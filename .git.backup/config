@@ -1,0 +1,10 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+[remote "origin"]
+	url = https://x-access-token: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@github.com/emiliancristea/xeno-platform.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[http]
+	postBuffer = 524288000

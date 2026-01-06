@@ -1,0 +1,10 @@
+export { default as Desktop } from './Desktop';
+export { default as DesktopIcon } from './DesktopIcon';
+export { default as DesktopContextMenu } from './DesktopContextMenu';
+export { default as DesktopContext, useDesktop } from './DesktopContext';
+export { default as DesktopWindow } from './DesktopWindow';
+export { default as FileExplorer } from './FileExplorer';
+export { default as WindowManager, useWindowManager, createFileExplorerWindow, createTerminalWindow, createSettingsWindow } from './WindowManager';
+export type { DesktopIconData, IconSize } from './Desktop';
+export type { WindowState } from './DesktopWindow';
+export type { FileSystemItem } from './FileExplorer';

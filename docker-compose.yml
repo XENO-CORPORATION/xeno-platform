@@ -1,0 +1,380 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: xenolabs-postgres
+    environment:
+      - POSTGRES_DB=xenolabs
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=xenolabs_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - xenolabs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    container_name: xenolabs-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"
+    networks:
+      - xenolabs-network
+    restart: unless-stopped
+
+  # Backend API Server
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: xenolabs-backend
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=xenolabs
+      - DB_USER=postgres
+      - DB_PASSWORD=xenolabs_password
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://postgres:xenolabs_password@postgres:5432/xenolabs
+      # Docker socket mounted below for container provisioning
+      - STORAGE_LIMIT_GB=5
+      - CONVERSION_RETENTION_DAYS=7
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - VITE_FAL_KEY=${VITE_FAL_KEY}
+      - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
+      - BROWSERLESS_URL=http://browserless:3000
+      - BROWSERLESS_TOKEN=xeno_browser_token_2024
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_SEARCH_CX=${GOOGLE_SEARCH_CX}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - YOUTUBE_REDIRECT_URI=${YOUTUBE_REDIRECT_URI}
+    volumes:
+      - ./src/server/uploads:/app/uploads
+      - ./src/server/sam2-uploads:/app/sam2-uploads
+      - ./src/server/storage:/app/storage
+      - ./conversions:/app/conversions
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Video Studio storage
+      - ./storage/videos:/app/storage/videos
+      - ./storage/thumbnails:/app/storage/thumbnails
+      - ./storage/assets:/app/storage/assets
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - xenolabs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/api/status', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+  # Proxy Server for external APIs (commented out - no Dockerfile)
+  # proxy:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.proxy
+  #   container_name: xenolabs-proxy
+  #   environment:
+  #     - PORT=4001
+  #   ports:
+  #     - "4001:4001"
+  #   networks:
+  #     - xenolabs-network
+  #   restart: unless-stopped
+
+  # CORS Proxy for Topaz Labs API (commented out - no Dockerfile)
+  # cors-proxy:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.cors-proxy
+  #   container_name: xenolabs-cors-proxy
+  #   ports:
+  #     - "4002:4002"
+  #   networks:
+  #     - xenolabs-network
+  #   restart: unless-stopped
+
+  # Xeno Search Service - AI-powered search and analysis
+  xeno-search:
+    build:
+      context: ../xeno-search-service
+      dockerfile: Dockerfile
+      target: production
+    container_name: xenolabs-xeno-search
+    environment:
+      - SERVICE_NAME=xeno-search-service
+      - SERVICE_VERSION=2.0.0
+      - ENVIRONMENT=production
+      # Use the shared Redis
+      - REDIS_URL=redis://redis:6379/1
+      - CACHE_ENABLED=true
+      - CACHE_TYPE=redis
+      # Rate limiting (disabled due to middleware compatibility)
+      - RATE_LIMITING_ENABLED=false
+      - RATE_LIMIT_REQUESTS_PER_MINUTE=60
+      - RATE_LIMIT_REQUESTS_PER_HOUR=1000
+      # Auth disabled for internal use
+      - AUTH_ENABLED=false
+      # Logging
+      - LOGGING_LEVEL=INFO
+      - LOGGING_FORMAT=json
+      # Search configuration - Add your API keys here!
+      - SEARXNG_INSTANCE_URL=https://searx.tiekoetter.com
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      # Google Custom Search (get from https://developers.google.com/custom-search)
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_CX=${GOOGLE_CX:-}
+      # Bing Search (get from https://azure.microsoft.com/en-us/services/cognitive-services/bing-web-search-api/)
+      - BING_API_KEY=${BING_API_KEY:-}
+      # NLP/ML configuration
+      - SUMMARIZATION_MODEL=sshleifer/distilbart-cnn-12-6
+      - ENABLE_SEMANTIC_SEARCH=true
+      # CORS - allow from frontend and backend (JSON format for pydantic-settings v2)
+      - CORS_ORIGINS=["*"]
+      # Meilisearch configuration (for Xeno Search Engine)
+      - MEILI_HOST=http://meilisearch:7700
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-xeno_search_master_key_change_me}
+    volumes:
+      - xeno_search_cache:/app/.cache
+      - xeno_search_logs:/app/logs
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_started
+      meilisearch:
+        condition: service_healthy
+    networks:
+      - xenolabs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # XenoRun Code Execution Engine
+  xenorun:
+    build:
+      context: ../xenorun
+      dockerfile: Dockerfile
+    container_name: xenolabs-xenorun
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - LOG_LEVEL=info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "3002:3000"
+    networks:
+      - xenolabs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # LaTeX Compilation Service (Full TeX Live)
+  latex:
+    build:
+      context: .
+      dockerfile: Dockerfile.latex
+    container_name: xenolabs-latex
+    ports:
+      - "3001:3001"
+    networks:
+      - xenolabs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend React Application
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        - VITE_FAL_KEY=${VITE_FAL_KEY}
+        - VITE_OPENAI_API_KEY=${VITE_OPENAI_API_KEY}
+        - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
+        - VITE_OPENROUTER_API_KEY=${VITE_OPENROUTER_API_KEY}
+        - VITE_API_URL=/api
+        - VITE_ENABLE_SITE_GATE=${VITE_ENABLE_SITE_GATE}
+        - VITE_SITE_PASSWORD=${VITE_SITE_PASSWORD}
+    container_name: xenolabs-frontend
+    environment:
+      - NODE_ENV=production
+      - REACT_APP_API_URL=http://backend:8080
+      - VITE_API_URL=/api
+      - VITE_BACKEND_URL=http://backend:8080
+    ports:
+      - "4040:80"
+    depends_on:
+      - backend
+    networks:
+      - xenolabs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /usr/share/nginx/html/index.html || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # WebSocket Gateway (commented out - no Dockerfile)
+  # websocket:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.websocket
+  #   container_name: xenolabs-websocket
+  #   environment:
+  #     - REDIS_URL=redis://redis:6379
+  #     - POSTGRES_URL=postgresql://postgres:xenolabs_password@postgres:5432/xenolabs
+  #   ports:
+  #     - "4003:8081"
+  #   depends_on:
+  #     - redis
+  #     - postgres
+  #   networks:
+  #     - xenolabs-network
+  #   restart: unless-stopped
+
+  # File Storage Service (commented out - no Dockerfile)
+  # storage:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.storage
+  #   container_name: xenolabs-storage
+  #   environment:
+  #     - POSTGRES_URL=postgresql://postgres:xenolabs_password@postgres:5432/xenolabs
+  #   volumes:
+  #     - ./xenoos-user-data:/data/users
+  #     - ./xenoos-shared:/data/shared
+  #     - ./xenoos-cloud-storage:/data/cloud
+  #   ports:
+  #     - "8082:8082"
+  #   depends_on:
+  #     - postgres
+  #   networks:
+  #     - xenolabs-network
+  #   restart: unless-stopped
+
+  # Xeno Browser - KasmVNC Chrome for embedded browsing
+  xeno-browser:
+    image: kasmweb/chrome:1.16.0
+    container_name: xenolabs-xeno-browser
+    environment:
+      - VNC_PW=xenobrowser123
+      - VNC_RESOLUTION=1920x1080
+      - VNC_COL_DEPTH=24
+    shm_size: "1gb"
+    ports:
+      - "6901:6901"
+    networks:
+      - xenolabs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k -s -o /dev/null -w '%{http_code}' https://localhost:6901 | grep -qE '200|401|302'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Browserless - Headless Chrome API for AI browser automation
+  browserless:
+    image: ghcr.io/browserless/chromium:latest
+    container_name: xenolabs-browserless
+    environment:
+      - TOKEN=xeno_browser_token_2024
+      - CONCURRENT=5
+      - QUEUED=10
+      - TIMEOUT=120000
+      - HEALTH=true
+      - ENABLE_DEBUGGER=false
+      - ENABLE_CORS=true
+    ports:
+      - "3003:3000"
+    networks:
+      - xenolabs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/config?token=xeno_browser_token_2024"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Meilisearch - Fast search index for Xeno Search Engine
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: xenolabs-meilisearch
+    environment:
+      - MEILI_ENV=production
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-xeno_search_master_key_change_me}
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - meilisearch_data:/meili_data
+    ports:
+      - "7700:7700"
+    networks:
+      - xenolabs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  xeno_search_cache:
+    driver: local
+  xeno_search_logs:
+    driver: local
+  meilisearch_data:
+    driver: local
+
+networks:
+  xenolabs-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

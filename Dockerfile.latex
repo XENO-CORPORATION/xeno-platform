@@ -1,0 +1,35 @@
+# Full TeX Live installation for LaTeX compilation
+FROM debian:bookworm-slim
+
+# Install TeX Live full distribution and utilities
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    texlive-full \
+    texlive-fonts-extra \
+    texlive-latex-extra \
+    texlive-science \
+    texlive-pictures \
+    texlive-xetex \
+    texlive-luatex \
+    latexmk \
+    ghostscript \
+    poppler-utils \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create working directory
+WORKDIR /app
+
+# Create a simple HTTP server for the LaTeX compilation service
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create the compilation service
+COPY src/server/latex-service.js /app/server.js
+
+# Expose port
+EXPOSE 3001
+
+# Run the service
+CMD ["node", "server.js"]

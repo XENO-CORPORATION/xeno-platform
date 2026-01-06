@@ -1,0 +1,35 @@
+[workspace]
+members = [
+    "libs/xeno-lib",
+    "libs/xeno-edit/server",
+    "libs/xeno-edit/cli",
+]
+# Bindings will be built separately when needed
+# "libs/xeno-edit/python",
+# "libs/xeno-edit/nodejs",
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["XENO Corporation"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Core libraries
+xeno-lib = { path = "libs/xeno-lib" }
+
+# Core image processing
+image = "0.25"
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Async
+tokio = { version = "1.40", features = ["full"] }
+
+# Web framework
+axum = { version = "0.7", features = ["multipart"] }
