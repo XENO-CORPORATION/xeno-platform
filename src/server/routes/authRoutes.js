@@ -168,9 +168,9 @@ router.post('/register', async (req, res) => {
     try {
       const tokenHash = await bcrypt.hash(token, 10);
       await req.db.query(`
-        INSERT INTO user_sessions (user_id, token_hash, expires_at, ip_address, user_agent)
-        VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4)
-      `, [user.id, tokenHash, req.ip, req.get('User-Agent')]);
+        INSERT INTO user_sessions (user_id, token_hash, session_token, expires_at, ip_address, user_agent)
+        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)
+      `, [user.id, tokenHash, token, req.ip, req.get('User-Agent')]);
     } catch (sessionError) {
       console.log('Session storage failed, but user created successfully:', sessionError.message);
       // Continue without session storage for now
@@ -260,9 +260,9 @@ router.post('/login', async (req, res) => {
     try {
       const tokenHash = await bcrypt.hash(token, 10);
       await req.db.query(`
-        INSERT INTO user_sessions (user_id, token_hash, expires_at, ip_address, user_agent)
-        VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4)
-      `, [user.id, tokenHash, req.ip, req.get('User-Agent')]);
+        INSERT INTO user_sessions (user_id, token_hash, session_token, expires_at, ip_address, user_agent)
+        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)
+      `, [user.id, tokenHash, token, req.ip, req.get('User-Agent')]);
     } catch (sessionError) {
       console.log('Session storage failed, but login successful:', sessionError.message);
       // Continue without session storage for now

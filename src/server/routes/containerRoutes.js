@@ -916,18 +916,36 @@ router.post('/:id/exec', authMiddleware, async (req, res) => {
       });
     }
 
-    // Get container info and verify ownership
-    const containerQuery = 'SELECT * FROM containers WHERE id = $1 AND user_id = $2';
-    const containerResult = await req.db.query(containerQuery, [containerId, userId]);
-    
+    // Get container info
+    const containerQuery = 'SELECT * FROM containers WHERE id = $1';
+    const containerResult = await req.db.query(containerQuery, [containerId]);
+
     if (containerResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Container not found or access denied',
+        error: 'Container not found',
       });
     }
 
     const containerData = containerResult.rows[0];
+
+    // Check if user owns container OR has collaboration access
+    const isOwner = containerData.user_id === userId;
+    if (!isOwner) {
+      const collabAccess = await req.db.query(
+        `SELECT p.* FROM os_session_participants p
+         JOIN os_collaborative_sessions s ON p.session_id = s.id
+         WHERE s.container_id = $1 AND p.user_id = $2 AND p.is_active = true AND s.is_active = true`,
+        [containerId, userId]
+      );
+
+      if (collabAccess.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Container not found or access denied',
+        });
+      }
+    }
 
     if (!containerData.docker_container_id || containerData.status !== 'running') {
       return res.status(400).json({
@@ -1000,6 +1018,66 @@ router.post('/:id/exec', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to execute commands in container',
+      message: error.message,
+    });
+  }
+});
+
+// GET /api/containers/:id - Get container by ID (for collaboration access)
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id: containerId } = req.params;
+    const userId = req.user.id;
+
+    // Get container info
+    const containerQuery = 'SELECT * FROM containers WHERE id = $1';
+    const containerResult = await req.db.query(containerQuery, [containerId]);
+
+    if (containerResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Container not found',
+      });
+    }
+
+    const containerData = containerResult.rows[0];
+
+    // Check if user owns this container OR has collaboration access
+    const isOwner = containerData.user_id === userId;
+
+    if (!isOwner) {
+      // Check if user has collaboration access to this container
+      const collabAccess = await req.db.query(
+        `SELECT p.* FROM os_session_participants p
+         JOIN os_collaborative_sessions s ON p.session_id = s.id
+         WHERE s.container_id = $1 AND p.user_id = $2 AND p.is_active = true AND s.is_active = true`,
+        [containerId, userId]
+      );
+
+      if (collabAccess.rows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied to this container',
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      container: {
+        id: containerData.id,
+        name: containerData.name,
+        display_name: containerData.display_name,
+        status: containerData.status,
+        resource_limits: containerData.resource_limits,
+        isShared: !isOwner
+      }
+    });
+  } catch (error) {
+    console.error('Error getting container:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get container',
       message: error.message,
     });
   }
@@ -1090,20 +1168,38 @@ router.get('/:containerId/storage', authMiddleware, async (req, res) => {
 
     console.log(`📊 Getting storage usage for container ${containerId}`);
 
-    // Verify container ownership
+    // Get container info
     const containerResult = await req.db.query(
-      'SELECT * FROM containers WHERE id = $1 AND user_id = $2',
-      [containerId, userId]
+      'SELECT * FROM containers WHERE id = $1',
+      [containerId]
     );
 
     if (containerResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Container not found or access denied',
+        error: 'Container not found',
       });
     }
 
     const container = containerResult.rows[0];
+
+    // Check if user owns container OR has collaboration access
+    const isOwner = container.user_id === userId;
+    if (!isOwner) {
+      const collabAccess = await req.db.query(
+        `SELECT p.* FROM os_session_participants p
+         JOIN os_collaborative_sessions s ON p.session_id = s.id
+         WHERE s.container_id = $1 AND p.user_id = $2 AND p.is_active = true AND s.is_active = true`,
+        [containerId, userId]
+      );
+
+      if (collabAccess.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Container not found or access denied',
+        });
+      }
+    }
 
     if (!container.docker_container_id) {
       return res.status(400).json({

@@ -39,13 +39,15 @@ import fileSystemRoutes from './routes/fileSystemRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import conversionRoutes from './routes/conversionRoutes.js';
 import videoRoutes from './routes/videoRoutes.js';
-import imageRoutes from './routes/imageRoutes.js';
+import imageRoutes, { imagePublicRoutes } from './routes/imageRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import tokenizerRoutes from './routes/tokenizerRoutes.js';
 import userDataRoutes from './routes/userDataRoutes.js';
 import browserRoutes from './routes/browserRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import youtubeRoutes, { youtubePublicRoutes } from './routes/youtubeRoutes.js';
+import collaborationRoutes from './routes/collaborationRoutes.js';
+import downloadRoutes from './routes/downloadRoutes.js';
 import { databaseMiddleware } from './middleware/database.js';
 import { authMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
@@ -402,6 +404,10 @@ app.post('/api/image/replicate/predictions/:predictionId/cancel', async (req, re
 });
 console.log('🔄 Replicate API proxy available at: /api/image/replicate/*');
 
+// Image Studio public routes (no auth required for xeno-flow)
+app.use('/api/image', databaseMiddleware, imagePublicRoutes);
+console.log('🎨 Image Studio public routes integrated: /api/image/xeno-flow/*');
+
 // Image Studio routes (with auth and database middleware)
 app.use('/api/image', databaseMiddleware, authMiddleware, imageRoutes);
 console.log('🎨 Image Studio routes integrated: /api/image/*');
@@ -443,6 +449,14 @@ app.use('/api/youtube', databaseMiddleware, youtubePublicRoutes);
 // Authenticated routes
 app.use('/api/youtube', databaseMiddleware, authMiddleware, youtubeRoutes);
 console.log('📺 YouTube routes integrated: /api/youtube/*');
+
+// Collaboration API routes (Figma-style real-time collaboration)
+app.use('/api/collaboration', databaseMiddleware, collaborationRoutes);
+console.log('🤝 Collaboration routes integrated: /api/collaboration/*');
+
+// Download API routes (YouTube, Twitter, Instagram, TikTok downloads)
+app.use('/api/download', downloadRoutes);
+console.log('⬇️ Download routes integrated: /api/download/*');
 
 console.log('✅ Custom routes integrated successfully');
 
@@ -3878,6 +3892,93 @@ const wss = new WebSocket({ server });
 // Store connected clients with their session info
 const wsClients = new Map();
 
+// Collaboration session maps
+// Map<sessionId, Map<WebSocket, ClientInfo>>
+const collabSessions = new Map();
+
+// Collaboration message types
+const CollabMessageTypes = {
+  AUTH: 'auth',
+  AUTH_SUCCESS: 'auth_success',
+  AUTH_ERROR: 'auth_error',
+  JOIN_SESSION: 'join_session',
+  LEAVE_SESSION: 'leave_session',
+  SESSION_JOINED: 'session_joined',
+  SESSION_LEFT: 'session_left',
+  USER_JOINED: 'user_joined',
+  USER_LEFT: 'user_left',
+  CURSOR_MOVE: 'cursor_move',
+  CURSOR_UPDATE: 'cursor_update',
+  SELECTION_CHANGE: 'selection_change',
+  SELECTION_UPDATE: 'selection_update',
+  FILE_OPERATION: 'file_operation',
+  FILE_SYNC: 'file_sync',
+  WINDOW_OPERATION: 'window_operation',
+  WINDOW_SYNC: 'window_sync',
+  ICON_POSITION: 'icon_position',
+  ICON_POSITION_UPDATE: 'icon_position_update',
+  CHAT_MESSAGE: 'chat_message',
+  PING: 'ping',
+  PONG: 'pong'
+};
+
+// Debounced cursor updates to database
+const cursorUpdateQueue = new Map();
+
+function updateCursorInDB(sessionId, odea, x, y, windowId) {
+  const key = `${sessionId}:${odea}`;
+  if (cursorUpdateQueue.has(key)) {
+    clearTimeout(cursorUpdateQueue.get(key));
+  }
+  cursorUpdateQueue.set(key, setTimeout(async () => {
+    try {
+      await pool.query(
+        `UPDATE os_session_participants
+         SET cursor_x = $1, cursor_y = $2, cursor_window_id = $3, last_seen_at = NOW()
+         WHERE session_id = $4 AND user_id = $5`,
+        [x, y, windowId, sessionId, odea]
+      );
+    } catch (error) {
+      console.error('Error updating cursor in DB:', error);
+    }
+    cursorUpdateQueue.delete(key);
+  }, 500));
+}
+
+// Broadcast to all users in a collaboration session
+function broadcastToCollabSession(sessionId, message, excludeUserId = null) {
+  const sessionClients = collabSessions.get(sessionId);
+  if (!sessionClients) return;
+  const messageStr = JSON.stringify(message);
+  sessionClients.forEach((clientInfo, ws) => {
+    if (excludeUserId && clientInfo.odea === excludeUserId) return;
+    if (ws.readyState === 1) { // WebSocket.OPEN = 1
+      ws.send(messageStr);
+    }
+  });
+}
+
+// Get all users in a collaboration session
+function getCollabSessionUsers(sessionId) {
+  const sessionClients = collabSessions.get(sessionId);
+  if (!sessionClients) return [];
+  const users = [];
+  sessionClients.forEach((clientInfo) => {
+    users.push({
+      id: clientInfo.odea,
+      odea: clientInfo.odea,
+      displayName: clientInfo.displayName,
+      avatarUrl: clientInfo.avatarUrl,
+      color: clientInfo.collabColor,
+      cursorX: clientInfo.cursorX || 0,
+      cursorY: clientInfo.cursorY || 0,
+      cursorWindowId: clientInfo.cursorWindowId,
+      selection: clientInfo.selection || []
+    });
+  });
+  return users;
+}
+
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
   const clientId = Date.now() + Math.random().toString(36).substr(2, 9);
@@ -3887,7 +3988,18 @@ wss.on('connection', (ws, req) => {
     connectedAt: new Date(),
     userAgent: req.headers['user-agent'],
     sessionToken: null,
-    userId: null
+    userId: null,
+    // Collaboration fields
+    collabSessionId: null,
+    odea: null,
+    displayName: null,
+    avatarUrl: null,
+    collabColor: '#3B82F6',
+    cursorX: 0,
+    cursorY: 0,
+    cursorWindowId: null,
+    selection: [],
+    collabPermissions: null
   };
 
   wsClients.set(ws, clientInfo);
@@ -3950,6 +4062,280 @@ wss.on('connection', (ws, req) => {
         handleFileOperation(ws, message);
       }
 
+      // ===========================================
+      // COLLABORATION MESSAGE HANDLERS
+      // ===========================================
+
+      // Handle auth for collaboration (using session token)
+      else if (message.type === CollabMessageTypes.AUTH) {
+        const { token } = message;
+        if (token) {
+          pool.query(
+            'SELECT u.* FROM users u JOIN user_sessions s ON u.id = s.user_id WHERE s.session_token = $1 AND s.expires_at > $2',
+            [token, new Date().toISOString()]
+          ).then(result => {
+            if (result.rows.length > 0) {
+              const user = result.rows[0];
+              clientInfo.sessionToken = token;
+              clientInfo.userId = user.id;
+              clientInfo.odea = user.id;
+              clientInfo.displayName = user.display_name || user.username || 'User';
+              clientInfo.avatarUrl = user.avatar_url;
+              ws.send(JSON.stringify({
+                type: CollabMessageTypes.AUTH_SUCCESS,
+                user: {
+                  id: user.id,
+                  displayName: clientInfo.displayName,
+                  avatarUrl: clientInfo.avatarUrl
+                }
+              }));
+              console.log(`✅ Collaboration auth: ${clientId} as ${clientInfo.displayName}`);
+            } else {
+              ws.send(JSON.stringify({
+                type: CollabMessageTypes.AUTH_ERROR,
+                error: 'Invalid or expired token'
+              }));
+            }
+          }).catch(error => {
+            console.error('Collaboration auth error:', error);
+            ws.send(JSON.stringify({
+              type: CollabMessageTypes.AUTH_ERROR,
+              error: 'Authentication failed'
+            }));
+          });
+        }
+      }
+
+      // Handle join collaboration session
+      else if (message.type === CollabMessageTypes.JOIN_SESSION) {
+        if (!clientInfo.userId) {
+          ws.send(JSON.stringify({
+            type: 'error',
+            error: 'Not authenticated'
+          }));
+          return;
+        }
+
+        const { sessionId } = message;
+
+        // Get participant info from database
+        pool.query(
+          'SELECT * FROM os_session_participants WHERE session_id = $1 AND user_id = $2',
+          [sessionId, clientInfo.userId]
+        ).then(async (result) => {
+          if (result.rows.length === 0) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              error: 'Not a participant in this session'
+            }));
+            return;
+          }
+
+          const participant = result.rows[0];
+
+          // Update client info
+          clientInfo.collabSessionId = sessionId;
+          clientInfo.collabColor = participant.color;
+          clientInfo.collabPermissions = participant.permissions;
+
+          // Add to session map
+          if (!collabSessions.has(sessionId)) {
+            collabSessions.set(sessionId, new Map());
+          }
+          collabSessions.get(sessionId).set(ws, clientInfo);
+
+          // Update participant as active in DB
+          await pool.query(
+            `UPDATE os_session_participants
+             SET is_active = true, last_seen_at = NOW()
+             WHERE session_id = $1 AND user_id = $2`,
+            [sessionId, clientInfo.userId]
+          );
+
+          // Get existing users in session
+          const existingUsers = getCollabSessionUsers(sessionId);
+
+          // Send session joined confirmation
+          ws.send(JSON.stringify({
+            type: CollabMessageTypes.SESSION_JOINED,
+            sessionId,
+            odea: clientInfo.userId,
+            color: clientInfo.collabColor,
+            users: existingUsers
+          }));
+
+          // Broadcast user joined to others
+          broadcastToCollabSession(sessionId, {
+            type: CollabMessageTypes.USER_JOINED,
+            user: {
+              id: clientInfo.odea,
+              odea: clientInfo.odea,
+              displayName: clientInfo.displayName,
+              avatarUrl: clientInfo.avatarUrl,
+              color: clientInfo.collabColor
+            }
+          }, clientInfo.userId);
+
+          console.log(`🤝 User ${clientInfo.displayName} joined collab session ${sessionId}`);
+        }).catch(error => {
+          console.error('Error joining session:', error);
+          ws.send(JSON.stringify({
+            type: 'error',
+            error: 'Failed to join session'
+          }));
+        });
+      }
+
+      // Handle leave collaboration session
+      else if (message.type === CollabMessageTypes.LEAVE_SESSION) {
+        if (clientInfo.collabSessionId) {
+          const sid = clientInfo.collabSessionId;
+
+          // Remove from session map
+          const sessionMap = collabSessions.get(sid);
+          if (sessionMap) {
+            sessionMap.delete(ws);
+            if (sessionMap.size === 0) {
+              collabSessions.delete(sid);
+            }
+          }
+
+          // Update participant as inactive in DB
+          pool.query(
+            `UPDATE os_session_participants
+             SET is_active = false, last_seen_at = NOW()
+             WHERE session_id = $1 AND user_id = $2`,
+            [sid, clientInfo.userId]
+          ).catch(err => console.error('Error updating participant:', err));
+
+          // Broadcast user left
+          broadcastToCollabSession(sid, {
+            type: CollabMessageTypes.USER_LEFT,
+            odea: clientInfo.userId
+          });
+
+          clientInfo.collabSessionId = null;
+
+          ws.send(JSON.stringify({
+            type: CollabMessageTypes.SESSION_LEFT,
+            sessionId: sid
+          }));
+
+          console.log(`🤝 User ${clientInfo.displayName} left collab session ${sid}`);
+        }
+      }
+
+      // Handle cursor move
+      else if (message.type === CollabMessageTypes.CURSOR_MOVE) {
+        if (!clientInfo.collabSessionId) return;
+
+        const { x, y, windowId } = message;
+        clientInfo.cursorX = x;
+        clientInfo.cursorY = y;
+        clientInfo.cursorWindowId = windowId;
+
+        // Update in database (debounced)
+        updateCursorInDB(clientInfo.collabSessionId, clientInfo.userId, x, y, windowId);
+
+        // Broadcast to session immediately
+        broadcastToCollabSession(clientInfo.collabSessionId, {
+          type: CollabMessageTypes.CURSOR_UPDATE,
+          odea: clientInfo.userId,
+          displayName: clientInfo.displayName,
+          color: clientInfo.collabColor,
+          x,
+          y,
+          windowId
+        }, clientInfo.userId);
+      }
+
+      // Handle selection change
+      else if (message.type === CollabMessageTypes.SELECTION_CHANGE) {
+        if (!clientInfo.collabSessionId) return;
+
+        clientInfo.selection = message.selection || [];
+
+        broadcastToCollabSession(clientInfo.collabSessionId, {
+          type: CollabMessageTypes.SELECTION_UPDATE,
+          odea: clientInfo.userId,
+          color: clientInfo.collabColor,
+          selection: clientInfo.selection
+        }, clientInfo.userId);
+      }
+
+      // Handle file operation broadcast
+      else if (message.type === CollabMessageTypes.FILE_OPERATION) {
+        if (!clientInfo.collabSessionId) return;
+
+        broadcastToCollabSession(clientInfo.collabSessionId, {
+          type: CollabMessageTypes.FILE_SYNC,
+          odea: clientInfo.userId,
+          displayName: clientInfo.displayName,
+          operation: message.operation,
+          path: message.path,
+          newPath: message.newPath,
+          itemType: message.itemType,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Handle window operation broadcast
+      else if (message.type === CollabMessageTypes.WINDOW_OPERATION) {
+        if (!clientInfo.collabSessionId) return;
+
+        broadcastToCollabSession(clientInfo.collabSessionId, {
+          type: CollabMessageTypes.WINDOW_SYNC,
+          odea: clientInfo.userId,
+          displayName: clientInfo.displayName,
+          operation: message.operation,
+          windowId: message.windowId,
+          windowType: message.windowType,
+          windowTitle: message.windowTitle,
+          position: message.position,
+          size: message.size,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Handle chat message
+      else if (message.type === CollabMessageTypes.CHAT_MESSAGE) {
+        if (!clientInfo.collabSessionId) return;
+
+        broadcastToCollabSession(clientInfo.collabSessionId, {
+          type: CollabMessageTypes.CHAT_MESSAGE,
+          odea: clientInfo.userId,
+          displayName: clientInfo.displayName,
+          avatarUrl: clientInfo.avatarUrl,
+          color: clientInfo.collabColor,
+          message: message.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Handle icon position broadcast (for real-time icon drag sync)
+      else if (message.type === CollabMessageTypes.ICON_POSITION) {
+        if (!clientInfo.collabSessionId) return;
+
+        broadcastToCollabSession(clientInfo.collabSessionId, {
+          type: CollabMessageTypes.ICON_POSITION_UPDATE,
+          odea: clientInfo.userId,
+          displayName: clientInfo.displayName,
+          iconId: message.iconId,
+          position: message.position,
+          isDragging: message.isDragging,
+          timestamp: new Date().toISOString()
+        }, clientInfo.userId);
+      }
+
+      // Handle ping
+      else if (message.type === CollabMessageTypes.PING) {
+        ws.send(JSON.stringify({ type: CollabMessageTypes.PONG }));
+      }
+
+      // ===========================================
+      // END COLLABORATION HANDLERS
+      // ===========================================
+
       // Broadcast other messages to authenticated clients
       else if (clientInfo.userId) {
         broadcastToAuthenticatedClients(message, ws);
@@ -3965,10 +4351,42 @@ wss.on('connection', (ws, req) => {
   });
 
   // Handle disconnection
-  ws.on('close', () => {
+  ws.on('close', async () => {
     const info = wsClients.get(ws);
     if (info) {
       console.log(`🔌 WebSocket client disconnected: ${info.id}`);
+
+      // Clean up collaboration session
+      if (info.collabSessionId) {
+        const sessionMap = collabSessions.get(info.collabSessionId);
+        if (sessionMap) {
+          sessionMap.delete(ws);
+          if (sessionMap.size === 0) {
+            collabSessions.delete(info.collabSessionId);
+          }
+        }
+
+        // Update participant as inactive in DB
+        if (info.userId) {
+          try {
+            await pool.query(
+              `UPDATE os_session_participants
+               SET is_active = false, last_seen_at = NOW()
+               WHERE session_id = $1 AND user_id = $2`,
+              [info.collabSessionId, info.userId]
+            );
+          } catch (error) {
+            console.error('Error updating participant on disconnect:', error);
+          }
+        }
+
+        // Broadcast user left
+        broadcastToCollabSession(info.collabSessionId, {
+          type: CollabMessageTypes.USER_LEFT,
+          odea: info.userId
+        });
+      }
+
       wsClients.delete(ws);
     }
   });

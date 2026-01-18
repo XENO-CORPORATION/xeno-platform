@@ -7,6 +7,7 @@ interface DesktopIconProps {
   onSelect: (event?: React.MouseEvent) => void;
   onOpen?: () => void;
   onDragStart?: (event: React.MouseEvent) => void;
+  onContextMenu?: (event: React.MouseEvent) => void;
   isDragging?: boolean;
   gridSize?: number;
 }
@@ -24,6 +25,7 @@ const DesktopIcon: React.FC<DesktopIconProps> = ({
   onSelect,
   onOpen,
   onDragStart,
+  onContextMenu,
   isDragging = false,
   gridSize = 80
 }) => {
@@ -119,8 +121,11 @@ const DesktopIcon: React.FC<DesktopIconProps> = ({
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        onSelect(e);
-        console.log('Icon context menu for:', icon.name);
+        if (onContextMenu) {
+          onContextMenu(e);
+        } else {
+          onSelect(e);
+        }
       }}
     >
       {/* Grid Selection Rectangle - exactly matches dynamic grid cell */}

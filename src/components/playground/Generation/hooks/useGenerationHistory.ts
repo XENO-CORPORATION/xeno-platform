@@ -127,6 +127,7 @@ export function useGenerationHistory(): UseGenerationHistoryReturn {
     setFavoritesOnlyState(value);
     favoritesOnlyRef.current = value;
     setOffset(0);
+    setIsLoading(true); // Set loading BEFORE clearing to prevent flash of empty state
     setGenerations([]);
     setHasMore(true);
     loadInitial(value);

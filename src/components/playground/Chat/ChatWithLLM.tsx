@@ -9312,15 +9312,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               >
               {/* Header with close button for mobile and multi-interface */}
               {(isMultiInterface || isMobile) && (
-                <div className="flex items-center justify-between px-3 pt-3 pb-2">
-                  <span className="text-sm font-medium text-gray-300">History</span>
-                  <button
-                    onClick={() => setIsHistoryOpen(false)}
-                    className="p-1.5 text-gray-400 hover:text-white hover:bg-[#2a2a2d] rounded-md transition-colors"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
+                <>
+                  <div className="flex items-center justify-between px-3 pt-3 pb-3">
+                    {/* Close button with text - left side */}
+                    <button
+                      onClick={() => setIsHistoryOpen(false)}
+                      className="flex items-center gap-2 px-3 py-1.5 text-gray-400 hover:text-white hover:bg-[#2a2a2d] rounded-lg transition-colors"
+                    >
+                      <X size={16} />
+                      <span className="text-sm font-medium">Close</span>
+                    </button>
+                    {/* History text - right side */}
+                    <span className="text-sm font-medium text-gray-300">History</span>
+                  </div>
+                  {/* Horizontal line separator */}
+                  <div className="mx-3 h-[1px] bg-[#2a2a2d]" />
+                </>
               )}
               {/* Search - aligned with top bar buttons */}
               <div className={`px-3 pb-3`} style={{ paddingTop: (isMultiInterface || isMobile) ? '0px' : '16px' }}>

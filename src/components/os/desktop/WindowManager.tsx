@@ -7,6 +7,7 @@ import TaskManager from './TaskManager';
 import { HardDrive, Terminal, Settings as SettingsIcon, Palette, FileText, Activity } from 'lucide-react';
 import { FileSyncDemo } from '../../FileSyncDemo';
 import ImageStudio from '../../playground/Studio/ImageStudio/components/ImageStudio';
+import { useCollaboration, WindowOperation } from '../../../contexts/CollaborationContext';
 
 interface WindowManagerProps {
   children: React.ReactNode;
@@ -15,6 +16,12 @@ interface WindowManagerProps {
 const WindowManager: React.FC<WindowManagerProps> = ({ children }) => {
   const [windows, setWindows] = React.useState<WindowState[]>([]);
   const [nextZIndex, setNextZIndex] = React.useState(100);
+
+  // Collaboration integration for real-time window sync
+  const { session, broadcastWindowOperation, lastWindowOperation } = useCollaboration();
+
+  // Ref to track if operation is from remote collaborator (to avoid broadcasting back)
+  const isRemoteOperationRef = React.useRef(false);
 
   const openWindow = React.useCallback((
     id: string,
@@ -54,23 +61,63 @@ const WindowManager: React.FC<WindowManagerProps> = ({ children }) => {
 
       setNextZIndex(prev => prev + 1);
 
+      // Broadcast to collaborators (only if not from remote)
+      if (session && !isRemoteOperationRef.current) {
+        broadcastWindowOperation({
+          operation: 'open',
+          windowId: id,
+          windowType: id.split('-')[0], // Extract type from id like 'explorer-123'
+          windowTitle: title,
+          position,
+          size,
+          timestamp: new Date().toISOString()
+        });
+      }
+
       return [...prevWindows, newWindow];
     });
-  }, [nextZIndex]);
+  }, [nextZIndex, session, broadcastWindowOperation]);
 
   const closeWindow = React.useCallback((id: string) => {
+    // Broadcast to collaborators (only if not from remote)
+    if (session && !isRemoteOperationRef.current) {
+      broadcastWindowOperation({
+        operation: 'close',
+        windowId: id,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     setWindows(prevWindows => prevWindows.filter(w => w.id !== id));
-  }, []);
+  }, [session, broadcastWindowOperation]);
 
   const minimizeWindow = React.useCallback((id: string) => {
+    // Broadcast to collaborators (only if not from remote)
+    if (session && !isRemoteOperationRef.current) {
+      broadcastWindowOperation({
+        operation: 'minimize',
+        windowId: id,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     setWindows(prevWindows =>
       prevWindows.map(w =>
         w.id === id ? { ...w, isMinimized: !w.isMinimized } : w
       )
     );
-  }, []);
+  }, [session, broadcastWindowOperation]);
 
   const maximizeWindow = React.useCallback((id: string) => {
+    // Broadcast to collaborators (only if not from remote)
+    if (session && !isRemoteOperationRef.current) {
+      broadcastWindowOperation({
+        operation: 'maximize',
+        windowId: id,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     setWindows(prevWindows =>
       prevWindows.map(w => {
         if (w.id === id) {
@@ -100,9 +147,18 @@ const WindowManager: React.FC<WindowManagerProps> = ({ children }) => {
         return w;
       })
     );
-  }, []);
+  }, [session, broadcastWindowOperation]);
 
   const bringToFront = React.useCallback((id: string) => {
+    // Broadcast to collaborators (only if not from remote)
+    if (session && !isRemoteOperationRef.current) {
+      broadcastWindowOperation({
+        operation: 'focus',
+        windowId: id,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     setWindows(prevWindows => {
       const window = prevWindows.find(w => w.id === id);
       if (!window) return prevWindows;
@@ -115,15 +171,108 @@ const WindowManager: React.FC<WindowManagerProps> = ({ children }) => {
       );
     });
     setNextZIndex(prev => prev + 1);
-  }, []);
+  }, [session, broadcastWindowOperation]);
 
   const updateWindowPosition = React.useCallback((id: string, position: { x: number; y: number }) => {
+    // Broadcast position updates (throttled in broadcastWindowOperation)
+    if (session && !isRemoteOperationRef.current) {
+      broadcastWindowOperation({
+        operation: 'move',
+        windowId: id,
+        position,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     setWindows(prevWindows =>
       prevWindows.map(w =>
         w.id === id ? { ...w, position } : w
       )
     );
-  }, []);
+  }, [session, broadcastWindowOperation]);
+
+  // Handle window operations from collaborators
+  React.useEffect(() => {
+    if (!lastWindowOperation) return;
+
+    console.log('🪟 Processing window operation from collaborator:', lastWindowOperation);
+
+    // Mark as remote operation to prevent re-broadcasting
+    isRemoteOperationRef.current = true;
+
+    const { operation, windowId, position, size } = lastWindowOperation;
+
+    switch (operation) {
+      case 'close':
+        setWindows(prev => prev.filter(w => w.id !== windowId));
+        break;
+
+      case 'minimize':
+        setWindows(prev => prev.map(w =>
+          w.id === windowId ? { ...w, isMinimized: !w.isMinimized } : w
+        ));
+        break;
+
+      case 'maximize':
+        setWindows(prev => prev.map(w => {
+          if (w.id === windowId) {
+            if (!w.isMaximized) {
+              return {
+                ...w,
+                isMaximized: true,
+                position: { x: 0, y: 0 },
+                size: { width: window.innerWidth, height: window.innerHeight - 40 },
+                originalPosition: w.position,
+                originalSize: w.size
+              };
+            } else {
+              return {
+                ...w,
+                isMaximized: false,
+                position: (w as any).originalPosition || w.position,
+                size: (w as any).originalSize || w.size
+              };
+            }
+          }
+          return w;
+        }));
+        break;
+
+      case 'focus':
+        setWindows(prev => {
+          const maxZIndex = prev.length > 0 ? Math.max(...prev.map(w => w.zIndex)) : 0;
+          return prev.map(w =>
+            w.id === windowId ? { ...w, zIndex: maxZIndex + 1 } : w
+          );
+        });
+        break;
+
+      case 'move':
+        if (position) {
+          setWindows(prev => prev.map(w =>
+            w.id === windowId ? { ...w, position } : w
+          ));
+        }
+        break;
+
+      case 'resize':
+        if (size) {
+          setWindows(prev => prev.map(w =>
+            w.id === windowId ? { ...w, size } : w
+          ));
+        }
+        break;
+
+      // Note: 'open' operation is handled by observing user actions,
+      // since we can't serialize React components through WebSocket
+    }
+
+    // Reset remote operation flag
+    setTimeout(() => {
+      isRemoteOperationRef.current = false;
+    }, 100);
+
+  }, [lastWindowOperation]);
 
   // Expose window management functions to child components via context
   const contextValue = React.useMemo(() => ({

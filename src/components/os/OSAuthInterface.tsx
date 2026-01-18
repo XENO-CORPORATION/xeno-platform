@@ -146,8 +146,6 @@ const OSAuthInterface: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [showDeleteButton, setShowDeleteButton] = React.useState(false);
   const [viewMode, setViewMode] = React.useState<'local' | 'remote'>('local'); // Toggle between local and remote views
-  const [remoteKey, setRemoteKey] = React.useState('');
-  const [isConnectingRemote, setIsConnectingRemote] = React.useState(false);
 
   // Fetch user's containers from the database on mount
   React.useEffect(() => {
@@ -252,20 +250,6 @@ const OSAuthInterface: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     }
   };
 
-  const handleRemoteConnect = () => {
-    if (!remoteKey.trim()) return;
-    
-    setIsConnectingRemote(true);
-    // Simulate remote connection
-    setTimeout(() => {
-      console.log('Connecting to remote container with key:', remoteKey);
-      setIsConnectingRemote(false);
-      // Here you would implement actual remote connection logic
-      // For now, just switch back to local view
-      setViewMode('local');
-      setRemoteKey('');
-    }, 2000);
-  };
 
   const handleDeleteContainer = async () => {
     if (!deployedContainer?.id) return;
@@ -730,8 +714,7 @@ const OSAuthInterface: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               </>
             ) : (
               <>
-              {/* Remote Connection Interface */}
-                {/* Remote Connection Icon */}
+              {/* Join via Share Link Info */}
                 <div
                   style={{
                     width: 80,
@@ -742,7 +725,6 @@ const OSAuthInterface: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     marginBottom: '20px',
-                    transition: 'all 0.15s ease-out',
                     background: 'rgba(25,25,25,0.3)',
                   }}
                 >
@@ -753,16 +735,13 @@ const OSAuthInterface: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
-                    style={{
-                      color: 'rgba(156,163,175,0.7)',
-                    }}
+                    style={{ color: 'rgba(156,163,175,0.7)' }}
                   >
-                    <circle cx="12" cy="8" r="4"/>
-                    <path d="M20 20c0-4.4-3.6-8-8-8s-8 3.6-8 8"/>
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                   </svg>
                 </div>
 
-                {/* Remote Connection Title */}
                 <div
                   style={{
                     color: 'rgba(156,163,175,0.9)',
@@ -773,121 +752,46 @@ const OSAuthInterface: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     letterSpacing: '0.5px',
                   }}
                 >
-                  Connect to Remote
+                  Join Collaboration
                 </div>
 
-                {/* Remote Connection Description */}
                 <div
                   style={{
                     color: 'rgba(156,163,175,0.6)',
                     fontSize: 13,
                     textAlign: 'center',
                     marginBottom: '24px',
-                    lineHeight: '1.4',
+                    lineHeight: '1.5',
                     letterSpacing: '0.3px',
                   }}
                 >
-                  Enter a network key to connect to a friend's shared container
+                  Ask your friend to share their collaboration link with you.
+                  Simply open the link in your browser to join their workspace.
                 </div>
 
-                {/* Network Key Input */}
-                <div
-                  style={{
-                    width: '100%',
-                    marginBottom: '16px',
-                  }}
-                >
-                  <input
-                    type="text"
-                    placeholder="Enter network key..."
-                    value={remoteKey}
-                    onChange={(e) => setRemoteKey(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '12px 14px',
-                      background: 'rgba(25,25,25,0.4)',
-                      border: '1px solid rgba(156,163,175,0.2)',
-                      borderRadius: '8px',
-                      color: 'rgba(156,163,175,0.95)',
-                      fontSize: '14px',
-                      fontFamily: 'inherit',
-                      fontWeight: '500',
-                      outline: 'none',
-                      letterSpacing: '0.3px',
-                      transition: 'all 0.15s ease-out',
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = 'rgba(156,163,175,0.4)';
-                      e.target.style.background = 'rgba(25,25,25,0.5)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = 'rgba(156,163,175,0.2)';
-                      e.target.style.background = 'rgba(25,25,25,0.4)';
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && remoteKey.trim().length > 0) {
-                        handleRemoteConnect();
-                      }
-                    }}
-                  />
-                </div>
-
-                {/* Connect Button */}
                 <button
-                  onClick={handleRemoteConnect}
-                  disabled={remoteKey.trim().length === 0 || isConnectingRemote}
+                  onClick={() => setViewMode('local')}
                   style={{
-                    width: '100%',
-                    padding: '12px 20px',
-                    background: remoteKey.trim().length > 0 && !isConnectingRemote
-                      ? 'rgba(156,163,175,0.15)'
-                      : 'rgba(156,163,175,0.05)',
-                    border: remoteKey.trim().length > 0
-                      ? '1px solid rgba(156,163,175,0.3)'
-                      : '1px solid rgba(156,163,175,0.15)',
+                    padding: '10px 20px',
+                    background: 'rgba(156,163,175,0.1)',
+                    border: '1px solid rgba(156,163,175,0.2)',
                     borderRadius: '8px',
-                    color: remoteKey.trim().length > 0
-                      ? 'rgba(156,163,175,0.9)'
-                      : 'rgba(156,163,175,0.4)',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: remoteKey.trim().length > 0 && !isConnectingRemote ? 'pointer' : 'not-allowed',
-                    transition: 'all 0.2s ease-out',
-                    letterSpacing: '0.5px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
+                    color: 'rgba(156,163,175,0.8)',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease-out',
                   }}
                   onMouseEnter={(e) => {
-                    if (remoteKey.trim().length > 0 && !isConnectingRemote) {
-                      e.currentTarget.style.background = 'rgba(156,163,175,0.25)';
-                      e.currentTarget.style.color = 'white';
-                      e.currentTarget.style.borderColor = 'rgba(156,163,175,0.4)';
-                    }
+                    e.currentTarget.style.background = 'rgba(156,163,175,0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(156,163,175,0.3)';
                   }}
                   onMouseLeave={(e) => {
-                    if (remoteKey.trim().length > 0 && !isConnectingRemote) {
-                      e.currentTarget.style.background = 'rgba(156,163,175,0.15)';
-                      e.currentTarget.style.color = 'rgba(156,163,175,0.9)';
-                      e.currentTarget.style.borderColor = 'rgba(156,163,175,0.3)';
-                    }
+                    e.currentTarget.style.background = 'rgba(156,163,175,0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(156,163,175,0.2)';
                   }}
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    style={{
-                      display: !isConnectingRemote ? 'block' : 'none',
-                    }}
-                  >
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                  </svg>
-                  {isConnectingRemote ? 'Connecting...' : 'Connect'}
+                  ← Back to My Container
                 </button>
               </>
             )}

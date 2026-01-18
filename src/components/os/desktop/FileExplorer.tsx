@@ -56,6 +56,7 @@ import { containerFileSystemService, ContainerFileSystemItem } from '../../../se
 import { ContainerService } from '../../../services/containerService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useContainer } from '../../../contexts/ContainerContext';
+import { useCollaboration } from '../../../contexts/CollaborationContext';
 import { useWindowManager, createTextEditorWindow } from './WindowManager';
 import { initialMockFileSystem, mockNetworkDevices, mockShareInvitations, mockSharedResources, mockSharedByMeResources, mockRecentFiles, mockSharedFolders } from './mockData';
 
@@ -167,6 +168,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
   const { openWindow } = useWindowManager();
 
+  // Collaboration context for real-time sync
+  const { session, broadcastFileOperation, lastFileOperation } = useCollaboration();
+
   // Single tab state (tabs are now handled at window level)
   // currentPath now comes from ContainerContext
   const [selectedItem, setSelectedItem] = React.useState<string | null>(null);
@@ -207,6 +211,15 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   // Storage and container data now comes from ContainerContext
 
   // File system data now comes from ContainerContext - no need for individual loading
+
+  // Collaboration: Handle file operations from other users (real-time sync)
+  React.useEffect(() => {
+    if (!lastFileOperation) return;
+
+    // Refresh the current directory when another user modifies files
+    console.log('📁 File operation from collaborator:', lastFileOperation);
+    refreshFileSystem(currentPath);
+  }, [lastFileOperation, refreshFileSystem, currentPath]);
 
   // Navigation now uses ContainerContext
   const loadContainerDirectory = React.useCallback(async (path: string) => {
@@ -685,6 +698,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             // Use ContainerContext refresh instead of double refresh
             await refreshFileSystem(currentPath);
 
+            // Broadcast to collaborators for real-time sync
+            if (session) {
+              broadcastFileOperation({
+                odea: '',
+                displayName: '',
+                operation: 'create',
+                path: `${currentPath}/${newName}`,
+                itemType: 'folder',
+                timestamp: new Date().toISOString()
+              });
+            }
+
             // Remove from temporary items
             setTempItems(prev => prev.filter(item => item.id !== itemId));
             setEditingItem(null);
@@ -701,6 +726,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             console.log('✅ File created successfully');
             // Use ContainerContext refresh instead of navigation
             await refreshFileSystem(currentPath);
+
+            // Broadcast to collaborators for real-time sync
+            if (session) {
+              broadcastFileOperation({
+                odea: '',
+                displayName: '',
+                operation: 'create',
+                path: `${currentPath}/${newName}`,
+                itemType: 'file',
+                timestamp: new Date().toISOString()
+              });
+            }
 
             // Remove from temporary items
             setTempItems(prev => prev.filter(item => item.id !== itemId));
@@ -779,24 +816,38 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           });
 
           if (confirm(`Delete ${itemsToDelete.length} item(s)?\n\n${itemNames.join('\n')}`)) {
-            // Delete items from the file system
-            itemsToDelete.forEach(async (itemId) => {
-              const item = currentAllItems.find(i => i.id === itemId);
-              if (item) {
-                try {
-                  await deleteFile(item.path);
-                } catch (error) {
-                  console.error(`Failed to delete ${item.name}:`, error);
+            // Delete items from the file system (use async IIFE)
+            (async () => {
+              for (const itemId of itemsToDelete) {
+                const item = currentAllItems.find(i => i.id === itemId);
+                if (item) {
+                  try {
+                    await deleteFile(item.path);
+
+                    // Broadcast to collaborators for real-time sync
+                    if (session) {
+                      broadcastFileOperation({
+                        odea: '',
+                        displayName: '',
+                        operation: 'delete',
+                        path: item.path,
+                        itemType: item.type as 'file' | 'folder',
+                        timestamp: new Date().toISOString()
+                      });
+                    }
+                  } catch (error) {
+                    console.error(`Failed to delete ${item.name}:`, error);
+                  }
                 }
               }
-            });
 
-            // Clear selection
-            setSelectedItems(new Set());
-            setSelectedItem(null);
+              // Clear selection
+              setSelectedItems(new Set());
+              setSelectedItem(null);
 
-            // Refresh the file system view
-            setTimeout(() => refreshFileSystem(), 100);
+              // Refresh the file system view
+              setTimeout(() => refreshFileSystem(), 100);
+            })();
           }
         }
         break;

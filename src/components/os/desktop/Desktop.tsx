@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { Folder, FileText, Terminal, Settings, HardDrive, Trash2, Wifi, Activity } from 'lucide-react';
 import DesktopIcon from './DesktopIcon';
 import DesktopContextMenu from './DesktopContextMenu';
+import IconContextMenu from './IconContextMenu';
 import DesktopContext from './DesktopContext';
 import DesktopTaskbar from './DesktopTaskbar';
 import StartMenu from './StartMenu';
+import CollaboratorCursors from './CollaboratorCursors';
+import CollaborationModal from './CollaborationModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useWindowManager, createFileExplorerWindow, createTerminalWindow, createWebSocketDemoWindow, createSettingsWindow, createTextEditorWindow, createTaskManagerWindow } from './WindowManager';
 import { useContainer } from '../../../contexts/ContainerContext';
+import { useCollaboration } from '../../../contexts/CollaborationContext';
 import { containerFileSystemService } from '../../../services/containerFileSystemService';
 
 export type IconSize = 'small' | 'medium' | 'large';
@@ -38,20 +42,39 @@ const getGridConfig = (iconSize: IconSize) => {
 const Desktop: React.FC = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
-  
+
   // Container integration
   const { fileSystem, refreshFileSystem, navigateToPath } = useContainer();
   const desktopPath = '/home/user/Desktop';
   const [desktopItems, setDesktopItems] = React.useState<DesktopIconData[]>([]);
-  
+
   const [selectedIcon, setSelectedIcon] = React.useState<string | null>(null);
   const [selectedIcons, setSelectedIcons] = React.useState<Set<string>>(new Set());
   const [iconSize, setIconSize] = React.useState<IconSize>('medium');
   const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number } | null>(null);
+  const [iconContextMenu, setIconContextMenu] = React.useState<{
+    x: number;
+    y: number;
+    icon: DesktopIconData;
+  } | null>(null);
   const [draggedIcon, setDraggedIcon] = React.useState<string | null>(null);
   const [dragOffset, setDragOffset] = React.useState({ x: 0, y: 0 });
   const [isStartMenuOpen, setIsStartMenuOpen] = React.useState(false);
+  const [isCollaborationModalOpen, setIsCollaborationModalOpen] = React.useState(false);
   const { openWindow } = useWindowManager();
+
+  // Collaboration integration - full real-time sync like Figma
+  const {
+    session,
+    participants,
+    broadcastCursor,
+    broadcastSelection,
+    broadcastFileOperation,
+    broadcastWindowOperation,
+    broadcastIconPosition,
+    lastFileOperation,
+    lastIconPositionUpdate
+  } = useCollaboration();
 
   // Marquee selection state
   const [isSelecting, setIsSelecting] = React.useState(false);
@@ -76,9 +99,62 @@ const Desktop: React.FC = () => {
         console.error('Failed to init desktop:', error);
       }
     };
-    
+
     initDesktop();
   }, []);
+
+  // Collaboration: Track mouse movement for cursor broadcasting
+  React.useEffect(() => {
+    if (!session) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      broadcastCursor(event.clientX, event.clientY);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [session, broadcastCursor]);
+
+  // Collaboration: Broadcast selection changes
+  React.useEffect(() => {
+    if (!session) return;
+    const selectedIds = Array.from(selectedIcons);
+    broadcastSelection(selectedIds);
+  }, [session, selectedIcons, broadcastSelection]);
+
+  // Collaboration: Handle file operations from other users
+  React.useEffect(() => {
+    if (!lastFileOperation) return;
+
+    // Refresh desktop when another user modifies files
+    console.log('📁 File operation from collaborator:', lastFileOperation);
+    refreshDesktop();
+  }, [lastFileOperation]);
+
+  // Collaboration: Handle icon position updates from other users
+  React.useEffect(() => {
+    if (!lastIconPositionUpdate) return;
+
+    console.log('📍 Icon position update from collaborator:', lastIconPositionUpdate);
+    const { iconId, position, isDragging } = lastIconPositionUpdate;
+
+    setIcons(prevIcons => {
+      // Find the icon and save position if drag ended
+      if (!isDragging) {
+        const icon = prevIcons.find(i => i.id === iconId);
+        if (icon) {
+          const storageKey = icon.path ? `icon_pos_${icon.path}` : `icon_pos_${icon.id}`;
+          localStorage.setItem(storageKey, JSON.stringify(position));
+        }
+      }
+
+      return prevIcons.map(icon =>
+        icon.id === iconId
+          ? { ...icon, position }
+          : icon
+      );
+    });
+  }, [lastIconPositionUpdate]);
 
   // Refresh desktop contents
   const refreshDesktop = async () => {
@@ -127,6 +203,17 @@ const Desktop: React.FC = () => {
     if (name) {
       await containerFileSystemService.createDirectory(desktopPath, name);
       refreshDesktop();
+      // Broadcast to collaborators
+      if (session) {
+        broadcastFileOperation({
+          odea: '',
+          displayName: '',
+          operation: 'create',
+          path: `${desktopPath}/${name}`,
+          itemType: 'folder',
+          timestamp: new Date().toISOString()
+        });
+      }
     }
   };
 
@@ -135,7 +222,98 @@ const Desktop: React.FC = () => {
     if (name) {
       await containerFileSystemService.createFile(desktopPath, name, '');
       refreshDesktop();
+      // Broadcast to collaborators
+      if (session) {
+        broadcastFileOperation({
+          odea: '',
+          displayName: '',
+          operation: 'create',
+          path: `${desktopPath}/${name}`,
+          itemType: 'file',
+          timestamp: new Date().toISOString()
+        });
+      }
     }
+  };
+
+  const handleDeleteIcon = async (icon: DesktopIconData) => {
+    if (!icon.path) {
+      console.warn('Cannot delete app icon:', icon.name);
+      return;
+    }
+
+    const confirmed = confirm(`Are you sure you want to delete "${icon.name}"?`);
+    if (!confirmed) return;
+
+    try {
+      const result = await containerFileSystemService.delete(icon.path, icon.type === 'folder');
+      if (result.success) {
+        refreshDesktop();
+        // Broadcast to collaborators
+        if (session) {
+          broadcastFileOperation({
+            odea: '',
+            displayName: '',
+            operation: 'delete',
+            path: icon.path,
+            itemType: icon.type === 'folder' ? 'folder' : 'file',
+            timestamp: new Date().toISOString()
+          });
+        }
+        // Clear selection
+        setSelectedIcon(null);
+        setSelectedIcons(new Set());
+      }
+    } catch (error) {
+      console.error('Failed to delete:', error);
+      alert('Failed to delete item');
+    }
+  };
+
+  const handleRenameIcon = async (icon: DesktopIconData) => {
+    if (!icon.path) {
+      console.warn('Cannot rename app icon:', icon.name);
+      return;
+    }
+
+    const newName = prompt('Enter new name:', icon.name);
+    if (!newName || newName === icon.name) return;
+
+    try {
+      const result = await containerFileSystemService.rename(icon.path, newName);
+      if (result.success) {
+        refreshDesktop();
+        // Broadcast to collaborators
+        if (session) {
+          broadcastFileOperation({
+            odea: '',
+            displayName: '',
+            operation: 'rename',
+            path: icon.path,
+            newPath: icon.path.replace(icon.name, newName),
+            itemType: icon.type === 'folder' ? 'folder' : 'file',
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to rename:', error);
+      alert('Failed to rename item');
+    }
+  };
+
+  const handleIconContextMenu = (icon: DesktopIconData, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedIcon(icon.id);
+    setSelectedIcons(new Set([icon.id]));
+    setIconContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      icon
+    });
+    // Close desktop context menu if open
+    setContextMenu(null);
   };
 
   const handleFileOpen = (item: any) => {
@@ -234,37 +412,53 @@ const Desktop: React.FC = () => {
 
     const newX = event.clientX - dragOffset.x;
     const newY = event.clientY - dragOffset.y;
+    const newPosition = { x: newX, y: newY };
 
     // Update icon position in real-time during drag
     setIcons(prevIcons =>
       prevIcons.map(icon =>
         icon.id === draggedIcon
-          ? { ...icon, position: { x: newX, y: newY } }
+          ? { ...icon, position: newPosition }
           : icon
       )
     );
-  }, [draggedIcon, dragOffset]);
+
+    // Broadcast position to collaborators
+    if (session) {
+      broadcastIconPosition(draggedIcon, newPosition, true);
+    }
+  }, [draggedIcon, dragOffset, session, broadcastIconPosition]);
 
   const handleIconDragEnd = React.useCallback(() => {
     if (!draggedIcon) return;
+
+    // Use a ref to capture the final position for broadcasting
+    let finalPositionForBroadcast: { x: number; y: number } = { x: 0, y: 0 };
 
     // Snap to grid on drop
     setIcons(prevIcons =>
       prevIcons.map(icon => {
         if (icon.id === draggedIcon) {
-          const newPos = snapToGrid(icon.position.x, icon.position.y);
+          finalPositionForBroadcast = snapToGrid(icon.position.x, icon.position.y);
           // Save position persistence
           const storageKey = icon.path ? `icon_pos_${icon.path}` : `icon_pos_${icon.id}`;
-          localStorage.setItem(storageKey, JSON.stringify(newPos));
-          return { ...icon, position: newPos };
+          localStorage.setItem(storageKey, JSON.stringify(finalPositionForBroadcast));
+          return { ...icon, position: finalPositionForBroadcast };
         }
         return icon;
       })
     );
 
+    // Broadcast final position to collaborators (use timeout to ensure state updated)
+    if (session && draggedIcon) {
+      setTimeout(() => {
+        broadcastIconPosition(draggedIcon, finalPositionForBroadcast, false);
+      }, 0);
+    }
+
     setDraggedIcon(null);
     setDragOffset({ x: 0, y: 0 });
-  }, [draggedIcon]);
+  }, [draggedIcon, session, broadcastIconPosition]);
 
   // Set up drag event listeners
   React.useEffect(() => {
@@ -387,18 +581,39 @@ const Desktop: React.FC = () => {
     }
   }, [isSelecting, handleMouseMove, handleMouseUp]);
 
+  // Keyboard Delete key handler for selected icons
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Delete' && selectedIcons.size > 0) {
+        // Find the selected icon(s)
+        const selectedIconsArray = icons.filter(icon => selectedIcons.has(icon.id));
+        // Only delete files/folders, not apps
+        const deletableIcons = selectedIconsArray.filter(icon => icon.path);
+        if (deletableIcons.length > 0) {
+          // Delete the first selected deletable icon
+          handleDeleteIcon(deletableIcons[0]);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIcons, icons]);
+
   const handleDesktopClick = (event: React.MouseEvent) => {
     // Only clear selection if clicking on empty desktop area
     if (event.target === event.currentTarget) {
       setSelectedIcon(null);
       setSelectedIcons(new Set());
       setContextMenu(null);
+      setIconContextMenu(null);
     }
   };
 
   const handleDesktopContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     setSelectedIcon(null);
+    setIconContextMenu(null);
     setContextMenu({ x: event.clientX, y: event.clientY });
   };
 
@@ -523,6 +738,7 @@ const Desktop: React.FC = () => {
             onSelect={(event) => handleIconSelect(icon.id, event)}
             onOpen={icon.onOpen}
             onDragStart={(event) => handleIconDragStart(icon.id, event)}
+            onContextMenu={(event) => handleIconContextMenu(icon, event)}
             isDragging={draggedIcon === icon.id}
             gridSize={gridSize}
           />
@@ -572,6 +788,23 @@ const Desktop: React.FC = () => {
           />
         )}
 
+        {/* Icon Context Menu */}
+        {iconContextMenu && (
+          <IconContextMenu
+            position={{ x: iconContextMenu.x, y: iconContextMenu.y }}
+            iconName={iconContextMenu.icon.name}
+            iconType={iconContextMenu.icon.type}
+            onClose={() => setIconContextMenu(null)}
+            onOpen={iconContextMenu.icon.onOpen}
+            onRename={() => handleRenameIcon(iconContextMenu.icon)}
+            onDelete={() => handleDeleteIcon(iconContextMenu.icon)}
+            onProperties={() => {
+              console.log('Properties for:', iconContextMenu.icon.name);
+              setIconContextMenu(null);
+            }}
+          />
+        )}
+
         {/* Windows-like Taskbar */}
         <DesktopTaskbar
           onStartMenuClick={() => setIsStartMenuOpen(!isStartMenuOpen)}
@@ -582,14 +815,24 @@ const Desktop: React.FC = () => {
           onSettingsClick={() => {
             handleAppLaunch('settings');
           }}
+          onCollaborateClick={() => setIsCollaborationModalOpen(true)}
         />
 
         {/* Start Menu */}
-        <StartMenu 
-          isOpen={isStartMenuOpen} 
-          onClose={() => setIsStartMenuOpen(false)} 
+        <StartMenu
+          isOpen={isStartMenuOpen}
+          onClose={() => setIsStartMenuOpen(false)}
           onLogout={handleLogout}
           onLaunchApp={handleAppLaunch}
+        />
+
+        {/* Collaboration: Remote Cursors Overlay */}
+        <CollaboratorCursors />
+
+        {/* Collaboration Modal */}
+        <CollaborationModal
+          isOpen={isCollaborationModalOpen}
+          onClose={() => setIsCollaborationModalOpen(false)}
         />
       </div>
     </DesktopContext.Provider>

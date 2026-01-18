@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Xeno Studio</title>
     <!-- v2.0.1 Deployment Marker -->
     <!-- Ensure mobile viewport height works correctly -->
@@ -27,6 +27,7 @@
         background-color: #121212; /* Dark background */
         color: #e0e0e0; /* Light text */
         overscroll-behavior: none; /* Prevent pull-to-refresh or other overscroll behaviors */
+        touch-action: manipulation; /* Disable double-tap zoom on mobile while allowing pinch zoom */
       }
 
       #root {

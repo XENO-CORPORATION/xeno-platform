@@ -236,6 +236,9 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // Mobile filter panel state
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
   // Get grid columns based on image size
   const getGridCols = () => {
     switch (imageSize) {
@@ -474,6 +477,23 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
     return groups;
   }, {} as Record<string, GenerationRecord[]>);
 
+  // Loading state when no data yet - show simple loading without grid/filters
+  if (isLoading && generations.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-white/40">
+        <svg className="w-12 h-12 mb-4 text-white/20 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
+        </svg>
+        <p className="text-lg mb-2">Loading...</p>
+      </div>
+    );
+  }
+
   // Empty state for no generations at all
   if (!isLoading && generations.length === 0) {
     return (
@@ -567,8 +587,110 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
       )}
 
       <div className="h-full overflow-y-auto">
+        {/* Mobile Filter Button - Fixed top right on mobile */}
+        <button
+          onClick={() => setShowMobileFilters(!showMobileFilters)}
+          className="md:hidden fixed top-20 right-3 z-50 w-10 h-10 bg-[#1a1a1c] border border-[#3a3a3d] rounded-lg flex items-center justify-center shadow-lg"
+          style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4)' }}
+        >
+          <svg className={`w-5 h-5 ${showMobileFilters || hasActiveFilters ? 'text-white' : 'text-white/50'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          {hasActiveFilters && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-white rounded-full" />
+          )}
+        </button>
+
+        {/* Mobile Filter Panel */}
+        {showMobileFilters && (
+          <div className="md:hidden fixed top-32 right-3 w-52 z-50 bg-[#1a1a1c] border border-[#3a3a3d] rounded-lg p-2.5 shadow-xl max-h-[50vh] overflow-y-auto" style={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+            {/* Close button */}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-white/70 font-medium">Filters</span>
+              <button onClick={() => setShowMobileFilters(false)} className="p-0.5 hover:bg-white/10 rounded">
+                <svg className="w-3.5 h-3.5 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* View Options */}
+            <div className="mb-2">
+              <label className="text-[10px] text-white/40 mb-1 block">View Size</label>
+              <div className="flex items-center justify-between bg-[#0a0a0c] border border-[#2a2a2d] rounded p-0.5">
+                <button
+                  onClick={() => setImageSize(prev => Math.max(1, prev - 1))}
+                  disabled={imageSize <= 1}
+                  className={`p-1 rounded transition-all ${imageSize <= 1 ? 'text-white/20' : 'text-white/60'}`}
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                  </svg>
+                </button>
+                <div className="flex items-center gap-0.5">
+                  {[1, 2, 3, 4, 5].map((level) => (
+                    <div key={level} className={`w-1 h-1 rounded-full ${level <= imageSize ? 'bg-white/60' : 'bg-white/20'}`} />
+                  ))}
+                </div>
+                <button
+                  onClick={() => setImageSize(prev => Math.min(5, prev + 1))}
+                  disabled={imageSize >= 5}
+                  className={`p-1 rounded transition-all ${imageSize >= 5 ? 'text-white/20' : 'text-white/60'}`}
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Search */}
+            <div className="mb-2">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search..."
+                className="w-full bg-[#0a0a0c] border border-[#2a2a2d] rounded px-2 py-1 text-xs text-white/80 placeholder-white/30 focus:outline-none"
+              />
+            </div>
+
+            {/* Time Filter */}
+            <div className="mb-2">
+              <div className="grid grid-cols-4 gap-0.5">
+                {[
+                  { value: 'all', label: 'All' },
+                  { value: 'today', label: 'Day' },
+                  { value: 'week', label: 'Week' },
+                  { value: 'month', label: 'Month' },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setTimeFilter(option.value as TimeFilter)}
+                    className={`px-1 py-1 rounded text-[10px] transition-all ${
+                      timeFilter === option.value ? 'bg-white/20 text-white' : 'bg-[#0a0a0c] text-white/50'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Clear filters button */}
+            {hasActiveFilters && (
+              <button
+                onClick={() => { clearAllFilters(); setShowMobileFilters(false); }}
+                className="w-full py-1.5 bg-white/10 hover:bg-white/20 rounded text-[10px] text-white/70 transition-all"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Main content - Images */}
-        <div className="pr-[272px]">
+        <div className="pr-0 md:pr-[272px]">
           {/* Gallery grouped by date */}
           <div className="p-4 space-y-6">
             {Object.entries(groupedByDate).map(([date, gens]) => (
@@ -626,8 +748,8 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
           {hasMore && <div ref={observerRef} className="h-10" />}
         </div>
 
-        {/* Filter Panel - Right Side (Fixed to viewport) */}
-        <div className="fixed top-[140px] right-[5.5%] w-64 space-y-2 overflow-y-auto max-h-[calc(100vh-160px)] z-40">
+        {/* Filter Panel - Right Side (Fixed to viewport) - Hidden on mobile */}
+        <div className="hidden md:block fixed top-[140px] right-[5.5%] w-64 space-y-2 overflow-y-auto max-h-[calc(100vh-160px)] z-40">
           {/* View Options */}
           <div className="bg-[#1a1a1c] border border-[#2a2a2d] rounded-lg p-3">
             <label className="text-xs text-white/40 mb-2 block">View Options</label>

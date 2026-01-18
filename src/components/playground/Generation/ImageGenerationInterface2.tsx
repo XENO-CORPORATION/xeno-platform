@@ -3,6 +3,7 @@ import JSZip from 'jszip';
 import imageGenerationService from '../../../services/imageGenerationService';
 import { ImageModelSettings } from '../../nodes/image-models/ImageModelInterface';
 import * as replicateService from '../../../services/replicateService';
+import openaiImageService from '../../../services/openaiImageService';
 import { useGenerationHistory } from './hooks/useGenerationHistory';
 import GenerationHistory from './components/GenerationHistory';
 import { generationHistoryService } from '../../../services/generationHistoryService';
@@ -58,22 +59,6 @@ const aiCompanies = [
   {
     name: 'OpenAI',
     models: [
-      {
-        name: 'DALL-E 3',
-        type: 'image' as const,
-        cost: '$0.040 - $0.120 per image',
-        speed: '~10-30 seconds',
-        quality: 'High quality, photorealistic',
-        description: 'Advanced image generation with improved prompt following and detail'
-      },
-      {
-        name: 'DALL-E 2',
-        type: 'image' as const,
-        cost: '$0.016 - $0.020 per image',
-        speed: '~5-15 seconds',
-        quality: 'Good quality',
-        description: 'Original DALL-E with fast generation times'
-      },
       {
         name: 'GPT 1.5',
         type: 'image' as const,
@@ -134,8 +119,12 @@ const aiCompanies = [
       }
     ],
     logo: (
-      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+      <svg viewBox="0 0 320 320" className="w-5 h-5" fill="currentColor">
+        {/* Seedream logo */}
+        <path d="M254 33C260.798 33.6798 266.739 34.4866 273.219 36.25C274.043 36.4682 274.868 36.6863 275.717 36.9111C277.439 37.3682 279.16 37.8288 280.88 38.293C283.519 39.0052 286.162 39.7067 288.805 40.4062C290.485 40.8535 292.164 41.3014 293.844 41.75C294.633 41.9604 295.423 42.1709 296.236 42.3877C301.764 43.8822 301.764 43.8822 304 45C304 120.57 304 196.14 304 274C298.222 275.926 292.553 277.74 286.676 279.262C285.926 279.457 285.176 279.653 284.403 279.854C282.835 280.262 281.266 280.667 279.697 281.072C277.306 281.689 274.918 282.318 272.529 282.947C270.995 283.344 269.46 283.741 267.926 284.137C267.219 284.324 266.513 284.512 265.785 284.705C261.591 285.77 258.445 286 254 286C254 202.51 254 119.02 254 33Z" />
+        <path d="M16 46C33.0076 48.1259 49.4193 53.6574 66 58C66 124.99 66 191.98 66 261C20 273 20 273 16 273C16 198.09 16 123.18 16 46Z" />
+        <path d="M226 113C226 157.55 226 202.1 226 248C215.108 245.58 204.294 243.146 193.507 240.335C191.445 239.798 189.381 239.267 187.316 238.736C177.275 236.137 177.275 236.137 175 235C175 199.03 175 163.06 175 126C199.585 118.976 199.585 118.976 210.625 116.125C211.793 115.818 212.961 115.511 214.164 115.195C215.278 114.907 216.392 114.618 217.539 114.32C218.521 114.065 219.503 113.81 220.514 113.547C223 113 223 113 226 113Z" />
+        <path d="M94 146C103.002 147.125 103.002 147.125 106.748 148.107C108.003 148.433 108.003 148.433 109.284 148.765C110.159 148.997 111.033 149.229 111.934 149.469C113.311 149.829 113.311 149.829 114.717 150.197C116.643 150.702 118.568 151.21 120.493 151.72C123.451 152.504 126.412 153.278 129.373 154.051C131.248 154.544 133.122 155.037 134.996 155.531C135.885 155.764 136.773 155.996 137.688 156.235C143.884 157.884 143.884 157.884 145 159C145.095 160.404 145.122 161.813 145.12 163.22C145.122 164.13 145.123 165.041 145.124 165.978C145.119 167.488 145.119 167.488 145.114 169.028C145.114 170.081 145.114 171.135 145.114 172.22C145.113 175.721 145.105 179.222 145.098 182.723C145.096 185.143 145.094 187.563 145.093 189.983C145.09 196.366 145.08 202.75 145.069 209.133C145.058 215.642 145.054 222.15 145.049 228.658C145.038 241.439 145.021 254.219 145 267C136.487 270.25 136.487 270.25 132.575 271.259C131.808 271.459 131.041 271.659 130.25 271.865C129.451 272.068 128.652 272.271 127.828 272.48C126.561 272.807 126.561 272.807 125.268 273.14C123.497 273.595 121.726 274.048 119.954 274.499C117.242 275.19 114.533 275.89 111.824 276.592C110.097 277.034 108.369 277.477 106.641 277.918C105.833 278.127 105.026 278.337 104.194 278.552C103.439 278.743 102.685 278.933 101.907 279.13C101.247 279.298 100.588 279.467 99.9078 279.641C98 280 98 280 94 280C94 235.78 94 191.56 94 146Z" />
       </svg>
     )
   },
@@ -168,9 +157,7 @@ const aiCompanies = [
       }
     ],
     logo: (
-      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-        <path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4zm0 2.18l6 3v4.82c0 4.52-2.98 8.69-6 9.88-3.02-1.19-6-5.36-6-9.88V7.18l6-3z"/>
-      </svg>
+      <img src="/flux-logo.svg" alt="Flux" className="w-5 h-5" />
     )
   },
   {
@@ -244,8 +231,8 @@ const aiCompanies = [
       }
     ],
     logo: (
-      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-        <path d="M4 4h16v2H4V4zm0 14h16v2H4v-2zm9.5-8.5l5.196 3-5.196 3v-6zm-2 0v6l-5.196-3 5.196-3z"/>
+      <svg viewBox="0 0 110 66" className="w-5 h-5" fill="currentColor">
+        <path fillRule="evenodd" clipRule="evenodd" d="M110.001 43.7425C97.1676 51.9955 84.2426 59.5498 69.8555 62.9776C66.6472 63.7363 63.0905 63.7363 59.8318 63.2123C56.7243 62.7484 55.1705 59.4898 56.2751 56.0619C57.3293 52.8688 58.7318 49.6156 60.5376 46.941C64.4426 41.1279 68.8518 35.8388 72.8118 30.0857C75.2301 26.56 77.4095 22.8111 79.3293 18.8743C80.7318 16.0851 80.081 12.7118 77.6243 11.32C73.513 8.93467 69.1039 7.2535 64.7451 5.45225C64.241 5.21754 63.4893 5.85617 62.4901 6.26554C63.7414 7.59737 64.6443 8.58533 65.8955 9.92262C52.9659 12.5426 40.733 16.2543 28.8622 21.3742C28.8072 21.6635 28.711 21.8928 28.7568 22.0128C30.5122 25.206 29.7101 27.6458 27.1526 29.6218C26.1597 30.3954 25.2803 31.358 24.5493 32.471C32.3685 35.2002 39.3351 33.6336 45.9993 28.4591C45.6005 27.7659 45.1972 27.1273 44.7985 26.4286C47.301 26.9526 48.8043 28.5792 49.006 31.1337C49.0564 31.7178 48.7584 32.2963 48.6072 32.8804C48.2543 32.411 47.8051 31.9525 47.5072 31.423C47.3009 31.0737 47.2505 30.6698 47.1039 30.0857C39.1839 36.3628 30.6635 37.9348 21.2905 34.6816C21.2905 36.8868 21.1897 38.7481 21.341 40.5493C21.4418 42.1159 20.8918 42.8145 19.691 43.6278C16.9822 45.6038 14.1726 47.6397 11.9176 50.2543C9.21345 53.4474 10.2172 57.3446 13.8747 58.9712C18.0318 60.827 22.3951 60.8816 26.7539 60.2485C31.9147 59.4898 36.9747 58.5018 42.5939 57.5739C36.026 61.231 29.5589 63.7964 22.748 64.8335C17.9814 65.5976 13.2239 66.0015 8.5122 64.375C1.7472 62.1098 -1.26405 56.182 0.491366 48.2183C2.14595 40.7786 6.15637 34.8508 10.4647 29.387C24.8518 11.1999 43.043 1.96438 64.0897 0.103084C69.003 -0.300833 73.9668 0.452418 78.573 2.89229C85.0401 6.38017 87.7489 13.7544 84.591 21.1995C82.5376 26.1393 79.6776 30.6698 76.8222 35.1456C74.0172 39.5614 70.8593 43.6278 67.903 47.869C67.0505 49.1462 66.2485 50.489 65.5976 51.9354C64.3418 54.6646 65.1943 56.4658 67.8526 56.182C73.4122 55.5379 79.0818 55.0194 84.4443 53.3928C92.3093 51.0075 99.9772 47.6397 107.746 44.6758C108.548 44.4411 109.3 44.0918 110.001 43.7479V43.7425Z" />
       </svg>
     )
   },
@@ -270,114 +257,9 @@ const aiCompanies = [
       }
     ],
     logo: (
-      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-        <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18L19.82 8 12 11.82 4.18 8 12 4.18zM4 9.47l7 3.5v7.85l-7-3.5V9.47zm16 0v7.85l-7 3.5v-7.85l7-3.5z"/>
-      </svg>
-    )
-  },
-  {
-    name: 'Midjourney',
-    models: [
-      {
-        name: 'v6.1',
-        type: 'image' as const,
-        cost: '$0.05 - $0.15 per image',
-        speed: '~30-90 seconds',
-        quality: 'Exceptional artistic quality',
-        description: 'Latest version with improved coherence and prompt understanding'
-      },
-      {
-        name: 'v6.0',
-        type: 'image' as const,
-        cost: '$0.04 - $0.12 per image',
-        speed: '~25-80 seconds',
-        quality: 'Artistic, stylized',
-        description: 'Previous flagship with great artistic rendering'
-      },
-      {
-        name: 'Niji 6',
-        type: 'image' as const,
-        cost: '$0.04 - $0.12 per image',
-        speed: '~25-80 seconds',
-        quality: 'Anime style specialist',
-        description: 'Specialized model for anime and manga-style artwork'
-      }
-    ],
-    logo: (
-      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    )
-  },
-  {
-    name: 'Runway',
-    models: [
-      {
-        name: 'Gen-3 Alpha',
-        type: 'video' as const,
-        cost: '$0.50 - $2.00 per 5s video',
-        speed: '~60-180 seconds',
-        quality: 'High quality video',
-        description: 'Latest video generation model with improved temporal consistency'
-      },
-      {
-        name: 'Gen-2',
-        type: 'video' as const,
-        cost: '$0.30 - $1.50 per 4s video',
-        speed: '~45-120 seconds',
-        quality: 'Good video quality',
-        description: 'Text and image to video generation with smooth motion'
-      }
-    ],
-    logo: (
-      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-        <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 18.5L4 16.18V8.82L12 4.5l8 4.32v7.36L12 20.5z"/>
-      </svg>
-    )
-  },
-  {
-    name: 'Image-to-Image',
-    models: [
-      {
-        name: 'Flux Dev Img2Img',
-        type: 'image' as const,
-        cost: '$0.030 per megapixel',
-        speed: '~8-25 seconds',
-        quality: 'High quality transformation',
-        description: 'Transform images with text prompts using Flux Dev. Requires an input image.',
-        isImageToImage: true
-      },
-      {
-        name: 'SD V3 Medium Img2Img',
-        type: 'image' as const,
-        cost: '$0.020 - $0.060 per image',
-        speed: '~6-18 seconds',
-        quality: 'High quality transformation',
-        description: 'Stable Diffusion V3 image transformation. Requires an input image.',
-        isImageToImage: true
-      },
-      {
-        name: 'Recraft V3 Img2Img',
-        type: 'image' as const,
-        cost: '$0.025 - $0.080 per image',
-        speed: '~8-20 seconds',
-        quality: 'Premium transformation',
-        description: 'Recraft V3 image editing and transformation. Requires an input image.',
-        isImageToImage: true
-      },
-      {
-        name: 'Ideogram V3',
-        type: 'image' as const,
-        cost: '$0.030 - $0.100 per image',
-        speed: '~10-30 seconds',
-        quality: 'High quality with style reference',
-        description: 'Generate images with style references. Supports multiple reference images.',
-        isImageToImage: true
-      }
-    ],
-    logo: (
-      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5-7l-3 3.72L9 13l-3 4h12l-4-5z"/>
+      <svg viewBox="0 0 12 12" className="w-5 h-5" fill="currentColor">
+        <path fillRule="evenodd" clipRule="evenodd" d="M3.6115 10.5C5.7375 10.5 7.1205 9.39 7.1205 7.72C7.1205 6.425 6.2795 5.602 4.7755 5.261L3.8105 4.9755C2.9635 4.788 2.469 4.563 2.5855 3.988C2.6825 3.5095 2.972 3.2395 3.6465 3.2395C5.789 3.2395 6.583 3.988 6.583 3.988V2.188C6.583 2.188 5.81 1.5 3.6465 1.5C1.6065 1.5 0.5 2.535 0.5 4.1365C0.5 5.4315 1.267 6.185 2.8225 6.5425L2.9895 6.584C3.226 6.656 3.5455 6.7515 3.9475 6.87C4.7425 7.0575 4.947 7.2565 4.947 7.853C4.947 8.398 4.372 8.708 3.612 8.708C1.4205 8.708 0.5 7.6155 0.5 7.6155V9.61C0.5 9.61 1.076 10.5 3.6115 10.5Z" />
+        <path fillRule="evenodd" clipRule="evenodd" d="M10.1876 10.3619C10.9401 10.3619 11.5006 9.82544 11.5006 9.09894C11.5006 8.35694 10.9561 7.83594 10.1876 7.83594C9.43512 7.83594 8.89062 8.35694 8.89062 9.09894C8.89062 9.84094 9.43512 10.3619 10.1876 10.3619Z" />
       </svg>
     )
   },
@@ -393,7 +275,7 @@ interface ModelCapabilities {
 
 // Map UI model names to provider and model ID
 interface ModelMapping {
-  provider: 'fal' | 'replicate';
+  provider: 'fal' | 'replicate' | 'openai' | 'xeno-flow';
   modelId: string;
   replicateConfig?: typeof replicateService.ReplicateModels[keyof typeof replicateService.ReplicateModels];
   capabilities: ModelCapabilities;
@@ -412,6 +294,48 @@ interface GeneratedImage {
 }
 
 const modelNameToProvider: Record<string, ModelMapping> = {
+  // OpenAI GPT Image models
+  'GPT 1.5': {
+    provider: 'openai',
+    modelId: 'gpt-image-1',
+    capabilities: {
+      maxCount: 4,
+      supportedAspectRatios: ['1:1', '16:9', '9:16'],
+      supportedResolutions: ['1k', '2k'],
+      maxResolution: '2k'
+    }
+  },
+  'GPT 1.5 - High': {
+    provider: 'openai',
+    modelId: 'gpt-image-1',
+    capabilities: {
+      maxCount: 4,
+      supportedAspectRatios: ['1:1', '16:9', '9:16'],
+      supportedResolutions: ['1k', '2k'],
+      maxResolution: '2k'
+    }
+  },
+  'GPT 1 - HQ': {
+    provider: 'openai',
+    modelId: 'gpt-image-1',
+    capabilities: {
+      maxCount: 4,
+      supportedAspectRatios: ['1:1', '16:9', '9:16'],
+      supportedResolutions: ['1k', '2k'],
+      maxResolution: '2k'
+    }
+  },
+  'GPT': {
+    provider: 'openai',
+    modelId: 'gpt-image-1',
+    capabilities: {
+      maxCount: 4,
+      supportedAspectRatios: ['1:1', '16:9', '9:16'],
+      supportedResolutions: ['1k'],
+      maxResolution: '1k'
+    }
+  },
+
   // Black Forest (Flux models) - Replicate
   'Flux 2 Max': {
     provider: 'replicate',
@@ -488,6 +412,26 @@ const modelNameToProvider: Record<string, ModelMapping> = {
       maxResolution: '2k'
     }
   },
+  'Nano Banana Pro': {
+    provider: 'xeno-flow',
+    modelId: 'nano-banana-pro',
+    capabilities: {
+      maxCount: 4,
+      supportedAspectRatios: ['1:1', '16:9', '9:16'],
+      supportedResolutions: ['1k', '2k', '4k'], // FIFE URL: =w1280 (1k), =w2560 (2k), =w3840 (4k)
+      maxResolution: '4k'
+    }
+  },
+  'Nano Banana': {
+    provider: 'xeno-flow',
+    modelId: 'nano-banana',
+    capabilities: {
+      maxCount: 4,
+      supportedAspectRatios: ['1:1', '16:9', '9:16'],
+      supportedResolutions: ['1k', '2k', '4k'], // FIFE URL: =w1280 (1k), =w2560 (2k), =w3840 (4k)
+      maxResolution: '4k'
+    }
+  },
 
   // Stability AI - Fal.ai (primary) and Replicate (backup)
   'SDXL 1.0': {
@@ -546,62 +490,6 @@ const modelNameToProvider: Record<string, ModelMapping> = {
     }
   },
 
-  // ============================================
-  // IMAGE-TO-IMAGE MODELS - Fal.ai
-  // ============================================
-  'Flux Dev Img2Img': {
-    provider: 'fal',
-    modelId: 'fal-ai/flux/dev/image-to-image',
-    capabilities: {
-      maxCount: 4,
-      supportedAspectRatios: [], // Inherits from input image
-      supportedResolutions: ['1k', '2k'],
-      maxResolution: '2k'
-    }
-  },
-  'SD V3 Medium Img2Img': {
-    provider: 'fal',
-    modelId: 'fal-ai/stable-diffusion-v3-medium/image-to-image',
-    capabilities: {
-      maxCount: 4,
-      supportedAspectRatios: [], // Inherits from input image
-      supportedResolutions: ['1k', '2k'],
-      maxResolution: '2k'
-    }
-  },
-  'Recraft V3 Img2Img': {
-    provider: 'fal',
-    modelId: 'fal-ai/recraft/v3/image-to-image',
-    capabilities: {
-      maxCount: 4,
-      supportedAspectRatios: [], // Inherits from input image
-      supportedResolutions: ['1k', '2k'],
-      maxResolution: '2k'
-    }
-  },
-  'Ideogram V3': {
-    provider: 'fal',
-    modelId: 'fal-ai/ideogram/v3',
-    capabilities: {
-      maxCount: 4,
-      supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4'],
-      supportedResolutions: ['1k', '2k'],
-      maxResolution: '2k'
-    }
-  },
-
-  // OpenAI (DALL-E models) - Replicate (requires OpenAI API key)
-  'DALL-E 3': {
-    provider: 'replicate',
-    modelId: 'openai/dall-e-3',
-    replicateConfig: replicateService.ReplicateModels.DALLE_3,
-    capabilities: {
-      maxCount: 1, // DALL-E 3 generates 1 image at a time
-      supportedAspectRatios: ['1:1', '16:9', '9:16'],
-      supportedResolutions: ['1k', '2k'],
-      maxResolution: '2k'
-    }
-  },
 };
 
 const ImageGenerationInterface2: React.FC = () => {
@@ -626,11 +514,17 @@ const ImageGenerationInterface2: React.FC = () => {
   const [animatingFavButton, setAnimatingFavButton] = useState(false);
   const [animatingHistoryButton, setAnimatingHistoryButton] = useState(false);
   const [animatingSettingsButton, setAnimatingSettingsButton] = useState(false);
+  // Tools state
+  const [showTools, setShowTools] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [selectedTool, setSelectedTool] = useState<'variations' | null>(null);
+  const [selectedVariationMode, setSelectedVariationMode] = useState<'reframe' | 'storyboard' | 'custom' | null>(null);
   // Image viewer modal state
   const [viewingImage, setViewingImage] = useState<{
     generationId: string;
     imageIndex: number;
   } | null>(null);
+  const [showDetailsOverlay, setShowDetailsOverlay] = useState(false);
   // Store the settings used for the current generation (frozen at generation start)
   const [generatingSettings, setGeneratingSettings] = useState<{
     prompt: string;
@@ -648,6 +542,17 @@ const ImageGenerationInterface2: React.FC = () => {
     return params.get('view') === 'history' || params.get('view') === 'favorites';
   });
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Track if we're on mobile (below md breakpoint - 768px)
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Track scroll position for header background
   useEffect(() => {
@@ -659,7 +564,7 @@ const ImageGenerationInterface2: React.FC = () => {
   }, []);
 
   const {
-    generations,  // This IS the source of truth - renders directly from this
+    generations: dbGenerations,  // Generations from database (authenticated users)
     isLoading: isHistoryLoading,
     hasMore,
     favoritesOnly,
@@ -669,6 +574,12 @@ const ImageGenerationInterface2: React.FC = () => {
     loadMore,
     setFavoritesOnly,
   } = useGenerationHistory();
+
+  // Local generations state for non-authenticated users or immediate display
+  const [localGenerations, setLocalGenerations] = useState<typeof dbGenerations>([]);
+
+  // Combine local and database generations (local first, then db)
+  const generations = [...localGenerations, ...dbGenerations];
 
   // Update URL when view changes to persist state on refresh
   useEffect(() => {
@@ -866,8 +777,9 @@ const ImageGenerationInterface2: React.FC = () => {
         const [w, h] = currentAspectRatio.split(':').map(Number);
         const baseSize = currentResolution === '1k' ? 512 : currentResolution === '2k' ? 1024 : 2048;
         const totalRatio = w + h;
-        const width = Math.round((w / totalRatio) * baseSize * 2);
-        const height = Math.round((h / totalRatio) * baseSize * 2);
+        // Ensure dimensions are divisible by 8 (required by SD models)
+        const width = Math.round((w / totalRatio) * baseSize * 2 / 8) * 8;
+        const height = Math.round((h / totalRatio) * baseSize * 2 / 8) * 8;
 
         let imageUrls: string[] = [];
 
@@ -906,6 +818,21 @@ const ImageGenerationInterface2: React.FC = () => {
           for (let i = 0; i < currentCount; i++) {
             const response = await replicateService.generateImage(modelMapping.replicateConfig, gen.prompt, replicateSettings);
             if (response.imageUrl) imageUrls.push(response.imageUrl);
+          }
+        } else if (modelMapping.provider === 'openai') {
+          // Use OpenAI API directly for DALL-E models
+          const response = await openaiImageService.generateImage({
+            prompt: gen.prompt,
+            model: modelMapping.modelId,
+            n: currentCount,
+            size: '1024x1024',
+            response_format: 'url',
+          });
+
+          if (response.success && response.images) {
+            imageUrls = response.images
+              .filter(img => img.url)
+              .map(img => img.url as string);
           }
         }
 
@@ -1047,6 +974,9 @@ const ImageGenerationInterface2: React.FC = () => {
     // Clear the input box immediately after generation starts
     setPrompt('');
 
+    // Switch to main view to show the generating skeleton
+    setShowHistory(false);
+
     setIsGenerating(true);
     setError(null);
     // Don't clear previous images - we want to keep history
@@ -1056,8 +986,9 @@ const ImageGenerationInterface2: React.FC = () => {
       const [w, h] = aspectRatio.split(':').map(Number);
       const baseSize = resolution === '1k' ? 512 : resolution === '2k' ? 1024 : 2048;
       const totalRatio = w + h;
-      const width = Math.round((w / totalRatio) * baseSize * 2);
-      const height = Math.round((h / totalRatio) * baseSize * 2);
+      // Ensure dimensions are divisible by 8 (required by SD models)
+      const width = Math.round((w / totalRatio) * baseSize * 2 / 8) * 8;
+      const height = Math.round((h / totalRatio) * baseSize * 2 / 8) * 8;
 
       console.log('Generating with settings:', {
         provider: modelMapping.provider,
@@ -1206,10 +1137,95 @@ const ImageGenerationInterface2: React.FC = () => {
             console.log(`Image ${i + 1} generated:`, response.imageUrl);
           }
         }
+      } else if (modelMapping.provider === 'openai') {
+        // Use OpenAI API directly for DALL-E models
+        const size = '1024x1024'; // DALL-E 2 only supports 1024x1024
+
+        const response = await openaiImageService.generateImage({
+          prompt: currentPrompt,
+          model: modelMapping.modelId,
+          n: count,
+          size: size,
+          response_format: 'url',
+        });
+
+        if (response.success && response.images) {
+          imageUrls = response.images
+            .filter(img => img.url)
+            .map(img => img.url as string);
+          console.log(`OpenAI generated ${imageUrls.length} images`);
+        } else if (response.error) {
+          throw new Error(response.error);
+        }
+      } else if (modelMapping.provider === 'xeno-flow') {
+        // Use Xeno Flow Service for Nano Banana models
+        console.log('Using Xeno Flow Service for', selectedModel);
+
+        // Map aspect ratio to xeno-flow format
+        let xenoAspectRatio: 'landscape' | 'portrait' | 'square' = 'landscape';
+        if (aspectRatio === '1:1') {
+          xenoAspectRatio = 'square';
+        } else if (aspectRatio === '9:16' || aspectRatio === '3:4' || aspectRatio === '2:3') {
+          xenoAspectRatio = 'portrait';
+        } else {
+          xenoAspectRatio = 'landscape';
+        }
+
+        // Map resolution to FIFE URL width parameter
+        const resolutionToWidth: Record<string, number> = {
+          '1k': 1280,  // 1280×720 (720p/HD)
+          '2k': 2560,  // 2560×1440 (QHD)
+          '4k': 3840,  // 3840×2160 (UHD)
+        };
+        const fifeWidth = resolutionToWidth[resolution] || 2560;
+
+        // Generate images one by one (API returns one image per call)
+        for (let i = 0; i < count; i++) {
+          console.log(`Generating image ${i + 1}/${count} with Xeno Flow at ${resolution}...`);
+
+          const response = await fetch('/api/image/xeno-flow/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: currentPrompt,
+              aspect_ratio: xenoAspectRatio,
+              num_images: 1,
+              resolution: fifeWidth, // FIFE URL width parameter
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.success && data.images?.[0]?.base64) {
+            imageUrls.push(data.images[0].base64);
+            console.log(`Image ${i + 1} generated successfully`);
+          } else {
+            console.error('Xeno Flow generation failed:', data.detail || data.error);
+            if (i === 0) {
+              throw new Error(data.detail || 'Generation failed');
+            }
+          }
+        }
       }
 
       if (imageUrls.length > 0) {
         console.log(`Successfully generated ${imageUrls.length} images`);
+
+        // Create a local generation record for immediate display
+        const localGen = {
+          id: `local-${Date.now()}`,
+          user_id: '',
+          prompt: currentPrompt,
+          image_urls: imageUrls,
+          model: selectedModel,
+          aspect_ratio: aspectRatio,
+          resolution,
+          count,
+          provider: modelMapping.provider,
+          is_favorite: false,
+          created_at: new Date().toISOString(),
+          reference_images: [] as any[],
+        };
 
         // Save to history - this updates the generations array (single source of truth)
         // The hook's saveGeneration automatically prepends to the generations array
@@ -1219,7 +1235,7 @@ const ImageGenerationInterface2: React.FC = () => {
             .filter(img => img.refTypes.length > 0)
             .flatMap(img => img.refTypes.map(type => ({ url: img.url, refType: type })));
 
-          await saveGeneration({
+          const saved = await saveGeneration({
             prompt: currentPrompt,
             image_urls: imageUrls,
             model: selectedModel,
@@ -1229,6 +1245,15 @@ const ImageGenerationInterface2: React.FC = () => {
             provider: modelMapping.provider,
             reference_images: refImages.length > 0 ? refImages : undefined,
           });
+
+          // If save failed, add to local generations as fallback
+          if (!saved) {
+            console.warn('Failed to save to database, using local generation');
+            setLocalGenerations(prev => [localGen, ...prev]);
+          }
+        } else {
+          // Not authenticated - add to local generations
+          setLocalGenerations(prev => [localGen, ...prev]);
         }
       } else {
         throw new Error('No images were generated');
@@ -1246,141 +1271,183 @@ const ImageGenerationInterface2: React.FC = () => {
   const selectedResolution = resolutions.find(res => res.value === resolution);
 
   return (
-    <div className="h-full w-full flex flex-col py-3 overflow-y-auto relative">
+    <div className="h-full w-full flex flex-col py-3 pb-36 md:pb-3 overflow-y-auto relative">
       {/* Parent Container - Wraps both Generation Header and Image History - Responsive width, centered */}
       <div className="w-[100%] sm:w-[99%] md:w-[98%] lg:w-[97%] xl:w-[95%] 2xl:w-[90%] mx-auto relative flex flex-col flex-1">
 
         {/* Generation Header Container - Sticky */}
         <div className={`generation-header flex flex-col items-center gap-3 sticky top-0 z-50 transition-colors duration-200 ${isScrolled ? 'bg-[#0a0a0b]' : 'bg-transparent'}`} style={{ width: '100%' }}>
-        <div className="w-full flex items-start justify-center gap-3 relative">
-          {/* Tool Container */}
-          <div className="w-60 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center pl-1 pr-4 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
-            <button
-              onClick={() => {
-                setShowAiCompanies(!showAiCompanies);
-                setSelectedCompany(null);
-                setShowSettings(false);
-                setActiveImageId(null);
-              }}
-              className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
-            >
-              <svg className="w-6 h-6 text-white/40" viewBox="0 0 24 24" fill="currentColor">
-                {/* Wand body - centered with equal padding */}
-                <rect x="2" y="12.8" width="10" height="2.4" rx="1.2" transform="rotate(-45 7 14)" />
-                {/* Wand tip - white with dark outline */}
-                <rect x="11.5" y="12.8" width="3.5" height="2.4" rx="1.2" transform="rotate(-45 7 14)" fill="white" stroke="currentColor" strokeWidth="0.5" />
-                {/* Large star - top right */}
-                <path d="M17.5 5.5 Q18.2 7.7 20.5 8.5 Q18.2 9.3 17.5 11.5 Q16.8 9.3 14.5 8.5 Q16.8 7.7 17.5 5.5 Z" />
-                {/* Medium star - right side */}
-                <path d="M20.5 12.5 Q21 14 22.5 14.5 Q21 15 20.5 16.5 Q20 15 18.5 14.5 Q20 14 20.5 12.5 Z" />
-                {/* Small star - between them */}
-                <path d="M15 12 Q15.4 13 16.5 13.4 Q15.4 13.8 15 14.8 Q14.6 13.8 13.5 13.4 Q14.6 13 15 12 Z" />
-              </svg>
-            </button>
-            <div className="w-px h-6 bg-white/10 ml-1 mr-3"></div>
-            {selectedModel ? (
-              <span className="text-white/60 text-sm font-medium truncate">{selectedModel}</span>
-            ) : prompt.trim().length > 0 ? (
-              <span className="text-red-400 text-sm font-medium animate-pulse">Select model</span>
-            ) : (
-              <span className="text-white/40 text-sm font-medium">No model selected</span>
-            )}
-          </div>
-
-          {/* Input Container */}
-          <div className="flex-1 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-between relative shadow-lg shadow-black/40 bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
-            <div className="flex items-center flex-1">
+        <div className="w-full hidden md:flex flex-col gap-3 relative">
+          {/* Desktop Row: All controls in one row (hidden on mobile) */}
+          <div className="w-full hidden md:flex flex-row items-start justify-center gap-3">
+            {/* Model Selector Container - Desktop */}
+            <div className="w-[118px] h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center pl-1 pr-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
               <button
-                onClick={handleImageClick}
-                className="p-2 ml-1 rounded flex items-center justify-center transition-all hover:bg-white/5"
+                onClick={() => {
+                  setShowAiCompanies(!showAiCompanies);
+                  setSelectedCompany(null);
+                  setShowSettings(false);
+                  setActiveImageId(null);
+                  setShowTools(false);
+                  setSelectedTool(null);
+                }}
+                className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
               >
-                <svg className="w-6 h-6 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                <svg className="w-6 h-6 text-white/40" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="2" y="12.8" width="10" height="2.4" rx="1.2" transform="rotate(-45 7 14)" />
+                  <rect x="11.5" y="12.8" width="3.5" height="2.4" rx="1.2" transform="rotate(-45 7 14)" fill="white" stroke="currentColor" strokeWidth="0.5" />
+                  <path d="M17.5 5.5 Q18.2 7.7 20.5 8.5 Q18.2 9.3 17.5 11.5 Q16.8 9.3 14.5 8.5 Q16.8 7.7 17.5 5.5 Z" />
+                  <path d="M20.5 12.5 Q21 14 22.5 14.5 Q21 15 20.5 16.5 Q20 15 18.5 14.5 Q20 14 20.5 12.5 Z" />
+                  <path d="M15 12 Q15.4 13 16.5 13.4 Q15.4 13.8 15 14.8 Q14.6 13.8 13.5 13.4 Q14.6 13 15 12 Z" />
                 </svg>
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-              <div className="w-px h-6 bg-white/10 ml-1 mr-3"></div>
-
-              {/* Text Input */}
-              {(() => {
-                const charLimit = resolution === '4k' ? 800 : resolution === '2k' ? 650 : 500;
-                const warningThreshold = charLimit - 50;
-                return (
-                  <>
-                    <input
-                      type="text"
-                      value={prompt}
-                      onChange={(e) => setPrompt(e.target.value.slice(0, charLimit))}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !isGenerating && prompt.trim() && selectedModel) {
-                          handleGenerate();
-                        }
-                      }}
-                      maxLength={charLimit}
-                      placeholder="Describe what you want to generate..."
-                      className="flex-1 bg-transparent text-white/90 text-sm placeholder:text-white/30 outline-none focus:outline-none focus:ring-0 border-0 px-1"
-                    />
-                    {/* Character Counter */}
-                    <span className={`text-xs mr-2 ${prompt.length >= warningThreshold ? 'text-red-400' : 'text-white/30'}`}>
-                      {prompt.length}/{charLimit}
-                    </span>
-                  </>
-                );
-              })()}
+              <div className="w-px h-6 bg-white/10 ml-1"></div>
+              <div className="flex-1 flex items-center justify-center overflow-hidden px-1">
+                {selectedModel ? (
+                  <span className="text-white/60 text-xs font-medium truncate max-w-full">{selectedModel}</span>
+                ) : prompt.trim().length > 0 ? (
+                  <span className="text-red-400 text-xs font-medium animate-pulse">Select</span>
+                ) : (
+                  <span className="text-white/40 text-xs font-medium">Model</span>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Settings Button Container */}
-          <div className="h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center px-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
-            <button
-              onClick={() => {
-                // Trigger animation
-                setAnimatingSettingsButton(true);
-                setTimeout(() => setAnimatingSettingsButton(false), 500);
-                setShowSettings(!showSettings);
-                setShowAiCompanies(false);
-                setSelectedCompany(null);
-              }}
-              className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
-            >
-              <svg
-                className={`w-6 h-6 ${showSettings ? 'text-white' : 'text-white/40'} ${animatingSettingsButton ? 'animate-gear-spin' : ''}`}
-                style={{ transformOrigin: 'center' }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            {/* Tools Container - Desktop - HIDDEN: Will be implemented in Image Studio later
+            <div className="w-[118px] h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center pl-1 pr-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
+              <button
+                onClick={() => {
+                  setShowTools(!showTools);
+                  setSelectedTool(null);
+                  setShowAiCompanies(false);
+                  setSelectedCompany(null);
+                  setShowSettings(false);
+                  setActiveImageId(null);
+                }}
+                className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-          </div>
+                <svg className={`w-6 h-6 ${showTools ? 'text-white' : 'text-white/40'}`} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 20L4 4L20 20H4Z" fillOpacity="0.3" />
+                  <path d="M4 20L4 4L20 20H4Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  <rect x="5.5" y="14" width="1.2" height="4" rx="0.4" />
+                  <rect x="8.5" y="16" width="1.2" height="2.5" rx="0.4" />
+                  <rect x="11.5" y="17" width="1.2" height="1.8" rx="0.4" />
+                </svg>
+              </button>
+              <div className="w-px h-6 bg-white/10 ml-1"></div>
+              <div className="flex-1 flex items-center justify-center">
+                {selectedVariationMode ? (
+                  <span className="text-white/60 text-xs font-medium truncate capitalize">{selectedVariationMode}</span>
+                ) : (
+                  <span className="text-white/40 text-xs font-medium">Tools</span>
+                )}
+              </div>
+            </div>
+            */}
 
-          {/* History & Favorites Button Container */}
-          <div className="h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center px-2 gap-1 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
+            {/* Input Container - Desktop */}
+            <div className="flex-1 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-between relative shadow-lg shadow-black/40 bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
+              <div className="flex items-center flex-1">
+                <button
+                  onClick={handleImageClick}
+                  className="p-2 ml-1 rounded flex items-center justify-center transition-all hover:bg-white/5"
+                >
+                  <svg className="w-6 h-6 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                <div className="w-px h-6 bg-white/10 ml-1 mr-3"></div>
+
+                {/* Text Input */}
+                {(() => {
+                  const charLimit = resolution === '4k' ? 800 : resolution === '2k' ? 650 : 500;
+                  const warningThreshold = charLimit - 50;
+                  return (
+                    <>
+                      <input
+                        type="text"
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value.slice(0, charLimit))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !isGenerating && prompt.trim() && selectedModel) {
+                            handleGenerate();
+                          }
+                        }}
+                        maxLength={charLimit}
+                        placeholder="Describe what you want to generate..."
+                        className="flex-1 bg-transparent text-white/90 text-sm placeholder:text-white/30 outline-none focus:outline-none focus:ring-0 border-0 px-1"
+                      />
+                      {/* Character Counter */}
+                      <span className={`text-xs mr-2 ${prompt.length >= warningThreshold ? 'text-red-400' : 'text-white/30'}`}>
+                        {prompt.length}/{charLimit}
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Settings Button Container */}
+            <div className="h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center px-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
+              <button
+                onClick={() => {
+                  // Trigger animation
+                  setAnimatingSettingsButton(true);
+                  setTimeout(() => setAnimatingSettingsButton(false), 500);
+                  setShowSettings(!showSettings);
+                  setShowAiCompanies(false);
+                  setSelectedCompany(null);
+                  setShowTools(false);
+                  setSelectedTool(null);
+                }}
+                className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
+              >
+                <svg
+                  className={`w-6 h-6 ${showSettings ? 'text-white' : 'text-white/40'} ${animatingSettingsButton ? 'animate-gear-spin' : ''}`}
+                  style={{ transformOrigin: 'center' }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
+
+            {/* History & Favorites Button Container */}
+            <div className="h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center px-2 gap-1 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
             {/* History Button */}
             <button
               onClick={() => {
                 // Trigger animation
                 setAnimatingHistoryButton(true);
                 setTimeout(() => setAnimatingHistoryButton(false), 500);
-                if (favoritesOnly) {
-                  // Switching from favorites to history - keep history open
+                if (favoritesOnly && showHistory) {
+                  // Currently showing favorites - switch to showing all history
                   setFavoritesOnly(false);
-                  setShowHistory(true);
+                  // Keep showHistory true
                 } else {
                   // Toggle history view
-                  setShowHistory(!showHistory);
+                  const newShowHistory = !showHistory;
+                  setShowHistory(newShowHistory);
+                  // If closing history, also turn off favorites filter
+                  if (!newShowHistory) {
+                    setFavoritesOnly(false);
+                  }
                 }
                 setShowSettings(false);
                 setShowAiCompanies(false);
                 setSelectedCompany(null);
+                setShowTools(false);
+                setSelectedTool(null);
               }}
               className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
               title={isAuthenticated ? 'View generation history' : 'Sign in to view history'}
@@ -1410,11 +1477,16 @@ const ImageGenerationInterface2: React.FC = () => {
                 setTimeout(() => setAnimatingFavButton(false), 700);
                 const newFavoritesOnly = !favoritesOnly;
                 setFavoritesOnly(newFavoritesOnly);
-                // Only show history when enabling favorites, hide when disabling
-                setShowHistory(newFavoritesOnly);
+                // When enabling favorites, show history. When disabling, keep history open.
+                if (newFavoritesOnly) {
+                  setShowHistory(true);
+                }
+                // If history is already open, keep it open (don't hide when toggling favorites off)
                 setShowSettings(false);
                 setShowAiCompanies(false);
                 setSelectedCompany(null);
+                setShowTools(false);
+                setSelectedTool(null);
               }}
               className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
               title={isAuthenticated ? 'View favorites' : 'Sign in to view favorites'}
@@ -1461,10 +1533,11 @@ const ImageGenerationInterface2: React.FC = () => {
                 </svg>
             </button>
           </div>
+          </div>
 
           {/* AI Companies Floating Buttons - Positioned at left below Tool Container */}
           {showAiCompanies && (
-            <div className="absolute left-0 top-full mt-2 flex flex-col items-start gap-2 p-2 z-[100]">
+            <div className="absolute left-0 right-0 md:right-auto top-full mt-2 flex flex-row md:flex-col flex-wrap md:flex-nowrap items-start gap-2 p-2 z-[100]">
               {aiCompanies.map((company, index) => (
                   <div key={company.name} className="relative" style={{ animation: `fadeInDown 0.2s ease-out ${index * 50}ms both` }}>
                     {/* Company Button - Icon only */}
@@ -1573,11 +1646,148 @@ const ImageGenerationInterface2: React.FC = () => {
               `}</style>
             </div>
           )}
+
+          {/* Tools Floating Buttons - HIDDEN: Will be implemented in Image Studio later
+          {showTools && (
+            <div className="absolute left-0 md:left-[130px] right-0 md:right-auto top-full mt-2 flex flex-row md:flex-col flex-wrap md:flex-nowrap items-start gap-2 p-2 z-[100]">
+              <div className="relative" style={{ animation: `fadeInDown 0.2s ease-out 0ms both` }}>
+                <button
+                  onClick={() => {
+                    setSelectedTool(selectedTool === 'variations' ? null : 'variations');
+                  }}
+                  className={`h-9 w-9 bg-[#1a1a1c] backdrop-blur-md border rounded-lg flex items-center justify-center text-white/80 hover:bg-[#2a2a2d] transition-all shadow-lg ${
+                    selectedTool === 'variations' ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
+                  }`}
+                  style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
+                  title="Variations"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L21 7V17L12 22L3 17V7L12 2Z" />
+                    <path d="M12 2L12 22" />
+                    <path d="M3 7L21 17" />
+                    <path d="M21 7L3 17" />
+                    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                  </svg>
+                </button>
+                {selectedTool === 'variations' && (
+                  <div className="absolute left-0 top-full mt-1.5 flex flex-col gap-1.5 z-[110]">
+                    <div className="relative group">
+                      <button
+                        onClick={() => {
+                          setSelectedVariationMode('reframe');
+                          setShowTools(false);
+                          setSelectedTool(null);
+                        }}
+                        className={`h-8 px-3 bg-[#1a1a1c] backdrop-blur-md border rounded-lg flex items-center gap-2 hover:bg-[#2a2a2d] hover:border-white/30 transition-all cursor-pointer text-white/90 shadow-lg whitespace-nowrap text-xs font-medium ${
+                          selectedVariationMode === 'reframe' ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
+                        }`}
+                        style={{
+                          boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)',
+                          animation: `fadeInDown 0.2s ease-out 0ms both`
+                        }}
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="5" y="5" width="14" height="14" rx="1" />
+                          <path d="M15 3L21 3L21 9" />
+                          <path d="M21 3L16 8" />
+                          <path d="M9 21L3 21L3 15" />
+                          <path d="M3 21L8 16" />
+                        </svg>
+                        Reframe
+                      </button>
+                      <div className="absolute left-0 top-full mt-1 px-2 py-1 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded text-[10px] text-white/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+                        Create different angles and perspectives
+                      </div>
+                    </div>
+                    <div className="relative group">
+                      <button
+                        onClick={() => {
+                          setSelectedVariationMode('storyboard');
+                          setShowTools(false);
+                          setSelectedTool(null);
+                        }}
+                        className={`h-8 px-3 bg-[#1a1a1c] backdrop-blur-md border rounded-lg flex items-center gap-2 hover:bg-[#2a2a2d] hover:border-white/30 transition-all cursor-pointer text-white/90 shadow-lg whitespace-nowrap text-xs font-medium ${
+                          selectedVariationMode === 'storyboard' ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
+                        }`}
+                        style={{
+                          boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)',
+                          animation: `fadeInDown 0.2s ease-out 50ms both`
+                        }}
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="2" width="8" height="6" rx="1" />
+                          <rect x="14" y="2" width="8" height="6" rx="1" />
+                          <rect x="2" y="10" width="8" height="6" rx="1" />
+                          <rect x="14" y="10" width="8" height="6" rx="1" />
+                          <rect x="8" y="18" width="8" height="4" rx="1" />
+                        </svg>
+                        Storyboard
+                      </button>
+                      <div className="absolute left-0 top-full mt-1 px-2 py-1 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded text-[10px] text-white/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+                        Generate cinematic storyboard sequence
+                      </div>
+                    </div>
+                    <div className="relative group">
+                      <button
+                        onClick={() => {
+                          setSelectedVariationMode('custom');
+                          setShowTools(false);
+                          setSelectedTool(null);
+                        }}
+                        className={`h-8 px-3 bg-[#1a1a1c] backdrop-blur-md border rounded-lg flex items-center gap-2 hover:bg-[#2a2a2d] hover:border-white/30 transition-all cursor-pointer text-white/90 shadow-lg whitespace-nowrap text-xs font-medium ${
+                          selectedVariationMode === 'custom' ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
+                        }`}
+                        style={{
+                          boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)',
+                          animation: `fadeInDown 0.2s ease-out 100ms both`
+                        }}
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                          <path d="M19 3v4" />
+                          <path d="M21 5h-4" />
+                        </svg>
+                        Custom
+                      </button>
+                      <div className="absolute left-0 top-full mt-1 px-2 py-1 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded text-[10px] text-white/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+                        Custom variations based on prompt
+                      </div>
+                    </div>
+                    <style>{`
+                      @keyframes fadeInDown {
+                        from {
+                          opacity: 0;
+                          transform: translateY(-8px);
+                        }
+                        to {
+                          opacity: 1;
+                          transform: translateY(0);
+                        }
+                      }
+                    `}</style>
+                  </div>
+                )}
+              </div>
+              <style>{`
+                @keyframes fadeInDown {
+                  from {
+                    opacity: 0;
+                    transform: translateY(-8px);
+                  }
+                  to {
+                    opacity: 1;
+                    transform: translateY(0);
+                  }
+                }
+              `}</style>
+            </div>
+          )}
+          End of Tools Floating Buttons */}
         </div>
 
-        {/* Uploaded Images Container - Overlaps below image icon in Input Container */}
+        {/* Uploaded Images Container - Aligns with Input Container left edge */}
         {uploadedImages.length > 0 && (
-          <div className="absolute left-[256px] top-full mt-2 flex flex-wrap items-start gap-2 p-2 z-[60]">
+          <div className="absolute left-0 md:left-[136px] right-0 md:right-auto top-full mt-2 flex flex-wrap items-start gap-2 p-2 z-[120]">
             {uploadedImages.map((image) => (
               <div key={image.id} className="flex flex-col items-start gap-2">
                 <div
@@ -1594,7 +1804,7 @@ const ImageGenerationInterface2: React.FC = () => {
                     {/* Trash Icon - Top Right */}
                     <button
                       onClick={() => handleDeleteImage(image.id)}
-                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-black/60 z-10"
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all bg-black/40 hover:bg-black/60 z-10"
                     >
                       <svg className="w-3.5 h-3.5 text-red-500 hover:text-red-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1704,9 +1914,9 @@ const ImageGenerationInterface2: React.FC = () => {
           </div>
         )}
 
-        {/* Settings Controls - Overlaps the uploaded images area when images exist, otherwise below */}
+        {/* Settings Controls - Desktop only (hidden on mobile, mobile has its own at bottom) */}
         {showSettings && (
-          <div className={`absolute left-0 right-0 flex flex-row-reverse items-start gap-2 justify-start p-2 z-50 ${uploadedImages.length > 0 ? 'top-14 mt-1' : 'top-full'}`}>
+          <div className={`absolute left-0 right-0 hidden md:flex flex-row flex-wrap md:flex-row-reverse items-start gap-2 justify-start p-2 z-50 ${uploadedImages.length > 0 ? 'top-14 mt-1' : 'top-full'}`}>
             {/* Resolution Selector - Appears first (rightmost) */}
             <div
               className="relative animate-fade-in"
@@ -1729,30 +1939,19 @@ const ImageGenerationInterface2: React.FC = () => {
               {/* Resolution Dropdown */}
               {showResolutions && (
                 <div className="absolute top-full right-0 mt-2 w-40 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg overflow-hidden shadow-xl shadow-black/30 z-50 p-1" style={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 0 25px rgba(0, 0, 0, 0.5)' }}>
-                  {resolutions.map((res) => {
-                    const isSupported = isResolutionSupported(res.value);
-                    return (
-                      <button
-                        key={res.value}
-                        onClick={() => {
-                          if (isSupported) {
-                            setResolution(res.value);
-                            setShowResolutions(false);
-                          }
-                        }}
-                        disabled={!isSupported}
-                        className={`w-full h-8 px-3 flex items-center justify-between rounded-lg transition-colors ${
-                          isSupported ? 'hover:bg-white/10 cursor-pointer' : 'cursor-not-allowed opacity-40'
-                        } ${res.value === resolution ? 'bg-white/10' : ''}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-medium ${isSupported ? 'text-white/80' : 'text-white/25'}`}>{res.label}</span>
-                          {!isSupported && <span className="text-xs text-red-400/60">N/A</span>}
-                        </div>
-                        <span className={`text-xs ${isSupported ? 'text-white/50' : 'text-white/10'}`}>{res.time}</span>
-                      </button>
-                    );
-                  })}
+                  {resolutions.filter((res) => isResolutionSupported(res.value)).map((res) => (
+                    <button
+                      key={res.value}
+                      onClick={() => {
+                        setResolution(res.value);
+                        setShowResolutions(false);
+                      }}
+                      className={`w-full h-8 px-3 flex items-center justify-between rounded-lg transition-colors hover:bg-white/10 cursor-pointer ${res.value === resolution ? 'bg-white/10' : ''}`}
+                    >
+                      <span className="text-sm font-medium text-white/80">{res.label}</span>
+                      <span className="text-xs text-white/50">{res.time}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -1777,29 +1976,20 @@ const ImageGenerationInterface2: React.FC = () => {
               {/* Aspect Ratio Dropdown */}
               {showAspectRatios && (
                 <div className="absolute top-full left-0 mt-2 w-48 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg overflow-hidden shadow-xl shadow-black/30 z-50 p-1" style={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 0 25px rgba(0, 0, 0, 0.5)' }}>
-                  {aspectRatios.map((ar) => {
-                    const isSupported = isAspectRatioSupported(ar.value);
-                    return (
+                  {aspectRatios.filter((ar) => isAspectRatioSupported(ar.value)).map((ar) => (
                       <button
                         key={ar.value}
                         onClick={() => {
-                          if (isSupported) {
-                            setAspectRatio(ar.value);
-                            setShowAspectRatios(false);
-                          }
+                          setAspectRatio(ar.value);
+                          setShowAspectRatios(false);
                         }}
-                        disabled={!isSupported}
-                        className={`w-full h-8 px-3 flex items-center gap-3 rounded-lg transition-colors ${
-                          isSupported ? 'hover:bg-white/10 cursor-pointer' : 'cursor-not-allowed opacity-40'
-                        } ${ar.value === aspectRatio ? 'bg-white/10' : ''}`}
+                        className={`w-full h-8 px-3 flex items-center gap-3 rounded-lg transition-colors hover:bg-white/10 cursor-pointer ${ar.value === aspectRatio ? 'bg-white/10' : ''}`}
                       >
-                        <span className={`text-base ${isSupported ? 'text-white/60' : 'text-white/15'}`}>{ar.icon}</span>
-                        <span className={`text-sm font-medium ${isSupported ? 'text-white/80' : 'text-white/25'}`}>{ar.value}</span>
-                        <span className={`text-sm ml-auto ${isSupported ? 'text-white/50' : 'text-white/10'}`}>{ar.label}</span>
-                        {!isSupported && <span className="text-xs text-red-400/60 ml-2">N/A</span>}
+                        <span className="text-base text-white/60">{ar.icon}</span>
+                        <span className="text-sm font-medium text-white/80">{ar.value}</span>
+                        <span className="text-sm ml-auto text-white/50">{ar.label}</span>
                       </button>
-                    );
-                  })}
+                    ))}
                 </div>
               )}
             </div>
@@ -1887,13 +2077,13 @@ const ImageGenerationInterface2: React.FC = () => {
             </div>
           ) : (
           /* Vertical stack of image answer containers - Midjourney style */
-          <div className="flex flex-col gap-6 py-4">
+          <div className="flex flex-col-reverse md:flex-col gap-6 py-4">
 
             {/* Currently Generating Container - shown only during generation */}
             {isGenerating && generatingSettings && (
               <div className="image-answer-container rounded-md py-4 relative">
-                <div className="flex gap-4 items-stretch">
-                  <div className="image-preview-container-wrapper relative" style={{ flexGrow: 1 }}>
+                <div className="flex flex-col md:flex-row gap-4 items-stretch">
+                  <div className="image-preview-container-wrapper relative w-full md:w-auto" style={{ flexGrow: 1 }}>
                     <div className={`grid gap-2 ${
                       generatingSettings.count === 1 ? 'grid-cols-1' :
                       generatingSettings.count === 2 ? 'grid-cols-2' :
@@ -1906,56 +2096,56 @@ const ImageGenerationInterface2: React.FC = () => {
                           className="relative group bg-[#0a0a0c] rounded-md overflow-hidden border border-[#2a2a2d]"
                           style={{ aspectRatio: '16/9' }}
                         >
-                          <div className="w-full h-full relative overflow-hidden bg-gradient-to-br from-purple-900/20 via-blue-900/20 to-pink-900/20">
-                            <div className="absolute inset-0 opacity-50" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)', backgroundSize: '200% 100%', animation: 'sweep 3s ease-in-out infinite' }}></div>
-                            <div className="absolute inset-0 opacity-20 mix-blend-soft-light" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' /%3E%3C/svg%3E")`, backgroundSize: '64px 64px', animation: 'grain 0.5s steps(4) infinite' }}></div>
+                          <div className="w-full h-full relative overflow-hidden bg-[#111113]">
+                            <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)', backgroundSize: '200% 100%', animation: 'sweep 2s ease-in-out infinite' }}></div>
+                            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' /%3E%3C/svg%3E")`, backgroundSize: '64px 64px' }}></div>
                             <div className="absolute inset-0">
-                              <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-purple-500/10 rounded-full blur-xl animate-pulse" style={{ animationDuration: '2s' }}></div>
-                              <div className="absolute bottom-1/4 right-1/4 w-40 h-40 bg-blue-500/10 rounded-full blur-xl animate-pulse" style={{ animationDuration: '3s', animationDelay: '0.5s' }}></div>
+                              <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-white/5 rounded-full blur-xl animate-pulse" style={{ animationDuration: '2s' }}></div>
+                              <div className="absolute bottom-1/4 right-1/4 w-40 h-40 bg-white/3 rounded-full blur-xl animate-pulse" style={{ animationDuration: '3s', animationDelay: '0.5s' }}></div>
                             </div>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-white/50 gap-2 z-10">
-                              <div className="relative">
-                                <svg className="w-12 h-12 text-white/40 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                                <div className="absolute inset-0 border-2 border-white/30 rounded-full animate-ping opacity-75"></div>
-                              </div>
-                              <span className="text-xs font-medium animate-pulse">Generating...</span>
+                            <div className="absolute inset-0 flex items-center justify-center z-10">
+                              <span className="text-white/40 text-sm font-medium tracking-wide">
+                                {'xenomorphing'.split('').map((letter, i) => (
+                                  <span key={i} style={{ animation: 'letterFade 3.6s infinite', animationDelay: `${i * 0.3}s` }}>{letter}</span>
+                                ))}
+                              </span>
                             </div>
                             <style>{`
                               @keyframes sweep { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-                              @keyframes grain { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-2px, 2px); } 50% { transform: translate(2px, -2px); } 75% { transform: translate(-2px, -2px); } }
+                              @keyframes letterFade { 0%, 8% { opacity: 0; } 16%, 92% { opacity: 1; } 100% { opacity: 0; } }
                             `}</style>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                  {/* Settings panel for generating */}
-                  <div className="image-detail-container relative bg-[#1a1a1c]/50 rounded-md overflow-hidden border border-[#2a2a2d] transition-all" style={{ width: '16%', flexShrink: 0 }}>
-                    <div className="w-full h-full flex flex-col items-start justify-start p-4 pt-4 text-white/70 text-sm">
-                      <div className="w-full mb-4 pb-3 border-b border-white/10">
-                        <p className="text-xs text-white/80 line-clamp-4">{generatingSettings.prompt}</p>
-                      </div>
-                      <div className="w-full space-y-2">
-                        <div className="flex justify-between text-xs"><span className="text-white/40">Model</span><span className="text-white/80">{selectedModel}</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-white/40">Aspect</span><span className="text-white/80">{generatingSettings.aspectRatio}</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-white/40">Resolution</span><span className="text-white/80">{generatingSettings.resolution.toUpperCase()}</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-white/40">Count</span><span className="text-white/80">{generatingSettings.count}</span></div>
+                  {/* Settings panel for generating - hidden on mobile */}
+                  {!isMobile && (
+                    <div className="image-detail-container flex relative bg-[#1a1a1c]/50 rounded-md overflow-hidden border border-[#2a2a2d] transition-all w-[16%] flex-shrink-0 flex-col">
+                      <div className="w-full h-full flex flex-col items-start justify-start p-4 pt-4 text-white/70 text-sm">
+                        <div className="w-full mb-4 pb-3 border-b border-white/10">
+                          <p className="text-xs text-white/80 line-clamp-4">{generatingSettings.prompt}</p>
+                        </div>
+                        <div className="w-full space-y-2">
+                          <div className="flex justify-between text-xs"><span className="text-white/40">Model</span><span className="text-white/80">{selectedModel}</span></div>
+                          <div className="flex justify-between text-xs"><span className="text-white/40">Aspect</span><span className="text-white/80">{generatingSettings.aspectRatio}</span></div>
+                          <div className="flex justify-between text-xs"><span className="text-white/40">Resolution</span><span className="text-white/80">{generatingSettings.resolution.toUpperCase()}</span></div>
+                          <div className="flex justify-between text-xs"><span className="text-white/40">Count</span><span className="text-white/80">{generatingSettings.count}</span></div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             )}
 
             {/* Midjourney-style: Map over generations - one container per generation (SINGLE SOURCE OF TRUTH from hook) */}
             {generations.map((gen) => (
-              <div key={gen.id} className="image-answer-container rounded-md py-4 relative">
-                <div className="flex gap-4 items-stretch">
+              <div key={gen.id} className="image-answer-container rounded-md py-0 md:py-4 relative">
+                <div className="flex flex-col md:flex-row gap-4 items-stretch">
                   {/* Image Preview Grid for this generation */}
-                  <div className="image-preview-container-wrapper relative" style={{ flexGrow: 1 }}>
-                    <div className={`grid gap-2 ${
+                  <div className="image-preview-container-wrapper relative w-full md:w-auto px-8 md:px-0" style={{ flexGrow: 1 }}>
+                    <div className={`grid gap-0 md:gap-1 ${
                       gen.image_urls.length === 1 ? 'grid-cols-1' :
                       gen.image_urls.length === 2 ? 'grid-cols-2' :
                       gen.image_urls.length === 3 ? 'grid-cols-3' :
@@ -1964,14 +2154,13 @@ const ImageGenerationInterface2: React.FC = () => {
                       {gen.image_urls.map((imageUrl, imgIndex) => (
                         <div
                           key={imgIndex}
-                          className="relative group bg-[#0a0a0c] rounded-md overflow-hidden border border-[#2a2a2d] hover:border-[#3a3a3d] transition-all cursor-pointer"
-                          style={{ aspectRatio: '16/9' }}
+                          className="relative group rounded-md overflow-hidden transition-all cursor-pointer"
                           onClick={() => setViewingImage({ generationId: gen.id, imageIndex: imgIndex })}
                         >
                           <img
                             src={imageUrl}
                             alt={`Generated ${imgIndex + 1}`}
-                            className="w-full h-full object-contain"
+                            className="w-full h-auto block rounded-md"
                           />
                           {/* Favorite Button - Top Right Corner, appears on hover */}
                           <button
@@ -2041,8 +2230,9 @@ const ImageGenerationInterface2: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Settings Panel for this generation */}
-                  <div className="image-detail-container group relative bg-[#1a1a1c]/50 rounded-md overflow-hidden border border-[#2a2a2d] transition-all flex flex-col justify-between" style={{ width: '16%', flexShrink: 0 }}>
+                  {/* Settings Panel for this generation - hidden on mobile */}
+                  {!isMobile && (
+                  <div className="image-detail-container flex group relative bg-[#1a1a1c]/50 rounded-md overflow-hidden border border-[#2a2a2d] transition-all flex-col justify-between w-[16%] flex-shrink-0">
                     <div className="w-full flex-1 flex flex-col items-start justify-start p-4 pt-4 text-white/70 text-sm">
                       {/* Prompt */}
                       <div className="w-full mb-4 pb-3 border-b border-white/10">
@@ -2185,6 +2375,7 @@ const ImageGenerationInterface2: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -2225,38 +2416,89 @@ const ImageGenerationInterface2: React.FC = () => {
 
         return (
           <div
-            className="fixed inset-0 z-30 flex items-center justify-center"
+            className="fixed inset-0 z-30 flex items-start md:items-center justify-center overflow-y-auto md:overflow-hidden"
           >
             {/* Backdrop */}
             <div
-              className="absolute inset-0 bg-black/80 backdrop-blur-md"
-              onClick={() => setViewingImage(null)}
+              className="fixed inset-0 bg-black/80 backdrop-blur-md"
+              onClick={() => {
+                setViewingImage(null);
+                setShowDetailsOverlay(false);
+              }}
             />
 
+            {/* Mobile Close Button */}
+            <button
+              onClick={() => {
+                setViewingImage(null);
+                setShowDetailsOverlay(false);
+              }}
+              className="md:hidden fixed top-4 right-4 z-20 p-2 bg-black/50 hover:bg-black/70 rounded-lg text-white/70 hover:text-white transition-all"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
             {/* Modal Content */}
-            <div className="relative z-10 flex gap-4 w-full h-full p-6 pt-24 max-w-[95vw]">
+            <div className="relative z-10 flex flex-col md:flex-row gap-4 w-full md:h-full p-4 md:p-6 pt-16 md:pt-24 max-w-[95vw] pb-64 md:pb-6">
               {/* Main Image */}
-              <div className="flex-1 flex items-center justify-center min-w-0">
-                <img
-                  src={currentImageUrl}
-                  alt="Enlarged view"
-                  className="max-w-full max-h-[calc(100vh-180px)] object-contain rounded-lg"
-                />
+              <div className="flex-1 flex items-center justify-center min-w-0 order-1 relative">
+                <div
+                  className="relative cursor-pointer md:cursor-default"
+                  onClick={() => {
+                    if (window.innerWidth < 768) {
+                      setShowDetailsOverlay(!showDetailsOverlay);
+                    }
+                  }}
+                >
+                  <img
+                    src={currentImageUrl}
+                    alt="Enlarged view"
+                    className="max-w-full max-h-[50vh] md:max-h-[calc(100vh-180px)] object-contain rounded-lg"
+                  />
+                  {/* Details Overlay on Image - Mobile only */}
+                  {showDetailsOverlay && (
+                    <div className="md:hidden absolute inset-0 bg-black/70 backdrop-blur-sm rounded-lg p-4 overflow-y-auto flex flex-col">
+                      {/* Prompt */}
+                      <p className="text-white/90 text-sm leading-relaxed mb-3">{currentGen.prompt}</p>
+
+                      {/* Settings */}
+                      <div className="border-t border-white/20 pt-3 mt-auto">
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="text-white/50">Model</div>
+                          <div className="text-white/90">{currentGen.model}</div>
+                          <div className="text-white/50">Aspect Ratio</div>
+                          <div className="text-white/90">{currentGen.aspect_ratio}</div>
+                          <div className="text-white/50">Resolution</div>
+                          <div className="text-white/90">{currentGen.resolution}</div>
+                        </div>
+                      </div>
+
+                      {/* Tap to hide hint */}
+                      <p className="text-white/40 text-xs text-center mt-3">Tap to hide</p>
+                    </div>
+                  )}
+                </div>
+                {/* Tap for details hint - Mobile only, when overlay is hidden */}
+                {!showDetailsOverlay && (
+                  <p className="md:hidden absolute bottom-2 left-1/2 -translate-x-1/2 text-white/40 text-xs bg-black/50 px-2 py-1 rounded">Tap image for details</p>
+                )}
               </div>
 
-              {/* Info Panel Wrapper */}
-              <div className="w-80 flex-shrink-0 relative">
-                {/* Close Button - positioned to the left of info panel */}
+              {/* Info Panel Wrapper - Hidden on mobile, details shown as overlay on image */}
+              <div className="hidden md:block md:w-80 flex-shrink-0 relative order-3 md:order-2">
+                {/* Close Button - positioned to the left of info panel on desktop */}
                 <button
                   onClick={() => setViewingImage(null)}
-                  className="absolute -left-12 top-0 p-2 bg-black/50 hover:bg-black/70 rounded-lg text-white/70 hover:text-white transition-all z-10"
+                  className="absolute -top-12 right-0 md:-left-12 md:top-0 md:right-auto p-2 bg-black/50 hover:bg-black/70 rounded-lg text-white/70 hover:text-white transition-all z-10"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
                 {/* Info Panel */}
-                <div className="w-full h-full bg-[#1a1a1c] border border-[#3a3a3d] rounded-lg p-4 flex flex-col justify-between overflow-y-auto max-h-[calc(100vh-180px)] relative">
+                <div className="w-full bg-[#1a1a1c] border border-[#3a3a3d] rounded-lg p-4 flex flex-col justify-between md:overflow-y-auto md:max-h-[calc(100vh-180px)] relative">
                 {/* Action Icons - Top Right */}
                 <div className="absolute top-3 right-3 flex gap-1">
                   {/* Download */}
@@ -2544,16 +2786,16 @@ const ImageGenerationInterface2: React.FC = () => {
                 </div>
               </div>
 
-              {/* Thumbnail Strip */}
-              <div className="w-24 flex-shrink-0 flex flex-col gap-2 overflow-y-auto max-h-[calc(100vh-160px)] pr-1 items-center">
+              {/* Thumbnail Strip - horizontal on mobile, vertical on desktop */}
+              <div className="order-2 md:order-3 w-full md:w-24 flex-shrink-0 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden max-w-full md:max-h-[calc(100vh-160px)] py-2 md:py-0 md:pr-1 items-center">
                 {allImages.map((img, idx) => (
                   <div
                     key={`${img.genId}-${img.imageIndex}`}
                     onClick={() => setViewingImage({ generationId: img.genId, imageIndex: img.imageIndex })}
-                    className={`relative cursor-pointer rounded overflow-hidden border-2 transition-all duration-300 ease-in-out ${
+                    className={`relative cursor-pointer rounded overflow-hidden border-2 transition-all duration-300 ease-in-out flex-shrink-0 ${
                       img.isActive
-                        ? 'border-white w-20 h-20'
-                        : 'border-transparent hover:border-white/50 w-16 h-16'
+                        ? 'border-white w-16 h-16 md:w-20 md:h-20'
+                        : 'border-transparent hover:border-white/50 w-12 h-12 md:w-16 md:h-16'
                     }`}
                   >
                     <img
@@ -2568,6 +2810,535 @@ const ImageGenerationInterface2: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* Mobile Bottom Bar - Fixed at bottom (hidden on desktop) */}
+      <div className="fixed bottom-0 left-0 right-0 md:hidden z-50 px-3 py-3 flex flex-col gap-2">
+        {/* Mobile AI Companies Dropdown - Opens upward */}
+        {showAiCompanies && (
+          <div className="absolute bottom-full left-0 right-0 mb-2 flex flex-row flex-wrap items-end gap-2 p-2 z-[100]">
+            {aiCompanies.map((company, index) => (
+              <div key={company.name} className="relative" style={{ animation: `fadeInUp 0.2s ease-out ${index * 50}ms both` }}>
+                <button
+                  onClick={() => {
+                    setSelectedCompany(selectedCompany === company.name ? null : company.name);
+                    setShowSettings(false);
+                  }}
+                  className={`h-9 w-9 bg-[#1a1a1c] backdrop-blur-md border rounded-lg flex items-center justify-center text-white/80 hover:bg-[#2a2a2d] transition-all shadow-lg ${
+                    selectedCompany === company.name ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
+                  } ${
+                    selectedCompany && selectedCompany !== company.name ? 'opacity-50' : 'opacity-100'
+                  }`}
+                  style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
+                  title={company.name}
+                >
+                  <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
+                </button>
+                {selectedCompany === company.name && (
+                  <div className="absolute bottom-full mb-2 left-0 flex flex-col gap-1.5 z-[110]">
+                    {company.models.map((model, modelIndex) => (
+                      <button
+                        key={model.name}
+                        onClick={() => {
+                          setSelectedModel(model.name);
+                          setShowAiCompanies(false);
+                          setSelectedCompany(null);
+                        }}
+                        className="h-8 px-3 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center hover:bg-[#2a2a2d] hover:border-white/30 transition-all cursor-pointer text-white/90 shadow-lg whitespace-nowrap text-xs font-medium"
+                        style={{
+                          boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)',
+                          animation: `fadeInUp 0.2s ease-out ${modelIndex * 50}ms both`
+                        }}
+                      >
+                        {model.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            <style>{`
+              @keyframes fadeInUp {
+                from {
+                  opacity: 0;
+                  transform: translateY(8px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateY(0);
+                }
+              }
+            `}</style>
+          </div>
+        )}
+
+        {/* Mobile Settings Panel - Opens horizontally to the left, centered with Settings button */}
+        {showSettings && (
+          <div
+            className="absolute right-[68px] flex flex-row flex-wrap items-center gap-2 p-2 z-[100]"
+            style={{ bottom: '79px' }}
+          >
+            {/* Counter Control */}
+            <div
+              className="h-8 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center px-1 gap-0.5 shadow-lg"
+              style={{ animation: `slideInLeft 0.2s ease-out 0ms both`, boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
+            >
+              <button
+                onClick={handleDecrement}
+                className="w-6 h-6 flex items-center justify-center text-white/60 hover:text-white/90 hover:bg-white/10 rounded transition-all"
+                disabled={count <= 1}
+              >
+                <span className="text-sm leading-none">−</span>
+              </button>
+              <div className="w-5 flex items-center justify-center">
+                <span className="text-white/90 text-sm font-medium">{count}</span>
+              </div>
+              <button
+                onClick={handleIncrement}
+                className="w-6 h-6 flex items-center justify-center text-white/60 hover:text-white/90 hover:bg-white/10 rounded transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={count >= (currentModelCapabilities?.maxCount || 10)}
+              >
+                <span className="text-sm leading-none">+</span>
+              </button>
+            </div>
+
+            {/* Aspect Ratio Selector */}
+            <div className="relative" style={{ animation: `slideInLeft 0.2s ease-out 50ms both` }}>
+              <button
+                onClick={() => {
+                  setShowAspectRatios(!showAspectRatios);
+                  setShowResolutions(false);
+                }}
+                className="h-8 px-3 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center text-white/90 text-sm hover:bg-[#2a2a2d] hover:border-white/30 transition-all shadow-lg"
+                style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
+              >
+                <span className="font-medium">{aspectRatio}</span>
+              </button>
+              {showAspectRatios && (
+                <div className="absolute bottom-full left-0 mb-2 w-48 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg overflow-hidden shadow-xl shadow-black/30 z-50 p-1 max-h-64 overflow-y-auto" style={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 0 25px rgba(0, 0, 0, 0.5)' }}>
+                  {aspectRatios.filter((ar) => isAspectRatioSupported(ar.value)).map((ar) => (
+                      <button
+                        key={ar.value}
+                        onClick={() => {
+                          setAspectRatio(ar.value);
+                          setShowAspectRatios(false);
+                        }}
+                        className={`w-full h-8 px-3 flex items-center gap-3 rounded-lg transition-colors hover:bg-white/10 cursor-pointer ${ar.value === aspectRatio ? 'bg-white/10' : ''}`}
+                      >
+                        <span className="text-base text-white/60">{ar.icon}</span>
+                        <span className="text-sm font-medium text-white/80">{ar.value}</span>
+                        <span className="text-sm ml-auto text-white/50">{ar.label}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* Resolution Selector */}
+            <div className="relative" style={{ animation: `slideInLeft 0.2s ease-out 100ms both` }}>
+              <button
+                onClick={() => {
+                  setShowResolutions(!showResolutions);
+                  setShowAspectRatios(false);
+                }}
+                className="h-8 px-3 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center text-white/90 text-sm hover:bg-[#2a2a2d] hover:border-white/30 transition-all shadow-lg"
+                style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
+              >
+                <span className="font-medium">{selectedResolution?.label}</span>
+              </button>
+              {showResolutions && (
+                <div className="absolute bottom-full right-0 mb-2 w-40 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg overflow-hidden shadow-xl shadow-black/30 z-50 p-1" style={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 0 25px rgba(0, 0, 0, 0.5)' }}>
+                  {resolutions.filter((res) => isResolutionSupported(res.value)).map((res) => (
+                    <button
+                      key={res.value}
+                      onClick={() => {
+                        setResolution(res.value);
+                        setShowResolutions(false);
+                      }}
+                      className={`w-full h-8 px-3 flex items-center justify-between rounded-lg transition-colors hover:bg-white/10 cursor-pointer ${res.value === resolution ? 'bg-white/10' : ''}`}
+                    >
+                      <span className="text-sm font-medium text-white/80">{res.label}</span>
+                      <span className="text-xs text-white/50">{res.time}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <style>{`
+              @keyframes slideInLeft {
+                from {
+                  opacity: 0;
+                  transform: translateX(30px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateX(0);
+                }
+              }
+            `}</style>
+          </div>
+        )}
+
+        {/* Mobile Tools Dropdown - HIDDEN: Will be implemented in Image Studio later
+        {showTools && (
+          <div
+            className="absolute right-[68px] flex flex-row flex-wrap items-center gap-2 p-2 z-[100]"
+            style={{ bottom: '134.5px' }}
+          >
+            <div className="relative" style={{ animation: `slideInLeft 0.2s ease-out 0ms both` }}>
+              <button
+                onClick={() => {
+                  setSelectedTool(selectedTool === 'variations' ? null : 'variations');
+                }}
+                className={`h-9 w-9 bg-[#1a1a1c] backdrop-blur-md border rounded-lg flex items-center justify-center text-white/80 hover:bg-[#2a2a2d] transition-all shadow-lg ${
+                  selectedTool === 'variations' ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
+                }`}
+                style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
+                title="Variations"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2L21 7V17L12 22L3 17V7L12 2Z" />
+                  <path d="M12 2L12 22" />
+                  <path d="M3 7L21 17" />
+                  <path d="M21 7L3 17" />
+                  <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                </svg>
+              </button>
+              {selectedTool === 'variations' && (
+                <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 flex flex-row gap-1 z-[110]">
+                  <button
+                    onClick={() => {
+                      setSelectedVariationMode('reframe');
+                      setShowTools(false);
+                      setSelectedTool(null);
+                    }}
+                    className={`h-7 px-2 bg-[#1a1a1c] backdrop-blur-md border rounded-md flex items-center gap-1.5 hover:bg-[#2a2a2d] hover:border-white/30 transition-all cursor-pointer text-white/90 shadow-lg whitespace-nowrap text-[10px] font-medium ${
+                      selectedVariationMode === 'reframe' ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
+                    }`}
+                    style={{
+                      boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)',
+                      animation: `slideInLeft 0.2s ease-out 0ms both`
+                    }}
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="5" y="5" width="14" height="14" rx="1" />
+                      <path d="M15 3L21 3L21 9" />
+                      <path d="M21 3L16 8" />
+                      <path d="M9 21L3 21L3 15" />
+                      <path d="M3 21L8 16" />
+                    </svg>
+                    Reframe
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedVariationMode('storyboard');
+                      setShowTools(false);
+                      setSelectedTool(null);
+                    }}
+                    className={`h-7 px-2 bg-[#1a1a1c] backdrop-blur-md border rounded-md flex items-center gap-1.5 hover:bg-[#2a2a2d] hover:border-white/30 transition-all cursor-pointer text-white/90 shadow-lg whitespace-nowrap text-[10px] font-medium ${
+                      selectedVariationMode === 'storyboard' ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
+                    }`}
+                    style={{
+                      boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)',
+                      animation: `slideInLeft 0.2s ease-out 50ms both`
+                    }}
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="2" width="8" height="6" rx="1" />
+                      <rect x="14" y="2" width="8" height="6" rx="1" />
+                      <rect x="2" y="10" width="8" height="6" rx="1" />
+                      <rect x="14" y="10" width="8" height="6" rx="1" />
+                      <rect x="8" y="18" width="8" height="4" rx="1" />
+                    </svg>
+                    Storyboard
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedVariationMode('custom');
+                      setShowTools(false);
+                      setSelectedTool(null);
+                    }}
+                    className={`h-7 px-2 bg-[#1a1a1c] backdrop-blur-md border rounded-md flex items-center gap-1.5 hover:bg-[#2a2a2d] hover:border-white/30 transition-all cursor-pointer text-white/90 shadow-lg whitespace-nowrap text-[10px] font-medium ${
+                      selectedVariationMode === 'custom' ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
+                    }`}
+                    style={{
+                      boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)',
+                      animation: `slideInLeft 0.2s ease-out 100ms both`
+                    }}
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                      <path d="M19 3v4" />
+                      <path d="M21 5h-4" />
+                    </svg>
+                    Custom
+                  </button>
+                </div>
+              )}
+            </div>
+            <style>{`
+              @keyframes slideInLeft {
+                from {
+                  opacity: 0;
+                  transform: translateX(30px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateX(0);
+                }
+              }
+            `}</style>
+          </div>
+        )}
+        End of Mobile Tools Dropdown */}
+
+        {/* Mobile Menu Column - Shows Settings, Tools, History, Favorites when menu is open */}
+        {showMobileMenu && (
+          <div className="absolute bottom-full right-3 mb-2 flex flex-col items-center gap-2 z-[150]">
+            {/* Favorites Button - appears first (at top), but animates last */}
+            <div
+              className="w-12 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center shadow-lg shadow-black/40 relative bg-[#1a1a1c]"
+              style={{
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
+                animation: 'mobileMenuSlideUp 0.2s ease-out 150ms both'
+              }}
+            >
+              <button
+                onClick={() => {
+                  setAnimatingFavButton(true);
+                  setTimeout(() => setAnimatingFavButton(false), 700);
+                  const newFavoritesOnly = !favoritesOnly;
+                  setFavoritesOnly(newFavoritesOnly);
+                  setShowHistory(newFavoritesOnly);
+                  setShowSettings(false);
+                  setShowTools(false);
+                  setSelectedTool(null);
+                  setShowAiCompanies(false);
+                  setSelectedCompany(null);
+                }}
+                className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
+              >
+                <svg className={`w-6 h-6 ${favoritesOnly ? 'text-white' : 'text-white/40'}`} fill={favoritesOnly ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+              </button>
+            </div>
+
+            {/* History Button */}
+            <div
+              className="w-12 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center shadow-lg shadow-black/40 relative bg-[#1a1a1c]"
+              style={{
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
+                animation: 'mobileMenuSlideUp 0.2s ease-out 100ms both'
+              }}
+            >
+              <button
+                onClick={() => {
+                  setAnimatingHistoryButton(true);
+                  setTimeout(() => setAnimatingHistoryButton(false), 500);
+                  if (favoritesOnly && showHistory) {
+                    setFavoritesOnly(false);
+                  } else {
+                    const newShowHistory = !showHistory;
+                    setShowHistory(newShowHistory);
+                    if (!newShowHistory) {
+                      setFavoritesOnly(false);
+                    }
+                  }
+                  setShowSettings(false);
+                  setShowTools(false);
+                  setSelectedTool(null);
+                  setShowAiCompanies(false);
+                  setSelectedCompany(null);
+                }}
+                className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
+              >
+                <svg
+                  className={`w-6 h-6 ${showHistory && !favoritesOnly ? 'text-white' : 'text-white/40'}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <circle cx="12" cy="12" r="9" strokeWidth={2} fill={showHistory && !favoritesOnly ? 'currentColor' : 'none'} fillOpacity="0.2" />
+                  <g className={animatingHistoryButton ? 'animate-clock-tick' : ''} style={{ transformOrigin: '12px 12px' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 4" />
+                  </g>
+                </svg>
+              </button>
+            </div>
+
+            {/* Tools Button - HIDDEN: Will be implemented in Image Studio later
+            <div
+              className="w-12 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center shadow-lg shadow-black/40 relative bg-[#1a1a1c]"
+              style={{
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
+                animation: 'mobileMenuSlideUp 0.2s ease-out 50ms both'
+              }}
+            >
+              <button
+                onClick={() => {
+                  setShowTools(!showTools);
+                  setSelectedTool(null);
+                  setShowSettings(false);
+                  setShowAiCompanies(false);
+                  setSelectedCompany(null);
+                }}
+                className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
+              >
+                <svg className={`w-6 h-6 ${showTools ? 'text-white' : 'text-white/40'}`} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 20L4 4L20 20H4Z" fillOpacity="0.3" />
+                  <path d="M4 20L4 4L20 20H4Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  <rect x="5.5" y="14" width="1.2" height="4" rx="0.4" />
+                  <rect x="8.5" y="16" width="1.2" height="2.5" rx="0.4" />
+                  <rect x="11.5" y="17" width="1.2" height="1.8" rx="0.4" />
+                </svg>
+              </button>
+            </div>
+            */}
+
+            {/* Settings Button - appears last (at bottom), but animates first */}
+            <div
+              className="w-12 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center shadow-lg shadow-black/40 relative bg-[#1a1a1c]"
+              style={{
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
+                animation: 'mobileMenuSlideUp 0.2s ease-out 0ms both'
+              }}
+            >
+              <button
+                onClick={() => {
+                  setShowSettings(!showSettings);
+                  setShowTools(false);
+                  setSelectedTool(null);
+                  setShowAiCompanies(false);
+                  setSelectedCompany(null);
+                }}
+                className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
+              >
+                <svg
+                  className={`w-6 h-6 ${showSettings ? 'text-white' : 'text-white/40'}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
+
+            <style>{`
+              @keyframes mobileMenuSlideUp {
+                from {
+                  opacity: 0;
+                  transform: translateY(16px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateY(0);
+                }
+              }
+            `}</style>
+          </div>
+        )}
+
+        {/* Mobile Main Row: Model + Input + Menu Button */}
+        <div className="w-full flex flex-row items-center justify-center gap-2">
+          {/* Model Selector - Mobile (icon only) */}
+          <div className="w-12 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
+            <button
+              onClick={() => {
+                setShowAiCompanies(!showAiCompanies);
+                setSelectedCompany(null);
+                setShowSettings(false);
+                setActiveImageId(null);
+                setShowTools(false);
+                setSelectedTool(null);
+                setShowMobileMenu(false);
+              }}
+              className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
+            >
+              <svg className="w-6 h-6 text-white/40" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="2" y="12.8" width="10" height="2.4" rx="1.2" transform="rotate(-45 7 14)" />
+                <rect x="11.5" y="12.8" width="3.5" height="2.4" rx="1.2" transform="rotate(-45 7 14)" fill="white" stroke="currentColor" strokeWidth="0.5" />
+                <path d="M17.5 5.5 Q18.2 7.7 20.5 8.5 Q18.2 9.3 17.5 11.5 Q16.8 9.3 14.5 8.5 Q16.8 7.7 17.5 5.5 Z" />
+                <path d="M20.5 12.5 Q21 14 22.5 14.5 Q21 15 20.5 16.5 Q20 15 18.5 14.5 Q20 14 20.5 12.5 Z" />
+                <path d="M15 12 Q15.4 13 16.5 13.4 Q15.4 13.8 15 14.8 Q14.6 13.8 13.5 13.4 Q14.6 13 15 12 Z" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Input Container - Mobile (flexible width) */}
+          <div className="flex-1 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-between relative shadow-lg shadow-black/40 bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
+            <div className="flex items-center flex-1">
+              <button
+                onClick={handleImageClick}
+                className="p-2 ml-1 rounded flex items-center justify-center transition-all hover:bg-white/5"
+              >
+                <svg className="w-5 h-5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+              <div className="w-px h-5 bg-white/10 ml-1 mr-2"></div>
+              {(() => {
+                const charLimit = resolution === '4k' ? 800 : resolution === '2k' ? 650 : 500;
+                return (
+                  <input
+                    type="text"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value.slice(0, charLimit))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !isGenerating && prompt.trim() && selectedModel) {
+                        handleGenerate();
+                      }
+                    }}
+                    maxLength={charLimit}
+                    placeholder="Describe..."
+                    className="flex-1 bg-transparent text-white/90 text-base placeholder:text-white/30 outline-none focus:outline-none focus:ring-0 border-0 px-1"
+                  />
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Menu Button - Mobile */}
+          <div className="w-12 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
+            <button
+              onClick={() => {
+                setShowMobileMenu(!showMobileMenu);
+                if (showMobileMenu) {
+                  setShowSettings(false);
+                  setShowTools(false);
+                  setSelectedTool(null);
+                }
+              }}
+              className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
+            >
+              <svg
+                className={`w-6 h-6 ${showMobileMenu ? 'text-white' : 'text-white/40'}`}
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <circle cx="12" cy="5" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="12" cy="19" r="2" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <style>{`
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(8px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `}</style>
+      </div>
     </div>
   );
 };

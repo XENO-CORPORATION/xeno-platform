@@ -122,17 +122,43 @@ export const ContainerProvider: React.FC<ContainerProviderProps> = ({ children }
 
       console.log('🚀 ContainerContext: Initializing container data...');
 
-      // 1. Get user's container
-      const containersResponse = await ContainerService.listContainers(1, 1);
-      if ('error' in containersResponse) {
-        throw new Error(containersResponse.error);
+      // Check if we're joining a shared container (collaboration)
+      const sharedContainerId = localStorage.getItem('sharedContainerId');
+      let containerInfo: ContainerInfo;
+
+      if (sharedContainerId) {
+        console.log('🤝 ContainerContext: Using shared container:', sharedContainerId);
+        // Get auth token from localStorage
+        const token = localStorage.getItem('xenoos_auth_token');
+        // Fetch the shared container info
+        const response = await fetch(`/api/containers/${sharedContainerId}`, {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
+        });
+        if (!response.ok) {
+          // Clear the shared container and fall back to user's own
+          localStorage.removeItem('sharedContainerId');
+          throw new Error('Shared container not accessible');
+        }
+        const data = await response.json();
+        containerInfo = data.container || data;
+      } else {
+        // 1. Get user's own container
+        const containersResponse = await ContainerService.listContainers(1, 1);
+        if ('error' in containersResponse) {
+          throw new Error(containersResponse.error);
+        }
+
+        if (!containersResponse.containers || containersResponse.containers.length === 0) {
+          throw new Error('No containers found for user');
+        }
+
+        containerInfo = containersResponse.containers[0];
       }
 
-      if (!containersResponse.containers || containersResponse.containers.length === 0) {
-        throw new Error('No containers found for user');
-      }
-
-      const containerInfo = containersResponse.containers[0];
       setContainer(containerInfo);
 
       // 2. Initialize filesystem service
@@ -407,10 +433,11 @@ export const ContainerProvider: React.FC<ContainerProviderProps> = ({ children }
 
   // Initialize when provider mounts
   useEffect(() => {
-    if (isAuthenticated && user?.id && !isInitialized && !isLoading) {
+    // Don't retry if there's already an error (prevents infinite loop)
+    if (isAuthenticated && user?.id && !isInitialized && !isLoading && !error) {
       initializeContainer();
     }
-  }, [isAuthenticated, user?.id, isInitialized, isLoading, initializeContainer]);
+  }, [isAuthenticated, user?.id, isInitialized, isLoading, error, initializeContainer]);
 
   // Start real-time updates when initialized
   useEffect(() => {

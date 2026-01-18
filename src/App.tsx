@@ -10,7 +10,9 @@ import OSAuthInterface, { OSStateProvider } from './components/os/OSAuthInterfac
 import OSHomeInterface from './components/os/OSHomeInterface';
 import { OSAuthWithContainers } from './components/dashboard/OSAuthWithContainers';
 import OSContainerWizard from './components/os/OSContainerWizard';
+import JoinSession from './components/os/JoinSession';
 import { AuthProvider } from './contexts/AuthContext';
+import { CollaborationProvider } from './contexts/CollaborationContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
 // Import MultiChatContainer for standalone xeno-chat.com domain
@@ -72,8 +74,9 @@ function App() {
   // Default: Full xeno-studio.com experience
   return (
     <AuthProvider>
-      <OSStateProvider>
-        <Routes>
+      <CollaborationProvider>
+        <OSStateProvider>
+          <Routes>
             {/* Landing Page - Show this first */}
             <Route path="/" element={<Home />} />
 
@@ -130,10 +133,18 @@ function App() {
               </ProtectedRoute>
             } />
 
+            {/* Join Collaboration Session - PROTECTED */}
+            <Route path="/os/join/:token" element={
+              <ProtectedRoute>
+                <JoinSession />
+              </ProtectedRoute>
+            } />
+
             {/* Catch-all: redirect unknown paths to home */}
             <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </OSStateProvider>
+          </Routes>
+        </OSStateProvider>
+      </CollaborationProvider>
     </AuthProvider>
   );
 }

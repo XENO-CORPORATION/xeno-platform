@@ -1,19 +1,24 @@
 import * as React from 'react';
-import { Clock, Calendar, Battery, Wifi, Volume2, Search, Grid3X3, Settings } from 'lucide-react';
+import { Clock, Calendar, Battery, Wifi, Volume2, Search, Grid3X3, Settings, Users, Share2 } from 'lucide-react';
 import { useWindowManager } from './WindowManager';
+import { useCollaboration } from '../../../contexts/CollaborationContext';
+import { ParticipantAvatars, CollaborationStatus } from './CollaboratorCursors';
 
 interface DesktopTaskbarProps {
   onStartMenuClick?: () => void;
   onSearchClick?: () => void;
   onSettingsClick?: () => void;
+  onCollaborateClick?: () => void;
 }
 
 const DesktopTaskbar: React.FC<DesktopTaskbarProps> = ({
   onStartMenuClick,
   onSearchClick,
-  onSettingsClick
+  onSettingsClick,
+  onCollaborateClick
 }) => {
   const { windows, bringToFront, minimizeWindow } = useWindowManager();
+  const { session, participants, isConnected } = useCollaboration();
   const [currentTime, setCurrentTime] = React.useState(new Date());
 
   // Update time every second
@@ -53,7 +58,7 @@ const DesktopTaskbar: React.FC<DesktopTaskbarProps> = ({
       // Check if it's the active window (highest z-index)
       const maxZIndex = Math.max(...windows.map(w => w.zIndex));
       const isActive = window.zIndex === maxZIndex;
-      
+
       if (isActive) {
         // Minimize if it's the active window
         minimizeWindow(windowId);
@@ -102,15 +107,15 @@ const DesktopTaskbar: React.FC<DesktopTaskbarProps> = ({
         {visibleWindows.map((window) => {
           const isActive = window.zIndex === maxZIndex && !window.isMinimized;
           const isMinimized = window.isMinimized;
-          
+
           return (
             <button
               key={window.id}
               onClick={() => handleTaskbarButtonClick(window.id)}
               className={`
                 h-8 px-3 flex items-center gap-2 rounded transition-all duration-200
-                ${isActive 
-                  ? 'bg-white/20 text-white border-b-2 border-blue-400' 
+                ${isActive
+                  ? 'bg-white/20 text-white border-b-2 border-blue-400'
                   : isMinimized
                   ? 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'
                   : 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
@@ -123,7 +128,7 @@ const DesktopTaskbar: React.FC<DesktopTaskbarProps> = ({
               <div className="flex-shrink-0">
                 {getWindowIcon(window)}
               </div>
-              
+
               {/* Window Title */}
               <span className="text-xs font-medium truncate">
                 {window.title}
@@ -140,22 +145,57 @@ const DesktopTaskbar: React.FC<DesktopTaskbarProps> = ({
 
       {/* Right Section - System Tray */}
       <div className="flex items-center gap-2 text-white/80">
+        {/* Collaboration Section */}
+        {session ? (
+          <>
+            {/* Participant Avatars */}
+            <ParticipantAvatars
+              maxVisible={3}
+              size="sm"
+              onClick={onCollaborateClick}
+            />
+
+            {/* Live Indicator */}
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 border border-green-500/20 rounded cursor-pointer hover:bg-green-500/15 transition-colors"
+              onClick={onCollaborateClick}
+              title="Collaboration active"
+            >
+              <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+              <span className="text-[11px] text-green-400/90 font-medium">Live</span>
+            </div>
+          </>
+        ) : (
+          /* Share/Collaborate Button */
+          <button
+            onClick={onCollaborateClick}
+            className="h-6 px-2.5 flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded transition-colors"
+            title="Share & Collaborate"
+          >
+            <Share2 size={12} className="text-white/60" />
+            <span className="text-[11px] text-white/60 font-medium">Share</span>
+          </button>
+        )}
+
+        {/* Separator */}
+        <div className="w-px h-6 bg-white/20 mx-1" />
+
         {/* System Icons */}
         <div className="flex items-center gap-1">
-          <button 
-            className="p-1 hover:bg-white/10 rounded transition-colors" 
+          <button
+            className="p-1 hover:bg-white/10 rounded transition-colors"
             title="Network"
           >
             <Wifi size={14} />
           </button>
-          <button 
-            className="p-1 hover:bg-white/10 rounded transition-colors" 
+          <button
+            className="p-1 hover:bg-white/10 rounded transition-colors"
             title="Volume"
           >
             <Volume2 size={14} />
           </button>
-          <button 
-            className="p-1 hover:bg-white/10 rounded transition-colors" 
+          <button
+            className="p-1 hover:bg-white/10 rounded transition-colors"
             title="Battery"
           >
             <Battery size={14} />
@@ -163,8 +203,8 @@ const DesktopTaskbar: React.FC<DesktopTaskbarProps> = ({
         </div>
 
         {/* Settings Button */}
-        <button 
-          className="p-1 hover:bg-white/10 rounded transition-colors" 
+        <button
+          className="p-1 hover:bg-white/10 rounded transition-colors"
           title="Settings"
           onClick={onSettingsClick}
         >
@@ -175,7 +215,7 @@ const DesktopTaskbar: React.FC<DesktopTaskbarProps> = ({
         <div className="w-px h-6 bg-white/20 mx-1" />
 
         {/* Date and Time */}
-        <button 
+        <button
           className="px-2 py-1 hover:bg-white/10 rounded transition-colors text-right"
           title="Date and Time"
         >

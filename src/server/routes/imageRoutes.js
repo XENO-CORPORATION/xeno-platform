@@ -65,6 +65,64 @@ router.post('/replicate/predictions', async (req, res) => {
   }
 });
 
+// ============================================
+// XENO FLOW SERVICE PROXY ROUTES (No auth required)
+// ============================================
+
+/**
+ * GENERATE IMAGE WITH XENO FLOW (Nano Banana models)
+ * POST /api/image/xeno-flow/generate
+ */
+router.post('/xeno-flow/generate', async (req, res) => {
+  try {
+    const XENO_FLOW_URL = process.env.XENO_FLOW_URL || 'http://127.0.0.1:8090';
+
+    const { prompt, aspect_ratio, num_images, resolution } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({
+        success: false,
+        error: 'Prompt is required'
+      });
+    }
+
+    console.log(`🍌 Generating image with Xeno Flow: "${prompt.substring(0, 50)}..." at ${resolution || 2560}px`);
+
+    const response = await fetch(`${XENO_FLOW_URL}/api/generate/free`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        aspect_ratio: aspect_ratio || 'landscape',
+        num_images: num_images || 1,
+        resolution: resolution || 2560, // FIFE URL width: 1280 (1k), 2560 (2k), 3840 (4k)
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ Xeno Flow API error:', data);
+      return res.status(response.status).json({
+        success: false,
+        error: data.detail || 'Generation failed'
+      });
+    }
+
+    console.log(`✅ Xeno Flow generation complete`);
+    res.json(data);
+
+  } catch (error) {
+    console.error('❌ Xeno Flow proxy error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to connect to Xeno Flow service'
+    });
+  }
+});
+
 /**
  * GET PREDICTION STATUS (PROXY)
  * GET /api/image/replicate/predictions/:predictionId
@@ -1107,4 +1165,62 @@ router.get('/health', (req, res) => {
   res.json({ success: true, service: 'image-studio', timestamp: new Date().toISOString() });
 });
 
+// ============================================
+// PUBLIC ROUTES (No auth required)
+// ============================================
+// Create a separate router for public endpoints
+const publicRouter = express.Router();
+
+// Xeno Flow Generate (public - for API portal demo)
+publicRouter.post('/xeno-flow/generate', async (req, res) => {
+  try {
+    const XENO_FLOW_URL = process.env.XENO_FLOW_URL || 'http://127.0.0.1:8090';
+
+    const { prompt, aspect_ratio, num_images, resolution } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({
+        success: false,
+        error: 'Prompt is required'
+      });
+    }
+
+    console.log(`🍌 [PUBLIC] Generating image with Xeno Flow: "${prompt.substring(0, 50)}..." at ${resolution || 2560}px`);
+
+    const response = await fetch(`${XENO_FLOW_URL}/api/generate/free`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        aspect_ratio: aspect_ratio || 'landscape',
+        num_images: num_images || 1,
+        resolution: resolution || 2560, // FIFE URL width: 1280 (1k), 2560 (2k), 3840 (4k)
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ Xeno Flow API error:', data);
+      return res.status(response.status).json({
+        success: false,
+        error: data.detail || 'Generation failed'
+      });
+    }
+
+    console.log(`✅ Xeno Flow generation complete`);
+    res.json(data);
+
+  } catch (error) {
+    console.error('❌ Xeno Flow proxy error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to connect to Xeno Flow service'
+    });
+  }
+});
+
+export { publicRouter as imagePublicRoutes };
 export default router;

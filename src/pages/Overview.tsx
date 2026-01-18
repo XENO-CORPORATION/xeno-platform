@@ -53,6 +53,8 @@ import CompressToolsInterface from '../components/playground/Tools/CompressTools
 import ImgToolsInterface from '../components/playground/Tools/ImgToolsInterface';
 import PDFToolsInterface from '../components/playground/Tools/PDFToolsInterface';
 import ShareToolsInterface from '../components/playground/Tools/ShareToolsInterface';
+// Import Download interface
+import DownloadToolsInterface from '../components/playground/Download/DownloadToolsInterface';
 // Import Account pages
 import ProfilePage from '../components/account/ProfilePage';
 import SettingsPage from '../components/account/SettingsPage';
@@ -253,6 +255,12 @@ const OverviewContent: React.FC = () => {
             <Route path="tools/img-tools" element={<ImgToolsInterface />} />
             <Route path="tools/pdf-tools" element={<PDFToolsInterface />} />
             <Route path="tools/share" element={<ShareToolsInterface />} />
+            {/* Download routes */}
+            <Route path="download/youtube" element={<DownloadToolsInterface defaultPlatform="youtube" />} />
+            <Route path="download/twitter" element={<DownloadToolsInterface defaultPlatform="twitter" />} />
+            <Route path="download/instagram" element={<DownloadToolsInterface defaultPlatform="instagram" />} />
+            <Route path="download/tiktok" element={<DownloadToolsInterface defaultPlatform="tiktok" />} />
+            <Route path="download/all" element={<DownloadToolsInterface defaultPlatform="auto" />} />
             {/* Content Creation routes */}
             <Route path="content-creation/youtube/all-channels/:groupSlug" element={<AllChannelsPage />} />
             <Route path="content-creation/youtube/all-channels" element={<AllChannelsPage />} />

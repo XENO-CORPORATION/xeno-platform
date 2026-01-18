@@ -1,8 +1,9 @@
 # Backend Dockerfile
 FROM node:20-alpine
 
-# Install FFmpeg and ImageMagick for file conversions
-RUN apk add --no-cache ffmpeg imagemagick
+# Install FFmpeg, ImageMagick, Python3, and yt-dlp for media downloads
+RUN apk add --no-cache ffmpeg imagemagick python3 py3-pip \
+    && pip3 install --break-system-packages yt-dlp
 
 # Set working directory
 WORKDIR /app
@@ -16,8 +17,8 @@ RUN npm install --omit=dev
 # Copy server source code
 COPY src/server/ ./
 
-# Create uploads and conversions directories
-RUN mkdir -p uploads sam2-uploads storage conversions
+# Create uploads, conversions, and downloads directories
+RUN mkdir -p uploads sam2-uploads storage conversions downloads
 
 # Expose port 8080
 EXPOSE 8080

@@ -65,6 +65,9 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - YOUTUBE_REDIRECT_URI=${YOUTUBE_REDIRECT_URI}
+      - XENO_FLOW_URL=http://host.docker.internal:8090
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./src/server/uploads:/app/uploads
       - ./src/server/sam2-uploads:/app/sam2-uploads
