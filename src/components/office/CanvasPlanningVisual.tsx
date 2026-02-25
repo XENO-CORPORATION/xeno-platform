@@ -1,4 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { officeCanvasService, OfficeCanvas, CanvasVersionConflictError } from '../../services/officeCanvasService';
 import {
   Plus,
   Type,
@@ -164,6 +167,7 @@ interface Node {
   fileSize?: string;
   fileType?: string;
   fileUrl?: string;
+  imageUrl?: string;
 
   // Content & Media
   videoUrl?: string;
@@ -244,6 +248,15 @@ interface Connection {
   from: string;
   to: string;
   color?: string;
+}
+
+interface OfficeLiveParticipant {
+  id: string;
+  displayName: string;
+  avatarUrl?: string;
+  color: string;
+  cursorX: number;
+  cursorY: number;
 }
 
 const COLORS = [
@@ -327,44 +340,101 @@ const NODE_REGISTRY: NodeMetadata[] = [
   { type: 'clock', name: 'World Clock', icon: Clock, color: 'text-orange-400', category: 'Smart', keywords: ['clock', 'time', 'world', 'timezone'] },
 ];
 
-const CanvasPlanningVisual: React.FC = () => {
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes] = useState<Node[]>([
-    {
-      id: '1',
-      type: 'sticky',
-      x: 100,
-      y: 100,
-      width: 200,
-      height: 200,
-      content: 'Double-click to edit',
-      color: '#FEF3C7',
-      zIndex: 1
-    },
-    {
-      id: '2',
-      type: 'text',
-      x: 400,
-      y: 100,
-      width: 250,
-      height: 150,
-      content: 'Dark themed text box',
-      color: '#1a1a1a',
-      zIndex: 1
-    },
-    {
-      id: '3',
-      type: 'document',
-      x: 100,
-      y: 350,
-      width: 300,
-      height: 250,
-      content: 'Start planning your project here...',
-      color: '#0a0a0a',
-      zIndex: 1
+const defaultCanvasNodes: Node[] = [
+  {
+    id: '1',
+    type: 'sticky',
+    x: 100,
+    y: 100,
+    width: 200,
+    height: 200,
+    content: 'Double-click to edit',
+    color: '#FEF3C7',
+    zIndex: 1
+  },
+  {
+    id: '2',
+    type: 'text',
+    x: 400,
+    y: 100,
+    width: 250,
+    height: 150,
+    content: 'Dark themed text box',
+    color: '#1a1a1a',
+    zIndex: 1
+  },
+  {
+    id: '3',
+    type: 'document',
+    x: 100,
+    y: 350,
+    width: 300,
+    height: 250,
+    content: 'Start planning your project here...',
+    color: '#0a0a0a',
+    zIndex: 1
+  }
+];
+
+const hydrateNodeDates = (node: Node): Node => ({
+  ...node,
+  timestamp: node.timestamp ? new Date(node.timestamp) : undefined,
+  timerTarget: node.timerTarget ? new Date(node.timerTarget) : undefined,
+  calendarDate: node.calendarDate ? new Date(node.calendarDate) : undefined,
+  meetingDate: node.meetingDate ? new Date(node.meetingDate) : undefined,
+});
+
+const getCanvasWsUrl = () => {
+  if (typeof window === 'undefined') return 'ws://localhost:8080/ws';
+
+  const envWsUrl = (import.meta as any)?.env?.VITE_WS_URL;
+  if (envWsUrl) {
+    try {
+      const parsed = new URL(envWsUrl);
+      parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : parsed.protocol === 'http:' ? 'ws:' : parsed.protocol;
+      if (!parsed.pathname || parsed.pathname === '/') {
+        parsed.pathname = '/ws';
+      } else if (!parsed.pathname.endsWith('/ws')) {
+        parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/ws`;
+      }
+      return parsed.toString();
+    } catch {
+      return envWsUrl.endsWith('/ws') ? envWsUrl : `${envWsUrl.replace(/\/$/, '')}/ws`;
     }
-  ]);
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.hostname;
+  const port = window.location.port;
+
+  if (port === '4040' || port === '5173') {
+    return `${protocol}//${host}:8080/ws`;
+  }
+
+  return `${protocol}//${window.location.host}/ws`;
+};
+
+const CURSOR_SEND_INTERVAL_MS = 8; // ~120Hz target when browser/device can keep up
+const LIVE_STATE_SEND_INTERVAL_MS = 16;
+const NODE_MOVE_SEND_INTERVAL_MS = 16;
+
+const CanvasPlanningVisual: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { canvasId: routeCanvasId } = useParams<{ canvasId?: string }>();
+  const { user } = useAuth();
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [nodes, setNodes] = useState<Node[]>(defaultCanvasNodes);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [canvasName, setCanvasName] = useState('Untitled Canvas');
+  const [allCanvases, setAllCanvases] = useState<OfficeCanvas[]>([]);
+  const [currentCanvasId, setCurrentCanvasId] = useState<string | null>(null);
+  const [currentCanvasVersion, setCurrentCanvasVersion] = useState<number>(1);
+  const [isCanvasLoading, setIsCanvasLoading] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string>('Ready');
+  const [collaboratorCount, setCollaboratorCount] = useState<number>(0);
+  const [lastRemoteSyncAt, setLastRemoteSyncAt] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -383,8 +453,594 @@ const CanvasPlanningVisual: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settingsNodeId, setSettingsNodeId] = useState<string | null>(null);
   const [originalNodeState, setOriginalNodeState] = useState<any>(null);
-  const [outsideClickCount, setOutsideClickCount] = useState(0);
-  const outsideClickTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isCreatingCanvas, setIsCreatingCanvas] = useState(false);
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
+  const [isLiveAuthed, setIsLiveAuthed] = useState(false);
+  const [liveParticipants, setLiveParticipants] = useState<OfficeLiveParticipant[]>([]);
+  const saveTimerRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+  const currentCanvasVersionRef = useRef(1);
+  const currentCanvasIdRef = useRef<string | null>(null);
+  const suppressDirtyRef = useRef(false);
+  const suppressLiveBroadcastRef = useRef(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const wsAuthedRef = useRef(false);
+  const joinedCanvasRef = useRef<string | null>(null);
+  const lastCursorSentAtRef = useRef<number>(0);
+  const cursorSendRafRef = useRef<number | null>(null);
+  const latestCursorRef = useRef<{ canvasId: string; x: number; y: number } | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const liveStateTimerRef = useRef<number | null>(null);
+  const lastNodeMoveSentAtRef = useRef<number>(0);
+  const nodeMoveSendRafRef = useRef<number | null>(null);
+  const latestNodeMoveRef = useRef<{ canvasId: string; nodeId: string; x: number; y: number } | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const realtimeDisabledRef = useRef(false);
+  const unmountedRef = useRef(false);
+
+  const refreshCanvases = async () => {
+    if (!user) return;
+    const canvases = await officeCanvasService.listCanvases();
+    setAllCanvases(canvases);
+  };
+
+  const refreshCollaborators = async (canvasId: string) => {
+    try {
+      const collaborators = await officeCanvasService.listCollaborators(canvasId);
+      setCollaboratorCount(collaborators.length);
+    } catch (error) {
+      console.error('Failed to load collaborators:', error);
+      setCollaboratorCount(0);
+    }
+  };
+
+  const sendLiveMessage = (message: Record<string, any>) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify(message));
+  };
+
+  const connectLiveChannel = () => {
+    if (!user) return;
+    if (realtimeDisabledRef.current) return;
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    const token = localStorage.getItem('xenoos_auth_token');
+    if (!token) return;
+
+    const ws = new WebSocket(getCanvasWsUrl());
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      reconnectAttemptsRef.current = 0;
+      setIsLiveConnected(true);
+      setIsLiveAuthed(false);
+      sendLiveMessage({ type: 'authenticate', token });
+    };
+
+    ws.onclose = (event) => {
+      setIsLiveConnected(false);
+      setIsLiveAuthed(false);
+      wsAuthedRef.current = false;
+      joinedCanvasRef.current = null;
+      setLiveParticipants([]);
+
+      if (event.code === 1008 || event.code === 1011) {
+        realtimeDisabledRef.current = true;
+        setSyncStatus('Live sync unavailable');
+        return;
+      }
+
+      if (!unmountedRef.current && !realtimeDisabledRef.current) {
+        reconnectAttemptsRef.current += 1;
+        if (reconnectAttemptsRef.current > 6) {
+          realtimeDisabledRef.current = true;
+          setSyncStatus('Live sync unavailable');
+          return;
+        }
+        const delayMs = Math.min(1200 * Math.pow(2, reconnectAttemptsRef.current - 1), 15000);
+        reconnectTimerRef.current = window.setTimeout(() => {
+          connectLiveChannel();
+        }, delayMs);
+      }
+    };
+
+    ws.onerror = () => {
+      setIsLiveConnected(false);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        const activeCanvasId = currentCanvasIdRef.current;
+
+        if (message.type === 'authenticated' || message.type === 'auth_success') {
+          wsAuthedRef.current = true;
+          setIsLiveAuthed(true);
+          if (activeCanvasId) {
+            sendLiveMessage({ type: 'office_canvas_join', canvasId: activeCanvasId });
+            joinedCanvasRef.current = activeCanvasId;
+          }
+          return;
+        }
+
+        if (message.type === 'auth_error') {
+          realtimeDisabledRef.current = true;
+          setIsLiveAuthed(false);
+          setSyncStatus('Live sync auth failed');
+          try {
+            // Browser clients must use 1000 or 3000-4999 when calling WebSocket.close().
+            ws.close(4001, 'auth_failed');
+          } catch (closeError) {
+            console.error('Office canvas WS close error:', closeError);
+          }
+          return;
+        }
+
+        if (message.type === 'office_canvas_joined' && message.canvasId === activeCanvasId) {
+          const users = Array.isArray(message.users) ? message.users : [];
+          setLiveParticipants(users);
+          return;
+        }
+
+        if (message.type === 'office_canvas_user_joined' && message.canvasId === activeCanvasId) {
+          const p = message.user;
+          if (!p?.id) return;
+          setLiveParticipants((prev) => {
+            if (prev.some((u) => u.id === p.id)) return prev;
+            return [...prev, { ...p, cursorX: 0, cursorY: 0 }];
+          });
+          setSyncStatus(`${p.displayName || 'User'} joined`);
+          return;
+        }
+
+        if (message.type === 'office_canvas_user_left' && message.canvasId === activeCanvasId) {
+          const leftId = message.userId;
+          const leftUser = liveParticipants.find((p) => p.id === leftId);
+          setLiveParticipants((prev) => prev.filter((u) => u.id !== leftId));
+          if (leftUser?.displayName) {
+            setSyncStatus(`${leftUser.displayName} left`);
+          }
+          return;
+        }
+
+        if (message.type === 'office_canvas_cursor_update' && message.canvasId === activeCanvasId) {
+          setLiveParticipants((prev) => {
+            const existing = prev.find((u) => u.id === message.userId);
+            if (!existing) {
+              return [
+                ...prev,
+                {
+                  id: message.userId,
+                  displayName: message.displayName || 'User',
+                  color: message.color || '#3B82F6',
+                  cursorX: message.x || 0,
+                  cursorY: message.y || 0,
+                }
+              ];
+            }
+            return prev.map((u) =>
+              u.id === message.userId
+                ? { ...u, cursorX: message.x || 0, cursorY: message.y || 0 }
+                : u
+            );
+          });
+          return;
+        }
+
+        if (message.type === 'office_canvas_patch' && message.canvasId === activeCanvasId) {
+          if (message.userId === user?.id) return;
+          const isRealtimePatch = message.realtime === true;
+          if (!isRealtimePatch) {
+            if (typeof message.version !== 'number') return;
+            if (message.version <= currentCanvasVersionRef.current) return;
+          }
+          const liveState = message.state || {};
+          suppressLiveBroadcastRef.current = true;
+          suppressDirtyRef.current = true;
+          setNodes(Array.isArray(liveState.nodes) ? liveState.nodes.map(hydrateNodeDates) : []);
+          setConnections(Array.isArray(liveState.connections) ? liveState.connections : []);
+          if (typeof liveState.name === 'string' && liveState.name.length > 0) {
+            setCanvasName(liveState.name);
+          }
+          if (!isRealtimePatch && typeof message.version === 'number') {
+            currentCanvasVersionRef.current = message.version;
+            setCurrentCanvasVersion(message.version);
+          }
+          setLastRemoteSyncAt(message.updatedAt || new Date().toISOString());
+          setSyncStatus(`${isRealtimePatch ? 'Realtime' : 'Live'} update from ${message.displayName || 'collaborator'}`);
+          return;
+        }
+
+        if (message.type === 'office_canvas_node_move' && message.canvasId === activeCanvasId) {
+          if (!message.nodeId || typeof message.x !== 'number' || typeof message.y !== 'number') return;
+          suppressLiveBroadcastRef.current = true;
+          suppressDirtyRef.current = true;
+          setNodes((prev) =>
+            prev.map((node) =>
+              node.id === message.nodeId
+                ? { ...node, x: message.x, y: message.y }
+                : node
+            )
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('Office canvas WS parse error:', error);
+      }
+    };
+  };
+
+  const applyCanvasState = (canvas: OfficeCanvas) => {
+    const canvasState = canvas.canvas_state || {};
+    const hydratedNodes = Array.isArray(canvasState.nodes)
+      ? canvasState.nodes.map(hydrateNodeDates)
+      : defaultCanvasNodes;
+
+    suppressLiveBroadcastRef.current = true;
+    suppressDirtyRef.current = true;
+    setNodes(hydratedNodes);
+    setConnections(Array.isArray(canvasState.connections) ? canvasState.connections : []);
+    setPanOffset(canvasState.panOffset || { x: 0, y: 0 });
+    setZoom(typeof canvasState.zoom === 'number' ? canvasState.zoom : 1);
+    setCanvasName(canvas.name || 'Untitled Canvas');
+    currentCanvasIdRef.current = canvas.id;
+    setCurrentCanvasId(canvas.id);
+    const normalizedVersion = Number(canvas.version) || 1;
+    currentCanvasVersionRef.current = normalizedVersion;
+    setCurrentCanvasVersion(normalizedVersion);
+    setLastRemoteSyncAt(canvas.updated_at);
+    refreshCollaborators(canvas.id);
+    setSyncStatus('Synced');
+    setIsDirty(false);
+  };
+
+  const saveCanvasNow = async (force = false) => {
+    if (!currentCanvasId || !user) return;
+    if (!force && !isDirty) return;
+    if (saveInFlightRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+
+    saveInFlightRef.current = true;
+
+    try {
+      setSyncStatus('Saving...');
+      const expectedVersion = Number.isFinite(currentCanvasVersionRef.current) ? currentCanvasVersionRef.current : 1;
+      const updated = await officeCanvasService.updateCanvas(currentCanvasId, {
+        name: canvasName,
+        canvasState: {
+          nodes,
+          connections,
+          panOffset,
+          zoom,
+        },
+        expectedVersion,
+      });
+
+      setLastRemoteSyncAt(updated.updated_at);
+      const nextVersion = Number(updated.version) || expectedVersion + 1;
+      currentCanvasVersionRef.current = nextVersion;
+      setCurrentCanvasVersion(nextVersion);
+      setSyncStatus('Saved');
+      setIsDirty(false);
+      sendLiveMessage({
+        type: 'office_canvas_patch',
+        canvasId: currentCanvasId,
+        version: nextVersion,
+        updatedAt: updated.updated_at,
+        state: {
+          name: canvasName,
+          nodes,
+          connections
+        }
+      });
+      await refreshCanvases();
+    } catch (error) {
+      if (error instanceof CanvasVersionConflictError && error.latest) {
+        const latest = error.latest;
+        const latestState = latest.canvas_state || {};
+        const localState = { nodes, connections, panOffset, zoom };
+        const sameName = (latest.name || 'Untitled Canvas') === (canvasName || 'Untitled Canvas');
+        const sameState = JSON.stringify(latestState || {}) === JSON.stringify(localState);
+
+        if (sameName && sameState) {
+          const latestVersion = Number(latest.version) || currentCanvasVersionRef.current + 1;
+          currentCanvasVersionRef.current = latestVersion;
+          setCurrentCanvasVersion(latestVersion);
+          setLastRemoteSyncAt(latest.updated_at);
+          setSyncStatus('Saved');
+          setIsDirty(false);
+        } else {
+          applyCanvasState(latest);
+          setSyncStatus('Reloaded latest (conflict)');
+        }
+        return;
+      }
+      console.error('Failed to save canvas:', error);
+      setSyncStatus('Save failed');
+    } finally {
+      saveInFlightRef.current = false;
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        window.setTimeout(() => {
+          saveCanvasNow(true);
+        }, 0);
+      }
+    }
+  };
+
+  const loadCanvasById = async (canvasId: string) => {
+    try {
+      setIsCanvasLoading(true);
+      const canvas = await officeCanvasService.getCanvas(canvasId);
+      applyCanvasState(canvas);
+    } catch (error) {
+      console.error('Failed to load canvas:', error);
+      setSyncStatus('Load failed');
+    } finally {
+      setIsCanvasLoading(false);
+    }
+  };
+
+  const createNewCanvas = async () => {
+    if (!user || isCreatingCanvas) return;
+
+    try {
+      setIsCreatingCanvas(true);
+      const created = await officeCanvasService.createCanvas('Untitled Canvas', {
+        nodes: defaultCanvasNodes,
+        connections: [],
+        panOffset: { x: 0, y: 0 },
+        zoom: 1
+      });
+      await refreshCanvases();
+      applyCanvasState(created);
+    } catch (error) {
+      console.error('Failed to create canvas:', error);
+      setSyncStatus('Create failed');
+    } finally {
+      setIsCreatingCanvas(false);
+    }
+  };
+
+  const shareCurrentCanvas = async () => {
+    if (!currentCanvasId) return;
+    try {
+      const { shareToken } = await officeCanvasService.createShareLink(currentCanvasId);
+      // Use a clean invite URL; opening it joins the user, then app redirects to canonical /canvas/:id.
+      const url = `${window.location.origin}/overview/office/canvas?share=${shareToken}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        setSyncStatus('Invite link copied');
+      } catch {
+        window.prompt('Copy this share link:', url);
+        setSyncStatus('Share link ready');
+      }
+      await refreshCanvases();
+    } catch (error) {
+      console.error('Failed to create share link:', error);
+      setSyncStatus('Share failed');
+    }
+  };
+
+  const deleteCurrentCanvas = async () => {
+    if (!currentCanvasId) return;
+    if (!window.confirm('Delete this canvas permanently?')) return;
+
+    try {
+      await officeCanvasService.deleteCanvas(currentCanvasId);
+      const canvases = await officeCanvasService.listCanvases();
+      setAllCanvases(canvases);
+
+      if (canvases.length > 0) {
+        await loadCanvasById(canvases[0].id);
+      } else {
+        await createNewCanvas();
+      }
+    } catch (error) {
+      console.error('Delete failed:', error);
+      setSyncStatus('Delete failed');
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+
+    const init = async () => {
+      try {
+        setIsCanvasLoading(true);
+
+        const shareToken = new URLSearchParams(location.search).get('share');
+        if (shareToken) {
+          const joined = await officeCanvasService.joinByShareToken(shareToken);
+          await refreshCanvases();
+          applyCanvasState(joined);
+          navigate(`/overview/office/canvas/${joined.id}`, { replace: true });
+          setSyncStatus('Joined shared canvas');
+          return;
+        }
+
+        const canvases = await officeCanvasService.listCanvases();
+        setAllCanvases(canvases);
+
+        if (canvases.length > 0) {
+          const selectedCanvasId = routeCanvasId && canvases.some((canvas) => canvas.id === routeCanvasId)
+            ? routeCanvasId
+            : canvases[0].id;
+          await loadCanvasById(selectedCanvasId);
+        } else {
+          await createNewCanvas();
+        }
+      } catch (error) {
+        console.error('Canvas init failed:', error);
+        setSyncStatus('Init failed');
+      } finally {
+        setIsCanvasLoading(false);
+      }
+    };
+
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, location.search, routeCanvasId, navigate]);
+
+  useEffect(() => {
+    if (!user || !routeCanvasId || !currentCanvasId) return;
+    if (routeCanvasId === currentCanvasId) return;
+    loadCanvasById(routeCanvasId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeCanvasId, currentCanvasId, user]);
+
+  useEffect(() => {
+    if (!currentCanvasId) return;
+    if (routeCanvasId === currentCanvasId) return;
+    navigate(`/overview/office/canvas/${currentCanvasId}`, { replace: true });
+  }, [currentCanvasId, routeCanvasId, navigate]);
+
+  useEffect(() => {
+    currentCanvasIdRef.current = currentCanvasId;
+  }, [currentCanvasId]);
+
+  useEffect(() => {
+    if (!user) return;
+    unmountedRef.current = false;
+    connectLiveChannel();
+
+    return () => {
+      unmountedRef.current = true;
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      reconnectAttemptsRef.current = 0;
+      realtimeDisabledRef.current = false;
+      setIsLiveAuthed(false);
+      lastCursorSentAtRef.current = 0;
+      latestCursorRef.current = null;
+      if (cursorSendRafRef.current) {
+        window.cancelAnimationFrame(cursorSendRafRef.current);
+        cursorSendRafRef.current = null;
+      }
+      if (liveStateTimerRef.current) {
+        window.clearTimeout(liveStateTimerRef.current);
+        liveStateTimerRef.current = null;
+      }
+      lastNodeMoveSentAtRef.current = 0;
+      latestNodeMoveRef.current = null;
+      if (nodeMoveSendRafRef.current) {
+        window.cancelAnimationFrame(nodeMoveSendRafRef.current);
+        nodeMoveSendRafRef.current = null;
+      }
+      if (wsRef.current) {
+        try {
+          if (joinedCanvasRef.current) {
+            wsRef.current.send(JSON.stringify({ type: 'office_canvas_leave', canvasId: joinedCanvasRef.current }));
+          }
+          wsRef.current.close();
+        } catch (error) {
+          console.error('WS cleanup error:', error);
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  useEffect(() => {
+    if (!currentCanvasId) return;
+    if (!isLiveConnected || !isLiveAuthed) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    if (joinedCanvasRef.current && joinedCanvasRef.current !== currentCanvasId) {
+      sendLiveMessage({ type: 'office_canvas_leave', canvasId: joinedCanvasRef.current });
+    }
+
+    setLiveParticipants([]);
+    sendLiveMessage({ type: 'office_canvas_join', canvasId: currentCanvasId });
+    joinedCanvasRef.current = currentCanvasId;
+  }, [currentCanvasId, isLiveConnected, isLiveAuthed]);
+
+  useEffect(() => {
+    if (suppressDirtyRef.current) {
+      suppressDirtyRef.current = false;
+      return;
+    }
+    setIsDirty(true);
+  }, [nodes, connections, panOffset, zoom, canvasName]);
+
+  useEffect(() => {
+    if (suppressLiveBroadcastRef.current) {
+      suppressLiveBroadcastRef.current = false;
+      return;
+    }
+    if (!currentCanvasId || !isLiveConnected || !isLiveAuthed) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (joinedCanvasRef.current !== currentCanvasId) return;
+
+    if (liveStateTimerRef.current) {
+      window.clearTimeout(liveStateTimerRef.current);
+    }
+
+    liveStateTimerRef.current = window.setTimeout(() => {
+      sendLiveMessage({
+        type: 'office_canvas_patch',
+        canvasId: currentCanvasId,
+        realtime: true,
+        state: {
+          name: canvasName,
+          nodes,
+          connections
+        }
+      });
+      liveStateTimerRef.current = null;
+    }, LIVE_STATE_SEND_INTERVAL_MS);
+
+    return () => {
+      if (liveStateTimerRef.current) {
+        window.clearTimeout(liveStateTimerRef.current);
+        liveStateTimerRef.current = null;
+      }
+    };
+  }, [nodes, connections, panOffset, zoom, canvasName, currentCanvasId, isLiveConnected, isLiveAuthed]);
+
+  useEffect(() => {
+    if (!currentCanvasId || !isDirty) return;
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+
+    saveTimerRef.current = window.setTimeout(() => {
+      saveCanvasNow();
+    }, 450);
+
+    return () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty, currentCanvasId, nodes, connections, panOffset, zoom, canvasName]);
+
+  // Poll remote updates for simple collaboration sync.
+  useEffect(() => {
+    if (!currentCanvasId || !user) return;
+
+    const interval = window.setInterval(async () => {
+      try {
+        const remote = await officeCanvasService.getCanvas(currentCanvasId);
+        if (lastRemoteSyncAt && remote.updated_at <= lastRemoteSyncAt) return;
+        if (isDirty) return;
+        applyCanvasState(remote);
+      } catch (error) {
+        console.error('Polling failed:', error);
+      }
+    }, 2500);
+
+    return () => window.clearInterval(interval);
+  }, [currentCanvasId, user, lastRemoteSyncAt, isDirty]);
 
   // Add new node with comprehensive defaults
   const addNode = (type: NodeType, color?: string) => {
@@ -401,6 +1057,7 @@ const CanvasPlanningVisual: React.FC = () => {
       sticky: { width: 200, height: 200 },
       text: { width: 300, height: 200 },
       shape: { width: 150, height: 150 },
+      image: { width: 320, height: 220 },
       file: { width: 280, height: 120 },
       todo: { width: 300, height: 250 },
       video: { width: 400, height: 250 },
@@ -448,6 +1105,10 @@ const CanvasPlanningVisual: React.FC = () => {
         break;
       case 'shape':
         newNode.shapeType = 'rectangle';
+        break;
+      case 'image':
+        newNode.imageUrl = 'https://picsum.photos/800/600';
+        newNode.content = 'Image';
         break;
       case 'todo':
         newNode.todos = [
@@ -636,18 +1297,83 @@ const CanvasPlanningVisual: React.FC = () => {
 
   // Handle mouse move
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (currentCanvasId && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && isLiveAuthed) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const localX = rect ? e.clientX - rect.left : e.clientX;
+      const localY = rect ? e.clientY - rect.top : e.clientY;
+      const worldX = (localX - panOffset.x) / zoom;
+      const worldY = (localY - panOffset.y) / zoom;
+      latestCursorRef.current = { canvasId: currentCanvasId, x: worldX, y: worldY };
+
+      if (!cursorSendRafRef.current) {
+        cursorSendRafRef.current = window.requestAnimationFrame(() => {
+          cursorSendRafRef.current = null;
+          const latest = latestCursorRef.current;
+          if (!latest || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !isLiveAuthed) {
+            return;
+          }
+
+          const now = performance.now();
+          if (now - lastCursorSentAtRef.current < CURSOR_SEND_INTERVAL_MS) {
+            return;
+          }
+
+          sendLiveMessage({
+            type: 'office_canvas_cursor',
+            canvasId: latest.canvasId,
+            x: latest.x,
+            y: latest.y,
+          });
+          lastCursorSentAtRef.current = now;
+        });
+      }
+    }
+
     if (draggingNodeId) {
       const node = nodes.find(n => n.id === draggingNodeId);
       if (node) {
+        const newX = e.clientX / zoom - dragOffset.x;
+        const newY = e.clientY / zoom - dragOffset.y;
         setNodes(nodes.map(n =>
           n.id === draggingNodeId
             ? {
                 ...n,
-                x: e.clientX / zoom - dragOffset.x,
-                y: e.clientY / zoom - dragOffset.y
+                x: newX,
+                y: newY
               }
             : n
         ));
+
+        if (currentCanvasId && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && isLiveAuthed) {
+          latestNodeMoveRef.current = {
+            canvasId: currentCanvasId,
+            nodeId: draggingNodeId,
+            x: newX,
+            y: newY,
+          };
+
+          if (!nodeMoveSendRafRef.current) {
+            nodeMoveSendRafRef.current = window.requestAnimationFrame(() => {
+              nodeMoveSendRafRef.current = null;
+              const payload = latestNodeMoveRef.current;
+              if (!payload || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !isLiveAuthed) {
+                return;
+              }
+              const now = performance.now();
+              if (now - lastNodeMoveSentAtRef.current < NODE_MOVE_SEND_INTERVAL_MS) {
+                return;
+              }
+              sendLiveMessage({
+                type: 'office_canvas_node_move',
+                canvasId: payload.canvasId,
+                nodeId: payload.nodeId,
+                x: payload.x,
+                y: payload.y,
+              });
+              lastNodeMoveSentAtRef.current = now;
+            });
+          }
+        }
       }
     } else if (isPanning) {
       setPanOffset({
@@ -873,11 +1599,39 @@ const CanvasPlanningVisual: React.FC = () => {
       // Store original node state for potential revert
       setOriginalNodeState({ ...node });
     }
+    setSelectedNodeId(nodeId);
     setSettingsNodeId(nodeId);
     setShowSettingsModal(true);
     setContextMenu(null);
-    setOutsideClickCount(0);
   };
+
+  const settingsNode = settingsNodeId ? nodes.find((n) => n.id === settingsNodeId) : null;
+
+  const updateSettingsNode = (patch: Partial<Node>) => {
+    if (!settingsNodeId) return;
+    setNodes((prev) => prev.map((n) => (n.id === settingsNodeId ? { ...n, ...patch } : n)));
+  };
+
+  const closeSettingsPanel = () => {
+    setShowSettingsModal(false);
+    setSettingsNodeId(null);
+    setOriginalNodeState(null);
+  };
+
+  const revertSettingsNode = () => {
+    if (!settingsNodeId || !originalNodeState) {
+      closeSettingsPanel();
+      return;
+    }
+    setNodes((prev) => prev.map((n) => (n.id === settingsNodeId ? { ...originalNodeState } : n)));
+    closeSettingsPanel();
+  };
+
+  useEffect(() => {
+    if (showSettingsModal && settingsNodeId && !settingsNode) {
+      closeSettingsPanel();
+    }
+  }, [showSettingsModal, settingsNodeId, settingsNode]);
 
   // Close context menu when clicking elsewhere
   useEffect(() => {
@@ -1137,20 +1891,10 @@ const CanvasPlanningVisual: React.FC = () => {
     </div>
   );
 
-  // Helper function to render settings panel
-  const renderSettingsPanel = (node: Node) => showSettingsModal && settingsNodeId === node.id && (
-    <div
-      className="absolute bg-black/95 backdrop-blur-md border-2 border-blue-500/50 rounded-lg shadow-2xl z-0"
-      style={{
-        top: '-50px',
-        left: '-10px',
-        right: '-10px',
-        bottom: '-10px',
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-    </div>
-  );
+  const renderSettingsPanel = (node: Node) => {
+    void node;
+    return null;
+  };
 
   // Render node based on type
   const renderNode = (node: Node) => {
@@ -1250,6 +1994,34 @@ const CanvasPlanningVisual: React.FC = () => {
               )}
               {node.shapeType === 'circle' && (
                 <div className="w-full h-full rounded-full border border-white/10" />
+              )}
+            </div>
+          </div>
+        )}
+
+        {node.type === 'image' && (
+          <div className="relative w-full h-full">
+            {renderSettingsPanel(node)}
+            {renderResizeHandles(node)}
+
+            <div
+              className="w-full h-full rounded-lg overflow-hidden bg-[#0a0a0a] border border-white/20 shadow-2xl backdrop-blur-md relative z-10 cursor-grab active:cursor-grabbing"
+              style={{
+                boxShadow: '0 10px 40px rgba(0, 0, 0, 0.7)'
+              }}
+            >
+              {node.imageUrl ? (
+                <img
+                  src={node.imageUrl}
+                  alt={node.content || 'Canvas image'}
+                  className="w-full h-full object-cover"
+                  draggable={false}
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-white/60 gap-2">
+                  <ImageIcon size={24} />
+                  <span className="text-xs">No image source</span>
+                </div>
               )}
             </div>
           </div>
@@ -2017,17 +2789,78 @@ const CanvasPlanningVisual: React.FC = () => {
     );
   };
 
+  const onlineCount = liveParticipants.length > 0 ? liveParticipants.length : 1;
+
   return (
-    <div className="w-full h-full flex flex-col relative bg-black border border-white/10 rounded-lg overflow-hidden">
+    <div className="fixed inset-0 z-[220] flex flex-col bg-black overflow-hidden">
       {/* Top Toolbar */}
       <div className="w-full border-b border-white/10 bg-black/90 backdrop-blur-md z-50">
         <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => navigate('/overview')}
+              className="p-2 hover:bg-white/10 rounded text-white/60 hover:text-white transition-colors"
+              title="Exit full screen canvas"
+            >
+              <X size={16} />
+            </button>
+
+            <select
+              value={currentCanvasId || ''}
+              onChange={(e) => loadCanvasById(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded px-2 py-1 text-sm text-white/90 min-w-[180px] focus:outline-none"
+              title="Choose canvas"
+            >
+              {allCanvases.map((canvas) => (
+                <option key={canvas.id} value={canvas.id} className="bg-[#0f0f10]">
+                  {canvas.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={createNewCanvas}
+              disabled={isCreatingCanvas}
+              className="p-2 hover:bg-white/10 rounded text-white/70 hover:text-white transition-colors disabled:opacity-40"
+              title="Create new canvas"
+            >
+              <Plus size={16} />
+            </button>
+
             <input
               type="text"
-              defaultValue="Untitled Canvas"
+              value={canvasName}
+              onChange={(e) => setCanvasName(e.target.value)}
               className="bg-transparent text-white text-lg font-medium focus:outline-none border-b border-transparent hover:border-white/20 focus:border-blue-500 transition-colors px-2 py-1"
             />
+            <span className="text-xs text-white/60 inline-flex items-center gap-1">
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${isLiveConnected ? 'bg-emerald-400' : 'bg-red-400'}`} />
+              {onlineCount} online
+            </span>
+            <span className="text-xs text-white/50 hidden md:inline">
+              {onlineCount} online / {collaboratorCount + 1} shared
+            </span>
+            <div className="hidden md:flex items-center gap-1 max-w-[360px] overflow-hidden">
+              {liveParticipants
+                .filter((participant) => participant.id !== user?.id)
+                .slice(0, 4)
+                .map((participant) => (
+                  <div
+                    key={participant.id}
+                    className="px-2 py-0.5 rounded-full text-[10px] text-white/90 border border-white/10 truncate max-w-[130px]"
+                    style={{ backgroundColor: `${participant.color}66` }}
+                    title={participant.displayName}
+                  >
+                    {participant.displayName}
+                  </div>
+                ))}
+            </div>
+            <span className="text-xs text-white/40 hidden md:inline">
+              {isLiveConnected ? 'Live' : 'Offline'} • {syncStatus}
+            </span>
+            <span className="text-xs text-white/35 hidden xl:inline">
+              Online: {liveParticipants.map((p) => p.displayName).join(', ') || 'only you'}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -2095,12 +2928,29 @@ const CanvasPlanningVisual: React.FC = () => {
 
             <div className="w-px h-6 bg-white/10"></div>
 
-            <button className="p-2 hover:bg-white/10 rounded text-white/60 hover:text-white transition-colors" title="Share">
+            <button
+              onClick={shareCurrentCanvas}
+              disabled={!currentCanvasId}
+              className="p-2 hover:bg-white/10 rounded text-white/60 hover:text-white transition-colors disabled:opacity-40"
+              title="Share"
+            >
               <Users size={18} />
             </button>
-            <button className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded text-white text-sm transition-colors">
+            <button
+              onClick={() => saveCanvasNow(true)}
+              disabled={!currentCanvasId}
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded text-white text-sm transition-colors disabled:opacity-40"
+            >
               <Save size={16} className="inline mr-1" />
               Save
+            </button>
+            <button
+              onClick={deleteCurrentCanvas}
+              disabled={!currentCanvasId}
+              className="p-2 hover:bg-red-500/15 rounded text-white/60 hover:text-red-300 transition-colors disabled:opacity-40"
+              title="Delete canvas"
+            >
+              <Trash2 size={16} />
             </button>
           </div>
         </div>
@@ -2345,6 +3195,279 @@ const CanvasPlanningVisual: React.FC = () => {
         )}
       </div>
 
+      <div
+        className={`fixed right-0 top-0 z-[45] h-screen w-80 border-l border-white/10 bg-[#090909]/92 shadow-[0_0_40px_rgba(0,0,0,0.45)] backdrop-blur-md transition-transform duration-200 ${
+          showSettingsModal && settingsNode ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {settingsNode && (
+          <div className="flex h-full flex-col pt-[62px]">
+            <div className="border-b border-white/10 bg-black/70 px-4 py-3">
+              <div className="mb-1 flex items-center justify-between">
+                <div className="text-sm font-semibold text-white">Design</div>
+                <button
+                  onClick={closeSettingsPanel}
+                  className="rounded p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                  title="Close settings"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/50">
+                  {NODE_REGISTRY.find((item) => item.type === settingsNode.type)?.name || settingsNode.type}
+                </span>
+                <span className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/55">
+                  Node
+                </span>
+              </div>
+            </div>
+
+            <div className="flex-1 space-y-3 overflow-y-auto p-3">
+              <section className="overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-white/[0.045] to-white/[0.02]">
+                <div className="border-b border-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/55">Layout</div>
+                <div className="grid grid-cols-2 gap-2 p-3">
+                  <label className="space-y-1 text-[10px] uppercase tracking-wide text-white/45">X
+                    <input
+                      type="number"
+                      value={Math.round(settingsNode.x)}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        updateSettingsNode({ x: Number.isFinite(next) ? next : settingsNode.x });
+                      }}
+                      className="h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                    />
+                  </label>
+                  <label className="space-y-1 text-[10px] uppercase tracking-wide text-white/45">Y
+                    <input
+                      type="number"
+                      value={Math.round(settingsNode.y)}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        updateSettingsNode({ y: Number.isFinite(next) ? next : settingsNode.y });
+                      }}
+                      className="h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                    />
+                  </label>
+                  <label className="space-y-1 text-[10px] uppercase tracking-wide text-white/45">W
+                    <input
+                      type="number"
+                      min={80}
+                      value={Math.round(settingsNode.width)}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        updateSettingsNode({ width: Number.isFinite(next) ? Math.max(80, next) : settingsNode.width });
+                      }}
+                      className="h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                    />
+                  </label>
+                  <label className="space-y-1 text-[10px] uppercase tracking-wide text-white/45">H
+                    <input
+                      type="number"
+                      min={60}
+                      value={Math.round(settingsNode.height)}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        updateSettingsNode({ height: Number.isFinite(next) ? Math.max(60, next) : settingsNode.height });
+                      }}
+                      className="h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-white/[0.045] to-white/[0.02]">
+                <div className="border-b border-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/55">Transform</div>
+                <div className="space-y-3 p-3">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-[10px] uppercase tracking-wide text-white/45">Rotation</span>
+                      <span className="rounded border border-white/10 bg-black/50 px-2 py-0.5 text-[10px] text-white/70">
+                        {Math.round(settingsNode.rotation || 0)} deg
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={-180}
+                      max={180}
+                      value={settingsNode.rotation || 0}
+                      onChange={(e) => updateSettingsNode({ rotation: Number(e.target.value) })}
+                      className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-white/15 accent-blue-500"
+                    />
+                  </div>
+
+                  <label className="block text-[10px] uppercase tracking-wide text-white/45">
+                    Layer
+                    <input
+                      type="number"
+                      value={settingsNode.zIndex || 1}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        updateSettingsNode({ zIndex: Number.isFinite(next) ? next : settingsNode.zIndex || 1 });
+                      }}
+                      className="mt-1 h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-white/[0.045] to-white/[0.02]">
+                <div className="border-b border-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/55">Appearance</div>
+                <div className="space-y-3 p-3">
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[10px] uppercase tracking-wide text-white/45">Fill</span>
+                      <span className="rounded border border-white/10 bg-black/50 px-2 py-0.5 text-[10px] text-white/65">
+                        {(settingsNode.color || COLORS[0]).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[...COLORS, ...DARK_COLORS].map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => updateSettingsNode({ color })}
+                          className={`h-7 rounded-md border-2 transition-all ${
+                            settingsNode.color === color ? 'scale-[1.04] border-white/90' : 'border-white/15 hover:border-white/40'
+                          }`}
+                          style={{ backgroundColor: color }}
+                          title={color}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={settingsNode.color || COLORS[0]}
+                        onChange={(e) => updateSettingsNode({ color: e.target.value })}
+                        className="h-8 w-10 cursor-pointer rounded border border-white/15 bg-black/60 p-1"
+                      />
+                      <input
+                        type="text"
+                        value={settingsNode.color || COLORS[0]}
+                        onChange={(e) => updateSettingsNode({ color: e.target.value })}
+                        className="h-8 flex-1 rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-white/[0.045] to-white/[0.02]">
+                <div className="border-b border-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/55">Content</div>
+                <div className="space-y-3 p-3">
+                  {settingsNode.type === 'shape' && (
+                    <label className="block text-[10px] uppercase tracking-wide text-white/45">
+                      Shape Type
+                      <select
+                        value={settingsNode.shapeType || 'rectangle'}
+                        onChange={(e) => updateSettingsNode({ shapeType: e.target.value as ShapeType })}
+                        className="mt-1 h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                      >
+                        <option value="rectangle" className="bg-[#101012]">Rectangle</option>
+                        <option value="circle" className="bg-[#101012]">Circle</option>
+                      </select>
+                    </label>
+                  )}
+
+                  {settingsNode.type !== 'shape' && (
+                    <label className="block text-[10px] uppercase tracking-wide text-white/45">
+                      Text
+                      <textarea
+                        value={settingsNode.content || ''}
+                        onChange={(e) => updateSettingsNode({ content: e.target.value })}
+                        rows={4}
+                        className="mt-1 w-full resize-none rounded-md border border-white/10 bg-black/60 px-2 py-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                      />
+                    </label>
+                  )}
+
+                  {settingsNode.type === 'link' && (
+                    <label className="block text-[10px] uppercase tracking-wide text-white/45">
+                      URL
+                      <input
+                        type="url"
+                        value={settingsNode.linkUrl || ''}
+                        onChange={(e) => updateSettingsNode({ linkUrl: e.target.value })}
+                        className="mt-1 h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                      />
+                    </label>
+                  )}
+
+                  {settingsNode.type === 'button' && (
+                    <>
+                      <label className="block text-[10px] uppercase tracking-wide text-white/45">
+                        Label
+                        <input
+                          type="text"
+                          value={settingsNode.buttonLabel || ''}
+                          onChange={(e) => updateSettingsNode({ buttonLabel: e.target.value })}
+                          className="mt-1 h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                        />
+                      </label>
+                      <label className="block text-[10px] uppercase tracking-wide text-white/45">
+                        Action
+                        <input
+                          type="text"
+                          value={settingsNode.buttonAction || ''}
+                          onChange={(e) => updateSettingsNode({ buttonAction: e.target.value })}
+                          className="mt-1 h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                        />
+                      </label>
+                    </>
+                  )}
+
+                  {settingsNode.type === 'status' && (
+                    <>
+                      <label className="block text-[10px] uppercase tracking-wide text-white/45">
+                        Label
+                        <input
+                          type="text"
+                          value={settingsNode.statusLabel || ''}
+                          onChange={(e) => updateSettingsNode({ statusLabel: e.target.value })}
+                          className="mt-1 h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                        />
+                      </label>
+                      <label className="block text-[10px] uppercase tracking-wide text-white/45">
+                        State
+                        <select
+                          value={settingsNode.statusType || 'todo'}
+                          onChange={(e) => updateSettingsNode({ statusType: e.target.value as StatusType })}
+                          className="mt-1 h-8 w-full rounded-md border border-white/10 bg-black/60 px-2 text-xs text-white/90 outline-none transition-colors focus:border-blue-400/50"
+                        >
+                          <option value="todo" className="bg-[#101012]">Todo</option>
+                          <option value="in-progress" className="bg-[#101012]">In progress</option>
+                          <option value="done" className="bg-[#101012]">Done</option>
+                          <option value="blocked" className="bg-[#101012]">Blocked</option>
+                        </select>
+                      </label>
+                    </>
+                  )}
+                </div>
+              </section>
+            </div>
+
+            <div className="border-t border-white/10 bg-black/80 p-3">
+              <div className="mb-2 text-[10px] uppercase tracking-wide text-white/35">Node Actions</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={revertSettingsNode}
+                  className="h-9 rounded-md border border-white/20 bg-white/[0.03] px-3 text-xs font-medium text-white/80 transition-colors hover:bg-white/10"
+                >
+                  Revert
+                </button>
+                <button
+                  onClick={closeSettingsPanel}
+                  className="h-9 rounded-md bg-gradient-to-r from-blue-500 to-blue-600 px-3 text-xs font-semibold text-white transition-all hover:from-blue-400 hover:to-blue-500"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Canvas */}
       <div
         ref={canvasRef}
@@ -2362,45 +3485,15 @@ const CanvasPlanningVisual: React.FC = () => {
         onClick={() => {
           // Close canvas context menu on click
           setCanvasContextMenu(null);
-
-          // Handle clicks outside the node when settings are open
-          if (showSettingsModal && settingsNodeId) {
-            // Clear any existing timer
-            if (outsideClickTimerRef.current) {
-              clearTimeout(outsideClickTimerRef.current);
-            }
-
-            const newCount = outsideClickCount + 1;
-            setOutsideClickCount(newCount);
-
-            if (newCount >= 2) {
-              // Double click detected - revert changes but preserve position/size
-              if (originalNodeState) {
-                const currentNode = nodes.find(n => n.id === settingsNodeId);
-                setNodes(nodes.map(n =>
-                  n.id === settingsNodeId ? {
-                    ...originalNodeState,
-                    // Preserve position and size from current state
-                    x: currentNode?.x ?? originalNodeState.x,
-                    y: currentNode?.y ?? originalNodeState.y,
-                    width: currentNode?.width ?? originalNodeState.width,
-                    height: currentNode?.height ?? originalNodeState.height,
-                  } : n
-                ));
-              }
-              setShowSettingsModal(false);
-              setSettingsNodeId(null);
-              setOriginalNodeState(null);
-              setOutsideClickCount(0);
-            } else {
-              // Reset count after 500ms if no second click
-              outsideClickTimerRef.current = setTimeout(() => {
-                setOutsideClickCount(0);
-              }, 500);
-            }
-          }
+          setContextMenu(null);
         }}
       >
+        {isCanvasLoading && (
+          <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center text-white/70 text-sm">
+            Loading canvas...
+          </div>
+        )}
+
         {/* Grid Background */}
         <div
           className="absolute inset-0"
@@ -2423,6 +3516,43 @@ const CanvasPlanningVisual: React.FC = () => {
           }}
         >
           {nodes.map(renderNode)}
+        </div>
+
+        {/* Live collaborator cursors */}
+        <div className="absolute inset-0 pointer-events-none z-[110]">
+          {liveParticipants
+            .filter((participant) => participant.id !== user?.id)
+            .map((participant) => (
+              <div
+                key={participant.id}
+                className="absolute"
+                style={{
+                  transform: `translate(${participant.cursorX * zoom + panOffset.x}px, ${participant.cursorY * zoom + panOffset.y}px)`
+                }}
+              >
+                <svg
+                  width="16"
+                  height="22"
+                  viewBox="0 0 16 22"
+                  aria-hidden="true"
+                  style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }}
+                >
+                  <path
+                    d="M1 1L1 18L5.6 13.8L8.8 20.8L11.4 19.7L8.2 12.7L15 12.7L1 1Z"
+                    fill={participant.color}
+                    stroke="white"
+                    strokeWidth="1.1"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <div
+                  className="mt-1 px-2 py-0.5 rounded text-[10px] text-white whitespace-nowrap"
+                  style={{ backgroundColor: participant.color }}
+                >
+                  {participant.displayName}
+                </div>
+              </div>
+            ))}
         </div>
       </div>
 

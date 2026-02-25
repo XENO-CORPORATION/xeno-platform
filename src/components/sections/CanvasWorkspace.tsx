@@ -6,7 +6,7 @@ const CanvasWorkspace: React.FC = () => {
     <div className="standard-container">
       <h2 className="section-title text-center">Interactive Canvas Workspace</h2>
       <p className="section-description text-center mb-10">
-        Experience the power of XenoLabs through our intuitive node-based editor. Create, connect, and automate your AI workflow with drag-and-drop simplicity.
+        Experience the power of XenoStudio through our intuitive node-based editor. Create, connect, and automate your AI workflow with drag-and-drop simplicity.
       </p>
       
       {/* Canvas Container - Optimized for rendering performance */}

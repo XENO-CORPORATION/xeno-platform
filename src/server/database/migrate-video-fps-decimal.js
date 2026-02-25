@@ -22,9 +22,9 @@ const { Pool } = pg;
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5433,
-  database: process.env.DB_NAME || 'xenolabs',
+  database: process.env.DB_NAME || 'xenostudio',
   user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'xenolabs_password',
+  password: process.env.DB_PASSWORD || 'xenostudio_password',
 });
 
 async function runMigration() {

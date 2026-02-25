@@ -54,7 +54,7 @@ class TerminalSession {
     this.container = null;
     this.createdAt = new Date();
     this.lastActiveAt = new Date();
-    this.currentDirectory = '/home/xenolabs-user';
+    this.currentDirectory = '/home/xenostudio-user';
     this.environment = {};
     this.commandHistory = [];
   }
@@ -422,7 +422,7 @@ wss.on('connection', async (ws, req) => {
             break;
 
           case 'change_directory':
-            terminalSession.currentDirectory = message.path || '/home/xenolabs-user';
+            terminalSession.currentDirectory = message.path || '/home/xenostudio-user';
             break;
 
           case 'set_environment':

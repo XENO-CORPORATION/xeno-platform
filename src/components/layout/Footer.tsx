@@ -27,10 +27,10 @@ const Footer: React.FC = () => {
           <div className="md:col-span-2">
             <div className="flex items-center space-x-2 mb-4">
               <Zap className="text-white" size={24} />
-              <span className="font-bold text-xl tracking-tight">XenoLabs</span>
+              <span className="font-bold text-xl tracking-tight">XenoStudio</span>
             </div>
             <p className="text-text-secondary text-sm max-w-md mb-6">
-              XenoLabs empowers creators to design, connect, and deploy AI workflows through a visual programming canvas.
+              XenoStudio empowers creators to design, connect, and deploy AI workflows through a visual programming canvas.
             </p>
             <div className="flex space-x-4">
               {socialLinks.map((social, index) => (
@@ -66,7 +66,7 @@ const Footer: React.FC = () => {
         {/* Bottom Bar */}
         <div className="border-t border-[rgba(255,255,255,0.05)] pt-6 flex flex-col md:flex-row justify-between items-center">
           <p className="text-text-secondary text-sm mb-4 md:mb-0">
-            © {currentYear} XenoLabs. All rights reserved.
+            © {currentYear} XenoStudio. All rights reserved.
           </p>
           <div className="flex items-center space-x-6">
             <span className="text-text-secondary text-sm">Made with cutting-edge AI technology</span>

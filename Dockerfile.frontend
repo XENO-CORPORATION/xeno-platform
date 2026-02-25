@@ -1,21 +1,21 @@
-# Frontend Dockerfile
+# Frontend Dockerfile - Optimized for faster builds
 FROM node:20-alpine AS builder
 
 # Build arguments for Vite environment variables
-ARG VITE_FAL_KEY
 ARG VITE_OPENAI_API_KEY
 ARG VITE_GEMINI_API_KEY
 ARG VITE_OPENROUTER_API_KEY
 ARG VITE_API_URL
+ARG VITE_WS_URL
 ARG VITE_ENABLE_SITE_GATE
 ARG VITE_SITE_PASSWORD
 
 # Set environment variables for build
-ENV VITE_FAL_KEY=$VITE_FAL_KEY
 ENV VITE_OPENAI_API_KEY=$VITE_OPENAI_API_KEY
 ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
 ENV VITE_OPENROUTER_API_KEY=$VITE_OPENROUTER_API_KEY
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_WS_URL=$VITE_WS_URL
 ENV VITE_ENABLE_SITE_GATE=$VITE_ENABLE_SITE_GATE
 ENV VITE_SITE_PASSWORD=$VITE_SITE_PASSWORD
 
@@ -25,36 +25,24 @@ WORKDIR /app
 # Copy package files first to leverage Docker cache
 COPY package*.json ./
 
-# Install dependencies (including dev dependencies for build)
-# Using npm install instead of npm ci to handle package.json changes
-RUN npm install --legacy-peer-deps
+# Clean install for reproducible builds (uses package-lock.json)
+RUN npm ci --legacy-peer-deps
 
-# Workaround for npm optional dependencies bug and esbuild version mismatch
-RUN rm -rf node_modules/.vite .npm && npm install --force --legacy-peer-deps
+# Copy configuration files (these rarely change, so cache them before src/)
+COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./
+COPY vite.config.ts ./
+COPY tailwind.config.js postcss.config.js ./
+COPY components.json ./
+COPY index.html ./
 
-# Clear esbuild cache and force rebuild
-RUN rm -rf node_modules/.vite && npm cache clean --force
+# Copy static assets
+COPY public/ ./public/
 
-# Remove existing esbuild binary to force redownload
-RUN rm -f node_modules/.bin/esbuild
+# Copy source code (this layer invalidates when source changes)
+COPY src/ ./src/
 
-# Update browserslist data
-RUN npx update-browserslist-db@latest
-
-# Clean install before build to fix dependency issues
-RUN rm -rf node_modules package-lock.json && npm install
-
-# Fix entities package issue
-RUN npm install entities --force
-
-# Force install correct esbuild version that matches host (after clean install)
-RUN npm install esbuild@0.25.1 --force
-
-# Copy source code (this will invalidate cache when source changes)
-COPY . .
-
-# Build the application with esbuild workaround
-RUN ESBUILD_BINARY_PATH="" npm run build
+# Build the application
+RUN npm run build
 
 # Production stage
 FROM nginx:alpine

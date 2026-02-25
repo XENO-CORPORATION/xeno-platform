@@ -465,7 +465,7 @@ socket.on('render-progress', (data) => {
 ### Rendering fails
 - Check FFmpeg is available: `ffmpeg -version`
 - Check video asset URLs are accessible
-- Review container logs: `docker logs xenolabs-render-{jobId}`
+- Review container logs: `docker logs xenostudio-render-{jobId}`
 
 ### Timeline data not persisting
 - Verify auth token is valid
@@ -486,4 +486,4 @@ socket.on('render-progress', (data) => {
 
 ---
 
-**Need Help?** Check the server logs at `/var/log/xenolabs/backend.log` or run with `DEBUG=true` for verbose output.
+**Need Help?** Check the server logs at `/var/log/xenostudio/backend.log` or run with `DEBUG=true` for verbose output.

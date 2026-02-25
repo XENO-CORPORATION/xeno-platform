@@ -1,7 +1,7 @@
 import React from 'react'; // Keep React import for JSX in renderModelSpecificSettings
 import { BaseImageModel } from '../BaseImageModel';
 import { ImageModelSettings, ImageGenerationResponse } from '../ImageModelInterface';
-import { generateImage, ReplicateModels, getReplicateSettings } from '../../../../services/replicateService';
+import { generateImage, XenoModels, getXenoSettings } from '../../../../services/xenoImageService';
 import { API_ENDPOINTS } from '../../../../config/apiConfig';
 
 export class FluxPro11Model extends BaseImageModel {
@@ -44,18 +44,18 @@ export class FluxPro11Model extends BaseImageModel {
       
       // Get the appropriate settings for the Flux Pro 1.1 model
       const replicateSettings = {
-        ...getReplicateSettings(settings, ReplicateModels.FLUX_PRO.model),
+        ...getXenoSettings(settings, XenoModels.FLUX_PRO.model),
         prompt: prompt // Ensure prompt is included
       };
       
       console.log("Flux Pro 1.1 settings:", replicateSettings);
-      console.log("Model:", ReplicateModels.FLUX_PRO.model);
-      console.log("Version:", ReplicateModels.FLUX_PRO.version);
+      console.log("Model:", XenoModels.FLUX_PRO.model);
+      console.log("Version:", XenoModels.FLUX_PRO.version);
       console.log("API Endpoint:", API_ENDPOINTS.REPLICATE_API);
       
       // Call Replicate API using the official Flux 1.1 Pro model
       return await generateImage(
-        ReplicateModels.FLUX_PRO,
+        XenoModels.FLUX_PRO,
         prompt,
         replicateSettings
       );

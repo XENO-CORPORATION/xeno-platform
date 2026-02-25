@@ -760,31 +760,23 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
   React.useEffect(() => {
     // Check URL for token parameter
     const params = new URLSearchParams(window.location.search);
-    const tokenFromUrl = params.get('api_token');
+    const tokenFromUrl = params.get('xeno_token');
     if (tokenFromUrl) {
-      window.REPLICATE_API_TOKEN = tokenFromUrl;
+      window.XENO_API_KEY = tokenFromUrl;
       // Update API_TOKENS object
       if (API_TOKENS) {
-        API_TOKENS.REPLICATE_API_TOKEN = tokenFromUrl;
+        API_TOKENS.XENO_API_KEY = tokenFromUrl;
       }
       // Remove token from URL to avoid exposing it
       const url = new URL(window.location.href);
-      url.searchParams.delete('api_token');
+      url.searchParams.delete('xeno_token');
       window.history.replaceState({}, document.title, url.toString());
     }
   }, []);
 
   // Check for API token availability immediately on initial render
   React.useEffect(() => {
-    // Check if the token is already set from your .env file
-    const urlParams = new URLSearchParams(window.location.search);
-    // Use your token from environment variables
-    if (!window.REPLICATE_API_TOKEN && !urlParams.has('api_token')) {
-      window.REPLICATE_API_TOKEN = import.meta.env.VITE_REPLICATE_API_TOKEN || '';
-      if (API_TOKENS) {
-        API_TOKENS.REPLICATE_API_TOKEN = import.meta.env.VITE_REPLICATE_API_TOKEN || '';
-      }
-    }
+    // API is now proxied through backend - no client-side key needed
   }, []);
 
   // Check API token and initialize Gemini SDK on mount

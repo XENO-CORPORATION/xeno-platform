@@ -374,7 +374,7 @@ router.post('/create', authMiddleware, async (req, res) => {
           `/tmp/xenoos-${userId}:/tmp:rw`,
         ],
         
-        NetworkMode: 'xeno-platform_xenolabs-network',
+        NetworkMode: 'xeno-platform_xenostudio-network',
         
         PortBindings: Object.fromEntries(
           Object.entries(portMappings).map(([internal, external]) => [

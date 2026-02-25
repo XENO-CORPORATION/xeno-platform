@@ -26,6 +26,7 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 import FormData from 'form-data';
 import pg from 'pg';
 import { createHash, randomBytes } from 'crypto';
+import jwt from 'jsonwebtoken';
 import { WebSocketServer as WebSocket } from 'ws';
 import chokidar from 'chokidar';
 import zlib from 'zlib';
@@ -47,7 +48,9 @@ import browserRoutes from './routes/browserRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import youtubeRoutes, { youtubePublicRoutes } from './routes/youtubeRoutes.js';
 import collaborationRoutes from './routes/collaborationRoutes.js';
+import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
+import xenoRoutes from './routes/xenoRoutes.js';
 import { databaseMiddleware } from './middleware/database.js';
 import { authMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
@@ -58,9 +61,9 @@ const { Pool } = pg;
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5433,
-  database: process.env.DB_NAME || 'xenolabs',
+  database: process.env.DB_NAME || 'xenostudio',
   user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'xenolabs_password',
+  password: process.env.DB_PASSWORD || 'xenostudio_password',
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
@@ -88,6 +91,7 @@ const upload = multer({ storage });
 // Create Express app with increased limits for image processing
 const app = express();
 const PORT = process.env.BACKEND_PORT || 8080;
+const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 
 // CRITICAL FIX: Increase server limits for large image data
 // This prevents 431 "Request Header Fields Too Large" errors when processing images
@@ -206,7 +210,7 @@ app.all('/api/fal-direct/*', async (req, res) => {
       method: req.method,
       headers: {
         'Authorization': `Key ${apiKey}`,
-        'User-Agent': 'XenoLabs/1.0'
+        'User-Agent': 'XenoStudio/1.0'
       }
     };
     
@@ -404,6 +408,10 @@ app.post('/api/image/replicate/predictions/:predictionId/cancel', async (req, re
 });
 console.log('🔄 Replicate API proxy available at: /api/image/replicate/*');
 
+// Xeno AI proxy routes (credit-tracked generation)
+app.use('/api/xeno', databaseMiddleware, authMiddleware, xenoRoutes);
+console.log('🎯 Xeno AI proxy routes integrated: /api/xeno/*');
+
 // Image Studio public routes (no auth required for xeno-flow)
 app.use('/api/image', databaseMiddleware, imagePublicRoutes);
 console.log('🎨 Image Studio public routes integrated: /api/image/xeno-flow/*');
@@ -453,6 +461,10 @@ console.log('📺 YouTube routes integrated: /api/youtube/*');
 // Collaboration API routes (Figma-style real-time collaboration)
 app.use('/api/collaboration', databaseMiddleware, collaborationRoutes);
 console.log('🤝 Collaboration routes integrated: /api/collaboration/*');
+
+// Office Canvas routes (multi-canvas + sharing)
+app.use('/api/office-canvas', databaseMiddleware, officeCanvasRoutes);
+console.log('🖼️ Office Canvas routes integrated: /api/office-canvas/*');
 
 // Download API routes (YouTube, Twitter, Instagram, TikTok downloads)
 app.use('/api/download', downloadRoutes);
@@ -3895,6 +3907,8 @@ const wsClients = new Map();
 // Collaboration session maps
 // Map<sessionId, Map<WebSocket, ClientInfo>>
 const collabSessions = new Map();
+// Map<canvasId, Map<WebSocket, ClientInfo>>
+const officeCanvasSessions = new Map();
 
 // Collaboration message types
 const CollabMessageTypes = {
@@ -3921,6 +3935,113 @@ const CollabMessageTypes = {
   PING: 'ping',
   PONG: 'pong'
 };
+
+const OfficeCanvasMessageTypes = {
+  JOIN: 'office_canvas_join',
+  LEAVE: 'office_canvas_leave',
+  JOINED: 'office_canvas_joined',
+  USER_JOINED: 'office_canvas_user_joined',
+  USER_LEFT: 'office_canvas_user_left',
+  CURSOR: 'office_canvas_cursor',
+  CURSOR_UPDATE: 'office_canvas_cursor_update',
+  PATCH: 'office_canvas_patch',
+  NODE_MOVE: 'office_canvas_node_move'
+};
+
+const OFFICE_PARTICIPANT_COLORS = [
+  '#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B',
+  '#EF4444', '#6366F1', '#14B8A6', '#F97316', '#06B6D4'
+];
+
+function getOfficeColor(userId) {
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = (hash << 5) - hash + userId.charCodeAt(i);
+    hash |= 0;
+  }
+  return OFFICE_PARTICIPANT_COLORS[Math.abs(hash) % OFFICE_PARTICIPANT_COLORS.length];
+}
+
+async function canAccessOfficeCanvas(canvasId, userId) {
+  const result = await pool.query(
+    `SELECT c.id
+     FROM office_canvases c
+     LEFT JOIN office_canvas_collaborators col
+       ON col.canvas_id = c.id AND col.user_id = $2
+     WHERE c.id = $1 AND (c.owner_id = $2 OR col.user_id = $2)
+     LIMIT 1`,
+    [canvasId, userId]
+  );
+  return result.rows.length > 0;
+}
+
+function broadcastToOfficeCanvas(canvasId, message, excludeUserId = null) {
+  const sessionClients = officeCanvasSessions.get(canvasId);
+  if (!sessionClients) return;
+  const messageStr = JSON.stringify(message);
+  sessionClients.forEach((clientInfo, ws) => {
+    if (excludeUserId && clientInfo.userId === excludeUserId) return;
+    if (ws.readyState === 1) {
+      ws.send(messageStr);
+    }
+  });
+}
+
+function getOfficeCanvasUsers(canvasId) {
+  const sessionClients = officeCanvasSessions.get(canvasId);
+  if (!sessionClients) return [];
+  const users = [];
+  sessionClients.forEach((clientInfo) => {
+    users.push({
+      id: clientInfo.userId,
+      displayName: clientInfo.displayName || 'User',
+      avatarUrl: clientInfo.avatarUrl,
+      color: clientInfo.officeCanvasColor || getOfficeColor(clientInfo.userId || 'user'),
+      cursorX: clientInfo.officeCursorX || 0,
+      cursorY: clientInfo.officeCursorY || 0,
+    });
+  });
+  return users;
+}
+
+async function resolveWebSocketUserByToken(token) {
+  if (!token || typeof token !== 'string') return null;
+
+  // Preferred path: token exists in active session table.
+  const sessionResult = await pool.query(
+    `SELECT u.*
+     FROM users u
+     JOIN user_sessions s ON u.id = s.user_id
+     WHERE s.session_token = $1
+       AND s.expires_at > $2
+       AND u.is_active = true
+     LIMIT 1`,
+    [token, new Date().toISOString()]
+  );
+
+  if (sessionResult.rows.length > 0) {
+    return sessionResult.rows[0];
+  }
+
+  // Fallback path: accept valid JWT bearer token directly.
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const userId = decoded?.userId || decoded?.id;
+    if (!userId) return null;
+
+    const userResult = await pool.query(
+      `SELECT *
+       FROM users
+       WHERE id = $1 AND is_active = true
+       LIMIT 1`,
+      [userId]
+    );
+
+    return userResult.rows[0] || null;
+  } catch {
+    return null;
+  }
+}
 
 // Debounced cursor updates to database
 const cursorUpdateQueue = new Map();
@@ -4000,6 +4121,12 @@ wss.on('connection', (ws, req) => {
     cursorWindowId: null,
     selection: [],
     collabPermissions: null
+    ,
+    // Office canvas realtime fields
+    officeCanvasId: null,
+    officeCanvasColor: '#3B82F6',
+    officeCursorX: 0,
+    officeCursorY: 0
   };
 
   wsClients.set(ws, clientInfo);
@@ -4010,7 +4137,7 @@ wss.on('connection', (ws, req) => {
   ws.send(JSON.stringify({
     type: 'welcome',
     clientId: clientId,
-    message: 'Connected to XenoLabs WebSocket Server'
+    message: 'Connected to XenoStudio WebSocket Server'
   }));
 
   // Handle incoming messages
@@ -4023,15 +4150,14 @@ wss.on('connection', (ws, req) => {
       if (message.type === 'authenticate') {
         const { token } = message;
         if (token) {
-          // Validate session token
-          pool.query(
-            'SELECT u.* FROM users u JOIN user_sessions s ON u.id = s.user_id WHERE s.session_token = $1 AND s.expires_at > $2',
-            [token, new Date().toISOString()]
-          ).then(result => {
-            if (result.rows.length > 0) {
-              const user = result.rows[0];
+          resolveWebSocketUserByToken(token).then(user => {
+            if (user) {
               clientInfo.sessionToken = token;
               clientInfo.userId = user.id;
+              clientInfo.odea = user.id;
+              clientInfo.displayName = user.display_name || user.username || 'User';
+              clientInfo.avatarUrl = user.avatar_url || null;
+              clientInfo.collabColor = clientInfo.collabColor || '#3B82F6';
               ws.send(JSON.stringify({
                 type: 'authenticated',
                 user: {
@@ -4070,12 +4196,8 @@ wss.on('connection', (ws, req) => {
       else if (message.type === CollabMessageTypes.AUTH) {
         const { token } = message;
         if (token) {
-          pool.query(
-            'SELECT u.* FROM users u JOIN user_sessions s ON u.id = s.user_id WHERE s.session_token = $1 AND s.expires_at > $2',
-            [token, new Date().toISOString()]
-          ).then(result => {
-            if (result.rows.length > 0) {
-              const user = result.rows[0];
+          resolveWebSocketUserByToken(token).then(user => {
+            if (user) {
               clientInfo.sessionToken = token;
               clientInfo.userId = user.id;
               clientInfo.odea = user.id;
@@ -4327,6 +4449,144 @@ wss.on('connection', (ws, req) => {
         }, clientInfo.userId);
       }
 
+      // ===========================================
+      // OFFICE CANVAS REALTIME MESSAGE HANDLERS
+      // ===========================================
+      else if (message.type === OfficeCanvasMessageTypes.JOIN) {
+        if (!clientInfo.userId) {
+          ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+          return;
+        }
+
+        const { canvasId } = message;
+        if (!canvasId) {
+          ws.send(JSON.stringify({ type: 'error', error: 'canvasId is required' }));
+          return;
+        }
+
+        canAccessOfficeCanvas(canvasId, clientInfo.userId).then((allowed) => {
+          if (!allowed) {
+            ws.send(JSON.stringify({ type: 'error', error: 'No access to this canvas' }));
+            return;
+          }
+
+          if (clientInfo.officeCanvasId && clientInfo.officeCanvasId !== canvasId) {
+            const previousMap = officeCanvasSessions.get(clientInfo.officeCanvasId);
+            if (previousMap) {
+              previousMap.delete(ws);
+              if (previousMap.size === 0) {
+                officeCanvasSessions.delete(clientInfo.officeCanvasId);
+              }
+              broadcastToOfficeCanvas(clientInfo.officeCanvasId, {
+                type: OfficeCanvasMessageTypes.USER_LEFT,
+                canvasId: clientInfo.officeCanvasId,
+                userId: clientInfo.userId
+              }, clientInfo.userId);
+            }
+          }
+
+          clientInfo.officeCanvasId = canvasId;
+          clientInfo.officeCanvasColor = getOfficeColor(clientInfo.userId);
+
+          if (!officeCanvasSessions.has(canvasId)) {
+            officeCanvasSessions.set(canvasId, new Map());
+          }
+          officeCanvasSessions.get(canvasId).set(ws, clientInfo);
+
+          const users = getOfficeCanvasUsers(canvasId);
+
+          ws.send(JSON.stringify({
+            type: OfficeCanvasMessageTypes.JOINED,
+            canvasId,
+            users
+          }));
+
+          broadcastToOfficeCanvas(canvasId, {
+            type: OfficeCanvasMessageTypes.USER_JOINED,
+            canvasId,
+            user: {
+              id: clientInfo.userId,
+              displayName: clientInfo.displayName || 'User',
+              avatarUrl: clientInfo.avatarUrl,
+              color: clientInfo.officeCanvasColor
+            }
+          }, clientInfo.userId);
+        }).catch((error) => {
+          console.error('Office canvas join error:', error);
+          ws.send(JSON.stringify({ type: 'error', error: 'Failed to join canvas' }));
+        });
+      }
+
+      else if (message.type === OfficeCanvasMessageTypes.LEAVE) {
+        if (!clientInfo.officeCanvasId) return;
+        const sid = clientInfo.officeCanvasId;
+        const sessionMap = officeCanvasSessions.get(sid);
+        if (sessionMap) {
+          sessionMap.delete(ws);
+          if (sessionMap.size === 0) {
+            officeCanvasSessions.delete(sid);
+          }
+        }
+        clientInfo.officeCanvasId = null;
+        broadcastToOfficeCanvas(sid, {
+          type: OfficeCanvasMessageTypes.USER_LEFT,
+          canvasId: sid,
+          userId: clientInfo.userId
+        }, clientInfo.userId);
+      }
+
+      else if (message.type === OfficeCanvasMessageTypes.CURSOR) {
+        if (!clientInfo.officeCanvasId) return;
+        const { x, y } = message;
+        clientInfo.officeCursorX = Number.isFinite(x) ? x : 0;
+        clientInfo.officeCursorY = Number.isFinite(y) ? y : 0;
+
+        broadcastToOfficeCanvas(clientInfo.officeCanvasId, {
+          type: OfficeCanvasMessageTypes.CURSOR_UPDATE,
+          canvasId: clientInfo.officeCanvasId,
+          userId: clientInfo.userId,
+          displayName: clientInfo.displayName || 'User',
+          color: clientInfo.officeCanvasColor,
+          x: clientInfo.officeCursorX,
+          y: clientInfo.officeCursorY
+        }, clientInfo.userId);
+      }
+
+      else if (message.type === OfficeCanvasMessageTypes.PATCH) {
+        if (!clientInfo.officeCanvasId) return;
+        const canvasId = clientInfo.officeCanvasId;
+        if (message.canvasId && message.canvasId !== canvasId) return;
+
+        broadcastToOfficeCanvas(canvasId, {
+          type: OfficeCanvasMessageTypes.PATCH,
+          canvasId,
+          userId: clientInfo.userId,
+          displayName: clientInfo.displayName || 'User',
+          color: clientInfo.officeCanvasColor,
+          realtime: message.realtime === true,
+          version: message.version,
+          updatedAt: message.updatedAt,
+          state: message.state
+        }, clientInfo.userId);
+      }
+
+      else if (message.type === OfficeCanvasMessageTypes.NODE_MOVE) {
+        if (!clientInfo.officeCanvasId) return;
+        const canvasId = clientInfo.officeCanvasId;
+        if (message.canvasId && message.canvasId !== canvasId) return;
+        if (!message.nodeId || typeof message.x !== 'number' || typeof message.y !== 'number') return;
+
+        broadcastToOfficeCanvas(canvasId, {
+          type: OfficeCanvasMessageTypes.NODE_MOVE,
+          canvasId,
+          userId: clientInfo.userId,
+          displayName: clientInfo.displayName || 'User',
+          nodeId: message.nodeId,
+          x: message.x,
+          y: message.y
+        }, clientInfo.userId);
+      }
+
       // Handle ping
       else if (message.type === CollabMessageTypes.PING) {
         ws.send(JSON.stringify({ type: CollabMessageTypes.PONG }));
@@ -4385,6 +4645,23 @@ wss.on('connection', (ws, req) => {
           type: CollabMessageTypes.USER_LEFT,
           odea: info.userId
         });
+      }
+
+      // Clean up office canvas session
+      if (info.officeCanvasId) {
+        const officeMap = officeCanvasSessions.get(info.officeCanvasId);
+        if (officeMap) {
+          officeMap.delete(ws);
+          if (officeMap.size === 0) {
+            officeCanvasSessions.delete(info.officeCanvasId);
+          }
+        }
+
+        broadcastToOfficeCanvas(info.officeCanvasId, {
+          type: OfficeCanvasMessageTypes.USER_LEFT,
+          canvasId: info.officeCanvasId,
+          userId: info.userId
+        }, info.userId);
       }
 
       wsClients.delete(ws);
@@ -4611,7 +4888,7 @@ runMigrations(pool).catch(err => {
 
 // Start main server
 server.listen(PORT, () => {
-  console.log(`🚀 XenoLabs Main Server running on port ${PORT}`);
+  console.log(`🚀 XenoStudio Main Server running on port ${PORT}`);
   console.log(`🔌 WebSocket server available at ws://localhost:${PORT}`);
   console.log(`📁 File uploads available at: http://localhost:${PORT}/uploads/`);
   console.log(`💾 Persistent File System API available at: http://localhost:${PORT}/api/filesystem/*`);

@@ -15,7 +15,7 @@ import ImageUpscaleInterface from '../components/playground/Enhance/ImageEnhance
 import VideoUpscaleInterface from '../components/playground/Enhance/VideoEnhanceInterface'; // Resolved missing import by creating placeholder component
 import MultiChatContainer from '../components/playground/Chat/MultiChatContainer';
 import ChatWithVoice from '../components/playground/Chat/ChatWithVoice';
-import ThreeDGenerationInterface from '../components/playground/Generation/ThreeDGenerationInterface';
+const ThreeDGenerationInterface = React.lazy(() => import('../components/playground/Generation/ThreeDGenerationInterface'));
 import AudioGenerationInterface from '../components/playground/Generation/AudioGenerationInterface';
 
 import VideoGenerationInterface from '../components/playground/Generation/VideoGenerationInterface';
@@ -171,7 +171,7 @@ const Dashboard: React.FC = () => {
                       <div className="h-full">
                         {labs.length === 0 ? (
                           <EmptyState
-                            title="Welcome to XenoLabs"
+                            title="Welcome to XenoStudio"
                             description="Get started by creating your first AI workflow lab. Connect AI components to build intelligent systems with drag-and-drop simplicity."
                             buttonText="Create your first lab"
                             onAction={handleCreateLab}
@@ -192,7 +192,7 @@ const Dashboard: React.FC = () => {
                     <Route path="/playground/generation/image" element={<ImageGenerationInterface />} />
                     <Route path="playground/generation/image" element={<ImageGenerationInterface />} />
 
-                    <Route path="playground/generation/3d" element={<ThreeDGenerationInterface />} />
+                    <Route path="playground/generation/3d" element={<React.Suspense fallback={<div>Loading 3D Studio...</div>}><ThreeDGenerationInterface /></React.Suspense>} />
                     <Route path="playground/generation/video" element={<VideoGenerationInterface />} />
                     <Route path="/playground/generation/video" element={<VideoGenerationInterface />} />
                     <Route path="/playground/generation/audio" element={<AudioGenerationInterface />} />

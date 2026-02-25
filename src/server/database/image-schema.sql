@@ -1,5 +1,5 @@
 -- ============================================
--- XENOLABS IMAGE STUDIO DATABASE SCHEMA
+-- XENOSTUDIO IMAGE STUDIO DATABASE SCHEMA
 -- ============================================
 -- This schema defines tables for Image Studio project management,
 -- including projects, sessions (chat history), and assets.

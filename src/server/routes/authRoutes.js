@@ -1,17 +1,210 @@
 /**
- * XenoOS Authentication API Routes
- * JWT-based authentication with PostgreSQL backend
+ * XenoStudio Authentication API Routes
+ * Production-grade JWT-based authentication with OAuth support
+ * Providers: Google, GitHub, Twitter/X
  */
 
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
+import fetch from 'node-fetch';
+import Redis from 'ioredis';
 
 const router = express.Router();
 
+// ============================================
+// REDIS CONNECTION (Production)
+// ============================================
+// Use REDIS_URL from env, or fallback to Docker service name, or localhost for dev
+const REDIS_URL = process.env.REDIS_URL || 'redis://xenostudio-redis:6379';
+const redis = new Redis(REDIS_URL, {
+  maxRetriesPerRequest: 3,
+  retryDelayOnFailover: 100,
+  enableReadyCheck: true,
+  lazyConnect: true
+});
+
+redis.on('error', (err) => console.error('Redis OAuth Error:', err.message));
+redis.on('connect', () => console.log('✅ Redis connected for OAuth state management'));
+
+// OAuth state TTL (10 minutes)
+const OAUTH_STATE_TTL = 600;
+
+// ============================================
+// OAUTH CONFIGURATION
+// ============================================
+const OAUTH_CONFIG = {
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    userInfoUrl: 'https://www.googleapis.com/oauth2/v2/userinfo',
+    scopes: ['openid', 'email', 'profile'],
+    callbackUrl: process.env.GOOGLE_CALLBACK_URL || 'https://xenostudio.ai/api/auth/google/callback'
+  },
+  github: {
+    clientId: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    authUrl: 'https://github.com/login/oauth/authorize',
+    tokenUrl: 'https://github.com/login/oauth/access_token',
+    userInfoUrl: 'https://api.github.com/user',
+    userEmailsUrl: 'https://api.github.com/user/emails',
+    scopes: ['user:email', 'read:user'],
+    callbackUrl: process.env.GITHUB_CALLBACK_URL || 'https://xenostudio.ai/api/auth/github/callback'
+  },
+  twitter: {
+    clientId: process.env.TWITTER_CLIENT_ID,
+    clientSecret: process.env.TWITTER_CLIENT_SECRET,
+    authUrl: 'https://twitter.com/i/oauth2/authorize',
+    tokenUrl: 'https://api.twitter.com/2/oauth2/token',
+    userInfoUrl: 'https://api.twitter.com/2/users/me',
+    scopes: ['users.read', 'tweet.read', 'offline.access'],
+    callbackUrl: process.env.TWITTER_CALLBACK_URL || 'https://xenostudio.ai/api/auth/twitter/callback'
+  }
+};
+
+// Frontend URL for redirects after OAuth
+const FRONTEND_URL = process.env.AUTH_FRONTEND_URL || 'https://xenostudio.ai';
+
+// ============================================
+// OAUTH HELPER FUNCTIONS
+// ============================================
+
+// Generate cryptographically secure state token
+function generateState() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Generate PKCE code verifier for Twitter OAuth 2.0
+function generateCodeVerifier() {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+// Generate PKCE code challenge from verifier
+function generateCodeChallenge(verifier) {
+  return crypto.createHash('sha256').update(verifier).digest('base64url');
+}
+
+// Store OAuth state in Redis
+async function storeOAuthState(state, data) {
+  await redis.setex(`oauth:state:${state}`, OAUTH_STATE_TTL, JSON.stringify(data));
+}
+
+// Get and delete OAuth state from Redis (one-time use)
+async function consumeOAuthState(state) {
+  const key = `oauth:state:${state}`;
+  const data = await redis.get(key);
+  if (data) {
+    await redis.del(key);
+    return JSON.parse(data);
+  }
+  return null;
+}
+
+// Find or create user from OAuth profile
+async function findOrCreateOAuthUser(db, provider, profile) {
+  const { id: providerId, email, name, avatar, username } = profile;
+
+  // First, check if this OAuth account is already linked
+  const existingOAuth = await db.query(
+    'SELECT user_id FROM oauth_accounts WHERE provider = $1 AND provider_user_id = $2',
+    [provider, providerId]
+  );
+
+  if (existingOAuth.rows.length > 0) {
+    // Get the linked user
+    const userResult = await db.query(
+      `SELECT id, username, email, display_name, avatar_url, created_at,
+              email_verified, is_active, credits, bonus_credits_claimed, status, role, plan
+       FROM users WHERE id = $1`,
+      [existingOAuth.rows[0].user_id]
+    );
+
+    if (userResult.rows.length > 0) {
+      // Update last login
+      await db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [userResult.rows[0].id]);
+      return { user: userResult.rows[0], isNew: false };
+    }
+  }
+
+  // Check if user exists with this email
+  let user = null;
+  if (email) {
+    const emailResult = await db.query(
+      `SELECT id, username, email, display_name, avatar_url, created_at,
+              email_verified, is_active, credits, bonus_credits_claimed, status, role, plan
+       FROM users WHERE email = $1`,
+      [email.toLowerCase()]
+    );
+
+    if (emailResult.rows.length > 0) {
+      user = emailResult.rows[0];
+    }
+  }
+
+  // Create new user if doesn't exist
+  let isNew = false;
+  if (!user) {
+    const userId = uuidv4();
+    const generatedUsername = username || email?.split('@')[0] || `user_${providerId.substring(0, 8)}`;
+
+    // Check if username exists, if so, append random suffix
+    let finalUsername = generatedUsername.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const usernameCheck = await db.query('SELECT id FROM users WHERE username = $1', [finalUsername]);
+    if (usernameCheck.rows.length > 0) {
+      finalUsername = `${finalUsername}_${crypto.randomBytes(4).toString('hex')}`;
+    }
+
+    // OAuth users don't use password login initially, but schema requires password_hash
+    const oauthPlaceholderPassword = crypto.randomBytes(32).toString('hex');
+    const oauthPasswordHash = await hashPassword(oauthPlaceholderPassword);
+
+    const insertResult = await db.query(
+      `INSERT INTO users (id, username, email, password_hash, display_name, avatar_url, email_verified, is_active, status, role, plan, credits, bonus_credits_claimed, created_at, updated_at, last_login)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), NOW())
+       RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed, status, role, plan`,
+      [userId, finalUsername, email?.toLowerCase(), oauthPasswordHash, name || finalUsername, avatar, true, true, 'active', 'user', 'free', 0, false]
+    );
+
+    user = insertResult.rows[0];
+    isNew = true;
+  } else {
+    // Update last login for existing user
+    await db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+  }
+
+  // Link OAuth account to user (upsert)
+  await db.query(
+    `INSERT INTO oauth_accounts (user_id, provider, provider_user_id, provider_email, provider_username, provider_avatar_url, provider_name, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+     ON CONFLICT (provider, provider_user_id) DO UPDATE SET
+       provider_email = EXCLUDED.provider_email,
+       provider_username = EXCLUDED.provider_username,
+       provider_avatar_url = EXCLUDED.provider_avatar_url,
+       provider_name = EXCLUDED.provider_name,
+       updated_at = NOW()`,
+    [user.id, provider, providerId, email, username, avatar, name]
+  );
+
+  // Log security event
+  try {
+    await db.query(
+      `INSERT INTO security_events (user_id, event_type, metadata, created_at)
+       VALUES ($1, $2, $3, NOW())`,
+      [user.id, isNew ? 'oauth_signup' : 'oauth_login', JSON.stringify({ provider, providerId })]
+    );
+  } catch (e) {
+    console.log('Could not log security event:', e.message);
+  }
+
+  return { user, isNew };
+}
+
 // JWT secret key (in production, use environment variable)
-const JWT_SECRET = process.env.JWT_SECRET || 'xenolabs-super-secret-jwt-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // Hash password utility
@@ -40,6 +233,10 @@ function generateToken(user) {
 // POST /api/auth/init - Initialize database tables
 router.post('/init', async (req, res) => {
   try {
+    const adminUserId = '9bcd1624-e26b-46ec-81f5-17d9b575c992';
+    const adminEmail = 'admin@xenostudio.local';
+    const legacyAdminEmail = 'admin@xenostudio.ai';
+
     // Create users table
     await req.db.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -77,6 +274,7 @@ router.post('/init', async (req, res) => {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         token_hash VARCHAR(255) NOT NULL,
+        session_token VARCHAR(512),
         expires_at TIMESTAMP NOT NULL,
         created_at TIMESTAMP DEFAULT NOW(),
         ip_address INET,
@@ -84,23 +282,29 @@ router.post('/init', async (req, res) => {
       )
     `);
 
-    // Check if default admin user exists
-    const adminCheck = await req.db.query('SELECT id FROM users WHERE email = $1', ['admin@xenolabs.local']);
-    
-    if (adminCheck.rows.length === 0) {
-      // Create default admin user
-      const adminPassword = await hashPassword('xenolabs123');
-      const adminUserId = '9bcd1624-e26b-46ec-81f5-17d9b575c992'; // Keep same ID for existing containers
-      
-      // Use ON CONFLICT DO NOTHING to handle duplicate key gracefully
-      await req.db.query(`
-        INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (id) DO NOTHING
-      `, [adminUserId, 'admin', 'admin@xenolabs.local', adminPassword, 'XenoLabs Admin', true, true]);
+    // Ensure existing deployments have session_token column used by login/register routes
+    await req.db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(512)`);
 
-      console.log('✅ Default admin user ensured: admin@xenolabs.local / xenolabs123');
-    }
+    // Check if default admin user exists
+    const adminCheck = await req.db.query(
+      'SELECT id FROM users WHERE id = $1 OR email IN ($2, $3)',
+      [adminUserId, adminEmail, legacyAdminEmail]
+    );
+    
+    // Create/update default admin user with stable ID and credentials
+    const adminPassword = await hashPassword('xenostudio123');
+    await req.db.query(`
+      INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (id) DO UPDATE SET
+        username = EXCLUDED.username,
+        password_hash = EXCLUDED.password_hash,
+        display_name = EXCLUDED.display_name,
+        email_verified = EXCLUDED.email_verified,
+        is_active = EXCLUDED.is_active
+    `, [adminUserId, 'admin', adminEmail, adminPassword, 'XenoStudio Admin', true, true]);
+
+    console.log('✅ Default admin user ensured: admin@xenostudio.local / xenostudio123');
 
     res.json({
       success: true,
@@ -216,13 +420,19 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    const normalizedEmail = email.toLowerCase();
+    const emailCandidates = normalizedEmail === 'admin@xenostudio.local'
+      ? ['admin@xenostudio.local', 'admin@xenostudio.ai']
+      : [normalizedEmail];
+
     // Find user by email
     const result = await req.db.query(`
       SELECT id, username, email, password_hash, display_name, avatar_url, 
              created_at, email_verified, is_active, last_login, credits, bonus_credits_claimed
       FROM users 
-      WHERE email = $1
-    `, [email.toLowerCase()]);
+      WHERE email = ANY($1::text[])
+      LIMIT 1
+    `, [emailCandidates]);
 
     if (result.rows.length === 0) {
       return res.status(401).json({
@@ -397,6 +607,9 @@ router.post('/logout', async (req, res) => {
 router.post('/migrate', async (req, res) => {
   try {
     console.log('🔧 Starting database migration for authentication system...');
+    const adminUserId = '9bcd1624-e26b-46ec-81f5-17d9b575c992';
+    const adminEmail = 'admin@xenostudio.local';
+    const legacyAdminEmail = 'admin@xenostudio.ai';
 
     // Step 1: Drop and recreate user_sessions table to ensure correct schema
     try {
@@ -406,6 +619,7 @@ router.post('/migrate', async (req, res) => {
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           user_id UUID NOT NULL,
           token_hash VARCHAR(255) NOT NULL,
+          session_token VARCHAR(512),
           expires_at TIMESTAMP NOT NULL,
           created_at TIMESTAMP DEFAULT NOW(),
           ip_address INET,
@@ -425,33 +639,38 @@ router.post('/migrate', async (req, res) => {
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255)`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP`);
+    await req.db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(512)`);
     console.log('✅ User table columns added/verified');
     
     // Step 3: Check if admin user exists and update/create it
-    const adminCheck = await req.db.query('SELECT id FROM users WHERE email = $1', ['admin@xenolabs.local']);
+    const adminCheck = await req.db.query(
+      'SELECT id FROM users WHERE id = $1 OR email IN ($2, $3)',
+      [adminUserId, adminEmail, legacyAdminEmail]
+    );
     
     if (adminCheck.rows.length === 0) {
       // Create new admin user
-      const adminPasswordHash = await hashPassword('xenolabs123');
-      const adminUserId = '9bcd1624-e26b-46ec-81f5-17d9b575c992';
+      const adminPasswordHash = await hashPassword('xenostudio123');
       
       await req.db.query(`
         INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (id) DO UPDATE SET 
+          username = EXCLUDED.username,
           password_hash = EXCLUDED.password_hash,
+          display_name = EXCLUDED.display_name,
           email_verified = EXCLUDED.email_verified,
           is_active = EXCLUDED.is_active
-      `, [adminUserId, 'admin', 'admin@xenolabs.local', adminPasswordHash, 'XenoLabs Admin', true, true]);
+      `, [adminUserId, 'admin', adminEmail, adminPasswordHash, 'XenoStudio Admin', true, true]);
       console.log('✅ Admin user created');
     } else {
       // Update existing admin user with hashed password
-      const adminPasswordHash = await hashPassword('xenolabs123');
+      const adminPasswordHash = await hashPassword('xenostudio123');
       await req.db.query(`
         UPDATE users 
-        SET password_hash = $1, email_verified = true, is_active = true, username = 'admin', display_name = 'XenoLabs Admin'
-        WHERE email = 'admin@xenolabs.local'
-      `, [adminPasswordHash]);
+        SET password_hash = $1, email_verified = true, is_active = true, username = 'admin', display_name = 'XenoStudio Admin'
+        WHERE id = $2 OR email IN ($3, $4)
+      `, [adminPasswordHash, adminUserId, adminEmail, legacyAdminEmail]);
       console.log('✅ Admin user updated');
     }
 
@@ -460,8 +679,8 @@ router.post('/migrate', async (req, res) => {
       message: 'Database migration completed successfully',
       details: {
         adminCredentials: {
-          email: 'admin@xenolabs.local',
-          password: 'xenolabs123'
+          email: 'admin@xenostudio.local',
+          password: 'xenostudio123'
         }
       }
     });
@@ -1050,6 +1269,500 @@ router.post('/claim-bonus', async (req, res) => {
       success: false,
       error: 'Failed to claim bonus credits'
     });
+  }
+});
+
+// ============================================
+// OAUTH ROUTES - GOOGLE
+// ============================================
+
+// GET /api/auth/google - Initiate Google OAuth
+router.get('/google', async (req, res) => {
+  try {
+    const config = OAUTH_CONFIG.google;
+    if (!config.clientId) {
+      return res.status(500).json({ success: false, error: 'Google OAuth not configured' });
+    }
+
+    const state = generateState();
+    const returnUrl = req.query.returnUrl || '/overview';
+
+    // Store state in Redis
+    await storeOAuthState(state, { provider: 'google', returnUrl, createdAt: Date.now() });
+
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: config.callbackUrl,
+      response_type: 'code',
+      scope: config.scopes.join(' '),
+      state: state,
+      access_type: 'offline',
+      prompt: 'consent'
+    });
+
+    res.redirect(`${config.authUrl}?${params.toString()}`);
+  } catch (error) {
+    console.error('Google OAuth init error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=oauth_failed`);
+  }
+});
+
+// GET /api/auth/google/callback - Google OAuth callback
+router.get('/google/callback', async (req, res) => {
+  try {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError) {
+      console.error('Google OAuth error:', oauthError);
+      return res.redirect(`${FRONTEND_URL}/auth?error=access_denied`);
+    }
+
+    if (!code || !state) {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_request`);
+    }
+
+    // Verify state from Redis
+    const stateData = await consumeOAuthState(state);
+    if (!stateData || stateData.provider !== 'google') {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_state`);
+    }
+
+    const config = OAUTH_CONFIG.google;
+
+    // Exchange code for tokens
+    const tokenResponse = await fetch(config.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        code: code,
+        grant_type: 'authorization_code',
+        redirect_uri: config.callbackUrl
+      })
+    });
+
+    const tokens = await tokenResponse.json();
+    if (!tokens.access_token) {
+      console.error('Google token error:', tokens);
+      return res.redirect(`${FRONTEND_URL}/auth?error=token_failed`);
+    }
+
+    // Get user info
+    const userResponse = await fetch(config.userInfoUrl, {
+      headers: { Authorization: `Bearer ${tokens.access_token}` }
+    });
+
+    const googleUser = await userResponse.json();
+    if (!googleUser.id) {
+      return res.redirect(`${FRONTEND_URL}/auth?error=user_fetch_failed`);
+    }
+
+    // Find or create user
+    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'google', {
+      id: googleUser.id,
+      email: googleUser.email,
+      name: googleUser.name,
+      avatar: googleUser.picture,
+      username: googleUser.email?.split('@')[0]
+    });
+
+    // Generate JWT
+    const jwtToken = jwt.sign(
+      { userId: user.id, email: user.email, username: user.username },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    // Store session
+    try {
+      const tokenHash = crypto.createHash('sha256').update(jwtToken).digest('hex');
+      await req.db.query(
+        `INSERT INTO user_sessions (user_id, access_token_hash, expires_at, ip_address, device_type, browser, created_at)
+         VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4, $5, NOW())`,
+        [user.id, tokenHash, req.ip, 'web', req.get('User-Agent')?.substring(0, 100)]
+      );
+    } catch (e) {
+      console.log('Session storage note:', e.message);
+    }
+
+    // Redirect with token
+    const returnUrl = stateData.returnUrl || '/overview';
+    res.redirect(`${FRONTEND_URL}${returnUrl}?token=${jwtToken}&isNew=${isNew}`);
+
+  } catch (error) {
+    console.error('Google OAuth callback error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
+  }
+});
+
+// ============================================
+// OAUTH ROUTES - GITHUB
+// ============================================
+
+// GET /api/auth/github - Initiate GitHub OAuth
+router.get('/github', async (req, res) => {
+  try {
+    const config = OAUTH_CONFIG.github;
+    if (!config.clientId) {
+      return res.status(500).json({ success: false, error: 'GitHub OAuth not configured' });
+    }
+
+    const state = generateState();
+    const returnUrl = req.query.returnUrl || '/overview';
+
+    await storeOAuthState(state, { provider: 'github', returnUrl, createdAt: Date.now() });
+
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: config.callbackUrl,
+      scope: config.scopes.join(' '),
+      state: state
+    });
+
+    res.redirect(`${config.authUrl}?${params.toString()}`);
+  } catch (error) {
+    console.error('GitHub OAuth init error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=oauth_failed`);
+  }
+});
+
+// GET /api/auth/github/callback - GitHub OAuth callback
+router.get('/github/callback', async (req, res) => {
+  try {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError) {
+      console.error('GitHub OAuth error:', oauthError);
+      return res.redirect(`${FRONTEND_URL}/auth?error=access_denied`);
+    }
+
+    if (!code || !state) {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_request`);
+    }
+
+    const stateData = await consumeOAuthState(state);
+    if (!stateData || stateData.provider !== 'github') {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_state`);
+    }
+
+    const config = OAUTH_CONFIG.github;
+
+    // Exchange code for token
+    const tokenResponse = await fetch(config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
+      body: new URLSearchParams({
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        code: code,
+        redirect_uri: config.callbackUrl
+      })
+    });
+
+    const tokens = await tokenResponse.json();
+    if (!tokens.access_token) {
+      console.error('GitHub token error:', tokens);
+      return res.redirect(`${FRONTEND_URL}/auth?error=token_failed`);
+    }
+
+    // Get user info
+    const userResponse = await fetch(config.userInfoUrl, {
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'XenoStudio'
+      }
+    });
+
+    const githubUser = await userResponse.json();
+    if (!githubUser.id) {
+      return res.redirect(`${FRONTEND_URL}/auth?error=user_fetch_failed`);
+    }
+
+    // Get primary email if not public
+    let email = githubUser.email;
+    if (!email) {
+      try {
+        const emailsResponse = await fetch(config.userEmailsUrl, {
+          headers: {
+            Authorization: `Bearer ${tokens.access_token}`,
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'XenoStudio'
+          }
+        });
+        const emails = await emailsResponse.json();
+        const primaryEmail = emails.find(e => e.primary && e.verified);
+        email = primaryEmail?.email || emails[0]?.email;
+      } catch (e) {
+        console.log('Could not fetch GitHub emails:', e.message);
+      }
+    }
+
+    // Find or create user
+    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'github', {
+      id: String(githubUser.id),
+      email: email,
+      name: githubUser.name || githubUser.login,
+      avatar: githubUser.avatar_url,
+      username: githubUser.login
+    });
+
+    // Generate JWT
+    const jwtToken = jwt.sign(
+      { userId: user.id, email: user.email, username: user.username },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    // Store session
+    try {
+      const tokenHash = crypto.createHash('sha256').update(jwtToken).digest('hex');
+      await req.db.query(
+        `INSERT INTO user_sessions (user_id, access_token_hash, expires_at, ip_address, device_type, browser, created_at)
+         VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4, $5, NOW())`,
+        [user.id, tokenHash, req.ip, 'web', req.get('User-Agent')?.substring(0, 100)]
+      );
+    } catch (e) {
+      console.log('Session storage note:', e.message);
+    }
+
+    const returnUrl = stateData.returnUrl || '/overview';
+    res.redirect(`${FRONTEND_URL}${returnUrl}?token=${jwtToken}&isNew=${isNew}`);
+
+  } catch (error) {
+    console.error('GitHub OAuth callback error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
+  }
+});
+
+// ============================================
+// OAUTH ROUTES - TWITTER/X (OAuth 2.0 with PKCE)
+// ============================================
+
+// GET /api/auth/twitter - Initiate Twitter OAuth
+router.get('/twitter', async (req, res) => {
+  try {
+    const config = OAUTH_CONFIG.twitter;
+    if (!config.clientId) {
+      return res.status(500).json({ success: false, error: 'Twitter OAuth not configured' });
+    }
+
+    const state = generateState();
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+    const returnUrl = req.query.returnUrl || '/overview';
+
+    // Store state and PKCE verifier in Redis
+    await storeOAuthState(state, {
+      provider: 'twitter',
+      returnUrl,
+      codeVerifier,
+      createdAt: Date.now()
+    });
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: config.clientId,
+      redirect_uri: config.callbackUrl,
+      scope: config.scopes.join(' '),
+      state: state,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256'
+    });
+
+    res.redirect(`${config.authUrl}?${params.toString()}`);
+  } catch (error) {
+    console.error('Twitter OAuth init error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=oauth_failed`);
+  }
+});
+
+// GET /api/auth/twitter/callback - Twitter OAuth callback
+router.get('/twitter/callback', async (req, res) => {
+  try {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError) {
+      console.error('Twitter OAuth error:', oauthError);
+      return res.redirect(`${FRONTEND_URL}/auth?error=access_denied`);
+    }
+
+    if (!code || !state) {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_request`);
+    }
+
+    const stateData = await consumeOAuthState(state);
+    if (!stateData || stateData.provider !== 'twitter') {
+      return res.redirect(`${FRONTEND_URL}/auth?error=invalid_state`);
+    }
+
+    const config = OAUTH_CONFIG.twitter;
+    const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
+
+    // Exchange code for token with PKCE verifier
+    const tokenResponse = await fetch(config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${basicAuth}`
+      },
+      body: new URLSearchParams({
+        code: code,
+        grant_type: 'authorization_code',
+        redirect_uri: config.callbackUrl,
+        code_verifier: stateData.codeVerifier
+      })
+    });
+
+    const tokens = await tokenResponse.json();
+    if (!tokens.access_token) {
+      console.error('Twitter token error:', tokens);
+      return res.redirect(`${FRONTEND_URL}/auth?error=token_failed`);
+    }
+
+    // Get user info
+    const userResponse = await fetch(`${config.userInfoUrl}?user.fields=profile_image_url,name,username`, {
+      headers: { Authorization: `Bearer ${tokens.access_token}` }
+    });
+
+    const twitterData = await userResponse.json();
+    const twitterUser = twitterData.data;
+
+    if (!twitterUser?.id) {
+      console.error('Twitter user fetch error:', twitterData);
+      return res.redirect(`${FRONTEND_URL}/auth?error=user_fetch_failed`);
+    }
+
+    // Find or create user (Twitter doesn't provide email in v2 API by default)
+    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'twitter', {
+      id: twitterUser.id,
+      email: null, // Twitter v2 API doesn't provide email without elevated access
+      name: twitterUser.name,
+      avatar: twitterUser.profile_image_url?.replace('_normal', '_400x400'),
+      username: twitterUser.username
+    });
+
+    // Generate JWT
+    const jwtToken = jwt.sign(
+      { userId: user.id, email: user.email, username: user.username },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    // Store session
+    try {
+      const tokenHash = crypto.createHash('sha256').update(jwtToken).digest('hex');
+      await req.db.query(
+        `INSERT INTO user_sessions (user_id, access_token_hash, expires_at, ip_address, device_type, browser, created_at)
+         VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4, $5, NOW())`,
+        [user.id, tokenHash, req.ip, 'web', req.get('User-Agent')?.substring(0, 100)]
+      );
+    } catch (e) {
+      console.log('Session storage note:', e.message);
+    }
+
+    const returnUrl = stateData.returnUrl || '/overview';
+    res.redirect(`${FRONTEND_URL}${returnUrl}?token=${jwtToken}&isNew=${isNew}`);
+
+  } catch (error) {
+    console.error('Twitter OAuth callback error:', error);
+    res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
+  }
+});
+
+// ============================================
+// OAUTH ACCOUNT MANAGEMENT
+// ============================================
+
+// GET /api/auth/linked-accounts - Get user's linked OAuth accounts
+router.get('/linked-accounts', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    const result = await req.db.query(
+      `SELECT provider, provider_email, provider_username, provider_avatar_url, created_at
+       FROM oauth_accounts WHERE user_id = $1`,
+      [decoded.userId]
+    );
+
+    res.json({
+      success: true,
+      accounts: result.rows.map(acc => ({
+        provider: acc.provider,
+        email: acc.provider_email,
+        username: acc.provider_username,
+        avatar: acc.provider_avatar_url,
+        linkedAt: acc.created_at
+      }))
+    });
+
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, error: 'Invalid or expired token' });
+    }
+    console.error('Linked accounts error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch linked accounts' });
+  }
+});
+
+// DELETE /api/auth/linked-accounts/:provider - Unlink OAuth account
+router.delete('/linked-accounts/:provider', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { provider } = req.params;
+
+    if (!['google', 'github', 'twitter'].includes(provider)) {
+      return res.status(400).json({ success: false, error: 'Invalid provider' });
+    }
+
+    // Check if user has password set (can't unlink last auth method)
+    const userResult = await req.db.query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [decoded.userId]
+    );
+
+    const accountsResult = await req.db.query(
+      'SELECT COUNT(*) as count FROM oauth_accounts WHERE user_id = $1',
+      [decoded.userId]
+    );
+
+    const hasPassword = userResult.rows[0]?.password_hash;
+    const oauthCount = parseInt(accountsResult.rows[0]?.count || 0);
+
+    if (!hasPassword && oauthCount <= 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot unlink last authentication method. Please set a password first.'
+      });
+    }
+
+    await req.db.query(
+      'DELETE FROM oauth_accounts WHERE user_id = $1 AND provider = $2',
+      [decoded.userId, provider]
+    );
+
+    res.json({ success: true, message: `${provider} account unlinked successfully` });
+
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, error: 'Invalid or expired token' });
+    }
+    console.error('Unlink account error:', error);
+    res.status(500).json({ success: false, error: 'Failed to unlink account' });
   }
 });
 

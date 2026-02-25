@@ -1,7 +1,7 @@
 import React from 'react'; // Keep React import for JSX in renderModelSpecificSettings
 import { BaseImageModel } from '../BaseImageModel';
 import { ImageModelSettings, ImageGenerationResponse } from '../ImageModelInterface';
-import { generateImage, ReplicateModels, getReplicateSettings } from '../../../../services/replicateService';
+import { generateImage, XenoModels, getXenoSettings } from '../../../../services/xenoImageService';
 import { API_ENDPOINTS } from '../../../../config/apiConfig';
 
 export class LumaPhotonModel extends BaseImageModel {
@@ -36,18 +36,18 @@ export class LumaPhotonModel extends BaseImageModel {
     try {
       // Get the appropriate settings for the Luma Photon model
       const replicateSettings = {
-        ...getReplicateSettings(settings, ReplicateModels.LUMA_PHOTON.model),
+        ...getXenoSettings(settings, XenoModels.LUMA_PHOTON.model),
         prompt: prompt // Ensure prompt is included
       };
       
       console.log("Luma Photon settings:", replicateSettings);
-      console.log("Model:", ReplicateModels.LUMA_PHOTON.model);
-      console.log("Version:", ReplicateModels.LUMA_PHOTON.version);
+      console.log("Model:", XenoModels.LUMA_PHOTON.model);
+      console.log("Version:", XenoModels.LUMA_PHOTON.version);
       console.log("API Endpoint:", API_ENDPOINTS.REPLICATE_API);
       
       // Call Replicate API
       const result = await generateImage(
-        ReplicateModels.LUMA_PHOTON,
+        XenoModels.LUMA_PHOTON,
         prompt,
         replicateSettings
       );

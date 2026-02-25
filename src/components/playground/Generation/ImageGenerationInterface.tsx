@@ -1136,16 +1136,16 @@ const FullImageGenerationInterface: React.FC = () => {
   React.useEffect(() => {
     // Check URL for token parameter
     const params = new URLSearchParams(window.location.search);
-    const tokenFromUrl = params.get('api_token');
+    const tokenFromUrl = params.get('xeno_token');
     if (tokenFromUrl) {
-      window.REPLICATE_API_TOKEN = tokenFromUrl;
+      window.XENO_API_KEY = tokenFromUrl;
       // Update API_TOKENS object
       if (API_TOKENS) {
-        API_TOKENS.REPLICATE_API_TOKEN = tokenFromUrl;
+        API_TOKENS.XENO_API_KEY = tokenFromUrl;
       }
       // Remove token from URL to avoid exposing it
       const url = new URL(window.location.href);
-      url.searchParams.delete('api_token');
+      url.searchParams.delete('xeno_token');
       window.history.replaceState({}, document.title, url.toString());
     }
 
@@ -1166,15 +1166,7 @@ const FullImageGenerationInterface: React.FC = () => {
 
   // Check for API token availability immediately on initial render
   React.useEffect(() => {
-    // Check if the token is already set from your .env file
-    const urlParams = new URLSearchParams(window.location.search);
-    // Use your token from environment variables
-    if (!window.REPLICATE_API_TOKEN && !urlParams.has('api_token')) {
-      window.REPLICATE_API_TOKEN = import.meta.env.VITE_REPLICATE_API_TOKEN || '';
-      if (API_TOKENS) {
-        API_TOKENS.REPLICATE_API_TOKEN = import.meta.env.VITE_REPLICATE_API_TOKEN || '';
-      }
-    }
+    // API is now proxied through backend - no client-side key needed
   }, []);
 
   // Load actual model data on component mount
@@ -2917,7 +2909,7 @@ export default ImageGenerationInterfaceWrapper;
 // Consolidated global Window type extension
 declare global {
   interface Window {
-    REPLICATE_API_TOKEN?: string;
+    XENO_API_KEY?: string;
     GEMINI_API_KEY?: string;
     GoogleGenerativeAI?: any; // Make optional or ensure SDK script loads first
   }

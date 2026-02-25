@@ -85,7 +85,7 @@ const Hero: React.FC<HeroProps> = ({ onGetStarted, onTestPhase1 }) => {
             <span className="block mt-1 text-text-secondary">Node by Node</span>
           </h1>
           <p className="text-lg md:text-xl text-text-secondary max-w-2xl mx-auto">
-            XenoLabs empowers creators to design, connect, and deploy AI workflows through a visual programming canvas.
+            XenoStudio empowers creators to design, connect, and deploy AI workflows through a visual programming canvas.
           </p>
         </div>
 

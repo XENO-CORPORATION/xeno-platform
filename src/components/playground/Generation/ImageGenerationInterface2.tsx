@@ -2,8 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import JSZip from 'jszip';
 import imageGenerationService from '../../../services/imageGenerationService';
 import { ImageModelSettings } from '../../nodes/image-models/ImageModelInterface';
-import * as replicateService from '../../../services/replicateService';
-import openaiImageService from '../../../services/openaiImageService';
+import * as xenoImageService from '../../../services/xenoImageService';
 import { useGenerationHistory } from './hooks/useGenerationHistory';
 import GenerationHistory from './components/GenerationHistory';
 import { generationHistoryService } from '../../../services/generationHistoryService';
@@ -275,9 +274,9 @@ interface ModelCapabilities {
 
 // Map UI model names to provider and model ID
 interface ModelMapping {
-  provider: 'fal' | 'replicate' | 'openai' | 'xeno-flow';
+  provider: 'fal' | 'xeno' | 'xeno-flow';
   modelId: string;
-  replicateConfig?: typeof replicateService.ReplicateModels[keyof typeof replicateService.ReplicateModels];
+  xenoConfig?: typeof xenoImageService.XenoModels[keyof typeof xenoImageService.XenoModels];
   capabilities: ModelCapabilities;
 }
 
@@ -296,38 +295,42 @@ interface GeneratedImage {
 const modelNameToProvider: Record<string, ModelMapping> = {
   // OpenAI GPT Image models
   'GPT 1.5': {
-    provider: 'openai',
-    modelId: 'gpt-image-1',
+    provider: 'xeno',
+    modelId: 'gpt-high',
+    xenoConfig: xenoImageService.XenoModels.DALLE_3,
     capabilities: {
       maxCount: 4,
       supportedAspectRatios: ['1:1', '16:9', '9:16'],
-      supportedResolutions: ['1k', '2k'],
-      maxResolution: '2k'
+      supportedResolutions: ['1k'],
+      maxResolution: '1k'
     }
   },
   'GPT 1.5 - High': {
-    provider: 'openai',
-    modelId: 'gpt-image-1',
+    provider: 'xeno',
+    modelId: 'gpt-high',
+    xenoConfig: xenoImageService.XenoModels.DALLE_3,
     capabilities: {
       maxCount: 4,
       supportedAspectRatios: ['1:1', '16:9', '9:16'],
-      supportedResolutions: ['1k', '2k'],
-      maxResolution: '2k'
+      supportedResolutions: ['1k'],
+      maxResolution: '1k'
     }
   },
   'GPT 1 - HQ': {
-    provider: 'openai',
-    modelId: 'gpt-image-1',
+    provider: 'xeno',
+    modelId: 'gpt-high',
+    xenoConfig: xenoImageService.XenoModels.DALLE_3,
     capabilities: {
       maxCount: 4,
       supportedAspectRatios: ['1:1', '16:9', '9:16'],
-      supportedResolutions: ['1k', '2k'],
-      maxResolution: '2k'
+      supportedResolutions: ['1k'],
+      maxResolution: '1k'
     }
   },
   'GPT': {
-    provider: 'openai',
-    modelId: 'gpt-image-1',
+    provider: 'xeno',
+    modelId: 'gpt-high',
+    xenoConfig: xenoImageService.XenoModels.DALLE_3,
     capabilities: {
       maxCount: 4,
       supportedAspectRatios: ['1:1', '16:9', '9:16'],
@@ -338,9 +341,9 @@ const modelNameToProvider: Record<string, ModelMapping> = {
 
   // Black Forest (Flux models) - Replicate
   'Flux 2 Max': {
-    provider: 'replicate',
+    provider: 'xeno',
     modelId: 'black-forest-labs/flux-1.1-pro',
-    replicateConfig: replicateService.ReplicateModels.FLUX_PRO,
+    xenoConfig: xenoImageService.XenoModels.FLUX_PRO,
     capabilities: {
       maxCount: 4,
       supportedAspectRatios: [], // Supports all
@@ -349,9 +352,9 @@ const modelNameToProvider: Record<string, ModelMapping> = {
     }
   },
   'Flux 2 Pro': {
-    provider: 'replicate',
+    provider: 'xeno',
     modelId: 'black-forest-labs/flux-1.1-pro',
-    replicateConfig: replicateService.ReplicateModels.FLUX_PRO,
+    xenoConfig: xenoImageService.XenoModels.FLUX_PRO,
     capabilities: {
       maxCount: 4,
       supportedAspectRatios: [], // Supports all
@@ -360,9 +363,9 @@ const modelNameToProvider: Record<string, ModelMapping> = {
     }
   },
   'Flux 2 Flex': {
-    provider: 'replicate',
+    provider: 'xeno',
     modelId: 'black-forest-labs/flux-dev',
-    replicateConfig: replicateService.ReplicateModels.FLUX_DEV,
+    xenoConfig: xenoImageService.XenoModels.FLUX_DEV,
     capabilities: {
       maxCount: 4,
       supportedAspectRatios: [], // Supports all
@@ -435,9 +438,9 @@ const modelNameToProvider: Record<string, ModelMapping> = {
 
   // Stability AI - Fal.ai (primary) and Replicate (backup)
   'SDXL 1.0': {
-    provider: 'replicate',
+    provider: 'xeno',
     modelId: 'stability-ai/sdxl',
-    replicateConfig: replicateService.ReplicateModels.STABLE_DIFFUSION_XL,
+    xenoConfig: xenoImageService.XenoModels.STABLE_DIFFUSION_XL,
     capabilities: {
       maxCount: 4,
       supportedAspectRatios: [], // Supports all
@@ -684,6 +687,94 @@ const ImageGenerationInterface2: React.FC = () => {
     return currentModelCapabilities.supportedResolutions.includes(res);
   };
 
+  const parseRatioValue = (ratio: string): number | null => {
+    const [w, h] = ratio.split(':').map(Number);
+    if (!w || !h || Number.isNaN(w) || Number.isNaN(h)) return null;
+    return w / h;
+  };
+
+  const pickClosestAspectRatio = (desired: string, supported: string[]): string => {
+    if (supported.length === 0 || supported.includes(desired)) return desired;
+
+    const desiredValue = parseRatioValue(desired);
+    if (desiredValue === null) return supported[0];
+
+    return supported.reduce((best, candidate) => {
+      const bestValue = parseRatioValue(best);
+      const candidateValue = parseRatioValue(candidate);
+      if (bestValue === null) return candidate;
+      if (candidateValue === null) return best;
+      const bestDiff = Math.abs(bestValue - desiredValue);
+      const candidateDiff = Math.abs(candidateValue - desiredValue);
+      return candidateDiff < bestDiff ? candidate : best;
+    });
+  };
+
+  const resolutionRank: Record<string, number> = {
+    '1k': 1,
+    '2k': 2,
+    '4k': 4,
+  };
+
+  const pickClosestResolution = (desired: string, supported: string[]): string => {
+    if (supported.length === 0 || supported.includes(desired)) return desired;
+
+    const desiredRank = resolutionRank[desired];
+    if (!desiredRank) return supported[0];
+
+    return supported.reduce((best, candidate) => {
+      const bestRank = resolutionRank[best] ?? Number.MAX_SAFE_INTEGER;
+      const candidateRank = resolutionRank[candidate] ?? Number.MAX_SAFE_INTEGER;
+      const bestDiff = Math.abs(bestRank - desiredRank);
+      const candidateDiff = Math.abs(candidateRank - desiredRank);
+      return candidateDiff < bestDiff ? candidate : best;
+    });
+  };
+
+  const normalizeGenerationSettings = (
+    mapping: ModelMapping,
+    desiredAspectRatio: string,
+    desiredResolution: string,
+    desiredCount: number
+  ) => {
+    const capabilities = mapping.capabilities;
+    const normalizedAspectRatio = pickClosestAspectRatio(
+      desiredAspectRatio,
+      capabilities.supportedAspectRatios
+    );
+    const normalizedResolution = pickClosestResolution(
+      desiredResolution,
+      capabilities.supportedResolutions
+    );
+    const normalizedCount = Math.max(1, Math.min(desiredCount, capabilities.maxCount || 10));
+
+    return {
+      aspectRatio: normalizedAspectRatio,
+      resolution: normalizedResolution,
+      count: normalizedCount,
+    };
+  };
+
+  useEffect(() => {
+    if (!selectedModel) return;
+    const mapping = modelNameToProvider[selectedModel];
+    if (!mapping) return;
+
+    const normalized = normalizeGenerationSettings(mapping, aspectRatio, resolution, count);
+
+    if (normalized.aspectRatio !== aspectRatio) {
+      setAspectRatio(normalized.aspectRatio);
+    }
+
+    if (normalized.resolution !== resolution) {
+      setResolution(normalized.resolution);
+    }
+
+    if (normalized.count !== count) {
+      setCount(normalized.count);
+    }
+  }, [selectedModel, aspectRatio, resolution, count]);
+
   const handleIncrement = () => {
     const maxCount = currentModelCapabilities?.maxCount || 10;
     if (count < maxCount) setCount(count + 1);
@@ -803,8 +894,8 @@ const ImageGenerationInterface2: React.FC = () => {
           if (response.success && response.images) {
             imageUrls = response.images.map(img => img.url);
           }
-        } else if (modelMapping.provider === 'replicate' && modelMapping.replicateConfig) {
-          const replicateSettings = replicateService.getReplicateSettings({
+        } else if (modelMapping.provider === 'xeno' && modelMapping.xenoConfig) {
+          const xenoSettings = xenoImageService.getXenoSettings({
             prompt: gen.prompt,
             resolution: `${width}x${height}`,
             width,
@@ -816,23 +907,8 @@ const ImageGenerationInterface2: React.FC = () => {
           }, modelMapping.modelId);
 
           for (let i = 0; i < currentCount; i++) {
-            const response = await replicateService.generateImage(modelMapping.replicateConfig, gen.prompt, replicateSettings);
+            const response = await xenoImageService.generateImage(modelMapping.xenoConfig, gen.prompt, xenoSettings);
             if (response.imageUrl) imageUrls.push(response.imageUrl);
-          }
-        } else if (modelMapping.provider === 'openai') {
-          // Use OpenAI API directly for DALL-E models
-          const response = await openaiImageService.generateImage({
-            prompt: gen.prompt,
-            model: modelMapping.modelId,
-            n: currentCount,
-            size: '1024x1024',
-            response_format: 'url',
-          });
-
-          if (response.success && response.images) {
-            imageUrls = response.images
-              .filter(img => img.url)
-              .map(img => img.url as string);
           }
         }
 
@@ -960,15 +1036,32 @@ const ImageGenerationInterface2: React.FC = () => {
       return;
     }
 
+    const normalized = normalizeGenerationSettings(modelMapping, aspectRatio, resolution, count);
+    const effectiveAspectRatio = normalized.aspectRatio;
+    const effectiveResolution = normalized.resolution;
+    const effectiveCount = normalized.count;
+
+    if (effectiveAspectRatio !== aspectRatio) {
+      setAspectRatio(effectiveAspectRatio);
+    }
+
+    if (effectiveResolution !== resolution) {
+      setResolution(effectiveResolution);
+    }
+
+    if (effectiveCount !== count) {
+      setCount(effectiveCount);
+    }
+
     // Store the current prompt for this generation
     const currentPrompt = prompt.trim();
 
     // Store the current settings for this generation (freeze them including prompt)
     setGeneratingSettings({
       prompt: currentPrompt,
-      count,
-      aspectRatio,
-      resolution
+      count: effectiveCount,
+      aspectRatio: effectiveAspectRatio,
+      resolution: effectiveResolution
     });
 
     // Clear the input box immediately after generation starts
@@ -983,8 +1076,8 @@ const ImageGenerationInterface2: React.FC = () => {
 
     try {
       // Parse aspect ratio to get width and height based on resolution
-      const [w, h] = aspectRatio.split(':').map(Number);
-      const baseSize = resolution === '1k' ? 512 : resolution === '2k' ? 1024 : 2048;
+      const [w, h] = effectiveAspectRatio.split(':').map(Number);
+      const baseSize = effectiveResolution === '1k' ? 512 : effectiveResolution === '2k' ? 1024 : 2048;
       const totalRatio = w + h;
       // Ensure dimensions are divisible by 8 (required by SD models)
       const width = Math.round((w / totalRatio) * baseSize * 2 / 8) * 8;
@@ -993,10 +1086,10 @@ const ImageGenerationInterface2: React.FC = () => {
       console.log('Generating with settings:', {
         provider: modelMapping.provider,
         model: selectedModel,
-        aspectRatio,
-        resolution,
+        aspectRatio: effectiveAspectRatio,
+        resolution: effectiveResolution,
         dimensions: `${width}x${height}`,
-        count
+        count: effectiveCount
       });
 
       let imageUrls: string[] = [];
@@ -1038,17 +1131,17 @@ const ImageGenerationInterface2: React.FC = () => {
 
         // Map aspect ratio to fal.ai image_size parameter
         let image_size = 'square_hd'; // default
-        if (aspectRatio === '1:1') {
-          image_size = resolution === '1k' ? 'square' : 'square_hd';
-        } else if (aspectRatio === '16:9') {
+        if (effectiveAspectRatio === '1:1') {
+          image_size = effectiveResolution === '1k' ? 'square' : 'square_hd';
+        } else if (effectiveAspectRatio === '16:9') {
           image_size = 'landscape_16_9';
-        } else if (aspectRatio === '9:16') {
+        } else if (effectiveAspectRatio === '9:16') {
           image_size = 'portrait_16_9';
-        } else if (aspectRatio === '4:3') {
+        } else if (effectiveAspectRatio === '4:3') {
           image_size = 'landscape_4_3';
-        } else if (aspectRatio === '3:4') {
+        } else if (effectiveAspectRatio === '3:4') {
           image_size = 'portrait_4_3';
-        } else if (aspectRatio === '21:9') {
+        } else if (effectiveAspectRatio === '21:9') {
           image_size = 'landscape_16_9'; // Use 16:9 as fallback for ultra-wide
         }
 
@@ -1056,8 +1149,8 @@ const ImageGenerationInterface2: React.FC = () => {
           prompt: currentPrompt,
           width,
           height,
-          num_outputs: count,
-          aspect_ratio: aspectRatio,
+          num_outputs: effectiveCount,
+          aspect_ratio: effectiveAspectRatio,
           image_size: image_size,
           // Style reference (for models that support it or Vision-to-Prompt fallback)
           ...(styleRefImage && {
@@ -1089,19 +1182,19 @@ const ImageGenerationInterface2: React.FC = () => {
         } else {
           throw new Error(response.error || 'Failed to generate image');
         }
-      } else if (modelMapping.provider === 'replicate') {
-        // Use Replicate - generate multiple images sequentially
-        if (!modelMapping.replicateConfig) {
-          throw new Error('Replicate model configuration missing');
+      } else if (modelMapping.provider === 'xeno') {
+        // Use Xeno proxy models - generate multiple images sequentially
+        if (!modelMapping.xenoConfig) {
+          throw new Error('Xeno model configuration missing');
         }
 
-        // Build settings object for Replicate (reuse styleRefImage/charRefImage from above)
-        const replicateSettings = replicateService.getReplicateSettings({
+        // Build settings object for Xeno model generation (reuse styleRefImage/charRefImage from above)
+        const xenoSettings = xenoImageService.getXenoSettings({
           prompt: currentPrompt,
           resolution: `${width}x${height}`,
           width,
           height,
-          aspect_ratio: aspectRatio,
+          aspect_ratio: effectiveAspectRatio,
           seed: -1, // Random seed
           num_inference_steps: 30, // Default quality steps
           guidance_scale: 7.5, // Default guidance
@@ -1120,16 +1213,16 @@ const ImageGenerationInterface2: React.FC = () => {
           }),
         }, modelMapping.modelId);
 
-        console.log('Replicate settings:', replicateSettings);
+        console.log('Xeno settings:', xenoSettings);
 
-        // Generate images one by one (Replicate API returns one image per call)
-        for (let i = 0; i < count; i++) {
-          console.log(`Generating image ${i + 1}/${count}...`);
+        // Generate images one by one
+        for (let i = 0; i < effectiveCount; i++) {
+          console.log(`Generating image ${i + 1}/${effectiveCount}...`);
 
-          const response = await replicateService.generateImage(
-            modelMapping.replicateConfig,
+          const response = await xenoImageService.generateImage(
+            modelMapping.xenoConfig,
             currentPrompt,
-            replicateSettings
+            xenoSettings
           );
 
           if (response.imageUrl) {
@@ -1137,35 +1230,15 @@ const ImageGenerationInterface2: React.FC = () => {
             console.log(`Image ${i + 1} generated:`, response.imageUrl);
           }
         }
-      } else if (modelMapping.provider === 'openai') {
-        // Use OpenAI API directly for DALL-E models
-        const size = '1024x1024'; // DALL-E 2 only supports 1024x1024
-
-        const response = await openaiImageService.generateImage({
-          prompt: currentPrompt,
-          model: modelMapping.modelId,
-          n: count,
-          size: size,
-          response_format: 'url',
-        });
-
-        if (response.success && response.images) {
-          imageUrls = response.images
-            .filter(img => img.url)
-            .map(img => img.url as string);
-          console.log(`OpenAI generated ${imageUrls.length} images`);
-        } else if (response.error) {
-          throw new Error(response.error);
-        }
       } else if (modelMapping.provider === 'xeno-flow') {
         // Use Xeno Flow Service for Nano Banana models
         console.log('Using Xeno Flow Service for', selectedModel);
 
         // Map aspect ratio to xeno-flow format
         let xenoAspectRatio: 'landscape' | 'portrait' | 'square' = 'landscape';
-        if (aspectRatio === '1:1') {
+        if (effectiveAspectRatio === '1:1') {
           xenoAspectRatio = 'square';
-        } else if (aspectRatio === '9:16' || aspectRatio === '3:4' || aspectRatio === '2:3') {
+        } else if (effectiveAspectRatio === '9:16' || effectiveAspectRatio === '3:4' || effectiveAspectRatio === '2:3') {
           xenoAspectRatio = 'portrait';
         } else {
           xenoAspectRatio = 'landscape';
@@ -1177,11 +1250,11 @@ const ImageGenerationInterface2: React.FC = () => {
           '2k': 2560,  // 2560×1440 (QHD)
           '4k': 3840,  // 3840×2160 (UHD)
         };
-        const fifeWidth = resolutionToWidth[resolution] || 2560;
+        const fifeWidth = resolutionToWidth[effectiveResolution] || 2560;
 
         // Generate images one by one (API returns one image per call)
-        for (let i = 0; i < count; i++) {
-          console.log(`Generating image ${i + 1}/${count} with Xeno Flow at ${resolution}...`);
+        for (let i = 0; i < effectiveCount; i++) {
+          console.log(`Generating image ${i + 1}/${effectiveCount} with Xeno Flow at ${effectiveResolution}...`);
 
           const response = await fetch('/api/image/xeno-flow/generate', {
             method: 'POST',
@@ -1218,9 +1291,9 @@ const ImageGenerationInterface2: React.FC = () => {
           prompt: currentPrompt,
           image_urls: imageUrls,
           model: selectedModel,
-          aspect_ratio: aspectRatio,
-          resolution,
-          count,
+          aspect_ratio: effectiveAspectRatio,
+          resolution: effectiveResolution,
+          count: effectiveCount,
           provider: modelMapping.provider,
           is_favorite: false,
           created_at: new Date().toISOString(),
@@ -1239,9 +1312,9 @@ const ImageGenerationInterface2: React.FC = () => {
             prompt: currentPrompt,
             image_urls: imageUrls,
             model: selectedModel,
-            aspect_ratio: aspectRatio,
-            resolution,
-            count,
+            aspect_ratio: effectiveAspectRatio,
+            resolution: effectiveResolution,
+            count: effectiveCount,
             provider: modelMapping.provider,
             reference_images: refImages.length > 0 ? refImages : undefined,
           });
@@ -3344,4 +3417,3 @@ const ImageGenerationInterface2: React.FC = () => {
 };
 
 export default ImageGenerationInterface2;
-

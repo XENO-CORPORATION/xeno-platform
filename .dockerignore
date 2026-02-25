@@ -1,3 +1,7 @@
+# Backend server - not needed for frontend build
+src/server/
+src/server/**
+
 node_modules
 npm-debug.log
 .git

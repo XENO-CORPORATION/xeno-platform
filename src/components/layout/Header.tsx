@@ -54,7 +54,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted }) => {
         {/* Logo */}
         <Link to="/" className="flex items-center space-x-2 transform-gpu">
           <Zap className="text-white" size={24} />
-          <span className="font-bold text-xl tracking-tight">XenoLabs</span>
+          <span className="font-bold text-xl tracking-tight">XenoStudio</span>
         </Link>
         
         {/* Desktop Navigation */}

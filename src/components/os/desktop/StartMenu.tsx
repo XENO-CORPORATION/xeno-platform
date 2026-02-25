@@ -116,7 +116,7 @@ export const StartMenu: React.FC<StartMenuProps> = ({
                 {user?.display_name || 'Xeno User'}
               </div>
               <div className="text-xs text-white/50 truncate">
-                {user?.email || 'user@xenolabs.io'}
+                {user?.email || 'user@xenostudio.io'}
               </div>
             </div>
           </div>

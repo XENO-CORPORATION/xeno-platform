@@ -1,7 +1,7 @@
 import React from 'react'; // Keep React import for JSX in renderModelSpecificSettings
 import { BaseVideoModel } from '../BaseVideoModel';
 import { VideoModelSettings, VideoGenerationResponse } from '../VideoModelInterface';
-import { ReplicateModels } from '../../../../services/replicateService';
+import { XenoModels } from '../../../../services/xenoImageService';
 
 export class MinimaxVideo01Model extends BaseVideoModel {
   id = 'minimax-video-01';
@@ -51,7 +51,7 @@ export class MinimaxVideo01Model extends BaseVideoModel {
         metadata: {
           generationTime: 3.5,
           promptTokens: prompt.length / 4,
-          modelVersion: `Minimax Video 01 (${ReplicateModels.MINIMAX_VIDEO_01.version.substring(0, 8)})`,
+          modelVersion: `Minimax Video 01 (${XenoModels.MINIMAX_VIDEO_01.version.substring(0, 8)})`,
           resolution: settings.resolution,
           fps: settings.fps,
           duration: settings.duration,

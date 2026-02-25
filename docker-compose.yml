@@ -1,20 +1,18 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: xenolabs-postgres
+    container_name: xenostudio-postgres
     environment:
-      - POSTGRES_DB=xenolabs
+      - POSTGRES_DB=xenostudio
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=xenolabs_password
+      - POSTGRES_PASSWORD=xenostudio_secure_2024
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     networks:
-      - xenolabs-network
+      - xenostudio-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -25,14 +23,14 @@ services:
   # Redis for caching and sessions
   redis:
     image: redis:7-alpine
-    container_name: xenolabs-redis
+    container_name: xenostudio-redis
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     ports:
       - "6380:6379"
     networks:
-      - xenolabs-network
+      - xenostudio-network
     restart: unless-stopped
 
   # Backend API Server
@@ -40,23 +38,22 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    container_name: xenolabs-backend
+    container_name: xenostudio-backend
     environment:
       - NODE_ENV=production
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=xenolabs
+      - DB_NAME=xenostudio
       - DB_USER=postgres
-      - DB_PASSWORD=xenolabs_password
+      - DB_PASSWORD=xenostudio_secure_2024
       - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://postgres:xenolabs_password@postgres:5432/xenolabs
+      - DATABASE_URL=postgresql://postgres:xenostudio_secure_2024@postgres:5432/xenostudio
       # Docker socket mounted below for container provisioning
       - STORAGE_LIMIT_GB=5
       - CONVERSION_RETENTION_DAYS=7
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
+      - XENO_API_KEY=${XENO_API_KEY}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - VITE_FAL_KEY=${VITE_FAL_KEY}
       - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
       - BROWSERLESS_URL=http://browserless:3000
       - BROWSERLESS_TOKEN=xeno_browser_token_2024
@@ -64,7 +61,22 @@ services:
       - GOOGLE_SEARCH_CX=${GOOGLE_SEARCH_CX}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
       - YOUTUBE_REDIRECT_URI=${YOUTUBE_REDIRECT_URI}
+      # OAuth - GitHub
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}
+      # OAuth - Twitter/X
+      - TWITTER_CLIENT_ID=${TWITTER_CLIENT_ID}
+      - TWITTER_CLIENT_SECRET=${TWITTER_CLIENT_SECRET}
+      - TWITTER_CALLBACK_URL=${TWITTER_CALLBACK_URL}
+      # JWT & Auth
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ACCESS_EXPIRES=${JWT_ACCESS_EXPIRES}
+      - JWT_REFRESH_EXPIRES=${JWT_REFRESH_EXPIRES}
+      - AUTH_FRONTEND_URL=${AUTH_FRONTEND_URL}
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN}
       - XENO_FLOW_URL=http://host.docker.internal:8090
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -86,7 +98,7 @@ services:
       redis:
         condition: service_started
     networks:
-      - xenolabs-network
+      - xenostudio-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/api/status', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
@@ -100,13 +112,13 @@ services:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile.proxy
-  #   container_name: xenolabs-proxy
+  #   container_name: xenostudio-proxy
   #   environment:
   #     - PORT=4001
   #   ports:
   #     - "4001:4001"
   #   networks:
-  #     - xenolabs-network
+  #     - xenostudio-network
   #   restart: unless-stopped
 
   # CORS Proxy for Topaz Labs API (commented out - no Dockerfile)
@@ -114,11 +126,11 @@ services:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile.cors-proxy
-  #   container_name: xenolabs-cors-proxy
+  #   container_name: xenostudio-cors-proxy
   #   ports:
   #     - "4002:4002"
   #   networks:
-  #     - xenolabs-network
+  #     - xenostudio-network
   #   restart: unless-stopped
 
   # Xeno Search Service - AI-powered search and analysis
@@ -127,7 +139,7 @@ services:
       context: ../xeno-search-service
       dockerfile: Dockerfile
       target: production
-    container_name: xenolabs-xeno-search
+    container_name: xenostudio-xeno-search
     environment:
       - SERVICE_NAME=xeno-search-service
       - SERVICE_VERSION=2.0.0
@@ -172,7 +184,7 @@ services:
       meilisearch:
         condition: service_healthy
     networks:
-      - xenolabs-network
+      - xenostudio-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -194,7 +206,7 @@ services:
     build:
       context: ../xenorun
       dockerfile: Dockerfile
-    container_name: xenolabs-xenorun
+    container_name: xenostudio-xenorun
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -204,10 +216,10 @@ services:
     ports:
       - "3002:3000"
     networks:
-      - xenolabs-network
+      - xenostudio-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/v1/health"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -217,11 +229,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.latex
-    container_name: xenolabs-latex
+    container_name: xenostudio-latex
     ports:
       - "3001:3001"
     networks:
-      - xenolabs-network
+      - xenostudio-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
@@ -235,14 +247,14 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        - VITE_FAL_KEY=${VITE_FAL_KEY}
         - VITE_OPENAI_API_KEY=${VITE_OPENAI_API_KEY}
         - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
         - VITE_OPENROUTER_API_KEY=${VITE_OPENROUTER_API_KEY}
         - VITE_API_URL=/api
+        - VITE_WS_URL=wss://xenostudio.ai/ws
         - VITE_ENABLE_SITE_GATE=${VITE_ENABLE_SITE_GATE}
         - VITE_SITE_PASSWORD=${VITE_SITE_PASSWORD}
-    container_name: xenolabs-frontend
+    container_name: xenostudio-frontend
     environment:
       - NODE_ENV=production
       - REACT_APP_API_URL=http://backend:8080
@@ -253,7 +265,7 @@ services:
     depends_on:
       - backend
     networks:
-      - xenolabs-network
+      - xenostudio-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "test -f /usr/share/nginx/html/index.html || exit 1"]
@@ -266,17 +278,17 @@ services:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile.websocket
-  #   container_name: xenolabs-websocket
+  #   container_name: xenostudio-websocket
   #   environment:
   #     - REDIS_URL=redis://redis:6379
-  #     - POSTGRES_URL=postgresql://postgres:xenolabs_password@postgres:5432/xenolabs
+  #     - POSTGRES_URL=postgresql://postgres:xenostudio_secure_2024@postgres:5432/xenostudio
   #   ports:
   #     - "4003:8081"
   #   depends_on:
   #     - redis
   #     - postgres
   #   networks:
-  #     - xenolabs-network
+  #     - xenostudio-network
   #   restart: unless-stopped
 
   # File Storage Service (commented out - no Dockerfile)
@@ -284,9 +296,9 @@ services:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile.storage
-  #   container_name: xenolabs-storage
+  #   container_name: xenostudio-storage
   #   environment:
-  #     - POSTGRES_URL=postgresql://postgres:xenolabs_password@postgres:5432/xenolabs
+  #     - POSTGRES_URL=postgresql://postgres:xenostudio_secure_2024@postgres:5432/xenostudio
   #   volumes:
   #     - ./xenoos-user-data:/data/users
   #     - ./xenoos-shared:/data/shared
@@ -296,13 +308,13 @@ services:
   #   depends_on:
   #     - postgres
   #   networks:
-  #     - xenolabs-network
+  #     - xenostudio-network
   #   restart: unless-stopped
 
   # Xeno Browser - KasmVNC Chrome for embedded browsing
   xeno-browser:
     image: kasmweb/chrome:1.16.0
-    container_name: xenolabs-xeno-browser
+    container_name: xenostudio-xeno-browser
     environment:
       - VNC_PW=xenobrowser123
       - VNC_RESOLUTION=1920x1080
@@ -311,7 +323,7 @@ services:
     ports:
       - "6901:6901"
     networks:
-      - xenolabs-network
+      - xenostudio-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -k -s -o /dev/null -w '%{http_code}' https://localhost:6901 | grep -qE '200|401|302'"]
@@ -322,7 +334,7 @@ services:
   # Browserless - Headless Chrome API for AI browser automation
   browserless:
     image: ghcr.io/browserless/chromium:latest
-    container_name: xenolabs-browserless
+    container_name: xenostudio-browserless
     environment:
       - TOKEN=xeno_browser_token_2024
       - CONCURRENT=5
@@ -334,7 +346,7 @@ services:
     ports:
       - "3003:3000"
     networks:
-      - xenolabs-network
+      - xenostudio-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/config?token=xeno_browser_token_2024"]
@@ -345,7 +357,7 @@ services:
   # Meilisearch - Fast search index for Xeno Search Engine
   meilisearch:
     image: getmeili/meilisearch:v1.6
-    container_name: xenolabs-meilisearch
+    container_name: xenostudio-meilisearch
     environment:
       - MEILI_ENV=production
       - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-xeno_search_master_key_change_me}
@@ -355,7 +367,7 @@ services:
     ports:
       - "7700:7700"
     networks:
-      - xenolabs-network
+      - xenostudio-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
@@ -376,7 +388,7 @@ volumes:
     driver: local
 
 networks:
-  xenolabs-network:
+  xenostudio-network:
     driver: bridge
     ipam:
       config:

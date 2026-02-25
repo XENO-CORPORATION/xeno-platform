@@ -53,7 +53,7 @@ const Features: React.FC = () => {
       <div className="text-center mb-16">
         <h2 className="section-title">Key Components</h2>
         <p className="section-description">
-          XenoLabs provides a unified workspace that consolidates essential AI generation tools in one powerful platform.
+          XenoStudio provides a unified workspace that consolidates essential AI generation tools in one powerful platform.
         </p>
       </div>
 

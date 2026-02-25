@@ -38,7 +38,6 @@ export class WebSocketService {
   private fileWatchers: Map<string, boolean> = new Map();
 
   constructor(private serverUrl: string = `ws://localhost:4003`) {
-    console.log('🔌 WebSocketService initialized with URL:', this.serverUrl);
   }
 
   // Connect to WebSocket server

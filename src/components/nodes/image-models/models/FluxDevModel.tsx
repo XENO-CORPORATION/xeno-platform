@@ -1,7 +1,7 @@
 import React from 'react'; // Keep React import for JSX in renderModelSpecificSettings
 import { BaseImageModel } from '../BaseImageModel';
 import { ImageModelSettings, ImageGenerationResponse } from '../ImageModelInterface';
-import { generateImage, ReplicateModels, getReplicateSettings } from '../../../../services/replicateService';
+import { generateImage, XenoModels, getXenoSettings } from '../../../../services/xenoImageService';
 
 export class FluxDevModel extends BaseImageModel {
   name = 'Flux Dev';
@@ -41,7 +41,7 @@ export class FluxDevModel extends BaseImageModel {
       
       // Prepare model-specific settings for the Flux Dev model
       const replicateSettings = {
-        ...getReplicateSettings(settings),
+        ...getXenoSettings(settings),
         // Add model-specific settings for Flux Dev
         width,
         height,
@@ -62,7 +62,7 @@ export class FluxDevModel extends BaseImageModel {
       
       // Call Replicate API using the official Flux Dev model
       return await generateImage(
-        ReplicateModels.FLUX_DEV,
+        XenoModels.FLUX_DEV,
         prompt,
         replicateSettings
       );

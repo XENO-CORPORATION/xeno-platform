@@ -1,7 +1,7 @@
 import React from 'react'; // Keep React import for JSX in renderModelSpecificSettings
 import { BaseImageModel } from '../BaseImageModel';
 import { ImageModelSettings, ImageGenerationResponse } from '../ImageModelInterface';
-import { generateImage, ReplicateModels, getReplicateSettings } from '../../../../services/replicateService';
+import { generateImage, XenoModels, getXenoSettings } from '../../../../services/xenoImageService';
 import { API_ENDPOINTS } from '../../../../config/apiConfig';
 
 export class RecraftV3Model extends BaseImageModel {
@@ -35,18 +35,18 @@ export class RecraftV3Model extends BaseImageModel {
     try {
       // Get the appropriate settings for the Recraft V3 model
       const replicateSettings = {
-        ...getReplicateSettings(settings, ReplicateModels.RECRAFT_V3.model),
+        ...getXenoSettings(settings, XenoModels.RECRAFT_V3.model),
         prompt: prompt // Ensure prompt is included
       };
       
       console.log("Recraft V3 settings:", replicateSettings);
-      console.log("Model:", ReplicateModels.RECRAFT_V3.model);
-      console.log("Version:", ReplicateModels.RECRAFT_V3.version);
+      console.log("Model:", XenoModels.RECRAFT_V3.model);
+      console.log("Version:", XenoModels.RECRAFT_V3.version);
       console.log("API Endpoint:", API_ENDPOINTS.REPLICATE_API);
       
       // Call Replicate API
       const result = await generateImage(
-        ReplicateModels.RECRAFT_V3,
+        XenoModels.RECRAFT_V3,
         prompt,
         replicateSettings
       );

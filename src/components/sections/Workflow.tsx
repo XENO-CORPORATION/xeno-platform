@@ -41,7 +41,7 @@ const Workflow: React.FC = () => {
         </div>
         <h2 className="section-title">How It Works</h2>
         <p className="section-description">
-          XenoLabs transforms complex AI operations into a visual, intuitive workflow that anyone can master.
+          XenoStudio transforms complex AI operations into a visual, intuitive workflow that anyone can master.
         </p>
       </div>
 

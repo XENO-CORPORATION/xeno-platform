@@ -1,5 +1,5 @@
 /**
- * Example: How to integrate container provisioning into existing XenoLabs server
+ * Example: How to integrate container provisioning into existing XenoStudio server
  * Add this to your main index.js file
  */
 

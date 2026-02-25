@@ -72,7 +72,7 @@ interface CanvasViewerProps {
 }
 
 
-const Ruler: React.FC<{
+const CanvasRuler: React.FC<{
   type: 'horizontal' | 'vertical';
   scale: number;
   offset: number;
@@ -2642,7 +2642,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
       // Create project data object
       const projectData = {
         version: '1.0',
-        type: 'xenolabs-image-project',
+        type: 'xenostudio-image-project',
         timestamp: Date.now(),
         project: {
           name: activeProjectSettings?.name || 'Untitled Project',
@@ -2662,7 +2662,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         metadata: {
           created: Date.now(),
           lastModified: Date.now(),
-          application: 'Xenolabs Image Studio',
+          application: 'XenoStudio Image Studio',
           version: '1.0'
         }
       };
@@ -2704,7 +2704,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         const projectData = JSON.parse(text);
 
         // Validate project file
-        if (projectData.type !== 'xenolabs-image-project') {
+        if (projectData.type !== 'xenostudio-image-project') {
           alert('Invalid project file format');
           return;
         }
@@ -4852,8 +4852,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                   <div className="w-16 h-16 border-4 border-white/20 rounded-full">
         {uiVisibility.rulers && activeProjectSettings && (
           <>
-            <Ruler type="horizontal" scale={scale} offset={translateX - 32} length={canvasSize.width || 1000} unit={activeProjectSettings.unit} resolution={activeProjectSettings.resolution} parScaleX={getParScaleX()} />
-            <Ruler type="vertical" scale={scale} offset={translateY - 32} length={canvasSize.height || 1000} unit={activeProjectSettings.unit} resolution={activeProjectSettings.resolution} parScaleX={getParScaleX()} />
+            <CanvasRuler type="horizontal" scale={scale} offset={translateX - 32} length={canvasSize.width || 1000} unit={activeProjectSettings.unit} resolution={activeProjectSettings.resolution} parScaleX={getParScaleX()} />
+            <CanvasRuler type="vertical" scale={scale} offset={translateY - 32} length={canvasSize.height || 1000} unit={activeProjectSettings.unit} resolution={activeProjectSettings.resolution} parScaleX={getParScaleX()} />
             <div className="absolute top-0 left-0 w-8 h-8 z-[10] flex items-center justify-center pointer-events-none bg-transparent border-none shadow-none">
               <span className="text-[8px] text-white/10 uppercase font-bold">{activeProjectSettings.unit === "inches" ? "in" : "px"}</span>
             </div>

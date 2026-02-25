@@ -146,7 +146,7 @@ const SiteGate: React.FC = () => {
 const PUBLIC_ROUTES = ['/privacy', '/terms'];
 
 export const SiteGateWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isUnlocked } = useSiteGate();
+  const { isUnlocked, unlock: _unlock } = useSiteGate();
   const location = useLocation();
 
   // Check if current path is a public route that should bypass the gate
@@ -154,8 +154,12 @@ export const SiteGateWrapper: React.FC<{ children: React.ReactNode }> = ({ child
     location.pathname === route || location.pathname.startsWith(route + '/')
   );
 
-  // Allow access if unlocked OR if it's a public route
-  return (isUnlocked || isPublicRoute) ? <>{children}</> : <SiteGate />;
+  // Bypass gate when arriving from OAuth callback with a token parameter
+  const searchParams = new URLSearchParams(location.search);
+  const hasAuthToken = searchParams.has('token');
+
+  // Allow access if unlocked OR if it's a public route OR if returning from OAuth
+  return (isUnlocked || isPublicRoute || hasAuthToken) ? <>{children}</> : <SiteGate />;
 };
 
 export default SiteGate;

@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:xenolabs_password@localhost:5433/xenolabs',
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:xenostudio_password@localhost:5433/xenostudio',
 });
 
 async function runMigration() {

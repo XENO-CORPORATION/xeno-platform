@@ -7,7 +7,7 @@ import DisplayContainer from '../components/layout/DisplayContainer';
 import EmptyState from '../components/overview/EmptyState';
 import TopUpModal from '../components/overview/TopUpModal';
 import CreateLabModal from '../components/overview/CreateLabModal';
-import ClaimCreditsModal from '../components/modals/ClaimCreditsModal';
+import WelcomeCreditBonusModal from '../components/modals/WelcomeCreditBonusModal';
 import Overview from '../components/overview/Overview';
 import CanvasView from '../components/canvas/CanvasView';
 import WindowManager, { useWindowManager, createFileExplorerWindow, createSettingsWindow } from '../components/os/desktop/WindowManager';
@@ -21,7 +21,7 @@ import VideoUpscaleInterface from '../components/playground/Enhance/VideoEnhance
 import MultiChatContainer from '../components/playground/Chat/MultiChatContainer';
 import ChatWithVoice from '../components/playground/Chat/ChatWithVoice';
 import SearchChatInterface from '../components/playground/Chat/SearchChatInterface';
-import ThreeDGenerationInterface from '../components/playground/Generation/ThreeDGenerationInterface';
+const ThreeDGenerationInterface = React.lazy(() => import('../components/playground/Generation/ThreeDGenerationInterface'));
 import AudioGenerationInterface from '../components/playground/Generation/AudioGenerationInterface';
 import VideoGenerationInterface from '../components/playground/Generation/VideoGenerationInterface';
 // Add imports for the new training components
@@ -203,7 +203,7 @@ const OverviewContent: React.FC = () => {
               <div className="h-full">
                 {labs.length === 0 ? (
                   <EmptyState
-                    title="Welcome to XenoLabs"
+                    title="Welcome to XenoStudio"
                     description="Get started by creating your first AI workflow lab. Connect AI components to build intelligent systems with drag-and-drop simplicity."
                     buttonText="Create your first lab"
                     onAction={handleCreateLab}
@@ -223,7 +223,7 @@ const OverviewContent: React.FC = () => {
             <Route path="generation/image" element={<ImageGenerationInterface />} />
             <Route path="generation/image2" element={<ImageGenerationInterface2 />} />
             <Route path="/overview/generation/image2" element={<ImageGenerationInterface2 />} />
-            <Route path="generation/3d" element={<ThreeDGenerationInterface />} />
+            <Route path="generation/3d" element={<React.Suspense fallback={<div>Loading 3D Studio...</div>}><ThreeDGenerationInterface /></React.Suspense>} />
             <Route path="generation/video" element={<VideoGenerationInterface />} />
             <Route path="generation/audio" element={<AudioGenerationInterface />} />
             <Route path="enhance/image" element={<ImageUpscaleInterface />} />
@@ -244,6 +244,7 @@ const OverviewContent: React.FC = () => {
             <Route path="studio/inpainting" element={<ImageInpaintingStudio />} />
             {/* Office routes */}
             <Route path="office/canvas" element={<CanvasPlanningVisual />} />
+            <Route path="office/canvas/:canvasId" element={<CanvasPlanningVisual />} />
             <Route path="office/word" element={<WordChatInterface />} />
             <Route path="office/spreadsheet" element={<div className="w-full h-full flex items-center justify-center"><h1 className="text-xl font-bold text-white">Spreadsheet - Coming Soon</h1></div>} />
             <Route path="office/presentation" element={<div className="w-full h-full flex items-center justify-center"><h1 className="text-xl font-bold text-white">Presentation - Coming Soon</h1></div>} />
@@ -305,7 +306,7 @@ const OverviewContent: React.FC = () => {
         {/* Modals at root */}
         <TopUpModal isOpen={isTopUpModalOpen} onClose={closeTopUpModal} />
         <CreateLabModal isOpen={isCreateLabModalOpen} onClose={closeCreateLabModal} />
-        <ClaimCreditsModal
+        <WelcomeCreditBonusModal
           isOpen={isWelcomeModalOpen}
           onClose={closeWelcomeModal}
           onClaim={handleWelcomeClaim}

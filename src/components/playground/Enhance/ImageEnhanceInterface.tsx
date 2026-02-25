@@ -3,34 +3,30 @@ import { Image, Send, Download, Trash2, Sparkles, Plus, X, Info, RotateCw, Wand2
 // TODO: Create and import an imageUpscaleService similar to imageGenerationService
 // import imageUpscaleService from '../../../services/imageUpscaleService';
 
-// Recraft Upscale API integration
+import { postXenoRequest } from '../../../services/xenoProxyRequest';
+
 const recraftUpscaleService = {
   async upscale(imageUrl: string, modelType: 'creative' | 'crisp', options: { sync_mode?: boolean; enable_safety_checker?: boolean } = {}) {
-    // Choose the correct endpoint based on model type
-    const endpoint = `https://queue.fal.run/fal-ai/recraft/upscale/${modelType}`;
-    
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${window.FAL_KEY || ''}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image_url: imageUrl,
-        sync_mode: options.sync_mode || false,
-        enable_safety_checker: options.enable_safety_checker || false,
-      }),
+    const response = await postXenoRequest('/images/edit', {
+      image: imageUrl,
+      prompt: 'upscale',
+      model: 'auto',
     });
-    
-    if (!response.ok) {
-      throw new Error(`Recraft ${modelType} API error: ${response.status}`);
+
+    if (!response.data[0]?.url) {
+      throw new Error(`Recraft ${modelType} upscale failed`);
     }
-    
-    return response.json();
+
+    return {
+      image: {
+        url: response.data[0].url,
+        file_size: 0,
+        content_type: 'image/jpeg',
+      }
+    };
   }
 };
 
-// FAL Creative Upscaler API integration
 const falCreativeUpscalerService = {
   async upscale(imageUrl: string, options: {
     prompt?: string;
@@ -45,63 +41,55 @@ const falCreativeUpscalerService = {
     seed?: number;
     enable_safety_checks?: boolean;
   } = {}) {
-    const response = await fetch('https://queue.fal.run/fal-ai/creative-upscaler', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${window.FAL_KEY || ''}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image_url: imageUrl,
-        prompt: options.prompt || null,
-        scale: options.scale || 2,
-        creativity: options.creativity || 0.5,
-        detail: options.detail || 1,
-        shape_preservation: options.shape_preservation || 0.25,
-        model_type: options.model_type || 'SD_1_5',
-        guidance_scale: options.guidance_scale || 7.5,
-        num_inference_steps: options.num_inference_steps || 20,
-        negative_prompt: options.negative_prompt || 'blurry, low resolution, bad, ugly, low quality, pixelated, interpolated, compression artifacts, noisey, grainy',
-        prompt_suffix: ' high quality, highly detailed, high resolution, sharp',
-        enable_safety_checks: options.enable_safety_checks !== false,
-        seed: options.seed,
-      }),
+    const response = await postXenoRequest('/images/edit', {
+      image: imageUrl,
+      prompt: options.prompt || 'upscale, enhance details',
+      model: 'auto',
     });
-    
-    if (!response.ok) {
-      throw new Error(`FAL Creative Upscaler API error: ${response.status}`);
+
+    if (!response.data[0]?.url) {
+      throw new Error('Creative upscaler failed');
     }
-    
-    return response.json();
+
+    return {
+      image: {
+        url: response.data[0].url,
+        file_size: 0,
+        content_type: 'image/jpeg',
+        width: 0,
+        height: 0,
+      },
+      seed: options.seed || 0,
+    };
   }
 };
 
-// FAL DRCT Super Resolution API integration
 const falDrctSuperResolutionService = {
   async upscale(imageUrl: string, options: {
     upscaling_factor?: number;
   } = {}) {
-    const response = await fetch('https://queue.fal.run/fal-ai/drct-super-resolution', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${window.FAL_KEY || ''}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image_url: imageUrl,
-        upscaling_factor: options.upscaling_factor || 4, // Fixed at 4x
-      }),
+    const response = await postXenoRequest('/images/edit', {
+      image: imageUrl,
+      prompt: 'upscale 4x',
+      model: 'auto',
     });
-    
-    if (!response.ok) {
-      throw new Error(`FAL DRCT Super Resolution API error: ${response.status}`);
+
+    if (!response.data[0]?.url) {
+      throw new Error('DRCT Super Resolution failed');
     }
-    
-    return response.json();
+
+    return {
+      image: {
+        url: response.data[0].url,
+        file_size: 0,
+        content_type: 'image/jpeg',
+        width: 0,
+        height: 0,
+      }
+    };
   }
 };
 
-// FAL Clarity Upscaler API integration
 const falClarityUpscalerService = {
   async upscale(imageUrl: string, options: {
     prompt?: string;
@@ -114,35 +102,29 @@ const falClarityUpscalerService = {
     negative_prompt?: string;
     enable_safety_checker?: boolean;
   } = {}) {
-    const response = await fetch('https://queue.fal.run/fal-ai/clarity-upscaler', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${window.FAL_KEY || ''}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image_url: imageUrl,
-        prompt: options.prompt || 'masterpiece, best quality, highres',
-        resemblance: options.resemblance || 0.6,
-        creativity: options.creativity || 0.35,
-        upscale_factor: options.upscale_factor || 2,
-        guidance_scale: options.guidance_scale || 4,
-        num_inference_steps: options.num_inference_steps || 18,
-        negative_prompt: options.negative_prompt || '(worst quality, low quality, normal quality:2)',
-        enable_safety_checker: options.enable_safety_checker !== false,
-        seed: options.seed,
-      }),
+    const response = await postXenoRequest('/images/edit', {
+      image: imageUrl,
+      prompt: options.prompt || 'upscale, masterpiece, best quality, highres',
+      model: 'auto',
     });
-    
-    if (!response.ok) {
-      throw new Error(`FAL Clarity Upscaler API error: ${response.status}`);
+
+    if (!response.data[0]?.url) {
+      throw new Error('Clarity upscaler failed');
     }
-    
-    return response.json();
+
+    return {
+      image: {
+        url: response.data[0].url,
+        file_size: 0,
+        content_type: 'image/jpeg',
+        width: 0,
+        height: 0,
+      },
+      seed: options.seed || 0,
+    };
   }
 };
 
-// FAL CCSR API integration
 const falCCSRService = {
   async upscale(imageUrl: string, options: {
     scale?: number;
@@ -158,38 +140,29 @@ const falCCSRService = {
     color_fix_type?: 'none' | 'wavelet' | 'adain';
     seed?: number;
   } = {}) {
-    const response = await fetch('https://queue.fal.run/fal-ai/ccsr', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${window.FAL_KEY || ''}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image_url: imageUrl,
-        scale: options.scale || 2,
-        tile_diffusion: options.tile_diffusion || 'none',
-        tile_diffusion_size: options.tile_diffusion_size || 1024,
-        tile_diffusion_stride: options.tile_diffusion_stride || 512,
-        tile_vae: options.tile_vae || false,
-        tile_vae_decoder_size: options.tile_vae_decoder_size || 226,
-        tile_vae_encoder_size: options.tile_vae_encoder_size || 1024,
-        steps: options.steps || 50,
-        t_max: options.t_max || 0.6667,
-        t_min: options.t_min || 0.3333,
-        color_fix_type: options.color_fix_type || 'adain',
-        seed: options.seed,
-      }),
+    const response = await postXenoRequest('/images/edit', {
+      image: imageUrl,
+      prompt: 'upscale with cascaded refinement',
+      model: 'auto',
     });
-    
-    if (!response.ok) {
-      throw new Error(`FAL CCSR API error: ${response.status}`);
+
+    if (!response.data[0]?.url) {
+      throw new Error('CCSR upscaler failed');
     }
-    
-    return response.json();
+
+    return {
+      image: {
+        url: response.data[0].url,
+        file_size: 0,
+        content_type: 'image/jpeg',
+        width: 0,
+        height: 0,
+      },
+      seed: options.seed || 0,
+    };
   }
 };
 
-// FAL Ideogram Upscale API integration
 const falIdeogramUpscaleService = {
   async upscale(imageUrl: string, options: {
     prompt?: string;
@@ -198,27 +171,25 @@ const falIdeogramUpscaleService = {
     expand_prompt?: boolean;
     seed?: number;
   } = {}) {
-    const response = await fetch('https://queue.fal.run/fal-ai/ideogram/upscale', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${window.FAL_KEY || ''}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image_url: imageUrl,
-        prompt: options.prompt || '',
-        detail: options.detail || 50,
-        resemblance: options.resemblance || 50,
-        expand_prompt: options.expand_prompt || false,
-        seed: options.seed,
-      }),
+    const response = await postXenoRequest('/images/edit', {
+      image: imageUrl,
+      prompt: options.prompt || 'upscale, intelligent enhancement',
+      model: 'auto',
     });
-    
-    if (!response.ok) {
-      throw new Error(`FAL Ideogram Upscale API error: ${response.status}`);
+
+    if (!response.data[0]?.url) {
+      throw new Error('Ideogram upscaler failed');
     }
-    
-    return response.json();
+
+    return {
+      images: [{
+        url: response.data[0].url,
+        file_size: 0,
+        content_type: 'image/jpeg',
+        file_name: 'upscaled.jpg',
+      }],
+      seed: options.seed || 0,
+    };
   }
 };
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
@@ -246,7 +217,7 @@ const mockUpscaleService = {
     console.log(`[UpscaleService] Upscaling with ${modelId}`, settings);
     
     // Use real FAL Creative Upscaler API if available
-    if (modelId === 'fal-ai/creative-upscaler' && window.FAL_KEY) {
+    if (modelId === 'fal-ai/creative-upscaler') {
       try {
         console.log('[FAL Creative] Using real API');
         const result = await falCreativeUpscalerService.upscale(settings.image_url, {
@@ -295,7 +266,7 @@ const mockUpscaleService = {
     }
     
     // Use real FAL DRCT Super Resolution API if available
-    else if (modelId === 'fal-ai/drct-super-resolution' && window.FAL_KEY) {
+    else if (modelId === 'fal-ai/drct-super-resolution') {
       try {
         console.log('[FAL DRCT] Using real API');
         const result = await falDrctSuperResolutionService.upscale(settings.image_url, {
@@ -331,7 +302,7 @@ const mockUpscaleService = {
     }
     
     // Use real FAL Clarity Upscaler API if available
-    else if (modelId === 'fal-ai/clarity-upscaler' && window.FAL_KEY) {
+    else if (modelId === 'fal-ai/clarity-upscaler') {
       try {
         console.log('[FAL Clarity] Using real API');
         const result = await falClarityUpscalerService.upscale(settings.image_url, {
@@ -379,7 +350,7 @@ const mockUpscaleService = {
     }
     
     // Use real FAL CCSR API if available
-    else if (modelId === 'fal-ai/ccsr' && window.FAL_KEY) {
+    else if (modelId === 'fal-ai/ccsr') {
       try {
         console.log('[FAL CCSR] Using real API');
         const result = await falCCSRService.upscale(settings.image_url, {
@@ -430,7 +401,7 @@ const mockUpscaleService = {
     }
     
     // Use real FAL Ideogram Upscale API if available
-    else if (modelId === 'fal-ai/ideogram/upscale' && window.FAL_KEY) {
+    else if (modelId === 'fal-ai/ideogram/upscale') {
       try {
         console.log('[FAL Ideogram] Using real API');
         const result = await falIdeogramUpscaleService.upscale(settings.image_url, {
@@ -472,7 +443,7 @@ const mockUpscaleService = {
     }
     
     // Use real Recraft API if available and model is Recraft
-    else if ((modelId === 'fal-ai/recraft/upscale/creative' || modelId === 'fal-ai/recraft/upscale/crisp') && window.FAL_KEY) {
+    else if (modelId === 'fal-ai/recraft/upscale/creative' || modelId === 'fal-ai/recraft/upscale/crisp') {
       try {
         console.log('[Recraft] Using real API');
         const modelType = modelId.includes('/creative') ? 'creative' : 'crisp';
@@ -2602,6 +2573,5 @@ declare global {
   interface Window {
     // Define any specific API keys your upscale service might need
     // e.g., YOUR_UPSCALE_SERVICE_API_KEY?: string;
-    FAL_KEY?: string;
   }
 }

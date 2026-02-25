@@ -9,30 +9,58 @@ interface SiteGateContextType {
 const SiteGateContext = createContext<SiteGateContextType | undefined>(undefined);
 
 const SITE_PASSWORD = import.meta.env.VITE_SITE_PASSWORD;
-const GATE_ENABLED = import.meta.env.VITE_ENABLE_SITE_GATE === 'true';
 
-// Debug logging
-console.log('[SiteGate] VITE_ENABLE_SITE_GATE:', import.meta.env.VITE_ENABLE_SITE_GATE);
-console.log('[SiteGate] VITE_SITE_PASSWORD:', import.meta.env.VITE_SITE_PASSWORD);
-console.log('[SiteGate] GATE_ENABLED:', GATE_ENABLED);
-console.log('[SiteGate] SITE_PASSWORD:', SITE_PASSWORD);
+const GATE_ALLOWED_HOSTNAMES = new Set(['xenostudio.ai', 'www.xenostudio.ai']);
+
+const getCurrentHostname = (): string => {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  return window.location.hostname.toLowerCase();
+};
+
+const GATE_ENABLED =
+  import.meta.env.VITE_ENABLE_SITE_GATE === 'true' &&
+  GATE_ALLOWED_HOSTNAMES.has(getCurrentHostname());
+
+const SITE_GATE_UNLOCKED_STORAGE_KEY = 'xeno_site_gate_unlocked';
+
+const isGateUnlockedInSession = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return sessionStorage.getItem(SITE_GATE_UNLOCKED_STORAGE_KEY) === 'true';
+};
+
+const setGateUnlockedInSession = (): void => {
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem(SITE_GATE_UNLOCKED_STORAGE_KEY, 'true');
+  }
+};
+
+const clearGateUnlockedInSession = (): void => {
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem(SITE_GATE_UNLOCKED_STORAGE_KEY);
+  }
+};
+
 
 export const SiteGateProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
     // Auto-unlock if gate is disabled or no password is set
     if (!GATE_ENABLED || !SITE_PASSWORD) {
-      console.log('[SiteGate] Auto-unlocking because GATE_ENABLED:', GATE_ENABLED, 'SITE_PASSWORD:', !!SITE_PASSWORD);
       return true;
     }
 
-    // Gate is enabled - require password on every visit
-    console.log('[SiteGate] Gate is enabled, password required');
-    return false;
+    // Keep gate unlocked during same browser session (e.g. OAuth redirects)
+    return isGateUnlockedInSession();
   });
 
   const unlock = (password: string): boolean => {
     if (password === SITE_PASSWORD) {
       setIsUnlocked(true);
+      setGateUnlockedInSession();
       return true;
     }
     return false;
@@ -40,6 +68,7 @@ export const SiteGateProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const lock = () => {
     setIsUnlocked(false);
+    clearGateUnlockedInSession();
   };
 
   return (

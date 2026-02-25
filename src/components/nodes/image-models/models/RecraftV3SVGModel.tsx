@@ -1,7 +1,7 @@
 import React from 'react';
 import { BaseImageModel } from '../BaseImageModel';
 import { ImageModelSettings, ImageGenerationResponse } from '../ImageModelInterface';
-import { generateImage, ReplicateModels, getReplicateSettings } from '../../../../services/replicateService';
+import { generateImage, XenoModels, getXenoSettings } from '../../../../services/xenoImageService';
 import { API_ENDPOINTS } from '../../../../config/apiConfig';
 
 export class RecraftV3SVGModel extends BaseImageModel {
@@ -65,13 +65,13 @@ export class RecraftV3SVGModel extends BaseImageModel {
     
     // Generate the SVG content
     const modelConfig = {
-      model: ReplicateModels.RECRAFT_V3_SVG.model,
-      version: ReplicateModels.RECRAFT_V3_SVG.version,
+      model: XenoModels.RECRAFT_V3_SVG.model,
+      version: XenoModels.RECRAFT_V3_SVG.version,
       description: this.description
     };
     
     const replicateSettings = {
-      ...getReplicateSettings(settings, ReplicateModels.RECRAFT_V3_SVG.model),
+      ...getXenoSettings(settings, XenoModels.RECRAFT_V3_SVG.model),
       ...modelParams
     };
     

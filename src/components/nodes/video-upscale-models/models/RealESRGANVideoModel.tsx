@@ -1,7 +1,7 @@
 import React from 'react'; // Keep React import for JSX in renderModelSpecificSettings
 import { BaseVideoUpscaleModel } from '../BaseVideoUpscaleModel';
 import { VideoUpscaleModelSettings, VideoUpscaleResponse } from '../VideoUpscaleModelInterface';
-import { ReplicateModels, generateImage, getReplicateSettings } from '../../../../services/replicateService';
+import { XenoModels, generateImage, getXenoSettings } from '../../../../services/xenoImageService';
 
 export class RealESRGANVideoModel extends BaseVideoUpscaleModel {
   name = 'Real-ESRGAN Video';
@@ -36,8 +36,8 @@ export class RealESRGANVideoModel extends BaseVideoUpscaleModel {
     try {
       console.log('Upscaling video with Real-ESRGAN Video model:', videoUrl);
       
-      // Get model config from ReplicateModels
-      const modelConfig = ReplicateModels.REAL_ESRGAN_VIDEO;
+      // Get model config from XenoModels
+      const modelConfig = XenoModels.REAL_ESRGAN_VIDEO;
       
       // Map our resolution setting to actual resolution values
       const resolutionMap: Record<string, string> = {

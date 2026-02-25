@@ -77,8 +77,8 @@ export const StartMenu: React.FC<StartMenuProps> = ({ isOpen, onClose, onLogout,
               <User size={20} className="text-white" />
             </div>
             <div>
-              <div className="text-white font-medium">{user?.display_name || 'XenoLabs User'}</div>
-              <div className="text-white/60 text-sm">{user?.email || 'user@xenolabs.local'}</div>
+              <div className="text-white font-medium">{user?.display_name || 'XenoStudio User'}</div>
+              <div className="text-white/60 text-sm">{user?.email || 'user@xenostudio.local'}</div>
             </div>
           </div>
         </div>

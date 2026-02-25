@@ -20,6 +20,7 @@ export async function runMigrations(pool) {
   const migrationsDir = path.join(__dirname, '../database');
   const migrationFiles = [
     'youtube-schema.sql',
+    'office-canvas-schema.sql',
     // Add more schema files here as needed
   ];
 

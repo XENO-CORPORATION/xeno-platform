@@ -602,25 +602,17 @@ const AudioGenerationInterface: React.FC = () => {
     { value: 180, label: '3m' }
   ];
   
-  // Check API token and initialize on mount - matching VideoGenerationInterface pattern
+  // API is now proxied through backend - always available if user is logged in
   useEffect(() => {
     setIsCheckingToken(true);
-    const checkToken = async () => {
-      // Check for fal.ai token for supported models
-      const falKey = import.meta.env.VITE_FAL_KEY;
-      const hasToken = Boolean(falKey);
-      setApiTokenAvailable(hasToken);
-      setIsCheckingToken(false);
-    };
-    checkToken();
+    setApiTokenAvailable(true);
+    setIsCheckingToken(false);
   }, []);
   
   const handleTokenSaved = () => {
-    // Check for fal.ai token
-    const falKey = import.meta.env.VITE_FAL_KEY;
-    const hasToken = Boolean(falKey);
-    setApiTokenAvailable(hasToken);
-    
+    // API is now proxied through backend
+    setApiTokenAvailable(true);
+
     if (hasToken) {
       // If token is now available, clear any error and start a new session
       console.log('Audio generation API token is now available');
@@ -1214,14 +1206,7 @@ const AudioGenerationInterface: React.FC = () => {
       return;
     }
     
-    // Check if API token is available for supported models
-    if (isAudioModelSupported(selectedModel)) {
-      const falKey = import.meta.env.VITE_FAL_KEY;
-      if (!falKey) {
-        notifications.error("Fal AI token is missing. Please add your VITE_FAL_KEY environment variable to continue.");
-        return;
-      }
-    }
+    // API token check no longer needed - backend handles auth
 
     setIsGenerating(true);
     setIsLoading(true);

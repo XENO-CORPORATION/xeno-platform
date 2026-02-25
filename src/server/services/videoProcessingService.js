@@ -388,7 +388,7 @@ class VideoProcessingService {
    * Render video in Docker container
    */
   async renderInDocker(jobId, ffmpegCommand, project) {
-    const containerName = `xenolabs-render-${jobId}`;
+    const containerName = `xenostudio-render-${jobId}`;
     
     try {
       // Build Docker command

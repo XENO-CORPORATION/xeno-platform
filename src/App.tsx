@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
 import Home from './pages/Home';
-import Auth from './pages/Auth';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import OverviewPage from './pages/Overview';
@@ -14,6 +13,12 @@ import JoinSession from './components/os/JoinSession';
 import { AuthProvider } from './contexts/AuthContext';
 import { CollaborationProvider } from './contexts/CollaborationContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+
+// Auth layout with shared video panel
+import AuthLayout from './components/layouts/AuthLayout';
+import AuthContent from './pages/AuthContent';
+import HelpContent from './pages/HelpContent';
+import ContactContent from './pages/ContactContent';
 
 // Import MultiChatContainer for standalone xeno-chat.com domain
 import MultiChatContainer from './components/playground/Chat/MultiChatContainer';
@@ -36,11 +41,11 @@ function App() {
     const setHeight = () => {
       document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
     };
-    
+
     setHeight();
     window.addEventListener('resize', setHeight);
     window.addEventListener('orientationchange', setHeight);
-    
+
     return () => {
       window.removeEventListener('resize', setHeight);
       window.removeEventListener('orientationchange', setHeight);
@@ -62,7 +67,9 @@ function App() {
           } />
 
           {/* Authentication Page */}
-          <Route path="/auth" element={<Auth />} />
+          <Route element={<AuthLayout />}>
+            <Route path="/auth" element={<AuthContent />} />
+          </Route>
 
           {/* Catch-all: redirect to chat */}
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -80,8 +87,12 @@ function App() {
             {/* Landing Page - Show this first */}
             <Route path="/" element={<Home />} />
 
-            {/* Authentication Pages */}
-            <Route path="/auth" element={<Auth />} />
+            {/* Auth Layout Routes - Shared video panel, swappable right content */}
+            <Route element={<AuthLayout />}>
+              <Route path="/auth" element={<AuthContent />} />
+              <Route path="/help" element={<HelpContent />} />
+              <Route path="/contact" element={<ContactContent />} />
+            </Route>
 
             {/* Public Legal Pages - No auth required */}
             <Route path="/privacy" element={<Privacy />} />

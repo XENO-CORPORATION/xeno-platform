@@ -150,8 +150,14 @@ class AuthService {
     return { 'Content-Type': 'application/json' };
   }
 
-  // Validate current session
+  // Validate current session and update user data
   async validateSession(): Promise<boolean> {
+    // Check for token in localStorage (might have been set by OAuth)
+    const storedToken = localStorage.getItem('xenoos_auth_token');
+    if (storedToken && !this.token) {
+      this.token = storedToken;
+    }
+
     if (!this.token) return false;
 
     try {
@@ -160,7 +166,15 @@ class AuthService {
         headers: this.getAuthHeaders(),
       });
 
-      return response.ok;
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.user) {
+          // Update stored user data
+          localStorage.setItem('xenoos_user', JSON.stringify(data.user));
+        }
+        return true;
+      }
+      return false;
     } catch {
       return false;
     }
@@ -175,9 +189,7 @@ class AuthService {
         headers: { 'Content-Type': 'application/json' },
       });
 
-      if (response.ok) {
-        console.log('Database initialized successfully');
-      } else {
+      if (!response.ok) {
         console.warn('Database initialization may have issues');
       }
     } catch (error) {

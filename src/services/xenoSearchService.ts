@@ -409,7 +409,7 @@ class XenoSearchService {
         summary: `Top-rated products for "${options.query}". Compare prices, reviews, and features from trusted retailers with real-time price comparison and availability status.`,
         sources: [
           {
-            url: 'https://xenolabs.ai/shopping-results',
+            url: 'https://xenostudio.ai/shopping-results',
             title: `Shopping Results for "${options.query}"`,
             snippet: `Best deals and products for "${options.query}" with verified reviews and competitive pricing.`,
             relevance_score: 0.92
@@ -457,7 +457,7 @@ class XenoSearchService {
         summary: `Comprehensive financial analysis for "${options.query}" including market trends, stock performance, and investment insights with real-time data and expert analysis.`,
         sources: [
           {
-            url: 'https://xenolabs.ai/finance-results',
+            url: 'https://xenostudio.ai/finance-results',
             title: `Finance Results for "${options.query}"`,
             snippet: `Market analysis and financial data for "${options.query}" with real-time quotes, news, and expert insights.`,
             relevance_score: 0.89

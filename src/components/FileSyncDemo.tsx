@@ -1,5 +1,5 @@
 // Real-time File Synchronization Demo Component
-// Demonstrates how to use WebSocket file sync in the XenoLabs interface
+// Demonstrates how to use WebSocket file sync in the XenoStudio interface
 
 import React, { useState, useEffect } from 'react';
 import { useWebSocket, useFileSync } from '../hooks/useWebSocket';

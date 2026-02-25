@@ -1,12 +1,4 @@
-// Import statements first
-import * as falImport from '@fal-ai/client';
-import minimaxSpeech02HdSchema from '../components/playground/Generation/Minimax/minimax-speech-02-hd-schema.json';
-import orpheusTtsSchema from '../components/playground/Generation/Orpheus/orpheus-tts-schema.json';
-import elevenlabsTtsMultilingualV2Schema from '../components/playground/Generation/ElevenLabs/elevenlabs-tts-multilingual-v2-schema.json';
-import elevenlabsTtsTurboV25Schema from '../components/playground/Generation/ElevenLabs/elevenlabs-tts-turbo-v2.5-schema.json';
-import mmaudioV2TextToAudioSchema from '../components/playground/Generation/MMAudio/mmaudio-v2-text-to-audio-schema.json';
-import cassetteaiSoundEffectsGeneratorSchema from '../components/playground/Generation/CassetteAI/cassetteai-sound-effects-generator-schema.json';
-import lyria2Schema from '../components/playground/Generation/Lyria/lyria2-schema.json';
+import { postXenoRequest } from './xenoProxyRequest';
 
 // Audio model interfaces
 export interface AudioModelSettings {
@@ -87,41 +79,27 @@ export interface AudioGenerationResponse {
   };
 }
 
-// Get environment variables
-const FAL_KEY = import.meta.env.VITE_FAL_KEY;
-
-// Initialize the fal client properly
-const { createFalClient } = falImport;
-const fal = createFalClient({
-  credentials: FAL_KEY,
-});
-
-console.log("Initialized Fal.ai client for audio generation:", fal);
-
 interface AudioModelDefinition {
-  provider: 'fal';
-  falModelId: string;
+  provider: 'xeno';
+  xenoModelId?: string;
   isTextToSpeech?: boolean;
   isMusicGeneration?: boolean;
   isSoundEffects?: boolean;
+  isAvailable: boolean;
+  unavailableMessage?: string;
   defaultSettings: Partial<AudioModelSettings>;
-  schema?: any;
 }
 
 type QueueUpdateCallback = (update: any) => void;
 
-if (!FAL_KEY) {
-  console.warn('Fal AI key (VITE_FAL_KEY) is not set. Fal.ai audio models will not work.');
-}
-
 const audioModelRegistry: Record<string, AudioModelDefinition> = {
   'fal-ai/minimax/speech-02-hd': {
-    provider: 'fal',
-    falModelId: 'fal-ai/minimax/speech-02-hd',
+    provider: 'xeno',
     isTextToSpeech: true,
     isMusicGeneration: false,
     isSoundEffects: false,
-    schema: minimaxSpeech02HdSchema,
+    isAvailable: false,
+    unavailableMessage: 'Minimax Speech is not yet available on Xeno API. Please use an alternative TTS model.',
     defaultSettings: {
       voice_setting: {
         voice_id: 'Wise_Woman',
@@ -141,12 +119,12 @@ const audioModelRegistry: Record<string, AudioModelDefinition> = {
     },
   },
   'fal-ai/orpheus-tts': {
-    provider: 'fal',
-    falModelId: 'fal-ai/orpheus-tts',
+    provider: 'xeno',
     isTextToSpeech: true,
     isMusicGeneration: false,
     isSoundEffects: false,
-    schema: orpheusTtsSchema,
+    isAvailable: false,
+    unavailableMessage: 'Orpheus TTS is not yet available on Xeno API. Please use an alternative TTS model.',
     defaultSettings: {
       voice: 'tara',
       temperature: 0.7,
@@ -154,12 +132,12 @@ const audioModelRegistry: Record<string, AudioModelDefinition> = {
     },
   },
   'fal-ai/elevenlabs/tts/multilingual-v2': {
-    provider: 'fal',
-    falModelId: 'fal-ai/elevenlabs/tts/multilingual-v2',
+    provider: 'xeno',
     isTextToSpeech: true,
     isMusicGeneration: false,
     isSoundEffects: false,
-    schema: elevenlabsTtsMultilingualV2Schema,
+    isAvailable: false,
+    unavailableMessage: 'ElevenLabs TTS is not yet available on Xeno API. Please use an alternative TTS model.',
     defaultSettings: {
       voice: 'Rachel',
       stability: 0.5,
@@ -170,12 +148,12 @@ const audioModelRegistry: Record<string, AudioModelDefinition> = {
     },
   },
   'fal-ai/elevenlabs/tts/turbo-v2.5': {
-    provider: 'fal',
-    falModelId: 'fal-ai/elevenlabs/tts/turbo-v2.5',
+    provider: 'xeno',
     isTextToSpeech: true,
     isMusicGeneration: false,
     isSoundEffects: false,
-    schema: elevenlabsTtsTurboV25Schema,
+    isAvailable: false,
+    unavailableMessage: 'ElevenLabs TTS Turbo is not yet available on Xeno API. Please use an alternative TTS model.',
     defaultSettings: {
       voice: 'Rachel',
       stability: 0.5,
@@ -186,12 +164,12 @@ const audioModelRegistry: Record<string, AudioModelDefinition> = {
     },
   },
   'fal-ai/mmaudio-v2/text-to-audio': {
-    provider: 'fal',
-    falModelId: 'fal-ai/mmaudio-v2/text-to-audio',
+    provider: 'xeno',
+    xenoModelId: 'mmaudio-v2',
     isTextToSpeech: false,
     isMusicGeneration: true,
     isSoundEffects: true,
-    schema: mmaudioV2TextToAudioSchema,
+    isAvailable: true,
     defaultSettings: {
       num_steps: 25,
       duration: 8,
@@ -201,44 +179,46 @@ const audioModelRegistry: Record<string, AudioModelDefinition> = {
     },
   },
   'cassetteai/sound-effects-generator': {
-    provider: 'fal',
-    falModelId: 'cassetteai/sound-effects-generator',
+    provider: 'xeno',
+    xenoModelId: 'cassette-ai',
     isTextToSpeech: false,
     isMusicGeneration: false,
     isSoundEffects: true,
-    schema: cassetteaiSoundEffectsGeneratorSchema,
+    isAvailable: true,
     defaultSettings: {
       duration: 10,
     },
   },
   'fal-ai/lyria2': {
-    provider: 'fal',
-    falModelId: 'fal-ai/lyria2',
+    provider: 'xeno',
+    xenoModelId: 'lyria2',
     isTextToSpeech: false,
     isMusicGeneration: true,
     isSoundEffects: false,
-    schema: lyria2Schema,
+    isAvailable: true,
     defaultSettings: {
       negative_prompt: '',
     },
   },
   'resemble-ai/chatterboxhd/speech-to-speech': {
-    provider: 'fal',
-    falModelId: 'resemble-ai/chatterboxhd/speech-to-speech',
+    provider: 'xeno',
     isTextToSpeech: false,
     isMusicGeneration: false,
     isSoundEffects: false,
+    isAvailable: false,
+    unavailableMessage: 'Resemble AI ChatterboxHD Speech-to-Speech is not yet available on Xeno API.',
     defaultSettings: {
       target_voice: 'Aurora',
       high_quality_audio: false,
     },
   },
   'resemble-ai/chatterboxhd/text-to-speech': {
-    provider: 'fal',
-    falModelId: 'resemble-ai/chatterboxhd/text-to-speech',
+    provider: 'xeno',
     isTextToSpeech: true,
     isMusicGeneration: false,
     isSoundEffects: false,
+    isAvailable: false,
+    unavailableMessage: 'Resemble AI ChatterboxHD TTS is not yet available on Xeno API.',
     defaultSettings: {
       voice: 'Aurora',
       exaggeration: 0.5,
@@ -250,335 +230,6 @@ const audioModelRegistry: Record<string, AudioModelDefinition> = {
   },
 };
 
-function mapAudioSettingsToFalInput(settings: AudioModelSettings, falModelId: string): Record<string, any> {
-  const input: Record<string, any> = {};
-  const modelDef = audioModelRegistry[falModelId];
-
-  // Common text handling for all TTS models
-  if (settings.text) {
-    input.text = settings.text;
-  } else if (settings.prompt) {
-    input.text = settings.prompt; // Map prompt to text for TTS
-  }
-
-  // Handle Minimax Speech 02 HD specifically
-  if (falModelId === 'fal-ai/minimax/speech-02-hd') {
-    // Voice settings
-    if (settings.voice_setting) {
-      input.voice_setting = {
-        ...modelDef?.defaultSettings.voice_setting,
-        ...settings.voice_setting,
-      };
-    } else {
-      input.voice_setting = modelDef?.defaultSettings.voice_setting;
-    }
-
-    // Language boost
-    if (settings.language_boost) {
-      input.language_boost = settings.language_boost;
-    } else {
-      input.language_boost = modelDef?.defaultSettings.language_boost;
-    }
-
-    // Output format
-    input.output_format = settings.output_format || modelDef?.defaultSettings.output_format || 'url';
-
-    // Audio settings
-    if (settings.audio_setting) {
-      input.audio_setting = {
-        ...modelDef?.defaultSettings.audio_setting,
-        ...settings.audio_setting,
-      };
-    } else {
-      input.audio_setting = modelDef?.defaultSettings.audio_setting;
-    }
-
-    // Pronunciation dictionary
-    if (settings.pronunciation_dict) {
-      input.pronunciation_dict = settings.pronunciation_dict;
-    }
-  }
-  
-  // Handle Orpheus TTS specifically
-  else if (falModelId === 'fal-ai/orpheus-tts') {
-    // Voice selection
-    if (settings.voice) {
-      input.voice = settings.voice;
-    } else {
-      input.voice = modelDef?.defaultSettings.voice || 'tara';
-    }
-
-    // Temperature control
-    if (settings.temperature !== undefined) {
-      input.temperature = settings.temperature;
-    } else {
-      input.temperature = modelDef?.defaultSettings.temperature || 0.7;
-    }
-
-    // Repetition penalty
-    if (settings.repetition_penalty !== undefined) {
-      input.repetition_penalty = settings.repetition_penalty;
-    } else {
-      input.repetition_penalty = modelDef?.defaultSettings.repetition_penalty || 1.2;
-    }
-  }
-  
-  // Handle ElevenLabs TTS Multilingual V2 specifically
-  else if (falModelId === 'fal-ai/elevenlabs/tts/multilingual-v2') {
-    // Voice selection
-    if (settings.voice) {
-      input.voice = settings.voice;
-    } else {
-      input.voice = modelDef?.defaultSettings.voice || 'Rachel';
-    }
-
-    // Stability control
-    if (settings.stability !== undefined) {
-      input.stability = settings.stability;
-    } else {
-      input.stability = modelDef?.defaultSettings.stability || 0.5;
-    }
-
-    // Similarity boost
-    if (settings.similarity_boost !== undefined) {
-      input.similarity_boost = settings.similarity_boost;
-    } else {
-      input.similarity_boost = modelDef?.defaultSettings.similarity_boost || 0.75;
-    }
-
-    // Style control
-    if (settings.style !== undefined) {
-      input.style = settings.style;
-    } else {
-      input.style = modelDef?.defaultSettings.style || 0;
-    }
-
-    // Speed control
-    if (settings.speed !== undefined) {
-      input.speed = settings.speed;
-    } else {
-      input.speed = modelDef?.defaultSettings.speed || 1;
-    }
-
-    // Timestamps (API uses 'timstamps' with typo for multilingual-v2)
-    if (settings.timestamps !== undefined) {
-      input.timstamps = settings.timestamps;
-    } else {
-      input.timstamps = modelDef?.defaultSettings.timestamps || false;
-    }
-  }
-  
-  // Handle ElevenLabs TTS Turbo V2.5 specifically
-  else if (falModelId === 'fal-ai/elevenlabs/tts/turbo-v2.5') {
-    // Voice selection
-    if (settings.voice) {
-      input.voice = settings.voice;
-    } else {
-      input.voice = modelDef?.defaultSettings.voice || 'Rachel';
-    }
-
-    // Stability control
-    if (settings.stability !== undefined) {
-      input.stability = settings.stability;
-    } else {
-      input.stability = modelDef?.defaultSettings.stability || 0.5;
-    }
-
-    // Similarity boost
-    if (settings.similarity_boost !== undefined) {
-      input.similarity_boost = settings.similarity_boost;
-    } else {
-      input.similarity_boost = modelDef?.defaultSettings.similarity_boost || 0.75;
-    }
-
-    // Style control
-    if (settings.style !== undefined) {
-      input.style = settings.style;
-    } else {
-      input.style = modelDef?.defaultSettings.style || 0;
-    }
-
-    // Speed control
-    if (settings.speed !== undefined) {
-      input.speed = settings.speed;
-    } else {
-      input.speed = modelDef?.defaultSettings.speed || 1;
-    }
-
-    // Timestamps (Turbo V2.5 uses correct spelling 'timestamps')
-    if (settings.timestamps !== undefined) {
-      input.timestamps = settings.timestamps;
-    } else {
-      input.timestamps = modelDef?.defaultSettings.timestamps || false;
-    }
-  }
-  
-  // Handle MMAudio V2 Text-to-Audio specifically
-  else if (falModelId === 'fal-ai/mmaudio-v2/text-to-audio') {
-    // Use prompt field for this model
-    if (settings.prompt || settings.text) {
-      input.prompt = settings.prompt || settings.text;
-    }
-
-    // Number of steps
-    if (settings.num_steps !== undefined) {
-      input.num_steps = settings.num_steps;
-    } else {
-      input.num_steps = modelDef?.defaultSettings.num_steps || 25;
-    }
-
-    // Duration
-    if (settings.duration !== undefined) {
-      input.duration = settings.duration;
-    } else {
-      input.duration = modelDef?.defaultSettings.duration || 8;
-    }
-
-    // CFG Strength
-    if (settings.cfg_strength !== undefined) {
-      input.cfg_strength = settings.cfg_strength;
-    } else {
-      input.cfg_strength = modelDef?.defaultSettings.cfg_strength || 4.5;
-    }
-
-    // Seed
-    if (settings.seed !== undefined && settings.seed >= 0) {
-      input.seed = settings.seed;
-    }
-
-    // Mask away clip
-    if (settings.mask_away_clip !== undefined) {
-      input.mask_away_clip = settings.mask_away_clip;
-    } else {
-      input.mask_away_clip = modelDef?.defaultSettings.mask_away_clip || false;
-    }
-
-    // Negative prompt
-    if (settings.negative_prompt !== undefined) {
-      input.negative_prompt = settings.negative_prompt;
-    } else {
-      input.negative_prompt = modelDef?.defaultSettings.negative_prompt || '';
-    }
-  }
-  
-  // Handle CassetteAI Sound Effects Generator specifically
-  else if (falModelId === 'cassetteai/sound-effects-generator') {
-    // Use prompt field for this model
-    if (settings.prompt || settings.text) {
-      input.prompt = settings.prompt || settings.text;
-    }
-
-    // Duration (required parameter)
-    if (settings.duration !== undefined) {
-      input.duration = Math.round(settings.duration); // Ensure integer
-    } else {
-      input.duration = Math.round(modelDef?.defaultSettings.duration || 10);
-    }
-  }
-  
-  // Handle Lyria2 specifically
-  else if (falModelId === 'fal-ai/lyria2') {
-    // Use prompt field for this model
-    if (settings.prompt || settings.text) {
-      input.prompt = settings.prompt || settings.text;
-    }
-
-    // Negative prompt
-    if (settings.negative_prompt !== undefined) {
-      input.negative_prompt = settings.negative_prompt;
-    } else {
-      input.negative_prompt = modelDef?.defaultSettings.negative_prompt || '';
-    }
-
-    // Seed
-    if (settings.seed !== undefined && settings.seed >= 0) {
-      input.seed = settings.seed;
-    }
-  }
-  
-  // Handle Resemble AI ChatterboxHD Speech-to-Speech specifically
-  else if (falModelId === 'resemble-ai/chatterboxhd/speech-to-speech') {
-    // Source audio URL (required)
-    if (settings.source_audio_url) {
-      input.source_audio_url = settings.source_audio_url;
-    } else {
-      throw new Error('Source audio URL is required for speech-to-speech conversion');
-    }
-
-    // Target voice (optional, defaults to random if not provided)
-    if (settings.target_voice) {
-      input.target_voice = settings.target_voice;
-    } else if (modelDef?.defaultSettings.target_voice) {
-      input.target_voice = modelDef.defaultSettings.target_voice;
-    }
-
-    // Target voice audio URL (optional, overrides target_voice if provided)
-    if (settings.target_voice_audio_url) {
-      input.target_voice_audio_url = settings.target_voice_audio_url;
-    }
-
-    // High quality audio (optional, defaults to false)
-    if (settings.high_quality_audio !== undefined) {
-      input.high_quality_audio = settings.high_quality_audio;
-    } else {
-      input.high_quality_audio = modelDef?.defaultSettings.high_quality_audio || false;
-    }
-  }
-  
-  // Handle Resemble AI ChatterboxHD Text-to-Speech specifically
-  else if (falModelId === 'resemble-ai/chatterboxhd/text-to-speech') {
-    // Voice selection (optional, uses random if not provided)
-    if (settings.voice) {
-      input.voice = settings.voice;
-    } else if (modelDef?.defaultSettings.voice) {
-      input.voice = modelDef.defaultSettings.voice;
-    }
-
-    // Custom voice audio URL (optional, overrides voice selection)
-    if (settings.audio_url) {
-      input.audio_url = settings.audio_url;
-    }
-
-    // Exaggeration control (emotion intensity)
-    if (settings.exaggeration !== undefined) {
-      input.exaggeration = settings.exaggeration;
-    } else {
-      input.exaggeration = modelDef?.defaultSettings.exaggeration || 0.5;
-    }
-
-    // Temperature control (randomness)
-    if (settings.temperature !== undefined) {
-      input.temperature = settings.temperature;
-    } else {
-      input.temperature = modelDef?.defaultSettings.temperature || 0.8;
-    }
-
-    // CFG (Classifier-free guidance scale)
-    if (settings.cfg !== undefined) {
-      input.cfg = settings.cfg;
-    } else {
-      input.cfg = modelDef?.defaultSettings.cfg || 0.5;
-    }
-
-    // High quality audio
-    if (settings.high_quality_audio !== undefined) {
-      input.high_quality_audio = settings.high_quality_audio;
-    } else {
-      input.high_quality_audio = modelDef?.defaultSettings.high_quality_audio || false;
-    }
-
-    // Seed for reproducibility
-    if (settings.seed !== undefined && settings.seed >= 0) {
-      input.seed = settings.seed;
-    } else {
-      input.seed = modelDef?.defaultSettings.seed || 0;
-    }
-  }
-
-  console.log(`Mapped audio settings for ${falModelId}:`, input);
-  return input;
-}
-
 async function generateAudio(
   modelId: string,
   settings: AudioModelSettings,
@@ -587,84 +238,44 @@ async function generateAudio(
   const startTime = Date.now();
 
   try {
-    console.log(`Starting audio generation with model: ${modelId}`);
-    console.log('Audio settings:', settings);
-
-    // Check if model is supported
     const modelDef = audioModelRegistry[modelId];
     if (!modelDef) {
       throw new Error(`Audio model ${modelId} is not supported`);
     }
 
-    if (!FAL_KEY) {
-      throw new Error('Fal AI key is not configured. Please check your environment variables.');
+    if (!modelDef.isAvailable) {
+      throw new Error(modelDef.unavailableMessage || `Model ${modelId} is not available`);
     }
 
-    // Map settings to fal input format
-    const falInput = mapAudioSettingsToFalInput(settings, modelId);
-    console.log('Fal input:', falInput);
-
-    // Validate required fields
-    if (modelDef.isTextToSpeech && !falInput.text) {
-      throw new Error('Text is required for text-to-speech generation');
-    }
-    
-    // Speech-to-speech models require source_audio_url instead of text/prompt
-    if (modelId === 'resemble-ai/chatterboxhd/speech-to-speech') {
-      if (!falInput.source_audio_url) {
-        throw new Error('Source audio URL is required for speech-to-speech conversion');
-      }
-    } else if (modelId === 'resemble-ai/chatterboxhd/text-to-speech') {
-      if (!falInput.text) {
-        throw new Error('Text is required for text-to-speech generation');
-      }
-    } else if (!modelDef.isTextToSpeech && !falInput.prompt) {
-      throw new Error('Prompt is required for audio generation');
+    const prompt = settings.prompt || settings.text || '';
+    if (!prompt) {
+      throw new Error(modelDef.isTextToSpeech ? 'Text is required for text-to-speech generation' : 'Prompt is required for audio generation');
     }
 
-    // Submit to fal.ai queue
-    console.log(`Submitting to fal.ai: ${modelDef.falModelId}`);
-    
-    const result = await fal.subscribe(modelDef.falModelId, {
-      input: falInput,
-      onQueueUpdate: (update) => {
-        console.log('Queue update:', update);
-        if (onQueueUpdate) {
-          onQueueUpdate(update);
-        }
-      },
+    const result = await postXenoRequest('/audio/generate', {
+      prompt,
+      model: modelDef.xenoModelId || 'auto',
+      duration: settings.duration || modelDef.defaultSettings.duration,
+      seed: settings.seed,
+      wait: true,
     });
-
-    console.log('Fal.ai result:', result);
 
     const generationTime = Date.now() - startTime;
 
-    // Process the result
-    if (result && result.data) {
-      const data = result.data;
+    if (result && result.data && result.data.length > 0) {
+      const audioData = result.data[0];
 
-      // Handle audio output
-      let generatedAudio: GeneratedAudio | null = null;
-
-      if (data.audio || data.audio_file) {
-        const audioData = data.audio || data.audio_file;
-        generatedAudio = {
-          url: audioData.url,
-          duration: data.duration_ms ? Math.round(data.duration_ms / 1000) : undefined,
-          duration_ms: data.duration_ms,
-          file_size: audioData.file_size,
-          content_type: audioData.content_type,
-          metadata: {
-            model: modelId,
-            generationTime,
-            settings: settings,
-          }
-        };
-      }
-
-      if (!generatedAudio) {
-        throw new Error('No audio was generated');
-      }
+      const generatedAudio: GeneratedAudio = {
+        url: audioData.url,
+        duration: audioData.duration,
+        metadata: {
+          model: modelId,
+          generationTime,
+          settings: settings,
+          tags: audioData.tags,
+          title: audioData.title,
+        }
+      };
 
       return {
         success: true,
@@ -672,18 +283,17 @@ async function generateAudio(
         metadata: {
           generationTime,
           modelVersion: modelId,
-          falInput,
-          falResult: data,
+          falInput: { prompt, model: modelDef.xenoModelId },
+          falResult: result,
         }
       };
     } else {
-      throw new Error('No result data received from fal.ai');
+      throw new Error('No audio was generated');
     }
 
   } catch (error) {
-    console.error(`Audio generation failed for model ${modelId}:`, error);
     const generationTime = Date.now() - startTime;
-    
+
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -691,7 +301,6 @@ async function generateAudio(
       metadata: {
         generationTime,
         modelVersion: modelId,
-        falInput: mapAudioSettingsToFalInput(settings, modelId),
       }
     };
   }
@@ -815,4 +424,4 @@ export {
   isAudioModelSupported,
   getAudioModelInfo,
   audioModelRegistry,
-}; 
+};

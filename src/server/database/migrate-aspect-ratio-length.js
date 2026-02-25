@@ -13,8 +13,8 @@ const pool = new Pool({
   host: process.env.POSTGRES_HOST || 'localhost',
   port: process.env.POSTGRES_PORT || 5432,
   user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'xenolabs_password',
-  database: process.env.POSTGRES_DB || 'xenolabs'
+  password: process.env.POSTGRES_PASSWORD || 'xenostudio_password',
+  database: process.env.POSTGRES_DB || 'xenostudio'
 });
 
 async function migrate() {

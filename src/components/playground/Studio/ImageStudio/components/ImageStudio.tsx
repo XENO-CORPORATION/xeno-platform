@@ -180,7 +180,7 @@ const ImageStudio: React.FC = () => {
     editMode?: string;
   }>>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('xenolabs_canvas_edit_history');
+      const saved = localStorage.getItem('xenostudio_canvas_edit_history');
       return saved ? JSON.parse(saved) : [];
     }
     return [];

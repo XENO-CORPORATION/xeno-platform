@@ -63,11 +63,11 @@ const ApiTokenNotice: React.FC<ApiTokenNoticeProps> = ({ serviceKey, onClose, on
         
         // Update API_TOKENS
         API_TOKENS.GEMINI_API_TOKEN = token.trim();
-      } else if (serviceKey === 'replicate') {
+      } else if (serviceKey === 'xeno') {
         // Save token to window object
-        window.REPLICATE_API_TOKEN = token.trim();
+        window.XENO_API_KEY = token.trim();
         // Update API_TOKENS
-        API_TOKENS.REPLICATE_API_TOKEN = token.trim();
+        API_TOKENS.XENO_API_KEY = token.trim();
       }
       
       // Success case

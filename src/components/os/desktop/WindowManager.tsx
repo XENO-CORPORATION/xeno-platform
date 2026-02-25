@@ -349,7 +349,7 @@ export const createTerminalWindow = () => {
     content: (
       <div className="h-full bg-black text-green-400 p-4 font-mono text-sm">
         <div className="mb-4">
-          <div>XenoLabs Terminal v1.0.0</div>
+          <div>XenoStudio Terminal v1.0.0</div>
           <div>Type 'help' for available commands.</div>
         </div>
         <div className="flex items-center">

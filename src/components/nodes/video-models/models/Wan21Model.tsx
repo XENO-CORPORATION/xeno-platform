@@ -1,7 +1,7 @@
 import React from 'react'; // Keep React import for JSX in renderModelSpecificSettings
 import { BaseVideoModel } from '../BaseVideoModel';
 import { VideoModelSettings, VideoGenerationResponse } from '../VideoModelInterface';
-import { ReplicateModels } from '../../../../services/replicateService';
+import { XenoModels } from '../../../../services/xenoImageService';
 
 export class Wan21Model extends BaseVideoModel {
   id = 'wan-2.1-1.3b';
@@ -50,7 +50,7 @@ export class Wan21Model extends BaseVideoModel {
         metadata: {
           generationTime: 4.2,
           promptTokens: prompt.length / 4,
-          modelVersion: `Wan 2.1 (${ReplicateModels.WAN_2_1_1_3B.version.substring(0, 8)})`,
+          modelVersion: `Wan 2.1 (${XenoModels.WAN_2_1_1_3B.version.substring(0, 8)})`,
           resolution: settings.resolution,
           fps: settings.fps,
           duration: settings.duration,

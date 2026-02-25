@@ -7,7 +7,7 @@ const execAsync = promisify(exec);
 const router = express.Router();
 
 // Browser service configuration
-const BROWSER_HOST = process.env.BROWSER_HOST || 'xenolabs-xeno-browser';
+const BROWSER_HOST = process.env.BROWSER_HOST || 'xenostudio-xeno-browser';
 const BROWSER_PORT = process.env.BROWSER_PORT || '6901';
 const BROWSER_PASSWORD = process.env.BROWSER_PASSWORD || 'xenobrowser123';
 

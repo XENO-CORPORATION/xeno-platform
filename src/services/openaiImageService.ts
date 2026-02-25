@@ -4,10 +4,12 @@ import { OpenAI } from 'openai';
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 
 // Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true // Allow browser usage for frontend
-});
+const openai = OPENAI_API_KEY
+  ? new OpenAI({
+      apiKey: OPENAI_API_KEY,
+      dangerouslyAllowBrowser: true // Allow browser usage for frontend
+    })
+  : null;
 
 // Type definitions for GPT Image 1
 export interface ImageGenerationSettings {
@@ -104,7 +106,7 @@ export interface ImageVariationSettings {
 
 // GPT Image 1 Service Class - Text-to-Image Generation Only
 export class OpenAIImageService {
-  private client: OpenAI;
+  private client: OpenAI | null;
 
   constructor() {
     if (!OPENAI_API_KEY) {

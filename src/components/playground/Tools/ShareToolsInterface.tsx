@@ -33,7 +33,7 @@ const ShareToolsInterface: React.FC = () => {
     if (!selectedFile) return;
 
     // Generate a mock share link
-    const mockLink = `https://xenolabs.app/share/${Math.random().toString(36).substr(2, 9)}`;
+    const mockLink = `https://xenostudio.app/share/${Math.random().toString(36).substr(2, 9)}`;
     setShareLink(mockLink);
     setQrCodeData(mockLink);
   };

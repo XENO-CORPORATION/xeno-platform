@@ -1,6 +1,6 @@
-# 🚀 Xenolabs Web - Complete Cloud Operating System & AI Platform
+# 🚀 XenoStudio Web - Complete Cloud Operating System & AI Platform
 
-**Xenolabs Web** is a revolutionary cloud-based operating system that brings a complete Windows-like desktop experience to your browser, powered by cutting-edge AI technologies and real container provisioning.
+**XenoStudio Web** is a revolutionary cloud-based operating system that brings a complete Windows-like desktop experience to your browser, powered by cutting-edge AI technologies and real container provisioning.
 
 ## ✨ Key Features
 
@@ -78,7 +78,7 @@ docker-compose up -d --build
 ## 📁 Project Structure
 
 ```
-xenolabs-web/
+xenostudio-web/
 ├── 📂 src/
 │   ├── 📂 components/          # React components
 │   ├── 📂 pages/              # Page-level components

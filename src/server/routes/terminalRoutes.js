@@ -216,7 +216,7 @@ router.post('/container/:containerId/exec', async (req, res) => {
       data: {
         output: result.output,
         command,
-        workingDir: workingDir || '/home/xenolabs-user',
+        workingDir: workingDir || '/home/xenostudio-user',
         timestamp: new Date().toISOString()
       },
       error: result.error

@@ -17,7 +17,6 @@ export function initializeGeminiSDK(apiKey?: string): boolean {
     let key = apiKey || API_TOKENS.GEMINI_API_TOKEN;
     
     if (!key) {
-      console.warn('[Gemini] No API key in config, using fallback key');
       // Fallback API key
       key = 'AIzaSyD8eHthLzcGmeJuhoCWSvBv-5jG1F56BYw';
     }
@@ -33,7 +32,6 @@ export function initializeGeminiSDK(apiKey?: string): boolean {
       API_TOKENS.GEMINI_API_TOKEN = key;
     }
     
-    console.log('[Gemini] SDK initialized successfully');
     return true;
   } catch (error) {
     console.error('[Gemini] Failed to initialize SDK:', error);
@@ -141,14 +139,16 @@ export async function analyzeImageWithGemini(imageBase64: string): Promise<strin
  */
 function getModelSpecificInstructions(modelId: string): string {
   const modelInstructions: Record<string, string> = {
-    'stable-diffusion-xl': 'Create a prompt specifically for Stable Diffusion 3.5. Use detailed descriptors, separate different concepts with commas, and add qualifiers like "highly detailed" or "photorealistic" where appropriate. Include style descriptors that SD 3.5 recognizes like "cinematic", "8k", "masterpiece", "artstation".',
+    'classic': 'Create a prompt specifically for Stable Diffusion 3.5. Use detailed descriptors, separate different concepts with commas, and add qualifiers like "highly detailed" or "photorealistic" where appropriate. Include style descriptors like "cinematic", "8k", "masterpiece", "artstation".',
     'flux-dev': 'Create a prompt for the Flux model that emphasizes visual consistency, clarity of composition, and artistic flair. Use clear simple language and focus on mood, lighting, and overall aesthetic.',
-    'flux-pro-1.1': 'Create a prompt for Flux Pro 1.1 that emphasizes photorealistic details, lighting quality, and composition. Use professional photography terms and references to artists or styles.',
-    'fal-ai/imagen4/preview': 'Create a prompt for Google Imagen 4 Preview that emphasizes natural language descriptions, clear subject details, and composition guidance. Focus on realistic photography or artistic style descriptions.',
-    'fal-ai/luma-photon/flash': 'Create a prompt for Luma Photon Flash that focuses on photorealistic rendering, lighting effects, and accurate reflections. Use descriptive lighting terms and camera settings references.',
-    'fal-ai/recraft/v3/text-to-image': 'Create a prompt for Recraft V3 that emphasizes clean design, professional illustrations, and specific style categories. Focus on visual design elements and composition.',
-    'fal-ai/ideogram/v3': 'Create a prompt for Ideogram V3 that emphasizes typography, text integration, artistic illustrations, and visual design. Focus on creative elements with excellent text rendering capabilities.',
-    'fal-ai/ideogram/v2a/turbo': 'Create a prompt for Ideogram V2a Turbo optimized for fast generation with good typography and poster design capabilities. Use clear descriptions with style categories.'
+    'flux-pro-plus': 'Create a prompt for Flux Pro that emphasizes photorealistic details, lighting quality, and composition. Use professional photography terms and references to artists or styles.',
+    'imagen4': 'Create a prompt for Google Imagen 4 that emphasizes natural language descriptions, clear subject details, and composition guidance. Focus on realistic photography or artistic style descriptions.',
+    'fast': 'Create a prompt that focuses on photorealistic rendering, lighting effects, and accurate reflections. Use descriptive lighting terms and camera settings references.',
+    'auto': 'Create a prompt that emphasizes clean design, professional illustrations, and specific style categories. Focus on visual design elements and composition.',
+    'ideogram': 'Create a prompt for Ideogram that emphasizes typography, text integration, artistic illustrations, and visual design. Focus on creative elements with excellent text rendering capabilities.',
+    'flux-2-max': 'Create a prompt for Flux 2 Max that emphasizes the highest quality output with photorealistic details, dramatic lighting, and cinematic composition.',
+    'seedream-4-5': 'Create a prompt for Seedream that emphasizes artistic creativity with painterly styles, dreamlike atmospheres, and vibrant color palettes.',
+    'gpt-high': 'Create a prompt with natural language descriptions focusing on clear subject details, composition, and mood. Be descriptive but conversational.',
   };
 
   return modelInstructions[modelId] || 'Create a detailed and creative prompt for an AI image generator, with clear descriptive terms and style references.';

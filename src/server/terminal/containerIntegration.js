@@ -32,7 +32,7 @@ class ContainerIntegration {
         `FEATURES=${JSON.stringify(config.languages)}`,
         'TERM=xterm-256color',
         'SHELL=/bin/bash',
-        'HOME=/home/xenolabs-user'
+        'HOME=/home/xenostudio-user'
       ];
 
       // Prepare port bindings for development servers
@@ -48,7 +48,7 @@ class ContainerIntegration {
 
       // Prepare volume mounts
       const binds = [
-        `xenoos-user-${userId}:/home/xenolabs-user:rw`,
+        `xenoos-user-${userId}:/home/xenostudio-user:rw`,
         `xenoos-shared-${userId}:/shared:rw`
       ];
 
@@ -57,8 +57,8 @@ class ContainerIntegration {
         Image: this.terminalContainerImage,
         name: containerName,
         Env: env,
-        WorkingDir: '/home/xenolabs-user',
-        User: 'xenolabs-user',
+        WorkingDir: '/home/xenostudio-user',
+        User: 'xenostudio-user',
         Cmd: ['/bin/bash', '-l'],
         ExposedPorts: exposedPorts,
         HostConfig: {
@@ -170,7 +170,7 @@ class ContainerIntegration {
         setupCommands.push(
           'wget -q https://go.dev/dl/go1.21.0.linux-amd64.tar.gz',
           'tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz',
-          'echo "export PATH=$PATH:/usr/local/go/bin" >> /home/xenolabs-user/.bashrc',
+          'echo "export PATH=$PATH:/usr/local/go/bin" >> /home/xenostudio-user/.bashrc',
           'rm go1.21.0.linux-amd64.tar.gz'
         );
       }
@@ -178,14 +178,14 @@ class ContainerIntegration {
       if (languages.rust) {
         setupCommands.push(
           'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
-          'echo "source ~/.cargo/env" >> /home/xenolabs-user/.bashrc'
+          'echo "source ~/.cargo/env" >> /home/xenostudio-user/.bashrc'
         );
       }
 
       if (languages.java) {
         setupCommands.push(
           'apt-get install -y openjdk-17-jdk maven gradle',
-          'echo "export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> /home/xenolabs-user/.bashrc'
+          'echo "export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> /home/xenostudio-user/.bashrc'
         );
       }
 
@@ -194,7 +194,7 @@ class ContainerIntegration {
         'apt-get install -y git curl wget vim nano htop tree jq unzip zip',
         'apt-get install -y build-essential gcc g++ make cmake',
         'apt-get clean',
-        'chown -R xenolabs-user:xenolabs-user /home/xenolabs-user'
+        'chown -R xenostudio-user:xenostudio-user /home/xenostudio-user'
       );
 
       // Execute setup commands
@@ -446,7 +446,7 @@ class ContainerIntegration {
   /**
    * Execute command in container
    */
-  async executeCommand(containerId, command, workingDir = '/home/xenolabs-user') {
+  async executeCommand(containerId, command, workingDir = '/home/xenostudio-user') {
     try {
       const container = this.docker.getContainer(containerId);
       

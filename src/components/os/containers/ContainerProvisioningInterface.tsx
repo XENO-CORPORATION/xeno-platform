@@ -199,7 +199,7 @@ const ContainerProvisioningInterface: React.FC<ContainerProvisioningInterfacePro
                   marginBottom: '20px',
                 }}
               >
-                XenoLabs Terminal
+                XenoStudio Terminal
               </div>
             </div>
 

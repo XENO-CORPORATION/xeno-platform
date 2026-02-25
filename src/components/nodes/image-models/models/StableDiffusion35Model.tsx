@@ -1,7 +1,7 @@
 import React from 'react'; // Keep React import for JSX in renderModelSpecificSettings
 import { BaseImageModel } from '../BaseImageModel';
 import { ImageModelSettings, ImageGenerationResponse } from '../ImageModelInterface';
-import { generateImage, ReplicateModels, getReplicateSettings } from '../../../../services/replicateService';
+import { generateImage, XenoModels, getXenoSettings } from '../../../../services/xenoImageService';
 
 export class StableDiffusion35Model extends BaseImageModel {
   name = 'Stable Diffusion 3.5';
@@ -34,7 +34,7 @@ export class StableDiffusion35Model extends BaseImageModel {
     try {
       // Convert our internal settings to Replicate API format
       const replicateSettings = {
-        ...getReplicateSettings(settings),
+        ...getXenoSettings(settings),
         // Add model-specific settings
         scheduler: settings.sampler || "K_EULER_ANCESTRAL",
         apply_watermark: false,
@@ -44,7 +44,7 @@ export class StableDiffusion35Model extends BaseImageModel {
       
       // Call Replicate API
       return await generateImage(
-        ReplicateModels.STABLE_DIFFUSION_XL,
+        XenoModels.STABLE_DIFFUSION_XL,
         prompt,
         replicateSettings
       );

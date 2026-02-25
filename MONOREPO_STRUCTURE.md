@@ -7,7 +7,7 @@
 ## 📁 Structure
 
 ```
-xenolabs/  (ROOT - This is the monorepo)
+xenostudio/  (ROOT - This is the monorepo)
 │
 ├── libs/                           ← Core Libraries
 │   ├── xeno-lib/                   ← Image processing engine (Rust)
@@ -21,7 +21,7 @@ xenolabs/  (ROOT - This is the monorepo)
 │       ├── python/                 ← Python bindings (PyO3)
 │       └── nodejs/                 ← Node.js bindings (NAPI-RS)
 │
-├── src/                            ← xenolabs Studio Frontend
+├── src/                            ← xenostudio Studio Frontend
 ├── public/                         ← Static assets
 ├── database/                       ← Database files
 ├── storage/                        ← File storage
@@ -58,7 +58,7 @@ cd libs/xeno-edit/server && cargo build --release
 ### **3. Start Development**
 
 ```bash
-# Start xenolabs studio (frontend)
+# Start xenostudio studio (frontend)
 npm run dev
 
 # Start xeno-edit REST API (in another terminal)
@@ -96,7 +96,7 @@ cargo run --release
 # The API starts on http://localhost:3000
 ```
 
-### **Working on xenolabs Studio (Frontend)**
+### **Working on xenostudio Studio (Frontend)**
 
 ```bash
 # From root
@@ -123,7 +123,7 @@ npm run dev
 ## 🔗 How Libraries Connect
 
 ```
-xenolabs Studio (Frontend)
+xenostudio Studio (Frontend)
     ↓ HTTP calls
 xeno-edit REST API (libs/xeno-edit/server)
     ↓ Uses
@@ -153,7 +153,7 @@ Images/Videos
 3. Add to REST API in `libs/xeno-edit/server/src/processing.rs`
 4. Use in frontend via API call
 
-### **To xenolabs Studio:**
+### **To xenostudio Studio:**
 
 1. Make changes in `src/`
 2. Call REST API for image processing
@@ -195,7 +195,7 @@ cargo build --release
 
 - **xeno-lib:** See `libs/xeno-lib/README.md`
 - **REST API:** See `libs/xeno-edit/server/README.md`
-- **xenolabs Studio:** See main `README.md`
+- **xenostudio Studio:** See main `README.md`
 
 ---
 
@@ -204,6 +204,6 @@ cargo build --release
 **This is now a unified monorepo containing:**
 - ✅ Core image processing library (xeno-lib)
 - ✅ REST API server (xeno-edit)
-- ✅ xenolabs video studio (frontend)
+- ✅ xenostudio video studio (frontend)
 
 **Everything works together seamlessly!** 🚀

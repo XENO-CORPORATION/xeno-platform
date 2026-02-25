@@ -2,7 +2,7 @@
   "name": "xeno-platform",
   "version": "1.0.0",
   "private": true,
-  "description": "XENO Platform - Monorepo for xenolabs studio and core libraries",
+  "description": "XENO Platform - Monorepo for xenostudio studio and core libraries",
   "scripts": {
     "start": "vite --host 0.0.0.0 --port 5173",
     "test": "echo \"Error: no test specified\" && exit 1",

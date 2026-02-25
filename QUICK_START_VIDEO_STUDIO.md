@@ -22,7 +22,7 @@
 **IMPORTANT:** Run this first to create the required tables:
 
 ```bash
-cd D:\DOCUMENTS\root\dev\xenolabs
+cd D:\DOCUMENTS\root\dev\xenostudio
 node src/server/database/migrate-video.js
 ```
 
@@ -61,8 +61,8 @@ Look for this log line:
 ### Step 3: Test Authentication
 
 1. **Login** to get a JWT token:
-   - Go to the Xenolabs app
-   - Login with: `admin@xenolabs.local` / `xenolabs123`
+   - Go to the XenoStudio app
+   - Login with: `admin@xenostudio.local` / `xenostudio123`
    - Or create a new account
 
 2. **Check Credits**:
@@ -241,7 +241,7 @@ curl -X GET http://localhost:8080/api/video/render/JOB_ID/status \
 docker ps | grep postgres
 
 # Check connection
-psql -h localhost -p 5433 -U postgres -d xenolabs
+psql -h localhost -p 5433 -U postgres -d xenostudio
 
 # If tables exist, drop them first (CAUTION: deletes data)
 DROP TABLE IF EXISTS video_project_sessions CASCADE;

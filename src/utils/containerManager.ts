@@ -136,14 +136,14 @@ export function generateDockerConfig(
       
       // Storage binds
       Binds: [
-        `${userStoragePath}:/home/xenolabs-user:rw`,
+        `${userStoragePath}:/home/xenostudio-user:rw`,
         `${sharedStoragePath}:/shared:rw`,
         // Add temporary directory
         `/tmp/xenoos-${userId}:/tmp:rw`,
       ],
       
       // Network configuration
-      NetworkMode: 'xenolabs-network',
+      NetworkMode: 'xenostudio-network',
       
       // Security options
       SecurityOpt: [
@@ -177,8 +177,8 @@ export function generateDockerConfig(
       // Development environment variables
       'TERM=xterm-256color',
       'SHELL=/bin/bash',
-      'HOME=/home/xenolabs-user',
-      'USER=xenolabs-user',
+      'HOME=/home/xenostudio-user',
+      'USER=xenostudio-user',
     ],
     
     // Exposed ports for web development
@@ -193,10 +193,10 @@ export function generateDockerConfig(
     },
     
     // Working directory
-    WorkingDir: '/home/xenolabs-user',
+    WorkingDir: '/home/xenostudio-user',
     
     // User configuration
-    User: 'xenolabs-user',
+    User: 'xenostudio-user',
     
     // Labels for management
     Labels: {
@@ -357,10 +357,10 @@ export function generateInstallScript(languages: LanguageConfig): string {
     'apt-get clean',
     'rm -rf /var/lib/apt/lists/*',
     '',
-    '# Create xenolabs user',
-    'useradd -m -s /bin/bash xenolabs-user',
-    'usermod -aG sudo xenolabs-user',
-    'echo "xenolabs-user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers',
+    '# Create xenostudio user',
+    'useradd -m -s /bin/bash xenostudio-user',
+    'usermod -aG sudo xenostudio-user',
+    'echo "xenostudio-user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers',
     '',
     'echo "Container setup completed successfully!"'
   );
