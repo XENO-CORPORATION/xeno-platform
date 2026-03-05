@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { 
   Send, Paperclip, Settings, Palette, History, 
@@ -133,6 +134,9 @@ const PresetThumbnail = ({ category, width, height }: { category: string, width:
 };
 
 const ImageStudio: React.FC = () => {
+  const navigate = useNavigate();
+  const { projectId: routeProjectId } = useParams<{ projectId?: string }>();
+
   // Extract ALL state variables from the original file exactly as they are
   const [inputValue, setInputValue] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -364,12 +368,25 @@ const ImageStudio: React.FC = () => {
       }).then(project => {
         if (project) {
           console.log('✅ Auto-created project:', project.id);
+          navigate(`/overview/studio/image/${project.id}`, { replace: true });
         }
       }).catch(err => {
         console.error('❌ Failed to auto-create project:', err);
       });
     }
   }, [databaseHook.isAuthenticated, databaseHook.currentProject, messages.length]);
+
+  // Load project from URL route parameter
+  useEffect(() => {
+    if (routeProjectId && routeProjectId !== databaseHook.currentProject?.id) {
+      databaseHook.loadProject(routeProjectId).then(() => {
+        databaseHook.loadSessionsFromDatabase();
+      }).catch(err => {
+        console.error('❌ Failed to load project from URL:', err);
+        navigate('/overview/studio/image', { replace: true });
+      });
+    }
+  }, [routeProjectId]);
 
   // URL cache for managing blob URLs
   const urlCache = useMemo(() => new URLObjectCache(), []);
@@ -1584,7 +1601,7 @@ const ImageStudio: React.FC = () => {
     // If no current project exists and user is authenticated, create one
     if (databaseHook.isAuthenticated && !databaseHook.currentProject) {
       console.log('📂 No current project - creating one...');
-      await databaseHook.createProject({
+      const project = await databaseHook.createProject({
         title: 'Untitled Project',
         model: selectedModel,
         seed: seed || undefined,
@@ -1592,6 +1609,9 @@ const ImageStudio: React.FC = () => {
         aspect_ratio: aspectRatio,
         num_images: numImages
       });
+      if (project) {
+        navigate(`/overview/studio/image/${project.id}`, { replace: true });
+      }
     }
     setIsProjectManagerOpen(!isProjectManagerOpen);
   };
@@ -1607,6 +1627,9 @@ const ImageStudio: React.FC = () => {
 
         // Load sessions for this project
         await databaseHook.loadSessionsFromDatabase();
+
+        // Update URL to reflect the loaded project
+        navigate(`/overview/studio/image/${project.id}`, { replace: true });
 
         console.log('✅ Project loaded successfully');
       } catch (error) {
@@ -1741,10 +1764,11 @@ const ImageStudio: React.FC = () => {
 
       if (project) {
         console.log('✅ Database project created:', project.id);
-        
+        navigate(`/overview/studio/image/${project.id}`, { replace: true });
+
         // Set as active session so history updates work correctly
         historyHook.setActiveSessionId(project.id);
-        
+
         // Reload history to show the new project
         historyHook.setGenerationHistory(prev => [
           {
@@ -1780,6 +1804,7 @@ const ImageStudio: React.FC = () => {
     if (session && session.isFromDatabase) {
       // If it's a database project, check if it has canvas data
       console.log('📂 Loading database project:', sessionId);
+      navigate(`/overview/studio/image/${sessionId}`, { replace: true });
 
       try {
         const result = await imageStudioService.getProject(sessionId);
@@ -1930,7 +1955,8 @@ const ImageStudio: React.FC = () => {
         if (project) {
           // Set as active session
           historyHook.setActiveSessionId(project.id);
-          
+          navigate(`/overview/studio/image/${project.id}`, { replace: true });
+
           // Update it with initial canvas data (using base64)
           await imageStudioService.updateProject(project.id, {
             canvas_data: {
@@ -2488,7 +2514,7 @@ const ImageStudio: React.FC = () => {
         }
       `}</style>
       
-  <div className="w-full h-full flex flex-col relative bg-[#09090b]">
+  <div className="w-full h-full flex flex-col relative">
     {/* Canvas Interaction Blur Overlay - Persistent to prevent flicker */}
     <div 
       className="absolute top-0 left-0 w-full h-full z-[100]"

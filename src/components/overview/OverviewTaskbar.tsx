@@ -245,6 +245,8 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isClosingMobileMenu, setIsClosingMobileMenu] = useState(false);
   const taskbarRef = useRef<HTMLDivElement>(null);
+  const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
+  const [hoveredSubcategory, setHoveredSubcategory] = useState<string | null>(null);
 
   // Mobile navigation experiment state
   const [mobileNavMode, setMobileNavMode] = useState<MobileNavMode>('radial');
@@ -286,6 +288,17 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
   // Function to check if a specific page is active
   const isPageActive = (pagePath: string) => {
     return location.pathname === pagePath;
+  };
+
+  const formatSubcategoryLabel = (pageId: string) => {
+    return pageId
+      .split(/[-_]/)
+      .map((part) => {
+        if (!part) return part;
+        if (part.toLowerCase() === 'llm') return 'LLM';
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      })
+      .join(' ');
   };
 
   // Keep dropdown open for active section
@@ -969,47 +982,82 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
 
         {/* Playground Categories - Parent Buttons */}
         <div className="w-full space-y-2 flex flex-col items-center">
-          {playgroundSections.map((section) => (
-            <div key={section.id} className="w-full flex flex-col items-center">
-              {/* Category Button */}
-              <button
-                onClick={() => handleCategoryClick(section.id)}
-                className={`flex items-center justify-center rounded-md font-medium transition-colors duration-300 ${
-                  openDropdown === section.id
-                    ? 'bg-white/20 text-white'
-                    : 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
-                }`}
-                style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-                title={section.name}
+          {playgroundSections.map((section) => {
+            const isTooltipVisible = hoveredCategory === section.id;
+            return (
+              <div
+                key={section.id}
+                className="w-full flex flex-col items-center"
               >
-                {section.icon}
-              </button>
+              {/* Category Button */}
+              <div
+                className="relative group w-[34px] flex justify-center"
+                onMouseEnter={() => setHoveredCategory(section.id)}
+                onMouseLeave={() => setHoveredCategory((prev) => (prev === section.id ? null : prev))}
+              >
+                <button
+                  onClick={() => handleCategoryClick(section.id)}
+                  className={`flex items-center justify-center rounded-md font-medium transition-colors duration-300 ${
+                    openDropdown === section.id
+                      ? 'bg-white/20 text-white'
+                      : 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
+                  }`}
+                  style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                  aria-label={section.name}
+                >
+                  {section.icon}
+                </button>
+                <span
+                  className="taskbar-tooltip"
+                  data-tooltip-state={isTooltipVisible ? 'visible' : 'hidden'}
+                >
+                  {section.name}
+                </span>
+              </div>
 
               {/* Inline Dropdown Container */}
               {openDropdown === section.id && (
                 <div style={{ width: 34 }} className="mt-1 mb-1 p-1 bg-white/5 backdrop-blur-sm border border-white/5 rounded-md space-y-1 flex flex-col items-center transition-all duration-300">
-                  {section.pages.map((page) => (
-                    <button
-                      key={page.id}
-                      onClick={() => {
-                        navigate(page.path);
-                        // Keep dropdown open for active section
-                      }}
-                      className={`flex items-center justify-center rounded-md font-medium transition-colors duration-300 ${
-                        isPageActive(page.path)
-                          ? 'bg-white/20 text-white'
-                          : 'bg-white/5 text-white/70 hover:bg-white/15 hover:text-white'
-                      }`}
-                      style={{ width: 28, height: 28, minWidth: 28, minHeight: 28, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-                      title={`${section.name} - ${page.id}`}
-                    >
-                      {page.icon}
-                    </button>
-                  ))}
+                  {section.pages.map((page) => {
+                    const subcategoryKey = `${section.id}:${page.id}`;
+                    const isSubcategoryActive = isPageActive(page.path);
+                    const isSubcategoryTooltipVisible = hoveredSubcategory === subcategoryKey;
+                    return (
+                      <div
+                        key={page.id}
+                        className="relative w-[28px] flex justify-center"
+                        onMouseEnter={() => setHoveredSubcategory(subcategoryKey)}
+                        onMouseLeave={() => setHoveredSubcategory((prev) => (prev === subcategoryKey ? null : prev))}
+                      >
+                        <button
+                          onClick={() => {
+                            navigate(page.path);
+                            // Keep dropdown open for active section
+                          }}
+                          className={`flex items-center justify-center rounded-md font-medium transition-colors duration-300 ${
+                            isSubcategoryActive
+                              ? 'bg-white/20 text-white'
+                              : 'bg-white/5 text-white/70 hover:bg-white/15 hover:text-white'
+                          }`}
+                          style={{ width: 28, height: 28, minWidth: 28, minHeight: 28, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                          title={`${section.name} - ${page.id}`}
+                        >
+                          {page.icon}
+                        </button>
+                        <span
+                          className="taskbar-tooltip taskbar-subcategory-tooltip"
+                          data-tooltip-state={isSubcategoryTooltipVisible ? 'visible' : 'hidden'}
+                        >
+                          {formatSubcategoryLabel(page.id)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
-          ))}
+          );
+          })}
         </div>
 
 

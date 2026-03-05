@@ -914,7 +914,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
   // Redraw canvas when state changes
   useEffect(() => {
     renderCompositeCanvas();
-  }, [imageObj, scale, translateX, translateY, imageAdjustments, canvasSize, layers]);
+  }, [imageObj, scale, translateX, translateY, imageAdjustments, canvasSize, layers, activeProjectSettings]);
 
   // Keyboard controls
   useEffect(() => {
@@ -2966,10 +2966,23 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
 
     // Save current transform
     ctx.save();
-    
+
     // Apply viewport transform (zoom and pan)
     ctx.translate(translateX, translateY);
     ctx.scale(scale, scale);
+
+    // Draw checkerboard pattern behind the image area for transparent backgrounds
+    if (activeProjectSettings?.backgroundColor === 'transparent') {
+      const w = imageObj.width;
+      const h = imageObj.height;
+      const checkSize = 16;
+      for (let y = 0; y < h; y += checkSize) {
+        for (let x = 0; x < w; x += checkSize) {
+          ctx.fillStyle = ((x / checkSize + y / checkSize) % 2 === 0) ? '#e0e0e0' : '#c0c0c0';
+          ctx.fillRect(x, y, Math.min(checkSize, w - x), Math.min(checkSize, h - y));
+        }
+      }
+    }
 
     // Recursive function to render layers and groups
     const renderLayerRecursive = (layer: Layer, parentOpacity: number = 1) => {
@@ -4598,7 +4611,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             onMouseEnter={() => setIsHoveringUI(true)}
             onMouseLeave={() => setIsHoveringUI(false)}
           >
-            <div className="bg-black/70 backdrop-blur-md px-4 py-1.5 flex items-center gap-4 rounded-full border border-white/20">
+            <div className="bg-black/70 backdrop-blur-md px-4 py-1.5 flex items-center gap-4 rounded-lg border border-white/20">
               {/* DOC Info */}
               {activeProjectSettings && (
                 <div className="flex items-center gap-1.5 border-r border-white/10 pr-4 mr-1">

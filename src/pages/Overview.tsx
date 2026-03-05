@@ -16,6 +16,7 @@ import { Beaker, Image, Video, ArrowUpRight, BrainCircuit, Palette, Sparkles, Me
 // Import playground interfaces with gallery
 import ImageGenerationInterface from '../components/playground/Generation/ImageGenerationInterface';
 import ImageGenerationInterface2 from '../components/playground/Generation/ImageGenerationInterface2';
+import ImageGenerationInterface2Copy from '../components/playground/Generation/ImageGenerationInterface2Copy';
 import ImageUpscaleInterface from '../components/playground/Enhance/ImageEnhanceInterface';
 import VideoUpscaleInterface from '../components/playground/Enhance/VideoEnhanceInterface';
 import MultiChatContainer from '../components/playground/Chat/MultiChatContainer';
@@ -223,6 +224,8 @@ const OverviewContent: React.FC = () => {
             <Route path="generation/image" element={<ImageGenerationInterface />} />
             <Route path="generation/image2" element={<ImageGenerationInterface2 />} />
             <Route path="/overview/generation/image2" element={<ImageGenerationInterface2 />} />
+            <Route path="generation/image2-copy" element={<ImageGenerationInterface2Copy />} />
+            <Route path="/overview/generation/image2-copy" element={<ImageGenerationInterface2Copy />} />
             <Route path="generation/3d" element={<React.Suspense fallback={<div>Loading 3D Studio...</div>}><ThreeDGenerationInterface /></React.Suspense>} />
             <Route path="generation/video" element={<VideoGenerationInterface />} />
             <Route path="generation/audio" element={<AudioGenerationInterface />} />
@@ -239,6 +242,7 @@ const OverviewContent: React.FC = () => {
             <Route path="search/finance" element={<FinanceSearchInterface />} />
             <Route path="search/shopping" element={<ShoppingSearchInterface />} />
             <Route path="studio/image" element={<ImageStudioInterface />} />
+            <Route path="studio/image/:projectId" element={<ImageStudioInterface />} />
             <Route path="studio/video" element={<React.Suspense fallback={<div>Loading Video Studio...</div>}><VideoStudioInterface /></React.Suspense>} />
             <Route path="studio/audio" element={<AudioStudioInterface />} />
             <Route path="studio/inpainting" element={<ImageInpaintingStudio />} />

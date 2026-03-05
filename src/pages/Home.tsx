@@ -19,10 +19,10 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-[#08080a] text-white font-['Inter',sans-serif] overflow-x-hidden antialiased">
-      <Header onGetStarted={handleGetStarted} />
+      <Header onGetStarted={handleGetStarted} visible={true} />
 
-      <main>
-        <HeroSection onGetStarted={handleGetStarted} />
+      <main className="pt-[46px]">
+        <HeroSection />
         <BentoShowcase />
         <section id="features">
           <FeaturesSection />
