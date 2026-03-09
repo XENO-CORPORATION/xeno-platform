@@ -52,6 +52,8 @@ import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import { databaseMiddleware } from './middleware/database.js';
+import blogRoutes from './routes/blogRoutes.js';
+import learnRoutes from './routes/learnRoutes.js';
 import { authMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { runMigrations } from './services/migrationService.js';
@@ -468,6 +470,8 @@ console.log('🖼️ Office Canvas routes integrated: /api/office-canvas/*');
 
 // Download API routes (YouTube, Twitter, Instagram, TikTok downloads)
 app.use('/api/download', downloadRoutes);
+app.use('/api/blog', databaseMiddleware, blogRoutes);
+app.use('/api/learn', databaseMiddleware, learnRoutes);
 console.log('⬇️ Download routes integrated: /api/download/*');
 
 console.log('✅ Custom routes integrated successfully');

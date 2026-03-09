@@ -89,9 +89,9 @@ const SECTION_DATA: Record<string, { items: { label: string; desc: string }[] }>
 // Each word occupies a slice of the 0–1 scroll progress
 // Expanded ranges for 800vh runway to give sub-items enough scroll room
 const WORD_RANGES: [number, number][] = [
-  [0.10, 0.32], // EXPLORE (starts after hero fully fades at 6%)
-  [0.32, 0.57], // CREATE
-  [0.57, 0.82], // INNOVATE
+  [0.04, 0.28], // EXPLORE
+  [0.28, 0.55], // CREATE
+  [0.55, 0.82], // INNOVATE
 ];
 
 /* ─── Single word + sub-items + 16:9 container phase ─── */
@@ -100,12 +100,10 @@ function WordPhase({
   word,
   range,
   scrollYProgress,
-  showGhost = false,
 }: {
   word: string;
   range: [number, number];
   scrollYProgress: import('framer-motion').MotionValue<number>;
-  showGhost?: boolean;
 }) {
   const [start, end] = range;
   const span = end - start;
@@ -140,7 +138,7 @@ function WordPhase({
 
       // Word's left edge pushed further left from the sidebar,
       // Word's TOP edge aligns with landing's top (top of sidebar column, beside the panel)
-      const targetLeft = landingRect.left - 320;
+      const targetLeft = landingRect.left - 235;
       const targetTop = landingRect.top - 100;
 
       setOffset({
@@ -156,19 +154,13 @@ function WordPhase({
   }, []);
 
   // Sub-ranges within this word's range (adjusted for sub-item scroll)
-  const fadeInEnd   = start + span * 0.15;  // 0-15%: word fades in centered
-  const slideEnd    = start + span * 0.30;  // 15-30%: word slides to top-left
-  const subStart    = start + span * 0.30;  // 30%: sub-item scroll begins
+  const fadeInEnd   = start + span * 0.10;  // 0-10%: word fades in centered
+  const slideEnd    = start + span * 0.22;  // 10-22%: word slides to top-left
+  const revealStart = start + span * 0.32;  // 32%: pause, then sub-items start appearing
+  const revealEnd   = start + span * 0.45;  // 32-45%: sub-items appear one by one
+  const subStart    = start + span * 0.45;  // 45%: fill animation begins
   const subEnd      = start + span * 0.85;  // 85%: sub-item scroll ends
   const fadeOutStart = start + span * 0.85; // 85-100%: everything fades out
-
-  // Ghost word (bg-colored) appears earlier than the white word
-  const ghostEarlyStart = 0.03;
-  const ghostOpacity = useTransform(
-    scrollYProgress,
-    [ghostEarlyStart, ghostEarlyStart + span * 0.08, start + span * 0.10, fadeInEnd],
-    [0, 1, 1, 0],
-  );
 
   // Word opacity: fade in 0→1, hold through sub-items, fade out 1→0
   const wordOpacity = useTransform(
@@ -207,66 +199,91 @@ function WordPhase({
     [0, 1, 1, 0],
   );
 
-  // Active sub-item index: derived from progress within the sub-item scroll range
-  // Maps subStart→subEnd to 0→items.length, then floor-clamped
-  const activeIndexRaw = useTransform(
+  // Divider line: appears only after word has landed
+  const dividerOpacity = useTransform(
     scrollYProgress,
-    [subStart, subEnd],
-    [0, items.length],
+    [slideEnd, slideEnd + span * 0.05, fadeOutStart, end],
+    [0, 1, 1, 0],
   );
 
-  const [activeIndex, setActiveIndex] = useState(0);
+  // Default preview: visible from sidebar appear until first item fill starts
+  const defaultPreviewOpacity = useTransform(
+    scrollYProgress,
+    [slideEnd, slideEnd + 0.01, subStart - 0.01, subStart],
+    [0, 1, 1, 0],
+  );
 
-  useEffect(() => {
-    const unsubscribe = activeIndexRaw.on('change', (v) => {
-      const clamped = Math.max(0, Math.min(items.length - 1, Math.floor(v)));
-      setActiveIndex(clamped);
-    });
-    return unsubscribe;
-  }, [activeIndexRaw, items.length]);
-
-  // Per-item opacity for crossfade in the 16:9 panel
-  const itemOpacities = items.map((_, i) => {
-    const itemStart = subStart + ((subEnd - subStart) / items.length) * i;
-    const itemEnd   = subStart + ((subEnd - subStart) / items.length) * (i + 1);
-    const fadeIn    = itemStart;
-    const fadeInDone = itemStart + (itemEnd - itemStart) * 0.15;
-    const fadeOutBegin = itemEnd - (itemEnd - itemStart) * 0.15;
-    const fadeOut   = itemEnd;
-
+  // Staggered reveal: each item fades in one by one between slideEnd and revealEnd
+  const revealSpan = revealEnd - revealStart;
+  const itemRevealOpacities = items.map((_, i) => {
+    const rStart = revealStart + (revealSpan / items.length) * i;
+    const rEnd = rStart + (revealSpan / items.length) * 0.7;
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useTransform(
       scrollYProgress,
-      [fadeIn, fadeInDone, fadeOutBegin, fadeOut],
+      [rStart, rEnd, fadeOutStart, end],
       [0, 1, 1, 0],
     );
   });
 
-  return (
-    <>
-    {/* Ghost word — bg-colored, appears before the white word (EXPLORE only) */}
-    {showGhost && (
-      <motion.div
-        className="absolute inset-0 flex items-center justify-center pointer-events-none"
-        style={{ opacity: ghostOpacity }}
-      >
-        <motion.span
-          className="absolute font-bold uppercase whitespace-nowrap"
-          style={{
-            fontSize: 'clamp(5rem, 14vw, 12rem)',
-            color: 'rgba(255,255,255,0.08)',
-            letterSpacing: wordLetterSpacing,
-            scale: wordScale,
-            x: wordX,
-            y: wordY,
-            transformOrigin: 'left top',
-          }}
-        >
-          {word}
-        </motion.span>
-      </motion.div>
-    )}
+  // First item gets 2x scroll time, rest share equally
+  const totalSpan = subEnd - subStart;
+  const firstWeight = 2;
+  const totalWeight = firstWeight + (items.length - 1);
 
+  // Compute weighted ranges for each item
+  const itemStarts: number[] = [];
+  const itemEnds: number[] = [];
+  let cursor = subStart;
+  items.forEach((_, i) => {
+    const w = i === 0 ? firstWeight : 1;
+    const len = totalSpan * (w / totalWeight);
+    itemStarts.push(cursor);
+    itemEnds.push(cursor + len);
+    cursor += len;
+  });
+
+  // Active index derived from weighted ranges
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    const unsubscribe = scrollYProgress.on('change', (v) => {
+      let idx = 0;
+      for (let i = 0; i < items.length; i++) {
+        if (v >= itemStarts[i]) idx = i;
+      }
+      setActiveIndex(Math.min(idx, items.length - 1));
+    });
+    return unsubscribe;
+  }, [scrollYProgress, items.length]);
+
+  // Per-item opacity for crossfade in the 16:9 panel + fill progress
+  const itemOpacities: import('framer-motion').MotionValue<number>[] = [];
+  const itemFills: import('framer-motion').MotionValue<string>[] = [];
+
+  items.forEach((_, i) => {
+    const iStart = itemStarts[i];
+    const iEnd = itemEnds[i];
+    const fadeInDone = iStart + (iEnd - iStart) * 0.15;
+    const fadeOutBegin = iEnd - (iEnd - iStart) * 0.15;
+
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    itemOpacities.push(useTransform(
+      scrollYProgress,
+      [iStart, fadeInDone, fadeOutBegin, iEnd],
+      [0, 1, 1, 0],
+    ));
+
+    // Fill progress: 0% → 100% width across the item's scroll range
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    itemFills.push(useTransform(
+      scrollYProgress,
+      [iStart, iEnd],
+      ['0%', '100%'],
+    ));
+  });
+
+  return (
     <motion.div
       className="absolute inset-0 flex items-center justify-center"
       style={{ opacity: wordOpacity }}
@@ -290,45 +307,69 @@ function WordPhase({
       {/* Layout container: sidebar + panel, centered in viewport */}
       <motion.div
         className="absolute inset-0 flex items-center justify-center"
-        style={{ opacity: sidebarOpacity, paddingLeft: '190px' }}
+        style={{ opacity: sidebarOpacity }}
       >
         <div
           className="relative"
-          style={{ width: '90vw', maxWidth: '1400px', height: '60vh', background: 'rgba(255,0,0,0.1)' }}
+          style={{ width: '95vw', maxWidth: '1800px', height: '60vh' }}
         >
           {/* Left column: word landing zone + divider + sub-item list — absolutely positioned */}
-          <div className="absolute flex flex-col" style={{ width: '240px', left: '0px', top: '80px', background: 'rgba(0,255,0,0.15)' }}>
+          <div className="absolute flex flex-col" style={{ width: '380px', left: '-35px', top: '80px' }}>
             {/* Landing target — word flies here, then divider + items below */}
             <div ref={landingRef} style={{ height: '8px' }} />
-            {/* Horizontal divider */}
-            <div className="h-px w-full bg-white/20 mb-4" />
+            {/* Horizontal divider — appears after word lands */}
+            <motion.div className="w-full bg-white/20 mb-4 rounded-sm" style={{ height: '2px', marginLeft: '23px', marginTop: '2px', opacity: dividerOpacity }} />
 
             {/* Item list */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-3" style={{ paddingLeft: '30px' }}>
               {items.map((item, i) => (
-                <div
+                <motion.div
                   key={item.label}
-                  className="flex items-center gap-2 transition-all duration-300"
+                  className="flex items-center gap-2"
                   style={{
-                    opacity: i === activeIndex ? 1 : 0.3,
+                    opacity: itemRevealOpacities[i],
                   }}
                 >
                   <span
-                    className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 transition-all duration-300"
+                    className="inline-block w-1.5 h-1.5 rounded-sm flex-shrink-0 transition-all duration-300"
                     style={{
                       backgroundColor: i === activeIndex ? 'white' : 'transparent',
                     }}
                   />
-                  <span className="text-white text-sm font-medium truncate">
+                  <motion.span
+                    className="text-3xl font-medium truncate"
+                    style={{
+                      backgroundImage: useTransform(
+                        itemFills[i],
+                        (v) => `linear-gradient(to right, rgba(255,255,255,1) ${v}, rgba(255,255,255,0.25) ${v})`,
+                      ),
+                      WebkitBackgroundClip: 'text',
+                      backgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                    }}
+                  >
                     {item.label}
-                  </span>
-                </div>
+                  </motion.span>
+                </motion.div>
               ))}
             </div>
           </div>
 
           {/* 16:9 panel — absolutely positioned, independent of left column */}
-          <div className="absolute rounded-lg border border-white/10 overflow-hidden bg-red-500/30" style={{ left: '360px', right: '0px', top: '0px', bottom: '0px' }}>
+          <div className="absolute rounded-lg border border-white/10 overflow-hidden" style={{ left: '440px', right: '0px', top: '0px', bottom: '0px' }}>
+
+            {/* Default preview — shown before sub-item fills begin */}
+            <motion.div
+              className="absolute inset-0 flex flex-col items-center justify-center px-8"
+              style={{ opacity: defaultPreviewOpacity }}
+            >
+              <span className="text-white text-3xl md:text-4xl font-semibold text-center">
+                {word}
+              </span>
+              <span className="mt-3 text-white/40 text-sm md:text-base text-center max-w-md">
+                Discover the tools that power your workflow
+              </span>
+            </motion.div>
 
             {/* Crossfading content layers */}
             {items.map((item, i) => (
@@ -349,7 +390,6 @@ function WordPhase({
         </div>
       </motion.div>
     </motion.div>
-    </>
   );
 }
 
@@ -398,8 +438,8 @@ const HeroSection: React.FC = () => {
   const runwayRef = useRef<HTMLDivElement>(null);
   const scrollYProgress = useRunwayProgress(runwayRef);
 
-  // Hero grid fades out over 0–6% of runway scroll
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.06], [1, 0]);
+  // Hero grid fades out over 0–4% of runway scroll (before EXPLORE lands)
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.04], [1, 0]);
 
   // Reduced motion: static fallback
   if (reducedMotion.current) {
@@ -433,7 +473,7 @@ const HeroSection: React.FC = () => {
   return (
     <>
       {/* ═══ SCROLL RUNWAY — hero grid + word sequence in one sticky viewport ═══ */}
-      <section ref={runwayRef} className="relative bg-[#08080a]" style={{ height: '800vh' }}>
+      <section ref={runwayRef} className="relative bg-[#08080a]" style={{ height: '1400vh' }}>
         <div className="sticky w-full overflow-hidden" style={{ top: '46px', height: 'calc(100svh - 46px)' }}>
 
           {/* Layer 1: Word phases (behind the grid) */}
@@ -443,7 +483,6 @@ const HeroSection: React.FC = () => {
               word={word}
               range={WORD_RANGES[i]}
               scrollYProgress={scrollYProgress}
-              showGhost={i === 0}
             />
           ))}
 

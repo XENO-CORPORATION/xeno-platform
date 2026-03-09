@@ -85,7 +85,20 @@ const ImageThumbnail: React.FC<{
   isSelectionMode: boolean;
   isSelected: boolean;
   onToggleSelect: (generationId: string, imageIndex: number, imageUrl: string) => void;
-}> = ({ imageUrl, generation, imageIndex, onDelete, onToggleFavorite, isSelectionMode, isSelected, onToggleSelect }) => {
+  minWidth: number;
+  rowHeight: number;
+}> = ({
+  imageUrl,
+  generation,
+  imageIndex,
+  onDelete,
+  onToggleFavorite,
+  isSelectionMode,
+  isSelected,
+  onToggleSelect,
+  minWidth,
+  rowHeight,
+}) => {
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -95,18 +108,18 @@ const ImageThumbnail: React.FC<{
 
   return (
     <div
-      className={`relative group bg-[#0a0a0c] rounded-md overflow-hidden border transition-all cursor-pointer ${
+      className={`relative group w-full bg-[#050505] rounded-[16px] overflow-hidden border transition-all cursor-pointer ${
         isSelected
           ? 'border-white/70 ring-2 ring-white/30'
           : 'border-[#2a2a2d] hover:border-[#4a4a4d]'
       }`}
-      style={{ aspectRatio: '1/1' }}
       onClick={handleClick}
+      style={{ minWidth: `${minWidth}px`, flex: `1 1 ${minWidth}px`, height: `${rowHeight}px` }}
     >
       <img
         src={imageUrl}
         alt="Generated"
-        className="w-full h-full object-cover"
+        className="w-full h-full object-cover block"
         loading="lazy"
       />
 
@@ -199,8 +212,11 @@ const ImageThumbnail: React.FC<{
   );
 };
 
-const LoadingSkeleton: React.FC = () => (
-  <div className="bg-[#0a0a0c] rounded-md overflow-hidden border border-[#2a2a2d] animate-pulse" style={{ aspectRatio: '1/1' }} />
+const LoadingSkeleton: React.FC<{ minWidth: number; rowHeight: number }> = ({ minWidth, rowHeight }) => (
+  <div
+    className="bg-[#0a0a0c] rounded-[16px] overflow-hidden border border-[#2a2a2d] animate-pulse"
+    style={{ minWidth: `${minWidth}px`, flex: `1 1 ${minWidth}px`, height: `${rowHeight}px` }}
+  />
 );
 
 export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
@@ -239,17 +255,24 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
   // Mobile filter panel state
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  // Get grid columns based on image size
-  const getGridCols = () => {
+  const thumbnailConfig = useMemo(() => {
     switch (imageSize) {
-      case 1: return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'; // Largest
-      case 2: return 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6';
-      case 3: return 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7'; // Default
-      case 4: return 'grid-cols-5 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8';
-      case 5: return 'grid-cols-6 sm:grid-cols-7 md:grid-cols-8 lg:grid-cols-10'; // Smallest
-      default: return 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7';
+      case 1: return { minWidth: 320, rowHeight: 320 };
+      case 2: return { minWidth: 300, rowHeight: 300 };
+      case 3: return { minWidth: 260, rowHeight: 260 };
+      case 4: return { minWidth: 230, rowHeight: 230 };
+      case 5: return { minWidth: 200, rowHeight: 200 };
+      default: return { minWidth: 260, rowHeight: 260 };
     }
-  };
+  }, [imageSize]);
+
+  const { minWidth, rowHeight } = thumbnailConfig;
+
+  const galleryFlexStyle = useMemo(() => ({
+    gap: '12px',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+  }), []);
 
   // Get unique values for filters
   const availableModels = useMemo(() => {
@@ -699,7 +722,7 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
                 <div className="text-xs text-white/40 mb-3 pl-1">{date}</div>
 
                 {/* Images Grid - Small thumbnails */}
-                <div className={`grid ${getGridCols()} gap-2`}>
+                <div className="flex flex-wrap" style={galleryFlexStyle}>
                   {gens.flatMap((gen) =>
                     gen.image_urls.map((imageUrl, imgIndex) => (
                       <ImageThumbnail
@@ -712,6 +735,8 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
                         isSelectionMode={isSelectionMode}
                         isSelected={isImageSelected(gen.id, imgIndex)}
                         onToggleSelect={toggleImageSelection}
+                        minWidth={minWidth}
+                        rowHeight={rowHeight}
                       />
                     ))
                   )}
@@ -738,8 +763,14 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
 
             {/* Loading skeletons */}
             {isLoading && (
-              <div className={`grid ${getGridCols()} gap-2`}>
-                {Array.from({ length: 10 }).map((_, i) => <LoadingSkeleton key={`skeleton-${i}`} />)}
+              <div className="flex flex-wrap" style={galleryFlexStyle}>
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <LoadingSkeleton
+                    key={`skeleton-${i}`}
+                    minWidth={minWidth}
+                    rowHeight={rowHeight}
+                  />
+                ))}
               </div>
             )}
           </div>

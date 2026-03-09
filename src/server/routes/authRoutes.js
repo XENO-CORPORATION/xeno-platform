@@ -69,6 +69,34 @@ const OAUTH_CONFIG = {
 // Frontend URL for redirects after OAuth
 const FRONTEND_URL = process.env.AUTH_FRONTEND_URL || 'https://xenostudio.ai';
 
+// Helper: build OAuth redirect URL
+function buildOAuthRedirectUrl(returnUrl, token, isNew) {
+  if (returnUrl && returnUrl.startsWith("xeno://")) {
+    const sep = returnUrl.includes("?") ? "&" : "?";
+    return `${returnUrl}${sep}token=${token}&isNew=${isNew}`;
+  }
+  return `${FRONTEND_URL}${returnUrl}?token=${token}&isNew=${isNew}`;
+}
+
+// For desktop app: serve an HTML page that triggers the deep link
+// Browsers block 302 redirects to custom protocols (xeno://)
+function handleOAuthRedirect(res, returnUrl, token, isNew) {
+  const targetUrl = buildOAuthRedirectUrl(returnUrl, token, isNew);
+  if (returnUrl && returnUrl.startsWith("xeno://")) {
+    res.send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Redirecting to XENO...</title>
+<meta http-equiv="refresh" content="0;url=${targetUrl}">
+<style>body{background:#08080a;color:#fff;font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.c{text-align:center}.s{width:20px;height:20px;border:2px solid rgba(255,255,255,0.1);border-top-color:rgba(255,255,255,0.5);border-radius:50%;animation:s .6s linear infinite;margin:16px auto}
+@keyframes s{to{transform:rotate(360deg)}}p{color:rgba(255,255,255,0.4);font-size:13px;margin-top:12px}a{color:rgba(255,255,255,0.6)}</style>
+</head><body><div class="c"><div class="s"></div><p>Opening XENO Desktop...</p>
+<p style="margin-top:24px"><a href="${targetUrl}">Click here if the app didn&apos;t open</a></p></div>
+</body></html>`);
+  } else {
+    res.redirect(targetUrl);
+  }
+}
+
 // ============================================
 // OAUTH HELPER FUNCTIONS
 // ============================================
@@ -1388,7 +1416,7 @@ router.get('/google/callback', async (req, res) => {
 
     // Redirect with token
     const returnUrl = stateData.returnUrl || '/overview';
-    res.redirect(`${FRONTEND_URL}${returnUrl}?token=${jwtToken}&isNew=${isNew}`);
+    handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
   } catch (error) {
     console.error('Google OAuth callback error:', error);
@@ -1531,7 +1559,7 @@ router.get('/github/callback', async (req, res) => {
     }
 
     const returnUrl = stateData.returnUrl || '/overview';
-    res.redirect(`${FRONTEND_URL}${returnUrl}?token=${jwtToken}&isNew=${isNew}`);
+    handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
   } catch (error) {
     console.error('GitHub OAuth callback error:', error);
@@ -1666,7 +1694,7 @@ router.get('/twitter/callback', async (req, res) => {
     }
 
     const returnUrl = stateData.returnUrl || '/overview';
-    res.redirect(`${FRONTEND_URL}${returnUrl}?token=${jwtToken}&isNew=${isNew}`);
+    handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
   } catch (error) {
     console.error('Twitter OAuth callback error:', error);

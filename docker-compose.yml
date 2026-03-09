@@ -140,6 +140,7 @@ services:
       dockerfile: Dockerfile
       target: production
     container_name: xenostudio-xeno-search
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
     environment:
       - SERVICE_NAME=xeno-search-service
       - SERVICE_VERSION=2.0.0

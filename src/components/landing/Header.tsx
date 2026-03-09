@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 
@@ -20,7 +21,9 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
     { label: 'Features', href: '#features' },
     { label: 'Use Cases', href: '#use-cases' },
     { label: 'Pricing', href: '#pricing' },
-    { label: 'Docs', href: '#docs' },
+    { label: 'Blog', href: '/blog' },
+    { label: 'Learn', href: '/learn' },
+    { label: 'Download', href: '/download' },
   ];
 
   return (
@@ -64,15 +67,25 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
 
           {/* Desktop Navigation - Center */}
           <nav className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-1 z-10">
-            {navItems.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className="relative px-3.5 py-2 text-[13px] text-white/50 hover:text-white transition-colors font-medium rounded-lg hover:bg-white/[0.04]"
-              >
-                {item.label}
-              </a>
-            ))}
+            {navItems.map((item) =>
+              item.href.startsWith('/') ? (
+                <Link
+                  key={item.label}
+                  to={item.href}
+                  className="relative px-3.5 py-2 text-[13px] text-white/50 hover:text-white transition-colors font-medium rounded-lg hover:bg-white/[0.04]"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  className="relative px-3.5 py-2 text-[13px] text-white/50 hover:text-white transition-colors font-medium rounded-lg hover:bg-white/[0.04]"
+                >
+                  {item.label}
+                </a>
+              )
+            )}
           </nav>
 
           {/* Desktop CTAs */}
@@ -83,12 +96,12 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
             >
               SIGN IN
             </button>
-            <button
-              onClick={onGetStarted}
+            <Link
+              to="/download"
               className="group flex items-center gap-1.5 px-4 py-2 bg-white text-[#08080a] text-[13px] font-semibold rounded-md hover:bg-white/90 transition-all hover:shadow-[0_2px_10px_rgba(255,255,255,0.10)]"
             >
               DOWNLOAD
-            </button>
+            </Link>
           </div>
 
           {/* Mobile Menu Button */}
@@ -116,19 +129,32 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
         {/* Menu Content */}
         <div className="relative flex flex-col h-full pt-24 px-6 pb-8">
           <nav className="flex-1 flex flex-col gap-1">
-            {navItems.map((item, i) => (
-              <a
-                key={item.label}
-                href={item.href}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`py-4 text-xl font-medium text-white/60 hover:text-white transition-all border-b border-white/[0.05] ${
-                  isMobileMenuOpen ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'
-                }`}
-                style={{ transitionDelay: `${i * 50}ms` }}
-              >
-                {item.label}
-              </a>
-            ))}
+            {navItems.map((item, i) => {
+              const cls = `py-4 text-xl font-medium text-white/60 hover:text-white transition-all border-b border-white/[0.05] ${
+                isMobileMenuOpen ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'
+              }`;
+              return item.href.startsWith('/') ? (
+                <Link
+                  key={item.label}
+                  to={item.href}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={cls}
+                  style={{ transitionDelay: `${i * 50}ms` }}
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={cls}
+                  style={{ transitionDelay: `${i * 50}ms` }}
+                >
+                  {item.label}
+                </a>
+              );
+            })}
           </nav>
 
           <div className="space-y-3 mt-auto">
@@ -141,15 +167,13 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
             >
               SIGN IN
             </button>
-            <button
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                onGetStarted();
-              }}
+            <Link
+              to="/download"
+              onClick={() => setIsMobileMenuOpen(false)}
               className="w-full py-3.5 bg-white text-[#08080a] font-semibold rounded-md flex items-center justify-center gap-2 hover:bg-white/90 transition-colors"
             >
               DOWNLOAD
-            </button>
+            </Link>
           </div>
         </div>
       </div>

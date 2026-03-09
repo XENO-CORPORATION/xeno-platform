@@ -1,7 +1,13 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
-import Home from './pages/Home';
+import Home from "./pages/Home";
+import Download from "./pages/Download";
+import ReleaseNotes from "./pages/ReleaseNotes";
+import Blog from "./pages/Blog";
+import BlogPost from "./pages/BlogPost";
+import Learn from "./pages/Learn";
+import LearnTutorial from "./pages/LearnTutorial";
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import OverviewPage from './pages/Overview';
@@ -86,6 +92,12 @@ function App() {
           <Routes>
             {/* Landing Page - Show this first */}
             <Route path="/" element={<Home />} />
+            <Route path="/download" element={<Download />} />
+            <Route path="/releases/:version" element={<ReleaseNotes />} />
+            <Route path="/blog" element={<Blog />} />
+            <Route path="/blog/:slug" element={<BlogPost />} />
+            <Route path="/learn" element={<Learn />} />
+            <Route path="/learn/:slug" element={<LearnTutorial />} />
 
             {/* Auth Layout Routes - Shared video panel, swappable right content */}
             <Route element={<AuthLayout />}>

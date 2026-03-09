@@ -1,11 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import JSZip from 'jszip';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import imageGenerationService from '../../../services/imageGenerationService';
 import { ImageModelSettings } from '../../nodes/image-models/ImageModelInterface';
 import * as xenoImageService from '../../../services/xenoImageService';
 import { useGenerationHistory } from './hooks/useGenerationHistory';
 import GenerationHistory from './components/GenerationHistory';
-import { generationHistoryService } from '../../../services/generationHistoryService';
+import { generationHistoryService, type GenerationRecord } from '../../../services/generationHistoryService';
 
 interface AspectRatio {
   value: string;
@@ -27,6 +26,7 @@ interface UploadedImage {
 
 // Copy page only: keep this enabled to preview generated-result layouts without calling real model APIs.
 const DEMO_MOCK_GENERATION_ENABLED = true;
+const DEMO_MOCK_HISTORY_MOBILE_ENABLED = true;
 const DEFAULT_DEMO_MODEL = 'Flux 2 Max';
 
 function buildMockImageUrls(prompt: string, count: number, width: number, height: number): string[] {
@@ -37,6 +37,52 @@ function buildMockImageUrls(prompt: string, count: number, width: number, height
   return Array.from({ length: count }, (_, index) => (
     `https://picsum.photos/seed/${encodeURIComponent(`${seedBase}-${index}`)}/${safeWidth}/${safeHeight}`
   ));
+}
+
+function buildMockGenerationHistory(): GenerationRecord[] {
+  const now = Date.now();
+  const demoPrompts = [
+    'cinematic portrait, soft rim light, 85mm lens',
+    'futuristic city at blue hour, rainy streets, neon reflections',
+    'minimal product shot on dark neutral background',
+    'high-detail fantasy landscape with volumetric fog',
+    'fashion editorial, studio lighting, monochrome palette',
+    'architectural visualization, brutalist interior, natural light',
+  ];
+  const sizes = [
+    { aspect: '1:1', width: 1024, height: 1024, count: 4 },
+    { aspect: '16:9', width: 1280, height: 720, count: 3 },
+    { aspect: '9:16', width: 720, height: 1280, count: 2 },
+    { aspect: '3:4', width: 960, height: 1280, count: 4 },
+  ];
+
+  return demoPrompts.map((prompt, index) => {
+    const size = sizes[index % sizes.length];
+    return {
+      id: `local-seed-${now}-${index}`,
+      user_id: '',
+      prompt,
+      image_urls: buildMockImageUrls(prompt, size.count, size.width, size.height),
+      model: DEFAULT_DEMO_MODEL,
+      aspect_ratio: size.aspect,
+      resolution: '2k',
+      count: size.count,
+      provider: 'demo',
+      is_favorite: index % 3 === 0,
+      created_at: new Date(now - index * 1000 * 60 * 18).toISOString(),
+      reference_images: [],
+    };
+  });
+}
+
+function parseAspectRatioValue(aspectRatio?: string | null): number {
+  if (!aspectRatio) return 1;
+  const match = aspectRatio.match(/^\s*(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)\s*$/);
+  if (!match) return 1;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || height === 0) return 1;
+  return width / height;
 }
 
 const aspectRatios: AspectRatio[] = [
@@ -510,6 +556,8 @@ const modelNameToProvider: Record<string, ModelMapping> = {
 };
 
 const ImageGenerationInterface2: React.FC = () => {
+  const desktopAspectRatioTriggerRef = useRef<HTMLDivElement | null>(null);
+  const mobileAspectRatioTriggerRef = useRef<HTMLDivElement | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [count, setCount] = useState(1);
   const [aspectRatio, setAspectRatio] = useState('3:4');
@@ -525,8 +573,6 @@ const ImageGenerationInterface2: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copiedPrompt, setCopiedPrompt] = useState<string | null>(null);
-  const [openMoreMenu, setOpenMoreMenu] = useState<string | null>(null);
   const [animatingStars, setAnimatingStars] = useState<Set<string>>(new Set());
   const [animatingFavButton, setAnimatingFavButton] = useState(false);
   const [animatingHistoryButton, setAnimatingHistoryButton] = useState(false);
@@ -542,6 +588,8 @@ const ImageGenerationInterface2: React.FC = () => {
     imageIndex: number;
   } | null>(null);
   const [showDetailsOverlay, setShowDetailsOverlay] = useState(false);
+  const [desktopAspectRatioDropdownStyle, setDesktopAspectRatioDropdownStyle] = useState<React.CSSProperties>({});
+  const [mobileAspectRatioDropdownStyle, setMobileAspectRatioDropdownStyle] = useState<React.CSSProperties>({});
   // Store the settings used for the current generation (frozen at generation start)
   const [generatingSettings, setGeneratingSettings] = useState<{
     prompt: string;
@@ -580,6 +628,52 @@ const ImageGenerationInterface2: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (!showAspectRatios) return;
+
+    const viewportPadding = 12;
+    const dropdownWidth = 192;
+    const maxHeight = Math.max(220, window.innerHeight - viewportPadding * 2);
+
+    const buildDropdownStyle = (node: HTMLElement | null): React.CSSProperties => {
+      const baseStyle: React.CSSProperties = {
+        width: `${Math.min(dropdownWidth, Math.max(0, window.innerWidth - viewportPadding * 2))}px`,
+        maxWidth: `calc(100vw - ${viewportPadding * 2}px)`,
+        maxHeight: `${maxHeight}px`,
+      };
+
+      if (!node) {
+        return baseStyle;
+      }
+
+      const rect = node.getBoundingClientRect();
+      const resolvedWidth = Math.min(dropdownWidth, Math.max(0, window.innerWidth - viewportPadding * 2));
+      const minShift = viewportPadding - rect.left;
+      const maxShift = window.innerWidth - viewportPadding - (rect.left + resolvedWidth);
+      const horizontalShift = maxShift < 0 ? maxShift : minShift > 0 ? minShift : 0;
+
+      return {
+        ...baseStyle,
+        left: `${horizontalShift}px`,
+      };
+    };
+
+    const updateDropdownPositions = () => {
+      setDesktopAspectRatioDropdownStyle(buildDropdownStyle(desktopAspectRatioTriggerRef.current));
+      setMobileAspectRatioDropdownStyle(buildDropdownStyle(mobileAspectRatioTriggerRef.current));
+    };
+
+    updateDropdownPositions();
+    window.addEventListener('resize', updateDropdownPositions);
+    window.addEventListener('scroll', updateDropdownPositions, true);
+
+    return () => {
+      window.removeEventListener('resize', updateDropdownPositions);
+      window.removeEventListener('scroll', updateDropdownPositions, true);
+    };
+  }, [showAspectRatios]);
+
+  // Track gallery width so row-justified layout can fill narrow viewports without right-side gaps.
   const {
     generations: dbGenerations,  // Generations from database (authenticated users)
     isLoading: isHistoryLoading,
@@ -594,9 +688,205 @@ const ImageGenerationInterface2: React.FC = () => {
 
   // Local generations state for non-authenticated users or immediate display
   const [localGenerations, setLocalGenerations] = useState<typeof dbGenerations>([]);
+  const [hasSeededMockHistory, setHasSeededMockHistory] = useState(false);
 
   // Combine local and database generations (local first, then db)
   const generations = [...localGenerations, ...dbGenerations];
+  const libraryImages = generations.flatMap((gen) =>
+    gen.image_urls.map((imageUrl, imageIndex) => ({
+      key: `${gen.id}-${imageIndex}`,
+      generation: gen,
+      imageUrl,
+      imageIndex,
+    }))
+  );
+  const cardRadius = 16;
+  const galleryGapPx = 12;
+  const galleryMinItemWidthPx = 200;
+  const galleryRowHeightPx = 240;
+  const galleryMaxRowHeightPx = 300;
+  const galleryContainerRef = useRef<HTMLDivElement | null>(null);
+  const [galleryViewportWidth, setGalleryViewportWidth] = useState(0);
+  type GalleryGridItem =
+    | { key: string; kind: 'loading' }
+    | { key: string; kind: 'image'; asset: (typeof libraryImages)[number] };
+  const gridItems: GalleryGridItem[] = [
+    ...(isGenerating && generatingSettings
+      ? Array.from({ length: generatingSettings.count }, (_, index) => ({
+          key: `loading-${index}`,
+          kind: 'loading' as const,
+        }))
+      : []),
+    ...libraryImages.map((asset) => ({
+      key: asset.key,
+      kind: 'image' as const,
+      asset,
+    })),
+  ];
+
+  useEffect(() => {
+    const node = galleryContainerRef.current;
+    if (!node) return;
+
+    let frameId = 0;
+    const applyWidth = (width: number) => {
+      const nextWidth = Math.max(0, Math.round(width));
+      setGalleryViewportWidth((previousWidth) => (
+        previousWidth === nextWidth ? previousWidth : nextWidth
+      ));
+    };
+
+    const updateWidth = () => {
+      applyWidth(node.clientWidth);
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(() => {
+        applyWidth(entry.contentRect.width);
+      });
+    });
+    observer.observe(node);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      observer.disconnect();
+    };
+  }, [showHistory, gridItems.length]);
+
+  const galleryItemLayout = useMemo(() => {
+    const layout = new Map<string, { width: number; height: number }>();
+    if (gridItems.length === 0) return layout;
+
+    const effectiveWidth = galleryViewportWidth > 0 ? galleryViewportWidth : 1200;
+    const targetRowHeight = Math.min(galleryRowHeightPx, galleryMaxRowHeightPx);
+    const minJustifiedRowHeight = Math.max(150, targetRowHeight * 0.72);
+    const minSparseRowHeight = 140;
+    const rowEdgeTolerancePx = Math.max(18, Math.min(32, effectiveWidth * 0.03));
+    const minFilledRowWidth = Math.max(0, effectiveWidth - rowEdgeTolerancePx);
+    const targetColumns = Math.max(1, Math.floor((effectiveWidth + galleryGapPx) / (galleryMinItemWidthPx + galleryGapPx)));
+    const defaultSlotWidth = Math.max(
+      120,
+      (effectiveWidth - galleryGapPx * Math.max(0, targetColumns - 1)) / targetColumns
+    );
+
+    const resolveAspect = (item: GalleryGridItem) => {
+      if (item.kind === 'loading') {
+        return Math.max(0.2, parseAspectRatioValue(generatingSettings?.aspectRatio || aspectRatio));
+      }
+      return Math.max(0.2, parseAspectRatioValue(item.asset.generation.aspect_ratio));
+    };
+
+    const getRowHeight = (row: Array<{ key: string; aspect: number }>) => {
+      if (row.length === 0) return targetRowHeight;
+      const aspectSum = row.reduce((sum, entry) => sum + entry.aspect, 0);
+      const gapsWidth = galleryGapPx * Math.max(0, row.length - 1);
+      return (effectiveWidth - gapsWidth) / aspectSum;
+    };
+
+    const getRowWidthAtHeight = (row: Array<{ key: string; aspect: number }>, height: number) => {
+      const aspectSum = row.reduce((sum, entry) => sum + entry.aspect, 0);
+      const gapsWidth = galleryGapPx * Math.max(0, row.length - 1);
+      return aspectSum * height + gapsWidth;
+    };
+
+    const rows: Array<Array<{ key: string; aspect: number }>> = [];
+    let currentRow: Array<{ key: string; aspect: number }> = [];
+
+    gridItems.forEach((item) => {
+      const aspect = Math.max(0.35, Math.min(2.8, resolveAspect(item)));
+      currentRow.push({ key: item.key, aspect });
+
+      if (currentRow.length < 2) {
+        return;
+      }
+
+      const currentHeight = getRowHeight(currentRow);
+      const currentWidthAtTargetHeight = getRowWidthAtHeight(currentRow, targetRowHeight);
+
+      const rowNeedsMoreImages =
+        currentHeight > galleryMaxRowHeightPx ||
+        (currentWidthAtTargetHeight < minFilledRowWidth && currentHeight > minJustifiedRowHeight);
+
+      if (rowNeedsMoreImages) {
+        return;
+      }
+
+      const previousRow = currentRow.slice(0, -1);
+      const previousHeight = previousRow.length > 0 ? getRowHeight(previousRow) : Number.POSITIVE_INFINITY;
+      const previousWidthAtTargetHeight = previousRow.length > 0 ? getRowWidthAtHeight(previousRow, targetRowHeight) : 0;
+      const previousRowIsUsable =
+        previousRow.length >= 2 &&
+        previousHeight >= minJustifiedRowHeight &&
+        previousWidthAtTargetHeight >= minFilledRowWidth;
+
+      const breakBeforeLast =
+        previousRowIsUsable &&
+        (currentHeight < minJustifiedRowHeight ||
+          Math.abs(previousHeight - targetRowHeight) < Math.abs(currentHeight - targetRowHeight));
+
+      if (breakBeforeLast) {
+        rows.push(previousRow);
+        currentRow = currentRow.slice(-1);
+        return;
+      }
+
+      rows.push(currentRow);
+      currentRow = [];
+    });
+
+    if (currentRow.length > 0) {
+      rows.push(currentRow);
+    }
+
+    rows.forEach((row, rowIndex) => {
+      const aspectSum = row.reduce((sum, entry) => sum + entry.aspect, 0);
+      const gapsWidth = galleryGapPx * Math.max(0, row.length - 1);
+      const justifiedRowHeight = Math.max(1, getRowHeight(row));
+      const isLastRow = rowIndex === rows.length - 1;
+      const shouldBoundLastRow = isLastRow && (row.length === 1 || justifiedRowHeight > galleryMaxRowHeightPx);
+
+      if (shouldBoundLastRow) {
+        // Only keep the active/incomplete last row bounded when full justification would make it oversized.
+        const boundedRowHeight = Math.max(
+          minSparseRowHeight,
+          Math.min(
+            galleryMaxRowHeightPx,
+            Math.max(
+              targetRowHeight,
+              ...row.map((entry) => defaultSlotWidth / entry.aspect)
+            )
+          )
+        );
+
+        row.forEach((entry) => {
+          const width = Math.max(90, boundedRowHeight * entry.aspect);
+          layout.set(entry.key, { width, height: boundedRowHeight });
+        });
+        return;
+      }
+
+      // Fully justified rows preserve every image ratio and fill the viewport width exactly.
+      row.forEach((entry) => {
+        const width = Math.max(90, justifiedRowHeight * entry.aspect);
+        layout.set(entry.key, { width, height: justifiedRowHeight });
+      });
+    });
+
+    return layout;
+  }, [
+    gridItems,
+    galleryViewportWidth,
+    generatingSettings?.aspectRatio,
+    aspectRatio,
+    galleryGapPx,
+    galleryRowHeightPx,
+    galleryMaxRowHeightPx,
+    galleryMinItemWidthPx,
+  ]);
 
   // Update URL when view changes to persist state on refresh
   useEffect(() => {
@@ -612,6 +902,23 @@ const ImageGenerationInterface2: React.FC = () => {
     }
     window.history.replaceState({}, '', url.toString());
   }, [showHistory, favoritesOnly]);
+
+  // Mobile-only mock content seed for design/testing
+  useEffect(() => {
+    if (!DEMO_MOCK_HISTORY_MOBILE_ENABLED || hasSeededMockHistory) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const shouldSeedMockContent = isMobile || params.has('token');
+    if (!shouldSeedMockContent) return;
+
+    if (localGenerations.length > 0) {
+      setHasSeededMockHistory(true);
+      return;
+    }
+
+    setLocalGenerations(buildMockGenerationHistory());
+    setHasSeededMockHistory(true);
+  }, [hasSeededMockHistory, isMobile, localGenerations.length]);
 
   // Keyboard and scroll navigation for image viewer modal
   useEffect(() => {
@@ -684,6 +991,7 @@ const ImageGenerationInterface2: React.FC = () => {
 
   // Check if user is authenticated
   const isAuthenticated = generationHistoryService.isAuthenticated();
+  const canViewHistory = isAuthenticated || localGenerations.length > 0;
 
   // Get current model capabilities
   const currentModelCapabilities = selectedModel ? modelNameToProvider[selectedModel]?.capabilities : null;
@@ -957,79 +1265,45 @@ const ImageGenerationInterface2: React.FC = () => {
     setPrompt(promptText);
   };
 
-  // Delete a generation
-  const handleDeleteGeneration = async (genId: string) => {
-    if (confirm('Are you sure you want to delete this generation?')) {
-      await deleteGeneration(genId);
-      setOpenMoreMenu(null);
-    }
-  };
-
-  // Download all images from a generation
-  // 1-2 images: individual downloads, 3+ images: ZIP file
-  const handleDownloadImages = async (gen: typeof generations[0]) => {
-    const imageCount = gen.image_urls?.length || 0;
-
-    if (imageCount === 0) {
-      alert('No images to download');
-      setOpenMoreMenu(null);
+  const handleToggleFavoriteGeneration = async (genId: string) => {
+    if (genId.startsWith('local-')) {
+      setLocalGenerations(prev =>
+        prev.map(gen =>
+          gen.id === genId ? { ...gen, is_favorite: !gen.is_favorite } : gen
+        )
+      );
       return;
     }
 
-    try {
-      // Fetch all images first
-      const blobs: { blob: Blob; index: number }[] = [];
+    await toggleFavorite(genId);
+  };
 
-      for (let i = 0; i < imageCount; i++) {
-        const imageUrl = gen.image_urls[i];
-        const response = await fetch(imageUrl);
-        const blob = await response.blob();
-        blobs.push({ blob, index: i });
-      }
-
-      // For 3+ images, create a ZIP file
-      if (imageCount >= 3) {
-        const zip = new JSZip();
-        const folderName = `generation-${gen.id.slice(0, 8)}`;
-        const folder = zip.folder(folderName);
-
-        for (const { blob, index } of blobs) {
-          folder?.file(`image-${index + 1}.png`, blob);
-        }
-
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        const blobUrl = URL.createObjectURL(zipBlob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = `${folderName}.zip`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
+  // Delete a generation
+  const handleDeleteGeneration = async (genId: string) => {
+    if (confirm('Are you sure you want to delete this generation?')) {
+      if (genId.startsWith('local-')) {
+        setLocalGenerations(prev => prev.filter(gen => gen.id !== genId));
       } else {
-        // For 1-2 images, download individually
-        for (let i = 0; i < blobs.length; i++) {
-          const { blob, index } = blobs[i];
-          const blobUrl = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          link.download = `generation-${gen.id.slice(0, 8)}-${index + 1}.png`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(blobUrl);
-
-          // Delay between downloads to prevent browser blocking
-          if (i < blobs.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 800));
-          }
-        }
+        await deleteGeneration(genId);
       }
-    } catch (error) {
-      console.error('Failed to download images:', error);
-      alert('Failed to download images. Please try again.');
     }
-    setOpenMoreMenu(null);
+  };
+
+  const handleDownloadSingleImage = async (imageUrl: string, generationId: string, imageIndex: number) => {
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `generation-${generationId.slice(0, 8)}-${imageIndex + 1}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (downloadError) {
+      console.error('Download failed:', downloadError);
+    }
   };
 
   const handleGenerate = async () => {
@@ -1373,7 +1647,7 @@ const ImageGenerationInterface2: React.FC = () => {
   return (
     <div className="h-full w-full flex flex-col py-3 pb-36 md:pb-3 overflow-y-auto relative bg-[#111214]">
       {/* Parent Container - Wraps both Generation Header and Image History - Responsive width, centered */}
-      <div className="w-[100%] sm:w-[99%] md:w-[98%] lg:w-[97%] xl:w-[95%] 2xl:w-[90%] mx-auto relative flex flex-col flex-1">
+      <div className="w-full mx-auto relative flex flex-col flex-1">
 
         {/* Generation Header Container - Sticky */}
         <div className={`generation-header flex flex-col items-center gap-3 sticky top-0 z-50 transition-colors duration-200 ${isScrolled ? 'bg-[#0a0a0b]' : 'bg-transparent'}`} style={{ width: '100%' }}>
@@ -1550,7 +1824,7 @@ const ImageGenerationInterface2: React.FC = () => {
                 setSelectedTool(null);
               }}
               className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
-              title={isAuthenticated ? 'View generation history' : 'Sign in to view history'}
+              title={canViewHistory ? 'View generation history' : 'Sign in to view history'}
             >
               <svg
                 className={`w-6 h-6 ${showHistory && !favoritesOnly ? 'text-white' : 'text-white/40'}`}
@@ -1589,7 +1863,7 @@ const ImageGenerationInterface2: React.FC = () => {
                 setSelectedTool(null);
               }}
               className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
-              title={isAuthenticated ? 'View favorites' : 'Sign in to view favorites'}
+              title={canViewHistory ? 'View favorites' : 'Sign in to view favorites'}
             >
               <svg className={`w-[27px] h-[27px] mt-0.5 ${favoritesOnly ? 'text-white' : 'text-white/40'}`} viewBox="0 0 50 50">
                   {/* Expanding ring */}
@@ -2058,6 +2332,7 @@ const ImageGenerationInterface2: React.FC = () => {
 
             {/* Aspect Ratio Selector - Appears second */}
             <div
+              ref={desktopAspectRatioTriggerRef}
               className="relative animate-fade-in"
               style={{ animationDelay: '100ms' }}
             >
@@ -2075,7 +2350,13 @@ const ImageGenerationInterface2: React.FC = () => {
 
               {/* Aspect Ratio Dropdown */}
               {showAspectRatios && (
-                <div className="absolute top-full left-0 mt-2 w-48 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg overflow-hidden shadow-xl shadow-black/30 z-50 p-1" style={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 0 25px rgba(0, 0, 0, 0.5)' }}>
+                <div
+                  className="absolute top-full mt-2 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg overflow-y-auto overflow-x-hidden shadow-xl shadow-black/30 z-50 p-1"
+                  style={{
+                    ...desktopAspectRatioDropdownStyle,
+                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 0 25px rgba(0, 0, 0, 0.5)',
+                  }}
+                >
                   {aspectRatios.filter((ar) => isAspectRatioSupported(ar.value)).map((ar) => (
                       <button
                         key={ar.value}
@@ -2145,11 +2426,14 @@ const ImageGenerationInterface2: React.FC = () => {
         )}
 
         {/* Image History Container - Scrollable */}
-        <div className="image-history-container h-full rounded-md mt-6 flex-1 relative overflow-y-auto" style={{ width: '100%' }}>
+        <div
+          className="image-history-container h-full rounded-md mt-6 flex-1 relative overflow-y-auto bg-black"
+          style={{ width: '100%', scrollbarGutter: 'stable' }}
+        >
           {/* History View - When showHistory is true */}
           {showHistory ? (
             <div className="pt-4">
-              {!isAuthenticated ? (
+              {!canViewHistory ? (
                 <div className="flex flex-col items-center justify-center py-16 text-white/40">
                   <svg className="w-16 h-16 mb-4 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -2160,11 +2444,13 @@ const ImageGenerationInterface2: React.FC = () => {
               ) : (
                 <GenerationHistory
                   generations={generations}
-                  isLoading={isHistoryLoading}
-                  hasMore={hasMore}
-                  onLoadMore={loadMore}
-                  onDelete={deleteGeneration}
-                  onToggleFavorite={toggleFavorite}
+                  isLoading={isAuthenticated ? isHistoryLoading : false}
+                  hasMore={isAuthenticated ? hasMore : false}
+                  onLoadMore={() => {
+                    if (isAuthenticated) loadMore();
+                  }}
+                  onDelete={handleDeleteGeneration}
+                  onToggleFavorite={handleToggleFavoriteGeneration}
                   onSelectGeneration={(gen) => {
                     // Load the prompt into input and close history
                     // The generation is already in the generations array (single source of truth)
@@ -2178,308 +2464,225 @@ const ImageGenerationInterface2: React.FC = () => {
           ) : (
           /* Vertical stack of image answer containers - Midjourney style */
           <div className="flex flex-col-reverse md:flex-col gap-6 py-4">
+            {/* Unified grid library view across all generations */}
+            {gridItems.length > 0 && (
+              <div className="image-answer-container rounded-md py-0 md:py-4 relative bg-black">
+                <div className="image-preview-container-wrapper relative w-full" style={{ flexGrow: 1 }}>
+                  <div
+                    ref={galleryContainerRef}
+                    className="flex flex-wrap w-full"
+                    style={{
+                      gap: `${galleryGapPx}px`,
+                      alignItems: 'stretch',
+                      alignContent: 'flex-start',
+                      justifyContent: 'flex-start',
+                    }}
+                  >
+                    <style>{`
+                      @keyframes sweep { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+                      @keyframes letterFade { 0%, 8% { opacity: 0; } 16%, 92% { opacity: 1; } 100% { opacity: 0; } }
+                      .image-action-button + .image-action-tooltip {
+                        opacity: 0;
+                        transform: translateY(4px);
+                      }
+                      .image-action-button:hover + .image-action-tooltip {
+                        opacity: 1;
+                        transform: translateY(0);
+                      }
+                    `}</style>
+                    {gridItems.map((item) => {
+                      const itemLayout = galleryItemLayout.get(item.key);
+                      const cardStyle: React.CSSProperties = {
+                        borderRadius: `${cardRadius}px`,
+                        overflow: 'hidden',
+                        width: `${itemLayout?.width ?? galleryMinItemWidthPx}px`,
+                        height: `${itemLayout?.height ?? galleryRowHeightPx}px`,
+                        flex: '0 0 auto',
+                      };
 
-            {/* Currently Generating Container - shown only during generation */}
-            {isGenerating && generatingSettings && (
-              <div className="image-answer-container rounded-md py-4 relative">
-                <div className="flex flex-col md:flex-row gap-4 items-stretch">
-                  <div className="image-preview-container-wrapper relative w-full" style={{ flexGrow: 1 }}>
-                    <div
-                      className="grid gap-3"
-                      style={{
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                        gridAutoRows: '220px',
-                      }}
-                    >
-                      {Array.from({ length: generatingSettings.count }).map((_, index) => (
-                        <div
-                          key={index}
-                          className="relative group bg-[#0a0a0c] rounded-[16px] overflow-hidden border border-[#2a2a2d] h-full"
-                        >
-                          <div className="w-full h-full relative overflow-hidden bg-[#111113]">
-                            <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)', backgroundSize: '200% 100%', animation: 'sweep 2s ease-in-out infinite' }}></div>
-                            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' /%3E%3C/svg%3E")`, backgroundSize: '64px 64px' }}></div>
-                            <div className="absolute inset-0">
-                              <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-white/5 rounded-full blur-xl animate-pulse" style={{ animationDuration: '2s' }}></div>
-                              <div className="absolute bottom-1/4 right-1/4 w-40 h-40 bg-white/3 rounded-full blur-xl animate-pulse" style={{ animationDuration: '3s', animationDelay: '0.5s' }}></div>
+                      if (item.kind === 'loading') {
+                        return (
+                          <div
+                            key={item.key}
+                            className="relative group border border-[#2a2a2d]"
+                            style={{
+                              ...cardStyle,
+                              backgroundColor: '#0a0a0c',
+                            }}
+                          >
+                            <div className="w-full h-full relative overflow-hidden bg-[#111113]">
+                              <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)', backgroundSize: '200% 100%', animation: 'sweep 2s ease-in-out infinite' }}></div>
+                              <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' /%3E%3C/svg%3E")`, backgroundSize: '64px 64px' }}></div>
+                              <div className="absolute inset-0">
+                                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-white/5 rounded-full blur-xl animate-pulse" style={{ animationDuration: '2s' }}></div>
+                                <div className="absolute bottom-1/4 right-1/4 w-40 h-40 bg-white/3 rounded-full blur-xl animate-pulse" style={{ animationDuration: '3s', animationDelay: '0.5s' }}></div>
+                              </div>
+                              <div className="absolute inset-0 flex items-center justify-center z-10">
+                                <span className="text-white/40 text-sm font-medium tracking-wide">
+                                  {'xenomorphing'.split('').map((letter, i) => (
+                                    <span key={i} style={{ animation: 'letterFade 3.6s infinite', animationDelay: `${i * 0.3}s` }}>{letter}</span>
+                                  ))}
+                                </span>
+                              </div>
                             </div>
-                            <div className="absolute inset-0 flex items-center justify-center z-10">
-                              <span className="text-white/40 text-sm font-medium tracking-wide">
-                                {'xenomorphing'.split('').map((letter, i) => (
-                                  <span key={i} style={{ animation: 'letterFade 3.6s infinite', animationDelay: `${i * 0.3}s` }}>{letter}</span>
-                                ))}
-                              </span>
-                            </div>
-                            <style>{`
-                              @keyframes sweep { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-                              @keyframes letterFade { 0%, 8% { opacity: 0; } 16%, 92% { opacity: 1; } 100% { opacity: 0; } }
-                            `}</style>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Settings panel for generating - hidden on mobile */}
-                  {!isMobile && (
-                    <div className="image-detail-container flex relative bg-[#1a1a1c]/50 rounded-md overflow-hidden border border-[#2a2a2d] transition-all w-[16%] flex-shrink-0 flex-col">
-                      <div className="w-full h-full flex flex-col items-start justify-start p-4 pt-4 text-white/70 text-sm">
-                        <div className="w-full mb-4 pb-3 border-b border-white/10">
-                          <p className="text-xs text-white/80 line-clamp-4">{generatingSettings.prompt}</p>
-                        </div>
-                        <div className="w-full space-y-2">
-                          <div className="flex justify-between text-xs"><span className="text-white/40">Model</span><span className="text-white/80">{selectedModel}</span></div>
-                          <div className="flex justify-between text-xs"><span className="text-white/40">Aspect</span><span className="text-white/80">{generatingSettings.aspectRatio}</span></div>
-                          <div className="flex justify-between text-xs"><span className="text-white/40">Resolution</span><span className="text-white/80">{generatingSettings.resolution.toUpperCase()}</span></div>
-                          <div className="flex justify-between text-xs"><span className="text-white/40">Count</span><span className="text-white/80">{generatingSettings.count}</span></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+                        );
+                      }
 
-            {/* Midjourney-style: Map over generations - one container per generation (SINGLE SOURCE OF TRUTH from hook) */}
-            {generations.map((gen) => (
-              <div key={gen.id} className="image-answer-container rounded-md py-0 md:py-4 relative">
-                <div className="flex flex-col gap-4 items-stretch">
-                  {/* Image Preview Grid for this generation */}
-                  <div className="image-preview-container-wrapper relative w-full" style={{ flexGrow: 1 }}>
-                    <div
-                      className="grid gap-3"
-                      style={{
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                        gridAutoRows: '220px',
-                      }}
-                    >
-                      {gen.image_urls.map((imageUrl, imgIndex) => (
+                      const { asset } = item;
+                      const createdAtLabel = asset.generation.created_at
+                        ? new Date(asset.generation.created_at).toLocaleString(undefined, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                          })
+                        : 'Unknown date';
+                      return (
                         <div
-                          key={imgIndex}
-                          className="relative group rounded-[16px] overflow-hidden transition-all cursor-pointer h-full"
-                          onClick={() => setViewingImage({ generationId: gen.id, imageIndex: imgIndex })}
+                          key={item.key}
+                          className="relative group cursor-pointer overflow-hidden"
+                          style={cardStyle}
+                          onClick={() => setViewingImage({ generationId: asset.generation.id, imageIndex: asset.imageIndex })}
                         >
                           <img
-                            src={imageUrl}
-                            alt={`Generated ${imgIndex + 1}`}
-                            className="w-full h-full object-cover block rounded-[16px]"
+                            src={asset.imageUrl}
+                            alt={`Generated ${asset.imageIndex + 1}`}
+                            className="w-full h-full object-cover block transition-[filter] duration-300 ease-in-out group-hover:brightness-110"
+                            style={{ borderRadius: `${cardRadius}px` }}
                           />
-                          {/* Favorite Button - Top Right Corner, appears on hover */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Trigger animation
-                              setAnimatingStars(prev => new Set(prev).add(gen.id));
-                              setTimeout(() => {
-                                setAnimatingStars(prev => {
-                                  const next = new Set(prev);
-                                  next.delete(gen.id);
-                                  return next;
-                                });
-                              }, 700);
-                              toggleFavorite(gen.id);
-                            }}
-                            className={`absolute top-2 right-2 p-2 rounded-lg backdrop-blur-sm transition-all z-10 ${
-                              gen.is_favorite
-                                ? 'bg-white/20 text-white'
-                                : 'opacity-0 group-hover:opacity-100 bg-black/50 text-white/80 hover:bg-white/20 hover:text-white'
-                            }`}
-                            title={gen.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-                          >
-                            <svg className="w-5 h-5 text-white" viewBox="0 0 50 50">
-                              {/* Expanding ring */}
-                              <circle
-                                cx="25" cy="25" r="8"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="16"
-                                className={animatingStars.has(gen.id) ? 'animate-star-ring' : 'opacity-0'}
-                                style={{ transformOrigin: 'center' }}
-                              />
-                              {/* Burst lines */}
-                              <g stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transformOrigin: 'center' }}>
-                                <line x1="25" y1="8" x2="25" y2="2" className={animatingStars.has(gen.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                <line x1="25" y1="42" x2="25" y2="48" className={animatingStars.has(gen.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                <line x1="8" y1="25" x2="2" y2="25" className={animatingStars.has(gen.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                <line x1="42" y1="25" x2="48" y2="25" className={animatingStars.has(gen.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                <line x1="13" y1="13" x2="7" y2="7" className={animatingStars.has(gen.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                <line x1="37" y1="37" x2="43" y2="43" className={animatingStars.has(gen.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                <line x1="37" y1="13" x2="43" y2="7" className={animatingStars.has(gen.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                <line x1="13" y1="37" x2="7" y2="43" className={animatingStars.has(gen.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                              </g>
-                              {/* Star outline (shrinks away) */}
-                              <path
-                                className={animatingStars.has(gen.id) ? 'animate-star-stroke' : ''}
-                                style={{ transformOrigin: 'center' }}
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M25 5l5.09 10.31L42 17.27l-8.5 8.28 2 11.66L25 32l-10.5 5.21 2-11.66-8.5-8.28 11.91-1.96L25 5z"
-                              />
-                              {/* Star fill (bounces in) */}
-                              <path
-                                className={animatingStars.has(gen.id) ? 'animate-star-fill' : ''}
-                                style={{ transformOrigin: 'center', transform: gen.is_favorite && !animatingStars.has(gen.id) ? 'scale(1)' : 'scale(0)' }}
-                                fill="currentColor"
-                                d="M25 5l5.09 10.31L42 17.27l-8.5 8.28 2 11.66L25 32l-10.5 5.21 2-11.66-8.5-8.28 11.91-1.96L25 5z"
-                              />
-                            </svg>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Settings Panel for this generation - hidden on mobile */}
-                  {!isMobile && false && (
-                  <div className="image-detail-container flex group relative bg-[#1a1a1c]/50 rounded-md overflow-hidden border border-[#2a2a2d] transition-all flex-col justify-between w-[16%] flex-shrink-0">
-                    <div className="w-full flex-1 flex flex-col items-start justify-start p-4 pt-4 text-white/70 text-sm">
-                      {/* Prompt */}
-                      <div className="w-full mb-4 pb-3 border-b border-white/10">
-                        <div
-                          className="px-1 py-1 rounded-md cursor-pointer hover:bg-white/5 active:bg-white/10 transition-colors"
-                          onClick={() => {
-                            navigator.clipboard.writeText(gen.prompt);
-                            setCopiedPrompt(gen.id);
-                            setTimeout(() => setCopiedPrompt(null), 2000);
-                          }}
-                        >
-                          <p className="text-xs text-white/80 line-clamp-4">{gen.prompt}</p>
-                          {copiedPrompt === gen.id && (
-                            <span className="text-xs text-green-400 mt-1 block">✓ Copied</span>
-                          )}
-                        </div>
-                        {/* Reference Images */}
-                        {gen.reference_images && gen.reference_images.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-3 px-1">
-                            {gen.reference_images.map((refImg, idx) => (
-                              <div key={idx} className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#3a3a3d]">
-                                <img src={refImg.url} alt={`Ref ${idx + 1}`} className="w-full h-full object-cover" />
-                                {refImg.refType && (
-                                  <div className="absolute bottom-1 left-1 p-1 bg-black/70 backdrop-blur-sm rounded">
-                                    {refImg.refType === 'style' && (
-                                      <svg className="w-2.5 h-2.5 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                                      </svg>
-                                    )}
-                                    {refImg.refType === 'character' && (
-                                      <svg className="w-2.5 h-2.5 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                      </svg>
-                                    )}
-                                    {refImg.refType === 'image' && (
-                                      <svg className="w-2.5 h-2.5 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                      </svg>
-                                    )}
-                                    {refImg.refType === 'pose' && (
-                                      <svg className="w-2.5 h-2.5 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
-                                      </svg>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {/* Settings */}
-                      <div className="w-full space-y-2">
-                        <div className="flex justify-between text-xs"><span className="text-white/40">Model</span><span className="text-white/80 truncate ml-2">{gen.model}</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-white/40">Aspect</span><span className="text-white/80">{gen.aspect_ratio}</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-white/40">Resolution</span><span className="text-white/80">{gen.resolution?.toUpperCase() || 'N/A'}</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-white/40">Count</span><span className="text-white/80">{gen.count}</span></div>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons - Appear on hover at the bottom inside the container */}
-                    <div className="w-full px-2 pb-2 mt-auto">
-                      <div className="flex flex-wrap gap-1.5">
-                        {/* Rerun Button - appears first (in), disappears last (out after 1.5s pause) */}
-                        <button
-                          onClick={() => handleRerun(gen)}
-                          className="flex items-center gap-1.5 px-2 py-1.5 bg-white/5 hover:bg-white/10 rounded text-xs text-white/70 hover:text-white opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 ease-out [transition-delay:1800ms] group-hover:![transition-delay:0ms]"
-                          title="Rerun with same settings"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          <span>Rerun</span>
-                        </button>
-
-                        {/* Use Prompt Button - appears second (in), disappears third (out after 1.5s pause) */}
-                        <button
-                          onClick={() => handleUsePrompt(gen.prompt)}
-                          className="flex items-center gap-1.5 px-2 py-1.5 bg-white/5 hover:bg-white/10 rounded text-xs text-white/70 hover:text-white opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 ease-out [transition-delay:1700ms] group-hover:![transition-delay:100ms]"
-                          title="Use this prompt"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                          <span>Use prompt</span>
-                        </button>
-
-                        {/* Delete Button - appears third (in), disappears second (out after 1.5s pause) */}
-                        <button
-                          onClick={() => handleDeleteGeneration(gen.id)}
-                          className="flex items-center gap-1.5 px-2 py-1.5 bg-white/5 hover:bg-red-500/20 rounded text-xs text-white/70 hover:text-red-400 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 ease-out [transition-delay:1600ms] group-hover:![transition-delay:200ms]"
-                          title="Delete generation"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          <span>Delete</span>
-                        </button>
-
-                        {/* More Button - appears fourth (in), disappears first (out after 1.5s pause) */}
-                        <div className="relative opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 ease-out [transition-delay:1500ms] group-hover:![transition-delay:300ms]">
-                          <button
-                            onClick={() => setOpenMoreMenu(openMoreMenu === gen.id ? null : gen.id)}
-                            className="flex items-center gap-1.5 px-2 py-1.5 bg-white/5 hover:bg-white/10 rounded text-xs text-white/70 hover:text-white transition-colors"
-                            title="More options"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
-                            </svg>
-                            <span>More</span>
-                          </button>
-
-                          {/* More Menu Dropdown */}
-                          {openMoreMenu === gen.id && (
-                            <div className="absolute bottom-full left-0 mb-1 w-40 bg-[#0a0a0b]/95 backdrop-blur-md border border-[#2a2a2d]/40 rounded-md shadow-xl overflow-hidden z-30">
+                              <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                            <div className="relative">
                               <button
-                                onClick={() => handleDownloadImages(gen)}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/10 transition-all"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAnimatingStars((prev) => new Set(prev).add(asset.generation.id));
+                                  setTimeout(() => {
+                                    setAnimatingStars((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(asset.generation.id);
+                                      return next;
+                                    });
+                                  }, 700);
+                                  handleToggleFavoriteGeneration(asset.generation.id);
+                                }}
+                                className={`image-action-button p-2 rounded-lg backdrop-blur-sm transition-all ${
+                                  asset.generation.is_favorite
+                                    ? 'bg-[#27272a]/85 group-hover:bg-[#36363a]/90 text-white'
+                                    : 'bg-[#1a1a1c]/80 group-hover:bg-[#2d2d31]/88 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white'
+                                }`}
+                              >
+                                <svg className="w-4 h-4 text-white" viewBox="0 0 50 50">
+                                  <g stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transformOrigin: 'center' }}>
+                                    <line x1="25" y1="8" x2="25" y2="2" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
+                                    <line x1="25" y1="42" x2="25" y2="48" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
+                                    <line x1="8" y1="25" x2="2" y2="25" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
+                                    <line x1="42" y1="25" x2="48" y2="25" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
+                                    <line x1="13" y1="13" x2="7" y2="7" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
+                                    <line x1="37" y1="37" x2="43" y2="43" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
+                                    <line x1="37" y1="13" x2="43" y2="7" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
+                                    <line x1="13" y1="37" x2="7" y2="43" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
+                                  </g>
+                                  <circle
+                                    cx="25" cy="25" r="8"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="16"
+                                    className={animatingStars.has(asset.generation.id) ? 'animate-star-ring' : 'opacity-0'}
+                                    style={{ transformOrigin: 'center' }}
+                                  />
+                                  <path
+                                    className={animatingStars.has(asset.generation.id) ? 'animate-star-stroke' : ''}
+                                    style={{ transformOrigin: 'center' }}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M25 5l5.09 10.31L42 17.27l-8.5 8.28 2 11.66L25 32l-10.5 5.21 2-11.66-8.5-8.28 11.91-1.96L25 5z"
+                                  />
+                                  <path
+                                    className={animatingStars.has(asset.generation.id) ? 'animate-star-fill' : ''}
+                                    style={{ transformOrigin: 'center', transform: asset.generation.is_favorite && !animatingStars.has(asset.generation.id) ? 'scale(1)' : 'scale(0)' }}
+                                    fill="currentColor"
+                                    d="M25 5l5.09 10.31L42 17.27l-8.5 8.28 2 11.66L25 32l-10.5 5.21 2-11.66-8.5-8.28 11.91-1.96L25 5z"
+                                  />
+                                </svg>
+                              </button>
+                              <span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">
+                                Favorite
+                              </span>
+                            </div>
+
+                            <div className="relative">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUsePrompt(asset.generation.prompt);
+                                }}
+                                className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 group-hover:bg-[#2d2d31]/88 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white transition-all"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11.8 15H9v-2.8l8.6-8.6z" />
+                                </svg>
+                              </button>
+                              <span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">
+                                Reuse Prompt
+                              </span>
+                            </div>
+
+                            <div className="relative">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRerun(asset.generation);
+                                }}
+                                className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 group-hover:bg-[#2d2d31]/88 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white transition-all"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.6m15.4 2A8 8 0 004.6 9m0 0H9m11 11v-5h-.6a8 8 0 01-15.4-2m15.4 2H15" />
+                                </svg>
+                              </button>
+                              <span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">
+                                Rerun
+                              </span>
+                            </div>
+
+                            <div className="relative">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownloadSingleImage(asset.imageUrl, asset.generation.id, asset.imageIndex);
+                                }}
+                                className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 group-hover:bg-[#2d2d31]/88 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white transition-all"
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                 </svg>
-                                <span>Download images</span>
                               </button>
-                              <button
-                                onClick={() => {
-                                  alert('Report submitted. Thank you for your feedback.');
-                                  setOpenMoreMenu(null);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/10 transition-all"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                                <span>Report</span>
-                              </button>
+                              <span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">
+                                Download
+                              </span>
                             </div>
-                          )}
-                        </div>
+                              </div>
+
+                              <div className="absolute inset-x-0 bottom-0 px-2 pb-2 pt-9 bg-gradient-to-t from-black/95 via-black/75 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                                <p className="text-[11px] leading-[1.35] text-white/95 line-clamp-3 break-words" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.75)' }}>
+                                  {asset.generation.prompt}
+                                </p>
+                                <div className="mt-2 flex items-center justify-between gap-3 text-[9px] text-white/80" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.75)' }}>
+                                  <span className="truncate">Model: {asset.generation.model || 'Unknown'}</span>
+                                  <span className="shrink-0">{createdAtLabel}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </div>
                   </div>
-                  )}
                 </div>
-              </div>
-            ))}
+            )}
 
             {/* Empty state message - only when not generating and no generations */}
             {!isGenerating && generations.length === 0 && (
@@ -2639,7 +2842,7 @@ const ImageGenerationInterface2: React.FC = () => {
                           return next;
                         });
                       }, 700);
-                      toggleFavorite(currentGen.id);
+                      handleToggleFavoriteGeneration(currentGen.id);
                     }}
                     className={`p-1.5 rounded hover:bg-white/10 transition-all ${currentGen.is_favorite ? 'text-white' : 'text-white/50 hover:text-white'}`}
                     title={currentGen.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -2688,7 +2891,11 @@ const ImageGenerationInterface2: React.FC = () => {
                   {/* Delete */}
                   <button
                     onClick={() => {
-                      deleteGeneration(currentGen.id);
+                      if (currentGen.id.startsWith('local-')) {
+                        setLocalGenerations(prev => prev.filter(gen => gen.id !== currentGen.id));
+                      } else {
+                        deleteGeneration(currentGen.id);
+                      }
                       setViewingImage(null);
                     }}
                     className="p-1.5 rounded hover:bg-red-500/20 text-white/50 hover:text-red-400 transition-all"
@@ -2912,70 +3119,7 @@ const ImageGenerationInterface2: React.FC = () => {
         );
       })()}
 
-      {/* Floating Prompt Bar - all screens */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[120] w-[min(920px,calc(100%-1.5rem))]">
-        <div
-          className="flex items-center gap-2 rounded-full border border-white/15 px-3 py-2 bg-black/60 backdrop-blur-xl"
-          style={{ boxShadow: '0 16px 30px -20px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04) inset' }}
-        >
-          <button
-            onClick={() => setShowAiCompanies(!showAiCompanies)}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-white/65 hover:text-white hover:bg-white/10 transition-all"
-            title="Models"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 3l2.1 4.26L19 8l-3.5 3.41.82 4.83L12 14l-4.32 2.24.82-4.83L5 8l4.9-.74L12 3z" />
-            </svg>
-          </button>
-
-          <button
-            onClick={handleImageClick}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-white/65 hover:text-white hover:bg-white/10 transition-all"
-            title="Upload reference"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.5-4.5a2 2 0 012.8 0L16 16m-2-2l1.5-1.5a2 2 0 012.8 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </button>
-
-          <input
-            type="text"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value.slice(0, resolution === '4k' ? 800 : resolution === '2k' ? 650 : 500))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !isGenerating) {
-                handleGenerate();
-              }
-            }}
-            placeholder="Describe your image..."
-            className="flex-1 bg-transparent border-0 outline-none text-sm text-white/90 placeholder:text-white/35 px-2"
-          />
-
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-white/65 hover:text-white hover:bg-white/10 transition-all"
-            title="Settings"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.3 4.3c.4-1.8 2.9-1.8 3.3 0a1.7 1.7 0 002.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 001.1 2.6c1.8.4 1.8 2.9 0 3.3a1.7 1.7 0 00-1.1 2.6c.9 1.5-.8 3.3-2.4 2.4a1.7 1.7 0 00-2.6 1.1c-.4 1.8-2.9 1.8-3.3 0a1.7 1.7 0 00-2.6-1.1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 00-1.1-2.6c-1.8-.4-1.8-2.9 0-3.3a1.7 1.7 0 001.1-2.6c-.9-1.5.8-3.3 2.4-2.4a1.7 1.7 0 002.6-1.1z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-
-          <button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className="w-9 h-9 rounded-full flex items-center justify-center bg-white text-black hover:bg-white/90 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
-            title="Generate"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Bottom Bar - legacy (hidden, replaced by floating prompt bar) */}
+      {/* Mobile Bottom Bar - legacy (hidden) */}
       <div className="hidden fixed bottom-0 left-0 right-0 md:hidden z-50 px-3 py-3 flex flex-col gap-2">
         {/* Mobile AI Companies Dropdown - Opens upward */}
         {showAiCompanies && (
@@ -3066,7 +3210,7 @@ const ImageGenerationInterface2: React.FC = () => {
             </div>
 
             {/* Aspect Ratio Selector */}
-            <div className="relative" style={{ animation: `slideInLeft 0.2s ease-out 50ms both` }}>
+            <div ref={mobileAspectRatioTriggerRef} className="relative" style={{ animation: `slideInLeft 0.2s ease-out 50ms both` }}>
               <button
                 onClick={() => {
                   setShowAspectRatios(!showAspectRatios);
@@ -3078,7 +3222,13 @@ const ImageGenerationInterface2: React.FC = () => {
                 <span className="font-medium">{aspectRatio}</span>
               </button>
               {showAspectRatios && (
-                <div className="absolute bottom-full left-0 mb-2 w-48 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg overflow-hidden shadow-xl shadow-black/30 z-50 p-1 max-h-64 overflow-y-auto" style={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 0 25px rgba(0, 0, 0, 0.5)' }}>
+                <div
+                  className="absolute bottom-full mb-2 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg overflow-y-auto overflow-x-hidden shadow-xl shadow-black/30 z-50 p-1"
+                  style={{
+                    ...mobileAspectRatioDropdownStyle,
+                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 0 25px rgba(0, 0, 0, 0.5)',
+                  }}
+                >
                   {aspectRatios.filter((ar) => isAspectRatioSupported(ar.value)).map((ar) => (
                       <button
                         key={ar.value}

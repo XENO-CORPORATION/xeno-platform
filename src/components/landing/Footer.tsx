@@ -7,14 +7,14 @@ const Footer: React.FC = () => {
     Product: [
       { label: 'Features', href: '#features' },
       { label: 'Pricing', href: '#pricing' },
-      { label: 'Changelog', href: '#' },
-      { label: 'Roadmap', href: '#' },
+      { label: 'Download', href: '/download' },
+      { label: 'Changelog', href: '/releases/latest' },
     ],
     Resources: [
       { label: 'Documentation', href: '#' },
       { label: 'API', href: '#' },
       { label: 'Guides', href: '#' },
-      { label: 'Blog', href: '#' },
+      { label: 'Blog', href: '/blog' },
     ],
     Company: [
       { label: 'About', href: '#' },
@@ -41,13 +41,13 @@ const Footer: React.FC = () => {
         <div className="grid grid-cols-2 md:grid-cols-6 gap-8 lg:gap-12 mb-16">
           {/* Brand column */}
           <div className="col-span-2">
-            <Link to="/" className="flex items-center gap-3 mb-6">
-              <img 
-                src="/logo.svg" 
-                alt="Xeno" 
-                className="w-9 h-9 rounded-lg object-contain invert"
+            <Link to="/" className="flex items-center gap-2.5 mb-6">
+              <img
+                src="/xeno-logo.svg"
+                alt="XENO"
+                className="w-7 h-7 rounded-md object-contain invert"
               />
-              <span className="text-xl font-bold text-white tracking-tight">Xeno</span>
+              <span className="text-[15px] font-bold text-white tracking-[0.15em] uppercase">XENO</span>
             </Link>
             <p className="text-white/35 text-[14px] leading-relaxed mb-6 max-w-xs">
               The visual AI workspace for creative professionals.
@@ -61,9 +61,9 @@ const Footer: React.FC = () => {
                     key={social.label}
                     href={social.href}
                     aria-label={social.label}
-                    className="w-10 h-10 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/[0.06] transition-all"
+                    className="w-9 h-9 rounded-md bg-white/[0.03] border border-white/[0.06] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/[0.06] transition-all"
                   >
-                    <Icon size={18} />
+                    <Icon size={16} />
                   </a>
                 );
               })}
@@ -75,16 +75,22 @@ const Footer: React.FC = () => {
             <div key={category}>
               <h4 className="text-sm font-semibold text-white mb-4">{category}</h4>
               <ul className="space-y-3">
-                {links.map((link) => (
-                  <li key={link.label}>
-                    <a
-                      href={link.href}
-                      className="text-sm text-white/40 hover:text-white transition-colors"
-                    >
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
+                {links.map((link) => {
+                  const cls = "text-sm text-white/40 hover:text-white transition-colors";
+                  return (
+                    <li key={link.label}>
+                      {link.href.startsWith('/') ? (
+                        <Link to={link.href} className={cls}>
+                          {link.label}
+                        </Link>
+                      ) : (
+                        <a href={link.href} className={cls}>
+                          {link.label}
+                        </a>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
@@ -93,9 +99,9 @@ const Footer: React.FC = () => {
         {/* Bottom section */}
         <div className="pt-8 border-t border-white/[0.06] flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-sm text-white/30">
-            © {new Date().getFullYear()} Xeno. All rights reserved.
+            &copy; {new Date().getFullYear()} XENO Corporation. All rights reserved.
           </p>
-          
+
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2 text-sm text-white/30">
               <div className="w-2 h-2 rounded-full bg-green-400" />
@@ -104,7 +110,6 @@ const Footer: React.FC = () => {
           </div>
         </div>
       </div>
-
     </footer>
   );
 };

@@ -941,7 +941,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
             onClick={() => navigate('/overview')}
             className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
             style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-            title="Home"
+            aria-label="Home"
           >
             <Home size={16} />
           </button>
@@ -951,7 +951,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
             onClick={() => navigate('/os/connect')}
             className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
             style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-            title="OS"
+            aria-label="OS"
           >
             <span style={{ fontSize: 12, fontWeight: 600 }}>OS</span>
           </button>
@@ -961,7 +961,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
             onClick={() => navigate('/overview/search')}
             className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
             style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-            title="Search"
+            aria-label="Search"
           >
             <Search size={16} />
           </button>
@@ -971,7 +971,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
             onClick={onCreateLab}
             className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
             style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-            title="Create Lab"
+            aria-label="Create Lab"
           >
             <Plus size={16} />
           </button>
@@ -1040,7 +1040,6 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
                               : 'bg-white/5 text-white/70 hover:bg-white/15 hover:text-white'
                           }`}
                           style={{ width: 28, height: 28, minWidth: 28, minHeight: 28, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-                          title={`${section.name} - ${page.id}`}
                         >
                           {page.icon}
                         </button>
@@ -1075,7 +1074,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
                         : 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
                     }`}
                     style={{ width: 32, height: 32, minWidth: 32, minHeight: 32, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0, zIndex: 30 }}
-                    title={lab.name}
+                    aria-label={lab.name}
                   >
                     <Beaker size={16} />
                   </button>
@@ -1089,7 +1088,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
                         }}
                         className="flex items-center justify-center rounded-md font-medium bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-colors duration-300"
                         style={{ width: 28, height: 28, minWidth: 28, minHeight: 28, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-                        title={`${lab.name} - Open`}
+                        aria-label={`${lab.name} - Open`}
                       >
                         <Beaker size={14} />
                       </button>
@@ -1108,7 +1107,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
         <button
           className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
           style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-          title="Notifications"
+          aria-label="Notifications"
         >
           <Bell size={16} />
         </button>
@@ -1117,7 +1116,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
         <button
           className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
           style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-          title="Light Theme"
+          aria-label="Light Theme"
         >
           <Sun size={16} />
         </button>
@@ -1131,7 +1130,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
               : 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
           }`}
           style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-          title="Profile"
+          aria-label="Profile"
         >
           <User size={16} />
         </button>

@@ -5,7 +5,7 @@ import { ImageModelSettings } from '../../nodes/image-models/ImageModelInterface
 import * as xenoImageService from '../../../services/xenoImageService';
 import { useGenerationHistory } from './hooks/useGenerationHistory';
 import GenerationHistory from './components/GenerationHistory';
-import { generationHistoryService } from '../../../services/generationHistoryService';
+import { generationHistoryService, type GenerationRecord } from '../../../services/generationHistoryService';
 
 interface AspectRatio {
   value: string;
@@ -23,6 +23,58 @@ interface UploadedImage {
   id: string;
   url: string;
   refTypes: ('style' | 'character' | 'image')[];
+}
+
+const DEMO_MOCK_HISTORY_ENABLED = true;
+const DEMO_MOCK_HISTORY_QUERY_PARAM = 'mockHistory';
+const DEMO_MOCK_MOBILE_GENERATION_ENABLED = true;
+const DEMO_MOCK_GENERATION_ONLY = true;
+const DEFAULT_DEMO_MODEL = 'Flux 2 Max';
+
+function buildMockImageUrls(prompt: string, count: number, width: number, height: number): string[] {
+  const safeWidth = Math.max(256, width);
+  const safeHeight = Math.max(256, height);
+  const seedBase = `${prompt}-${Date.now()}`;
+
+  return Array.from({ length: count }, (_, index) => (
+    `https://picsum.photos/seed/${encodeURIComponent(`${seedBase}-${index}`)}/${safeWidth}/${safeHeight}`
+  ));
+}
+
+function buildMockGenerationHistory(): GenerationRecord[] {
+  const now = Date.now();
+  const demoPrompts = [
+    'cinematic portrait, soft rim light, 85mm lens',
+    'futuristic city at blue hour, rainy streets, neon reflections',
+    'minimal product shot on dark neutral background',
+    'high-detail fantasy landscape with volumetric fog',
+    'fashion editorial, studio lighting, monochrome palette',
+    'architectural visualization, brutalist interior, natural light',
+  ];
+  const sizes = [
+    { aspect: '1:1', width: 1024, height: 1024, count: 4 },
+    { aspect: '16:9', width: 1280, height: 720, count: 3 },
+    { aspect: '9:16', width: 720, height: 1280, count: 2 },
+    { aspect: '3:4', width: 960, height: 1280, count: 4 },
+  ];
+
+  return demoPrompts.map((prompt, index) => {
+    const size = sizes[index % sizes.length];
+    return {
+      id: `local-seed-${now}-${index}`,
+      user_id: '',
+      prompt,
+      image_urls: buildMockImageUrls(prompt, size.count, size.width, size.height),
+      model: DEFAULT_DEMO_MODEL,
+      aspect_ratio: size.aspect,
+      resolution: '2k',
+      count: size.count,
+      provider: 'demo',
+      is_favorite: index % 3 === 0,
+      created_at: new Date(now - index * 1000 * 60 * 18).toISOString(),
+      reference_images: [],
+    };
+  });
 }
 
 const aspectRatios: AspectRatio[] = [
@@ -496,6 +548,7 @@ const modelNameToProvider: Record<string, ModelMapping> = {
 };
 
 const ImageGenerationInterface2: React.FC = () => {
+  const hasTokenInUrl = new URLSearchParams(window.location.search).has('token');
   const [showSettings, setShowSettings] = useState(false);
   const [count, setCount] = useState(1);
   const [aspectRatio, setAspectRatio] = useState('3:4');
@@ -580,6 +633,8 @@ const ImageGenerationInterface2: React.FC = () => {
 
   // Local generations state for non-authenticated users or immediate display
   const [localGenerations, setLocalGenerations] = useState<typeof dbGenerations>([]);
+  const [hasSeededMockHistory, setHasSeededMockHistory] = useState(false);
+  const isMockGenerateMode = DEMO_MOCK_MOBILE_GENERATION_ENABLED && (isMobile || hasTokenInUrl);
 
   // Combine local and database generations (local first, then db)
   const generations = [...localGenerations, ...dbGenerations];
@@ -598,6 +653,29 @@ const ImageGenerationInterface2: React.FC = () => {
     }
     window.history.replaceState({}, '', url.toString());
   }, [showHistory, favoritesOnly]);
+
+  // Seed local mock content for design/testing mode.
+  // Desktop: trigger with ?mockHistory=1
+  // Mobile: auto-seed into the main generated feed by default
+  useEffect(() => {
+    if (!DEMO_MOCK_HISTORY_ENABLED || hasSeededMockHistory) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const mockHistoryEnabled =
+      params.get(DEMO_MOCK_HISTORY_QUERY_PARAM) === '1' ||
+      isMobile ||
+      params.has('token');
+
+    if (!mockHistoryEnabled) return;
+
+    if (localGenerations.length > 0) {
+      setHasSeededMockHistory(true);
+      return;
+    }
+
+    setLocalGenerations(buildMockGenerationHistory());
+    setHasSeededMockHistory(true);
+  }, [hasSeededMockHistory, isMobile, localGenerations.length]);
 
   // Keyboard and scroll navigation for image viewer modal
   useEffect(() => {
@@ -670,6 +748,7 @@ const ImageGenerationInterface2: React.FC = () => {
 
   // Check if user is authenticated
   const isAuthenticated = generationHistoryService.isAuthenticated();
+  const canViewHistory = isAuthenticated || localGenerations.length > 0;
 
   // Get current model capabilities
   const currentModelCapabilities = selectedModel ? modelNameToProvider[selectedModel]?.capabilities : null;
@@ -943,10 +1022,27 @@ const ImageGenerationInterface2: React.FC = () => {
     setPrompt(promptText);
   };
 
+  const handleToggleFavoriteGeneration = async (genId: string) => {
+    if (genId.startsWith('local-')) {
+      setLocalGenerations(prev =>
+        prev.map(gen =>
+          gen.id === genId ? { ...gen, is_favorite: !gen.is_favorite } : gen
+        )
+      );
+      return;
+    }
+
+    await toggleFavorite(genId);
+  };
+
   // Delete a generation
   const handleDeleteGeneration = async (genId: string) => {
     if (confirm('Are you sure you want to delete this generation?')) {
-      await deleteGeneration(genId);
+      if (genId.startsWith('local-')) {
+        setLocalGenerations(prev => prev.filter(gen => gen.id !== genId));
+      } else {
+        await deleteGeneration(genId);
+      }
       setOpenMoreMenu(null);
     }
   };
@@ -1019,20 +1115,29 @@ const ImageGenerationInterface2: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) {
+    const demoMode = DEMO_MOCK_GENERATION_ONLY || isMockGenerateMode;
+    const promptInput = prompt.trim();
+    const promptForGeneration = promptInput || (demoMode ? 'Demo image preview' : '');
+    const modelForGeneration = selectedModel || (demoMode ? DEFAULT_DEMO_MODEL : null);
+
+    if (!promptForGeneration) {
       setError('Please enter a prompt');
       return;
     }
 
-    if (!selectedModel) {
+    if (!modelForGeneration) {
       setError('Please select a model');
       return;
     }
 
+    if (demoMode && !selectedModel) {
+      setSelectedModel(modelForGeneration);
+    }
+
     // Get the model mapping
-    const modelMapping = modelNameToProvider[selectedModel];
+    const modelMapping = modelNameToProvider[modelForGeneration];
     if (!modelMapping) {
-      setError(`Model "${selectedModel}" is not yet supported. Please select a different model.`);
+      setError(`Model "${modelForGeneration}" is not yet supported. Please select a different model.`);
       return;
     }
 
@@ -1054,7 +1159,7 @@ const ImageGenerationInterface2: React.FC = () => {
     }
 
     // Store the current prompt for this generation
-    const currentPrompt = prompt.trim();
+    const currentPrompt = promptForGeneration;
 
     // Store the current settings for this generation (freeze them including prompt)
     setGeneratingSettings({
@@ -1085,7 +1190,7 @@ const ImageGenerationInterface2: React.FC = () => {
 
       console.log('Generating with settings:', {
         provider: modelMapping.provider,
-        model: selectedModel,
+        model: modelForGeneration,
         aspectRatio: effectiveAspectRatio,
         resolution: effectiveResolution,
         dimensions: `${width}x${height}`,
@@ -1126,7 +1231,10 @@ const ImageGenerationInterface2: React.FC = () => {
       const charRefImage = uploadedImages.find(img => img.refTypes.includes('character'));
       const imgRefImages = uploadedImages.filter(img => img.refTypes.includes('image') || img.refTypes.length === 0);
 
-      if (modelMapping.provider === 'fal') {
+      if (demoMode) {
+        await new Promise(resolve => setTimeout(resolve, 220));
+        imageUrls = buildMockImageUrls(currentPrompt, effectiveCount, width, height);
+      } else if (modelMapping.provider === 'fal') {
         // Use fal.ai - supports batch generation
 
         // Map aspect ratio to fal.ai image_size parameter
@@ -1232,7 +1340,7 @@ const ImageGenerationInterface2: React.FC = () => {
         }
       } else if (modelMapping.provider === 'xeno-flow') {
         // Use Xeno Flow Service for Nano Banana models
-        console.log('Using Xeno Flow Service for', selectedModel);
+        console.log('Using Xeno Flow Service for', modelForGeneration);
 
         // Map aspect ratio to xeno-flow format
         let xenoAspectRatio: 'landscape' | 'portrait' | 'square' = 'landscape';
@@ -1290,11 +1398,11 @@ const ImageGenerationInterface2: React.FC = () => {
           user_id: '',
           prompt: currentPrompt,
           image_urls: imageUrls,
-          model: selectedModel,
+          model: modelForGeneration,
           aspect_ratio: effectiveAspectRatio,
           resolution: effectiveResolution,
           count: effectiveCount,
-          provider: modelMapping.provider,
+          provider: demoMode ? 'demo' : modelMapping.provider,
           is_favorite: false,
           created_at: new Date().toISOString(),
           reference_images: [] as any[],
@@ -1302,7 +1410,7 @@ const ImageGenerationInterface2: React.FC = () => {
 
         // Save to history - this updates the generations array (single source of truth)
         // The hook's saveGeneration automatically prepends to the generations array
-        if (isAuthenticated) {
+        if (isAuthenticated && !demoMode) {
           // Collect reference images used for this generation (flatten multiple types per image)
           const refImages = uploadedImages
             .filter(img => img.refTypes.length > 0)
@@ -1311,7 +1419,7 @@ const ImageGenerationInterface2: React.FC = () => {
           const saved = await saveGeneration({
             prompt: currentPrompt,
             image_urls: imageUrls,
-            model: selectedModel,
+            model: modelForGeneration,
             aspect_ratio: effectiveAspectRatio,
             resolution: effectiveResolution,
             count: effectiveCount,
@@ -1449,7 +1557,7 @@ const ImageGenerationInterface2: React.FC = () => {
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value.slice(0, charLimit))}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !isGenerating && prompt.trim() && selectedModel) {
+                          if ((e.key === 'Enter' || e.key === 'Go' || e.key === 'Done') && !isGenerating && (Boolean(prompt.trim() && selectedModel) || isMockGenerateMode)) {
                             handleGenerate();
                           }
                         }}
@@ -1523,7 +1631,7 @@ const ImageGenerationInterface2: React.FC = () => {
                 setSelectedTool(null);
               }}
               className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
-              title={isAuthenticated ? 'View generation history' : 'Sign in to view history'}
+              title={canViewHistory ? 'View generation history' : 'Sign in to view history'}
             >
               <svg
                 className={`w-6 h-6 ${showHistory && !favoritesOnly ? 'text-white' : 'text-white/40'}`}
@@ -1562,7 +1670,7 @@ const ImageGenerationInterface2: React.FC = () => {
                 setSelectedTool(null);
               }}
               className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
-              title={isAuthenticated ? 'View favorites' : 'Sign in to view favorites'}
+              title={canViewHistory ? 'View favorites' : 'Sign in to view favorites'}
             >
               <svg className={`w-[27px] h-[27px] mt-0.5 ${favoritesOnly ? 'text-white' : 'text-white/40'}`} viewBox="0 0 50 50">
                   {/* Expanding ring */}
@@ -2122,7 +2230,7 @@ const ImageGenerationInterface2: React.FC = () => {
           {/* History View - When showHistory is true */}
           {showHistory ? (
             <div className="pt-4">
-              {!isAuthenticated ? (
+              {!canViewHistory ? (
                 <div className="flex flex-col items-center justify-center py-16 text-white/40">
                   <svg className="w-16 h-16 mb-4 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -2133,11 +2241,13 @@ const ImageGenerationInterface2: React.FC = () => {
               ) : (
                 <GenerationHistory
                   generations={generations}
-                  isLoading={isHistoryLoading}
-                  hasMore={hasMore}
-                  onLoadMore={loadMore}
-                  onDelete={deleteGeneration}
-                  onToggleFavorite={toggleFavorite}
+                  isLoading={isAuthenticated ? isHistoryLoading : false}
+                  hasMore={isAuthenticated ? hasMore : false}
+                  onLoadMore={() => {
+                    if (isAuthenticated) loadMore();
+                  }}
+                  onDelete={handleDeleteGeneration}
+                  onToggleFavorite={handleToggleFavoriteGeneration}
                   onSelectGeneration={(gen) => {
                     // Load the prompt into input and close history
                     // The generation is already in the generations array (single source of truth)
@@ -2248,7 +2358,7 @@ const ImageGenerationInterface2: React.FC = () => {
                                   return next;
                                 });
                               }, 700);
-                              toggleFavorite(gen.id);
+                              handleToggleFavoriteGeneration(gen.id);
                             }}
                             className={`absolute top-2 right-2 p-2 rounded-lg backdrop-blur-sm transition-all z-10 ${
                               gen.is_favorite
@@ -2611,7 +2721,7 @@ const ImageGenerationInterface2: React.FC = () => {
                           return next;
                         });
                       }, 700);
-                      toggleFavorite(currentGen.id);
+                      handleToggleFavoriteGeneration(currentGen.id);
                     }}
                     className={`p-1.5 rounded hover:bg-white/10 transition-all ${currentGen.is_favorite ? 'text-white' : 'text-white/50 hover:text-white'}`}
                     title={currentGen.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -2660,7 +2770,11 @@ const ImageGenerationInterface2: React.FC = () => {
                   {/* Delete */}
                   <button
                     onClick={() => {
-                      deleteGeneration(currentGen.id);
+                      if (currentGen.id.startsWith('local-')) {
+                        setLocalGenerations(prev => prev.filter(gen => gen.id !== currentGen.id));
+                      } else {
+                        deleteGeneration(currentGen.id);
+                      }
                       setViewingImage(null);
                     }}
                     className="p-1.5 rounded hover:bg-red-500/20 text-white/50 hover:text-red-400 transition-all"
@@ -3360,7 +3474,7 @@ const ImageGenerationInterface2: React.FC = () => {
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value.slice(0, charLimit))}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !isGenerating && prompt.trim() && selectedModel) {
+                      if ((e.key === 'Enter' || e.key === 'Go' || e.key === 'Done') && !isGenerating && (Boolean(prompt.trim() && selectedModel) || isMockGenerateMode)) {
                         handleGenerate();
                       }
                     }}
