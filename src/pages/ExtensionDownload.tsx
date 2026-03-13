@@ -7,10 +7,7 @@ import {
   ExternalLink,
   FlaskConical,
   Package,
-  PanelRightOpen,
-  ServerCog,
   ShieldCheck,
-  Sparkles,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import Header from '../components/landing/Header';
@@ -85,7 +82,6 @@ const channelCopy: Record<
     title: string;
     eyebrow: string;
     description: string;
-    accent: string;
     button: string;
     icon: typeof ShieldCheck;
   }
@@ -93,24 +89,21 @@ const channelCopy: Record<
   stable: {
     title: 'Stable',
     eyebrow: 'Production',
-    description: 'Use this for the main install path. Lowest-risk updates, slower promotion, and the cleanest support surface.',
-    accent: 'from-[#f5f1e8]/18 via-[#f5f1e8]/6 to-transparent',
+    description: 'Default install track for customer-facing use, documentation, and the cleanest support path.',
     button: 'Install Stable',
     icon: ShieldCheck,
   },
   beta: {
     title: 'Beta',
     eyebrow: 'Opt-in',
-    description: 'Near-production builds for testers who want faster updates before they are promoted to Stable.',
-    accent: 'from-[#d79b55]/18 via-[#d79b55]/6 to-transparent',
+    description: 'For testers who want faster updates before changes are promoted into the production track.',
     button: 'Install Beta',
-    icon: Sparkles,
+    icon: CheckCircle2,
   },
   preview: {
     title: 'Preview',
-    eyebrow: 'Experimental',
-    description: 'Internal experiments, newest agent logic, and the highest chance of breakage while features settle.',
-    accent: 'from-[#89a0ff]/18 via-[#89a0ff]/6 to-transparent',
+    eyebrow: 'Internal',
+    description: 'For experiments, newest agent logic, and internal validation before anything graduates further.',
     button: 'Get Preview',
     icon: FlaskConical,
   },
@@ -123,29 +116,25 @@ const browserCopy: Record<
     description: string;
     system: string;
     badge: string;
-    tint: string;
   }
 > = {
   chrome: {
     title: 'Chrome',
-    description: 'Best default for the full browser agent workflow, side panel UI, and Chromium extension runtime.',
-    system: 'Chrome Web Store or manual Chromium package',
+    description: 'Full Chromium install path with the main browser-agent workflow and store-ready packaging.',
+    system: 'Chrome Web Store or Chromium package',
     badge: 'Chromium',
-    tint: 'from-[#8ad6ff]/15 via-[#8ad6ff]/5 to-transparent',
   },
   edge: {
     title: 'Edge',
-    description: 'Same agent flow, tuned for Microsoft Edge installs and the Chromium runtime that the extension expects.',
-    system: 'Edge Add-ons or manual Chromium package',
+    description: 'Same extension runtime, optimized for Microsoft Edge installs and enterprise-friendly rollout.',
+    system: 'Edge Add-ons or Chromium package',
     badge: 'Recommended',
-    tint: 'from-[#8ec5ff]/18 via-[#8ec5ff]/6 to-transparent',
   },
   safari: {
     title: 'Safari',
-    description: 'Uses the Safari wrapper route rather than the Chromium side panel flow. Best once App Store/TestFlight links are live.',
-    system: 'App Store or TestFlight once published',
-    badge: 'Wrapper app',
-    tint: 'from-[#f7b3ff]/18 via-[#f7b3ff]/6 to-transparent',
+    description: 'Wrapper-based distribution path for Apple devices. Best once App Store and TestFlight links are live.',
+    system: 'App Store or TestFlight',
+    badge: 'Wrapper',
   },
 };
 
@@ -174,28 +163,58 @@ function BrowserButton({
   return (
     <button
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-2xl border px-4 py-4 text-left transition-all duration-300 ${
+      className={`rounded-md border px-4 py-4 text-left transition-colors duration-200 ${
         active
-          ? 'border-white/18 bg-white/[0.08] shadow-[0_18px_70px_rgba(0,0,0,0.45)]'
-          : 'border-white/[0.08] bg-white/[0.03] hover:border-white/[0.16] hover:bg-white/[0.05]'
+          ? 'border-white/20 bg-white/[0.06]'
+          : 'border-white/[0.08] bg-white/[0.02] hover:border-white/[0.14] hover:bg-white/[0.04]'
       }`}
     >
-      <div className={`absolute inset-0 bg-gradient-to-br ${browser.tint} opacity-100`} />
-      <div className="relative">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.22em] text-white/35">{browser.badge}</p>
-            <p className="mt-1 text-[17px] font-medium text-white/92">{browser.title}</p>
-          </div>
-          {detected ? (
-            <span className="rounded-full border border-white/[0.12] bg-white/[0.06] px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-white/55">
-              Detected
-            </span>
-          ) : null}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{browser.badge}</p>
+          <p className="mt-1 text-[17px] font-medium text-white/92">{browser.title}</p>
         </div>
-        <p className="mt-3 text-[12px] leading-6 text-white/48">{browser.description}</p>
+        {detected ? (
+          <span className="rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-white/48">
+            Detected
+          </span>
+        ) : null}
       </div>
+      <p className="mt-3 text-[13px] leading-6 text-white/48">{browser.description}</p>
     </button>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-t border-white/[0.06] py-3 first:border-t-0 first:pt-0 last:pb-0">
+      <span className="text-[12px] uppercase tracking-[0.14em] text-white/36">{label}</span>
+      <span className="text-right text-[13px] text-white/72">{value}</span>
+    </div>
+  );
+}
+
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof CheckCircle2;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-md border border-white/[0.08] bg-white/[0.02] p-4">
+      <div className="flex items-start gap-3">
+        <div className="rounded-md border border-white/[0.08] bg-white/[0.03] p-2 text-white/62">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">{label}</p>
+          <p className="mt-1 text-[14px] font-medium text-white/86">{value}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -214,90 +233,64 @@ function TrackRailCard({
   const Icon = meta.icon;
 
   return (
-    <article className="group relative overflow-hidden rounded-[26px] border border-white/[0.08] bg-[#0d0f12] p-5">
-      <div className={`absolute inset-0 bg-gradient-to-br ${meta.accent}`} />
-      <div className="relative">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.24em] text-white/38">{meta.eyebrow}</p>
-            <h3 className="mt-2 text-[22px] font-semibold tracking-tight text-white/92">{meta.title}</h3>
-          </div>
-          <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-2.5 text-white/60">
-            <Icon className="h-4 w-4" />
-          </div>
+    <article className="rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">{meta.eyebrow}</p>
+          <h3 className="mt-1 text-[22px] font-semibold text-white/92">{meta.title}</h3>
         </div>
-
-        <p className="mt-4 text-[13px] leading-6 text-white/52">{meta.description}</p>
-
-        <div className="mt-5 rounded-[20px] border border-white/[0.08] bg-black/25 p-4">
-          <div className="flex items-center justify-between gap-3 text-[12px] text-white/45">
-            <span>{browserCopy[browser].title}</span>
-            <span>{loading ? 'Loading...' : target.release?.version || 'Pending'}</span>
-          </div>
-          <div className="mt-2 flex items-center justify-between gap-3 text-[12px] text-white/42">
-            <span>Published</span>
-            <span>{loading ? '...' : formatDate(target.release?.publishedAt)}</span>
-          </div>
-          <div className="mt-2 flex items-center justify-between gap-3 text-[12px] text-white/42">
-            <span>Install path</span>
-            <span className="text-right">{loading ? '...' : target.pathLabel}</span>
-          </div>
+        <div className="rounded-md border border-white/[0.08] bg-white/[0.03] p-2 text-white/60">
+          <Icon className="h-4 w-4" />
         </div>
+      </div>
 
-        <div className="mt-5 flex flex-wrap gap-2.5">
-          {target.url ? (
-            <a
-              href={target.url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-[12px] font-semibold text-[#08080a] transition-opacity duration-200 hover:opacity-85"
-            >
-              <Download className="h-4 w-4" />
-              {meta.button}
-            </a>
-          ) : (
-            <span className="inline-flex items-center rounded-full border border-white/[0.08] px-4 py-2.5 text-[12px] text-white/35">
-              Release pending
-            </span>
-          )}
+      <p className="mt-4 text-[13px] leading-6 text-white/48">{meta.description}</p>
 
-          {target.release?.htmlUrl ? (
-            <a
-              href={target.release.htmlUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] px-4 py-2.5 text-[12px] text-white/68 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
-            >
-              Notes
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          ) : null}
-        </div>
+      <div className="mt-5 rounded-md border border-white/[0.08] bg-white/[0.02] p-4">
+        <DetailRow label="Browser" value={browserCopy[browser].title} />
+        <DetailRow label="Version" value={loading ? 'Loading...' : target.release?.version || 'Pending'} />
+        <DetailRow label="Published" value={loading ? '...' : formatDate(target.release?.publishedAt)} />
+        <DetailRow label="Path" value={loading ? '...' : target.pathLabel} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {target.url ? (
+          <a
+            href={target.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2.5 text-[12px] font-semibold text-[#08080a] transition-opacity duration-200 hover:opacity-90"
+          >
+            <Download className="h-4 w-4" />
+            {meta.button}
+          </a>
+        ) : (
+          <span className="inline-flex items-center rounded-md border border-white/[0.08] px-4 py-2.5 text-[12px] text-white/34">
+            Release pending
+          </span>
+        )}
+
+        {target.release?.htmlUrl ? (
+          <a
+            href={target.release.htmlUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] px-4 py-2.5 text-[12px] text-white/68 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
+          >
+            Notes
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        ) : null}
       </div>
     </article>
   );
 }
 
-function SurfaceStat({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof CheckCircle2;
-  label: string;
-  value: string;
-}) {
+function SupportCard({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-[20px] border border-white/[0.08] bg-black/25 p-4">
-      <div className="flex items-center gap-3">
-        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-2.5 text-white/70">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.22em] text-white/34">{label}</p>
-          <p className="mt-1 text-[14px] font-medium text-white/85">{value}</p>
-        </div>
-      </div>
+    <div className="rounded-md border border-white/[0.08] bg-white/[0.02] p-5">
+      <p className="text-[14px] font-medium text-white/86">{title}</p>
+      <p className="mt-2 text-[13px] leading-6 text-white/48">{body}</p>
     </div>
   );
 }
@@ -341,152 +334,156 @@ export default function ExtensionDownloadPage() {
 
   const handleGetStarted = () => navigate('/auth');
   const stableTarget = getInstallTarget(data, selectedBrowser, 'stable');
-  const selectedStableRelease = data?.channels?.stable || null;
+  const stableRelease = data?.channels?.stable || null;
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#08080a] font-['Inter',sans-serif] text-white antialiased">
+    <div className="min-h-screen bg-[#08080a] font-['Inter',sans-serif] text-white antialiased">
       <Header onGetStarted={handleGetStarted} visible={true} />
-      <main className="relative pt-[46px]">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute left-[-10%] top-24 h-[420px] w-[420px] rounded-full bg-[#2f4f78]/18 blur-[120px]" />
-          <div className="absolute right-[-8%] top-[18rem] h-[360px] w-[360px] rounded-full bg-[#8f6b3d]/16 blur-[120px]" />
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:32px_32px] opacity-[0.04]" />
-        </div>
-
-        <section className="relative px-6 pb-14 pt-16 md:pb-20 md:pt-20">
+      <main className="pt-[46px]">
+        <section className="px-6 py-14 md:py-18">
           <div className="mx-auto max-w-[1260px]">
-            <div className="mb-8 flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-4 py-2 text-[11px] uppercase tracking-[0.24em] text-white/45">
+            <div className="mb-6 flex flex-wrap items-center gap-2">
+              <span className="rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-white/40">
                 Browser agent
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-black/20 px-4 py-2 text-[11px] uppercase tracking-[0.22em] text-white/32">
+              <span className="rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-white/34">
                 Release pipeline synced
               </span>
             </div>
 
-            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_340px]">
-              <div className="relative overflow-hidden rounded-[34px] border border-white/[0.08] bg-[#0d0f12] shadow-[0_30px_140px_rgba(0,0,0,0.45)]">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(111,168,255,0.12),transparent_30%)]" />
-                <div className="relative grid gap-10 p-6 md:p-8 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-8">
-                  <div>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-white/40">
-                      Detected {browserCopy[detectedBrowser].title}
-                    </div>
+            <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="grid gap-5">
+                <div className="rounded-md border border-white/[0.08] bg-[#0b0c0f]">
+                  <div className="grid gap-0 xl:min-h-[560px] xl:grid-cols-[minmax(0,1.1fr)_360px] xl:aspect-[16/9]">
+                    <div className="flex flex-col justify-between p-6 md:p-8">
+                      <div>
+                        <div className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-white/40">
+                          Detected {browserCopy[detectedBrowser].title}
+                        </div>
 
-                    <h1 className="mt-6 max-w-[740px] text-[34px] font-semibold tracking-[-0.03em] text-white/94 md:text-[52px] md:leading-[1.02]">
-                      Download the Xeno browser agent for {browserCopy[selectedBrowser].title}
-                    </h1>
+                        <h1 className="mt-6 max-w-[760px] text-[34px] font-semibold tracking-[-0.03em] text-white/94 md:text-[48px] md:leading-[1.03]">
+                          Download the Xeno browser agent for {browserCopy[selectedBrowser].title}
+                        </h1>
 
-                    <p className="mt-5 max-w-[700px] text-[15px] leading-8 text-white/55 md:text-[16px]">
-                      Stable is for production installs, Beta is for opt-in testers, and Preview is for internal experiments.
-                      This page reads directly from the Xeno extension release pipeline so the website stays in sync with the repo.
-                    </p>
+                        <p className="mt-5 max-w-[720px] text-[15px] leading-8 text-white/54">
+                          Stable is for production installs, Beta is for opt-in testers, and Preview is for internal
+                          experiments. This page reads directly from the Xeno extension release pipeline so the website
+                          stays in sync with the repo.
+                        </p>
 
-                    <div className="mt-8 grid gap-3 md:grid-cols-3">
-                      {(Object.keys(browserCopy) as BrowserId[]).map((browserId) => (
-                        <BrowserButton
-                          key={browserId}
-                          browserId={browserId}
-                          active={browserId === selectedBrowser}
-                          detected={browserId === detectedBrowser}
-                          onClick={() => setSelectedBrowser(browserId)}
-                        />
-                      ))}
-                    </div>
+                        <div className="mt-8 grid gap-3 md:grid-cols-3">
+                          {(Object.keys(browserCopy) as BrowserId[]).map((browserId) => (
+                            <BrowserButton
+                              key={browserId}
+                              browserId={browserId}
+                              active={browserId === selectedBrowser}
+                              detected={browserId === detectedBrowser}
+                              onClick={() => setSelectedBrowser(browserId)}
+                            />
+                          ))}
+                        </div>
+                      </div>
 
-                    <div className="mt-8 flex flex-wrap items-center gap-3">
-                      {stableTarget.url ? (
-                        <a
-                          href={stableTarget.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-[13px] font-semibold text-[#08080a] transition-opacity duration-200 hover:opacity-85"
+                      <div className="mt-8 flex flex-wrap items-center gap-3">
+                        {stableTarget.url ? (
+                          <a
+                            href={stableTarget.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-3 text-[13px] font-semibold text-[#08080a] transition-opacity duration-200 hover:opacity-90"
+                          >
+                            <Download className="h-4 w-4" />
+                            {stableTarget.storeUrl ? 'Install Stable' : 'Download Stable'}
+                          </a>
+                        ) : (
+                          <span className="inline-flex items-center rounded-md border border-white/[0.08] px-5 py-3 text-[13px] text-white/34">
+                            Stable release pending
+                          </span>
+                        )}
+
+                        {stableRelease?.htmlUrl ? (
+                          <a
+                            href={stableRelease.htmlUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] px-5 py-3 text-[13px] text-white/68 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
+                          >
+                            View release notes
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        ) : null}
+
+                        <button
+                          onClick={() => document.getElementById('extension-release-history')?.scrollIntoView({ behavior: 'smooth' })}
+                          className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] px-5 py-3 text-[13px] text-white/52 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
                         >
-                          <Download className="h-4 w-4" />
-                          {stableTarget.storeUrl ? 'Install Stable' : 'Download Stable'}
-                        </a>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full border border-white/[0.08] px-6 py-3 text-[13px] text-white/38">
-                          Stable release pending
-                        </span>
-                      )}
+                          Release history
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      </div>
 
-                      {selectedStableRelease?.htmlUrl ? (
-                        <a
-                          href={selectedStableRelease.htmlUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] px-6 py-3 text-[13px] text-white/70 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
-                        >
-                          View release notes
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
+                      {error ? (
+                        <div className="mt-6 rounded-md border border-[#5a2020] bg-[#241212] px-4 py-3 text-[13px] leading-6 text-[#ffb6b6]">
+                          {error}
+                        </div>
                       ) : null}
-
-                      <button
-                        onClick={() => document.getElementById('release-surface')?.scrollIntoView({ behavior: 'smooth' })}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] px-6 py-3 text-[13px] text-white/52 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
-                      >
-                        See all tracks
-                        <ArrowRight className="h-4 w-4" />
-                      </button>
                     </div>
 
-                    {error ? (
-                      <div className="mt-6 rounded-[22px] border border-[#5a2020] bg-[#241212] px-5 py-4 text-[13px] leading-6 text-[#ffb6b6]">
-                        {error}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="relative">
-                    <div className="rounded-[28px] border border-white/[0.08] bg-[#12151a] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[11px] uppercase tracking-[0.22em] text-white/36">Install surface</p>
-                          <h2 className="mt-2 text-[24px] font-semibold tracking-tight text-white/92">
-                            {browserCopy[selectedBrowser].title} release channel
-                          </h2>
-                        </div>
-                        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3 text-white/68">
-                          <PanelRightOpen className="h-5 w-5" />
-                        </div>
-                      </div>
-
-                      <p className="mt-4 text-[14px] leading-7 text-white/52">
-                        Extension installs and ZIP fallbacks resolve from the release pipeline. If store URLs are configured,
-                        this page prefers them automatically for the selected browser.
+                    <div className="border-t border-white/[0.06] p-6 md:p-8 xl:border-l xl:border-t-0">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Install surface</p>
+                      <h2 className="mt-2 text-[24px] font-semibold text-white/92">
+                        {browserCopy[selectedBrowser].title} install details
+                      </h2>
+                      <p className="mt-3 text-[14px] leading-7 text-white/50">
+                        Minimal install path for the selected browser. If store URLs exist, they take precedence over
+                        GitHub release packages automatically.
                       </p>
 
                       <div className="mt-6 grid gap-3">
-                        <SurfaceStat
+                        <MetricCard
                           icon={CheckCircle2}
                           label="Latest stable"
-                          value={loading ? 'Loading...' : selectedStableRelease?.version || 'Not published'}
+                          value={loading ? 'Loading...' : stableRelease?.version || 'Not published'}
                         />
-                        <SurfaceStat
+                        <MetricCard
                           icon={Package}
                           label="Package size"
-                          value={selectedStableRelease?.primaryAsset ? formatSize(selectedStableRelease.primaryAsset.size) : 'Unavailable'}
+                          value={stableRelease?.primaryAsset ? formatSize(stableRelease.primaryAsset.size) : 'Unavailable'}
                         />
-                        <SurfaceStat
+                        <MetricCard
                           icon={Clock3}
                           label="Published"
-                          value={selectedStableRelease?.publishedAt ? formatDate(selectedStableRelease.publishedAt) : 'Unavailable'}
+                          value={stableRelease?.publishedAt ? formatDate(stableRelease.publishedAt) : 'Unavailable'}
                         />
                       </div>
 
-                      <div className="mt-6 rounded-[22px] border border-white/[0.08] bg-black/25 p-4">
-                        <p className="text-[11px] uppercase tracking-[0.22em] text-white/34">Install path</p>
-                        <p className="mt-2 text-[15px] font-medium text-white/84">{stableTarget.pathLabel}</p>
-                        <p className="mt-2 text-[13px] leading-6 text-white/45">{browserCopy[selectedBrowser].system}</p>
+                      <div className="mt-6 rounded-md border border-white/[0.08] bg-white/[0.02] p-4">
+                        <DetailRow label="Install path" value={stableTarget.pathLabel} />
+                        <DetailRow label="Browser route" value={browserCopy[selectedBrowser].system} />
+                        <DetailRow label="Release source" value={data?.repo || 'XENO-CORPORATION/xeno-extension'} />
+                        <DetailRow label="Generated" value={formatDate(data?.generatedAt)} />
                       </div>
                     </div>
                   </div>
                 </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <SupportCard
+                    title="Stable is the default path"
+                    body="Use Stable for production installs, documentation, and support-driven rollout."
+                  />
+                  <SupportCard
+                    title="Beta and Preview stay separate"
+                    body="Testers can install faster tracks without confusing the main install path for everyone else."
+                  />
+                  <SupportCard
+                    title="User key support stays available"
+                    body="Install first, then add a custom API key inside extension settings if you want to override the fallback."
+                  />
+                </div>
               </div>
 
-              <aside className="space-y-4">
+              <aside className="grid gap-3 xl:sticky xl:top-24">
                 {(Object.keys(channelCopy) as ChannelId[]).map((channel) => (
                   <TrackRailCard
                     key={channel}
@@ -501,211 +498,98 @@ export default function ExtensionDownloadPage() {
           </div>
         </section>
 
-        <section id="release-surface" className="relative border-t border-white/[0.05] px-6 py-20">
-          <div className="mx-auto max-w-[1260px]">
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-              <div className="rounded-[30px] border border-white/[0.08] bg-[#0c0e12] p-6 md:p-8">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-white/36">Release surface</p>
-                <h2 className="mt-4 max-w-[460px] text-[30px] font-semibold tracking-[-0.03em] text-white/94">
-                  One extension product. Three release lanes. One source of truth.
-                </h2>
-                <p className="mt-4 max-w-[520px] text-[14px] leading-7 text-white/52">
-                  The hero above is the install decision. This section is the audit trail: what shipped, when it shipped, and which
-                  browser already has a direct install path.
-                </p>
-
-                <div className="mt-8 space-y-3">
-                  {[
-                    {
-                      icon: ShieldCheck,
-                      title: 'Stable for real installs',
-                      body: 'Use Stable for public installs, support docs, and the lowest-risk path.',
-                    },
-                    {
-                      icon: FlaskConical,
-                      title: 'Beta and Preview stay visible',
-                      body: 'Opt-in testers and internal teams can pull newer builds without confusing the main install path.',
-                    },
-                    {
-                      icon: ServerCog,
-                      title: 'Synced from the repo',
-                      body: `Release source: ${data?.repo || 'XENO-CORPORATION/xeno-extension'}`,
-                    },
-                  ].map(({ icon: Icon, title, body }) => (
-                    <div key={title} className="rounded-[22px] border border-white/[0.08] bg-white/[0.03] p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-2.5 text-white/68">
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="text-[14px] font-medium text-white/88">{title}</p>
-                          <p className="mt-1 text-[13px] leading-6 text-white/48">{body}</p>
-                        </div>
-                      </div>
+        <section id="extension-release-history" className="border-t border-white/[0.05] px-6 py-16">
+          <div className="mx-auto max-w-[1260px] grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="space-y-3">
+              <div className="rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Tracks</p>
+                <div className="mt-4 space-y-3">
+                  {(Object.keys(channelCopy) as ChannelId[]).map((channel) => (
+                    <div key={channel} className="rounded-md border border-white/[0.08] bg-white/[0.02] p-4">
+                      <p className="text-[13px] font-medium text-white/84">{channelCopy[channel].title}</p>
+                      <p className="mt-1 text-[12px] leading-6 text-white/46">{channelCopy[channel].description}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-3">
-                {(Object.keys(channelCopy) as ChannelId[]).map((channel) => {
-                  const meta = channelCopy[channel];
-                  const release = data?.channels?.[channel] || null;
-                  const installUrl = data?.browserInstall?.[selectedBrowser]?.[channel] || release?.primaryAsset?.url || null;
-                  const Icon = meta.icon;
+              <div className="rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Notes</p>
+                <div className="mt-4 space-y-3 text-[13px] leading-6 text-white/48">
+                  <p>Store URLs override ZIP downloads automatically when they exist.</p>
+                  <p>Safari should point to App Store or TestFlight rather than a Chromium-style panel install path.</p>
+                  <p>GitHub release packages remain the fallback until store listings are wired.</p>
+                </div>
+              </div>
+            </div>
 
-                  return (
-                    <article key={channel} className="rounded-[28px] border border-white/[0.08] bg-[#101318] p-5">
-                      <div className="flex items-start justify-between gap-3">
+            <div className="rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5 md:p-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Release history</p>
+                  <h2 className="mt-2 text-[28px] font-semibold text-white/92">What actually shipped</h2>
+                </div>
+                <p className="text-[12px] text-white/34">Generated {formatDate(data?.generatedAt)}</p>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                {loading ? (
+                  <div className="rounded-md border border-white/[0.08] bg-white/[0.02] px-4 py-4 text-[13px] text-white/44">
+                    Loading extension releases...
+                  </div>
+                ) : error ? (
+                  <div className="rounded-md border border-[#5a2020] bg-[#241212] px-4 py-4 text-[13px] text-[#ffb6b6]">
+                    {error}
+                  </div>
+                ) : (
+                  data?.recentReleases.map((release) => (
+                    <div
+                      key={`${release.channel}-${release.tag}`}
+                      className="rounded-md border border-white/[0.08] bg-white/[0.02] px-4 py-4"
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div>
-                          <p className="text-[11px] uppercase tracking-[0.22em] text-white/34">{meta.eyebrow}</p>
-                          <h3 className="mt-2 text-[24px] font-semibold tracking-tight text-white/92">{meta.title}</h3>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[17px] font-medium text-white/88">{release.name}</span>
+                            <span className="rounded-md border border-white/[0.08] px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-white/42">
+                              {release.channel}
+                            </span>
+                          </div>
+                          <p className="mt-2 max-w-[780px] text-[13px] leading-6 text-white/46">
+                            {release.notesSummary || 'No release notes provided.'}
+                          </p>
                         </div>
-                        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-2.5 text-white/65">
-                          <Icon className="h-4 w-4" />
-                        </div>
-                      </div>
 
-                      <p className="mt-4 text-[13px] leading-6 text-white/50">{meta.description}</p>
-
-                      <div className="mt-5 rounded-[22px] border border-white/[0.08] bg-black/25 p-4">
-                        <div className="flex items-center justify-between gap-3 text-[12px] text-white/45">
-                          <span>Version</span>
-                          <span>{release?.version || 'Pending'}</span>
-                        </div>
-                        <div className="mt-2 flex items-center justify-between gap-3 text-[12px] text-white/42">
-                          <span>Published</span>
-                          <span>{formatDate(release?.publishedAt)}</span>
-                        </div>
-                        <div className="mt-2 flex items-center justify-between gap-3 text-[12px] text-white/42">
-                          <span>Package</span>
-                          <span>{release?.primaryAsset ? formatSize(release.primaryAsset.size) : 'Unavailable'}</span>
-                        </div>
-                        <p className="mt-3 text-[12px] leading-6 text-white/46">
-                          {release?.notesSummary || 'This channel does not have a published release yet.'}
-                        </p>
-                      </div>
-
-                      <div className="mt-5 flex flex-wrap gap-2.5">
-                        {installUrl ? (
-                          <a
-                            href={installUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-[12px] font-semibold text-[#08080a]"
-                          >
-                            <Download className="h-4 w-4" />
-                            {data?.browserInstall?.[selectedBrowser]?.[channel] ? 'Install' : 'Download'}
-                          </a>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full border border-white/[0.08] px-4 py-2.5 text-[12px] text-white/35">
-                            Pending
-                          </span>
-                        )}
-
-                        {release?.htmlUrl ? (
+                        <div className="flex flex-wrap items-center gap-2 text-[12px] text-white/42">
+                          <span>{formatDate(release.publishedAt)}</span>
+                          {release.primaryAsset ? <span>{formatSize(release.primaryAsset.size)}</span> : null}
+                          {release.primaryAsset ? (
+                            <a
+                              href={release.primaryAsset.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] px-4 py-2.5 text-white/70 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
+                            >
+                              Download
+                              <Download className="h-4 w-4" />
+                            </a>
+                          ) : null}
                           <a
                             href={release.htmlUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] px-4 py-2.5 text-[12px] text-white/70"
+                            className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] px-4 py-2.5 text-white/70 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
                           >
-                            Notes
+                            GitHub
                             <ExternalLink className="h-4 w-4" />
                           </a>
-                        ) : null}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="px-6 pb-10">
-          <div className="mx-auto max-w-[1260px] rounded-[32px] border border-white/[0.08] bg-[#0d1015] p-6 md:p-8">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-white/36">Release history</p>
-                <h2 className="mt-3 text-[30px] font-semibold tracking-[-0.03em] text-white/94">
-                  What actually shipped
-                </h2>
-              </div>
-              <p className="text-[12px] text-white/34">Generated {formatDate(data?.generatedAt)}</p>
-            </div>
-
-            <div className="mt-6 space-y-3">
-              {loading ? (
-                <div className="rounded-[24px] border border-white/[0.06] px-5 py-4 text-[13px] text-white/45">
-                  Loading extension releases...
-                </div>
-              ) : error ? (
-                <div className="rounded-[24px] border border-[#5a2020] bg-[#241212] px-5 py-4 text-[13px] text-[#ffb6b6]">
-                  {error}
-                </div>
-              ) : (
-                data?.recentReleases.map((release) => (
-                  <div
-                    key={`${release.channel}-${release.tag}`}
-                    className="rounded-[24px] border border-white/[0.07] bg-black/20 px-5 py-4"
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[17px] font-medium text-white/88">{release.name}</span>
-                          <span className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-white/42">
-                            {release.channel}
-                          </span>
                         </div>
-                        <p className="mt-2 max-w-[760px] text-[13px] leading-6 text-white/46">
-                          {release.notesSummary || 'No release notes provided.'}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2.5 text-[12px] text-white/42">
-                        <span>{formatDate(release.publishedAt)}</span>
-                        {release.primaryAsset ? <span>{formatSize(release.primaryAsset.size)}</span> : null}
-                        {release.primaryAsset ? (
-                          <a
-                            href={release.primaryAsset.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] px-4 py-2.5 text-white/70"
-                          >
-                            Download
-                            <Download className="h-4 w-4" />
-                          </a>
-                        ) : null}
-                        <a
-                          href={release.htmlUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] px-4 py-2.5 text-white/70"
-                        >
-                          GitHub
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
                       </div>
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="px-6 pb-20">
-          <div className="mx-auto max-w-[1260px] grid gap-4 lg:grid-cols-3">
-            {[
-              'Store URLs override ZIP downloads automatically when they exist. Until then, the page falls back to the latest GitHub release package.',
-              'Safari should ultimately point to App Store or TestFlight. The wrapper path is the right install surface there, not a Chromium-style panel.',
-              'If you want a custom API key, add it in the extension settings after install. Otherwise the channel fallback can be used by default.',
-            ].map((line) => (
-              <div key={line} className="rounded-[24px] border border-white/[0.08] bg-white/[0.03] p-5">
-                <p className="text-[14px] leading-7 text-white/50">{line}</p>
+                  ))
+                )}
               </div>
-            ))}
+            </div>
           </div>
 
           <div className="mx-auto mt-8 max-w-[1260px]">
