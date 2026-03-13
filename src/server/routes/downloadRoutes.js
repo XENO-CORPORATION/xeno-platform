@@ -6,8 +6,25 @@
 import express from 'express';
 import fs from 'fs';
 import downloadService from '../services/downloadService.js';
+import { getExtensionReleaseData } from '../services/extensionReleaseService.js';
 
 const router = express.Router();
+
+router.get('/extension/releases', async (req, res) => {
+  try {
+    const data = await getExtensionReleaseData(req.query.refresh === '1');
+    res.json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    console.error('[Download] Error fetching extension releases:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch extension release metadata',
+    });
+  }
+});
 
 /**
  * POST /api/download/info

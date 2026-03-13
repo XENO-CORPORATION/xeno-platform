@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 
 import Home from "./pages/Home";
 import Download from "./pages/Download";
+import ExtensionDownload from "./pages/ExtensionDownload";
 import ReleaseNotes from "./pages/ReleaseNotes";
 import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
@@ -93,6 +94,7 @@ function App() {
             {/* Landing Page - Show this first */}
             <Route path="/" element={<Home />} />
             <Route path="/download" element={<Download />} />
+            <Route path="/product/extension/download" element={<ExtensionDownload />} />
             <Route path="/releases/:version" element={<ReleaseNotes />} />
             <Route path="/blog" element={<Blog />} />
             <Route path="/blog/:slug" element={<BlogPost />} />
