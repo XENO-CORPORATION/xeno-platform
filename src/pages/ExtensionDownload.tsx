@@ -120,19 +120,19 @@ const browserCopy: Record<
 > = {
   chrome: {
     title: 'Chrome',
-    description: 'Full Chromium install path with the main browser-agent workflow and store-ready packaging.',
+    description: 'Best default for the full extension runtime and side panel workflow.',
     system: 'Chrome Web Store or Chromium package',
     badge: 'Chromium',
   },
   edge: {
     title: 'Edge',
-    description: 'Same extension runtime, optimized for Microsoft Edge installs and enterprise-friendly rollout.',
+    description: 'Same Chromium package with a cleaner Microsoft Edge install path.',
     system: 'Edge Add-ons or Chromium package',
     badge: 'Recommended',
   },
   safari: {
     title: 'Safari',
-    description: 'Wrapper-based distribution path for Apple devices. Best once App Store and TestFlight links are live.',
+    description: 'Wrapper-app path for Apple devices and TestFlight or App Store rollout.',
     system: 'App Store or TestFlight',
     badge: 'Wrapper',
   },
@@ -341,7 +341,7 @@ export default function ExtensionDownloadPage() {
       <Header onGetStarted={handleGetStarted} visible={true} />
       <main className="pt-[46px]">
         <section className="px-6 py-14 md:py-18">
-          <div className="mx-auto max-w-[1260px]">
+          <div className="mx-auto max-w-[1260px] space-y-5">
             <div className="mb-6 flex flex-wrap items-center gap-2">
               <span className="rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-white/40">
                 Browser agent
@@ -351,27 +351,29 @@ export default function ExtensionDownloadPage() {
               </span>
             </div>
 
-            <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="grid gap-5">
-                <div className="rounded-md border border-white/[0.08] bg-[#0b0c0f]">
-                  <div className="grid gap-0 xl:min-h-[560px] xl:grid-cols-[minmax(0,1.1fr)_360px] xl:aspect-[16/9]">
-                    <div className="flex flex-col justify-between p-6 md:p-8">
-                      <div>
+            <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+              <div className="min-w-0 space-y-5">
+                <div className="overflow-hidden rounded-md border border-white/[0.08] bg-[#0b0c0f]">
+                  <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_340px] xl:aspect-[16/9]">
+                    <div className="flex min-w-0 flex-col justify-between gap-8 p-6 md:p-8 lg:p-10">
+                      <div className="space-y-6">
                         <div className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-white/40">
                           Detected {browserCopy[detectedBrowser].title}
                         </div>
 
-                        <h1 className="mt-6 max-w-[760px] text-[34px] font-semibold tracking-[-0.03em] text-white/94 md:text-[48px] md:leading-[1.03]">
-                          Download the Xeno browser agent for {browserCopy[selectedBrowser].title}
-                        </h1>
+                        <div className="max-w-[760px] space-y-4">
+                          <h1 className="text-[32px] font-semibold tracking-[-0.03em] text-white/94 md:text-[42px] md:leading-[1.04] xl:text-[46px]">
+                            Download the Xeno browser agent for {browserCopy[selectedBrowser].title}
+                          </h1>
 
-                        <p className="mt-5 max-w-[720px] text-[15px] leading-8 text-white/54">
-                          Stable is for production installs, Beta is for opt-in testers, and Preview is for internal
-                          experiments. This page reads directly from the Xeno extension release pipeline so the website
-                          stays in sync with the repo.
-                        </p>
+                          <p className="max-w-[700px] text-[14px] leading-7 text-white/54 md:text-[15px]">
+                            Stable is for production installs, Beta is for opt-in testers, and Preview is for internal
+                            experiments. This page reads directly from the Xeno extension release pipeline so the website
+                            stays in sync with the repo.
+                          </p>
+                        </div>
 
-                        <div className="mt-8 grid gap-3 md:grid-cols-3">
+                        <div className="grid gap-3 md:grid-cols-3">
                           {(Object.keys(browserCopy) as BrowserId[]).map((browserId) => (
                             <BrowserButton
                               key={browserId}
@@ -384,84 +386,90 @@ export default function ExtensionDownloadPage() {
                         </div>
                       </div>
 
-                      <div className="mt-8 flex flex-wrap items-center gap-3">
-                        {stableTarget.url ? (
-                          <a
-                            href={stableTarget.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-3 text-[13px] font-semibold text-[#08080a] transition-opacity duration-200 hover:opacity-90"
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          {stableTarget.url ? (
+                            <a
+                              href={stableTarget.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-3 text-[13px] font-semibold text-[#08080a] transition-opacity duration-200 hover:opacity-90"
+                            >
+                              <Download className="h-4 w-4" />
+                              {stableTarget.storeUrl ? 'Install Stable' : 'Download Stable'}
+                            </a>
+                          ) : (
+                            <span className="inline-flex items-center rounded-md border border-white/[0.08] px-5 py-3 text-[13px] text-white/34">
+                              Stable release pending
+                            </span>
+                          )}
+
+                          {stableRelease?.htmlUrl ? (
+                            <a
+                              href={stableRelease.htmlUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] px-5 py-3 text-[13px] text-white/68 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
+                            >
+                              View release notes
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          ) : null}
+
+                          <button
+                            onClick={() => document.getElementById('extension-release-history')?.scrollIntoView({ behavior: 'smooth' })}
+                            className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] px-5 py-3 text-[13px] text-white/52 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
                           >
-                            <Download className="h-4 w-4" />
-                            {stableTarget.storeUrl ? 'Install Stable' : 'Download Stable'}
-                          </a>
-                        ) : (
-                          <span className="inline-flex items-center rounded-md border border-white/[0.08] px-5 py-3 text-[13px] text-white/34">
-                            Stable release pending
-                          </span>
-                        )}
-
-                        {stableRelease?.htmlUrl ? (
-                          <a
-                            href={stableRelease.htmlUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] px-5 py-3 text-[13px] text-white/68 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
-                          >
-                            View release notes
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        ) : null}
-
-                        <button
-                          onClick={() => document.getElementById('extension-release-history')?.scrollIntoView({ behavior: 'smooth' })}
-                          className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] px-5 py-3 text-[13px] text-white/52 transition-colors duration-200 hover:border-white/[0.16] hover:text-white"
-                        >
-                          Release history
-                          <ArrowRight className="h-4 w-4" />
-                        </button>
-                      </div>
-
-                      {error ? (
-                        <div className="mt-6 rounded-md border border-[#5a2020] bg-[#241212] px-4 py-3 text-[13px] leading-6 text-[#ffb6b6]">
-                          {error}
+                            Release history
+                            <ArrowRight className="h-4 w-4" />
+                          </button>
                         </div>
-                      ) : null}
+
+                        {error ? (
+                          <div className="rounded-md border border-[#5a2020] bg-[#241212] px-4 py-3 text-[13px] leading-6 text-[#ffb6b6]">
+                            {error}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
 
-                    <div className="border-t border-white/[0.06] p-6 md:p-8 xl:border-l xl:border-t-0">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Install surface</p>
-                      <h2 className="mt-2 text-[24px] font-semibold text-white/92">
-                        {browserCopy[selectedBrowser].title} install details
-                      </h2>
-                      <p className="mt-3 text-[14px] leading-7 text-white/50">
-                        Minimal install path for the selected browser. If store URLs exist, they take precedence over
-                        GitHub release packages automatically.
-                      </p>
+                    <div className="min-w-0 border-t border-white/[0.06] bg-white/[0.01] p-6 md:p-8 xl:border-l xl:border-t-0">
+                      <div className="space-y-4">
+                        <div className="space-y-3">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Install surface</p>
+                          <h2 className="text-[22px] font-semibold text-white/92 md:text-[24px]">
+                            {browserCopy[selectedBrowser].title} install details
+                          </h2>
+                          <p className="text-[13px] leading-6 text-white/50">
+                            Store URLs take precedence automatically. If a store link is not configured yet, the page falls
+                            back to the latest release package.
+                          </p>
+                        </div>
 
-                      <div className="mt-6 grid gap-3">
-                        <MetricCard
-                          icon={CheckCircle2}
-                          label="Latest stable"
-                          value={loading ? 'Loading...' : stableRelease?.version || 'Not published'}
-                        />
-                        <MetricCard
-                          icon={Package}
-                          label="Package size"
-                          value={stableRelease?.primaryAsset ? formatSize(stableRelease.primaryAsset.size) : 'Unavailable'}
-                        />
-                        <MetricCard
-                          icon={Clock3}
-                          label="Published"
-                          value={stableRelease?.publishedAt ? formatDate(stableRelease.publishedAt) : 'Unavailable'}
-                        />
-                      </div>
+                        <div className="grid gap-3">
+                          <MetricCard
+                            icon={CheckCircle2}
+                            label="Latest stable"
+                            value={loading ? 'Loading...' : stableRelease?.version || 'Not published'}
+                          />
+                          <MetricCard
+                            icon={Package}
+                            label="Package size"
+                            value={stableRelease?.primaryAsset ? formatSize(stableRelease.primaryAsset.size) : 'Unavailable'}
+                          />
+                          <MetricCard
+                            icon={Clock3}
+                            label="Published"
+                            value={stableRelease?.publishedAt ? formatDate(stableRelease.publishedAt) : 'Unavailable'}
+                          />
+                        </div>
 
-                      <div className="mt-6 rounded-md border border-white/[0.08] bg-white/[0.02] p-4">
-                        <DetailRow label="Install path" value={stableTarget.pathLabel} />
-                        <DetailRow label="Browser route" value={browserCopy[selectedBrowser].system} />
-                        <DetailRow label="Release source" value={data?.repo || 'XENO-CORPORATION/xeno-extension'} />
-                        <DetailRow label="Generated" value={formatDate(data?.generatedAt)} />
+                        <div className="rounded-md border border-white/[0.08] bg-white/[0.02] p-4">
+                          <DetailRow label="Install path" value={stableTarget.pathLabel} />
+                          <DetailRow label="Browser route" value={browserCopy[selectedBrowser].system} />
+                          <DetailRow label="Release source" value={data?.repo || 'XENO-CORPORATION/xeno-extension'} />
+                          <DetailRow label="Generated" value={formatDate(data?.generatedAt)} />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -470,15 +478,15 @@ export default function ExtensionDownloadPage() {
                 <div className="grid gap-3 md:grid-cols-3">
                   <SupportCard
                     title="Stable is the default path"
-                    body="Use Stable for production installs, documentation, and support-driven rollout."
+                    body="Use Stable for production installs, support docs, and the cleanest public rollout."
                   />
                   <SupportCard
                     title="Beta and Preview stay separate"
-                    body="Testers can install faster tracks without confusing the main install path for everyone else."
+                    body="Keep testers and internal users on faster tracks without muddying the production install path."
                   />
                   <SupportCard
                     title="User key support stays available"
-                    body="Install first, then add a custom API key inside extension settings if you want to override the fallback."
+                    body="Install first, then add a custom API key in extension settings if you want to override the fallback."
                   />
                 </div>
               </div>
@@ -495,11 +503,8 @@ export default function ExtensionDownloadPage() {
                 ))}
               </aside>
             </div>
-          </div>
-        </section>
 
-        <section id="extension-release-history" className="border-t border-white/[0.05] px-6 py-16">
-          <div className="mx-auto max-w-[1260px] grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <div id="extension-release-history" className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
             <div className="space-y-3">
               <div className="rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Tracks</p>
@@ -523,7 +528,7 @@ export default function ExtensionDownloadPage() {
               </div>
             </div>
 
-            <div className="rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5 md:p-6">
+            <div className="min-w-0 rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5 md:p-6">
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Release history</p>
@@ -590,9 +595,8 @@ export default function ExtensionDownloadPage() {
                 )}
               </div>
             </div>
-          </div>
+            </div>
 
-          <div className="mx-auto mt-8 max-w-[1260px]">
             <Link
               to="/download"
               className="inline-flex items-center gap-2 text-[13px] text-white/35 transition-colors duration-200 hover:text-white/70"
