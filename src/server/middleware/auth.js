@@ -12,6 +12,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-ch
  */
 export const authMiddleware = async (req, res, next) => {
   try {
+    const publicPaths = new Set([
+      '/status',
+      '/download/extension/releases',
+    ]);
+    if (publicPaths.has(req.path)) {
+      return next();
+    }
+
     const token = req.headers.authorization?.replace('Bearer ', '');
     console.log('[Auth] Token present:', !!token, 'Path:', req.path);
 
