@@ -504,9 +504,13 @@ export default function ExtensionDownloadPage() {
               </aside>
             </div>
 
-            <div id="extension-release-history" className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
+            <div
+              id="extension-release-history"
+              className="rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5 md:p-6"
+            >
+              <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
             <div className="space-y-3">
-              <div className="rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5">
+              <div className="rounded-md border border-white/[0.08] bg-white/[0.02] p-5">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Tracks</p>
                 <div className="mt-4 space-y-3">
                   {(Object.keys(channelCopy) as ChannelId[]).map((channel) => (
@@ -518,7 +522,7 @@ export default function ExtensionDownloadPage() {
                 </div>
               </div>
 
-              <div className="rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5">
+              <div className="rounded-md border border-white/[0.08] bg-white/[0.02] p-5">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Notes</p>
                 <div className="mt-4 space-y-3 text-[13px] leading-6 text-white/48">
                   <p>Store URLs override ZIP downloads automatically when they exist.</p>
@@ -528,7 +532,7 @@ export default function ExtensionDownloadPage() {
               </div>
             </div>
 
-            <div className="min-w-0 rounded-md border border-white/[0.08] bg-[#0b0c0f] p-5 md:p-6">
+            <div className="min-w-0 rounded-md border border-white/[0.08] bg-white/[0.02] p-5 md:p-6">
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.18em] text-white/36">Release history</p>
@@ -594,7 +598,8 @@ export default function ExtensionDownloadPage() {
                   ))
                 )}
               </div>
-            </div>
+              </div>
+              </div>
             </div>
 
             <Link
