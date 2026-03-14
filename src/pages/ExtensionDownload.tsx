@@ -340,8 +340,8 @@ export default function ExtensionDownloadPage() {
     <div className="min-h-screen bg-[#08080a] font-['Inter',sans-serif] text-white antialiased">
       <Header onGetStarted={handleGetStarted} visible={true} />
       <main className="pt-[46px]">
-        <section className="px-4 py-14 md:px-6 md:py-18 xl:px-8">
-          <div className="mx-auto w-full max-w-[1680px] space-y-5">
+        <section className="px-6 py-14 md:py-18">
+          <div className="mx-auto max-w-[1260px] space-y-5">
             <div className="mb-6 flex flex-wrap items-center gap-2">
               <span className="rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-white/40">
                 Browser agent
@@ -361,12 +361,12 @@ export default function ExtensionDownloadPage() {
                           Detected {browserCopy[detectedBrowser].title}
                         </div>
 
-                        <div className="max-w-[920px] space-y-4">
+                        <div className="max-w-[760px] space-y-4">
                           <h1 className="text-[32px] font-semibold tracking-[-0.03em] text-white/94 md:text-[42px] md:leading-[1.04] xl:text-[46px]">
                             Download the Xeno browser agent for {browserCopy[selectedBrowser].title}
                           </h1>
 
-                          <p className="max-w-[860px] text-[14px] leading-7 text-white/54 md:text-[15px]">
+                          <p className="max-w-[700px] text-[14px] leading-7 text-white/54 md:text-[15px]">
                             Stable is for production installs, Beta is for opt-in testers, and Preview is for internal
                             experiments. This page reads directly from the Xeno extension release pipeline so the website
                             stays in sync with the repo.
