@@ -1,644 +1,955 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { motion, useScroll, useTransform, useMotionValue } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
-/* ─── Grid items with animation wave + hover labels ─── */
+/* ─── Bento card data ─── */
 
-const GRID_ITEMS: { src: string; area: string; wave: number; label: string; tag: string }[] = [
-  { src: '/hero-assets/hero-workspace.jpg',    area: 'ws', wave: 1, label: 'AI Workspace',     tag: 'Node Editor' },
-  { src: '/hero-assets/hero-neural.jpg',       area: 'nr', wave: 1, label: 'Neural Art',        tag: 'Image Gen' },
-  { src: '/hero-assets/hero-portrait.jpg',     area: 'pt', wave: 1, label: 'Portrait Studio',   tag: 'Face AI' },
-  { src: '/hero-assets/hero-fluid.jpg',        area: 'fl', wave: 2, label: 'Fluid Dynamics',    tag: 'Simulation' },
-  { src: '/hero-assets/hero-abstract.webp',    area: 'ab', wave: 0, label: 'Abstract Forms',    tag: 'Generative' },
-  { src: '/hero-assets/hero-architecture.jpg', area: 'ar', wave: 0, label: 'Architecture',      tag: '3D Render' },
-  { src: '/hero-assets/hero-portrait.webp',    area: 'pw', wave: 2, label: 'Character Design',  tag: 'Stylize' },
-  { src: '/hero-assets/hero-nature.webp',      area: 'nt', wave: 2, label: 'Nature Scenes',     tag: 'Landscape' },
-  { src: '/hero-assets/hero-city.webp',        area: 'ct', wave: 1, label: 'Cityscapes',        tag: 'Environment' },
-  { src: '/hero-assets/hero-ui.webp',          area: 'ui', wave: 2, label: 'UI Generation',     tag: 'Design' },
-];
-
-/* ─── Hook ─── */
-
-function useEntryAnimation() {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const prefersReduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    if (prefersReduced) {
-      ref.current?.classList.add('hero-visible');
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      ref.current?.classList.add('hero-visible');
-    });
-  }, []);
-
-  return ref;
+interface BentoItem {
+  id: string;
+  area: string;
+  label: string;
+  sub?: string;
+  desc: string;
+  type: 'hero-image' | 'stat' | 'stat-image' | 'feature' | 'mirror' | 'cube' | 'clock';
+  bg?: string;
+  stat?: string;
+  icon: string;
+  href: string;
+  demoPlaceholder: string;
 }
 
-/* ─── Reduced motion hook ─── */
-
-function useReducedMotion() {
-  const ref = useRef(false);
-  useEffect(() => {
-    ref.current =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  }, []);
-  return ref;
-}
-
-/* ─── Scroll Sequence Words ─── */
-
-const SEQUENCE_WORDS = ['EXPLORE', 'CREATE', 'INNOVATE'] as const;
-
-const SECTION_DATA: Record<string, { items: { label: string; desc: string }[] }> = {
-  EXPLORE: {
-    items: [
-      { label: 'Chat with AI',    desc: 'Conversational AI with LLMs and voice' },
-      { label: 'Office Suite',     desc: 'PDF, Word, Spreadsheets, Presentations' },
-      { label: 'Search',           desc: 'General, Finance & Shopping search' },
-      { label: 'Canvas Planning',  desc: 'Visual planning & whiteboarding' },
-    ],
+const BENTO_ITEMS: BentoItem[] = [
+  // ── Tier 1: Hero cards (big) — "What you create" ──
+  {
+    id: 'image',
+    area: 'image',
+    label: 'Image Generation',
+    sub: '20+ models · Up to 4K',
+    desc: 'Flux, SDXL, Imagen, Seedream — generate stunning images from text with 20+ AI models at up to 4K resolution.',
+    type: 'hero-image',
+    icon: 'image',
+    href: '/overview/generation/image',
+    demoPlaceholder: 'Describe an image: "a neon-lit Tokyo alley at midnight"',
   },
-  CREATE: {
-    items: [
-      { label: 'Image Generation', desc: 'AI image synthesis & inpainting' },
-      { label: 'Video Generation', desc: 'AI video creation & editing' },
-      { label: 'Audio & Music',    desc: 'AI audio generation & studio' },
-      { label: '3D Generation',    desc: '3D model and asset creation' },
-      { label: 'Enhance & Upscale',desc: 'Image & video quality enhancement' },
-      { label: 'Studio Tools',     desc: 'Image, video & audio editing suites' },
-      { label: 'Converters',       desc: 'File conversion & compression' },
-    ],
+  {
+    id: 'video',
+    area: 'video',
+    label: 'Video Generation',
+    sub: 'Kling · Runway · Hailuo · Wan',
+    desc: 'Generate and edit video with the best AI models. Text-to-video, image-to-video, and motion control.',
+    type: 'hero-image',
+    icon: 'video',
+    href: '/overview/generation/video',
+    demoPlaceholder: 'Describe a scene: "drone flying over misty mountains at sunrise"',
   },
-  INNOVATE: {
-    items: [
-      { label: 'AI Workflows',     desc: 'Node-based agentic workflow labs' },
-      { label: 'Studio Interfaces',desc: 'Professional editing environments' },
-      { label: 'Xeno OS',          desc: 'Full desktop OS environment' },
-      { label: 'Collaboration',    desc: 'Real-time shared sessions' },
-      { label: 'Content Creation', desc: 'YouTube, TikTok management & scheduling' },
-    ],
+  {
+    id: 'chat',
+    area: 'chat',
+    label: 'AI Chat',
+    sub: 'GPT-4 · Claude · Gemini · Llama',
+    desc: 'Every major LLM in one interface. Chat, code, analyze documents, brainstorm — switch models mid-conversation.',
+    type: 'feature',
+    icon: 'chat',
+    href: '/overview/chat/llm',
+    demoPlaceholder: 'Ask anything...',
   },
-};
-
-// Each word occupies a slice of the 0–1 scroll progress
-// Expanded ranges for 800vh runway to give sub-items enough scroll room
-const WORD_RANGES: [number, number][] = [
-  [0.04, 0.28], // EXPLORE
-  [0.28, 0.55], // CREATE
-  [0.55, 0.82], // INNOVATE
+  // ── Tier 2: Medium cards — "How you create" ──
+  {
+    id: 'threed',
+    area: 'threed',
+    label: '3D Studio',
+    desc: 'Text and image to 3D models, textures, and scenes. Export production-ready assets.',
+    type: 'cube',
+    icon: '3d',
+    href: '/overview/generation/3d',
+    demoPlaceholder: 'Describe a 3D object: "a crystal dragon statue"',
+  },
+  {
+    id: 'audio',
+    area: 'audio',
+    label: 'Audio & Music',
+    sub: 'Voice · Music · SFX',
+    desc: 'Generate music, sound effects, and voice clones. Create custom soundtracks and professional audio.',
+    type: 'feature',
+    icon: 'audio',
+    href: '/overview/generation/audio',
+    demoPlaceholder: 'Describe a sound: "epic orchestral trailer music"',
+  },
+  {
+    id: 'workflows',
+    area: 'workflows',
+    label: 'Visual Workflows',
+    sub: 'Node-based AI pipelines',
+    desc: 'Chain AI models in a visual node editor. Connect generation, upscaling, and editing into automated pipelines.',
+    type: 'feature',
+    icon: 'workflow',
+    href: '/workflows',
+    demoPlaceholder: 'Describe a workflow: "Generate → Upscale → Edit"',
+  },
+  {
+    id: 'office',
+    area: 'office',
+    label: 'Office Suite',
+    sub: 'Word · PDF · Spreadsheets · Slides',
+    desc: 'AI-powered documents, spreadsheets, and presentations. Edit, collaborate, and create with intelligence built in.',
+    type: 'feature',
+    icon: 'office',
+    href: '/overview/office/word',
+    demoPlaceholder: 'Create a document, spreadsheet, or presentation...',
+  },
+  {
+    id: 'content',
+    area: 'content',
+    label: 'Content Creation',
+    sub: 'YouTube · TikTok · Scheduler',
+    desc: 'Manage channels, schedule posts, and automate content distribution across YouTube, TikTok, and more.',
+    type: 'feature',
+    icon: 'content',
+    href: '/overview/content-creation/youtube',
+    demoPlaceholder: 'Plan your next video or post...',
+  },
+  // ── Tier 3: Small accent cards — "Why us" ──
+  {
+    id: 'models',
+    area: 'models',
+    label: '20+',
+    sub: 'AI Models',
+    desc: 'Flux, Stable Diffusion, GPT-4, Claude, Gemini, Kling, Runway — every model through one interface.',
+    type: 'stat',
+    stat: '20+',
+    icon: 'models',
+    href: '/overview/generation/image',
+    demoPlaceholder: 'Choose a model and start creating...',
+  },
+  {
+    id: 'privacy',
+    area: 'privacy',
+    label: 'Your Data, Yours',
+    sub: 'We never train on your work',
+    desc: 'Your data stays yours. We never train on your inputs or outputs. Enterprise-grade privacy by default.',
+    type: 'stat',
+    stat: 'Private',
+    icon: 'privacy',
+    href: '/privacy',
+    demoPlaceholder: 'Learn about our privacy guarantees...',
+  },
 ];
 
-/* ─── Single word + sub-items + 16:9 container phase ─── */
+/* ─── SVG icons ─── */
 
-function WordPhase({
-  word,
-  range,
-  scrollYProgress,
-}: {
-  word: string;
-  range: [number, number];
-  scrollYProgress: import('framer-motion').MotionValue<number>;
-}) {
-  const [start, end] = range;
-  const span = end - start;
-  const items = SECTION_DATA[word]?.items ?? [];
+function BentoIcon({ type, size = 22 }: { type: string; size?: number }) {
+  const s = size;
+  const p: React.SVGProps<SVGSVGElement> = { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: 'rgba(255,255,255,0.6)', strokeWidth: '1.5', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  switch (type) {
+    case 'image': return <svg {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" opacity="0.5" /><path d="M21 15l-5-5L5 21" /></svg>;
+    case 'video': return <svg {...p}><rect x="2" y="4" width="20" height="16" rx="2" /><path d="M10 9l5 3-5 3V9z" /></svg>;
+    case 'chat': return <svg {...p}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /><path d="M8 9h8M8 13h4" opacity="0.4" /></svg>;
+    case '3d': return <svg {...p}><path d="M12 2l10 6v8l-10 6L2 16V8z" /><path d="M12 22V14M12 14l10-6M12 14L2 8" opacity="0.4" /></svg>;
+    case 'audio': return <svg {...p}><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>;
+    case 'workflow': return <svg {...p}><circle cx="5" cy="6" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="18" r="2" /><path d="M7 7l3 3M14 13l3 3" opacity="0.4" /></svg>;
+    case 'office': return <svg {...p}><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M8 6h8M8 10h8M8 14h4" opacity="0.4" /></svg>;
+    case 'content': return <svg {...p}><path d="M4 4h16v12H4z" /><path d="M8 20h8" /><path d="M12 16v4" /><path d="M10 9l5 3-5 3V9z" opacity="0.4" /></svg>;
+    case 'models': return <svg {...p}><path d="M12 2l10 6v8l-10 6L2 16V8z" /><path d="M12 22V14M12 14l10-6M12 14L2 8" opacity="0.4" /></svg>;
+    case 'privacy': return <svg {...p}><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /><circle cx="12" cy="16" r="1" /></svg>;
+    default: return null;
+  }
+}
 
-  // Refs to measure actual DOM positions for precise word landing
-  const wordRef = useRef<HTMLSpanElement>(null);
-  const landingRef = useRef<HTMLDivElement>(null);
-  const [offset, setOffset] = useState({ x: 0, y: 0, scale: 1 });
+/* ─── Rotating 3D cube ─── */
 
-  // Measure where the word needs to land: left-aligned with the landing ref,
-  // bottom edge sitting right above the divider line.
-  // The word element starts centered in viewport (via flex). With transformOrigin
-  // 'left top', the top-left corner is the anchor point for scale + translate.
-  // So at rest: top-left corner is at (centerX - width/2, centerY - height/2).
-  // We need that corner to move to (landingLeft, landingTop - scaledHeight).
+function RotatingCube() {
+  const [rot, setRot] = useState(45);
   useEffect(() => {
-    const measure = () => {
-      const wordEl = wordRef.current;
-      const landingEl = landingRef.current;
-      if (!wordEl || !landingEl) return;
-
-      const wordRect = wordEl.getBoundingClientRect();
-      const landingRect = landingEl.getBoundingClientRect();
-
-      // The word's top-left corner position (its anchor since transformOrigin is left top)
-      const wordLeft = wordRect.left;
-      const wordTop = wordRect.top;
-
-      // Scale word to fit the sidebar width (280px)
-      const targetScale = Math.max(0.44, 480 / wordRect.width);
-
-      // Word's left edge pushed further left from the sidebar,
-      // Word's TOP edge aligns with landing's top (top of sidebar column, beside the panel)
-      const targetLeft = landingRect.left - 235;
-      const targetTop = landingRect.top - 100;
-
-      setOffset({
-        x: targetLeft - wordLeft,
-        y: targetTop - wordTop,
-        scale: targetScale,
-      });
-    };
-
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    let frame: number;
+    let t = 0;
+    const go = () => { t += 0.008; setRot(45 + t * 40); frame = requestAnimationFrame(go); };
+    frame = requestAnimationFrame(go);
+    return () => cancelAnimationFrame(frame);
   }, []);
-
-  // Sub-ranges within this word's range (adjusted for sub-item scroll)
-  const fadeInEnd   = start + span * 0.10;  // 0-10%: word fades in centered
-  const slideEnd    = start + span * 0.22;  // 10-22%: word slides to top-left
-  const revealStart = start + span * 0.32;  // 32%: pause, then sub-items start appearing
-  const revealEnd   = start + span * 0.45;  // 32-45%: sub-items appear one by one
-  const subStart    = start + span * 0.45;  // 45%: fill animation begins
-  const subEnd      = start + span * 0.85;  // 85%: sub-item scroll ends
-  const fadeOutStart = start + span * 0.85; // 85-100%: everything fades out
-
-  // Word opacity: fade in 0→1, hold through sub-items, fade out 1→0
-  const wordOpacity = useTransform(
-    scrollYProgress,
-    [start, fadeInEnd, fadeOutStart, end],
-    [0, 1, 1, 0],
+  const sz = '2.2rem';
+  return (
+    <div className="relative mx-auto" style={{ width: sz, height: sz, perspective: '400px' }}>
+      <div style={{ transformStyle: 'preserve-3d', transform: `rotateX(-15deg) rotateY(${rot}deg)`, width: '100%', height: '100%', position: 'relative' }}>
+        {[0, 180, 90, 270].map((ry, i) => (
+          <div key={i} className="absolute bg-white" style={{ width: '100%', height: '100%', transform: `rotateY(${ry}deg) translateZ(calc(${sz}/2))`, backfaceVisibility: 'hidden' }}>
+            <div className="w-full h-full" style={{ backgroundColor: `rgba(0,0,0,${[0.05, 0.2, 0.15, 0.15][i]})` }} />
+          </div>
+        ))}
+        {[90, -90].map((rx, i) => (
+          <div key={`t${i}`} className="absolute bg-white" style={{ width: '100%', height: '100%', transform: `rotateX(${rx}deg) translateZ(calc(${sz}/2))`, backfaceVisibility: 'hidden' }} />
+        ))}
+      </div>
+    </div>
   );
+}
 
-  // Word starts centered, big font, wide letter spacing.
-  // Animates to measured landing position (top of divider, left of panel).
-  const wordX = useTransform(
-    scrollYProgress,
-    [start, fadeInEnd, slideEnd],
-    [0, 0, offset.x],
+/* ─── Mini clock ─── */
+
+function MiniClock() {
+  const [s, setS] = useState(0);
+  useEffect(() => { const i = setInterval(() => setS(new Date().getSeconds()), 1000); return () => clearInterval(i); }, []);
+  const sa = s * 6;
+  return (
+    <svg viewBox="0 0 60 60" width="48" height="48" className="block">
+      <circle cx="30" cy="30" r="28" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+      {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((a) => (
+        <line key={a} x1={30 + 24 * Math.cos((a - 90) * Math.PI / 180)} y1={30 + 24 * Math.sin((a - 90) * Math.PI / 180)} x2={30 + 27 * Math.cos((a - 90) * Math.PI / 180)} y2={30 + 27 * Math.sin((a - 90) * Math.PI / 180)} stroke="rgba(255,255,255,0.3)" strokeWidth="1" />
+      ))}
+      <g transform={`rotate(${sa}, 30, 30)`}>
+        <line x1="30" y1="30" x2="30" y2="8" stroke="#FFC32F" strokeWidth="1" strokeLinecap="round" />
+      </g>
+      <circle cx="30" cy="30" r="2" fill="#FFC32F" />
+    </svg>
   );
-  const wordY = useTransform(
-    scrollYProgress,
-    [start, fadeInEnd, slideEnd],
-    [0, 0, offset.y],
-  );
-  const wordScale = useTransform(
-    scrollYProgress,
-    [start, fadeInEnd, slideEnd],
-    [1, 1, offset.scale],
-  );
-  const wordLetterSpacing = useTransform(
-    scrollYProgress,
-    [start, fadeInEnd, slideEnd],
-    ['0.4em', '0.4em', '0.05em'],
-  );
+}
 
-  // Sidebar + panel fade in as word settles, fade out at end
-  const sidebarOpacity = useTransform(
-    scrollYProgress,
-    [fadeInEnd, slideEnd, fadeOutStart, end],
-    [0, 1, 1, 0],
-  );
+/* ─── Demo interfaces for expanded cards ─── */
 
-  // Divider line: appears only after word has landed
-  const dividerOpacity = useTransform(
-    scrollYProgress,
-    [slideEnd, slideEnd + span * 0.05, fadeOutStart, end],
-    [0, 1, 1, 0],
-  );
+function DemoChatInterface() {
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState('Claude 4 Sonnet');
+  const [selectedPersona, setSelectedPersona] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(true);
+  const [alignment, setAlignment] = useState<'left'|'center'|'right'>('center');
+  const [fontSize, setFontSize] = useState<'small'|'medium'|'large'>('medium');
+  const [expandedCompany, setExpandedCompany] = useState<string | null>('Anthropic');
+  const [showCustomPrompt, setShowCustomPrompt] = useState(false);
+  const [customPromptText, setCustomPromptText] = useState('');
 
-  // Default preview: visible from sidebar appear until first item fill starts
-  const defaultPreviewOpacity = useTransform(
-    scrollYProgress,
-    [slideEnd, slideEnd + 0.01, subStart - 0.01, subStart],
-    [0, 1, 1, 0],
-  );
+  const toggle = (name: string) => {
+    setOpenDropdown(prev => prev === name ? null : name);
+    if (name !== 'persona') setShowCustomPrompt(false);
+  };
 
-  // Staggered reveal: each item fades in one by one between slideEnd and revealEnd
-  const revealSpan = revealEnd - revealStart;
-  const itemRevealOpacities = items.map((_, i) => {
-    const rStart = revealStart + (revealSpan / items.length) * i;
-    const rEnd = rStart + (revealSpan / items.length) * 0.7;
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    return useTransform(
-      scrollYProgress,
-      [rStart, rEnd, fadeOutStart, end],
-      [0, 1, 1, 0],
-    );
-  });
+  const history = [
+    { title: 'Quantum computing basics', date: 'Today' },
+    { title: 'React performance tips', date: 'Today' },
+    { title: 'Business plan review', date: 'Yesterday' },
+    { title: 'Python data pipeline', date: 'Yesterday' },
+    { title: 'Marketing copy for landing', date: 'Mar 14' },
+  ];
 
-  // First item gets 2x scroll time, rest share equally
-  const totalSpan = subEnd - subStart;
-  const firstWeight = 2;
-  const totalWeight = firstWeight + (items.length - 1);
+  const models: Record<string, { name: string; tokens: string }[]> = {
+    Anthropic: [
+      { name: 'Claude Opus 4', tokens: '200k' },
+      { name: 'Claude 4 Sonnet', tokens: '200k' },
+      { name: 'Claude Haiku 4', tokens: '200k' },
+    ],
+    OpenAI: [
+      { name: 'GPT-4o', tokens: '128k' },
+      { name: 'GPT-4 Turbo', tokens: '128k' },
+      { name: 'o3', tokens: '200k' },
+    ],
+    Google: [
+      { name: 'Gemini 2.5 Pro', tokens: '1M' },
+      { name: 'Gemini 2.5 Flash', tokens: '1M' },
+    ],
+    Meta: [
+      { name: 'Llama 4 Scout', tokens: '512k' },
+      { name: 'Llama 4 Maverick', tokens: '512k' },
+    ],
+    DeepSeek: [
+      { name: 'DeepSeek R1', tokens: '128k' },
+      { name: 'DeepSeek V3', tokens: '128k' },
+    ],
+  };
 
-  // Compute weighted ranges for each item
-  const itemStarts: number[] = [];
-  const itemEnds: number[] = [];
-  let cursor = subStart;
-  items.forEach((_, i) => {
-    const w = i === 0 ? firstWeight : 1;
-    const len = totalSpan * (w / totalWeight);
-    itemStarts.push(cursor);
-    itemEnds.push(cursor + len);
-    cursor += len;
-  });
+  const personas = [
+    { name: 'Engineer', desc: 'Expert software engineer' },
+    { name: 'Lawyer', desc: 'Legal professional' },
+    { name: 'Copywriter', desc: 'Content creator' },
+    { name: 'Custom', desc: 'Custom prompt' },
+  ];
 
-  // Active index derived from weighted ranges
-  const [activeIndex, setActiveIndex] = useState(0);
+  const msgs = [
+    { role: 'user', text: 'Explain quantum computing in simple terms' },
+    { role: 'ai', thinking: 'Analyzing the concept of quantum computing and finding accessible analogies...', text: 'Think of a regular computer bit like a light switch — it\'s either on (1) or off (0). A quantum bit, or **qubit**, is like a coin spinning in the air — it can be both heads and tails at the same time until it lands.\n\nThis "superposition" lets quantum computers explore many possibilities simultaneously, making them incredibly powerful for certain problems like:\n\n- **Cryptography** — breaking and building encryption\n- **Drug discovery** — simulating molecular interactions\n- **Optimization** — solving complex logistics problems\n- **Machine learning** — training models exponentially faster' },
+    { role: 'user', text: 'Can you show me a simple qubit simulation in Python?' },
+    { role: 'ai', text: 'Here\'s a minimal qubit simulation using NumPy:', code: `import numpy as np\n\n# Define basis states\n|0⟩ = np.array([1, 0])\n|1⟩ = np.array([0, 1])\n\n# Hadamard gate — creates superposition\nH = np.array([[1, 1], [1, -1]]) / np.sqrt(2)\n\n# Apply Hadamard to |0⟩\nqubit = H @ |0⟩\nprint(f"Superposition: {qubit}")\nprint(f"P(|0⟩) = {abs(qubit[0])**2:.1%}")\nprint(f"P(|1⟩) = {abs(qubit[1])**2:.1%}")` },
+  ];
 
-  useEffect(() => {
-    const unsubscribe = scrollYProgress.on('change', (v) => {
-      let idx = 0;
-      for (let i = 0; i < items.length; i++) {
-        if (v >= itemStarts[i]) idx = i;
-      }
-      setActiveIndex(Math.min(idx, items.length - 1));
-    });
-    return unsubscribe;
-  }, [scrollYProgress, items.length]);
-
-  // Per-item opacity for crossfade in the 16:9 panel + fill progress
-  const itemOpacities: import('framer-motion').MotionValue<number>[] = [];
-  const itemFills: import('framer-motion').MotionValue<string>[] = [];
-
-  items.forEach((_, i) => {
-    const iStart = itemStarts[i];
-    const iEnd = itemEnds[i];
-    const fadeInDone = iStart + (iEnd - iStart) * 0.15;
-    const fadeOutBegin = iEnd - (iEnd - iStart) * 0.15;
-
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    itemOpacities.push(useTransform(
-      scrollYProgress,
-      [iStart, fadeInDone, fadeOutBegin, iEnd],
-      [0, 1, 1, 0],
-    ));
-
-    // Fill progress: 0% → 100% width across the item's scroll range
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    itemFills.push(useTransform(
-      scrollYProgress,
-      [iStart, iEnd],
-      ['0%', '100%'],
-    ));
-  });
+  const btnBase = "h-9 px-3 py-1.5 rounded-lg border flex items-center justify-center pointer-events-auto cursor-pointer transition-colors";
+  const btnInactive = "border-white/[0.08] hover:border-gray-500";
+  const btnActive = "border-gray-500";
 
   return (
-    <motion.div
-      className="absolute inset-0 flex items-center justify-center"
-      style={{ opacity: wordOpacity }}
-    >
-      {/* Word — absolutely positioned, starts centered/big, flies to measured landing spot */}
-      <motion.span
-        ref={wordRef}
-        className="absolute font-bold uppercase text-white whitespace-nowrap"
-        style={{
-          fontSize: 'clamp(5rem, 14vw, 12rem)',
-          letterSpacing: wordLetterSpacing,
-          scale: wordScale,
-          x: wordX,
-          y: wordY,
-          transformOrigin: 'left top',
-        }}
-      >
-        {word}
-      </motion.span>
-
-      {/* Layout container: sidebar + panel, centered in viewport */}
-      <motion.div
-        className="absolute inset-0 flex items-center justify-center"
-        style={{ opacity: sidebarOpacity }}
-      >
-        <div
-          className="relative"
-          style={{ width: '95vw', maxWidth: '1800px', height: '60vh' }}
-        >
-          {/* Left column: word landing zone + divider + sub-item list — absolutely positioned */}
-          <div className="absolute flex flex-col" style={{ width: '380px', left: '-35px', top: '80px' }}>
-            {/* Landing target — word flies here, then divider + items below */}
-            <div ref={landingRef} style={{ height: '8px' }} />
-            {/* Horizontal divider — appears after word lands */}
-            <motion.div className="w-full bg-white/20 mb-4 rounded-sm" style={{ height: '2px', marginLeft: '23px', marginTop: '2px', opacity: dividerOpacity }} />
-
-            {/* Item list */}
-            <div className="flex flex-col gap-3" style={{ paddingLeft: '30px' }}>
-              {items.map((item, i) => (
-                <motion.div
-                  key={item.label}
-                  className="flex items-center gap-2"
-                  style={{
-                    opacity: itemRevealOpacities[i],
-                  }}
-                >
-                  <span
-                    className="inline-block w-1.5 h-1.5 rounded-sm flex-shrink-0 transition-all duration-300"
-                    style={{
-                      backgroundColor: i === activeIndex ? 'white' : 'transparent',
-                    }}
-                  />
-                  <motion.span
-                    className="text-3xl font-medium truncate"
-                    style={{
-                      backgroundImage: useTransform(
-                        itemFills[i],
-                        (v) => `linear-gradient(to right, rgba(255,255,255,1) ${v}, rgba(255,255,255,0.25) ${v})`,
-                      ),
-                      WebkitBackgroundClip: 'text',
-                      backgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                    }}
-                  >
-                    {item.label}
-                  </motion.span>
-                </motion.div>
-              ))}
+    <div className="relative h-full bg-[#0a0a0b] rounded-xl overflow-hidden pointer-events-none" onClick={() => { if (openDropdown) { setOpenDropdown(null); setShowCustomPrompt(false); } }}>
+      {/* Floating history sidebar */}
+      {showHistory && (
+        <div className="absolute top-3 left-3 bottom-3 w-[200px] z-10 bg-[#121212] border border-[#2a2a2d] rounded-xl flex flex-col overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
+          <div className="p-2.5 border-b border-[#2a2a2d]">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#19191a] border border-[#2a2a2d] pointer-events-auto cursor-pointer hover:border-[#3a3a3d] transition-colors">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+              <span className="text-[11px] text-white/25">Search...</span>
             </div>
           </div>
-
-          {/* 16:9 panel — absolutely positioned, independent of left column */}
-          <div className="absolute rounded-lg border border-white/10 overflow-hidden" style={{ left: '440px', right: '0px', top: '0px', bottom: '0px' }}>
-
-            {/* Default preview — shown before sub-item fills begin */}
-            <motion.div
-              className="absolute inset-0 flex flex-col items-center justify-center px-8"
-              style={{ opacity: defaultPreviewOpacity }}
-            >
-              <span className="text-white text-3xl md:text-4xl font-semibold text-center">
-                {word}
-              </span>
-              <span className="mt-3 text-white/40 text-sm md:text-base text-center max-w-md">
-                Discover the tools that power your workflow
-              </span>
-            </motion.div>
-
-            {/* Crossfading content layers */}
-            {items.map((item, i) => (
-              <motion.div
-                key={item.label}
-                className="absolute inset-0 flex flex-col items-center justify-center px-8"
-                style={{ opacity: itemOpacities[i] }}
-              >
-                <span className="text-white text-2xl md:text-3xl font-semibold text-center">
-                  {item.label}
-                </span>
-                <span className="mt-3 text-white/40 text-sm md:text-base text-center max-w-md">
-                  {item.desc}
-                </span>
-              </motion.div>
+          <div className="flex-1 overflow-hidden px-1.5 py-1.5 space-y-0.5">
+            {history.map((h, i) => (
+              <div key={i} className={`px-2.5 py-2 rounded-lg text-[12px] truncate pointer-events-auto cursor-pointer transition-colors ${i === 0 ? 'bg-[#2a2a2d] text-white/80' : 'text-white/40 hover:bg-[#19191a]'}`}>
+                <div className="truncate">{h.title}</div>
+                <div className="text-[10px] text-white/20 mt-0.5">{h.date}</div>
+              </div>
             ))}
           </div>
         </div>
-      </motion.div>
-    </motion.div>
-  );
-}
+      )}
 
-/* ─── Component ─── */
+      {/* Top bar — floating buttons */}
+      <div className="absolute top-3.5 z-20 flex items-center gap-1.5 px-3" style={{ left: showHistory ? 'calc(12px + 200px + 12px)' : '12px', right: '12px' }}>
+        {/* History (Lightbulb) */}
+        <div className={`${btnBase} ${showHistory ? btnActive : btnInactive}`} title="History" onClick={(e) => { e.stopPropagation(); setShowHistory(!showHistory); setOpenDropdown(null); }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+        </div>
+        {/* System Prompt (FilePenLine) */}
+        <div className="relative">
+          <div className={`${btnBase} gap-2 text-sm text-white/80`} style={{ borderColor: openDropdown === 'persona' ? 'rgb(107,114,128)' : 'rgba(255,255,255,0.08)' }} title="System Prompt" onClick={(e) => { e.stopPropagation(); toggle('persona'); }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.376 3.622a1 1 0 013.002 3.002L7.368 18.635a2 2 0 01-.855.506l-2.872.838a.5.5 0 01-.62-.62l.838-2.872a2 2 0 01.506-.854z" /><path d="M15 5l3 3" /></svg>
+            <span className="text-[13px]">{selectedPersona || 'System Prompt'}</span>
+          </div>
+          {/* Persona dropdown */}
+          {openDropdown === 'persona' && (
+            <div className="absolute top-full left-0 mt-2 bg-[#19191a] border border-[#2a2a2d] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto overflow-hidden" style={{ width: showCustomPrompt ? '18rem' : '12rem' }} onClick={(e) => e.stopPropagation()}>
+              {showCustomPrompt ? (
+                <div className="p-3 space-y-2">
+                  <textarea
+                    className="w-full h-32 bg-[#0a0a0b] border border-[#2a2a2d] rounded-lg p-3 text-[13px] text-white/80 placeholder-white/20 resize-none focus:outline-none focus:border-gray-500 transition-colors pointer-events-auto"
+                    placeholder="Enter custom system prompt..."
+                    value={customPromptText}
+                    onChange={(e) => setCustomPromptText(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="flex items-center justify-between">
+                    <div className="h-8 px-3 rounded-lg border border-[#3a3a3d] flex items-center text-[12px] text-gray-400 cursor-pointer hover:border-gray-500 hover:text-white transition-colors"
+                      onClick={() => setShowCustomPrompt(false)}>
+                      Back
+                    </div>
+                    <div className={`h-8 px-3 rounded-lg border flex items-center text-[12px] cursor-pointer transition-colors ${customPromptText.trim() ? 'border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white' : 'border-[#2a2a2d] text-gray-600 cursor-not-allowed'}`}
+                      onClick={() => { if (customPromptText.trim()) { setSelectedPersona('Custom'); setOpenDropdown(null); setShowCustomPrompt(false); } }}>
+                      Save
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {personas.map((p) => (
+                    <div key={p.name} className={`px-3 py-2.5 text-[13px] cursor-pointer transition-colors border-b border-[#2a2a2d] last:border-0 ${selectedPersona === p.name ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'}`}
+                      onClick={() => {
+                        if (p.name === 'Custom') { setShowCustomPrompt(true); }
+                        else { setSelectedPersona(p.name); setOpenDropdown(null); }
+                      }}>
+                      <div className="font-medium">{p.name}</div>
+                      <div className="text-[11px] text-white/25 mt-0.5">{p.desc}</div>
+                    </div>
+                  ))}
+                  {selectedPersona && (
+                    <div className="px-3 py-2.5 text-[13px] cursor-pointer text-red-400/60 hover:text-red-400 hover:bg-white/[0.03] transition-colors"
+                      onClick={() => { setSelectedPersona(null); setOpenDropdown(null); }}>
+                      Clear
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        {/* Clear (X) */}
+        <div className={`${btnBase} ${selectedPersona ? 'border-white/[0.08] text-gray-400 hover:border-red-500/50 hover:text-red-400' : 'border-white/[0.08] text-gray-600'}`} title="Clear" onClick={(e) => { e.stopPropagation(); if (selectedPersona) { setSelectedPersona(null); } }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+        </div>
 
-const WAVE_DELAY = [0, 350, 650];
+        <div className="flex-1" />
 
-function getScrollParent(el: HTMLElement): HTMLElement | Window {
-  let parent = el.parentElement;
-  while (parent) {
-    const s = getComputedStyle(parent);
-    if (/(auto|scroll)/.test(s.overflowY || s.overflow)) return parent;
-    parent = parent.parentElement;
-  }
-  return window;
-}
-
-function useRunwayProgress(ref: React.RefObject<HTMLDivElement | null>) {
-  const progress = useMotionValue(0);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const scrollTarget = getScrollParent(el);
-
-    const onScroll = () => {
-      const rect = el.getBoundingClientRect();
-      const totalScroll = el.offsetHeight - window.innerHeight;
-      const scrolled = -rect.top;
-      const p = Math.max(0, Math.min(1, scrolled / Math.max(totalScroll, 1)));
-      progress.set(p);
-    };
-
-    onScroll();
-    scrollTarget.addEventListener('scroll', onScroll, { passive: true });
-    return () => scrollTarget.removeEventListener('scroll', onScroll);
-  }, [ref, progress]);
-
-  return progress;
-}
-
-const HeroSection: React.FC = () => {
-  const heroRef = useEntryAnimation();
-  const reducedMotion = useReducedMotion();
-  const runwayRef = useRef<HTMLDivElement>(null);
-  const scrollYProgress = useRunwayProgress(runwayRef);
-
-  // Hero grid fades out over 0–4% of runway scroll (before EXPLORE lands)
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.04], [1, 0]);
-
-  // Reduced motion: static fallback
-  if (reducedMotion.current) {
-    return (
-      <>
-        <section className="relative bg-[#08080a] overflow-hidden" style={{ height: 'calc(100svh - 46px)' }}>
-          <div ref={heroRef} className="hero-mosaic absolute inset-0 p-1.5 sm:p-2 md:p-3">
-            <div className="hero-grid h-full w-full gap-1.5 sm:gap-2 md:gap-2.5">
-              {GRID_ITEMS.map((item) => (
-                <HeroTile key={item.area} item={item} />
+        {/* New Chat (SquarePen) */}
+        <div className={`${btnBase} ${btnInactive}`} title="New Chat" onClick={(e) => e.stopPropagation()}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.375 2.625a1 1 0 013 3l-9.013 9.014a2 2 0 01-.853.505l-2.873.84a.5.5 0 01-.62-.62l.84-2.868a2 2 0 01.506-.854z" /></svg>
+        </div>
+        {/* Model Selector (Brain) */}
+        <div className="relative">
+          <div className={`${btnBase} gap-2 text-sm text-white/80`} style={{ borderColor: openDropdown === 'model' ? 'rgb(107,114,128)' : 'rgba(255,255,255,0.08)' }} title="Model" onClick={(e) => { e.stopPropagation(); toggle('model'); }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5a3 3 0 100-6 3 3 0 000 6z" /><path d="M9.09 9a3 3 0 00-5.83 1.41 3 3 0 003.48 2.92" /><path d="M14.91 9a3 3 0 015.83 1.41 3 3 0 01-3.48 2.92" /><path d="M12 12v6" /><path d="M8 21a4 4 0 018 0" /><path d="M12 7v1" /></svg>
+            <span className="text-[13px]">{selectedModel}</span>
+          </div>
+          {/* Model dropdown */}
+          {openDropdown === 'model' && (
+            <div className="absolute top-full right-0 mt-2 w-72 max-h-[60vh] overflow-y-auto bg-[#19191a] border border-[#2a2a2d] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+              {Object.entries(models).map(([company, items]) => (
+                <div key={company}>
+                  <div className="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-white/[0.03] transition-colors border-b border-[#2a2a2d]/50"
+                    onClick={() => setExpandedCompany(expandedCompany === company ? null : company)}>
+                    <span className="text-[12px] font-semibold text-white/50 uppercase tracking-wider">{company}</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{ transform: expandedCompany === company ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}><path d="M6 9l6 6 6-6" /></svg>
+                  </div>
+                  {expandedCompany === company && items.map((m) => (
+                    <div key={m.name} className={`px-3 py-2 flex items-center justify-between cursor-pointer transition-colors ${selectedModel === m.name ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/[0.05] hover:text-white'}`}
+                      onClick={() => { setSelectedModel(m.name); setOpenDropdown(null); }}>
+                      <span className="text-[13px]">{m.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-white/25">{m.tokens}</span>
+                        {selectedModel === m.name && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2"><path d="M20 6L9 17l-5-5" /></svg>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ))}
             </div>
+          )}
+        </div>
+        {/* Search */}
+        <div className={`${btnBase} ${openDropdown === 'search' ? btnActive : btnInactive}`} title="Search in conversation" onClick={(e) => { e.stopPropagation(); toggle('search'); }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+        </div>
+        {/* Settings */}
+        <div className="relative">
+          <div className={`${btnBase} ${openDropdown === 'settings' ? btnActive : btnInactive}`} title="Settings" onClick={(e) => { e.stopPropagation(); toggle('settings'); }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
           </div>
-        </section>
-        <section className="bg-[#08080a]">
-          {SEQUENCE_WORDS.map((word) => (
-            <div key={word} className="flex items-center justify-center gap-12 px-8 py-24">
-              <span className="font-bold uppercase tracking-tight text-white" style={{ fontSize: 'clamp(3rem, 6vw, 5rem)' }}>
-                {word}
-              </span>
-              <div className="aspect-[16/9] w-full max-w-3xl rounded-2xl border border-white/10 bg-white/5" />
-            </div>
-          ))}
-        </section>
-        <HeroStyles />
-        <XenoBrandMoment />
-      </>
-    );
-  }
-
-  return (
-    <>
-      {/* ═══ SCROLL RUNWAY — hero grid + word sequence in one sticky viewport ═══ */}
-      <section ref={runwayRef} className="relative bg-[#08080a]" style={{ height: '1400vh' }}>
-        <div className="sticky w-full overflow-hidden" style={{ top: '46px', height: 'calc(100svh - 46px)' }}>
-
-          {/* Layer 1: Word phases (behind the grid) */}
-          {SEQUENCE_WORDS.map((word, i) => (
-            <WordPhase
-              key={word}
-              word={word}
-              range={WORD_RANGES[i]}
-              scrollYProgress={scrollYProgress}
-            />
-          ))}
-
-          {/* Layer 2: Hero grid (on top, fades out) */}
-          <motion.div
-            className="absolute inset-0 z-10"
-            style={{ opacity: heroOpacity }}
-          >
-            <div
-              ref={heroRef}
-              className="hero-mosaic absolute inset-0 p-1.5 sm:p-2 md:p-3"
-            >
-              <div className="hero-grid h-full w-full gap-1.5 sm:gap-2 md:gap-2.5">
-                {GRID_ITEMS.map((item) => (
-                  <HeroTile key={item.area} item={item} />
-                ))}
+          {/* Settings dropdown */}
+          {openDropdown === 'settings' && (
+            <div className="absolute top-full right-0 mt-2 w-56 bg-[#19191a] border border-[#2a2a2d] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto p-3 space-y-3" onClick={(e) => e.stopPropagation()}>
+              {/* Alignment */}
+              <div>
+                <div className="text-[11px] text-white/30 mb-1.5">Alignment</div>
+                <div className="flex gap-1">
+                  {(['left','center','right'] as const).map((a) => (
+                    <div key={a} className={`flex-1 h-8 rounded-lg border flex items-center justify-center text-[11px] capitalize cursor-pointer transition-colors ${alignment === a ? 'border-gray-500 text-white' : 'border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'}`}
+                      onClick={() => setAlignment(a)}>{a}</div>
+                  ))}
+                </div>
+              </div>
+              <div className="border-t border-[#2a2a2d]" />
+              {/* Font size */}
+              <div>
+                <div className="text-[11px] text-white/30 mb-1.5">Text Size</div>
+                <div className="flex gap-1">
+                  {([['small','A','text-[10px]'],['medium','A','text-xs'],['large','A','text-sm']] as const).map(([size, label, cls]) => (
+                    <div key={size} className={`flex-1 h-8 rounded-lg border flex items-center justify-center cursor-pointer transition-colors ${cls} ${fontSize === size ? 'border-gray-500 text-white' : 'border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'}`}
+                      onClick={() => setFontSize(size)}>{label}</div>
+                  ))}
+                </div>
+              </div>
+              <div className="border-t border-[#2a2a2d]" />
+              {/* Interface actions */}
+              <div className="space-y-1">
+                <div className="h-8 px-3 rounded-lg border border-[#3a3a3d] flex items-center gap-2 text-[12px] text-gray-400 cursor-pointer hover:border-gray-500 hover:text-white transition-colors">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+                  New Interface
+                </div>
+                <div className="h-8 px-3 rounded-lg border border-[#3a3a3d] flex items-center gap-2 text-[12px] text-gray-400 cursor-pointer hover:border-gray-500 hover:text-white transition-colors">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                  Export as Markdown
+                </div>
               </div>
             </div>
-
-            {/* Bottom gradient */}
-            <div
-              className="pointer-events-none absolute bottom-0 left-0 right-0 h-24"
-              style={{ background: 'linear-gradient(to top, #08080a 0%, transparent 100%)' }}
-            />
-          </motion.div>
-
+          )}
         </div>
-      </section>
-
-      <HeroStyles />
-
-      <XenoBrandMoment />
-    </>
-  );
-};
-
-/* ─── Hero Tile (extracted for reuse) ─── */
-
-function HeroTile({ item }: { item: (typeof GRID_ITEMS)[number] }) {
-  return (
-    <div
-      className="hero-tile hero-enter group relative overflow-hidden rounded-md md:rounded-lg cursor-pointer"
-      style={{
-        gridArea: item.area,
-        transitionDelay: `${WAVE_DELAY[item.wave]}ms`,
-      }}
-    >
-      <img
-        src={item.src}
-        alt=""
-        loading={item.wave === 0 ? 'eager' : 'lazy'}
-        className="h-full w-full object-cover grayscale opacity-50 transition-all duration-500 ease-out group-hover:scale-[1.05] group-hover:grayscale-0 group-hover:opacity-100"
-      />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-      <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4 translate-y-4 opacity-0 transition-all duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100">
-        <span className="inline-block rounded-full bg-white/10 backdrop-blur-sm px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-widest text-white/70 mb-1.5">
-          {item.tag}
-        </span>
-        <p className="text-sm font-semibold text-white md:text-base">{item.label}</p>
       </div>
-      <div className="absolute top-3 right-3 md:top-4 md:right-4 opacity-0 scale-75 transition-all duration-300 group-hover:opacity-100 group-hover:scale-100">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 backdrop-blur-sm">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4 10L10 4M10 4H5M10 4V9" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+
+      {/* Search bar */}
+      {openDropdown === 'search' && (
+        <div className="absolute top-14 z-20 px-3 pointer-events-auto" style={{ left: showHistory ? 'calc(12px + 200px + 12px)' : '12px', right: '12px' }}>
+          <div className="flex items-center gap-2 px-3 h-9 bg-[#19191a] border border-[#2a2a2d] rounded-lg" onClick={(e) => e.stopPropagation()}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+            <span className="text-[13px] text-white/25">Search messages...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Main chat area — offset to the right of floating sidebar */}
+      <div className="absolute top-0 right-0 bottom-0 flex flex-col transition-all duration-300" style={{ left: showHistory ? 'calc(12px + 200px + 12px)' : '12px' }}>
+        {/* Spacer for top bar */}
+        <div className={`${openDropdown === 'search' ? 'h-[5.5rem]' : 'h-12'} shrink-0 transition-all duration-200`} />
+
+        {/* Messages area */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
+            {msgs.map((m, i) => (
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className="max-w-[85%]">
+                  {/* Thinking section for AI */}
+                  {m.role === 'ai' && (m as any).thinking && (
+                    <div className="mb-2 px-3 py-2 rounded-lg bg-[#19191a]/50 border border-[#2a2a2d]/50">
+                      <div className="flex items-center gap-1.5 text-[11px] text-white/30">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                        Thoughts · 1.2s
+                      </div>
+                      <div className="text-[11px] text-white/20 mt-1">{(m as any).thinking}</div>
+                    </div>
+                  )}
+                  <div className={`px-4 py-3 rounded-2xl text-[13px] leading-relaxed ${
+                    m.role === 'user'
+                      ? 'bg-[#19191a] border border-[#3a3a3d] text-white/90 rounded-br-none'
+                      : 'bg-[#19191a] border border-[#3a3a3d] text-white/70 rounded-bl-none'
+                  }`}>
+                    {m.text.split('\n\n').map((p, j) => (
+                      <p key={j} className={j > 0 ? 'mt-3' : ''}>
+                        {p.startsWith('- **') ? (
+                          <span className="block ml-2">{p}</span>
+                        ) : p}
+                      </p>
+                    ))}
+                    {/* Code block */}
+                    {(m as any).code && (
+                      <div className="mt-3 rounded-lg bg-[#0a0a0b] border border-[#2a2a2d] overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#2a2a2d] bg-[#121212]">
+                          <span className="text-[10px] text-white/30">python</span>
+                          <div className="flex items-center gap-1">
+                            <div className="px-2 py-0.5 rounded text-[10px] text-white/30 pointer-events-auto cursor-pointer hover:text-white/50 transition-colors">Copy</div>
+                            <div className="px-2 py-0.5 rounded text-[10px] text-green-400/60 pointer-events-auto cursor-pointer hover:text-green-400 transition-colors">Run</div>
+                          </div>
+                        </div>
+                        <pre className="p-3 text-[11px] text-white/50 leading-relaxed overflow-x-auto"><code>{(m as any).code}</code></pre>
+                      </div>
+                    )}
+                  </div>
+                  {/* AI message footer */}
+                  {m.role === 'ai' && (
+                    <div className="flex items-center gap-1 mt-1.5 ml-1">
+                      {['Copy', '👍', '👎', 'Info'].map((a, ai) => (
+                        <div key={ai} className="px-1.5 py-0.5 rounded text-[10px] text-white/15 pointer-events-auto cursor-pointer hover:text-white/30 transition-colors">{a}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {/* Typing indicator */}
+            <div className="flex justify-start">
+              <div className="px-4 py-3 rounded-2xl rounded-bl-none bg-[#19191a] border border-[#3a3a3d] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-white/30 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-white/30 animate-pulse" style={{ animationDelay: '0.15s' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-white/30 animate-pulse" style={{ animationDelay: '0.3s' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Input area */}
+        <div className="shrink-0 px-6 pb-4">
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-[#19191a] border border-[#3a3a3d] rounded-2xl p-3 md:p-4">
+              <div className="text-[13px] text-white/20 mb-3 min-h-[20px]">Ask anything...</div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  {/* Attachment */}
+                  <div className="w-8 h-8 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center pointer-events-auto cursor-pointer hover:bg-white/[0.06] transition-colors">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
+                  </div>
+                  {/* Link */}
+                  <div className="w-8 h-8 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center pointer-events-auto cursor-pointer hover:bg-white/[0.06] transition-colors">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {/* Reason toggle */}
+                  <div className="h-8 px-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center gap-1.5 text-[11px] text-white/30 pointer-events-auto cursor-pointer hover:bg-white/[0.06] transition-colors">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                    Reason
+                  </div>
+                  {/* Search toggle */}
+                  <div className="h-8 px-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center gap-1.5 text-[11px] text-white/30 pointer-events-auto cursor-pointer hover:bg-white/[0.06] transition-colors">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"><circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" /></svg>
+                    Search
+                  </div>
+                  {/* Voice */}
+                  <div className="w-8 h-8 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center pointer-events-auto cursor-pointer hover:bg-white/[0.06] transition-colors">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" /><path d="M19 10v2a7 7 0 01-14 0v-2" /><path d="M12 19v4M8 23h8" /></svg>
+                  </div>
+                  {/* Send */}
+                  <div className="w-8 h-8 rounded-lg bg-gray-400 flex items-center justify-center pointer-events-auto cursor-pointer hover:bg-gray-300 transition-colors">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="text-center text-[10px] text-white/15 mt-2">Demo preview · <a href="/auth" className="underline hover:text-white/25 pointer-events-auto cursor-pointer">Sign up</a> to use the full interface</p>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/* ─── XENO Brand Moment ─── */
-
-function XenoBrandMoment() {
+function DemoPlaceholder({ item }: { item: BentoItem }) {
   return (
-    <section className="relative overflow-hidden bg-[#08080a] px-6">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(255,255,255,0.03) 0%, transparent 70%)',
-        }}
-      />
-      <div className="relative mx-auto flex min-h-[80vh] max-w-4xl flex-col items-center justify-center py-32 text-center">
-        <span
-          className="text-lg text-white/30"
-          style={{ fontFamily: "'Playfair Display', serif", fontStyle: 'italic' }}
-        >
-          with
-        </span>
-        <span
-          className="mt-3 select-none font-extrabold uppercase leading-[0.9] tracking-tight text-white"
-          style={{ fontSize: 'clamp(4rem, 12vw, 10rem)' }}
-        >
-          XENO
-        </span>
-        <p className="mt-8 text-base text-white/40 md:text-lg">
-          The complete visual AI platform.
-        </p>
-        <a
-          href="/auth"
-          className="mt-12 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3 text-sm font-medium text-[#08080a] transition-opacity hover:opacity-90"
-        >
-          Get Started
-          <span aria-hidden="true">&rarr;</span>
-        </a>
+    <div className="h-full flex flex-col items-center justify-center gap-4 p-8">
+      <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
+        <BentoIcon type={item.icon} size={32} />
       </div>
-    </section>
+      <div className="text-white/60 text-lg font-semibold">{item.label}</div>
+      <div className="text-white/25 text-sm text-center max-w-md">{item.desc}</div>
+      <a href="/auth" className="mt-2 px-6 py-2 rounded-md bg-white text-[#08080a] text-sm font-semibold hover:bg-white/90 transition-colors">
+        Try {item.label}
+      </a>
+      <p className="text-white/15 text-xs">Press ESC to go back</p>
+    </div>
   );
 }
 
-/* ─── Styles ─── */
+/* ─── Bento card renderer ─── */
 
-function HeroStyles() {
+function BentoCard({ item, onExpand, hideContent }: { item: BentoItem; onExpand: (item: BentoItem) => void; hideContent?: boolean }) {
+  const base = `relative rounded-2xl overflow-hidden group transition-all duration-300 ${hideContent ? 'cursor-default' : 'cursor-pointer'}`;
+  const border = hideContent ? "border border-white/[0.06]" : "border border-white/[0.06] hover:border-white/[0.15]";
+
+  const demoContent = hideContent ? (
+    item.id === 'chat' ? <DemoChatInterface /> : <DemoPlaceholder item={item} />
+  ) : null;
+
+  const inner = (children: React.ReactNode) => (
+    <motion.div
+      className={`${base} ${border} bg-[#111113] h-full`}
+      onClick={hideContent ? undefined : () => onExpand(item)}
+      whileHover={hideContent ? {} : { scale: 1.01 }}
+      transition={{ duration: 0.2 }}
+    >
+      <div className="h-full" style={{ opacity: hideContent ? 0 : 1, transition: hideContent ? 'none' : 'opacity 0.5s' }}>
+        {children}
+      </div>
+      {hideContent && (
+        <div className="absolute inset-0 z-10" style={{ opacity: 1, animation: 'fadeIn 0.5s ease 0.4s both' }}>
+          {demoContent}
+        </div>
+      )}
+      {!hideContent && (
+        <div className="absolute top-3 right-3 w-7 h-7 rounded-md bg-white/[0.05] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M4 10L10 4M10 4H5M10 4V9" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      )}
+    </motion.div>
+  );
+
+  switch (item.type) {
+    case 'hero-image':
+      return inner(
+        <div className="bg-[#111113] h-full flex flex-col items-center justify-center p-6 text-center">
+          <span className="text-3xl md:text-4xl font-semibold text-white leading-tight">{item.label}</span>
+          {item.sub && <span className="text-lg md:text-xl font-medium text-white/70 mt-1">{item.sub}</span>}
+        </div>
+      );
+    case 'stat':
+      return inner(
+        <div className="bg-[#111113] h-full flex flex-col items-center justify-center p-6">
+          <span className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent text-4xl xl:text-6xl font-bold tracking-tight leading-none">{item.stat}</span>
+          <span className="text-sm font-semibold text-white/70 mt-2 text-center xl:text-base">{item.sub ?? item.label}</span>
+        </div>
+      );
+    case 'stat-image':
+      return inner(
+        <div className="bg-[#111113] h-full flex flex-col items-center justify-center p-6">
+          <span className="text-4xl xl:text-6xl font-bold tracking-tight text-white">{item.stat}</span>
+          <span className="text-sm font-medium text-white/70 mt-1 text-center xl:text-base">{item.sub}</span>
+        </div>
+      );
+    case 'feature':
+      return inner(
+        <div className="relative h-full">
+          <div className="absolute inset-0 bg-[#111113]" />
+          <div className="relative z-10 h-full p-5 flex flex-col justify-between">
+            <div className="w-9 h-9 rounded-lg bg-white/[0.08] border border-white/[0.1] flex items-center justify-center mb-auto">
+              <BentoIcon type={item.icon} size={18} />
+            </div>
+            <div className="mt-auto">
+              <div className="text-white text-lg font-semibold leading-tight">{item.label}</div>
+              {item.sub && <div className="text-white/40 text-sm mt-1 whitespace-pre-line">{item.sub}</div>}
+            </div>
+          </div>
+        </div>
+      );
+    case 'mirror':
+      return inner(
+        <div className="bg-[#111113] h-full flex flex-col items-center justify-center p-6">
+          <div className="relative text-center text-2xl md:text-3xl font-semibold text-white leading-none">
+            {item.label}
+            <div className="absolute -bottom-full -scale-y-100 text-2xl md:text-3xl font-semibold opacity-40 blur-[2px] left-0 right-0" aria-hidden="true"
+              style={{ background: 'linear-gradient(to top, white 0%, transparent 80%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+              {item.label}
+            </div>
+          </div>
+        </div>
+      );
+    case 'cube':
+      return inner(
+        <div className="bg-[#111113] h-full flex flex-col items-center justify-center gap-3 p-5">
+          <span className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent text-xl font-semibold">{item.label}</span>
+          <RotatingCube />
+        </div>
+      );
+    case 'clock':
+      return inner(
+        <div className="bg-[#111113] h-full flex flex-col items-center justify-center gap-3 p-5">
+          <div className="text-lg font-semibold text-white">{item.label}</div>
+          <MiniClock />
+          {item.sub && <div className="text-center text-xs font-medium text-white/40 whitespace-pre-line">{item.sub}</div>}
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+/* ─── (ExpandedView removed — expand logic now handled inline) ─── */
+
+/* ─── Cursor glow text ─── */
+
+function CursorGlowText({ children, className }: { children: React.ReactNode; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const target = useRef({ x: -200, y: -200 });
+  const current = useRef({ x: -200, y: -200 });
+  const rafId = useRef<number>(0);
+
+  useEffect(() => {
+    const lerp = () => {
+      current.current.x += (target.current.x - current.current.x) * 0.15;
+      current.current.y += (target.current.y - current.current.y) * 0.15;
+      if (ref.current) {
+        ref.current.style.setProperty('--gx', `${current.current.x}px`);
+        ref.current.style.setProperty('--gy', `${current.current.y}px`);
+      }
+      rafId.current = requestAnimationFrame(lerp);
+    };
+    rafId.current = requestAnimationFrame(lerp);
+    return () => cancelAnimationFrame(rafId.current);
+  }, []);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    target.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    target.current = { x: -200, y: -200 };
+  }, []);
+
   return (
-    <style>{`
-      .hero-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        grid-template-rows: repeat(4, 1fr);
-        grid-template-areas:
-          "ws ws nr fl"
-          "ws ws ab ar"
-          "pt ct ct ui"
-          "pt pw nt nt";
-      }
-      @media (min-width: 768px) {
-        .hero-grid {
-          grid-template-columns: repeat(6, 1fr);
-          grid-template-rows: repeat(3, 1fr);
-          grid-template-areas:
-            "ws ws nr nr pt fl"
-            "ws ws ab ar pt pw"
-            "nt ct ct ct ui pw";
-        }
-      }
-      .hero-enter {
-        opacity: 0;
-        transform: scale(0.92);
-        transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
-                    transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
-        will-change: opacity, transform;
-      }
-      .hero-visible .hero-enter {
-        opacity: 1;
-        transform: scale(1);
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .hero-enter {
-          opacity: 1 !important;
-          transform: none !important;
-          transition: none !important;
-        }
-      }
-    `}</style>
+    <span
+      ref={ref}
+      className={`cursor-glow-text ${className ?? ''}`}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      style={{ '--gx': '-200px', '--gy': '-200px' } as React.CSSProperties}
+    >
+      {children}
+    </span>
   );
 }
+
+/* ─── Main HeroSection ─── */
+
+const HeroSection: React.FC = () => {
+  const [expandedItem, setExpandedItem] = useState<BentoItem | null>(null);
+  const [expandRect, setExpandRect] = useState<{ top: number; left: number; height: number } | null>(null);
+  const [isCollapsing, setIsCollapsing] = useState(false);
+  const [isRevealing, setIsRevealing] = useState(false);
+  const isExpanded = expandedItem !== null;
+  const hideOthers = isExpanded && !isRevealing;
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const handleExpand = useCallback((item: BentoItem) => {
+    if (isCollapsing || isRevealing) return;
+    const el = cardRefs.current[item.id];
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      setExpandRect({ top: rect.top, left: rect.left, height: rect.height });
+    }
+    setExpandedItem(item);
+  }, [isCollapsing, isRevealing]);
+
+  const handleClose = useCallback(() => {
+    setIsCollapsing(true);
+    // Phase 1: card collapses (1.2s)
+    // Phase 2: staggered reveal
+    setTimeout(() => {
+      setIsRevealing(true);
+    }, 300);
+    // Phase 3: cleanup after reveal animations finish
+    setTimeout(() => {
+      setExpandedItem(null);
+      setExpandRect(null);
+      setIsCollapsing(false);
+      setIsRevealing(false);
+    }, 1200);
+  }, []);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isExpanded, handleClose]);
+
+  return (
+    <>
+      {/* ═══ HERO — 40/60 split: banner + bento in one viewport ═══ */}
+      <section className="relative bg-[#08080a] overflow-hidden flex flex-col" style={{ minHeight: 'calc(100svh - 58px)' }}>
+
+        {/* ── Top: Hero banner ── */}
+        <div
+          className="relative shrink-0 flex flex-col items-center justify-center text-center overflow-hidden"
+          style={{ minHeight: '42vh' }}
+        >
+          {/* Video background */}
+          <video
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover opacity-25"
+            src="/hero-bg.mp4"
+          />
+          {/* Gradient overlays to blend video into dark bg */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/50 via-transparent to-[#08080a]" />
+          <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 80% 70% at 50% 50%, transparent 0%, #08080a 75%)' }} />
+
+          {/* Content */}
+          <div
+            className="relative z-10 w-full px-6 py-5 md:py-6"
+            style={{
+              opacity: hideOthers ? 0 : 1,
+              transition: isRevealing ? 'opacity 0.6s ease 0.1s' : 'opacity 0.5s ease',
+              pointerEvents: hideOthers ? 'none' : 'auto',
+            }}
+          >
+            <div className="flex items-center justify-center gap-3 mb-3 text-[11px] md:text-xs font-medium tracking-[0.3em] uppercase text-white/25">
+              <span>Explore</span>
+              <span className="w-1 h-1 rounded-full bg-white/20" />
+              <span>Create</span>
+              <span className="w-1 h-1 rounded-full bg-white/20" />
+              <span>Innovate</span>
+            </div>
+            <h1 className="text-3xl md:text-4xl lg:text-[2.75rem] font-bold text-white tracking-[-0.02em] leading-[1.15] whitespace-nowrap mx-auto w-fit mb-3">
+              Where humans imagine and AI builds.
+            </h1>
+            <div className="mt-5 flex items-center justify-center gap-3">
+              <a href="/auth" className="inline-flex items-center gap-2 rounded-md bg-white px-6 py-2 text-sm font-semibold text-[#08080a] hover:bg-white/90 transition-colors">
+                Get Started Free
+              </a>
+              <a href="#products" className="inline-flex items-center gap-2 rounded-md border border-white/15 px-6 py-2 text-sm font-medium text-white/80 hover:bg-white/[0.06] transition-colors">
+                See all products
+              </a>
+            </div>
+            <CursorGlowText className="mt-4 text-xs md:text-sm mx-auto text-center tracking-wide w-fit">
+              The last tool you learn. The first that works for you.
+            </CursorGlowText>
+          </div>
+        </div>
+
+        {/* ── Bottom: Bento grid ── */}
+        <div id="products" className="relative z-10 flex-1 px-3 lg:px-4 pb-1 pt-0" style={{ minHeight: '70vh' }}>
+          <div className="max-w-[1920px] mx-auto h-full">
+            <div className="hero-bento gap-2 lg:gap-2.5 h-full">
+              {BENTO_ITEMS.map((item, index) => {
+                const isSelected = expandedItem?.id === item.id;
+                const isHidden = hideOthers && !isSelected;
+                const isCardExpanded = isSelected && isExpanded && !isCollapsing;
+                const staggerDelay = index * 0.06;
+                return (
+                  <motion.div
+                    key={item.id}
+                    ref={(el) => { cardRefs.current[item.id] = el; }}
+                    layout
+                    className={isCardExpanded ? 'fixed z-50' : ''}
+                    style={{
+                      gridArea: isCardExpanded ? undefined : item.area,
+                      opacity: isHidden ? 0 : 1,
+                      transition: isRevealing
+                        ? `opacity 0.5s ease ${staggerDelay}s`
+                        : 'opacity 0.5s ease',
+                      pointerEvents: isHidden ? 'none' : 'auto',
+                      ...(isCardExpanded && expandRect ? {
+                        top: 70,
+                        left: 12,
+                        width: 'calc(100vw - 24px)',
+                        height: 'calc(100vh - 70px - 12px)',
+                      } : {}),
+                    }}
+                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <BentoCard item={item} onExpand={handleExpand} hideContent={isCardExpanded} />
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+          {/* Subtle glow behind grid */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[500px] bg-white/[0.01] rounded-full blur-[160px] pointer-events-none" />
+
+        </div>
+      </section>
+
+      {/* Brand moment */}
+      <section className="relative overflow-hidden bg-[#08080a] px-6">
+        <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(255,255,255,0.03) 0%, transparent 70%)' }} />
+        <div className="relative mx-auto flex min-h-[60vh] max-w-4xl flex-col items-center justify-center py-24 text-center">
+          <span className="text-lg text-white/30" style={{ fontFamily: "'Playfair Display', serif", fontStyle: 'italic' }}>with</span>
+          <span className="mt-3 select-none font-extrabold uppercase leading-[0.9] tracking-tight text-white" style={{ fontSize: 'clamp(4rem, 12vw, 10rem)' }}>XENO</span>
+          <p className="mt-8 text-base text-white/40 md:text-lg">The complete visual AI platform.</p>
+          <a href="/auth" className="mt-10 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3 text-sm font-medium text-[#08080a] transition-opacity hover:opacity-90">
+            Get Started <span aria-hidden="true">&rarr;</span>
+          </a>
+        </div>
+      </section>
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .cursor-glow-text {
+          display: inline-block;
+          cursor: default;
+          background-image: radial-gradient(
+            circle 100px at var(--gx, -200px) var(--gy, -200px),
+            rgba(255,255,255,0.9) 0%,
+            rgba(255,255,255,0.4) 30%,
+            rgba(255,255,255,0.12) 60%,
+            rgba(255,255,255,0.12) 100%
+          );
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+          color: transparent;
+        }
+        @keyframes meshMove {
+          0%, 100% { background-position: 0% 50%; }
+          25% { background-position: 50% 0%; }
+          50% { background-position: 100% 50%; }
+          75% { background-position: 50% 100%; }
+        }
+        .hero-mesh-bg {
+          background: radial-gradient(ellipse at 20% 50%, rgba(99,102,241,0.12) 0%, transparent 50%),
+                      radial-gradient(ellipse at 80% 50%, rgba(168,85,247,0.10) 0%, transparent 50%),
+                      radial-gradient(ellipse at 50% 20%, rgba(59,130,246,0.08) 0%, transparent 50%),
+                      radial-gradient(ellipse at 50% 80%, rgba(139,92,246,0.06) 0%, transparent 50%);
+          background-size: 200% 200%;
+          animation: meshMove 20s ease-in-out infinite;
+        }
+        .hero-bento {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          grid-template-rows: repeat(4, 1fr);
+          grid-template-areas:
+            "image image video video"
+            "chat threed audio workflows"
+            "office office content content"
+            "models models privacy privacy";
+        }
+        @media (min-width: 1024px) {
+          .hero-bento {
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            grid-template-areas:
+              "image image video chat threed"
+              "workflows workflows office office audio"
+              "models content content privacy privacy";
+          }
+        }
+      `}</style>
+    </>
+  );
+};
 
 export default HeroSection;

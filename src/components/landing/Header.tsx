@@ -37,7 +37,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
         <div
           className={`
             relative flex w-full items-center justify-between gap-2
-            px-4 py-1 md:px-6
+            px-4 py-2.5 md:px-6
             border-b border-white/[0.08]
             transition-all duration-500 ease-out
             ${isScrolled 
