@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Release Notes — XENO Agent CLI</title>
+  <meta name="description" content="XENO Agent CLI release notes and changelog.">
+  <link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #08080a; color: rgba(255,255,255,0.9); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  </style>
+</head>
+<body>
+  <header style="position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(255,255,255,0.02);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.08)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 24px">
+      <a href="/"><img src="/xeno-logo.svg" alt="Xeno" style="width:24px;height:24px;border-radius:6px;filter:invert(1)"></a>
+      <nav style="display:flex;gap:4px;position:absolute;left:50%;transform:translateX(-50%)">
+        <a href="/#features" style="padding:8px 14px;font-size:13px;color:rgba(255,255,255,0.5)">Features</a>
+        <a href="/#pricing" style="padding:8px 14px;font-size:13px;color:rgba(255,255,255,0.5)">Pricing</a>
+        <a href="/blog" style="padding:8px 14px;font-size:13px;color:rgba(255,255,255,0.5)">Blog</a>
+        <a href="/download" style="padding:8px 14px;font-size:13px;color:rgba(255,255,255,0.5)">Download</a>
+        <a href="/products/" style="padding:8px 14px;font-size:13px;color:rgba(255,255,255,0.9)">Products</a>
+      </nav>
+      <div style="display:flex;gap:8px">
+        <a href="/auth" style="padding:8px 14px;font-size:13px;color:rgba(255,255,255,0.6)">SIGN IN</a>
+        <a href="/download" style="padding:8px 16px;background:white;color:#08080a;font-size:13px;font-weight:600;border-radius:6px">DOWNLOAD</a>
+      </div>
+    </div>
+  </header>
+
+  <main style="padding-top:100px;padding-bottom:120px">
+    <div class="container" style="max-width:720px">
+      <div style="margin-bottom:48px">
+        <p style="font-size:13px;color:rgba(255,255,255,0.3)">
+          <a href="/products/" style="color:rgba(255,255,255,0.3)">Products</a>
+          <span style="margin:0 8px">/</span>
+          <a href="/products/agent-cli/" style="color:rgba(255,255,255,0.3)">Agent CLI</a>
+          <span style="margin:0 8px">/</span>
+          <span style="color:rgba(255,255,255,0.5)">Release Notes</span>
+        </p>
+      </div>
+
+      <h1 style="font-size:36px;font-weight:700;letter-spacing:-0.5px;margin-bottom:48px">Release Notes</h1>
+
+      <div style="margin-bottom:48px;padding-bottom:48px;border-bottom:1px solid rgba(255,255,255,0.06)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <span style="font-size:11px;padding:3px 8px;background:rgba(34,197,94,0.15);color:#4ade80;border-radius:4px;font-weight:600">Preview</span>
+          <span style="font-size:13px;color:rgba(255,255,255,0.25)">March 2026</span>
+          <span style="font-size:11px;padding:3px 8px;background:rgba(34,197,94,0.15);color:#4ade80;border-radius:4px">Latest</span>
+        </div>
+        <h2 style="font-size:22px;font-weight:600;margin-bottom:16px">Preview Release</h2>
+        <p style="font-size:14px;color:rgba(255,255,255,0.5);line-height:1.7;margin-bottom:20px">The first preview of XENO Agent CLI brings an autonomous coding agent to your terminal.</p>
+
+        <div style="margin-bottom:20px">
+          <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Core Capabilities</p>
+          <ul style="list-style:none;display:flex;flex-direction:column;gap:8px">
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> Agentic loop with plan-execute-verify cycle</li>
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> File read, write, edit, and search tools</li>
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> Shell command execution with sandboxing</li>
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> Multi-file project understanding</li>
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> Git integration (commit, branch, diff)</li>
+          </ul>
+        </div>
+
+        <div style="margin-bottom:20px">
+          <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Model Support</p>
+          <ul style="list-style:none;display:flex;flex-direction:column;gap:8px">
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> Local models via XENO RT (GGUF format)</li>
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> Cloud providers via api.xenostudio.ai</li>
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> OpenAI-compatible API interface</li>
+          </ul>
+        </div>
+
+        <div>
+          <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Interface</p>
+          <ul style="list-style:none;display:flex;flex-direction:column;gap:8px">
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> Interactive REPL with syntax highlighting</li>
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> Streaming responses with tool call visualization</li>
+            <li style="font-size:13px;color:rgba(255,255,255,0.5);padding-left:16px;position:relative"><span style="position:absolute;left:0;color:rgba(255,255,255,0.2)">+</span> Persistent conversation sessions</li>
+          </ul>
+        </div>
+      </div>
+
+      <div style="text-align:center;padding:32px 0">
+        <a href="/products/agent-cli/download/" style="display:inline-block;padding:12px 32px;background:white;color:#08080a;font-size:14px;font-weight:600;border-radius:6px">Get Started</a>
+      </div>
+    </div>
+  </main>
+
+  <footer style="border-top:1px solid rgba(255,255,255,0.06);padding:64px 0 0">
+    <div class="container">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:48px;padding-bottom:48px">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <img src="/xeno-logo.svg" alt="Xeno" style="width:20px;height:20px;border-radius:4px;filter:invert(1)">
+            <span style="font-size:15px;font-weight:600">XENO</span>
+          </div>
+          <p style="font-size:13px;color:rgba(255,255,255,0.3);line-height:1.6;margin-bottom:20px">Professional creative tools<br>powered by local AI.</p>
+          <div style="display:flex;gap:16px">
+            <a href="https://github.com/XENO-CORPORATION" style="color:rgba(255,255,255,0.25);font-size:13px">GitHub</a>
+            <a href="https://x.com/xenostudioai" style="color:rgba(255,255,255,0.25);font-size:13px">X</a>
+            <a href="https://discord.gg/xenostudio" style="color:rgba(255,255,255,0.25);font-size:13px">Discord</a>
+          </div>
+        </div>
+        <div>
+          <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">Product</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <a href="/products/pixel/" style="font-size:13px;color:rgba(255,255,255,0.4)">Pixel</a>
+            <a href="/products/motion/" style="font-size:13px;color:rgba(255,255,255,0.4)">Motion</a>
+            <a href="/products/sound/" style="font-size:13px;color:rgba(255,255,255,0.4)">Sound</a>
+            <a href="/products/hub/" style="font-size:13px;color:rgba(255,255,255,0.4)">Hub</a>
+            <a href="/download" style="font-size:13px;color:rgba(255,255,255,0.4)">Download</a>
+          </div>
+        </div>
+        <div>
+          <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">Resources</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <a href="/blog" style="font-size:13px;color:rgba(255,255,255,0.4)">Blog</a>
+            <a href="https://github.com/XENO-CORPORATION" style="font-size:13px;color:rgba(255,255,255,0.4)">GitHub</a>
+            <a href="/products/lib/" style="font-size:13px;color:rgba(255,255,255,0.4)">AI Models</a>
+          </div>
+        </div>
+        <div>
+          <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">Company</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <a href="/#about" style="font-size:13px;color:rgba(255,255,255,0.4)">About</a>
+            <a href="mailto:hello@xenostudio.ai" style="font-size:13px;color:rgba(255,255,255,0.4)">Contact</a>
+          </div>
+        </div>
+        <div>
+          <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">Legal</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <a href="/privacy" style="font-size:13px;color:rgba(255,255,255,0.4)">Privacy</a>
+            <a href="/terms" style="font-size:13px;color:rgba(255,255,255,0.4)">Terms</a>
+          </div>
+        </div>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.06);padding:20px 0;display:flex;justify-content:space-between;align-items:center">
+        <p style="font-size:12px;color:rgba(255,255,255,0.2)">&copy; 2026 XENO Corporation. All rights reserved.</p>
+        <p style="font-size:12px;color:rgba(255,255,255,0.15)">All systems operational</p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
