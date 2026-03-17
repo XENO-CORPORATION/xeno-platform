@@ -2187,6 +2187,71 @@ const ImageGenerationInterface2: React.FC = () => {
                 </>
               )}
             </div>
+            {/* AI Company icons — inline horizontal, right of model button */}
+            {(showAiCompanies || desktopAiCompaniesClosing) && (() => {
+              const visibleCompanies = desktopAiCompaniesMode === 'selected' && selectedModelCompany
+                ? [selectedModelCompany]
+                : aiCompanies;
+              return visibleCompanies.map((company, index) => {
+                const total = visibleCompanies.length;
+                const enterDelay = index * 50;
+                const exitDelay = (total - 1 - index) * 50;
+                return (
+                  <div key={company.name} className="relative"
+                    style={{
+                      animation: `${desktopAiCompaniesClosing ? 'desktopCompanyExit' : 'desktopCompanyEnter'} 160ms ease-out both`,
+                      animationDelay: `${desktopAiCompaniesClosing ? exitDelay : enterDelay}ms`,
+                    }}
+                    data-desktop-header-popout="true"
+                  >
+                    <button
+                      onClick={() => {
+                        setSelectedCompany(selectedCompany === company.name ? null : company.name);
+                        setShowSettings(false);
+                      }}
+                      className={`h-9 w-9 bg-[#1a1a1c] backdrop-blur-md border rounded-lg flex items-center justify-center text-white/80 hover:bg-[#2a2a2d] transition-all shadow-lg ${
+                        selectedCompany === company.name ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
+                      } ${
+                        selectedCompany && selectedCompany !== company.name ? 'opacity-50' : 'opacity-100'
+                      }`}
+                      style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
+                    </button>
+                    {selectedCompany === company.name && (
+                      <div className="absolute left-0 top-full mt-2 flex flex-col gap-1.5 z-[110]">
+                        {company.models.map((model, modelIndex) => (
+                          <div key={model.name} className="relative"
+                            onMouseEnter={() => handleModelHoverEnter(model)}
+                            onMouseLeave={handleModelHoverLeave}
+                          >
+                            {hoveredModel && hoveredModel.name === model.name && (
+                              <div className="absolute left-0 top-full mt-2 w-56 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg p-3 shadow-xl z-[120]" style={{ boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+                                <h3 className="text-white font-semibold text-xs">{hoveredModel.name}</h3>
+                                <p className="text-white/60 text-[11px] mb-2 leading-tight">{hoveredModel.description}</p>
+                              </div>
+                            )}
+                            <button
+                              onClick={() => {
+                                setSelectedModel(model.name);
+                                setShowAiCompanies(false);
+                                setDesktopAiCompaniesClosing(false);
+                                setSelectedCompany(null);
+                                clearModelHoverState();
+                              }}
+                              className={`h-8 px-3 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center gap-2 text-white/90 text-sm hover:bg-[#2a2a2d] hover:border-white/30 transition-all shadow-lg whitespace-nowrap ${selectedModel === model.name ? 'border-white/40 bg-[#2a2a2d]' : ''}`}
+                              style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4)' }}
+                            >
+                              <span className="font-medium text-xs">{model.name}</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
             </div>
 
             {/* Tools Container - Desktop - HIDDEN: Will be implemented in Image Studio later
@@ -2543,132 +2608,6 @@ const ImageGenerationInterface2: React.FC = () => {
           {/* End right-side controls group */}
           </div>
 
-          {/* AI Companies Floating Buttons — horizontal, left-to-right animation */}
-          {(showAiCompanies || desktopAiCompaniesClosing) && (() => {
-            const visibleCompanies = desktopAiCompaniesMode === 'selected' && selectedModelCompany
-              ? [selectedModelCompany]
-              : aiCompanies;
-            return (
-            <div className="absolute left-0 top-full mt-2 flex flex-row items-start gap-2 p-2 z-[100]">
-              {visibleCompanies.map((company, index) => {
-                const total = visibleCompanies.length;
-                const enterDelay = index * 50;
-                const exitDelay = (total - 1 - index) * 50;
-                return (
-                  <div key={company.name} className="relative"
-                    style={{
-                      animation: `${desktopAiCompaniesClosing ? 'desktopCompanyExit' : 'desktopCompanyEnter'} 160ms ease-out both`,
-                      animationDelay: `${desktopAiCompaniesClosing ? exitDelay : enterDelay}ms`,
-                    }}
-                  >
-                    <button
-                      onClick={() => {
-                        setSelectedCompany(selectedCompany === company.name ? null : company.name);
-                        setShowSettings(false);
-                      }}
-                      className={`h-9 w-9 bg-[#1a1a1c] backdrop-blur-md border rounded-lg flex items-center justify-center text-white/80 hover:bg-[#2a2a2d] transition-all shadow-lg ${
-                        selectedCompany === company.name ? 'border-white/40 bg-[#2a2a2d]' : 'border-[#3a3a3d]'
-                      } ${
-                        selectedCompany && selectedCompany !== company.name ? 'opacity-50' : 'opacity-100'
-                      }`}
-                      style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
-                    >
-                      <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
-                    </button>
-
-                    {/* Models — appears below the company button */}
-                    {selectedCompany === company.name && (
-                      <div className="absolute left-0 top-full mt-2 flex flex-col gap-1.5 z-[110]">
-                        {company.models.map((model, modelIndex) => (
-                          <div
-                            key={model.name}
-                            className="relative"
-                            onMouseEnter={() => handleModelHoverEnter(model)}
-                            onMouseLeave={handleModelHoverLeave}
-                          >
-                            {/* Model Details Panel - shows on hover to the right */}
-                            {hoveredModel && hoveredModel.name === model.name && (
-                              <div className="absolute left-full ml-2 top-0 w-56 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg p-3 shadow-xl z-[120]"
-                                style={{
-                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 0, 0, 0.4)'
-                                }}
-                              >
-                                <div className="flex items-center justify-between mb-2">
-                                  <h3 className="text-white font-semibold text-xs">{hoveredModel.name}</h3>
-                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
-                                    hoveredModel.type === 'video' ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'
-                                  }`}>
-                                    {hoveredModel.type}
-                                  </span>
-                                </div>
-                                <p className="text-white/60 text-[11px] mb-2 leading-tight">{hoveredModel.description}</p>
-                                <div className="space-y-1.5">
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-white/50 text-[10px]">Cost</span>
-                                    <span className="text-white/80 text-[10px] font-medium">{hoveredModel.cost}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-white/50 text-[10px]">Speed</span>
-                                    <span className="text-white/80 text-[10px] font-medium">{hoveredModel.speed}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-white/50 text-[10px]">Quality</span>
-                                    <span className="text-white/80 text-[10px] font-medium">{hoveredModel.quality}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            <button
-                              onClick={() => {
-                                setSelectedModel(model.name);
-                                setShowAiCompanies(false);
-                                setSelectedCompany(null);
-                              }}
-                              className="h-8 px-3 bg-[#1a1a1c] backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center hover:bg-[#2a2a2d] hover:border-white/30 transition-all cursor-pointer text-white/90 shadow-lg whitespace-nowrap text-xs font-medium"
-                              style={{
-                                boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)',
-                                animation: `fadeInDown 0.2s ease-out ${modelIndex * 50}ms both`
-                              }}
-                            >
-                              {model.name}
-                            </button>
-                          </div>
-                        ))}
-                        <style>{`
-                          @keyframes fadeInDown {
-                            from { opacity: 0; transform: translateY(-8px); }
-                            to { opacity: 1; transform: translateY(0); }
-                          }
-                          @keyframes desktopCompanyEnter {
-                            from { opacity: 0; transform: translateX(-12px); }
-                            to { opacity: 1; transform: translateX(0); }
-                          }
-                          @keyframes desktopCompanyExit {
-                            from { opacity: 1; transform: translateX(0); }
-                            to { opacity: 0; transform: translateX(-12px); }
-                          }
-                        `}</style>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <style>{`
-                @keyframes fadeInDown {
-                  from {
-                    opacity: 0;
-                    transform: translateY(-8px);
-                  }
-                  to {
-                    opacity: 1;
-                    transform: translateY(0);
-                  }
-                }
-              `}</style>
-            </div>
-            );
-          })()}
 
           {/* Tools Floating Buttons - HIDDEN: Will be implemented in Image Studio later
           {showTools && (
