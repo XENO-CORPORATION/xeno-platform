@@ -2406,70 +2406,56 @@ const ImageGenerationInterface2: React.FC = () => {
             {/* Right-side controls group */}
             <div className="ml-auto flex items-center gap-2 lg:gap-3 min-w-0">
 
-            {/* Search Button — collapsed icon, expanded = smooth width transition to measured gap */}
+            {/* Search — 3-layer approach: outer slot (always full width) → inner bar (animates width) → content */}
             <div
               ref={desktopSearchSlotRef}
-              className="relative flex items-center justify-end min-w-0"
-              style={{
-                width: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'auto',
-                overflow: showGallerySearch ? 'hidden' : 'visible',
-                transition: showGallerySearch ? 'width 200ms ease-out' : 'none',
-              }}
+              className="relative h-10 lg:h-12 flex items-center justify-end min-w-0"
+              style={{ width: `${desktopLibrarySearchWidth}px` }}
             >
-              {showGallerySearch && (
-                <div
-                  className="flex items-center h-10 lg:h-12 w-full backdrop-blur-md border border-[#3a3a3d] rounded-lg shadow-lg shadow-black/40 bg-[#1a1a1c]"
-                  style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)', minWidth: `${desktopLibrarySearchWidth}px` }}
-                >
-                  <div className="flex-1 flex items-center pl-3 pr-2 min-w-0">
-                    <input
-                      type="text"
-                      value={gallerySearchQuery}
-                      onChange={(e) => setGallerySearchQuery(e.target.value.slice(0, 500))}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') {
-                          setShowGallerySearch(false);
-                          setGallerySearchQuery('');
-                        }
-                      }}
-                      maxLength={500}
-                      autoFocus
-                      placeholder="Search generated prompts..."
-                      className="w-full min-w-0 bg-transparent text-white/90 text-sm placeholder:text-white/35 border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
-                    />
-                  </div>
-                  <button
-                    onClick={() => {
+              {/* Layer 2: Inner bar — absolute, right-aligned, transitions width from icon to full */}
+              <div
+                className="absolute right-0 top-0 h-10 lg:h-12 overflow-hidden backdrop-blur-md border border-[#3a3a3d] rounded-lg shadow-lg shadow-black/40 bg-[#1a1a1c] transition-[width] duration-200 ease-out"
+                style={{
+                  width: showGallerySearch ? '100%' : '40px',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
+                }}
+              />
+              {/* Layer 3a: Input area — fades in when expanded */}
+              <div className={`absolute inset-y-0 left-0 right-10 lg:right-12 flex items-center pl-3 pr-2 transition-opacity duration-150 ${showGallerySearch ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                <input
+                  type="text"
+                  value={gallerySearchQuery}
+                  onChange={(e) => setGallerySearchQuery(e.target.value.slice(0, 500))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
                       setShowGallerySearch(false);
                       setGallerySearchQuery('');
-                    }}
-                    className="shrink-0 p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
-                    aria-label="Close search"
-                  >
-                    <svg className="w-6 h-6 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <circle cx="11" cy="11" r="7" strokeWidth="2" />
-                      <path strokeLinecap="round" strokeWidth="2" d="M20 20L16.65 16.65" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-              {!showGallerySearch && (
-                <div
-                  className="h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center px-1.5 lg:px-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]"
-                  style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}
-                >
-                  <button
-                    onClick={() => setShowGallerySearch(true)}
-                    className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
-                    aria-label="Toggle search"
-                  >
-                    <svg className={`w-6 h-6 transition-colors ${gallerySearchQuery ? 'text-white/80' : 'text-white/40'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <circle cx="11" cy="11" r="7" strokeWidth="2" />
-                      <path strokeLinecap="round" strokeWidth="2" d="M20 20L16.65 16.65" />
-                    </svg>
-                  </button>
-                </div>
-              )}
+                    }
+                  }}
+                  maxLength={500}
+                  autoFocus={showGallerySearch}
+                  placeholder="Search generated prompts..."
+                  className="w-full min-w-0 bg-transparent text-white/90 text-sm placeholder:text-white/35 border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
+                />
+              </div>
+              {/* Layer 3b: Icon button — always right-aligned, stays pinned */}
+              <button
+                onClick={() => {
+                  if (showGallerySearch) {
+                    setShowGallerySearch(false);
+                    setGallerySearchQuery('');
+                  } else {
+                    setShowGallerySearch(true);
+                  }
+                }}
+                className="absolute right-0 top-0 z-10 h-full w-10 lg:w-12 rounded-lg flex items-center justify-center transition-all hover:bg-white/5"
+                aria-label="Toggle search"
+              >
+                <svg className={`w-6 h-6 transition-colors ${showGallerySearch || gallerySearchQuery ? 'text-white/80' : 'text-white/40'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="7" strokeWidth="2" />
+                  <path strokeLinecap="round" strokeWidth="2" d="M20 20L16.65 16.65" />
+                </svg>
+              </button>
             </div>
 
             {/* Settings Button Container — dropdown opens below */}
