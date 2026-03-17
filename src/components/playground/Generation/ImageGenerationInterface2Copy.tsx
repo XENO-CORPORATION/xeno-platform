@@ -2406,19 +2406,19 @@ const ImageGenerationInterface2: React.FC = () => {
             {/* Right-side controls group */}
             <div className="ml-auto flex items-center gap-2 lg:gap-3 min-w-0">
 
-            {/* Search Button — collapsed = same structure as settings, expanded = capped by measured gap */}
+            {/* Search Button — collapsed icon, expanded = smooth width transition to measured gap */}
             <div
               ref={desktopSearchSlotRef}
-              className="relative flex items-center justify-end min-w-0"
+              className="relative flex items-center justify-end min-w-0 overflow-hidden"
               style={{
-                width: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'auto',
-                maxWidth: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'none',
+                width: showGallerySearch ? `${desktopLibrarySearchWidth}px` : '40px',
+                transition: 'width 200ms ease-out',
               }}
             >
               {showGallerySearch && (
                 <div
                   className="flex items-center h-10 lg:h-12 w-full backdrop-blur-md border border-[#3a3a3d] rounded-lg shadow-lg shadow-black/40 bg-[#1a1a1c]"
-                  style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)', animation: 'virtuosoTileFadeIn 150ms ease-out both' }}
+                  style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)', minWidth: `${desktopLibrarySearchWidth}px` }}
                 >
                   <div className="flex-1 flex items-center pl-3 pr-2 min-w-0">
                     <input
