@@ -2409,10 +2409,11 @@ const ImageGenerationInterface2: React.FC = () => {
             {/* Search Button — collapsed icon, expanded = smooth width transition to measured gap */}
             <div
               ref={desktopSearchSlotRef}
-              className="relative flex items-center justify-end min-w-0 overflow-hidden"
+              className="relative flex items-center justify-end min-w-0"
               style={{
-                width: showGallerySearch ? `${desktopLibrarySearchWidth}px` : '40px',
-                transition: 'width 200ms ease-out',
+                width: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'auto',
+                overflow: showGallerySearch ? 'hidden' : 'visible',
+                transition: showGallerySearch ? 'width 200ms ease-out' : 'none',
               }}
             >
               {showGallerySearch && (
