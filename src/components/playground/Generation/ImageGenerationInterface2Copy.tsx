@@ -955,12 +955,9 @@ const ImageGenerationInterface2: React.FC = () => {
     };
     let debounceId: ReturnType<typeof setTimeout> | null = null;
     const debouncedMeasure = () => { if (debounceId) clearTimeout(debounceId); debounceId = setTimeout(measure, 60); };
-    // Measure immediately, then again after layout settles (prompt shrink transition)
     const frameId = requestAnimationFrame(measure);
     window.addEventListener('resize', debouncedMeasure);
-    const delayed1 = setTimeout(measure, 120);
-    const delayed2 = setTimeout(measure, 300);
-    return () => { window.removeEventListener('resize', debouncedMeasure); if (debounceId) clearTimeout(debounceId); cancelAnimationFrame(frameId); clearTimeout(delayed1); clearTimeout(delayed2); };
+    return () => { window.removeEventListener('resize', debouncedMeasure); if (debounceId) clearTimeout(debounceId); cancelAnimationFrame(frameId); };
   }, [isMobile, viewportWidth, showAiCompanies, showGallerySearch, selectedModel, selectedCompany]);
 
   // Track scroll position for header background
@@ -2409,7 +2406,7 @@ const ImageGenerationInterface2: React.FC = () => {
             {/* Search Button — collapsed = same structure as settings, expanded = capped by measured gap */}
             <div
               ref={desktopSearchSlotRef}
-              className="relative flex items-center justify-end min-w-0 transition-all duration-200 ease-out"
+              className="relative flex items-center justify-end min-w-0"
               style={{
                 width: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'auto',
                 maxWidth: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'none',
@@ -2418,7 +2415,7 @@ const ImageGenerationInterface2: React.FC = () => {
               {showGallerySearch && (
                 <div
                   className="flex items-center h-10 lg:h-12 w-full backdrop-blur-md border border-[#3a3a3d] rounded-lg shadow-lg shadow-black/40 bg-[#1a1a1c]"
-                  style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}
+                  style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)', animation: 'virtuosoTileFadeIn 150ms ease-out both' }}
                 >
                   <div className="flex-1 flex items-center pl-3 pr-2 min-w-0">
                     <input
