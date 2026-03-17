@@ -35,37 +35,45 @@ const upload = multer({
   }
 });
 
-// Middleware to get user ID from session/token
+// Middleware to get user ID from JWT token
+// SECURITY FIX: Removed hardcoded test user — all filesystem access now requires authentication
 const getUserId = async (req, res, next) => {
   try {
-    // For now, use a fixed test user ID for consistency
-    // In production, this should come from authentication middleware
-    const userId = '550e8400-e29b-41d4-a716-446655440000'; // Fixed test user ID
-
-    // Check if user exists, if not create a test user
-    const userCheck = await req.db.query('SELECT id FROM users WHERE id = $1', [userId]);
-    if (userCheck.rows.length === 0) {
-      try {
-        // Create a test user with unique username to avoid conflicts
-        const uniqueUsername = `testuser_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await req.db.query(`
-          INSERT INTO users (id, username, email, password_hash, display_name, is_active, email_verified)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `, [userId, uniqueUsername, `test${Date.now()}@xenoos.com`, '$2b$10$test', 'Test User', true, true]);
-      } catch (insertError) {
-        // If insertion fails, just continue - user might already exist
-        console.log('User creation skipped, continuing...');
-      }
+    // Use authenticated user from authMiddleware if available
+    if (req.user && req.user.id) {
+      req.userId = req.user.id;
+      return next();
     }
 
-    req.userId = userId;
+    // Fall back to JWT verification
+    const jwt = await import('jsonwebtoken');
+    const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
+    const token = req.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required for filesystem access'
+      });
+    }
+
+    const decoded = jwt.default.verify(token, JWT_SECRET);
+    const userCheck = await req.db.query('SELECT id FROM users WHERE id = $1 AND is_active = true', [decoded.userId]);
+
+    if (userCheck.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid or expired token'
+      });
+    }
+
+    req.userId = decoded.userId;
     next();
   } catch (error) {
-    console.error('User ID middleware error:', error);
-    res.status(500).json({
+    console.error('Filesystem auth error:', error.message);
+    res.status(401).json({
       success: false,
-      error: 'Authentication error',
-      message: error.message
+      error: 'Authentication failed'
     });
   }
 };

@@ -6,7 +6,7 @@ services:
     environment:
       - POSTGRES_DB=xenostudio
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=xenostudio_secure_2024
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-xenostudio_secure_2024}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -19,12 +19,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Redis for caching and sessions
   redis:
     image: redis:7-alpine
     container_name: xenostudio-redis
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     ports:
@@ -32,6 +45,24 @@ services:
     networks:
       - xenostudio-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
 
   # Backend API Server
   backend:
@@ -45,9 +76,9 @@ services:
       - DB_PORT=5432
       - DB_NAME=xenostudio
       - DB_USER=postgres
-      - DB_PASSWORD=xenostudio_secure_2024
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-xenostudio_secure_2024}
       - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://postgres:xenostudio_secure_2024@postgres:5432/xenostudio
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-xenostudio_secure_2024}@postgres:5432/xenostudio
       # Docker socket mounted below for container provisioning
       - STORAGE_LIMIT_GB=5
       - CONVERSION_RETENTION_DAYS=7
@@ -117,6 +148,19 @@ services:
       timeout: 3s
       start_period: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
 
   # Proxy Server for external APIs (commented out - no Dockerfile)
   # proxy:

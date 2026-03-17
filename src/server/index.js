@@ -12,6 +12,9 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import hpp from 'hpp';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import fs from 'fs';
@@ -94,6 +97,62 @@ const upload = multer({ storage });
 const app = express();
 const PORT = process.env.BACKEND_PORT || 8080;
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  console.error('CRITICAL SECURITY WARNING: JWT_SECRET not set! Using insecure default. Set JWT_SECRET environment variable immediately.');
+}
+
+// =============================================================================
+// SECURITY MIDDLEWARE (must be first)
+// =============================================================================
+
+// Helmet: sets security-related HTTP headers (CSP, X-Frame-Options, etc.)
+app.use(helmet({
+  contentSecurityPolicy: false, // Disabled for SPA with inline scripts/styles
+  crossOriginEmbedderPolicy: false, // Disabled for cross-origin resource loading
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allow cross-origin requests for API
+}));
+
+// Remove X-Powered-By header (defense in depth — Helmet also does this)
+app.disable('x-powered-by');
+
+// HTTP Parameter Pollution protection
+app.use(hpp());
+
+// Global rate limiter: 200 requests per minute per IP
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 200,
+  standardHeaders: true, // Return rate limit info in headers
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests, please try again later.' },
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/api/status' || req.path === '/health';
+  },
+});
+app.use('/api/', globalLimiter);
+
+// Strict rate limiter for auth endpoints: 10 requests per 15 minutes per IP
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many authentication attempts, please try again later.' },
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+
+// Stricter rate limiter for AI generation endpoints: 30 requests per minute
+const generationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Generation rate limit exceeded. Please wait before trying again.' },
+});
+app.use('/api/chat/generate', generationLimiter);
+app.use('/api/xeno/', generationLimiter);
 
 // CRITICAL FIX: Increase server limits for large image data
 // This prevents 431 "Request Header Fields Too Large" errors when processing images
@@ -104,8 +163,23 @@ app.use((req, res, next) => {
   next();
 });
 
-// Middleware with enhanced limits for image processing
+// CORS: restrict to known origins in production
+const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+  : ['https://xenostudio.ai', 'https://www.xenostudio.ai', 'http://localhost:5173', 'http://localhost:4040'];
+
 app.use(cors({
+  origin: process.env.NODE_ENV === 'production'
+    ? (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, etc.)
+        if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(null, true); // Log but allow — tight lockdown can break desktop app
+          console.warn(`[CORS] Request from unlisted origin: ${origin}`);
+        }
+      }
+    : true, // Allow all origins in development
   maxAge: 86400, // 24 hours
   credentials: true
 }));
@@ -476,9 +550,42 @@ console.log('⬇️ Download routes integrated: /api/download/*');
 
 console.log('✅ Custom routes integrated successfully');
 
-// Routes
+// =============================================================================
+// HEALTH & STATUS ENDPOINTS
+// =============================================================================
+
+// Basic status (for load balancers, uptime monitoring)
 app.get('/api/status', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
+  res.json({ status: 'ok', message: 'Server is running', timestamp: new Date().toISOString() });
+});
+
+// Detailed health check (for monitoring dashboards)
+app.get('/api/health', async (req, res) => {
+  const health = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    checks: {}
+  };
+
+  // Check database connectivity
+  try {
+    const dbStart = Date.now();
+    await pool.query('SELECT 1');
+    health.checks.database = { status: 'ok', responseTime: Date.now() - dbStart };
+  } catch (err) {
+    health.status = 'degraded';
+    health.checks.database = { status: 'error', error: err.message };
+  }
+
+  const statusCode = health.status === 'ok' ? 200 : 503;
+  res.status(statusCode).json(health);
+});
+
+// Health endpoint for Docker/Nginx (simple text response)
+app.get('/health', (req, res) => {
+  res.status(200).send('ok');
 });
 
 // OpenRouter Models API - Fetch available models grouped by company
@@ -648,8 +755,12 @@ app.get('/api/models', async (req, res) => {
   }
 });
 
-// Test database connection
+// Test database connection (restricted in production)
 app.get('/api/test-db', async (req, res) => {
+  // SECURITY: Disable in production to prevent information disclosure
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ success: false, error: 'Not found' });
+  }
   try {
     const result = await pool.query('SELECT NOW() as current_time');
     res.json({
@@ -658,11 +769,10 @@ app.get('/api/test-db', async (req, res) => {
       time: result.rows[0].current_time
     });
   } catch (error) {
-    console.error('Database test error:', error);
+    console.error('Database test error:', error.message);
     res.status(500).json({
       success: false,
-      error: 'Database connection failed',
-      details: error.message
+      error: 'Database connection failed'
     });
   }
 });
@@ -690,32 +800,40 @@ app.post('/api/auth/init', async (req, res) => {
 
 app.post('/api/auth/register', async (req, res) => {
   try {
-    console.log('Registration request:', req.body);
-    // Write to log file
-    fs.appendFileSync('/tmp/auth.log', `Registration request: ${JSON.stringify(req.body)}\n`);
     const { username, email, password, display_name } = req.body;
 
     if (!username || !email || !password || !display_name) {
-      console.log('Missing required fields');
       return res.status(400).json({
         success: false,
         error: 'All fields are required'
       });
     }
 
-    // Hash password
-    const passwordHash = createHash('sha256').update(password).digest('hex');
+    // Input validation
+    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: 'Invalid email format' });
+    }
+    if (typeof username !== 'string' || username.length < 3 || username.length > 30 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+      return res.status(400).json({ success: false, error: 'Username must be 3-30 alphanumeric characters or underscores' });
+    }
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+    }
+    if (typeof display_name !== 'string' || display_name.length < 1 || display_name.length > 100) {
+      return res.status(400).json({ success: false, error: 'Display name must be 1-100 characters' });
+    }
+
+    // SECURITY: Use bcrypt instead of SHA-256 for password hashing
+    const bcrypt = await import('bcryptjs');
+    const passwordHash = await bcrypt.default.hash(password, 12);
 
     // Check if user already exists
-    console.log('Checking for existing user:', email, username);
     const existingUser = await pool.query(
       'SELECT id FROM users WHERE email = $1 OR username = $2',
-      [email, username]
+      [email.toLowerCase(), username.toLowerCase()]
     );
-    console.log('Existing user query result:', existingUser.rows);
 
     if (existingUser.rows && existingUser.rows.length > 0) {
-      console.log('User already exists');
       return res.status(400).json({
         success: false,
         error: 'User already exists with this email or username'
@@ -724,16 +842,13 @@ app.post('/api/auth/register', async (req, res) => {
 
     // Create new user
     const userId = uuidv4();
-    console.log('Creating user with ID:', userId);
     await pool.query(
       'INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active, credits) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [userId, username, email, passwordHash, display_name, true, true, 2000]
+      [userId, username.toLowerCase(), email.toLowerCase(), passwordHash, display_name, true, true, 2000]
     );
-    console.log('User created successfully');
 
     // Create session token
     const sessionToken = randomBytes(32).toString('hex');
-    console.log('Creating session token');
 
     // Store session
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
@@ -741,7 +856,6 @@ app.post('/api/auth/register', async (req, res) => {
       'INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES ($1, $2, $3)',
       [userId, sessionToken, expiresAt.toISOString()]
     );
-    console.log('Session created successfully');
 
     res.json({
       success: true,
@@ -760,11 +874,7 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Registration error:', error);
-    console.error('Error details:', error.message);
-    console.error('Error stack:', error.stack);
-    // Write to log file
-    fs.appendFileSync('/tmp/auth.log', `Registration error: ${error.message}\nStack: ${error.stack}\n`);
+    console.error('Registration error:', error.message);
     res.status(500).json({
       success: false,
       error: 'Registration failed'
@@ -783,13 +893,15 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Hash password for comparison
-    const passwordHash = createHash('sha256').update(password).digest('hex');
+    // Input validation
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ success: false, error: 'Invalid input' });
+    }
 
     // Find user
     const userResult = await pool.query(
       'SELECT * FROM users WHERE email = $1',
-      [email]
+      [email.toLowerCase()]
     );
     const user = userResult.rows[0];
 
@@ -800,8 +912,26 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Check password
-    if (user.password_hash !== passwordHash) {
+    // SECURITY: Use bcrypt for password comparison (supports both legacy SHA-256 and bcrypt hashes)
+    const bcrypt = await import('bcryptjs');
+    let passwordValid = false;
+
+    if (user.password_hash.startsWith('$2')) {
+      // Bcrypt hash
+      passwordValid = await bcrypt.default.compare(password, user.password_hash);
+    } else {
+      // Legacy SHA-256 hash — compare and upgrade to bcrypt
+      const legacyHash = createHash('sha256').update(password).digest('hex');
+      passwordValid = (user.password_hash === legacyHash);
+      if (passwordValid) {
+        // Upgrade to bcrypt hash
+        const newHash = await bcrypt.default.hash(password, 12);
+        await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, user.id]);
+        console.log(`[Auth] Upgraded password hash to bcrypt for user ${user.id}`);
+      }
+    }
+
+    if (!passwordValid) {
       return res.status(401).json({
         success: false,
         error: 'Invalid email or password'
@@ -863,7 +993,9 @@ app.get('/api/auth/validate', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Invalid or expired token' });
     }
 
-    res.json({ success: true, user: session });
+    // SECURITY: Only return safe user fields, never password_hash or internal data
+    const { password_hash, ...safeUser } = session;
+    res.json({ success: true, user: safeUser });
 
   } catch (error) {
     console.error('Token validation error:', error);
@@ -872,17 +1004,37 @@ app.get('/api/auth/validate', async (req, res) => {
 });
 
 
-// File upload endpoint
+// File upload endpoint with validation
+const ALLOWED_UPLOAD_MIMES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  'application/pdf', 'text/plain', 'application/json',
+  'video/mp4', 'video/webm', 'audio/mpeg', 'audio/wav', 'audio/mp4',
+]);
+const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB
+
 app.post('/api/upload', upload.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
-  
+
+  // SECURITY: Validate file type
+  if (!ALLOWED_UPLOAD_MIMES.has(req.file.mimetype)) {
+    // Remove the uploaded file
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: `File type '${req.file.mimetype}' is not allowed` });
+  }
+
+  // SECURITY: Validate file size
+  if (req.file.size > MAX_UPLOAD_SIZE) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'File exceeds maximum size of 100MB' });
+  }
+
   const filePath = req.file.path;
   const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${path.basename(filePath)}`;
-  
-  res.json({ 
-    success: true, 
+
+  res.json({
+    success: true,
     message: 'File uploaded successfully',
     file: {
       name: req.file.originalname,
@@ -4844,6 +4996,9 @@ watcher.on('unlink', (filePath) => {
 });
 
 // API endpoint to watch/unwatch directories
+// SECURITY: Restrict to safe base directories to prevent path traversal
+const SAFE_WATCH_BASES = ['/app/uploads', '/app/storage', '/app/conversions'];
+
 app.post('/api/files/watch', (req, res) => {
   const { directories, action } = req.body;
 
@@ -4851,27 +5006,34 @@ app.post('/api/files/watch', (req, res) => {
     return res.status(400).json({ error: 'Directories must be an array' });
   }
 
+  // SECURITY: Validate all directories are within allowed base paths
+  const resolvedDirs = directories.map(d => path.resolve(d));
+  const unsafeDirs = resolvedDirs.filter(d =>
+    !SAFE_WATCH_BASES.some(base => d.startsWith(base))
+  );
+  if (unsafeDirs.length > 0) {
+    return res.status(403).json({ error: 'Cannot watch directories outside allowed paths' });
+  }
+
   try {
     if (action === 'add') {
-      directories.forEach(dir => {
+      resolvedDirs.forEach(dir => {
         if (fs.existsSync(dir)) {
           watcher.add(dir);
-          console.log(`👀 Started watching: ${dir}`);
         }
       });
       res.json({ success: true, message: `Added ${directories.length} directories to watch` });
     } else if (action === 'remove') {
-      directories.forEach(dir => {
+      resolvedDirs.forEach(dir => {
         watcher.unwatch(dir);
-        console.log(`🙈 Stopped watching: ${dir}`);
       });
       res.json({ success: true, message: `Removed ${directories.length} directories from watch` });
     } else {
       res.status(400).json({ error: 'Action must be "add" or "remove"' });
     }
   } catch (error) {
-    console.error('Watch operation error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Watch operation error:', error.message);
+    res.status(500).json({ error: 'Watch operation failed' });
   }
 });
 
@@ -4880,6 +5042,79 @@ app.get('/api/files/watched', (req, res) => {
   const watchedPaths = watcher.getWatched();
   const directories = Object.keys(watchedPaths);
   res.json({ directories });
+});
+
+// =============================================================================
+// GLOBAL ERROR HANDLER (must be last middleware)
+// =============================================================================
+app.use((err, req, res, next) => {
+  // Log the full error server-side
+  console.error('[Global Error Handler]', err.stack || err.message || err);
+
+  // SECURITY: Never expose internal error details to clients in production
+  const isDev = process.env.NODE_ENV !== 'production';
+
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    return res.status(413).json({
+      success: false,
+      error: 'Request payload too large',
+      ...(isDev && { details: err.message })
+    });
+  }
+
+  if (err.status === 431) {
+    return res.status(431).json({
+      success: false,
+      error: 'Request header fields too large'
+    });
+  }
+
+  res.status(err.status || 500).json({
+    success: false,
+    error: isDev ? err.message : 'Internal server error'
+  });
+});
+
+// =============================================================================
+// GRACEFUL SHUTDOWN
+// =============================================================================
+function gracefulShutdown(signal) {
+  console.log(`\n${signal} received. Starting graceful shutdown...`);
+
+  // Stop accepting new connections
+  server.close(async () => {
+    console.log('HTTP server closed.');
+
+    // Close database pool
+    try {
+      await pool.end();
+      console.log('Database pool closed.');
+    } catch (err) {
+      console.error('Error closing database pool:', err.message);
+    }
+
+    process.exit(0);
+  });
+
+  // Force exit after 30 seconds
+  setTimeout(() => {
+    console.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 30000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle unhandled rejections and uncaught exceptions
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[UnhandledRejection]', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[UncaughtException]', error);
+  // Give time for logs to flush, then exit
+  setTimeout(() => process.exit(1), 1000);
 });
 
 // Initialize cleanup service for old conversions

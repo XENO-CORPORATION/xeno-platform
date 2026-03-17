@@ -320,7 +320,7 @@ router.post('/init', async (req, res) => {
     );
     
     // Create/update default admin user with stable ID and credentials
-    const adminPassword = await hashPassword('xenostudio123');
+    const adminPassword = await hashPassword(process.env.ADMIN_PASSWORD || 'xenostudio123');
     await req.db.query(`
       INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -332,7 +332,10 @@ router.post('/init', async (req, res) => {
         is_active = EXCLUDED.is_active
     `, [adminUserId, 'admin', adminEmail, adminPassword, 'XenoStudio Admin', true, true]);
 
-    console.log('✅ Default admin user ensured: admin@xenostudio.local / xenostudio123');
+    // SECURITY WARNING: Change the default admin password via ADMIN_PASSWORD env var
+    if (!process.env.ADMIN_PASSWORD) {
+      console.warn('⚠️  SECURITY WARNING: Using default admin password. Set ADMIN_PASSWORD env var in production!');
+    }
 
     res.json({
       success: true,
@@ -678,7 +681,7 @@ router.post('/migrate', async (req, res) => {
     
     if (adminCheck.rows.length === 0) {
       // Create new admin user
-      const adminPasswordHash = await hashPassword('xenostudio123');
+      const adminPasswordHash = await hashPassword(process.env.ADMIN_PASSWORD || 'xenostudio123');
       
       await req.db.query(`
         INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active)
@@ -693,7 +696,7 @@ router.post('/migrate', async (req, res) => {
       console.log('✅ Admin user created');
     } else {
       // Update existing admin user with hashed password
-      const adminPasswordHash = await hashPassword('xenostudio123');
+      const adminPasswordHash = await hashPassword(process.env.ADMIN_PASSWORD || 'xenostudio123');
       await req.db.query(`
         UPDATE users 
         SET password_hash = $1, email_verified = true, is_active = true, username = 'admin', display_name = 'XenoStudio Admin'

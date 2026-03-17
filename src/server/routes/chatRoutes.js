@@ -7,8 +7,12 @@ const router = express.Router();
 // ============================================
 
 // POST /api/chat/init - Initialize chat tables
+// SECURITY: This should only run in development or via a migration script
 router.post('/init', async (req, res) => {
   try {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ success: false, error: 'Database initialization disabled in production. Use migration scripts.' });
+    }
     // Create conversations table
     await req.db.query(`
       CREATE TABLE IF NOT EXISTS chat_conversations (
@@ -123,7 +127,10 @@ router.get('/conversations', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const { interface_id = 'playground', include_archived = false, limit = 50, offset = 0 } = req.query;
+    const { interface_id = 'playground', include_archived = false } = req.query;
+    // SECURITY: Sanitize and clamp pagination parameters to prevent abuse
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
 
     let query = `
       SELECT
@@ -144,7 +151,7 @@ router.get('/conversations', async (req, res) => {
     }
 
     query += ` ORDER BY c.updated_at DESC LIMIT $3 OFFSET $4`;
-    params.push(parseInt(limit), parseInt(offset));
+    params.push(limit, offset);
 
     const result = await req.db.query(query, params);
     console.log('[Conversations] Found', result.rows.length, 'conversations for user:', userId);

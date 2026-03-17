@@ -25,8 +25,9 @@ pool.on('connect', () => {
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  // SECURITY FIX: Do not crash the process on transient DB errors
+  // The pool will automatically reconnect on the next query
+  console.error('Unexpected error on idle database client:', err.message);
 });
 
 /**

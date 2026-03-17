@@ -6,6 +6,9 @@
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  console.error('CRITICAL SECURITY WARNING: JWT_SECRET not set in auth middleware! Using insecure default.');
+}
 
 /**
  * Middleware to verify JWT token and add user to request
@@ -67,11 +70,11 @@ export const authMiddleware = async (req, res, next) => {
       });
     }
     
-    console.error('Authentication middleware error:', error);
+    console.error('Authentication middleware error:', error.message);
     return res.status(500).json({
       success: false,
-      error: 'Authentication failed',
-      message: error.message
+      error: 'Authentication failed'
+      // SECURITY: Do not expose error.message to clients in production
     });
   }
 };
