@@ -2416,7 +2416,7 @@ const ImageGenerationInterface2: React.FC = () => {
               <div
                 className="absolute right-0 top-0 h-10 lg:h-12 overflow-hidden backdrop-blur-md border border-[#3a3a3d] rounded-lg shadow-lg shadow-black/40 bg-[#1a1a1c] transition-[width] duration-200 ease-out"
                 style={{
-                  width: showGallerySearch ? '100%' : '40px',
+                  width: showGallerySearch ? '100%' : '44px',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
                 }}
               />
