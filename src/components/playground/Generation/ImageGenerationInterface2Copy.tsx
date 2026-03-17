@@ -2406,11 +2406,14 @@ const ImageGenerationInterface2: React.FC = () => {
             {/* Right-side controls group */}
             <div className="ml-auto flex items-center gap-2 lg:gap-3 min-w-0">
 
-            {/* Search Button — collapsed = same structure as settings, expanded = fills remaining flex space */}
+            {/* Search Button — collapsed = same structure as settings, expanded = capped by measured gap */}
             <div
               ref={desktopSearchSlotRef}
               className="relative flex items-center justify-end min-w-0 transition-all duration-200 ease-out"
-              style={{ flex: showGallerySearch ? '1 1 0%' : '0 0 auto' }}
+              style={{
+                width: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'auto',
+                maxWidth: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'none',
+              }}
             >
               {showGallerySearch && (
                 <div
