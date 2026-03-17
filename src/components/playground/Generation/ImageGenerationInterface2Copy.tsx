@@ -937,10 +937,14 @@ const ImageGenerationInterface2: React.FC = () => {
       const searchSlotRect = desktopSearchSlotRef.current?.getBoundingClientRect();
       const settingsRect = desktopSettingsButtonRef.current?.getBoundingClientRect();
       if (!promptRect || !settingsRect) return;
-      const headerGapPx = viewportWidth >= 1024 ? 12 : 8;
-      // Search width = gap between prompt right edge and settings left edge
-      // Subtract one headerGapPx for the left gap (prompt-to-search). The right gap (search-to-settings) comes from the parent flex gap.
-      const available = settingsRect.left - promptRect.right - headerGapPx;
+      const flexGapPx = viewportWidth >= 1024 ? 12 : 8;
+      // Use the search slot's own position to measure accurately
+      const searchSlotLeft = desktopSearchSlotRef.current?.getBoundingClientRect().left ?? settingsRect.left;
+      // Right gap = settingsRect.left - (searchSlotLeft + searchWidth) = flex gap (automatic)
+      // Left gap should equal the flex gap: searchSlotLeft should be promptRect.right + flexGapPx
+      // So search width = settingsRect.left - promptRect.right - flexGapPx * 2 would make left=right=flexGap
+      // But flex gap on the right is already in the layout, so we just need one for the left
+      const available = settingsRect.left - promptRect.right - flexGapPx;
       setDesktopLibrarySearchWidth(Math.max(40, available));
       // Collision limit = max prompt width before it touches model popouts
       if (modelNode && searchSlotRect) {
@@ -957,8 +961,10 @@ const ImageGenerationInterface2: React.FC = () => {
     let debounceId: ReturnType<typeof setTimeout> | null = null;
     const debouncedMeasure = () => { if (debounceId) clearTimeout(debounceId); debounceId = setTimeout(measure, 60); };
     const frameId = requestAnimationFrame(measure);
+    // Re-measure after prompt shrink transition completes (100ms duration + buffer)
+    const delayed = setTimeout(measure, 150);
     window.addEventListener('resize', debouncedMeasure);
-    return () => { window.removeEventListener('resize', debouncedMeasure); if (debounceId) clearTimeout(debounceId); cancelAnimationFrame(frameId); };
+    return () => { window.removeEventListener('resize', debouncedMeasure); if (debounceId) clearTimeout(debounceId); cancelAnimationFrame(frameId); clearTimeout(delayed); };
   }, [isMobile, viewportWidth, showAiCompanies, showGallerySearch, selectedModel, selectedCompany]);
 
   // Track scroll position for header background
