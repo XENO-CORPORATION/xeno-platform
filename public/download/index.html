@@ -69,7 +69,7 @@
           <h1 style="font-size:28px;font-weight:600;letter-spacing:-0.5px;text-align:center;color:rgba(255,255,255,0.90);margin-bottom:40px">Select an option to download XENO DESKTOP</h1>
           <div style="display:flex;align-items:center;gap:12px">
             <!-- Windows -->
-            <a href="https://updates.xenostudio.ai/XENO-HUB%20Setup%200.0.9.exe" style="display:flex;align-items:center;gap:10px;padding:14px 28px;border:1px solid rgba(255,255,255,0.08);border-radius:6px;font-size:14px;font-weight:500;color:rgba(255,255,255,0.50);transition:all 0.3s">
+            <a id="hero-download-btn" href="https://updates.xenostudio.ai/XENO-HUB%20Setup%200.0.9.exe" style="display:flex;align-items:center;gap:10px;padding:14px 28px;border:1px solid rgba(255,255,255,0.08);border-radius:6px;font-size:14px;font-weight:500;color:rgba(255,255,255,0.50);transition:all 0.3s">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="rgba(255,255,255,0.25)"><path d="M3 12V6.75l6-1.32v6.48L3 12zm6.98.01l.02 6.5 6-1.32V12H9.98zM10 5.07L22 3v9h-12V5.07zM22 12.01h-12v6.72L22 21V12.01z"/></svg>
               Windows
             </a>
@@ -86,7 +86,7 @@
           </div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding:0 2px">
-          <p style="font-size:11px;color:rgba(255,255,255,0.15)">v0.0.9</p>
+          <p id="hero-version" style="font-size:11px;color:rgba(255,255,255,0.15)">v0.0.9</p>
           <a href="#versions" style="font-size:11px;color:rgba(255,255,255,0.20)">View all download options &darr;</a>
         </div>
       </div>
@@ -98,13 +98,13 @@
         <h2 style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.30);margin-bottom:32px;letter-spacing:3px;text-transform:uppercase">All Versions</h2>
 
         <!-- XENO Hub -->
-        <div style="margin-bottom:48px">
+        <div style="margin-bottom:48px" data-app="hub">
           <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px">XENO Hub</p>
 
           <div class="version-section">
             <div class="version-header" onclick="toggleVersion(this)">
               <div style="display:flex;align-items:center">
-                <span class="version-title">v0.0.9</span>
+                <span class="version-title" data-version>v0.0.9</span>
                 <span class="version-badge">Latest</span>
               </div>
               <div class="chevron-btn">
@@ -120,7 +120,7 @@
                       <span class="platform-name">Windows</span>
                     </div>
                     <div class="platform-downloads">
-                      <a href="https://updates.xenostudio.ai/XENO-HUB%20Setup%200.0.9.exe" class="download-link">
+                      <a href="https://updates.xenostudio.ai/XENO-HUB%20Setup%200.0.9.exe" class="download-link" data-download>
                         <span>Download for x64</span>
                         <svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                       </a>
@@ -155,12 +155,12 @@
         </div>
 
         <!-- XENO Pixel -->
-        <div style="margin-bottom:48px">
+        <div style="margin-bottom:48px" data-app="pixel">
           <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px">XENO Pixel</p>
           <div class="version-section">
             <div class="version-header" onclick="toggleVersion(this)">
               <div style="display:flex;align-items:center">
-                <span class="version-title">v0.1.0</span>
+                <span class="version-title" data-version>v0.1.0</span>
                 <span class="version-badge">Latest</span>
               </div>
               <div class="chevron-btn">
@@ -172,7 +172,7 @@
                 <div class="platform-grid">
                   <div class="platform-col">
                     <div class="platform-header"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.48L3 12zm6.98.01l.02 6.5 6-1.32V12H9.98zM10 5.07L22 3v9h-12V5.07zM22 12.01h-12v6.72L22 21V12.01z"/></svg><span class="platform-name">Windows</span></div>
-                    <div class="platform-downloads"><a href="https://updates.xenostudio.ai/apps/pixel/v0.1.0/XENO%20Pixel%20Setup%200.1.0.exe" class="download-link"><span>Download for x64</span><svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>
+                    <div class="platform-downloads"><a href="https://updates.xenostudio.ai/apps/pixel/v0.1.0/XENO%20Pixel%20Setup%200.1.0.exe" class="download-link" data-download><span>Download for x64</span><svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>
                     <div class="platform-req"><p>Windows 10+ (64-bit) &middot; 8GB RAM &middot; DirectX 11 GPU</p></div>
                   </div>
                   <div class="platform-col">
@@ -193,12 +193,12 @@
         </div>
 
         <!-- XENO Motion -->
-        <div style="margin-bottom:48px">
+        <div style="margin-bottom:48px" data-app="motion">
           <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px">XENO Motion</p>
           <div class="version-section">
             <div class="version-header" onclick="toggleVersion(this)">
               <div style="display:flex;align-items:center">
-                <span class="version-title">v0.1.0</span>
+                <span class="version-title" data-version>v0.1.0</span>
                 <span class="version-badge">Latest</span>
               </div>
               <div class="chevron-btn">
@@ -210,7 +210,7 @@
                 <div class="platform-grid">
                   <div class="platform-col">
                     <div class="platform-header"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.48L3 12zm6.98.01l.02 6.5 6-1.32V12H9.98zM10 5.07L22 3v9h-12V5.07zM22 12.01h-12v6.72L22 21V12.01z"/></svg><span class="platform-name">Windows</span></div>
-                    <div class="platform-downloads"><a href="https://updates.xenostudio.ai/apps/motion/v0.1.0/XENO%20Motion%20Setup%200.1.0.exe" class="download-link"><span>Download for x64</span><svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>
+                    <div class="platform-downloads"><a href="https://updates.xenostudio.ai/apps/motion/v0.1.0/XENO%20Motion%20Setup%200.1.0.exe" class="download-link" data-download><span>Download for x64</span><svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>
                     <div class="platform-req"><p>Windows 10+ (64-bit) &middot; 16GB RAM &middot; DirectX 12 GPU</p></div>
                   </div>
                   <div class="platform-col">
@@ -231,12 +231,12 @@
         </div>
 
         <!-- XENO Sound -->
-        <div style="margin-bottom:48px">
+        <div style="margin-bottom:48px" data-app="sound">
           <p style="font-size:12px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px">XENO Sound</p>
           <div class="version-section">
             <div class="version-header" onclick="toggleVersion(this)">
               <div style="display:flex;align-items:center">
-                <span class="version-title">v0.1.0</span>
+                <span class="version-title" data-version>v0.1.0</span>
                 <span class="version-badge">Latest</span>
               </div>
               <div class="chevron-btn">
@@ -248,7 +248,7 @@
                 <div class="platform-grid">
                   <div class="platform-col">
                     <div class="platform-header"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.48L3 12zm6.98.01l.02 6.5 6-1.32V12H9.98zM10 5.07L22 3v9h-12V5.07zM22 12.01h-12v6.72L22 21V12.01z"/></svg><span class="platform-name">Windows</span></div>
-                    <div class="platform-downloads"><a href="https://updates.xenostudio.ai/apps/sound/v0.1.0/XENO%20Sound%20Setup%200.1.0.exe" class="download-link"><span>Download for x64</span><svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>
+                    <div class="platform-downloads"><a href="https://updates.xenostudio.ai/apps/sound/v0.1.0/XENO%20Sound%20Setup%200.1.0.exe" class="download-link" data-download><span>Download for x64</span><svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>
                     <div class="platform-req"><p>Windows 10+ (64-bit) &middot; 8GB RAM &middot; Audio output</p></div>
                   </div>
                   <div class="platform-col">
@@ -368,6 +368,46 @@
       var chevron = el.previousElementSibling.querySelector('.chevron');
       if (chevron) chevron.style.transform = 'rotate(180deg)';
     });
+
+    // Dynamic version loading from R2
+    async function loadVersions() {
+      var apps = [
+        { id: 'hub', url: 'https://updates.xenostudio.ai/version.json', selector: '[data-app="hub"]' },
+        { id: 'pixel', url: 'https://updates.xenostudio.ai/apps/pixel/version.json', selector: '[data-app="pixel"]' },
+        { id: 'motion', url: 'https://updates.xenostudio.ai/apps/motion/version.json', selector: '[data-app="motion"]' },
+        { id: 'sound', url: 'https://updates.xenostudio.ai/apps/sound/version.json', selector: '[data-app="sound"]' }
+      ];
+      for (var i = 0; i < apps.length; i++) {
+        var app = apps[i];
+        try {
+          var res = await fetch(app.url, { signal: AbortSignal.timeout(5000) });
+          if (!res.ok) continue;
+          var data = await res.json();
+          var card = document.querySelector(app.selector);
+          if (!card) continue;
+          var versionEl = card.querySelector('[data-version]');
+          if (versionEl) versionEl.textContent = 'v' + data.version;
+          var downloadBtn = card.querySelector('[data-download]');
+          if (downloadBtn) {
+            var baseUrl = app.id === 'hub'
+              ? 'https://updates.xenostudio.ai/'
+              : 'https://updates.xenostudio.ai/apps/' + app.id + '/v' + data.version + '/';
+            var fileName = data.windows || '';
+            downloadBtn.href = baseUrl + encodeURIComponent(fileName);
+          }
+          // Update hero section for hub
+          if (app.id === 'hub') {
+            var heroVersion = document.getElementById('hero-version');
+            if (heroVersion) heroVersion.textContent = 'v' + data.version;
+            var heroBtn = document.getElementById('hero-download-btn');
+            if (heroBtn) {
+              heroBtn.href = 'https://updates.xenostudio.ai/' + encodeURIComponent(data.windows || '');
+            }
+          }
+        } catch (e) { /* offline or timeout, use hardcoded fallback */ }
+      }
+    }
+    document.addEventListener('DOMContentLoaded', loadVersions);
   </script>
 </body>
 </html>

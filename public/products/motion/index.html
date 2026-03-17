@@ -46,7 +46,7 @@
         <h1 style="font-size:48px;font-weight:700;letter-spacing:-1px;margin-bottom:16px">XENO Motion</h1>
         <p style="font-size:17px;color:rgba(255,255,255,0.45);max-width:560px;margin:0 auto 32px;line-height:1.6">Professional video editing and compositing. Timeline, effects, color grading, motion graphics, and AI-powered editing — all running locally.</p>
         <div style="display:flex;gap:12px;justify-content:center;align-items:center">
-          <a href="/products/motion/download/" style="display:inline-block;padding:12px 32px;background:white;color:#08080a;font-size:14px;font-weight:600;border-radius:6px">Download v0.1.0</a>
+          <a href="/products/motion/download/" style="display:inline-block;padding:12px 32px;background:white;color:#08080a;font-size:14px;font-weight:600;border-radius:6px" data-cta>Download <span data-version>v0.1.0</span></a>
           <a href="/products/motion/release-notes/" style="display:inline-block;padding:12px 24px;font-size:14px;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1);border-radius:6px">Release Notes</a>
         </div>
         <p style="font-size:12px;color:rgba(255,255,255,0.25);margin-top:12px">Windows 10+ &middot; Free &middot; Open Source</p>
@@ -182,5 +182,17 @@
       </div>
     </div>
   </footer>
+
+  <script>
+    async function loadVersion() {
+      try {
+        var res = await fetch('https://updates.xenostudio.ai/apps/motion/version.json', { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) return;
+        var data = await res.json();
+        document.querySelectorAll('[data-version]').forEach(function(el) { el.textContent = 'v' + data.version; });
+      } catch (e) { /* offline, use hardcoded fallback */ }
+    }
+    document.addEventListener('DOMContentLoaded', loadVersion);
+  </script>
 </body>
 </html>

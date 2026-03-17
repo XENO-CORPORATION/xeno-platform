@@ -49,14 +49,14 @@
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
         <h1 style="font-size:36px;font-weight:700;letter-spacing:-0.5px;margin-bottom:12px">Download XENO Hub</h1>
-        <p style="font-size:15px;color:rgba(255,255,255,0.45);margin-bottom:48px">v0.0.9 &middot; Windows 10+</p>
+        <p style="font-size:15px;color:rgba(255,255,255,0.45);margin-bottom:48px"><span data-version>v0.0.9</span> &middot; Windows 10+</p>
 
         <div style="background:#0b0b0d;border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:40px 32px;margin-bottom:32px">
           <div style="margin-bottom:24px">
             <p style="font-size:13px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Windows Installer</p>
             <p style="font-size:13px;color:rgba(255,255,255,0.4)">XENO Hub Setup (auto-updates enabled)</p>
           </div>
-          <a href="https://updates.xenostudio.ai/XENO-HUB%20Setup%200.0.9.exe" style="display:inline-block;padding:14px 48px;background:white;color:#08080a;font-size:14px;font-weight:600;border-radius:6px">
+          <a href="https://updates.xenostudio.ai/XENO-HUB%20Setup%200.0.9.exe" data-download style="display:inline-block;padding:14px 48px;background:white;color:#08080a;font-size:14px;font-weight:600;border-radius:6px">
             Download for Windows
           </a>
           <p style="font-size:12px;color:rgba(255,255,255,0.2);margin-top:16px">Free &middot; Auto-updates included</p>
@@ -129,5 +129,22 @@
       </div>
     </div>
   </footer>
+
+  <script>
+    async function loadVersion() {
+      try {
+        var res = await fetch('https://updates.xenostudio.ai/version.json', { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) return;
+        var data = await res.json();
+        var versionEl = document.querySelector('[data-version]');
+        if (versionEl) versionEl.textContent = 'v' + data.version;
+        var downloadBtn = document.querySelector('[data-download]');
+        if (downloadBtn) {
+          downloadBtn.href = 'https://updates.xenostudio.ai/' + encodeURIComponent(data.windows || '');
+        }
+      } catch (e) { /* offline, use hardcoded fallback */ }
+    }
+    document.addEventListener('DOMContentLoaded', loadVersion);
+  </script>
 </body>
 </html>
