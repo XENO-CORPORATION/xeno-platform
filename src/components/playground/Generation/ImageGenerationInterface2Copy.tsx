@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { Virtuoso } from 'react-virtuoso';
+import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent, DragOverlay, type DragStartEvent } from '@dnd-kit/core';
 import imageGenerationService from '../../../services/imageGenerationService';
 import { ImageModelSettings } from '../../nodes/image-models/ImageModelInterface';
 import * as xenoImageService from '../../../services/xenoImageService';
@@ -555,6 +557,249 @@ const modelNameToProvider: Record<string, ModelMapping> = {
 
 };
 
+// --- Error Boundary ---
+class GalleryErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('GalleryErrorBoundary caught:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 24, margin: 16, border: '2px solid #ef4444', borderRadius: 12, background: 'rgba(239,68,68,0.08)', color: '#fca5a5' }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 600, color: '#ef4444' }}>Something went wrong</h2>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, opacity: 0.8 }}>{this.state.error?.message}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// --- DraggableTile ---
+function DraggableTile({ id, children }: { id: string; children: (props: { dragAttributes: Record<string, any>; dragListeners: Record<string, any> | undefined; dragNodeRef: React.Ref<any>; isDragging: boolean }) => React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+  return <>{children({ dragAttributes: attributes, dragListeners: listeners, dragNodeRef: setNodeRef, isDragging })}</>;
+}
+
+// --- DroppableTile ---
+function DroppableTile({ id, children }: { id: string; children: (props: { dropNodeRef: React.Ref<any>; isOver: boolean }) => React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return <>{children({ dropNodeRef: setNodeRef, isOver })}</>;
+}
+
+// --- GalleryImageTile ---
+interface GalleryImageTileProps {
+  tileId: string;
+  tileIndex: number;
+  imageUrl: string;
+  imageIndex: number;
+  prompt: string;
+  model: string;
+  createdAt: string;
+  isFavorite: boolean;
+  cardRadius: number;
+  cardStyle: React.CSSProperties;
+  animatingStars: Set<string>;
+  loadedImageUrlsRef: React.MutableRefObject<Set<string>>;
+  onView: () => void;
+  onToggleFavorite: () => void;
+  onUsePrompt: () => void;
+  onRerun: () => void;
+  onDownload: () => void;
+}
+
+const GalleryImageTile = React.memo(function GalleryImageTile({
+  tileId,
+  tileIndex,
+  imageUrl,
+  imageIndex,
+  prompt,
+  model,
+  createdAt,
+  isFavorite,
+  cardRadius,
+  cardStyle,
+  animatingStars,
+  loadedImageUrlsRef,
+  onView,
+  onToggleFavorite,
+  onUsePrompt,
+  onRerun,
+  onDownload,
+}: GalleryImageTileProps) {
+  const [imageLoaded, setImageLoaded] = useState(() => loadedImageUrlsRef.current.has(imageUrl));
+  const [outerHoverState, setOuterHoverState] = useState(false);
+  const [innerHoverState, setInnerHoverState] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      if (!imageLoaded) {
+        loadedImageUrlsRef.current.add(imageUrl);
+        setImageLoaded(true);
+      }
+    }
+  }, [imageUrl, imageLoaded, loadedImageUrlsRef]);
+
+  const createdAtLabel = createdAt
+    ? new Date(createdAt).toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : 'Unknown date';
+
+  return (
+    <div
+      style={{ ...cardStyle }}
+      onMouseEnter={() => setOuterHoverState(true)}
+      onMouseLeave={() => { setOuterHoverState(false); setInnerHoverState(false); }}
+      data-tile-id={tileId}
+    >
+      <span data-state={outerHoverState ? 'hover' : 'idle'} style={{ display: 'block', width: '100%', height: '100%', position: 'relative' }}>
+        <div
+          className="relative cursor-pointer overflow-hidden"
+          style={{ width: '100%', height: '100%', borderRadius: cardRadius }}
+          onClick={onView}
+          onMouseEnter={() => setInnerHoverState(true)}
+          onMouseLeave={() => setInnerHoverState(false)}
+        >
+          <span data-state={innerHoverState ? 'hover' : 'idle'} style={{ display: 'block', width: '100%', height: '100%' }}>
+            <div data-tile-id={tileId} style={{ width: '100%', height: '100%', position: 'relative' }}>
+              {/* Skeleton placeholder — always visible until image covers it */}
+              {!imageLoaded && (
+                <div className="absolute inset-0 tile-skeleton-bg" style={{ borderRadius: cardRadius }} />
+              )}
+              <img
+                ref={imgRef}
+                src={imageUrl}
+                alt={`Generated ${imageIndex + 1}`}
+                className="w-full h-full object-cover block relative z-[1]"
+                style={{
+                  borderRadius: cardRadius,
+                  opacity: imageLoaded ? 1 : 0,
+                  transition: 'opacity 0.3s ease, filter 0.3s ease',
+                  filter: innerHoverState ? 'brightness(1.1)' : 'brightness(1)',
+                }}
+                onLoad={() => {
+                  loadedImageUrlsRef.current.add(imageUrl);
+                  setImageLoaded(true);
+                }}
+              />
+              {/* Hover overlay with action buttons */}
+              {outerHoverState && (
+                <>
+                  <div className="absolute top-2 right-2 flex items-center gap-1 z-20" style={{ animation: 'virtuosoTileFadeIn 0.15s ease' }}>
+                    {/* Favorite */}
+                    <div className="relative">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
+                        className={`image-action-button p-2 rounded-lg backdrop-blur-sm transition-all ${
+                          isFavorite
+                            ? 'bg-[#27272a]/85 text-white'
+                            : 'bg-[#1a1a1c]/80 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white'
+                        }`}
+                      >
+                        <svg className="w-4 h-4 text-white" viewBox="0 0 50 50">
+                          <g stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transformOrigin: 'center' }}>
+                            {[
+                              ['25','8','25','2'], ['25','42','25','48'], ['8','25','2','25'], ['42','25','48','25'],
+                              ['13','13','7','7'], ['37','37','43','43'], ['37','13','43','7'], ['13','37','7','43'],
+                            ].map(([x1,y1,x2,y2], i) => (
+                              <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
+                                className={animatingStars.has(tileId) ? 'animate-star-line' : ''}
+                                style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }}
+                              />
+                            ))}
+                          </g>
+                          <circle cx="25" cy="25" r="8" fill="none" stroke="currentColor" strokeWidth="16"
+                            className={animatingStars.has(tileId) ? 'animate-star-ring' : 'opacity-0'}
+                            style={{ transformOrigin: 'center' }}
+                          />
+                          <path
+                            className={animatingStars.has(tileId) ? 'animate-star-stroke' : ''}
+                            style={{ transformOrigin: 'center' }}
+                            fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                            d="M25 5l5.09 10.31L42 17.27l-8.5 8.28 2 11.66L25 32l-10.5 5.21 2-11.66-8.5-8.28 11.91-1.96L25 5z"
+                          />
+                          <path
+                            className={animatingStars.has(tileId) ? 'animate-star-fill' : ''}
+                            style={{ transformOrigin: 'center', transform: isFavorite && !animatingStars.has(tileId) ? 'scale(1)' : 'scale(0)' }}
+                            fill="currentColor"
+                            d="M25 5l5.09 10.31L42 17.27l-8.5 8.28 2 11.66L25 32l-10.5 5.21 2-11.66-8.5-8.28 11.91-1.96L25 5z"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                    {/* Reuse Prompt */}
+                    <div className="relative">
+                      <button onClick={(e) => { e.stopPropagation(); onUsePrompt(); }}
+                        className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white transition-all">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11.8 15H9v-2.8l8.6-8.6z" />
+                        </svg>
+                      </button>
+                    </div>
+                    {/* Rerun */}
+                    <div className="relative">
+                      <button onClick={(e) => { e.stopPropagation(); onRerun(); }}
+                        className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white transition-all">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.6m15.4 2A8 8 0 004.6 9m0 0H9m11 11v-5h-.6a8 8 0 01-15.4-2m15.4 2H15" />
+                        </svg>
+                      </button>
+                    </div>
+                    {/* Download */}
+                    <div className="relative">
+                      <button onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                        className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white transition-all">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  {/* Bottom gradient with prompt text */}
+                  <div className="absolute inset-x-0 bottom-0 px-2 pb-2 pt-9 bg-gradient-to-t from-black/95 via-black/75 to-transparent z-10 pointer-events-none">
+                    <p className="text-[11px] leading-[1.35] text-white/95 line-clamp-3 break-words" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.75)' }}>
+                      {prompt}
+                    </p>
+                    <div className="mt-2 flex items-center justify-between gap-3 text-[9px] text-white/80" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.75)' }}>
+                      <span className="truncate">Model: {model || 'Unknown'}</span>
+                      <span className="shrink-0">{createdAtLabel}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </span>
+        </div>
+      </span>
+    </div>
+  );
+}, (prev, next) =>
+  prev.imageUrl === next.imageUrl &&
+  prev.isFavorite === next.isFavorite &&
+  prev.cardStyle.width === next.cardStyle.width &&
+  prev.cardStyle.height === next.cardStyle.height &&
+  prev.animatingStars === next.animatingStars
+);
+
+// --- Collage type ---
+type Collage = { id: string; name: string; imageKeys: string[]; isFavorite?: boolean };
+
 const ImageGenerationInterface2: React.FC = () => {
   const desktopAspectRatioTriggerRef = useRef<HTMLDivElement | null>(null);
   const mobileAspectRatioTriggerRef = useRef<HTMLDivElement | null>(null);
@@ -565,9 +810,31 @@ const ImageGenerationInterface2: React.FC = () => {
   const [showAspectRatios, setShowAspectRatios] = useState(false);
   const [showResolutions, setShowResolutions] = useState(false);
   const [showAiCompanies, setShowAiCompanies] = useState(false);
+  const [desktopAiCompaniesClosing, setDesktopAiCompaniesClosing] = useState(false);
+  const [desktopAiCompaniesMode, setDesktopAiCompaniesMode] = useState<'all' | 'selected'>('all');
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [hoveredModel, setHoveredModel] = useState<ModelDetails | null>(null);
+  const modelHoverTimeoutRef = useRef<number | null>(null);
+  const modelHoverLockUntilRef = useRef<number>(0);
+  const clearModelHoverState = useCallback(() => {
+    if (modelHoverTimeoutRef.current) { window.clearTimeout(modelHoverTimeoutRef.current); modelHoverTimeoutRef.current = null; }
+    setHoveredModel(null);
+  }, []);
+  const lockModelHover = useCallback((ms = 180) => {
+    modelHoverLockUntilRef.current = Date.now() + ms;
+    clearModelHoverState();
+  }, [clearModelHoverState]);
+  const handleModelHoverEnter = useCallback((model: ModelDetails) => {
+    if (Date.now() < modelHoverLockUntilRef.current) return;
+    if (modelHoverTimeoutRef.current) window.clearTimeout(modelHoverTimeoutRef.current);
+    modelHoverTimeoutRef.current = window.setTimeout(() => { setHoveredModel(model); modelHoverTimeoutRef.current = null; }, 700);
+  }, []);
+  const handleModelHoverLeave = useCallback(() => { clearModelHoverState(); }, [clearModelHoverState]);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const selectedModelCompany = useMemo(
+    () => aiCompanies.find((company) => company.models.some((model) => model.name === selectedModel)) ?? null,
+    [selectedModel]
+  );
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [activeImageId, setActiveImageId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -599,6 +866,37 @@ const ImageGenerationInterface2: React.FC = () => {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasAnimatedRef = useRef(false);
+  const loadedImageUrlsRef = useRef<Set<string>>(new Set());
+  const [collages, setCollages] = useState<Collage[]>([]);
+  const [expandedCollageId, setExpandedCollageId] = useState<string | null>(null);
+  const [isEditingCollageName, setIsEditingCollageName] = useState(false);
+  const collageNameInputRef = useRef<HTMLInputElement>(null);
+  const [inlineRenamingCollageId, setInlineRenamingCollageId] = useState<string | null>(null);
+  const inlineRenameInputRef = useRef<HTMLInputElement>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [promptDropHover, setPromptDropHover] = useState(false);
+  const desktopPromptContainerRef = useRef<HTMLDivElement | null>(null);
+  const desktopModelControlsRef = useRef<HTMLDivElement | null>(null);
+  const desktopSettingsButtonRef = useRef<HTMLDivElement | null>(null);
+  const desktopSearchSlotRef = useRef<HTMLDivElement | null>(null);
+  const [desktopLibrarySearchWidth, setDesktopLibrarySearchWidth] = useState(48);
+  const [desktopPromptCollisionLimit, setDesktopPromptCollisionLimit] = useState<number | null>(null);
+  const isViewportConstrained = !isMobile && viewportWidth < 1280;
+  const desktopPromptMaxWidth = useMemo(() => {
+    const fluidWidth = Math.round(viewportWidth * (isViewportConstrained ? 0.46 : 0.52));
+    let maxWidth = Math.max(360, Math.min(835, fluidWidth));
+    // Shrink when search or models are open in constrained viewport
+    if (isViewportConstrained) {
+      const searchShrink = showGallerySearch ? 132 : 0;
+      const modelShrink = showAiCompanies ? 92 : 0;
+      maxWidth -= searchShrink + modelShrink;
+    }
+    return Math.max(280, Math.min(maxWidth, desktopPromptCollisionLimit ?? maxWidth));
+  }, [viewportWidth, isViewportConstrained, showGallerySearch, showAiCompanies, desktopPromptCollisionLimit]);
+  const [ingredientImages, setIngredientImages] = useState<{ id: string; url: string }[]>([]);
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const [gallerySearchQuery, setGallerySearchQuery] = useState('');
+  const [showGallerySearch, setShowGallerySearch] = useState(false);
 
   // History state - SINGLE SOURCE OF TRUTH (no local copy needed)
   // Initialize from URL params to persist view on refresh
@@ -608,16 +906,61 @@ const ImageGenerationInterface2: React.FC = () => {
   });
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1200);
 
-  // Track if we're on mobile (below md breakpoint - 768px)
+  // Track viewport state for responsive header behavior
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+    const checkViewportState = () => {
+      const width = window.innerWidth;
+      setIsMobile(width < 768);
+      setViewportWidth(width);
+      // Auto-close model flyout and search when viewport gets too narrow
+      if (width >= 768 && width < 960) {
+        setShowAiCompanies(false);
+        setSelectedCompany(null);
+        if (showGallerySearch) {
+          setShowGallerySearch(false);
+          setGallerySearchQuery('');
+        }
+      }
     };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+    checkViewportState();
+    window.addEventListener('resize', checkViewportState);
+    return () => window.removeEventListener('resize', checkViewportState);
+  }, [showGallerySearch]);
+
+  // Measure available width for search bar + prompt collision limit
+  useEffect(() => {
+    if (isMobile) return;
+    const measure = () => {
+      const modelNode = desktopModelControlsRef.current;
+      const promptRect = desktopPromptContainerRef.current?.getBoundingClientRect();
+      const searchSlotRect = desktopSearchSlotRef.current?.getBoundingClientRect();
+      const settingsRect = desktopSettingsButtonRef.current?.getBoundingClientRect();
+      if (!promptRect || !settingsRect) return;
+      const headerGapPx = viewportWidth >= 1024 ? 12 : 8;
+      // Search width = gap between prompt right edge and settings left edge
+      const available = settingsRect.left - promptRect.right - headerGapPx * 2;
+      setDesktopLibrarySearchWidth(Math.max(40, available));
+      // Collision limit = max prompt width before it touches model popouts
+      if (modelNode && searchSlotRect) {
+        let leftOccupiedRight = modelNode.getBoundingClientRect().right;
+        const openPopouts = modelNode.querySelectorAll<HTMLElement>('[data-desktop-header-popout="true"]');
+        openPopouts.forEach((node) => {
+          const rect = node.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) leftOccupiedRight = Math.max(leftOccupiedRight, rect.right);
+        });
+        const promptSafeWidth = Math.floor(searchSlotRect.left - leftOccupiedRight - headerGapPx * 2);
+        setDesktopPromptCollisionLimit(Math.max(280, promptSafeWidth));
+      }
+    };
+    let debounceId: ReturnType<typeof setTimeout> | null = null;
+    const debouncedMeasure = () => { if (debounceId) clearTimeout(debounceId); debounceId = setTimeout(measure, 60); };
+    measure();
+    window.addEventListener('resize', debouncedMeasure);
+    const delayed = setTimeout(measure, 180);
+    return () => { window.removeEventListener('resize', debouncedMeasure); if (debounceId) clearTimeout(debounceId); clearTimeout(delayed); };
+  }, [isMobile, viewportWidth, showAiCompanies, showGallerySearch, selectedModel, selectedCompany]);
 
   // Track scroll position for header background
   useEffect(() => {
@@ -691,16 +1034,29 @@ const ImageGenerationInterface2: React.FC = () => {
   const [hasSeededMockHistory, setHasSeededMockHistory] = useState(false);
 
   // Combine local and database generations (local first, then db)
-  const generations = [...localGenerations, ...dbGenerations];
-  const libraryImages = generations.flatMap((gen) =>
+  const generations = useMemo(() => [...localGenerations, ...dbGenerations], [localGenerations, dbGenerations]);
+
+  const filteredGenerations = useMemo(() => {
+    if (!gallerySearchQuery.trim()) return generations;
+    const q = gallerySearchQuery.toLowerCase();
+    return generations.filter(g => g.prompt.toLowerCase().includes(q) || (g.model || '').toLowerCase().includes(q));
+  }, [generations, gallerySearchQuery]);
+
+  const libraryImages = useMemo(() => filteredGenerations.flatMap((gen) =>
     gen.image_urls.map((imageUrl, imageIndex) => ({
       key: `${gen.id}-${imageIndex}`,
       generation: gen,
       imageUrl,
       imageIndex,
     }))
-  );
-  const cardRadius = 16;
+  ), [filteredGenerations]);
+
+  const collageImageKeys = useMemo(() => {
+    const s = new Set<string>();
+    collages.forEach(c => c.imageKeys.forEach(k => s.add(k)));
+    return s;
+  }, [collages]);
+  const cardRadius = 8;
   const galleryGapPx = 12;
   const galleryMinItemWidthPx = 200;
   const galleryRowHeightPx = 240;
@@ -709,50 +1065,90 @@ const ImageGenerationInterface2: React.FC = () => {
   const [galleryViewportWidth, setGalleryViewportWidth] = useState(0);
   type GalleryGridItem =
     | { key: string; kind: 'loading' }
-    | { key: string; kind: 'image'; asset: (typeof libraryImages)[number] };
-  const gridItems: GalleryGridItem[] = [
-    ...(isGenerating && generatingSettings
+    | { key: string; kind: 'image'; asset: (typeof libraryImages)[number] }
+    | { key: string; kind: 'collage'; collage: Collage };
+  const gridItems: GalleryGridItem[] = useMemo(() => {
+    const loadingItems: GalleryGridItem[] = isGenerating && generatingSettings
       ? Array.from({ length: generatingSettings.count }, (_, index) => ({
           key: `loading-${index}`,
           kind: 'loading' as const,
         }))
-      : []),
-    ...libraryImages.map((asset) => ({
-      key: asset.key,
-      kind: 'image' as const,
-      asset,
-    })),
-  ];
+      : [];
+
+    // Build image items excluding those in collages
+    const imageItems: GalleryGridItem[] = libraryImages
+      .filter(a => !collageImageKeys.has(a.key))
+      .map((asset) => ({
+        key: asset.key,
+        kind: 'image' as const,
+        asset,
+      }));
+
+    // Build a full lookup of ALL library images (including those in collages) for resolving collage assets
+    const allImagesByKey = new Map(libraryImages.map(a => [a.key, a]));
+
+    // Insert collage tiles at natural position of their first image
+    const result: GalleryGridItem[] = [...loadingItems];
+    const collagesToInsert = collages.map(c => {
+      const firstKey = c.imageKeys[0];
+      const idx = libraryImages.findIndex(a => a.key === firstKey);
+      const assets = c.imageKeys.map(k => allImagesByKey.get(k)).filter(Boolean) as (typeof libraryImages)[number][];
+      return { collage: c, assets, firstIdx: idx >= 0 ? idx : Infinity };
+    }).sort((a, b) => a.firstIdx - b.firstIdx);
+
+    let imageIdx = 0;
+    let collageIdx = 0;
+    let globalImageIdx = 0;
+    const imageItemKeys = new Set(imageItems.map(i => i.key));
+    for (const asset of libraryImages) {
+      while (collageIdx < collagesToInsert.length && collagesToInsert[collageIdx].firstIdx <= globalImageIdx) {
+        const ci = collagesToInsert[collageIdx];
+        result.push({ key: `collage-${ci.collage.id}`, kind: 'collage', collage: ci.collage, assets: ci.assets });
+        collageIdx++;
+      }
+      if (imageItemKeys.has(asset.key)) {
+        result.push(imageItems[imageIdx++]);
+      }
+      globalImageIdx++;
+    }
+    while (collageIdx < collagesToInsert.length) {
+      const ci = collagesToInsert[collageIdx];
+      result.push({ key: `collage-${ci.collage.id}`, kind: 'collage', collage: ci.collage, assets: ci.assets });
+      collageIdx++;
+    }
+
+    return result;
+  }, [isGenerating, generatingSettings, libraryImages, collages, collageImageKeys]);
 
   useEffect(() => {
     const node = galleryContainerRef.current;
     if (!node) return;
 
     let frameId = 0;
+    let debounceId: ReturnType<typeof setTimeout> | null = null;
     const applyWidth = (width: number) => {
-      const nextWidth = Math.max(0, Math.round(width));
+      const nextWidth = Math.max(0, Math.round(width / 4) * 4);
       setGalleryViewportWidth((previousWidth) => (
         previousWidth === nextWidth ? previousWidth : nextWidth
       ));
     };
 
-    const updateWidth = () => {
-      applyWidth(node.clientWidth);
-    };
-
+    const updateWidth = () => { applyWidth(node.clientWidth); };
     updateWidth();
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
+      if (debounceId !== null) clearTimeout(debounceId);
       cancelAnimationFrame(frameId);
-      frameId = requestAnimationFrame(() => {
-        applyWidth(entry.contentRect.width);
-      });
+      debounceId = setTimeout(() => {
+        frameId = requestAnimationFrame(() => { applyWidth(entry.contentRect.width); });
+      }, 80);
     });
     observer.observe(node);
 
     return () => {
       cancelAnimationFrame(frameId);
+      if (debounceId !== null) clearTimeout(debounceId);
       observer.disconnect();
     };
   }, [showHistory, gridItems.length]);
@@ -776,6 +1172,9 @@ const ImageGenerationInterface2: React.FC = () => {
     const resolveAspect = (item: GalleryGridItem) => {
       if (item.kind === 'loading') {
         return Math.max(0.2, parseAspectRatioValue(generatingSettings?.aspectRatio || aspectRatio));
+      }
+      if (item.kind === 'collage') {
+        return 1;
       }
       return Math.max(0.2, parseAspectRatioValue(item.asset.generation.aspect_ratio));
     };
@@ -887,6 +1286,78 @@ const ImageGenerationInterface2: React.FC = () => {
     galleryMaxRowHeightPx,
     galleryMinItemWidthPx,
   ]);
+
+  // Build virtualized row data for Virtuoso
+  const virtualizedRows = useMemo(() => {
+    if (gridItems.length === 0 || galleryViewportWidth === 0) return [];
+    const rows: Array<{ items: typeof gridItems; rowHeight: number; knownSize: number }> = [];
+    let curItems: typeof gridItems = [];
+    let curWidth = 0;
+    let curHeight = galleryRowHeightPx;
+    gridItems.forEach((item) => {
+      const il = galleryItemLayout.get(item.key);
+      const iw = il?.width ?? galleryMinItemWidthPx;
+      const ih = il?.height ?? galleryRowHeightPx;
+      const projected = curWidth + (curItems.length > 0 ? galleryGapPx : 0) + iw;
+      if (curItems.length > 0 && projected > galleryViewportWidth + 2) {
+        rows.push({ items: curItems, rowHeight: curHeight, knownSize: curHeight + galleryGapPx });
+        curItems = [item]; curWidth = iw; curHeight = ih;
+      } else {
+        curItems.push(item); curWidth = projected; curHeight = Math.max(curHeight, ih);
+      }
+    });
+    if (curItems.length > 0) rows.push({ items: curItems, rowHeight: curHeight, knownSize: curHeight + galleryGapPx });
+    return rows;
+  }, [gridItems, galleryItemLayout, galleryViewportWidth, galleryGapPx, galleryRowHeightPx, galleryMinItemWidthPx]);
+
+  // DnD handlers
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  }, []);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const draggedKey = String(event.active.id);
+    const droppedOnKey = event.over ? String(event.over.id) : null;
+    setActiveDragId(null);
+    if (!droppedOnKey || draggedKey === droppedOnKey) return;
+
+    // Dropped on prompt drop zone → add as ingredient
+    if (droppedOnKey === 'prompt-drop-zone') {
+      const draggedAsset = libraryImages.find(li => li.key === draggedKey);
+      if (draggedAsset && uploadedImages.length < 10) {
+        const alreadyAdded = uploadedImages.some(img => img.url === draggedAsset.imageUrl);
+        if (!alreadyAdded) {
+          setUploadedImages(prev => [...prev, { id: `drop-${Date.now()}`, url: draggedAsset.imageUrl, refTypes: ['image'] }]);
+        }
+      }
+      return;
+    }
+
+    // Dropped on existing collage → add to it
+    const targetCollageMatch = droppedOnKey.startsWith('collage-') ? droppedOnKey.replace('collage-', '') : null;
+    if (targetCollageMatch) {
+      setCollages(prev => prev.map(c => c.id === targetCollageMatch && !c.imageKeys.includes(draggedKey) ? { ...c, imageKeys: [...c.imageKeys, draggedKey] } : c));
+      return;
+    }
+
+    // Check if dragged from a collage
+    const draggedFromCollage = collages.find(c => c.imageKeys.includes(draggedKey));
+    if (draggedFromCollage) {
+      setCollages(prev => prev.map(c => c.id === draggedFromCollage.id ? { ...c, imageKeys: c.imageKeys.filter(k => k !== draggedKey) } : c).filter(c => c.imageKeys.length > 0));
+    }
+
+    // Check if target is in a collage
+    const targetInCollage = collages.find(c => c.imageKeys.includes(droppedOnKey));
+    if (targetInCollage) {
+      setCollages(prev => prev.map(c => c.id === targetInCollage.id && !c.imageKeys.includes(draggedKey) ? { ...c, imageKeys: [...c.imageKeys, draggedKey] } : c));
+      return;
+    }
+
+    // Both solo → create new collage
+    setCollages(prev => [...prev, { id: `col_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, name: `Collage ${prev.length + 1}`, imageKeys: [droppedOnKey, draggedKey] }]);
+  }, [collages, libraryImages, uploadedImages]);
+
+  const handleDragCancel = useCallback(() => { setActiveDragId(null); }, []);
 
   // Update URL when view changes to persist state on refresh
   useEffect(() => {
@@ -1650,15 +2121,29 @@ const ImageGenerationInterface2: React.FC = () => {
       <div className="w-full mx-auto relative flex flex-col flex-1">
 
         {/* Generation Header Container - Sticky */}
+        <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
         <div className={`generation-header flex flex-col items-center gap-3 sticky top-0 z-50 transition-colors duration-200 ${isScrolled ? 'bg-[#0a0a0b]' : 'bg-transparent'}`} style={{ width: '100%' }}>
         <div className="w-full hidden md:flex flex-col gap-3 relative">
           {/* Desktop Row: All controls in one row (hidden on mobile) */}
-          <div className="w-full hidden md:flex flex-row items-start justify-center gap-3">
-            {/* Model Selector Container - Desktop */}
-            <div className="w-[118px] h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center pl-1 pr-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
+          <div className="w-full hidden md:flex flex-row items-start justify-between gap-3 relative">
+            {/* Model Selector Container - Desktop: icon-only when no model, expands with text after selection */}
+            <div ref={desktopModelControlsRef} className="relative flex items-start gap-3">
+            <div
+              className={`h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center shadow-lg shadow-black/40 relative bg-[#1a1a1c] transition-[width,padding] duration-200 ${selectedModel ? 'w-[96px] lg:w-[118px] pl-1 pr-2' : 'w-10 lg:w-12 justify-center px-0'}`}
+              style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}
+            >
+              {/* Icon area — click opens full company chooser */}
               <button
                 onClick={() => {
-                  setShowAiCompanies(!showAiCompanies);
+                  if (showAiCompanies) {
+                    setDesktopAiCompaniesClosing(true);
+                    setSelectedCompany(null);
+                    setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 300);
+                  } else {
+                    setDesktopAiCompaniesMode('all');
+                    lockModelHover();
+                    setShowAiCompanies(true);
+                  }
                   setSelectedCompany(null);
                   setShowSettings(false);
                   setActiveImageId(null);
@@ -1667,24 +2152,42 @@ const ImageGenerationInterface2: React.FC = () => {
                 }}
                 className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
               >
-                <svg className="w-6 h-6 text-white/40" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="2" y="12.8" width="10" height="2.4" rx="1.2" transform="rotate(-45 7 14)" />
-                  <rect x="11.5" y="12.8" width="3.5" height="2.4" rx="1.2" transform="rotate(-45 7 14)" fill="white" stroke="currentColor" strokeWidth="0.5" />
-                  <path d="M17.5 5.5 Q18.2 7.7 20.5 8.5 Q18.2 9.3 17.5 11.5 Q16.8 9.3 14.5 8.5 Q16.8 7.7 17.5 5.5 Z" />
-                  <path d="M20.5 12.5 Q21 14 22.5 14.5 Q21 15 20.5 16.5 Q20 15 18.5 14.5 Q20 14 20.5 12.5 Z" />
-                  <path d="M15 12 Q15.4 13 16.5 13.4 Q15.4 13.8 15 14.8 Q14.6 13.8 13.5 13.4 Q14.6 13 15 12 Z" />
-                </svg>
-              </button>
-              <div className="w-px h-6 bg-white/10 ml-1"></div>
-              <div className="flex-1 flex items-center justify-center overflow-hidden px-1">
-                {selectedModel ? (
-                  <span className="text-white/60 text-xs font-medium truncate max-w-full">{selectedModel}</span>
-                ) : prompt.trim().length > 0 ? (
-                  <span className="text-red-400 text-xs font-medium animate-pulse">Select</span>
+                {selectedModelCompany ? (
+                  <span className="w-6 h-6 flex items-center justify-center text-white/70">{selectedModelCompany.logo}</span>
                 ) : (
-                  <span className="text-white/40 text-xs font-medium">Model</span>
+                  <svg className="w-6 h-6 text-white/40" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="2" y="12.8" width="10" height="2.4" rx="1.2" transform="rotate(-45 7 14)" />
+                    <rect x="11.5" y="12.8" width="3.5" height="2.4" rx="1.2" transform="rotate(-45 7 14)" fill="white" stroke="currentColor" strokeWidth="0.5" />
+                    <path d="M17.5 5.5 Q18.2 7.7 20.5 8.5 Q18.2 9.3 17.5 11.5 Q16.8 9.3 14.5 8.5 Q16.8 7.7 17.5 5.5 Z" />
+                    <path d="M20.5 12.5 Q21 14 22.5 14.5 Q21 15 20.5 16.5 Q20 15 18.5 14.5 Q20 14 20.5 12.5 Z" />
+                    <path d="M15 12 Q15.4 13 16.5 13.4 Q15.4 13.8 15 14.8 Q14.6 13.8 13.5 13.4 Q14.6 13 15 12 Z" />
+                  </svg>
                 )}
-              </div>
+              </button>
+              {/* Text area — click opens only selected company's model list */}
+              {selectedModel && (
+                <>
+                  <div className="w-px h-6 bg-white/10 ml-1"></div>
+                  <button
+                    onClick={() => {
+                      if (showAiCompanies) {
+                        setDesktopAiCompaniesClosing(true);
+                        setSelectedCompany(null);
+                        setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 300);
+                      } else {
+                        setDesktopAiCompaniesMode('selected');
+                        setSelectedCompany(selectedModelCompany?.name ?? null);
+                        setShowAiCompanies(true);
+                      }
+                      setShowSettings(false);
+                    }}
+                    className="flex-1 flex items-center justify-center overflow-hidden px-1 rounded transition-all hover:bg-white/5 cursor-pointer"
+                  >
+                    <span className="text-white/60 text-xs font-medium truncate max-w-full">{selectedModel}</span>
+                  </button>
+                </>
+              )}
+            </div>
             </div>
 
             {/* Tools Container - Desktop - HIDDEN: Will be implemented in Image Studio later
@@ -1719,8 +2222,52 @@ const ImageGenerationInterface2: React.FC = () => {
             </div>
             */}
 
-            {/* Input Container - Desktop */}
-            <div className="flex-1 h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-between relative shadow-lg shadow-black/40 bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
+            {/* Input Container - Desktop — positioned + responsive width */}
+            <div
+              ref={desktopPromptContainerRef}
+              className="absolute left-1/2 top-0 -translate-x-1/2 w-full min-w-[240px] lg:min-w-[320px] transition-[max-width] duration-100 ease-out"
+              style={{ maxWidth: `${desktopPromptMaxWidth}px` }}
+              onDragOver={(e) => { e.preventDefault(); setPromptDropHover(true); }}
+              onDragLeave={() => setPromptDropHover(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setPromptDropHover(false);
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0 && uploadedImages.length < 10) {
+                  Array.from(files).forEach((file) => {
+                    if (!file.type.startsWith('image/')) return;
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      setUploadedImages(prev => [...prev, {
+                        id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        url: reader.result as string,
+                        refTypes: ['image'],
+                      }]);
+                    };
+                    reader.readAsDataURL(file);
+                  });
+                }
+              }}
+            >
+            {promptDropHover && (
+              <div style={{
+                position: 'absolute', top: -36, left: '50%', transform: 'translateX(-50%)',
+                background: '#fff', color: '#000', fontWeight: 600, fontSize: 12,
+                padding: '4px 14px', borderRadius: 20, whiteSpace: 'nowrap',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.3)', zIndex: 50,
+                animation: 'badgeScaleIn 180ms ease-out both', pointerEvents: 'none',
+              }}>
+                Add Ingredient
+              </div>
+            )}
+            <div
+              className={`h-10 lg:h-12 backdrop-blur-md border rounded-lg flex items-center justify-between relative shadow-lg shadow-black/40 bg-[#1a1a1c] transition-all duration-200 ${promptDropHover ? 'border-[#3b82f6] bg-white/[0.05]' : 'border-[#3a3a3d]'}`}
+              style={{
+                boxShadow: promptDropHover
+                  ? '0 0 15px rgba(59, 130, 246, 0.4), 0 4px 6px -1px rgba(0, 0, 0, 0.2)'
+                  : '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
+              }}
+            >
               <div className="flex items-center flex-1">
                 <button
                   onClick={handleImageClick}
@@ -1767,33 +2314,119 @@ const ImageGenerationInterface2: React.FC = () => {
                 })()}
               </div>
             </div>
+            {/* Ingredient thumbnails — dropped images shown below the prompt bar */}
+            {uploadedImages.length > 0 && (
+              <div className="flex items-center gap-1.5 mt-1.5 px-1 flex-wrap">
+                {uploadedImages.map((img) => (
+                  <div key={img.id} className="relative group/thumb w-8 h-8 rounded overflow-hidden border border-white/10">
+                    <img src={img.url} alt="" className="w-full h-full object-cover" draggable={false} />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setUploadedImages(prev => prev.filter(i => i.id !== img.id));
+                      }}
+                      className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                    >
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            </div>
 
-            {/* Settings Button Container */}
-            <div className="h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center px-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
-              <button
-                onClick={() => {
-                  // Trigger animation
-                  setAnimatingSettingsButton(true);
-                  setTimeout(() => setAnimatingSettingsButton(false), 500);
-                  setShowSettings(!showSettings);
-                  setShowAiCompanies(false);
-                  setSelectedCompany(null);
-                  setShowTools(false);
-                  setSelectedTool(null);
-                }}
-                className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
-              >
-                <svg
-                  className={`w-6 h-6 ${showSettings ? 'text-white' : 'text-white/40'} ${animatingSettingsButton ? 'animate-gear-spin' : ''}`}
-                  style={{ transformOrigin: 'center' }}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+            {/* Right-side controls group */}
+            <div className="ml-auto flex items-center gap-2 lg:gap-3 min-w-0">
+
+            {/* Search Button — collapsed = same structure as settings, expanded = fills measured gap */}
+            <div
+              ref={desktopSearchSlotRef}
+              className="relative flex items-center justify-end min-w-0"
+              style={{ width: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'auto' }}
+            >
+              {showGallerySearch && (
+                <div
+                  className="flex items-center h-10 lg:h-12 w-full backdrop-blur-md border border-[#3a3a3d] rounded-lg shadow-lg shadow-black/40 bg-[#1a1a1c]"
+                  style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
+                  <div className="flex-1 flex items-center pl-3 pr-2 min-w-0">
+                    <input
+                      type="text"
+                      value={gallerySearchQuery}
+                      onChange={(e) => setGallerySearchQuery(e.target.value.slice(0, 500))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setShowGallerySearch(false);
+                          setGallerySearchQuery('');
+                        }
+                      }}
+                      maxLength={500}
+                      autoFocus
+                      placeholder="Search generated prompts..."
+                      className="w-full min-w-0 bg-transparent text-white/90 text-sm placeholder:text-white/35 border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowGallerySearch(false);
+                      setGallerySearchQuery('');
+                    }}
+                    className="shrink-0 p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
+                    aria-label="Close search"
+                  >
+                    <svg className="w-6 h-6 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle cx="11" cy="11" r="7" strokeWidth="2" />
+                      <path strokeLinecap="round" strokeWidth="2" d="M20 20L16.65 16.65" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+              {!showGallerySearch && (
+                <div
+                  className="h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center px-1.5 lg:px-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]"
+                  style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}
+                >
+                  <button
+                    onClick={() => setShowGallerySearch(true)}
+                    className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
+                    aria-label="Toggle search"
+                  >
+                    <svg className={`w-6 h-6 transition-colors ${gallerySearchQuery ? 'text-white/80' : 'text-white/40'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle cx="11" cy="11" r="7" strokeWidth="2" />
+                      <path strokeLinecap="round" strokeWidth="2" d="M20 20L16.65 16.65" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Settings Button Container — dropdown opens below */}
+            <div ref={desktopSettingsButtonRef} className="relative">
+              <div className="h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center px-1.5 lg:px-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
+                <button
+                  onClick={() => {
+                    setAnimatingSettingsButton(true);
+                    setTimeout(() => setAnimatingSettingsButton(false), 500);
+                    setShowSettings(!showSettings);
+                    setShowAiCompanies(false);
+                    setSelectedCompany(null);
+                    setShowTools(false);
+                    setSelectedTool(null);
+                  }}
+                  className="p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
+                >
+                  <svg
+                    className={`w-6 h-6 ${showSettings ? 'text-white' : 'text-white/40'} ${animatingSettingsButton ? 'animate-gear-spin' : ''}`}
+                    style={{ transformOrigin: 'center' }}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {/* History & Favorites Button Container */}
@@ -1908,13 +2541,27 @@ const ImageGenerationInterface2: React.FC = () => {
             </button>
           </div>
           </div>
+          {/* End right-side controls group */}
+          </div>
 
-          {/* AI Companies Floating Buttons - Positioned at left below Tool Container */}
-          {showAiCompanies && (
-            <div className="absolute left-0 right-0 md:right-auto top-full mt-2 flex flex-row md:flex-col flex-wrap md:flex-nowrap items-start gap-2 p-2 z-[100]">
-              {aiCompanies.map((company, index) => (
-                  <div key={company.name} className="relative" style={{ animation: `fadeInDown 0.2s ease-out ${index * 50}ms both` }}>
-                    {/* Company Button - Icon only */}
+          {/* AI Companies Floating Buttons — horizontal, left-to-right animation */}
+          {(showAiCompanies || desktopAiCompaniesClosing) && (() => {
+            const visibleCompanies = desktopAiCompaniesMode === 'selected' && selectedModelCompany
+              ? [selectedModelCompany]
+              : aiCompanies;
+            return (
+            <div className="absolute left-0 top-full mt-2 flex flex-row items-start gap-2 p-2 z-[100]">
+              {visibleCompanies.map((company, index) => {
+                const total = visibleCompanies.length;
+                const enterDelay = index * 50;
+                const exitDelay = (total - 1 - index) * 50;
+                return (
+                  <div key={company.name} className="relative"
+                    style={{
+                      animation: `${desktopAiCompaniesClosing ? 'desktopCompanyExit' : 'desktopCompanyEnter'} 160ms ease-out both`,
+                      animationDelay: `${desktopAiCompaniesClosing ? exitDelay : enterDelay}ms`,
+                    }}
+                  >
                     <button
                       onClick={() => {
                         setSelectedCompany(selectedCompany === company.name ? null : company.name);
@@ -1926,20 +2573,19 @@ const ImageGenerationInterface2: React.FC = () => {
                         selectedCompany && selectedCompany !== company.name ? 'opacity-50' : 'opacity-100'
                       }`}
                       style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
-                      title={company.name}
                     >
                       <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
                     </button>
 
-                    {/* Models Dropdown - appears to the right of the company button */}
+                    {/* Models — appears below the company button */}
                     {selectedCompany === company.name && (
-                      <div className="absolute left-full ml-2 top-0 flex flex-col gap-1.5 z-[110]">
+                      <div className="absolute left-0 top-full mt-2 flex flex-col gap-1.5 z-[110]">
                         {company.models.map((model, modelIndex) => (
                           <div
                             key={model.name}
                             className="relative"
-                            onMouseEnter={() => setHoveredModel(model)}
-                            onMouseLeave={() => setHoveredModel(null)}
+                            onMouseEnter={() => handleModelHoverEnter(model)}
+                            onMouseLeave={handleModelHoverLeave}
                           >
                             {/* Model Details Panel - shows on hover to the right */}
                             {hoveredModel && hoveredModel.name === model.name && (
@@ -1992,20 +2638,23 @@ const ImageGenerationInterface2: React.FC = () => {
                         ))}
                         <style>{`
                           @keyframes fadeInDown {
-                            from {
-                              opacity: 0;
-                              transform: translateY(-8px);
-                            }
-                            to {
-                              opacity: 1;
-                              transform: translateY(0);
-                            }
+                            from { opacity: 0; transform: translateY(-8px); }
+                            to { opacity: 1; transform: translateY(0); }
+                          }
+                          @keyframes desktopCompanyEnter {
+                            from { opacity: 0; transform: translateX(-12px); }
+                            to { opacity: 1; transform: translateX(0); }
+                          }
+                          @keyframes desktopCompanyExit {
+                            from { opacity: 1; transform: translateX(0); }
+                            to { opacity: 0; transform: translateX(-12px); }
                           }
                         `}</style>
                       </div>
                     )}
                   </div>
-                ))}
+                );
+              })}
               <style>{`
                 @keyframes fadeInDown {
                   from {
@@ -2019,7 +2668,8 @@ const ImageGenerationInterface2: React.FC = () => {
                 }
               `}</style>
             </div>
-          )}
+            );
+          })()}
 
           {/* Tools Floating Buttons - HIDDEN: Will be implemented in Image Studio later
           {showTools && (
@@ -2464,225 +3114,177 @@ const ImageGenerationInterface2: React.FC = () => {
           ) : (
           /* Vertical stack of image answer containers - Midjourney style */
           <div className="flex flex-col-reverse md:flex-col gap-6 py-4">
-            {/* Unified grid library view across all generations */}
+            {/* Virtualized grid library view — React Virtuoso windowed rendering */}
             {gridItems.length > 0 && (
-              <div className="image-answer-container rounded-md py-0 md:py-4 relative bg-black">
+              <GalleryErrorBoundary>
+              <div className="image-answer-container rounded-md py-0 md:py-4 px-4 md:px-8 lg:px-12 relative bg-black">
                 <div className="image-preview-container-wrapper relative w-full" style={{ flexGrow: 1 }}>
-                  <div
-                    ref={galleryContainerRef}
-                    className="flex flex-wrap w-full"
-                    style={{
-                      gap: `${galleryGapPx}px`,
-                      alignItems: 'stretch',
-                      alignContent: 'flex-start',
-                      justifyContent: 'flex-start',
-                    }}
-                  >
+                  <div id="DndDescribedBy-0" style={{ display: 'none' }}>Press space bar to start a drag.</div>
+                  <div ref={galleryContainerRef} className="w-full" style={{ overflowAnchor: 'none' }}>
                     <style>{`
                       @keyframes sweep { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-                      @keyframes letterFade { 0%, 8% { opacity: 0; } 16%, 92% { opacity: 1; } 100% { opacity: 0; } }
-                      .image-action-button + .image-action-tooltip {
-                        opacity: 0;
-                        transform: translateY(4px);
-                      }
-                      .image-action-button:hover + .image-action-tooltip {
-                        opacity: 1;
-                        transform: translateY(0);
-                      }
+                      @keyframes letterFade { 0%,8% { opacity: 0; } 16%,92% { opacity: 1; } 100% { opacity: 0; } }
+                      @keyframes virtuosoTileFadeIn { 0% { opacity: 0; transform: translateY(12px); } 100% { opacity: 1; transform: translateY(0); } }
+                      .virtuoso-tile-mount { animation: virtuosoTileFadeIn 320ms ease-out both; }
+                      @keyframes skeletonShimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+                      .tile-skeleton-bg { background: linear-gradient(90deg, #111113 25%, #1a1a1e 37%, #111113 63%); background-size: 200% 100%; animation: skeletonShimmer 1.6s ease-in-out infinite; }
+                      @keyframes badgeScaleIn { 0% { transform: translateX(-50%) scale(0.7); opacity: 0; } 100% { transform: translateX(-50%) scale(1); opacity: 1; } }
+                      .image-action-button + .image-action-tooltip { opacity: 0; transform: translateY(4px); }
+                      .image-action-button:hover + .image-action-tooltip { opacity: 1; transform: translateY(0); }
+                      [data-tile-id] { contain: layout style paint; will-change: transform, opacity; touch-action: none; }
+                      [data-testid="virtuoso-row"] { contain: layout style; overflow-anchor: none; }
                     `}</style>
-                    {gridItems.map((item) => {
-                      const itemLayout = galleryItemLayout.get(item.key);
-                      const cardStyle: React.CSSProperties = {
-                        borderRadius: `${cardRadius}px`,
-                        overflow: 'hidden',
-                        width: `${itemLayout?.width ?? galleryMinItemWidthPx}px`,
-                        height: `${itemLayout?.height ?? galleryRowHeightPx}px`,
-                        flex: '0 0 auto',
-                      };
-
-                      if (item.kind === 'loading') {
-                        return (
-                          <div
-                            key={item.key}
-                            className="relative group border border-[#2a2a2d]"
-                            style={{
-                              ...cardStyle,
-                              backgroundColor: '#0a0a0c',
-                            }}
-                          >
-                            <div className="w-full h-full relative overflow-hidden bg-[#111113]">
-                              <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)', backgroundSize: '200% 100%', animation: 'sweep 2s ease-in-out infinite' }}></div>
-                              <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' /%3E%3C/svg%3E")`, backgroundSize: '64px 64px' }}></div>
-                              <div className="absolute inset-0">
-                                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-white/5 rounded-full blur-xl animate-pulse" style={{ animationDuration: '2s' }}></div>
-                                <div className="absolute bottom-1/4 right-1/4 w-40 h-40 bg-white/3 rounded-full blur-xl animate-pulse" style={{ animationDuration: '3s', animationDelay: '0.5s' }}></div>
-                              </div>
-                              <div className="absolute inset-0 flex items-center justify-center z-10">
-                                <span className="text-white/40 text-sm font-medium tracking-wide">
-                                  {'xenomorphing'.split('').map((letter, i) => (
-                                    <span key={i} style={{ animation: 'letterFade 3.6s infinite', animationDelay: `${i * 0.3}s` }}>{letter}</span>
-                                  ))}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      const { asset } = item;
-                      const createdAtLabel = asset.generation.created_at
-                        ? new Date(asset.generation.created_at).toLocaleString(undefined, {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                          })
-                        : 'Unknown date';
-                      return (
-                        <div
-                          key={item.key}
-                          className="relative group cursor-pointer overflow-hidden"
-                          style={cardStyle}
-                          onClick={() => setViewingImage({ generationId: asset.generation.id, imageIndex: asset.imageIndex })}
-                        >
-                          <img
-                            src={asset.imageUrl}
-                            alt={`Generated ${asset.imageIndex + 1}`}
-                            className="w-full h-full object-cover block transition-[filter] duration-300 ease-in-out group-hover:brightness-110"
-                            style={{ borderRadius: `${cardRadius}px` }}
-                          />
-                              <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                            <div className="relative">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setAnimatingStars((prev) => new Set(prev).add(asset.generation.id));
-                                  setTimeout(() => {
-                                    setAnimatingStars((prev) => {
-                                      const next = new Set(prev);
-                                      next.delete(asset.generation.id);
-                                      return next;
-                                    });
-                                  }, 700);
-                                  handleToggleFavoriteGeneration(asset.generation.id);
-                                }}
-                                className={`image-action-button p-2 rounded-lg backdrop-blur-sm transition-all ${
-                                  asset.generation.is_favorite
-                                    ? 'bg-[#27272a]/85 group-hover:bg-[#36363a]/90 text-white'
-                                    : 'bg-[#1a1a1c]/80 group-hover:bg-[#2d2d31]/88 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white'
-                                }`}
-                              >
-                                <svg className="w-4 h-4 text-white" viewBox="0 0 50 50">
-                                  <g stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transformOrigin: 'center' }}>
-                                    <line x1="25" y1="8" x2="25" y2="2" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                    <line x1="25" y1="42" x2="25" y2="48" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                    <line x1="8" y1="25" x2="2" y2="25" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                    <line x1="42" y1="25" x2="48" y2="25" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                    <line x1="13" y1="13" x2="7" y2="7" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                    <line x1="37" y1="37" x2="43" y2="43" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                    <line x1="37" y1="13" x2="43" y2="7" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                    <line x1="13" y1="37" x2="7" y2="43" className={animatingStars.has(asset.generation.id) ? 'animate-star-line' : ''} style={{ strokeDasharray: '1 23', strokeDashoffset: 1 }} />
-                                  </g>
-                                  <circle
-                                    cx="25" cy="25" r="8"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="16"
-                                    className={animatingStars.has(asset.generation.id) ? 'animate-star-ring' : 'opacity-0'}
-                                    style={{ transformOrigin: 'center' }}
-                                  />
-                                  <path
-                                    className={animatingStars.has(asset.generation.id) ? 'animate-star-stroke' : ''}
-                                    style={{ transformOrigin: 'center' }}
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M25 5l5.09 10.31L42 17.27l-8.5 8.28 2 11.66L25 32l-10.5 5.21 2-11.66-8.5-8.28 11.91-1.96L25 5z"
-                                  />
-                                  <path
-                                    className={animatingStars.has(asset.generation.id) ? 'animate-star-fill' : ''}
-                                    style={{ transformOrigin: 'center', transform: asset.generation.is_favorite && !animatingStars.has(asset.generation.id) ? 'scale(1)' : 'scale(0)' }}
-                                    fill="currentColor"
-                                    d="M25 5l5.09 10.31L42 17.27l-8.5 8.28 2 11.66L25 32l-10.5 5.21 2-11.66-8.5-8.28 11.91-1.96L25 5z"
-                                  />
-                                </svg>
-                              </button>
-                              <span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">
-                                Favorite
-                              </span>
-                            </div>
-
-                            <div className="relative">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleUsePrompt(asset.generation.prompt);
-                                }}
-                                className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 group-hover:bg-[#2d2d31]/88 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white transition-all"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11.8 15H9v-2.8l8.6-8.6z" />
-                                </svg>
-                              </button>
-                              <span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">
-                                Reuse Prompt
-                              </span>
-                            </div>
-
-                            <div className="relative">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRerun(asset.generation);
-                                }}
-                                className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 group-hover:bg-[#2d2d31]/88 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white transition-all"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.6m15.4 2A8 8 0 004.6 9m0 0H9m11 11v-5h-.6a8 8 0 01-15.4-2m15.4 2H15" />
-                                </svg>
-                              </button>
-                              <span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">
-                                Rerun
-                              </span>
-                            </div>
-
-                            <div className="relative">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDownloadSingleImage(asset.imageUrl, asset.generation.id, asset.imageIndex);
-                                }}
-                                className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 group-hover:bg-[#2d2d31]/88 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white transition-all"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                              </button>
-                              <span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">
-                                Download
-                              </span>
-                            </div>
-                              </div>
-
-                              <div className="absolute inset-x-0 bottom-0 px-2 pb-2 pt-9 bg-gradient-to-t from-black/95 via-black/75 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
-                                <p className="text-[11px] leading-[1.35] text-white/95 line-clamp-3 break-words" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.75)' }}>
-                                  {asset.generation.prompt}
-                                </p>
-                                <div className="mt-2 flex items-center justify-between gap-3 text-[9px] text-white/80" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.75)' }}>
-                                  <span className="truncate">Model: {asset.generation.model || 'Unknown'}</span>
-                                  <span className="shrink-0">{createdAtLabel}</span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                    <Virtuoso
+                      data={virtualizedRows}
+                      useWindowScroll
+                      overscan={400}
+                      computeItemKey={(index, rowData) => `vrow-${index}-${rowData.items.length}-${rowData.items[0]?.key ?? ''}`}
+                      defaultItemHeight={galleryRowHeightPx + galleryGapPx}
+                      itemContent={(rowIndex, rowData) => (
+                        <div data-testid="virtuoso-row" data-index={rowIndex} data-known-size={Math.round(rowData.knownSize)} className="flex items-start" style={{ gap: `${galleryGapPx}px`, height: `${rowData.rowHeight}px`, marginBottom: `${galleryGapPx}px`, width: '100%', overflowAnchor: 'none' }}>
+                          {rowData.items.map((item, tileIndex) => {
+                            const il = galleryItemLayout.get(item.key);
+                            const tw = il?.width ?? galleryMinItemWidthPx;
+                            const th = il?.height ?? galleryRowHeightPx;
+                            const cardStyle: React.CSSProperties = { borderRadius: `${cardRadius}px`, overflow: 'hidden', width: `${tw}px`, height: `${th}px`, flex: '0 0 auto' };
+                            if (item.kind === 'loading') return (<div key={item.key} data-tile-id={item.key} className="relative group border border-[#2a2a2d] virtuoso-tile-mount" style={{ ...cardStyle, backgroundColor: '#0a0a0c', animationDelay: `${tileIndex * 60}ms` }}><div className="w-full h-full relative overflow-hidden bg-[#111113]"><div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)', backgroundSize: '200% 100%', animation: 'sweep 2s ease-in-out infinite' }} /><div className="absolute inset-0 flex items-center justify-center z-10"><span className="text-white/40 text-sm font-medium tracking-wide">{'xenomorphing'.split('').map((letter, i) => (<span key={i} style={{ animation: 'letterFade 3.6s infinite', animationDelay: `${i * 0.3}s` }}>{letter}</span>))}</span></div></div></div>);
+                            if (item.kind === 'collage') { const { collage, assets: ca } = item; const cover = ca[0]?.imageUrl; return (<DroppableTile key={item.key} id={item.key}>{({ dropNodeRef, isOver: colOver }) => (<div ref={dropNodeRef} data-tile-id={collage.id} role="button" tabIndex={0} className={`relative group cursor-pointer overflow-hidden transition-all duration-200 ${colOver ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-black' : 'hover:ring-1 hover:ring-white/30'}`} style={{ ...cardStyle, background: '#0c0c0e' }} onClick={() => setExpandedCollageId(expandedCollageId === collage.id ? null : collage.id)}>{cover && <img src={cover} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" style={{ filter: 'blur(40px) brightness(0.35) saturate(1.4)', transform: 'scale(1.3)' }} />}<div className="absolute inset-0 flex items-center justify-center" style={{ perspective: '800px' }}><div style={{ position: 'relative', width: '65%', height: '62%' }}>{ca.slice(0, Math.min(3, ca.length)).reverse().map((img, ci, arr) => { const t=arr.length; const rot=t===1?0:(ci-(t-1)/2)*12; const xs=t===1?0:(ci-(t-1)/2)*8; const sc=t===1?1:0.88+ci*0.06; return <img key={img.key} src={img.imageUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" style={{ borderRadius: 6, transform: `rotate(${rot}deg) translateX(${xs}px) scale(${sc})`, boxShadow: `0 ${6+ci*3}px ${14+ci*6}px rgba(0,0,0,${0.35+ci*0.1})`, zIndex: ci }} />; })}</div></div><div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" /><div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20"><div className="relative"><button onClick={(e) => { e.stopPropagation(); setInlineRenamingCollageId(collage.id); }} className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white transition-all"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button><span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">Rename</span></div><div className="relative"><button onClick={(e) => { e.stopPropagation(); setCollages(prev => prev.map(c => c.id === collage.id ? { ...c, isFavorite: !c.isFavorite } : c)); }} className={`image-action-button p-2 rounded-lg backdrop-blur-sm transition-all ${collage.isFavorite ? 'bg-[#27272a]/85 text-white' : 'bg-[#1a1a1c]/80 text-white/80 hover:bg-[#3a3a3d]/90 hover:text-white'}`}><svg className="w-4 h-4" fill={collage.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg></button><span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">Favorite</span></div><div className="relative"><button onClick={(e) => { e.stopPropagation(); setCollages(prev => prev.filter(c => c.id !== collage.id)); }} className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 text-white/80 hover:bg-red-500/80 hover:text-white transition-all"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button><span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">Delete</span></div></div><div className="absolute inset-x-0 bottom-0 px-3 pb-3 pt-8 bg-gradient-to-t from-black/90 to-transparent z-10 flex items-end justify-between">{inlineRenamingCollageId === collage.id ? (<div className="flex items-center gap-1.5 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}><input ref={inlineRenameInputRef} type="text" defaultValue={collage.name} autoFocus className="font-semibold text-white/95 bg-transparent border-0 outline-none p-0 m-0 min-w-0 flex-1" style={{ fontSize: '30px' }} onKeyDown={(e) => { if (e.key==='Enter'){const v=e.currentTarget.value.trim();if(v)setCollages(prev=>prev.map(c=>c.id===collage.id?{...c,name:v}:c));setInlineRenamingCollageId(null);}if(e.key==='Escape')setInlineRenamingCollageId(null);}} onBlur={(e)=>{const v=e.currentTarget.value.trim();if(v)setCollages(prev=>prev.map(c=>c.id===collage.id?{...c,name:v}:c));setInlineRenamingCollageId(null);}} /><button onClick={()=>{const v=inlineRenameInputRef.current?.value.trim();if(v)setCollages(prev=>prev.map(c=>c.id===collage.id?{...c,name:v}:c));setInlineRenamingCollageId(null);}} className="p-0.5 text-white/70 hover:text-white transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></button><button onClick={()=>setInlineRenamingCollageId(null)} className="p-0.5 text-white/70 hover:text-white transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button></div>) : (<p className="font-semibold text-white/95 truncate" style={{ fontSize: '30px' }}>{collage.name}</p>)}<span className="shrink-0 bg-white/20 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{collage.imageKeys.length}</span></div></div>)}</DroppableTile>); }
+                            if (item.kind !== 'image') return null;
+                            const { asset } = item;
+                            const dragImgUrl = activeDragId ? libraryImages.find(li => li.key === activeDragId)?.imageUrl ?? null : null;
+                            return (<DroppableTile key={`drop-${item.key}`} id={item.key}>{({ dropNodeRef, isOver }) => (<DraggableTile key={item.key} id={item.key}>{({ dragAttributes, dragListeners, dragNodeRef, isDragging }) => (<div ref={(node) => { dragNodeRef(node); dropNodeRef(node); }} role="button" tabIndex={0} aria-roledescription="draggable" aria-describedby="DndDescribedBy-0" style={{ flex: '0 0 auto', opacity: isDragging ? 0.35 : 1, willChange: 'transform, opacity', contain: 'layout style paint' }} {...dragAttributes} {...dragListeners}>{isOver && !isDragging && dragImgUrl ? (<div className="collection-stack-preview" style={{ width: cardStyle.width, height: cardStyle.height, borderRadius: `${cardRadius}px`, overflow: 'visible', outline: '2px solid #3b82f6', outlineOffset: '-2px', background: '#0c0c0e', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ position: 'relative', width: '70%', height: '70%' }}><img src={asset.imageUrl} alt="" draggable={false} className="w-full h-full object-cover" style={{ borderRadius: 8, transform: 'rotate(-8deg) scale(0.7)', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }} /><img src={dragImgUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" style={{ borderRadius: 8, transform: 'rotate(8deg) scale(0.7)', boxShadow: '0 6px 18px rgba(0,0,0,0.6)', zIndex: 1 }} /></div><div style={{ position: 'absolute', bottom: 12, left: '50%', zIndex: 10, background: '#fff', color: '#000', fontWeight: 700, fontSize: 11, padding: '5px 16px', borderRadius: 999, whiteSpace: 'nowrap', boxShadow: '0 2px 10px rgba(0,0,0,0.35)', animation: 'badgeScaleIn 200ms ease-out both' }}>Create Collection</div></div>) : (<GalleryImageTile tileId={asset.generation.id} tileIndex={tileIndex} imageUrl={asset.imageUrl} imageIndex={asset.imageIndex} prompt={asset.generation.prompt} model={asset.generation.model} createdAt={asset.generation.created_at} isFavorite={asset.generation.is_favorite} cardRadius={cardRadius} cardStyle={cardStyle} animatingStars={animatingStars} loadedImageUrlsRef={loadedImageUrlsRef} onView={() => { if (!isDragging) setViewingImage({ generationId: asset.generation.id, imageIndex: asset.imageIndex }); }} onToggleFavorite={() => { setAnimatingStars(prev => new Set(prev).add(asset.generation.id)); setTimeout(() => { setAnimatingStars(prev => { const n = new Set(prev); n.delete(asset.generation.id); return n; }); }, 700); handleToggleFavoriteGeneration(asset.generation.id); }} onUsePrompt={() => handleUsePrompt(asset.generation.prompt)} onRerun={() => handleRerun(asset.generation)} onDownload={() => handleDownloadSingleImage(asset.imageUrl, asset.generation.id, asset.imageIndex)} />)}</div>)}</DraggableTile>)}</DroppableTile>);
+                          })}
+                        </div>
+                      )}
+                    />
+                    <DragOverlay>{activeDragId ? (() => { const di = gridItems.find(i => i.key === activeDragId && i.kind === 'image'); if (!di || di.kind !== 'image') return null; const dl = galleryItemLayout.get(di.key); return (<div style={{ width: dl?.width ?? galleryMinItemWidthPx, height: dl?.height ?? galleryRowHeightPx, borderRadius: cardRadius, overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', opacity: 0.85 }}><img src={di.asset.imageUrl} alt="Dragging" draggable={false} className="w-full h-full object-cover block" style={{ borderRadius: cardRadius }} /></div>); })() : null}</DragOverlay>
                   </div>
                 </div>
+              </div>
+              </GalleryErrorBoundary>
             )}
+
+            {/* Expanded collection overlay */}
+            {expandedCollageId && (() => {
+              const collage = collages.find(c => c.id === expandedCollageId);
+              if (!collage) return null;
+              const imagesByKey = new Map(libraryImages.map(a => [a.key, a]));
+              const collageImages = collage.imageKeys.map(k => imagesByKey.get(k)).filter(Boolean) as typeof libraryImages;
+              return (
+                <div
+                  className="fixed inset-0 z-[200] flex flex-col"
+                  style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
+                  onClick={(e) => { if (e.target === e.currentTarget) { setExpandedCollageId(null); setIsEditingCollageName(false); } }}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-6 py-4 shrink-0">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => { setExpandedCollageId(null); setIsEditingCollageName(false); }}
+                        className="p-2 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                      </button>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          {isEditingCollageName ? (
+                            <>
+                              <input
+                                ref={collageNameInputRef}
+                                type="text"
+                                defaultValue={collage.name}
+                                autoFocus
+                                className="text-white text-2xl font-semibold bg-transparent border-0 outline-none focus:outline-none p-0 m-0"
+                                style={{ minWidth: 80, maxWidth: 300 }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') { const v = e.currentTarget.value.trim(); if (v) setCollages(prev => prev.map(c => c.id === collage.id ? { ...c, name: v } : c)); setIsEditingCollageName(false); }
+                                  if (e.key === 'Escape') setIsEditingCollageName(false);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <button onClick={(e) => { e.stopPropagation(); const v = collageNameInputRef.current?.value.trim(); if (v) setCollages(prev => prev.map(c => c.id === collage.id ? { ...c, name: v } : c)); setIsEditingCollageName(false); }} className="p-0.5 text-white/70 hover:text-white transition-colors"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></button>
+                              <button onClick={(e) => { e.stopPropagation(); setIsEditingCollageName(false); }} className="p-0.5 text-white/70 hover:text-white transition-colors"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                            </>
+                          ) : (
+                            <h2
+                              className="text-white text-2xl font-semibold cursor-pointer hover:bg-white/10 rounded px-1 -ml-1 py-0.5 transition-colors"
+                              onClick={(e) => { e.stopPropagation(); setIsEditingCollageName(true); }}
+                            >
+                              {collage.name}
+                              <svg className="w-5 h-5 inline-block ml-2 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                            </h2>
+                          )}
+                        </div>
+                        <p className="text-white/50 text-xs">{collage.imageKeys.length} items</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { setExpandedCollageId(null); setIsEditingCollageName(false); }}
+                      className="p-2 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {/* Image grid — exact same pipeline as main library gallery */}
+                  <div className="flex-1 overflow-y-auto px-4 md:px-8 lg:px-12 pb-6" style={{ overflowAnchor: 'none' }}>
+                    <div id="DndDescribedBy-1" style={{ display: 'none' }}>Press space bar to start a drag. When dragging, use arrow keys to move. Press space again to drop, or escape to cancel.</div>
+                    <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
+                    {(() => {
+                      const winW = typeof window !== 'undefined' ? window.innerWidth : 1200;
+                      const padTotal = winW >= 1024 ? 96 : winW >= 768 ? 64 : 32;
+                      const containerWidth = Math.max(300, winW - padTotal);
+                      const maxH = galleryMaxRowHeightPx;
+                      const gap = galleryGapPx;
+                      const getAspect = (a: typeof collageImages[number]) => Math.max(0.35, Math.min(2.8, parseAspectRatioValue(a.generation.aspect_ratio)));
+                      const rows: typeof collageImages[] = [];
+                      let cur: typeof collageImages = [];
+                      collageImages.forEach((a) => { cur.push(a); const as2 = cur.reduce((s, i) => s + getAspect(i), 0); const g = gap * Math.max(0, cur.length - 1); const rh = (containerWidth - g) / as2; if (cur.length >= 2 && rh <= maxH) { rows.push(cur); cur = []; } });
+                      if (cur.length > 0) rows.push(cur);
+                      return rows.map((row, ri) => {
+                        const as2 = row.reduce((s, a) => s + getAspect(a), 0);
+                        const g = gap * Math.max(0, row.length - 1);
+                        const justH = (containerWidth - g) / as2;
+                        const rowH = Math.min(maxH, Math.max(1, justH));
+                        return (
+                          <div key={ri} data-testid="virtuoso-row" data-index={ri} data-known-size={Math.round(rowH + gap)} className="flex items-start" style={{ gap, marginBottom: gap, overflowAnchor: 'none', contain: 'layout style' }}>
+                            {row.map((asset, ci) => {
+                              const w = Math.max(90, rowH * getAspect(asset));
+                              const tileCardStyle: React.CSSProperties = { borderRadius: `${cardRadius}px`, overflow: 'hidden', width: `${w}px`, height: `${rowH}px`, flex: '0 0 auto' };
+                              return (
+                                <DroppableTile key={`drop-${asset.key}`} id={asset.key}>
+                                  {({ dropNodeRef, isOver: tileIsOver }) => (
+                                <DraggableTile key={asset.key} id={asset.key}>
+                                  {({ dragAttributes, dragListeners, dragNodeRef, isDragging }) => (
+                                    <div ref={(node) => { dragNodeRef(node); dropNodeRef(node); }} data-tile-id={asset.generation.id} data-item-index={ci} role="button" tabIndex={0} aria-disabled={false} aria-roledescription="draggable" aria-describedby="DndDescribedBy-1" style={{ flex: '0 0 auto', opacity: isDragging ? 0.35 : 1, willChange: 'transform, opacity', contain: 'layout style paint', touchAction: 'none', position: 'relative' }} {...dragAttributes} {...dragListeners}>
+                                      <GalleryImageTile tileId={asset.generation.id} tileIndex={ci} imageUrl={asset.imageUrl} imageIndex={asset.imageIndex} prompt={asset.generation.prompt} model={asset.generation.model} createdAt={asset.generation.created_at} isFavorite={asset.generation.is_favorite} cardRadius={cardRadius} cardStyle={tileCardStyle} animatingStars={animatingStars} loadedImageUrlsRef={loadedImageUrlsRef}
+                                        onView={() => { if (!isDragging) setViewingImage({ generationId: asset.generation.id, imageIndex: asset.imageIndex }); }}
+                                        onToggleFavorite={() => { setAnimatingStars(prev => new Set(prev).add(asset.generation.id)); setTimeout(() => { setAnimatingStars(prev => { const n = new Set(prev); n.delete(asset.generation.id); return n; }); }, 700); handleToggleFavoriteGeneration(asset.generation.id); }}
+                                        onUsePrompt={() => handleUsePrompt(asset.generation.prompt)} onRerun={() => handleRerun(asset.generation)} onDownload={() => handleDownloadSingleImage(asset.imageUrl, asset.generation.id, asset.imageIndex)}
+                                      />
+                                      <button onClick={(e) => { e.stopPropagation(); setCollages(prev => prev.map(c => c.id === expandedCollageId ? { ...c, imageKeys: c.imageKeys.filter(k => k !== asset.key) } : c).filter(c => c.imageKeys.length > 0)); if (collage.imageKeys.length <= 1) { setExpandedCollageId(null); setIsEditingCollageName(false); } }} className="absolute top-2 left-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-white/60 hover:text-white hover:bg-red-500/80 opacity-0 hover:opacity-100 transition-all z-30" title="Remove from collection">
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
+                                      </button>
+                                    </div>
+                                  )}
+                                </DraggableTile>
+                                  )}
+                                </DroppableTile>
+                              );
+                            })}
+                          </div>
+                        );
+                      });
+                    })()}
+                    <DragOverlay>{activeDragId ? (() => { const da = collageImages.find(a => a.key === activeDragId); if (!da) return null; const asp = Math.max(0.35, parseAspectRatioValue(da.generation.aspect_ratio)); const h = galleryRowHeightPx; const w = h * asp; return (<div style={{ width: w, height: h, borderRadius: cardRadius, overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', opacity: 0.85 }}><img src={da.imageUrl} alt="Dragging" draggable={false} className="w-full h-full object-cover block" style={{ borderRadius: cardRadius }} /></div>); })() : null}</DragOverlay>
+                    </DndContext>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Empty state message - only when not generating and no generations */}
             {!isGenerating && generations.length === 0 && (
@@ -2697,6 +3299,7 @@ const ImageGenerationInterface2: React.FC = () => {
           </div>
           )}
         </div>
+      </DndContext>
       </div>
 
       {/* Image Viewer Modal */}
@@ -2720,7 +3323,7 @@ const ImageGenerationInterface2: React.FC = () => {
 
         return (
           <div
-            className="fixed inset-0 z-30 flex items-start md:items-center justify-center overflow-y-auto md:overflow-hidden"
+            className="fixed inset-0 z-[300] flex items-start md:items-center justify-center overflow-y-auto md:overflow-hidden"
           >
             {/* Backdrop */}
             <div
