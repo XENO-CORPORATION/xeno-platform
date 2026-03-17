@@ -899,11 +899,10 @@ const ImageGenerationInterface2: React.FC = () => {
   const desktopPromptMaxWidth = useMemo(() => {
     const fluidWidth = Math.round(viewportWidth * (isViewportConstrained ? 0.46 : 0.52));
     let maxWidth = Math.max(360, Math.min(835, fluidWidth));
-    if (isViewportConstrained) {
-      const searchShrink = showGallerySearch ? 132 : 0;
-      const modelShrink = showAiCompanies ? 92 : 0;
-      maxWidth -= searchShrink + modelShrink;
-    }
+    const searchShrink = showGallerySearch ? (isViewportConstrained ? 132 : 72) : 0;
+    const modelShrink = showAiCompanies ? (isViewportConstrained ? 92 : 0) : 0;
+    const combinedShrink = (isViewportConstrained && searchShrink > 0 && modelShrink > 0) ? 88 : 0;
+    maxWidth -= searchShrink + modelShrink + combinedShrink;
     return Math.max(280, Math.min(maxWidth, desktopPromptCollisionLimit ?? maxWidth));
   }, [viewportWidth, isViewportConstrained, showGallerySearch, showAiCompanies, desktopPromptCollisionLimit]);
 
