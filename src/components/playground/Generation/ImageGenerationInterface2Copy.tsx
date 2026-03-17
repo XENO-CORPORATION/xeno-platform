@@ -2407,7 +2407,7 @@ const ImageGenerationInterface2: React.FC = () => {
             <div className="ml-auto flex-1 flex items-center justify-end gap-2 lg:gap-3 min-w-0">
 
             {/* Search — collapsed matches settings button exactly, expanded uses flex:1 */}
-            <div ref={desktopSearchSlotRef} style={{ flex: showGallerySearch ? '1 1 0%' : '0 0 auto', maxWidth: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'none', transition: 'flex 200ms ease-out, max-width 200ms ease-out' }}>
+            <div ref={desktopSearchSlotRef} style={{ flex: showGallerySearch ? '1 1 0%' : '0 0 auto', maxWidth: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'none', transition: showGallerySearch ? 'flex 200ms ease-out, max-width 200ms ease-out' : 'none' }}>
               {!showGallerySearch ? (
                 /* Collapsed — exact same structure as settings button */
                 <div className="h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center px-1.5 lg:px-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
