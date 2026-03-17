@@ -957,11 +957,10 @@ const ImageGenerationInterface2: React.FC = () => {
     };
     let debounceId: ReturnType<typeof setTimeout> | null = null;
     const debouncedMeasure = () => { if (debounceId) clearTimeout(debounceId); debounceId = setTimeout(measure, 60); };
-    const frameId = requestAnimationFrame(measure);
-    // Re-measure after prompt shrink transition completes (100ms duration + buffer)
-    const delayed = setTimeout(measure, 150);
+    // Single delayed measure — waits for prompt shrink transition (100ms) to finish before measuring
+    const delayed = setTimeout(measure, 130);
     window.addEventListener('resize', debouncedMeasure);
-    return () => { window.removeEventListener('resize', debouncedMeasure); if (debounceId) clearTimeout(debounceId); cancelAnimationFrame(frameId); clearTimeout(delayed); };
+    return () => { window.removeEventListener('resize', debouncedMeasure); if (debounceId) clearTimeout(debounceId); clearTimeout(delayed); };
   }, [isMobile, viewportWidth, showAiCompanies, showGallerySearch, selectedModel, selectedCompany]);
 
   // Track scroll position for header background
