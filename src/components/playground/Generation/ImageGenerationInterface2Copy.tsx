@@ -881,18 +881,6 @@ const ImageGenerationInterface2: React.FC = () => {
   const desktopSearchSlotRef = useRef<HTMLDivElement | null>(null);
   const [desktopLibrarySearchWidth, setDesktopLibrarySearchWidth] = useState(48);
   const [desktopPromptCollisionLimit, setDesktopPromptCollisionLimit] = useState<number | null>(null);
-  const isViewportConstrained = !isMobile && viewportWidth < 1280;
-  const desktopPromptMaxWidth = useMemo(() => {
-    const fluidWidth = Math.round(viewportWidth * (isViewportConstrained ? 0.46 : 0.52));
-    let maxWidth = Math.max(360, Math.min(835, fluidWidth));
-    // Shrink when search or models are open in constrained viewport
-    if (isViewportConstrained) {
-      const searchShrink = showGallerySearch ? 132 : 0;
-      const modelShrink = showAiCompanies ? 92 : 0;
-      maxWidth -= searchShrink + modelShrink;
-    }
-    return Math.max(280, Math.min(maxWidth, desktopPromptCollisionLimit ?? maxWidth));
-  }, [viewportWidth, isViewportConstrained, showGallerySearch, showAiCompanies, desktopPromptCollisionLimit]);
   const [ingredientImages, setIngredientImages] = useState<{ id: string; url: string }[]>([]);
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [gallerySearchQuery, setGallerySearchQuery] = useState('');
@@ -907,6 +895,17 @@ const ImageGenerationInterface2: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const isViewportConstrained = !isMobile && viewportWidth < 1280;
+  const desktopPromptMaxWidth = useMemo(() => {
+    const fluidWidth = Math.round(viewportWidth * (isViewportConstrained ? 0.46 : 0.52));
+    let maxWidth = Math.max(360, Math.min(835, fluidWidth));
+    if (isViewportConstrained) {
+      const searchShrink = showGallerySearch ? 132 : 0;
+      const modelShrink = showAiCompanies ? 92 : 0;
+      maxWidth -= searchShrink + modelShrink;
+    }
+    return Math.max(280, Math.min(maxWidth, desktopPromptCollisionLimit ?? maxWidth));
+  }, [viewportWidth, isViewportConstrained, showGallerySearch, showAiCompanies, desktopPromptCollisionLimit]);
 
   // Track viewport state for responsive header behavior
   useEffect(() => {
