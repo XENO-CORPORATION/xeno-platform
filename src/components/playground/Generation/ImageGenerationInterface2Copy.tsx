@@ -939,7 +939,8 @@ const ImageGenerationInterface2: React.FC = () => {
       if (!promptRect || !settingsRect) return;
       const headerGapPx = viewportWidth >= 1024 ? 12 : 8;
       // Search width = gap between prompt right edge and settings left edge
-      const available = settingsRect.left - promptRect.right - headerGapPx * 2;
+      // Subtract one headerGapPx for the left gap (prompt-to-search). The right gap (search-to-settings) comes from the parent flex gap.
+      const available = settingsRect.left - promptRect.right - headerGapPx;
       setDesktopLibrarySearchWidth(Math.max(40, available));
       // Collision limit = max prompt width before it touches model popouts
       if (modelNode && searchSlotRect) {
