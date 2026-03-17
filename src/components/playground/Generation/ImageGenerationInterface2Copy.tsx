@@ -2406,8 +2406,8 @@ const ImageGenerationInterface2: React.FC = () => {
             {/* Right-side controls group — flex-1 so search can expand into available space */}
             <div className="ml-auto flex-1 flex items-center justify-end gap-2 lg:gap-3 min-w-0">
 
-            {/* Search — collapsed matches settings button exactly, expanded uses flex:1 */}
-            <div ref={desktopSearchSlotRef} style={{ flex: showGallerySearch ? '1 1 0%' : '0 0 auto', maxWidth: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'none', transition: showGallerySearch ? 'flex 200ms ease-out, max-width 200ms ease-out' : 'none' }}>
+            {/* Search — collapsed matches settings button exactly, expanded reveals from right */}
+            <div ref={desktopSearchSlotRef} style={{ flex: showGallerySearch ? '1 1 0%' : '0 0 auto', maxWidth: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'none' }}>
               {!showGallerySearch ? (
                 /* Collapsed — exact same structure as settings button */
                 <div className="h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center justify-center px-1.5 lg:px-2 shadow-lg shadow-black/40 relative bg-[#1a1a1c]" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
@@ -2423,9 +2423,16 @@ const ImageGenerationInterface2: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                /* Expanded — input + close icon */
-                <div className="h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center shadow-lg shadow-black/40 bg-[#1a1a1c] overflow-hidden" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)' }}>
-                  <div className="flex-1 flex items-center pl-3 pr-1 min-w-0">
+                /* Expanded — reveals from right with animation */
+                <div
+                  className="h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg flex items-center shadow-lg shadow-black/40 bg-[#1a1a1c] overflow-hidden"
+                  style={{
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
+                    animation: 'searchBarExpand 200ms ease-out both',
+                    transformOrigin: 'right center',
+                  }}
+                >
+                  <div className="flex-1 flex items-center pl-3 pr-1 min-w-0" style={{ animation: 'searchInputFadeIn 150ms ease-out 100ms both' }}>
                     <input
                       type="text"
                       value={gallerySearchQuery}
@@ -3048,6 +3055,8 @@ const ImageGenerationInterface2: React.FC = () => {
                       @keyframes sweep { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
                       @keyframes letterFade { 0%,8% { opacity: 0; } 16%,92% { opacity: 1; } 100% { opacity: 0; } }
                       @keyframes virtuosoTileFadeIn { 0% { opacity: 0; transform: translateY(12px); } 100% { opacity: 1; transform: translateY(0); } }
+                      @keyframes searchBarExpand { 0% { opacity: 0; transform: scaleX(0.3); } 100% { opacity: 1; transform: scaleX(1); } }
+                      @keyframes searchInputFadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
                       .virtuoso-tile-mount { animation: virtuosoTileFadeIn 320ms ease-out both; }
                       @keyframes skeletonShimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
                       .tile-skeleton-bg { background: linear-gradient(90deg, #111113 25%, #1a1a1e 37%, #111113 63%); background-size: 200% 100%; animation: skeletonShimmer 1.6s ease-in-out infinite; }
