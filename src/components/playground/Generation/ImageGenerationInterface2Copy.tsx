@@ -2403,25 +2403,22 @@ const ImageGenerationInterface2: React.FC = () => {
             )}
             </div>
 
-            {/* Right-side controls group */}
-            <div className="ml-auto flex items-center gap-2 lg:gap-3 min-w-0">
+            {/* Right-side controls group — flex-1 so search can expand into available space */}
+            <div className="ml-auto flex-1 flex items-center justify-end gap-2 lg:gap-3 min-w-0">
 
-            {/* Search — 3-layer approach: outer slot (always full width) → inner bar (animates width) → content */}
+            {/* Search — single flex element: collapsed = fixed width, expanded = flex:1 fills remaining space */}
             <div
               ref={desktopSearchSlotRef}
-              className="relative h-10 lg:h-12 flex items-center justify-end min-w-0"
-              style={{ width: `${desktopLibrarySearchWidth}px` }}
+              className="h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg shadow-lg shadow-black/40 bg-[#1a1a1c] flex items-center overflow-hidden min-w-0"
+              style={{
+                flex: showGallerySearch ? '1 1 0%' : '0 0 auto',
+                width: showGallerySearch ? undefined : '44px',
+                transition: 'flex 200ms ease-out, width 200ms ease-out',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
+              }}
             >
-              {/* Layer 2: Inner bar — absolute, right-aligned, transitions width from icon to full */}
-              <div
-                className="absolute right-0 top-0 h-10 lg:h-12 overflow-hidden backdrop-blur-md border border-[#3a3a3d] rounded-lg shadow-lg shadow-black/40 bg-[#1a1a1c] transition-[width] duration-200 ease-out"
-                style={{
-                  width: showGallerySearch ? '100%' : '44px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
-                }}
-              />
-              {/* Layer 3a: Input area — fades in when expanded */}
-              <div className={`absolute inset-y-0 left-0 right-10 lg:right-12 flex items-center pl-3 pr-2 transition-opacity duration-150 ${showGallerySearch ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+              {/* Input area — fades in/out */}
+              <div className={`flex-1 flex items-center pl-3 pr-1 min-w-0 transition-opacity duration-150 ${showGallerySearch ? 'opacity-100' : 'opacity-0 pointer-events-none w-0'}`}>
                 <input
                   type="text"
                   value={gallerySearchQuery}
@@ -2438,7 +2435,7 @@ const ImageGenerationInterface2: React.FC = () => {
                   className="w-full min-w-0 bg-transparent text-white/90 text-sm placeholder:text-white/35 border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
                 />
               </div>
-              {/* Layer 3b: Icon button — always right-aligned, stays pinned */}
+              {/* Icon button — always visible, fills the container when collapsed */}
               <button
                 onClick={() => {
                   if (showGallerySearch) {
@@ -2448,7 +2445,7 @@ const ImageGenerationInterface2: React.FC = () => {
                     setShowGallerySearch(true);
                   }
                 }}
-                className="absolute right-0 top-0 z-10 h-full w-10 lg:w-12 rounded-lg flex items-center justify-center transition-all hover:bg-white/5"
+                className="shrink-0 p-2 rounded flex items-center justify-center transition-all hover:bg-white/5"
                 aria-label="Toggle search"
               >
                 <svg className={`w-6 h-6 transition-colors ${showGallerySearch || gallerySearchQuery ? 'text-white/80' : 'text-white/40'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
