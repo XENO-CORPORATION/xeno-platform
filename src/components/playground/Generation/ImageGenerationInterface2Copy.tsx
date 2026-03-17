@@ -938,13 +938,10 @@ const ImageGenerationInterface2: React.FC = () => {
       const settingsRect = desktopSettingsButtonRef.current?.getBoundingClientRect();
       if (!promptRect || !settingsRect) return;
       const flexGapPx = viewportWidth >= 1024 ? 12 : 8;
-      // Use the search slot's own position to measure accurately
-      const searchSlotLeft = desktopSearchSlotRef.current?.getBoundingClientRect().left ?? settingsRect.left;
-      // Right gap = settingsRect.left - (searchSlotLeft + searchWidth) = flex gap (automatic)
-      // Left gap should equal the flex gap: searchSlotLeft should be promptRect.right + flexGapPx
-      // So search width = settingsRect.left - promptRect.right - flexGapPx * 2 would make left=right=flexGap
-      // But flex gap on the right is already in the layout, so we just need one for the left
-      const available = settingsRect.left - promptRect.right - flexGapPx;
+      // Between search slot and settings there is one flex gap (automatic from parent).
+      // We need the same gap on the left (prompt-to-search). So subtract flexGapPx * 2:
+      // one for the right (already in settingsRect.left) and one for the left.
+      const available = settingsRect.left - promptRect.right - flexGapPx * 2;
       setDesktopLibrarySearchWidth(Math.max(40, available));
       // Collision limit = max prompt width before it touches model popouts
       if (modelNode && searchSlotRect) {
