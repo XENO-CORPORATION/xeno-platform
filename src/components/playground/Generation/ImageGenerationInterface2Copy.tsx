@@ -2406,14 +2406,14 @@ const ImageGenerationInterface2: React.FC = () => {
             {/* Right-side controls group — flex-1 so search can expand into available space */}
             <div className="ml-auto flex-1 flex items-center justify-end gap-2 lg:gap-3 min-w-0">
 
-            {/* Search — single flex element: collapsed = fixed width, expanded = flex:1 fills remaining space */}
+            {/* Search — single flex element: collapsed = fixed, expanded = flex:1 capped by maxWidth */}
             <div
               ref={desktopSearchSlotRef}
-              className="h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg shadow-lg shadow-black/40 bg-[#1a1a1c] flex items-center overflow-hidden min-w-0"
+              className={`h-10 lg:h-12 backdrop-blur-md border border-[#3a3a3d] rounded-lg shadow-lg shadow-black/40 bg-[#1a1a1c] flex items-center overflow-hidden min-w-0 ${!showGallerySearch ? 'justify-center px-1.5 lg:px-2' : ''}`}
               style={{
                 flex: showGallerySearch ? '1 1 0%' : '0 0 auto',
-                width: showGallerySearch ? undefined : '44px',
-                transition: 'flex 200ms ease-out, width 200ms ease-out',
+                maxWidth: showGallerySearch ? `${desktopLibrarySearchWidth}px` : 'none',
+                transition: 'flex 200ms ease-out, max-width 200ms ease-out',
                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 0, 0, 0.3)',
               }}
             >
