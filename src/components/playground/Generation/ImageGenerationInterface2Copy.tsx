@@ -909,24 +909,25 @@ const ImageGenerationInterface2: React.FC = () => {
 
   // Track viewport state for responsive header behavior
   useEffect(() => {
-    const checkViewportState = () => {
+    const updateSize = () => {
+      setIsMobile(window.innerWidth < 768);
+      setViewportWidth(window.innerWidth);
+    };
+    const onResize = () => {
+      updateSize();
+      // Auto-close model flyout and search only on actual resize, not on state change
       const width = window.innerWidth;
-      setIsMobile(width < 768);
-      setViewportWidth(width);
-      // Auto-close model flyout and search when viewport gets too narrow
       if (width >= 768 && width < 960) {
         setShowAiCompanies(false);
         setSelectedCompany(null);
-        if (showGallerySearch) {
-          setShowGallerySearch(false);
-          setGallerySearchQuery('');
-        }
+        setShowGallerySearch(false);
+        setGallerySearchQuery('');
       }
     };
-    checkViewportState();
-    window.addEventListener('resize', checkViewportState);
-    return () => window.removeEventListener('resize', checkViewportState);
-  }, [showGallerySearch]);
+    updateSize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Measure available width for search bar + prompt collision limit
   useEffect(() => {
@@ -955,10 +956,12 @@ const ImageGenerationInterface2: React.FC = () => {
     };
     let debounceId: ReturnType<typeof setTimeout> | null = null;
     const debouncedMeasure = () => { if (debounceId) clearTimeout(debounceId); debounceId = setTimeout(measure, 60); };
-    measure();
+    // Measure immediately, then again after layout settles (prompt shrink transition)
+    const frameId = requestAnimationFrame(measure);
     window.addEventListener('resize', debouncedMeasure);
-    const delayed = setTimeout(measure, 180);
-    return () => { window.removeEventListener('resize', debouncedMeasure); if (debounceId) clearTimeout(debounceId); clearTimeout(delayed); };
+    const delayed1 = setTimeout(measure, 120);
+    const delayed2 = setTimeout(measure, 300);
+    return () => { window.removeEventListener('resize', debouncedMeasure); if (debounceId) clearTimeout(debounceId); cancelAnimationFrame(frameId); clearTimeout(delayed1); clearTimeout(delayed2); };
   }, [isMobile, viewportWidth, showAiCompanies, showGallerySearch, selectedModel, selectedCompany]);
 
   // Track scroll position for header background
