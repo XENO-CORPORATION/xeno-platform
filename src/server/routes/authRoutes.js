@@ -348,7 +348,7 @@ router.post('/init', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Database initialization failed',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });
@@ -434,7 +434,7 @@ router.post('/register', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Registration failed',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });
@@ -532,7 +532,7 @@ router.post('/login', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Login failed',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });
@@ -604,7 +604,7 @@ router.get('/validate', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Token validation failed',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });
@@ -721,7 +721,7 @@ router.post('/migrate', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Migration failed',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });
@@ -785,7 +785,7 @@ router.get('/me', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch user profile',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });
@@ -894,7 +894,7 @@ router.put('/profile', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to update profile',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });
@@ -976,7 +976,7 @@ router.put('/password', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to change password',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });
@@ -1054,7 +1054,7 @@ router.get('/usage', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch usage data',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });
@@ -1151,7 +1151,7 @@ router.post('/use-credits', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to use credits',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });
@@ -1224,7 +1224,7 @@ router.delete('/account', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to delete account',
-      message: error.message
+      // SECURITY: error.message not exposed to clients
     });
   }
 });

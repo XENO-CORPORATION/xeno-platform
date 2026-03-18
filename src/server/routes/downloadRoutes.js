@@ -21,7 +21,7 @@ router.get('/extension/releases', async (req, res) => {
     console.error('[Download] Error fetching extension releases:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to fetch extension release metadata',
+      error:'Failed to fetch extension release metadata',
     });
   }
 });
@@ -61,7 +61,7 @@ router.post('/info', async (req, res) => {
     console.error('[Download] Error fetching info:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to fetch media info',
+      error:'Failed to fetch media info',
     });
   }
 });
@@ -100,7 +100,7 @@ router.post('/start', async (req, res) => {
     console.error('[Download] Error starting download:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to start download',
+      error:'Failed to start download',
     });
   }
 });
@@ -130,7 +130,7 @@ router.get('/status/:id', (req, res) => {
     console.error('[Download] Error getting status:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to get download status',
+      error:'Failed to get download status',
     });
   }
 });
@@ -151,7 +151,7 @@ router.get('/list', (req, res) => {
     console.error('[Download] Error listing downloads:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to list downloads',
+      error:'Failed to list downloads',
     });
   }
 });
@@ -219,7 +219,7 @@ router.get('/file/:id', (req, res) => {
     console.error('[Download] Error serving file:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to serve file',
+      error:'Failed to serve file',
     });
   }
 });
@@ -242,7 +242,7 @@ router.delete('/:id', (req, res) => {
     console.error('[Download] Error deleting download:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to delete download',
+      error:'Failed to delete download',
     });
   }
 });
@@ -263,7 +263,7 @@ router.post('/cleanup', (req, res) => {
     console.error('[Download] Error during cleanup:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Cleanup failed',
+      error:'Cleanup failed',
     });
   }
 });
@@ -294,7 +294,7 @@ router.post('/cookies', (req, res) => {
     console.error('[Download] Error saving cookies:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to save cookies',
+      error:'Failed to save cookies',
     });
   }
 });
@@ -317,7 +317,7 @@ router.get('/cookies/status', (req, res) => {
     console.error('[Download] Error checking cookies:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to check cookies status',
+      error:'Failed to check cookies status',
     });
   }
 });
@@ -338,7 +338,7 @@ router.delete('/cookies', (req, res) => {
     console.error('[Download] Error deleting cookies:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to delete cookies',
+      error:'Failed to delete cookies',
     });
   }
 });

@@ -280,11 +280,11 @@ const falProxy = createProxyMiddleware({
   onError: (err, req, res) => {
     console.error('FAL.ai Proxy error:', err);
     res.status(500).json({
-      error: 'FAL.ai Proxy Error',
-      message: err.message
+      error: 'FAL.ai Proxy Error'
+      // SECURITY: Do not expose err.message to clients
     });
   },
-  logLevel: 'debug'
+  logLevel: 'warn'
 });
 
 // Apply FAL.ai proxy middleware
@@ -627,7 +627,7 @@ app.get('/api/health', async (req, res) => {
     health.checks.database = { status: 'ok', responseTime: Date.now() - dbStart };
   } catch (err) {
     health.status = 'degraded';
-    health.checks.database = { status: 'error', error: err.message };
+    health.checks.database = { status: 'error', error: 'Database connection failed' };
   }
 
   const statusCode = health.status === 'ok' ? 200 : 503;
@@ -1122,8 +1122,9 @@ app.use('/api/chat/generate', (err, req, res, next) => {
     }
     return res.status(500).json({
       error: 'Server Error',
-      message: err.message || 'An unexpected error occurred',
+      message: 'An unexpected error occurred',
       code: 'INTERNAL_ERROR'
+      // SECURITY: Do not expose err.message to clients
     });
   }
   next();
@@ -1390,8 +1391,7 @@ app.post('/api/chat/generate', async (req, res) => {
 
         } catch (error) {
             console.error('Error in conversational image generation task:', error);
-            const message = error instanceof Error ? error.message : 'An unexpected error occurred during image generation.';
-            return res.status(500).json({ error: `Failed to generate image: ${message}` });
+            return res.status(500).json({ error: 'Failed to generate image. Please try again.' });
         }
     }
     // <<< END: Image Generation Task Handling >>>
@@ -1505,8 +1505,7 @@ app.post('/api/chat/generate', async (req, res) => {
 
         } catch (error) {
             console.error('Error in prompt refinement task:', error);
-            const message = error instanceof Error ? error.message : 'An unexpected error occurred during prompt refinement.';
-            return res.status(500).json({ error: `Failed to refine prompt: ${message}` });
+            return res.status(500).json({ error: 'Failed to refine prompt. Please try again.' });
         }
     }
     // <<< END: Prompt Refinement Task Handling >>>
@@ -1685,8 +1684,7 @@ app.post('/api/chat/generate', async (req, res) => {
 
         } catch (error) {
             console.error('Error in image edit task:', error);
-            const message = error instanceof Error ? error.message : 'An unexpected error occurred during image editing.';
-            return res.status(500).json({ error: `Failed to edit image: ${message}` });
+            return res.status(500).json({ error: 'Failed to edit image. Please try again.' });
         }
     }
     // <<< END: Image Edit Task Handling >>>
@@ -1846,8 +1844,7 @@ app.post('/api/chat/generate', async (req, res) => {
 
         } catch (error) {
             console.error('🚨 Error in FAL.ai SAM 2 segmentation task:', error);
-            const message = error instanceof Error ? error.message : 'An unexpected error occurred during segmentation.';
-            return res.status(500).json({ error: `Failed to segment image: ${message}` });
+            return res.status(500).json({ error: 'Failed to segment image. Please try again.' });
         }
     }
     // <<< END: FAL.ai SAM 2 Segmentation Task Handling >>>
@@ -2023,8 +2020,7 @@ app.post('/api/chat/generate', async (req, res) => {
 
         } catch (error) {
             console.error('🚨 Error in FAL.ai IC-Light-v2 relight task:', error);
-            const message = error instanceof Error ? error.message : 'An unexpected error occurred during IC-Light-v2 relight.';
-            return res.status(500).json({ error: `Failed to relight image: ${message}` });
+            return res.status(500).json({ error: 'Failed to relight image. Please try again.' });
         }
     }
     // <<< END: FAL.ai IC-Light-v2 Relight Task Handling >>>
@@ -2204,8 +2200,7 @@ app.post('/api/chat/generate', async (req, res) => {
 
         } catch (error) {
             console.error('🚨 Error in FAL.ai IC-Light-v2 background change task:', error);
-            const message = error instanceof Error ? error.message : 'An unexpected error occurred during IC-Light-v2 background change.';
-            return res.status(500).json({ error: `Failed to change background: ${message}` });
+            return res.status(500).json({ error: 'Failed to change background. Please try again.' });
         }
     }
     // <<< END: FAL.ai IC-Light-v2 Background Change Task Handling >>>
@@ -2923,8 +2918,7 @@ app.post('/api/chat/generate', async (req, res) => {
 
     } catch (error) {
         console.error('Error in /api/chat/generate route:', error);
-        const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
-        const errorResponsePayload = { error: `Failed to generate chat response: ${message}` };
+        const errorResponsePayload = { error: 'Failed to generate chat response. Please try again.' };
         console.log("[BACKEND CATCH] Sending error to frontend:", errorResponsePayload);
         return res.status(500).json(errorResponsePayload);
     }
@@ -3302,7 +3296,7 @@ app.post('/api/generate-image', databaseMiddleware, authMiddleware, async (req, 
   } catch (error) {
     console.error('Error generating image:', error);
     return res.status(500).json({ 
-      error: `Failed to generate image: ${error.message}` 
+      error: 'Failed to generate image. Please try again.'
     });
   }
 });
@@ -3375,13 +3369,13 @@ app.post('/api/openai/images/generations', databaseMiddleware, authMiddleware, a
     
     // Handle specific OpenAI API errors
     if (error.status) {
-      return res.status(error.status).json({ 
-        error: error.message || 'OpenAI API error'
+      return res.status(error.status).json({
+        error: 'Image generation API error'
       });
     }
-    
-    return res.status(500).json({ 
-      error: `Failed to generate image with GPT Image 1: ${error.message}` 
+
+    return res.status(500).json({
+      error: 'Failed to generate image. Please try again.'
     });
   }
 });
@@ -3472,7 +3466,7 @@ app.post('/api/openai/images/edits', databaseMiddleware, authMiddleware, upload.
     }
     
     res.status(500).json({
-      error: error.message || 'OpenAI Image Edit API error'
+      error: 'Image edit failed. Please try again.'
     });
   }
 });
@@ -3537,7 +3531,7 @@ app.post('/api/openai/images/variations', databaseMiddleware, authMiddleware, up
     }
     
     res.status(500).json({
-      error: error.message || 'OpenAI Image Variations API error'
+      error: 'Image variations failed. Please try again.'
     });
   }
 });
@@ -3618,7 +3612,7 @@ app.post('/api/openai/responses/create', databaseMiddleware, authMiddleware, asy
     console.error('Error in OpenAI conversational image generation:', error);
     
     res.status(500).json({
-      error: error.message || 'OpenAI Responses API error'
+      error: 'Conversational image generation failed. Please try again.'
     });
   }
 });
@@ -3664,7 +3658,7 @@ app.get('/api/piston/runtimes', databaseMiddleware, authMiddleware, async (req, 
 
   } catch (error) {
     console.error('Error fetching XenoRun runtimes:', error);
-    res.status(500).json({ error: 'Failed to fetch runtimes', message: error instanceof Error ? error.message : 'Unknown server error' });
+    res.status(500).json({ error: 'Failed to fetch runtimes' });
   }
 });
 
@@ -3728,7 +3722,7 @@ app.post('/api/piston/execute', databaseMiddleware, authMiddleware, async (req, 
 
   } catch (error) {
     console.error('Error executing via XenoRun:', error);
-    res.status(500).json({ error: 'Failed to execute code', message: error instanceof Error ? error.message : 'Unknown server error' });
+    res.status(500).json({ error: 'Failed to execute code' });
   }
 });
 
@@ -4970,7 +4964,7 @@ async function handleFileOperation(ws, message) {
     console.error('File operation error:', error);
     ws.send(JSON.stringify({
       type: 'error',
-      message: error.message
+      message: 'File operation failed'
     }));
   }
 }

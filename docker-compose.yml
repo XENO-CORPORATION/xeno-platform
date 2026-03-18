@@ -10,7 +10,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     networks:
       - xenostudio-network
     restart: unless-stopped
@@ -41,12 +41,12 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     networks:
       - xenostudio-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-xenostudio_redis_secure_2024}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -233,7 +233,7 @@ services:
       - xeno_search_cache:/app/.cache
       - xeno_search_logs:/app/logs
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       redis:
         condition: service_started
@@ -270,7 +270,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "3002:3000"
+      - "127.0.0.1:3002:3000"
     networks:
       - xenostudio-network
     restart: unless-stopped
@@ -287,7 +287,7 @@ services:
       dockerfile: Dockerfile.latex
     container_name: xenostudio-latex
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     networks:
       - xenostudio-network
     restart: unless-stopped
@@ -377,7 +377,7 @@ services:
       - VNC_COL_DEPTH=24
     shm_size: "1gb"
     ports:
-      - "6901:6901"
+      - "127.0.0.1:6901:6901"
     networks:
       - xenostudio-network
     restart: unless-stopped
@@ -400,7 +400,7 @@ services:
       - ENABLE_DEBUGGER=false
       - ENABLE_CORS=true
     ports:
-      - "3003:3000"
+      - "127.0.0.1:3003:3000"
     networks:
       - xenostudio-network
     restart: unless-stopped
@@ -421,7 +421,7 @@ services:
     volumes:
       - meilisearch_data:/meili_data
     ports:
-      - "7700:7700"
+      - "127.0.0.1:7700:7700"
     networks:
       - xenostudio-network
     restart: unless-stopped

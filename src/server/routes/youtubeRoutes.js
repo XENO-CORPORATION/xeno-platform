@@ -387,7 +387,7 @@ router.post('/init', requireAuth, async (req, res) => {
     res.json({ success: true, message: 'YouTube tables created successfully' });
   } catch (error) {
     console.error('Failed to initialize YouTube schema:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -428,7 +428,7 @@ router.get('/auth', requireAuth, (req, res) => {
     res.json({ success: true, authUrl });
   } catch (error) {
     console.error('Failed to generate auth URL:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -552,7 +552,7 @@ publicRouter.get('/callback', async (req, res) => {
     res.redirect('/overview/content-creation/youtube?success=connected');
   } catch (error) {
     console.error('OAuth callback error:', error);
-    res.redirect('/overview/content-creation/youtube?error=' + encodeURIComponent(error.message));
+    res.redirect('/overview/content-creation/youtube?error=connection_failed');
   }
 });
 
@@ -580,7 +580,7 @@ router.get('/channels', requireAuth, async (req, res) => {
     res.json({ success: true, channels: result.rows });
   } catch (error) {
     console.error('Failed to fetch channels:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -607,7 +607,7 @@ router.get('/channels/:id', requireAuth, async (req, res) => {
     res.json({ success: true, channel: result.rows[0] });
   } catch (error) {
     console.error('Failed to fetch channel:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -637,7 +637,7 @@ router.delete('/channels/:id', requireAuth, async (req, res) => {
     res.json({ success: true, message: 'Channel disconnected successfully' });
   } catch (error) {
     console.error('Failed to disconnect channel:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -689,7 +689,7 @@ router.post('/channels/:id/reauthorize', requireAuth, async (req, res) => {
     res.json({ success: true, authUrl });
   } catch (error) {
     console.error('Failed to generate reauthorization URL:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -763,7 +763,7 @@ router.post('/channels/:id/sync', requireAuth, async (req, res) => {
       [error.message, req.params.id]
     );
     console.error('Failed to sync channel:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -897,7 +897,7 @@ router.get('/analytics/overview', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to fetch combined analytics:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -978,7 +978,7 @@ router.get('/analytics/overview/:channelId', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to fetch channel analytics:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -1065,7 +1065,7 @@ router.get('/analytics/videos/:channelId', requireAuth, async (req, res) => {
     res.json({ success: true, videos });
   } catch (error) {
     console.error('Failed to fetch videos analytics:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -1165,7 +1165,7 @@ router.get('/analytics/demographics/:channelId', requireAuth, async (req, res) =
     res.json({ success: true, demographics });
   } catch (error) {
     console.error('Failed to fetch demographics:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -1236,7 +1236,7 @@ router.get('/analytics/traffic/:channelId', requireAuth, async (req, res) => {
     res.json({ success: true, sources: trafficSources });
   } catch (error) {
     console.error('Failed to fetch traffic sources:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -1298,7 +1298,7 @@ router.get('/analytics/daily/:channelId', requireAuth, async (req, res) => {
     res.json({ success: true, daily: dailyData });
   } catch (error) {
     console.error('Failed to fetch daily analytics:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -1383,7 +1383,7 @@ router.get('/videos/:channelId', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to fetch videos:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -1588,7 +1588,7 @@ router.get('/video/:channelId/:videoId', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to fetch video details:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -2626,7 +2626,7 @@ router.get('/dashboard/:channelId', requireAuth, async (req, res) => {
     }
   } catch (error) {
     console.error('Failed to fetch dashboard data:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -2709,7 +2709,7 @@ router.get('/realtime/:channelId', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to fetch real-time data:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -2813,7 +2813,7 @@ router.get('/comments/:channelId', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to fetch comments:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -2845,7 +2845,7 @@ router.get('/groups', async (req, res) => {
     res.json({ success: true, groups: result.rows });
   } catch (error) {
     console.error('Failed to fetch groups:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -2886,7 +2886,7 @@ router.post('/groups', async (req, res) => {
       return res.status(400).json({ success: false, error: 'A group with this name already exists' });
     }
     console.error('Failed to create group:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -2917,7 +2917,7 @@ router.put('/groups/:id', async (req, res) => {
     res.json({ success: true, group: result.rows[0] });
   } catch (error) {
     console.error('Failed to update group:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -2941,7 +2941,7 @@ router.delete('/groups/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to delete group:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -2968,7 +2968,7 @@ router.put('/groups/reorder', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to reorder groups:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3014,7 +3014,7 @@ router.post('/groups/:id/channels', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to add channel to group:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3043,7 +3043,7 @@ router.delete('/groups/:id/channels/:channelId', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to remove channel from group:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3076,7 +3076,7 @@ router.put('/groups/:id/channels/reorder', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to reorder channels in group:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3099,7 +3099,7 @@ router.get('/channels/:id/groups', async (req, res) => {
     res.json({ success: true, groups: result.rows });
   } catch (error) {
     console.error('Failed to fetch channel groups:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3126,7 +3126,7 @@ router.get('/languages', async (req, res) => {
     res.json({ success: true, languages: result.rows });
   } catch (error) {
     console.error('Failed to fetch languages:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3147,7 +3147,7 @@ router.get('/channels/:id/languages', async (req, res) => {
     res.json({ success: true, languages: result.rows.map(r => r.language_code) });
   } catch (error) {
     console.error('Failed to fetch channel languages:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3183,7 +3183,7 @@ router.post('/channels/:id/languages', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to add language to channel:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3212,7 +3212,7 @@ router.delete('/channels/:id/languages/:languageCode', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to remove language from channel:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3299,7 +3299,7 @@ router.post('/sync/all', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Background sync failed:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3352,7 +3352,7 @@ router.get('/sync/status', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to get sync status:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3386,7 +3386,7 @@ router.post('/cache/clear', requireAuth, async (req, res) => {
     res.json({ success: true, message: 'Cache cleared successfully' });
   } catch (error) {
     console.error('Failed to clear cache:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3532,7 +3532,7 @@ router.get('/history/:channelId', requireAuth, async (req, res) => {
     }
   } catch (error) {
     console.error('Failed to fetch channel history:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3596,7 +3596,7 @@ router.post('/history/:channelId/snapshot', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to record snapshot:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -3656,7 +3656,7 @@ router.post('/history/sync-all', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to sync all snapshots:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 

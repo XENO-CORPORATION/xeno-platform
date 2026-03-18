@@ -179,7 +179,7 @@ router.get('/', getUserId, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to list filesystem entries',
-      message: error.message
+      message: 'Operation failed'
     });
   }
 });
@@ -265,7 +265,7 @@ router.post('/folders', getUserId, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to create folder',
-      message: error.message
+      message: 'Operation failed'
     });
   }
 });
@@ -385,7 +385,7 @@ router.post('/upload', getUserId, upload.array('files'), async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to upload files',
-      message: error.message
+      message: 'Operation failed'
     });
   }
 });
@@ -446,7 +446,7 @@ router.get('/:id', getUserId, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to get filesystem entry',
-      message: error.message
+      message: 'Operation failed'
     });
   }
 });
@@ -571,7 +571,7 @@ router.put('/:id', getUserId, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to update filesystem entry',
-      message: error.message
+      message: 'Operation failed'
     });
   }
 });
@@ -629,7 +629,7 @@ router.delete('/:id', getUserId, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to delete filesystem entry',
-      message: error.message
+      message: 'Operation failed'
     });
   }
 });
@@ -682,7 +682,7 @@ router.get('/:id/download', getUserId, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to download file',
-      message: error.message
+      message: 'Operation failed'
     });
   }
 });
@@ -738,7 +738,7 @@ router.get('/search', getUserId, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to search filesystem',
-      message: error.message
+      message: 'Operation failed'
     });
   }
 });
@@ -787,7 +787,7 @@ router.get('/:id/history', getUserId, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to get file history',
-      message: error.message
+      message: 'Operation failed'
     });
   }
 });
