@@ -7,7 +7,11 @@
   "scripts": {
     "start": "node --max-http-header-size=80000 --max-old-space-size=4096 index.js",
     "dev": "nodemon --max-http-header-size=80000 --max-old-space-size=4096 index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node tests/run-all.js",
+    "test:health": "node tests/health.test.js",
+    "test:auth": "node tests/auth.test.js",
+    "test:security": "node tests/security.test.js",
+    "test:rate-limiting": "node tests/rate-limiting.test.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
