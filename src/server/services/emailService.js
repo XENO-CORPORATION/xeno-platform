@@ -176,11 +176,51 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
   }
 
   try {
-    // In production, integrate with SES, SendGrid, Resend, etc.
-    if (process.env.NODE_ENV === 'production' && process.env.SMTP_HOST) {
-      // TODO: Integrate with actual email provider
-      // For now, log the email details
-      console.log(`[Email] Would send to ${toEmail}: ${subject}`);
+    // Production: send via Resend API
+    if (process.env.RESEND_API_KEY) {
+      const resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM || 'XENO <noreply@xenostudio.ai>',
+          to: [toEmail],
+          subject,
+          html,
+        }),
+      });
+
+      if (!resendResponse.ok) {
+        const errBody = await resendResponse.text();
+        throw new Error(`Resend API error ${resendResponse.status}: ${errBody}`);
+      }
+
+      const resendData = await resendResponse.json();
+      console.log(`[Email] Sent via Resend to ${toEmail}: ${subject} (id: ${resendData.id})`);
+    } else if (process.env.SENDGRID_API_KEY) {
+      // Fallback: SendGrid
+      const sgResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: toEmail }] }],
+          from: { email: process.env.SENDGRID_FROM || 'noreply@xenostudio.ai', name: 'XENO' },
+          subject,
+          content: [{ type: 'text/html', value: html }],
+        }),
+      });
+
+      if (!sgResponse.ok) {
+        const errBody = await sgResponse.text();
+        throw new Error(`SendGrid API error ${sgResponse.status}: ${errBody}`);
+      }
+
+      console.log(`[Email] Sent via SendGrid to ${toEmail}: ${subject}`);
     } else {
       // Development: log to console
       console.log(`[Email] DEV MODE — Template: ${template}, To: ${toEmail}, Subject: ${subject}`);

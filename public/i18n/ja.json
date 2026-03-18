@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "locale": "ja",
+    "name": "Japanese",
+    "direction": "ltr"
+  },
+  "common": {
+    "download": "Download",
+    "signIn": "Sign In",
+    "features": "Features",
+    "pricing": "Pricing",
+    "blog": "Blog",
+    "products": "Products",
+    "docs": "Documentation",
+    "releaseNotes": "Release Notes",
+    "allProducts": "All Products",
+    "getStarted": "Get Started",
+    "learnMore": "Learn More",
+    "free": "Free",
+    "openSource": "Open Source",
+    "windows": "Windows",
+    "crossPlatform": "Cross-platform",
+    "copyright": "XENO Corporation. All rights reserved.",
+    "systemsOperational": "All systems operational",
+    "github": "GitHub",
+    "discord": "Discord",
+    "contact": "Contact",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "about": "About"
+  },
+  "nav": {
+    "product": "Product",
+    "resources": "Resources",
+    "company": "Company",
+    "legal": "Legal",
+    "aiModels": "AI Models"
+  },
+  "home": {
+    "tagline": "Professional creative tools powered by local AI",
+    "subtitle": "No subscriptions, no cloud lock-in, no compromises.",
+    "cta": "Download XENO Hub"
+  },
+  "products": {
+    "theEcosystem": "The Ecosystem",
+    "allProducts": "All Products",
+    "allProductsDesc": "Professional creative tools powered by local AI. No subscriptions, no cloud lock-in, no compromises.",
+    "creativeApps": "Creative Apps",
+    "platform": "Platform",
+    "readyToCreate": "Ready to create?",
+    "readyToCreateDesc": "Download the XENO Hub to get started with the entire suite."
+  },
+  "sysReq": {
+    "systemRequirements": "System Requirements",
+    "minimum": "Minimum",
+    "recommended": "Recommended"
+  },
+  "docs": {
+    "searchDocs": "Search docs...",
+    "documentation": "Documentation",
+    "keyboardShortcuts": "Keyboard Shortcuts",
+    "searchShortcuts": "Search shortcuts...",
+    "resources": "Resources",
+    "productPage": "Product Page",
+    "apiReference": "API Reference",
+    "community": "Community",
+    "backToDocs": "Back to Documentation"
+  }
+}

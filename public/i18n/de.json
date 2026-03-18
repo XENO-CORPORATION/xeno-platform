@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "locale": "de",
+    "name": "Deutsch",
+    "direction": "ltr"
+  },
+  "common": {
+    "download": "Herunterladen",
+    "signIn": "Anmelden",
+    "features": "Funktionen",
+    "pricing": "Preise",
+    "blog": "Blog",
+    "products": "Produkte",
+    "docs": "Dokumentation",
+    "releaseNotes": "Versionshinweise",
+    "allProducts": "Alle Produkte",
+    "getStarted": "Jetzt starten",
+    "learnMore": "Mehr erfahren",
+    "free": "Kostenlos",
+    "openSource": "Open Source",
+    "windows": "Windows",
+    "crossPlatform": "Plattformunabhaengig",
+    "copyright": "XENO Corporation. Alle Rechte vorbehalten.",
+    "systemsOperational": "Alle Systeme betriebsbereit",
+    "github": "GitHub",
+    "discord": "Discord",
+    "contact": "Kontakt",
+    "privacy": "Datenschutz",
+    "terms": "Nutzungsbedingungen",
+    "about": "Ueber uns"
+  },
+  "nav": {
+    "product": "Produkt",
+    "resources": "Ressourcen",
+    "company": "Unternehmen",
+    "legal": "Rechtliches",
+    "aiModels": "KI-Modelle"
+  },
+  "home": {
+    "tagline": "Professionelle Kreativ-Tools mit lokaler KI",
+    "subtitle": "Keine Abonnements, kein Cloud-Lock-in, keine Kompromisse.",
+    "cta": "XENO Hub herunterladen"
+  },
+  "products": {
+    "theEcosystem": "Das Oekosystem",
+    "allProducts": "Alle Produkte",
+    "allProductsDesc": "Professionelle Kreativ-Tools mit lokaler KI. Keine Abonnements, kein Cloud-Lock-in, keine Kompromisse.",
+    "creativeApps": "Kreativ-Apps",
+    "platform": "Plattform",
+    "readyToCreate": "Bereit zum Erstellen?",
+    "readyToCreateDesc": "Laden Sie den XENO Hub herunter, um die gesamte Suite zu nutzen."
+  },
+  "sysReq": {
+    "systemRequirements": "Systemanforderungen",
+    "minimum": "Minimum",
+    "recommended": "Empfohlen"
+  },
+  "docs": {
+    "searchDocs": "Dokumentation durchsuchen...",
+    "documentation": "Dokumentation",
+    "keyboardShortcuts": "Tastenkuerzel",
+    "searchShortcuts": "Tastenkuerzel suchen...",
+    "resources": "Ressourcen",
+    "productPage": "Produktseite",
+    "apiReference": "API-Referenz",
+    "community": "Community",
+    "backToDocs": "Zurueck zur Dokumentation"
+  },
+  "email": {
+    "welcome": "Willkommen bei XENO",
+    "passwordReset": "XENO-Passwort zuruecksetzen",
+    "receipt": "Kaufbeleg",
+    "creditsLow": "Guthaben niedrig",
+    "newVersion": "Update verfuegbar"
+  }
+}

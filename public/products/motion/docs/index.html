@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XENO Motion Documentation</title>
+  <meta name="description" content="Official documentation for XENO Motion. Professional video editor and compositor.">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+  <link rel="canonical" href="https://xenostudio.ai/products/motion/docs/">
+  <meta property="og:title" content="XENO Motion Documentation">
+  <meta property="og:description" content="Official documentation for XENO Motion. Professional video editor and compositor.">
+  <meta property="og:url" content="https://xenostudio.ai/products/motion/docs/">
+  <meta property="og:site_name" content="XENO Studio">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://xenostudio.ai/xeno-logo.svg">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@xenostudioai">
+  <meta name="twitter:title" content="XENO Motion Documentation">
+  <meta name="twitter:description" content="Official documentation for XENO Motion. Professional video editor and compositor.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "name": "XENO Motion Documentation",
+    "description": "Professional video editor and compositor",
+    "url": "https://xenostudio.ai/products/motion/docs/",
+    "publisher": {
+      "@type": "Organization",
+      "name": "XENO Corporation",
+      "url": "https://xenostudio.ai"
+    }
+  }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #08080a; color: rgba(255,255,255,0.85); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    code { font-family: 'JetBrains Mono', monospace; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+    pre { background: #0b0b0d; border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 16px; overflow-x: auto; margin: 16px 0; }
+    pre code { background: none; padding: 0; }
+    .doc-layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+    .doc-sidebar { position: fixed; top: 0; left: 0; width: 240px; height: 100vh; overflow-y: auto; border-right: 1px solid rgba(255,255,255,0.06); padding: 20px 0; background: #08080a; z-index: 40; }
+    .doc-sidebar-header { padding: 0 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+    .doc-sidebar-header img { width: 20px; height: 20px; border-radius: 4px; filter: invert(1); }
+    .doc-sidebar-header span { font-size: 14px; font-weight: 600; }
+    .doc-nav-group { padding: 0 12px; margin-bottom: 16px; }
+    .doc-nav-label { font-size: 11px; color: rgba(255,255,255,0.25); text-transform: uppercase; letter-spacing: 1.5px; padding: 8px; margin-bottom: 4px; }
+    .doc-nav-link { display: block; padding: 6px 8px; font-size: 13px; color: rgba(255,255,255,0.5); border-radius: 4px; transition: all 0.15s; }
+    .doc-nav-link:hover { color: rgba(255,255,255,0.8); background: rgba(255,255,255,0.03); }
+    .doc-nav-link.active { color: white; background: rgba(255,255,255,0.06); }
+    .doc-content { grid-column: 2; padding: 40px 60px 120px; max-width: 860px; }
+    .doc-breadcrumb { font-size: 13px; color: rgba(255,255,255,0.3); margin-bottom: 32px; }
+    .doc-breadcrumb a { color: rgba(255,255,255,0.4); }
+    .doc-breadcrumb a:hover { color: rgba(255,255,255,0.7); }
+    .doc-content h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 12px; }
+    .doc-content .subtitle { font-size: 16px; color: rgba(255,255,255,0.45); line-height: 1.6; margin-bottom: 40px; }
+    .doc-section { margin-bottom: 48px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.06); }
+    .doc-section h2 { font-size: 22px; font-weight: 600; margin-bottom: 12px; }
+    .doc-section p { font-size: 15px; color: rgba(255,255,255,0.5); line-height: 1.7; margin-bottom: 16px; }
+    .doc-search { margin: 0 12px 16px; }
+    .doc-search input { width: 100%; padding: 8px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: white; font-size: 13px; outline: none; }
+    .doc-search input::placeholder { color: rgba(255,255,255,0.25); }
+    .doc-search input:focus { border-color: rgba(255,255,255,0.15); }
+    @media (max-width: 768px) {
+      .doc-layout { grid-template-columns: 1fr; }
+      .doc-sidebar { display: none; }
+      .doc-content { padding: 24px 20px 80px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="doc-layout">
+    <aside class="doc-sidebar">
+      <div class="doc-sidebar-header">
+        <a href="/"><img src="/xeno-logo.svg" alt="XENO"></a>
+        <a href="/products/motion/"><span>XENO Motion</span></a>
+      </div>
+      <div class="doc-search">
+        <input type="text" placeholder="Search docs..." id="doc-search">
+      </div>
+      <nav class="doc-nav-group">
+        <div class="doc-nav-label">Documentation</div>
+            <a href="#getting-started" class="doc-nav-link">Getting Started</a>
+            <a href="#timeline" class="doc-nav-link">Timeline</a>
+            <a href="#color-grading" class="doc-nav-link">Color Grading</a>
+            <a href="#effects" class="doc-nav-link">Effects</a>
+            <a href="#motion-graphics" class="doc-nav-link">Motion Graphics</a>
+            <a href="#audio" class="doc-nav-link">Audio</a>
+            <a href="#ai-editing" class="doc-nav-link">Ai Editing</a>
+            <a href="#export" class="doc-nav-link">Export</a>
+            <a href="/products/motion/docs/shortcuts/" class="doc-nav-link">Keyboard Shortcuts</a>
+      </nav>
+      <nav class="doc-nav-group">
+        <div class="doc-nav-label">Resources</div>
+        <a href="/products/motion/" class="doc-nav-link">Product Page</a>
+        <a href="/products/motion/release-notes/" class="doc-nav-link">Release Notes</a>
+        <a href="/api/docs/" class="doc-nav-link">API Reference</a>
+        <a href="https://github.com/XENO-CORPORATION" class="doc-nav-link">GitHub</a>
+        <a href="https://discord.gg/xenostudio" class="doc-nav-link">Community</a>
+      </nav>
+    </aside>
+
+    <main class="doc-content">
+      <div class="doc-breadcrumb">
+        <a href="/">XENO</a> / <a href="/products/">Products</a> / <a href="/products/motion/">XENO Motion</a> / Docs
+      </div>
+      <h1>XENO Motion Documentation</h1>
+      <p class="subtitle">Professional video editor and compositor. Learn how to get started, explore features, and build your workflow.</p>
+
+          <section id="getting-started" class="doc-section" style="border-top:none;padding-top:0">
+            <h2>Getting Started</h2>
+            <p>Documentation for Getting Started is being prepared. Check back soon or contribute on <a href="https://github.com/XENO-CORPORATION" style="color:rgba(255,255,255,0.6);text-decoration:underline">GitHub</a>.</p>
+          </section>
+
+          <section id="timeline" class="doc-section">
+            <h2>Timeline</h2>
+            <p>Documentation for Timeline is being prepared. Check back soon or contribute on <a href="https://github.com/XENO-CORPORATION" style="color:rgba(255,255,255,0.6);text-decoration:underline">GitHub</a>.</p>
+          </section>
+
+          <section id="color-grading" class="doc-section">
+            <h2>Color Grading</h2>
+            <p>Documentation for Color Grading is being prepared. Check back soon or contribute on <a href="https://github.com/XENO-CORPORATION" style="color:rgba(255,255,255,0.6);text-decoration:underline">GitHub</a>.</p>
+          </section>
+
+          <section id="effects" class="doc-section">
+            <h2>Effects</h2>
+            <p>Documentation for Effects is being prepared. Check back soon or contribute on <a href="https://github.com/XENO-CORPORATION" style="color:rgba(255,255,255,0.6);text-decoration:underline">GitHub</a>.</p>
+          </section>
+
+          <section id="motion-graphics" class="doc-section">
+            <h2>Motion Graphics</h2>
+            <p>Documentation for Motion Graphics is being prepared. Check back soon or contribute on <a href="https://github.com/XENO-CORPORATION" style="color:rgba(255,255,255,0.6);text-decoration:underline">GitHub</a>.</p>
+          </section>
+
+          <section id="audio" class="doc-section">
+            <h2>Audio</h2>
+            <p>Documentation for Audio is being prepared. Check back soon or contribute on <a href="https://github.com/XENO-CORPORATION" style="color:rgba(255,255,255,0.6);text-decoration:underline">GitHub</a>.</p>
+          </section>
+
+          <section id="ai-editing" class="doc-section">
+            <h2>Ai Editing</h2>
+            <p>Documentation for Ai Editing is being prepared. Check back soon or contribute on <a href="https://github.com/XENO-CORPORATION" style="color:rgba(255,255,255,0.6);text-decoration:underline">GitHub</a>.</p>
+          </section>
+
+          <section id="export" class="doc-section">
+            <h2>Export</h2>
+            <p>Documentation for Export is being prepared. Check back soon or contribute on <a href="https://github.com/XENO-CORPORATION" style="color:rgba(255,255,255,0.6);text-decoration:underline">GitHub</a>.</p>
+          </section>
+    </main>
+  </div>
+
+  <script>
+    var sections = document.querySelectorAll('.doc-section');
+    var links = document.querySelectorAll('.doc-nav-link');
+    function updateActive() {
+      var scrollPos = window.scrollY + 100;
+      sections.forEach(function(section) {
+        if (section.offsetTop <= scrollPos && section.offsetTop + section.offsetHeight > scrollPos) {
+          links.forEach(function(link) { link.classList.remove('active'); });
+          var activeLink = document.querySelector('.doc-nav-link[href="#' + section.id + '"]');
+          if (activeLink) activeLink.classList.add('active');
+        }
+      });
+    }
+    window.addEventListener('scroll', updateActive);
+    updateActive();
+    document.getElementById('doc-search').addEventListener('input', function(e) {
+      var query = e.target.value.toLowerCase();
+      sections.forEach(function(section) {
+        section.style.display = !query || section.textContent.toLowerCase().includes(query) ? 'block' : 'none';
+      });
+    });
+  </script>
+</body>
+</html>

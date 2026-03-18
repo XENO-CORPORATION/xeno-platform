@@ -1,0 +1,155 @@
+{
+  "meta": {
+    "locale": "en",
+    "name": "English",
+    "direction": "ltr"
+  },
+  "common": {
+    "download": "Download",
+    "signIn": "Sign In",
+    "features": "Features",
+    "pricing": "Pricing",
+    "blog": "Blog",
+    "products": "Products",
+    "docs": "Documentation",
+    "releaseNotes": "Release Notes",
+    "allProducts": "All Products",
+    "getStarted": "Get Started",
+    "learnMore": "Learn More",
+    "free": "Free",
+    "openSource": "Open Source",
+    "windows": "Windows",
+    "crossPlatform": "Cross-platform",
+    "copyright": "XENO Corporation. All rights reserved.",
+    "systemsOperational": "All systems operational",
+    "github": "GitHub",
+    "discord": "Discord",
+    "contact": "Contact",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "about": "About"
+  },
+  "nav": {
+    "product": "Product",
+    "resources": "Resources",
+    "company": "Company",
+    "legal": "Legal",
+    "aiModels": "AI Models"
+  },
+  "home": {
+    "tagline": "Professional creative tools powered by local AI",
+    "subtitle": "No subscriptions, no cloud lock-in, no compromises.",
+    "cta": "Download XENO Hub"
+  },
+  "products": {
+    "theEcosystem": "The Ecosystem",
+    "allProducts": "All Products",
+    "allProductsDesc": "Professional creative tools powered by local AI. No subscriptions, no cloud lock-in, no compromises.",
+    "creativeApps": "Creative Apps",
+    "platform": "Platform",
+    "readyToCreate": "Ready to create?",
+    "readyToCreateDesc": "Download the XENO Hub to get started with the entire suite.",
+    "pixel": {
+      "name": "XENO Pixel",
+      "tagline": "Professional Image Editor",
+      "desc": "Professional image editing with AI-powered tools. Layers, brushes, masks, filters, generation, and vector — all running locally.",
+      "shortDesc": "Professional image editor. Layers, brushes, masks, filters, AI generation, and vector tools.",
+      "cta": "Start creating with Pixel",
+      "ctaDesc": "Free, open source, and running entirely on your machine."
+    },
+    "motion": {
+      "name": "XENO Motion",
+      "tagline": "Professional Video Editor",
+      "desc": "Professional video editing and compositing. Timeline, effects, color grading, motion graphics, and AI-powered editing — all running locally.",
+      "shortDesc": "Video editor and compositor. Timeline, effects, color grading, motion graphics, and AI editing.",
+      "cta": "Start editing with Motion",
+      "ctaDesc": "Free, open source, and running entirely on your machine."
+    },
+    "sound": {
+      "name": "XENO Sound",
+      "tagline": "Digital Audio Workstation",
+      "desc": "Professional DAW with multi-track recording, mixing, mastering, effects, and AI audio tools — all running locally.",
+      "shortDesc": "Digital audio workstation. Multi-track recording, mixing, mastering, effects, and AI audio tools.",
+      "cta": "Start producing with Sound",
+      "ctaDesc": "Free, open source, and running entirely on your machine."
+    },
+    "hub": {
+      "name": "XENO Hub",
+      "tagline": "Desktop Launcher & AI Workspace",
+      "desc": "Your desktop command center. Launch apps, chat with AI agents, manage models, track credits, and configure the entire XENO ecosystem.",
+      "shortDesc": "Desktop launcher and AI workspace. Manage apps, agents, models, credits, and settings.",
+      "cta": "Get started with XENO",
+      "ctaDesc": "The Hub is your gateway to the entire creative suite."
+    },
+    "agentCli": {
+      "name": "XENO Agent CLI",
+      "tagline": "Terminal AI Agent",
+      "desc": "Autonomous terminal AI agent for coding, file management, and system operations from your shell.",
+      "shortDesc": "Terminal AI agent. Autonomous coding, file management, and system operations from your shell."
+    },
+    "3d": {
+      "name": "XENO 3D",
+      "tagline": "3D Modeling, Animation & Rendering",
+      "desc": "AI-native 3D suite with polygon modeling, sculpting, UV mapping, PBR materials, animation, path tracing, and procedural generation.",
+      "shortDesc": "3D modeling, animation, and rendering. Sculpting, UV mapping, PBR materials, path tracing, and procedural generation."
+    },
+    "architect": {
+      "name": "XENO Architect",
+      "tagline": "Architecture & CAD",
+      "desc": "AI-native architecture and CAD tool with BIM, parametric design, 2D drafting, 3D viewport, AI floor plans, and IFC support.",
+      "shortDesc": "Architecture and CAD. BIM modeling, parametric design, 2D drafting, AI floor plans, and IFC support."
+    },
+    "engine": {
+      "name": "XENO Engine",
+      "tagline": "Game Engine",
+      "desc": "AI-native game engine with ECS architecture, real-time PBR rendering, physics, scripting, multiplayer, and cross-platform export.",
+      "shortDesc": "Game engine. ECS architecture, real-time PBR rendering, physics, scripting, multiplayer, and cross-platform export."
+    },
+    "workflow": {
+      "name": "XENO Workflow",
+      "tagline": "Visual Workflow Automation",
+      "desc": "AI-native visual workflow automation. Build pipelines connecting all XENO apps and external services with a node-based editor.",
+      "shortDesc": "Visual workflow automation. AI-native pipelines connecting all XENO apps and external services."
+    },
+    "lib": {
+      "name": "XENO Lib",
+      "tagline": "AI Model Library",
+      "desc": "17 AI models for image generation, upscaling, segmentation, depth estimation, and more. Built in Rust with ONNX and CUDA.",
+      "shortDesc": "AI model library. 17 models for image generation, upscaling, segmentation, depth, and more."
+    }
+  },
+  "features": {
+    "layerSystem": "Layer System",
+    "brushEngine": "Brush Engine",
+    "aiGeneration": "AI Generation",
+    "selectionTools": "Selection Tools",
+    "filtersEffects": "Filters & Effects",
+    "vectorTools": "Vector Tools",
+    "aiUpscaling": "AI Upscaling",
+    "backgroundRemoval": "Background Removal",
+    "formatSupport": "Format Support"
+  },
+  "sysReq": {
+    "systemRequirements": "System Requirements",
+    "minimum": "Minimum",
+    "recommended": "Recommended"
+  },
+  "docs": {
+    "searchDocs": "Search docs...",
+    "documentation": "Documentation",
+    "keyboardShortcuts": "Keyboard Shortcuts",
+    "searchShortcuts": "Search shortcuts...",
+    "resources": "Resources",
+    "productPage": "Product Page",
+    "apiReference": "API Reference",
+    "community": "Community",
+    "backToDocs": "Back to Documentation"
+  },
+  "email": {
+    "welcome": "Welcome to XENO",
+    "passwordReset": "Reset your XENO password",
+    "receipt": "Purchase Receipt",
+    "creditsLow": "Credits Running Low",
+    "newVersion": "Update Available"
+  }
+}

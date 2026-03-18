@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "locale": "es",
+    "name": "Spanish",
+    "direction": "ltr"
+  },
+  "common": {
+    "download": "Descargar",
+    "signIn": "Iniciar sesion",
+    "features": "Funciones",
+    "pricing": "Precios",
+    "blog": "Blog",
+    "products": "Productos",
+    "docs": "Documentacion",
+    "releaseNotes": "Notas de la version",
+    "allProducts": "Todos los productos",
+    "getStarted": "Comenzar",
+    "learnMore": "Mas informacion",
+    "free": "Gratis",
+    "openSource": "Codigo abierto",
+    "windows": "Windows",
+    "crossPlatform": "Multiplataforma",
+    "copyright": "XENO Corporation. Todos los derechos reservados.",
+    "systemsOperational": "Todos los sistemas operativos",
+    "github": "GitHub",
+    "discord": "Discord",
+    "contact": "Contacto",
+    "privacy": "Privacidad",
+    "terms": "Terminos",
+    "about": "Acerca de"
+  },
+  "nav": {
+    "product": "Producto",
+    "resources": "Recursos",
+    "company": "Empresa",
+    "legal": "Legal",
+    "aiModels": "Modelos de IA"
+  },
+  "home": {
+    "tagline": "Herramientas creativas profesionales con IA local",
+    "subtitle": "Sin suscripciones, sin bloqueo en la nube, sin compromisos.",
+    "cta": "Descargar XENO Hub"
+  },
+  "products": {
+    "theEcosystem": "El Ecosistema",
+    "allProducts": "Todos los Productos",
+    "allProductsDesc": "Herramientas creativas profesionales con IA local. Sin suscripciones, sin bloqueo en la nube, sin compromisos.",
+    "creativeApps": "Apps Creativas",
+    "platform": "Plataforma",
+    "readyToCreate": "Listo para crear?",
+    "readyToCreateDesc": "Descarga XENO Hub para comenzar con la suite completa."
+  },
+  "sysReq": {
+    "systemRequirements": "Requisitos del sistema",
+    "minimum": "Minimo",
+    "recommended": "Recomendado"
+  },
+  "docs": {
+    "searchDocs": "Buscar en docs...",
+    "documentation": "Documentacion",
+    "keyboardShortcuts": "Atajos de teclado",
+    "searchShortcuts": "Buscar atajos...",
+    "resources": "Recursos",
+    "productPage": "Pagina del producto",
+    "apiReference": "Referencia de API",
+    "community": "Comunidad",
+    "backToDocs": "Volver a la documentacion"
+  }
+}
