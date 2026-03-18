@@ -99,11 +99,19 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniquePrefix = uuidv4();
-    cb(null, `${uniquePrefix}-${file.originalname}`);
+    // Sanitize originalname to prevent path traversal
+    const safeName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${uniquePrefix}-${safeName}`);
   }
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100MB
+    files: 10, // Max 10 files per request
+  },
+});
 
 // Create Express app with increased limits for image processing
 const app = express();
@@ -190,12 +198,12 @@ const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
     ? (origin, callback) => {
-        // Allow requests with no origin (mobile apps, curl, etc.)
+        // Allow requests with no origin (mobile apps, curl, desktop app, etc.)
         if (!origin || ALLOWED_ORIGINS.includes(origin)) {
           callback(null, true);
         } else {
-          callback(null, true); // Log but allow — tight lockdown can break desktop app
-          console.warn(`[CORS] Request from unlisted origin: ${origin}`);
+          console.warn(`[CORS] Blocked request from unlisted origin: ${origin}`);
+          callback(new Error('CORS: origin not allowed'), false);
         }
       }
     : true, // Allow all origins in development
@@ -284,8 +292,8 @@ app.use('/api/fal', falProxy);
 
 // Note: SAM 2 segmentation is now handled via FAL.ai integration in the chat generation route
 
-// Direct FAL.ai API endpoint as fallback - handle all HTTP methods
-app.all('/api/fal-direct/*', async (req, res) => {
+// Direct FAL.ai API endpoint as fallback - handle all HTTP methods (auth required)
+app.all('/api/fal-direct/*', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     const falPath = req.path.replace('/api/fal-direct', '');
     const falUrl = `https://queue.fal.run${falPath}${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`;
@@ -340,15 +348,14 @@ app.all('/api/fal-direct/*', async (req, res) => {
   } catch (error) {
     console.error('Direct FAL.ai API error:', error);
     res.status(500).json({
-      error: 'Direct FAL.ai API Error',
-      message: error.message
+      error: 'Direct FAL.ai API Error'
     });
   }
 });
 
 // Add OpenRouter Key retrieval & Log Check
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
-console.log('Checking OPENROUTER_API_KEY: Starts with ->', openRouterApiKey?.substring(0, 5) || 'Not Found!'); // Log first 5 chars or 'Not Found!'
+console.log('Checking OPENROUTER_API_KEY:', openRouterApiKey ? 'Configured' : 'Not Found!');
 if (!openRouterApiKey) {
     console.warn('OpenRouter API key (OPENROUTER_API_KEY) not found in .env. API calls will fail.');
 }
@@ -431,9 +438,9 @@ app.use('/api/conversion', conversionRoutes);
 app.use('/api/video', databaseMiddleware, authMiddleware, videoRoutes);
 console.log('🎬 Video Studio routes integrated: /api/video/*');
 
-// Replicate API Proxy routes (NO auth required - uses server-side API token)
+// Replicate API Proxy routes (auth required to prevent API key abuse)
 // Must be defined BEFORE the authenticated image routes
-app.post('/api/image/replicate/predictions', async (req, res) => {
+app.post('/api/image/replicate/predictions', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
     if (!REPLICATE_API_TOKEN) {
@@ -457,7 +464,7 @@ app.post('/api/image/replicate/predictions', async (req, res) => {
   }
 });
 
-app.get('/api/image/replicate/predictions/:predictionId', async (req, res) => {
+app.get('/api/image/replicate/predictions/:predictionId', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
     const { predictionId } = req.params;
@@ -479,7 +486,7 @@ app.get('/api/image/replicate/predictions/:predictionId', async (req, res) => {
   }
 });
 
-app.post('/api/image/replicate/predictions/:predictionId/cancel', async (req, res) => {
+app.post('/api/image/replicate/predictions/:predictionId/cancel', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
     const { predictionId } = req.params;
@@ -519,8 +526,8 @@ console.log('🎨 Image Studio routes integrated: /api/image/*');
 // Create a conditional auth middleware that skips auth for public paths
 const chatAuthMiddleware = (req, res, next) => {
   console.log('[ChatAuth] Path:', req.path, 'Original URL:', req.originalUrl);
-  // Skip auth for public endpoints
-  const publicPaths = ['/init', '/generate'];
+  // Skip auth for init endpoint only (generate requires auth to prevent abuse)
+  const publicPaths = ['/init'];
   if (publicPaths.some(path => req.path === path || req.path.startsWith(path))) {
     console.log('[ChatAuth] Skipping auth for public path:', req.path);
     return next();
@@ -543,8 +550,8 @@ console.log('👤 User data routes integrated: /api/user-data/*');
 // Browser routes are mounted early in the middleware chain (before JSON body parser)
 // to handle raw POST bodies from proxied pages. See line ~105.
 
-// AI Routes (for chat completion with multiple providers)
-app.use('/api/ai', aiRoutes);
+// AI Routes (for chat completion with multiple providers) - requires auth
+app.use('/api/ai', databaseMiddleware, authMiddleware, aiRoutes);
 
 // YouTube Routes (channel management and analytics)
 // Public routes first (OAuth callback - no auth needed, Google redirects here)
@@ -562,7 +569,8 @@ app.use('/api/office-canvas', databaseMiddleware, officeCanvasRoutes);
 console.log('🖼️ Office Canvas routes integrated: /api/office-canvas/*');
 
 // Download API routes (YouTube, Twitter, Instagram, TikTok downloads)
-app.use('/api/download', downloadRoutes);
+// Extension releases are public (handled by publicPaths in auth middleware)
+app.use('/api/download', databaseMiddleware, authMiddleware, downloadRoutes);
 app.use('/api/blog', databaseMiddleware, blogRoutes);
 app.use('/api/learn', databaseMiddleware, learnRoutes);
 console.log('⬇️ Download routes integrated: /api/download/*');
@@ -792,8 +800,7 @@ app.get('/api/models', async (req, res) => {
     console.error('❌ Error fetching models:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch models',
-      message: error.message
+      error: 'Failed to fetch models'
     });
   }
 });
@@ -835,8 +842,7 @@ app.post('/api/auth/init', async (req, res) => {
     console.error('Auth init error:', error);
     res.status(500).json({
       success: false,
-      error: 'Auth system initialization failed',
-      details: error.message
+      error: 'Auth system initialization failed'
     });
   }
 });
@@ -1055,7 +1061,7 @@ const ALLOWED_UPLOAD_MIMES = new Set([
 ]);
 const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB
 
-app.post('/api/upload', upload.single('image'), (req, res) => {
+app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -2592,7 +2598,7 @@ app.post('/api/chat/generate', async (req, res) => {
 
         // 4. Make the fetch call
         console.log(`Calling OpenRouter API with model: ${selectedModelId}`);
-        console.log(`Authorization Header Check: Bearer ${openRouterApiKey?.substring(0, 5)}...`);
+        console.log(`Authorization Header Check: Bearer [REDACTED]`);
         console.log('OpenRouter Request Body:', body); // Log body for debugging
         
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -2941,7 +2947,7 @@ app.post('/api/chat/generate', async (req, res) => {
  *   400 Bad Request: If query is missing.
  *   500 Internal Server Error / Other 5xx: If errors occur calling Python service.
  */
-app.post('/api/xeno-search', async (req, res) => {
+app.post('/api/xeno-search', databaseMiddleware, authMiddleware, async (req, res) => {
   const { query, search_type = 'normal', num_results = 5 } = req.body;
   // Use docker network name when in container, fallback to localhost for local dev
   const pythonServiceUrl = process.env.NODE_ENV === 'production'
@@ -2979,13 +2985,12 @@ app.post('/api/xeno-search', async (req, res) => {
       console.error('[Node.js Backend] Python Service Error Data:', error.response.data);
       console.error('[Node.js Backend] Python Service Error Status:', error.response.status);
       res.status(error.response.status || 500).json({
-        error: 'Error from Xeno Search service.',
-        details: error.response.data,
+        error: 'Search service error',
       });
     } else if (error.request) {
       // The request was made but no response was received
-      console.error('[Node.js Backend] No response received from Python service. Error Request:', error.request);
-      res.status(503).json({ error: 'No response from Xeno Search service. The service might be down or unreachable.' });
+      console.error('[Node.js Backend] No response received from Python service.');
+      res.status(503).json({ error: 'Search service unavailable' });
     } else {
       // Something happened in setting up the request that triggered an Error
       console.error('[Node.js Backend] Internal error setting up request to Python service:', error.message);
@@ -2999,7 +3004,7 @@ app.post('/api/xeno-search', async (req, res) => {
  * Dynamic real-time search using Xeno Search Engine
  * Crawls authoritative sites on-demand based on query topics
  */
-app.post('/api/v2/engine/dynamic-search', async (req, res) => {
+app.post('/api/v2/engine/dynamic-search', databaseMiddleware, authMiddleware, async (req, res) => {
   const { query, max_pages = 10, index_results = true } = req.body;
 
   const pythonServiceUrl = process.env.NODE_ENV === 'production'
@@ -3029,8 +3034,7 @@ app.post('/api/v2/engine/dynamic-search', async (req, res) => {
     console.error('[Dynamic Search] Error:', error.message);
     if (error.response) {
       res.status(error.response.status || 500).json({
-        error: 'Error from Dynamic Search service.',
-        details: error.response.data,
+        error: 'Dynamic search service error',
       });
     } else if (error.request) {
       res.status(503).json({ error: 'Dynamic Search service unreachable.' });
@@ -3040,8 +3044,8 @@ app.post('/api/v2/engine/dynamic-search', async (req, res) => {
   }
 });
 
-// OpenAI Realtime API endpoint - creates ephemeral session and returns session details
-app.get('/api/openai-realtime-session', async (req, res) => {
+// OpenAI Realtime API endpoint - creates ephemeral session and returns session details (auth required)
+app.get('/api/openai-realtime-session', databaseMiddleware, authMiddleware, async (req, res) => {
   console.log('Requesting ephemeral key from OpenAI Realtime API with voice:', req.query.voice || 'alloy');
   const openaiApiKey = process.env.OPENAI_API_KEY;
   
@@ -3086,14 +3090,13 @@ app.get('/api/openai-realtime-session', async (req, res) => {
       responseData = JSON.parse(responseBody);
     } catch (e) {
       console.error(`[Node.js Backend] Failed to parse OpenAI Realtime session response: ${responseBody.substring(0,200)}...`);
-      return res.status(500).json({ error: 'Failed to parse session response from OpenAI.', details: responseBody });
+      return res.status(500).json({ error: 'Failed to create realtime session' });
     }
 
     if (!openAiSessionResponse.ok) {
       console.error('[Node.js Backend] Error from OpenAI Realtime session API:', responseData);
-      return res.status(openAiSessionResponse.status || 500).json({ 
-        error: 'Failed to create OpenAI Realtime session.', 
-        details: responseData.error || responseData 
+      return res.status(openAiSessionResponse.status || 500).json({
+        error: 'Failed to create realtime session'
       });
     }
 
@@ -3101,12 +3104,12 @@ app.get('/api/openai-realtime-session', async (req, res) => {
     res.json(responseData); // Send the full response which includes the client_secret (ephemeral key)
 
   } catch (error) {    console.error('[Node.js Backend] Error creating OpenAI Realtime session:', error);
-    res.status(500).json({ error: 'Failed to create OpenAI Realtime session', message: error instanceof Error ? error.message : 'Unknown server error' });
+    res.status(500).json({ error: 'Failed to create realtime session' });
   }
 });
 
 // OpenAI Realtime WebRTC endpoint - exchanges SDP offer for answer
-app.post('/api/openai-realtime-webrtc', async (req, res) => {
+app.post('/api/openai-realtime-webrtc', databaseMiddleware, authMiddleware, async (req, res) => {
   console.log('[Node.js Backend] HIT /api/openai-realtime-webrtc with body keys:', Object.keys(req.body));
   const { sdpOffer, model = 'gpt-4o-mini-realtime-preview' } = req.body;
 
@@ -3134,9 +3137,8 @@ app.post('/api/openai-realtime-webrtc', async (req, res) => {
     if (!openAiResponse.ok) {
       const errorText = await openAiResponse.text();
       console.error('[Node.js Backend] Error from OpenAI Realtime WebRTC endpoint:', errorText);
-      return res.status(openAiResponse.status).json({ 
-        error: 'Failed to exchange SDP with OpenAI.', 
-        details: errorText 
+      return res.status(openAiResponse.status).json({
+        error: 'Failed to exchange SDP'
       });
     }
 
@@ -3148,12 +3150,12 @@ app.post('/api/openai-realtime-webrtc', async (req, res) => {
 
   } catch (error) {
     console.error('[Node.js Backend] Error in OpenAI WebRTC SDP exchange:', error);
-    res.status(500).json({ error: 'Failed to exchange SDP with OpenAI', message: error instanceof Error ? error.message : 'Unknown server error' });
+    res.status(500).json({ error: 'Failed to exchange SDP' });
   }
 });
 
 // API endpoint to fetch metadata from a URL
-app.post('/api/fetch-metadata', async (req, res) => {
+app.post('/api/fetch-metadata', databaseMiddleware, authMiddleware, async (req, res) => {
   const { url } = req.body;
   
   if (!url) {
@@ -3245,15 +3247,13 @@ app.post('/api/fetch-metadata', async (req, res) => {
     console.error(`Error processing metadata for ${url}:`, error.message, error.stack);
     // Return a structured error response
     res.status(500).json({ 
-      error: 'Failed to process metadata',
-      message: error.message || 'An unexpected error occurred.',
-      url: url // Include the URL that failed
+      error: 'Failed to process metadata'
     });
   }
 });
 
 // API endpoint for generating images using OpenAI
-app.post('/api/generate-image', async (req, res) => {
+app.post('/api/generate-image', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     const { prompt } = req.body;
     
@@ -3308,7 +3308,7 @@ app.post('/api/generate-image', async (req, res) => {
 });
 
 // OpenAI Images API endpoint (GPT Image 1) - matches frontend expectations
-app.post('/api/openai/images/generations', async (req, res) => {
+app.post('/api/openai/images/generations', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     const { model, prompt, quality = 'medium', size = '1024x1024', n = 1, image } = req.body;
     
@@ -3387,7 +3387,7 @@ app.post('/api/openai/images/generations', async (req, res) => {
 });
 
 // OpenAI Image Edit endpoint
-app.post('/api/openai/images/edits', upload.fields([
+app.post('/api/openai/images/edits', databaseMiddleware, authMiddleware, upload.fields([
   { name: 'image', maxCount: 1 },
   { name: 'mask', maxCount: 1 }
 ]), async (req, res) => {
@@ -3478,7 +3478,7 @@ app.post('/api/openai/images/edits', upload.fields([
 });
 
 // OpenAI Image Variations endpoint
-app.post('/api/openai/images/variations', upload.single('image'), async (req, res) => {
+app.post('/api/openai/images/variations', databaseMiddleware, authMiddleware, upload.single('image'), async (req, res) => {
   try {
     console.log('OpenAI Image Variations Request:', req.body);
     
@@ -3543,7 +3543,7 @@ app.post('/api/openai/images/variations', upload.single('image'), async (req, re
 });
 
 // OpenAI Conversational Image Generation (Responses API simulation)
-app.post('/api/openai/responses/create', async (req, res) => {
+app.post('/api/openai/responses/create', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     console.log('OpenAI Responses API Request:', req.body);
     
@@ -3639,7 +3639,7 @@ app.get('/api/openai/stream/setup', (req, res) => {
 const XENORUN_URL = process.env.XENORUN_URL || 'http://xenorun:3000';
 
 // Fetch available runtimes from XenoRun
-app.get('/api/piston/runtimes', async (req, res) => {
+app.get('/api/piston/runtimes', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     console.log('Fetching runtimes from XenoRun...');
     const response = await fetch(`${XENORUN_URL}/api/v1/runtimes`);
@@ -3669,7 +3669,7 @@ app.get('/api/piston/runtimes', async (req, res) => {
 });
 
 // Execute code via XenoRun
-app.post('/api/piston/execute', async (req, res) => {
+app.post('/api/piston/execute', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     console.log('Executing code via XenoRun...');
     const requestBody = req.body;
@@ -3735,7 +3735,7 @@ app.post('/api/piston/execute', async (req, res) => {
 // --- End XenoRun Code Execution API Routes ---
 
 // Ideogram V3 Reframe API Endpoint
-app.post('/api/ideogram-reframe', async (req, res) => {
+app.post('/api/ideogram-reframe', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     console.log('🖼️ Ideogram V3 Reframe request received:', req.body);
     console.log('🖼️ Request headers:', req.headers);
@@ -3892,18 +3892,15 @@ app.post('/api/ideogram-reframe', async (req, res) => {
     
   } catch (error) {
     console.error('🖼️ Error in Ideogram V3 reframe API:', error);
-    console.error('🖼️ Error stack:', error.stack);
-    res.status(500).json({ 
-      error: 'Failed to process reframe request', 
-      message: error instanceof Error ? error.message : 'Unknown server error',
-      stack: error.stack
+    res.status(500).json({
+      error: 'Failed to process reframe request'
     });
   }
 });
 
 // LaTeX to PDF compilation using local TeX Live service
 // Full TeX Live installation - supports ALL LaTeX packages and features
-app.post('/api/latex/compile', async (req, res) => {
+app.post('/api/latex/compile', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     const { latex, command = 'pdflatex' } = req.body;
     
@@ -4004,8 +4001,7 @@ app.post('/api/latex/compile', async (req, res) => {
   } catch (error) {
     console.error('LaTeX proxy error:', error);
     res.status(500).json({ 
-      error: 'Failed to compile LaTeX', 
-      message: error.message 
+      error: 'Failed to compile LaTeX'
     });
   }
 });
@@ -4030,7 +4026,7 @@ app.get('/health', async (req, res) => {
     res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
-      error: error.message
+      error: 'Service unavailable'
     });
   }
 });

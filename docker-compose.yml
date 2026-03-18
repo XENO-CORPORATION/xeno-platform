@@ -37,7 +37,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: xenostudio-redis
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-xenostudio_redis_secure_2024}
     volumes:
       - redis_data:/data
     ports:
@@ -77,7 +77,7 @@ services:
       - DB_NAME=xenostudio
       - DB_USER=postgres
       - DB_PASSWORD=${POSTGRES_PASSWORD:-xenostudio_secure_2024}
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-xenostudio_redis_secure_2024}@redis:6379
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-xenostudio_secure_2024}@postgres:5432/xenostudio
       # Docker socket mounted below for container provisioning
       - STORAGE_LIMIT_GB=5
@@ -201,7 +201,7 @@ services:
       - SERVICE_VERSION=2.0.0
       - ENVIRONMENT=production
       # Use the shared Redis
-      - REDIS_URL=redis://redis:6379/1
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-xenostudio_redis_secure_2024}@redis:6379/1
       - CACHE_ENABLED=true
       - CACHE_TYPE=redis
       # Rate limiting (disabled due to middleware compatibility)
@@ -225,7 +225,7 @@ services:
       - SUMMARIZATION_MODEL=sshleifer/distilbart-cnn-12-6
       - ENABLE_SEMANTIC_SEARCH=true
       # CORS - allow from frontend and backend (JSON format for pydantic-settings v2)
-      - CORS_ORIGINS=["*"]
+      - CORS_ORIGINS=["http://backend:8080","https://xenostudio.ai"]
       # Meilisearch configuration (for Xeno Search Engine)
       - MEILI_HOST=http://meilisearch:7700
       - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-xeno_search_master_key_change_me}

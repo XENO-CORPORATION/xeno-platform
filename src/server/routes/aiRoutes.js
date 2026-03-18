@@ -134,7 +134,7 @@ router.post('/chat', async (req, res) => {
   } catch (error) {
     console.error(`[AI Chat] Error:`, error.message);
     res.status(500).json({
-      error: error.message,
+      error: 'AI generation failed',
       provider: provider,
       model: model
     });

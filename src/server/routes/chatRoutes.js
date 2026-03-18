@@ -109,7 +109,7 @@ router.post('/init', async (req, res) => {
     res.json({ success: true, message: 'Chat tables initialized' });
   } catch (error) {
     console.error('❌ Failed to initialize chat tables:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -163,7 +163,7 @@ router.get('/conversations', async (req, res) => {
     });
   } catch (error) {
     console.error('[Conversations] Failed to fetch:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -202,7 +202,7 @@ router.get('/conversations/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to fetch conversation:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -231,7 +231,7 @@ router.post('/conversations', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to create conversation:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -294,7 +294,7 @@ router.put('/conversations/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to update conversation:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -326,7 +326,7 @@ router.delete('/conversations/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to delete conversation:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -411,7 +411,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to add message:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -480,7 +480,7 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to add messages batch:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -539,7 +539,7 @@ router.put('/messages/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to update message:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -566,7 +566,7 @@ router.get('/personas', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to fetch personas:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -597,7 +597,7 @@ router.post('/personas', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to create persona:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -644,7 +644,7 @@ router.put('/personas/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to update persona:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -666,7 +666,7 @@ router.delete('/personas/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to delete persona:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -689,7 +689,7 @@ router.post('/personas/:id/use', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to track persona usage:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -747,7 +747,7 @@ router.post('/conversations/:id/share', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to create share link:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -794,7 +794,7 @@ router.get('/share/:token', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to get shared conversation:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -894,7 +894,7 @@ router.post('/share/:token/accept', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to accept shared conversation:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -918,7 +918,7 @@ router.delete('/conversations/:id/share', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to revoke share link:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -945,7 +945,7 @@ router.get('/conversations/:id/shares', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to list share links:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -1022,7 +1022,7 @@ router.post('/sync', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to sync conversations:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
