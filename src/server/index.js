@@ -61,6 +61,18 @@ import { authMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { runMigrations } from './services/migrationService.js';
 
+// Round 8: Infrastructure imports
+import healthRoutes from './routes/healthRoutes.js';
+import webhookRoutes from './routes/webhookRoutes.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
+import docsRoutes from './routes/docsRoutes.js';
+import jobRoutes from './routes/jobRoutes.js';
+import { requestLoggerMiddleware, logger } from './middleware/requestLogger.js';
+import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } from './middleware/cdnOptimization.js';
+import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter } from './middleware/rateLimiter.js';
+import { runAllMigrations } from './services/migrationRunner.js';
+import { initBackgroundJobs } from './services/backgroundJobs.js';
+
 // PostgreSQL connection
 const { Pool } = pg;
 const pool = new Pool({
@@ -117,6 +129,13 @@ app.disable('x-powered-by');
 
 // HTTP Parameter Pollution protection
 app.use(hpp());
+
+// Structured request logging (JSON output with request ID correlation)
+app.use(requestLoggerMiddleware);
+
+// CDN cache headers for static assets & security headers
+app.use(securityHeadersMiddleware);
+app.use(staticCacheMiddleware);
 
 // Global rate limiter: 200 requests per minute per IP
 const globalLimiter = rateLimit({
@@ -547,6 +566,30 @@ app.use('/api/download', downloadRoutes);
 app.use('/api/blog', databaseMiddleware, blogRoutes);
 app.use('/api/learn', databaseMiddleware, learnRoutes);
 console.log('⬇️ Download routes integrated: /api/download/*');
+
+// Round 8: Infrastructure routes
+// Health check routes (readiness, liveness, detailed health)
+app.use('/api', databaseMiddleware, healthRoutes);
+console.log('[Infra] Health check routes: /api/health, /api/ready, /api/live');
+
+// Webhook management (requires auth)
+app.use('/api/webhooks', databaseMiddleware, authMiddleware, webhookRoutes);
+console.log('[Infra] Webhook routes: /api/webhooks/*');
+
+// Analytics (event tracking + admin dashboard)
+app.use('/api/analytics', databaseMiddleware, authMiddleware, analyticsRoutes);
+console.log('[Infra] Analytics routes: /api/analytics/*');
+
+// Background job management (admin only)
+app.use('/api/jobs', databaseMiddleware, authMiddleware, jobRoutes);
+console.log('[Infra] Job queue routes: /api/jobs/*');
+
+// API documentation (Swagger UI + OpenAPI spec)
+app.use('/api/docs', docsRoutes);
+console.log('[Infra] API docs: /api/docs');
+
+// API cache headers for all /api/ responses
+app.use('/api/', apiCacheMiddleware);
 
 console.log('✅ Custom routes integrated successfully');
 
@@ -5120,9 +5163,19 @@ process.on('uncaughtException', (error) => {
 // Initialize cleanup service for old conversions
 initCleanupService();
 
-// Run database migrations on startup
+// Run database migrations on startup (legacy)
 runMigrations(pool).catch(err => {
   console.error('Migration warning:', err.message);
+});
+
+// Run versioned migrations (Round 8 infrastructure tables)
+runAllMigrations(pool).catch(err => {
+  console.error('[Migrations] Versioned migration warning:', err.message);
+});
+
+// Initialize background job queues
+initBackgroundJobs(pool).catch(err => {
+  console.error('[BackgroundJobs] Init warning:', err.message);
 });
 
 // Start main server
