@@ -12,10 +12,14 @@ interface ProtectedRouteProps {
   redirectTo?: string;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
-  children, 
-  redirectTo = '/auth' 
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
+  redirectTo = '/auth'
 }) => {
+  // DEV BYPASS: VPS auth endpoints returning 502 — skip auth locally
+  // TODO: remove before deploying
+  if (import.meta.env.DEV) return <>{children}</>;
+
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
@@ -35,10 +39,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   if (!isAuthenticated) {
     // Save the attempted location so we can redirect back after login
     return (
-      <Navigate 
-        to={redirectTo} 
-        state={{ from: location }} 
-        replace 
+      <Navigate
+        to={redirectTo}
+        state={{ from: location }}
+        replace
       />
     );
   }

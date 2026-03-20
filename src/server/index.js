@@ -115,7 +115,7 @@ const upload = multer({
 
 // Create Express app with increased limits for image processing
 const app = express();
-const PORT = process.env.BACKEND_PORT || 8080;
+const PORT = process.env.BACKEND_PORT || 8090;
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   console.error('CRITICAL SECURITY WARNING: JWT_SECRET not set! Using insecure default. Set JWT_SECRET environment variable immediately.');
@@ -657,7 +657,7 @@ const COMPANY_PREFIXES = {
   'xAI': 'x-ai/',
 };
 
-app.get('/api/models', async (req, res) => {
+app.get('/api/models', databaseMiddleware, authMiddleware, async (req, res) => {
   try {
     const now = Date.now();
 
@@ -1131,7 +1131,7 @@ app.use('/api/chat/generate', (err, req, res, next) => {
 });
 
 // --- Chat Generation Route (Refactored for OpenRouter) ---
-app.post('/api/chat/generate', async (req, res) => {
+app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, res) => {
     // --- LOG REQUEST INFO FOR DEBUGGING (with size monitoring) ---
     const requestSize = JSON.stringify(req.body).length;
     console.log('>>> REQUEST INFO:', {
@@ -3618,7 +3618,7 @@ app.post('/api/openai/responses/create', databaseMiddleware, authMiddleware, asy
 });
 
 // WebSocket for real-time image streaming (simplified implementation)
-app.get('/api/openai/stream/setup', (req, res) => {
+app.get('/api/openai/stream/setup', databaseMiddleware, authMiddleware, (req, res) => {
   // This would setup WebSocket connections for streaming
   // For now, return connection info
   res.json({
@@ -5032,7 +5032,7 @@ watcher.on('unlink', (filePath) => {
 // SECURITY: Restrict to safe base directories to prevent path traversal
 const SAFE_WATCH_BASES = ['/app/uploads', '/app/storage', '/app/conversions'];
 
-app.post('/api/files/watch', (req, res) => {
+app.post('/api/files/watch', databaseMiddleware, authMiddleware, (req, res) => {
   const { directories, action } = req.body;
 
   if (!Array.isArray(directories)) {
@@ -5071,7 +5071,7 @@ app.post('/api/files/watch', (req, res) => {
 });
 
 // API endpoint to get watched directories
-app.get('/api/files/watched', (req, res) => {
+app.get('/api/files/watched', databaseMiddleware, authMiddleware, (req, res) => {
   const watchedPaths = watcher.getWatched();
   const directories = Object.keys(watchedPaths);
   res.json({ directories });

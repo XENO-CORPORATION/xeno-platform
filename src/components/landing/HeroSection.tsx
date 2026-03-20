@@ -215,6 +215,7 @@ function DemoChatInterface() {
   const [showCustomPrompt, setShowCustomPrompt] = useState(false);
   const [customPromptText, setCustomPromptText] = useState('');
   const [thinkingOpen, setThinkingOpen] = useState(false);
+  const [inputText, setInputText] = useState('');
 
   const toggle = (name: string) => {
     setOpenDropdown(prev => prev === name ? null : name);
@@ -296,9 +297,8 @@ function DemoChatInterface() {
           </div>
           <div className="flex-1 overflow-hidden px-1.5 py-1.5 space-y-0.5">
             {history.map((h, i) => (
-              <div key={i} className={`px-2.5 py-2 rounded-lg text-[12px] truncate pointer-events-auto cursor-pointer transition-colors ${i === 0 ? 'bg-[#1a1a1d] text-white/80' : 'text-white/40 hover:bg-[#141416]'}`}>
-                <div className="truncate">{h.title}</div>
-                <div className="text-[10px] text-white/20 mt-0.5">{h.date}</div>
+              <div key={i} className={`px-2.5 py-1.5 rounded-md text-[13px] truncate pointer-events-auto cursor-pointer transition-colors ${i === 0 ? 'text-white/90 bg-white/[0.05]' : 'text-white/40 hover:text-white/60'}`}>
+                {h.title}
               </div>
             ))}
           </div>
@@ -586,9 +586,17 @@ function DemoChatInterface() {
 
         {/* Input area */}
         <div className="shrink-0 px-6 pb-4">
-          <div className="max-w-3xl mx-auto">
-            <div className="bg-[#111113] border border-[#1e1e21] rounded-2xl p-3 md:p-4">
-              <div className="text-[13px] text-white/20 mb-3 min-h-[20px]">Ask anything...</div>
+          <div className="max-w-3xl mx-auto group/input relative">
+            <p className="absolute -top-6 left-0 right-0 text-center text-[10px] text-white/0 group-hover/input:text-white/15 transition-colors duration-300 pointer-events-none">Demo preview · <a href="/auth" className="underline hover:text-white/25 pointer-events-auto cursor-pointer">Sign up</a> to use the full interface</p>
+            <div className="bg-[#111113] border border-[#1e1e21] rounded-2xl p-3 md:p-4 pointer-events-auto">
+              <textarea
+                className="w-full text-[13px] text-white/80 placeholder-white/20 mb-3 min-h-[20px] max-h-[120px] bg-transparent border-none outline-none ring-0 focus:ring-0 focus:outline-none resize-none"
+                placeholder="Ask anything..."
+                rows={1}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onInput={(e) => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px'; }}
+              />
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   {/* Attachment */}
@@ -611,18 +619,17 @@ function DemoChatInterface() {
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"><circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" /></svg>
                     Search
                   </div>
-                  {/* Voice */}
-                  <div className="w-8 h-8 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center pointer-events-auto cursor-pointer hover:bg-white/[0.06] transition-colors">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" /><path d="M19 10v2a7 7 0 01-14 0v-2" /><path d="M12 19v4M8 23h8" /></svg>
-                  </div>
-                  {/* Send */}
-                  <div className="w-8 h-8 rounded-lg bg-gray-400 flex items-center justify-center pointer-events-auto cursor-pointer hover:bg-gray-300 transition-colors">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+                  {/* Voice / Send toggle */}
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center pointer-events-auto cursor-pointer transition-all ${inputText.trim() ? 'bg-white hover:bg-white/90' : 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06]'}`}>
+                    {inputText.trim() ? (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" /><path d="M19 10v2a7 7 0 01-14 0v-2" /><path d="M12 19v4M8 23h8" /></svg>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
-            <p className="text-center text-[10px] text-white/15 mt-2">Demo preview · <a href="/auth" className="underline hover:text-white/25 pointer-events-auto cursor-pointer">Sign up</a> to use the full interface</p>
           </div>
         </div>
       </div>

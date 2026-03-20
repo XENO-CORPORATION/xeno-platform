@@ -25,8 +25,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 
 // Default model to use initially (will be updated when API models are fetched)
 const DEFAULT_MODEL: Model = {
-  id: "anthropic/claude-sonnet-4",
-  name: "Claude Sonnet 4",
+  id: "anthropic/claude-sonnet-4.6",
+  name: "Claude Sonnet 4.6",
   maxTokens: 200000,
   inputModalities: ['text', 'image', 'file'],
   outputModalities: ['text']
@@ -106,6 +106,10 @@ const shouldForceThinkingDisplay = (modelId: string): boolean => {
 
 // Helper to format large token counts
 const formatTokens = (tokens: number): string => {
+  if (tokens >= 1000000) {
+    const m = tokens / 1000000;
+    return m % 1 === 0 ? `${m}M` : `${m.toFixed(1)}M`;
+  }
   if (tokens >= 1000) {
     return `${(tokens / 1000).toFixed(0)}k`;
   }
@@ -578,8 +582,8 @@ const sourceHighlightStyles = `
     width: 320px;
     max-height: 240px;
     overflow: hidden;
-    background-color: #1f1f20;
-    border: 1px solid #3a3a3d;
+    background-color: #111113;
+    border: 1px solid #1e1e21;
     border-radius: 8px;
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8);
     pointer-events: none;
@@ -598,8 +602,8 @@ const sourceHighlightStyles = `
     align-items: center;
     justify-content: space-between;
     padding: 8px 12px;
-    background-color: #252526;
-    border-bottom: 1px solid #3a3a3d;
+    background-color: #141416;
+    border-bottom: 1px solid #1e1e21;
   }
   
   .source-preview-content {
@@ -613,8 +617,8 @@ const sourceHighlightStyles = `
     display: flex;
     align-items: center;
     padding: 6px 12px;
-    background-color: #252526;
-    border-top: 1px solid #3a3a3d;
+    background-color: #141416;
+    border-top: 1px solid #1e1e21;
     font-size: 0.75rem;
   }
 
@@ -622,8 +626,8 @@ const sourceHighlightStyles = `
   .image-container {
     width: 100%;
     max-width: 512px; /* Maximum width for the final image */
-    background-color: #1f1f20; /* Fallback background */
-    border: 1px solid #3a3a3d; /* Fallback border */
+    background-color: #111113; /* Fallback background */
+    border: 1px solid #1e1e21; /* Fallback border */
     border-radius: 8px;
     overflow: hidden;
     margin: 8px 0; /* Align to left (removed auto for horizontal centering) */
@@ -635,8 +639,8 @@ const sourceHighlightStyles = `
     max-width: 256px; /* Smaller max-width for loading square */
     height: 256px; /* Explicit height for square */
     aspect-ratio: 1 / 1; /* Reinforce square shape */
-    background-color: #252526; /* Loading background */
-    border-color: #252526; /* Match background for loading */
+    background-color: #141416; /* Loading background */
+    border-color: #141416; /* Match background for loading */
     /* margin: 8px auto; REMOVED to align left */
   }
 
@@ -649,7 +653,7 @@ const sourceHighlightStyles = `
     width: 100%; /* Take full width of its parent, up to max-width */
     max-width: 256px;
     height: 256px; /* Make height equal to max-width for a square */
-    background-color: #252526;
+    background-color: #141416;
     aspect-ratio: 1 / 1; /* Keep for browsers that support it well */
     /* margin: 0 auto; REMOVED to align left within .image-container.loading */
   }
@@ -732,7 +736,7 @@ const sourceHighlightStyles = `
     top: 0;
     right: 0;
     bottom: 0;
-    background-color: #121212;
+    background-color: #0a0a0b;
     border-left: 1px solid #2a2a2d;
     display: flex;
     flex-direction: column;
@@ -770,7 +774,7 @@ const sourceHighlightStyles = `
     align-items: center;
     justify-content: space-between;
     padding: 16px;
-    background-color: #121212;
+    background-color: #0a0a0b;
     border-bottom: 1px solid #2a2a2d;
     flex-shrink: 0;
     gap: 12px;
@@ -799,8 +803,8 @@ const sourceHighlightStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: #19191a;
-    border: 1px solid #3a3a3d;
+    background-color: #0e0e10;
+    border: 1px solid #1e1e21;
     border-radius: 8px;
     padding: 0 10px;
     height: 32px;
@@ -814,7 +818,7 @@ const sourceHighlightStyles = `
   .context-panel-btn:hover {
     border-color: #6b7280;
     color: rgba(255, 255, 255, 0.9);
-    background-color: #222224;
+    background-color: #141416;
   }
 
   .context-panel-btn:active {
@@ -826,7 +830,7 @@ const sourceHighlightStyles = `
   .context-panel-btn.active {
     border-color: #6b7280;
     color: rgba(255, 255, 255, 0.9);
-    background-color: #222224;
+    background-color: #141416;
   }
 
   .context-panel-btn.success {
@@ -839,8 +843,8 @@ const sourceHighlightStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: #19191a;
-    border: 1px solid #3a3a3d;
+    background-color: #0e0e10;
+    border: 1px solid #1e1e21;
     border-radius: 8px;
     width: 32px;
     height: 32px;
@@ -853,7 +857,7 @@ const sourceHighlightStyles = `
   .context-panel-btn-icon:hover {
     border-color: #6b7280;
     color: rgba(255, 255, 255, 0.9);
-    background-color: #222224;
+    background-color: #141416;
   }
 
   .context-panel-btn-icon:active {
@@ -865,7 +869,7 @@ const sourceHighlightStyles = `
   .context-panel-btn-icon.active {
     border-color: #6b7280;
     color: rgba(255, 255, 255, 0.9);
-    background-color: #222224;
+    background-color: #141416;
   }
 
   .context-panel-btn-icon.success {
@@ -926,11 +930,11 @@ const sourceHighlightStyles = `
     width: 8px;
   }
   .context-panel-content::-webkit-scrollbar-track {
-    background: #1e1e1e;
+    background: #0e0e10;
     border-radius: 4px;
   }
   .context-panel-content::-webkit-scrollbar-thumb {
-    background: #3a3a3d;
+    background: #1e1e21;
     border-radius: 4px;
   }
   .context-panel-content::-webkit-scrollbar-thumb:hover {
@@ -938,7 +942,7 @@ const sourceHighlightStyles = `
   }
   .context-panel-content {
     scrollbar-width: thin;
-    scrollbar-color: #3a3a3d #1e1e1e;
+    scrollbar-color: #1e1e21 #0e0e10;
   }
 
   /* Global Focus Indicators for Accessibility */
@@ -1296,6 +1300,28 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isTaskbarHidden, setIsTaskbarHidden] = useState(false);
+  const historySidebarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.shiftKey && e.key === 'H') setIsTaskbarHidden(prev => !prev);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Close history sidebar on click outside
+  useEffect(() => {
+    if (!isHistoryOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (historySidebarRef.current && !historySidebarRef.current.contains(e.target as Node)) {
+        setIsHistoryOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isHistoryOpen]);
 
   // Touch/swipe handling for mobile
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -2672,8 +2698,7 @@ interface QueueState {
     // Helper function to check if a model is excluded from reasoning processing
     const isModelExcludedFromReasoning = (modelId: string): boolean => {
         const modelsToExcludeMarkers = [
-            'anthropic/claude-3.5-sonnet:beta',
-            'deepseek/deepseek-chat-v3-0324:free'
+            'anthropic/claude-3.5-sonnet:beta'
         ];
         return modelsToExcludeMarkers.some(excludedModel => modelId.includes(excludedModel));
     };
@@ -4778,14 +4803,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
     return (
         <div className="absolute inset-0 z-[999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-[#1f1f20] border border-[#3a3a3d] rounded-lg shadow-xl max-w-sm w-full overflow-hidden">
+            <div className="bg-[#111113] border border-[#1e1e21] rounded-lg shadow-xl max-w-sm w-full overflow-hidden">
                 {/* Header */}
                 <div className="p-4">
                     <h2 className="text-lg font-semibold text-white">Delete chat?</h2>
                 </div>
 
                 {/* Divider */}
-                <hr className="border-t border-[#3a3a3d]" />
+                <hr className="border-t border-[#1e1e21]" />
 
                 {/* Content */}
                 <div className="p-4">
@@ -4795,10 +4820,10 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 </div>
 
                 {/* Footer with Buttons */}
-                <div className="flex justify-end gap-3 bg-[#19191a]/50 px-4 py-3 border-t border-[#3a3a3d]">
+                <div className="flex justify-end gap-3 bg-[#0e0e10]/50 px-4 py-3 border-t border-[#1e1e21]">
                     <button 
                         onClick={handleCancelDelete}
-                        className="px-4 py-1.5 rounded-md text-sm font-medium text-gray-300 bg-[#3a3a3d] hover:bg-[#4a4a4d] transition-colors"
+                        className="px-4 py-1.5 rounded-md text-sm font-medium text-gray-300 bg-[#1e1e21] hover:bg-[#2a2a2d] transition-colors"
                     >
                         Cancel
                     </button>
@@ -5863,7 +5888,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         </div>
         
         {results.summary && isXenoResultsExpanded && (
-          <div className="mb-3 px-3 py-2 bg-[#1a1a1c] rounded-md border border-[#3a3a3d]">
+          <div className="mb-3 px-3 py-2 bg-[#111113] rounded-md border border-[#1e1e21]">
             <p className="text-xs text-gray-300 italic">{results.summary}</p>
           </div>
         )}
@@ -5906,7 +5931,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         {hasValidSources && sourceCount > 2 && !isXenoResultsExpanded && (
           <button
             onClick={() => setIsXenoResultsExpanded(true)}
-            className="w-full mt-3 text-center py-1.5 text-xs text-gray-400 hover:text-white hover:bg-[#3a3a40] rounded-md transition-colors border border-gray-700/30"
+            className="w-full mt-3 text-center py-1.5 text-xs text-gray-400 hover:text-white hover:bg-[#1e1e21] rounded-md transition-colors border border-gray-700/30"
           >
             Show all {sourceCount} sources
           </button>
@@ -5915,7 +5940,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         {isXenoResultsExpanded && (
           <button
             onClick={() => setIsXenoResultsExpanded(false)}
-            className="w-full mt-3 text-center py-1.5 text-xs text-gray-400 hover:text-white hover:bg-[#3a3a40] rounded-md transition-colors border border-gray-700/30"
+            className="w-full mt-3 text-center py-1.5 text-xs text-gray-400 hover:text-white hover:bg-[#1e1e21] rounded-md transition-colors border border-gray-700/30"
           >
             Show less
           </button>
@@ -5936,8 +5961,8 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       willChange: 'transform',
       zIndex: 9999,
       width: '300px',
-      backgroundColor: '#1f1f20',
-      border: '1px solid #3a3a3d',
+      backgroundColor: '#111113',
+      border: '1px solid #1e1e21',
       borderRadius: '8px',
       boxShadow: '0 5px 15px rgba(0, 0, 0, 0.5)',
       color: 'white',
@@ -5958,7 +5983,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         onMouseEnter={handleIndicatorPopupMouseEnter}
         onMouseLeave={handleIndicatorPopupMouseLeave}
       >
-        <div style={{ padding: '8px 10px', borderBottom: '1px solid #3a3a3d', fontWeight: 500 }}>
+        <div style={{ padding: '8px 10px', borderBottom: '1px solid #1e1e21', fontWeight: 500 }}>
           Sources for this section
         </div>
         <ul style={{ listStyle: 'none', padding: '8px 10px', margin: 0, maxHeight: '150px', overflowY: 'auto' }}>
@@ -6051,7 +6076,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       top: `${position.y}px`,
       zIndex: 100,
       width: '220px',
-      background: '#2d2d2f',
+      background: '#1a1a1d',
       color: '#e4e4e7',
       borderRadius: '12px',
       boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
@@ -6112,7 +6137,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       top: `${position.y}px`,
       zIndex: 100,
       width: '220px',
-      background: '#2d2d2f',
+      background: '#1a1a1d',
       color: '#e4e4e7',
       borderRadius: '12px',
       boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
@@ -7145,7 +7170,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
           /* Xeno Search Container Styles */
           .xeno-search-container {
-            background: linear-gradient(135deg, #1a1a1b 0%, #1f1f22 100%);
+            background: linear-gradient(135deg, #111113 0%, #1f1f22 100%);
             border: 1px solid #2a2a2d;
             border-radius: 12px;
             padding: 16px;
@@ -7209,7 +7234,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
           /* Xeno Sources Container Styles */
           .xeno-sources-container {
-            background: linear-gradient(135deg, #1a1a1b 0%, #1f1f22 100%);
+            background: linear-gradient(135deg, #111113 0%, #1f1f22 100%);
             border: 1px solid #2a2a2d;
             border-radius: 12px;
             overflow: hidden;
@@ -7281,7 +7306,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             width: 32px;
             height: 32px;
             border-radius: 8px;
-            background: #1a1a1b;
+            background: #111113;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -7453,10 +7478,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         ref={chatContainerRef}
         className={`relative flex flex-col h-full text-white overflow-hidden main-content-transition ${isMobile ? 'chat-mobile-container' : ''} ${isMobile && isHistoryOpen ? 'chat-sidebar-open' : ''}`}
         style={{
-          paddingRight: isContextPanelOpen ? `${contextPanelWidth}px` : '0px',
-          // In single interface mode on desktop, shift content when history opens; on mobile, sidebar overlays
-          // Using window.innerWidth check - on mobile (<768px), don't shift content
-          marginLeft: !isMultiInterface && isHistoryOpen && typeof window !== 'undefined' && window.innerWidth >= 768 ? '320px' : '0px'
+          paddingRight: isContextPanelOpen ? `${contextPanelWidth}px` : '0px'
         }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -7464,29 +7486,31 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {/* Top Bar - matches PDF/Word interface style */}
         <div
           ref={topBarRef}
-          className={`chat-top-bar absolute top-0 left-0 z-10 flex flex-col px-4 py-2 md:px-4 md:py-2 main-content-transition bg-[#121212] ${isMultiInterface ? 'px-2 py-1' : ''}`}
-          style={{ right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px', backgroundColor: '#121212' }}
+          className={`chat-top-bar absolute top-0 left-0 z-10 flex flex-col px-4 py-2 md:px-4 md:py-2 main-content-transition bg-[#0a0a0b] ${isMultiInterface ? 'px-2 py-1' : ''}`}
+          style={{ right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px', backgroundColor: '#0a0a0b' }}
         >
           {/* Buttons row */}
           <div className={`relative flex flex-shrink-0 items-center justify-between`}>
-          {/* Left side - History & System Prompt */}
-          <div ref={leftButtonsRef} className={`chat-top-bar-buttons relative flex items-center ${isMultiInterface ? 'gap-1' : 'gap-2 md:gap-2'}`}>
+          {/* Left side - History, System Prompt, Clear/Save */}
+          <div ref={leftButtonsRef} className={`chat-top-bar-buttons relative flex items-center ${isMultiInterface ? 'gap-1' : 'gap-2 md:gap-2'} transition-all duration-300 ease-in-out`}
+            style={{ marginLeft: !isMultiInterface && isHistoryOpen && !isMobile ? (isTaskbarHidden ? '272px' : '264px') : '0px' }}>
+              {/* History */}
               <button
                   onClick={toggleHistory}
-                  className={`flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${isHistoryOpen ? 'border-gray-500' : ''}`}
+                  className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${isHistoryOpen ? 'border-gray-500' : ''}`}
                   aria-label="Toggle History"
                   title="History"
               >
                   <Lightbulb size={16} />
               </button>
-              {/* System Prompt Button */}
+              {/* System Prompt */}
               <div className="relative">
                 <button
                   ref={systemPromptButtonRef}
                   onClick={toggleSystemPrompt}
                   onMouseEnter={() => setIsSystemPromptButtonHovered(true)}
                   onMouseLeave={() => setIsSystemPromptButtonHovered(false)}
-                  className={`chat-system-prompt-btn flex items-center justify-center gap-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'} ${selectedPersona ? 'border-gray-500' : ''}`}
+                  className={`chat-system-prompt-btn flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'} ${selectedPersona ? 'border-gray-500' : ''}`}
                 >
                   <FilePenLine size={16} className="flex-shrink-0" />
                   <span className="truncate hidden md:inline">
@@ -7497,127 +7521,51 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         : (isMultiInterface ? 'System' : 'System Prompt')}
                   </span>
                 </button>
-
-                {/* Chevron indicator on hover */}
                 {(isSystemPromptButtonHovered && !isSystemPromptOpen && !isCustomPromptOpen) && (
                   <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 pointer-events-none">
                     <ChevronDown size={16} className="text-gray-500" />
                   </div>
                 )}
-
-                {/* Stacked Persona Buttons - shown below system prompt button */}
                 <div
                   ref={systemPromptPanelRef}
-                  className={`
-                    absolute top-full left-0 mt-[10px] z-20
-                    flex flex-col gap-2
-                    transition-all duration-200 ease-out origin-top-left
-                    ${isSystemPromptOpen && !isCustomPromptOpen
-                      ? 'opacity-100 scale-100 visible'
-                      : 'opacity-0 scale-95 invisible pointer-events-none'
-                    }
-                  `}
+                  className={`absolute top-full left-0 mt-[10px] z-20 flex flex-col gap-2 transition-all duration-200 ease-out origin-top-left ${isSystemPromptOpen && !isCustomPromptOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible pointer-events-none'}`}
                 >
                   {PERSONAS.map((persona) => (
-                    <button
-                      key={persona.id}
-                      onClick={() => handlePersonaSelect(persona.id)}
-                      className={`flex items-center justify-center bg-[#19191a] border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${
-                        selectedPersona === persona.id
-                          ? 'border-gray-500 text-white'
-                          : 'border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
-                      }`}
-                    >
-                      {persona.label}
-                    </button>
+                    <button key={persona.id} onClick={() => handlePersonaSelect(persona.id)}
+                      className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === persona.id ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-gray-500 hover:text-white'}`}
+                    >{persona.label}</button>
                   ))}
-                  <button
-                    onClick={() => {
-                      setIsSystemPromptOpen(false);
-                      setIsCustomPromptOpen(true);
-                    }}
-                    className={`flex items-center justify-center bg-[#19191a] border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${
-                      selectedPersona === 'custom'
-                        ? 'border-gray-500 text-white'
-                        : 'border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
-                    }`}
-                  >
-                    Custom
-                  </button>
-                  {/* Clear button - only show when a persona is selected */}
+                  <button onClick={() => { setIsSystemPromptOpen(false); setIsCustomPromptOpen(true); }}
+                    className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === 'custom' ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-gray-500 hover:text-white'}`}
+                  >Custom</button>
                   {selectedPersona && (
-                    <button
-                      onClick={handleClearSystemPrompt}
-                      className={`flex items-center justify-center bg-[#19191a] border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} border-[#3a3a3d] text-gray-400 hover:border-red-500/50 hover:text-red-400`}
-                    >
-                      Clear
-                    </button>
+                    <button onClick={handleClearSystemPrompt}
+                      className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} border-[#1e1e21] text-gray-400 hover:border-red-500/50 hover:text-red-400`}
+                    >Clear</button>
                   )}
                 </div>
-
+                {/* Custom Prompt Input */}
+                <div className={`absolute top-full left-0 mt-[10px] z-20 bg-[#0e0e10] border border-[#2a2a2d] rounded-lg shadow-xl overflow-hidden transition-all duration-200 ease-out origin-top-left ${isCustomPromptOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible pointer-events-none'}`}
+                  style={{ width: '18rem' }}>
+                  <textarea placeholder="Enter custom system prompt..." value={systemPrompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSystemPrompt(e.target.value)}
+                    className="w-full h-32 p-3 text-sm text-gray-200 placeholder-gray-500 outline-none bg-[#0e0e10] border-b border-[#2a2a2d] scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent resize-none" />
+                  <div className="flex gap-2 p-2">
+                    <button onClick={() => { setIsCustomPromptOpen(false); setIsSystemPromptOpen(true); }}
+                      className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white transition-colors">Back</button>
+                    <button onClick={() => { setSavedSystemPrompt(systemPrompt); setIsCustomPromptOpen(false); setSelectedPersona('custom'); setIsSystemPromptSaved(true); setTimeout(() => setIsSystemPromptSaved(false), 1500); }}
+                      disabled={!systemPrompt.trim()}
+                      className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${systemPrompt.trim() ? 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white' : 'border-white/[0.04] text-gray-600 cursor-not-allowed'}`}>Save</button>
+                  </div>
+                </div>
               </div>
+              {/* Clear/Save */}
               <button
                   onClick={selectedPersona ? handleClearSystemPrompt : undefined}
-                  className={`flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 transition-colors h-9 ${
-                    selectedPersona
-                      ? 'text-gray-400 hover:border-red-500/50 hover:text-red-400 cursor-pointer'
-                      : 'text-gray-600 cursor-default'
-                  }`}
+                  className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 transition-colors h-9 ${selectedPersona ? 'text-gray-400 hover:border-red-500/50 hover:text-red-400 cursor-pointer' : 'text-gray-600 cursor-default'}`}
                   disabled={!selectedPersona}
               >
                   {selectedPersona ? <X size={16} /> : <Save size={16} />}
               </button>
-              {/* Custom Prompt Input - positioned at left buttons level */}
-              <div
-                className={`
-                  absolute top-full left-0 mt-[10px] z-20
-                  bg-[#19191a] border border-[#2a2a2d] rounded-lg shadow-xl overflow-hidden
-                  transition-all duration-200 ease-out origin-top-left
-                  ${isCustomPromptOpen
-                    ? 'opacity-100 scale-100 visible'
-                    : 'opacity-0 scale-95 invisible pointer-events-none'
-                  }
-                `}
-                style={{ width: 'calc(36px + 10rem + 36px + 24px)' }}
-              >
-                <textarea
-                  placeholder="Enter custom system prompt..."
-                  value={systemPrompt}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSystemPrompt(e.target.value)}
-                  className="w-full h-32 p-3 text-sm text-gray-200 placeholder-gray-500 outline-none
-                             bg-[#19191a] border-b border-[#2a2a2d]
-                             scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent
-                             resize-none"
-                />
-                <div className="flex gap-2 p-2">
-                  <button
-                    onClick={() => {
-                      setIsCustomPromptOpen(false);
-                      setIsSystemPromptOpen(true);
-                    }}
-                    className="flex-1 px-3 py-1.5 text-sm rounded-lg border bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSavedSystemPrompt(systemPrompt);
-                      setIsCustomPromptOpen(false);
-                      setSelectedPersona('custom');
-                      setIsSystemPromptSaved(true);
-                      setTimeout(() => setIsSystemPromptSaved(false), 1500);
-                    }}
-                    disabled={!systemPrompt.trim()}
-                    className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      systemPrompt.trim()
-                        ? 'bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
-                        : 'bg-[#19191a] border-[#2a2a2d] text-gray-600 cursor-not-allowed'
-                    }`}
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
                       </div>
 
           {/* Center - Token Count (mobile only, non-multi-interface) - absolutely centered */}
@@ -7644,7 +7592,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               <button
                 ref={conversationSelectorButtonRef}
                 onClick={() => setIsConversationSelectorOpen(!isConversationSelectorOpen)}
-                className={`flex items-center justify-center gap-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 max-w-[14rem] ${isConversationSelectorOpen ? 'border-gray-500' : ''}`}
+                className={`flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 max-w-[14rem] ${isConversationSelectorOpen ? 'border-gray-500' : ''}`}
               >
                 <MessageSquarePlus size={16} className="text-gray-500 flex-shrink-0" />
                 <span className="truncate max-w-[10rem]">
@@ -7665,7 +7613,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     ? 'opacity-100 scale-100 visible'
                     : 'opacity-0 scale-95 invisible pointer-events-none'
                   }
-                  bg-[#19191a] border border-[#2a2a2d] rounded-lg shadow-xl
+                  bg-[#0e0e10] border border-[#2a2a2d] rounded-lg shadow-xl
                   w-64 max-h-80 overflow-hidden
                 `}
               >
@@ -7678,7 +7626,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       placeholder="Search conversations..."
                       value={conversationSearchQuery}
                       onChange={(e) => setConversationSearchQuery(e.target.value)}
-                      className="w-full bg-[#121212] border border-[#3a3a3d] rounded-md py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
+                      className="w-full bg-[#0a0a0b] border border-[#1e1e21] rounded-md py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
                     />
                   </div>
                 </div>
@@ -7758,7 +7706,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <button
                     onClick={handleRefreshConversation}
                     disabled={isRefreshing}
-                    className={`flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     aria-label="Refresh conversation"
                     title="Refresh conversation from database"
                 >
@@ -7767,7 +7715,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               )}
               <button
                   onClick={handleNewChat}
-                  className="flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9"
+                  className="flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9"
                   aria-label="Start New Chat"
                   title="New Chat"
               >
@@ -7781,10 +7729,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       }}
                   onMouseEnter={() => setIsModelSelectorButtonHovered(true)}
                   onMouseLeave={() => setIsModelSelectorButtonHovered(false)}
-                  className={`chat-model-selector flex items-center justify-center gap-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'}`}
+                  className={`chat-model-selector flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'}`}
                 >
                   {isModelsLoading ? (
                     <Loader2 size={16} className="text-gray-500 flex-shrink-0 animate-spin" />
+                  ) : modelHasReasoningCapability(selectedModel.id, selectedModel) !== 'disabled' && isReasonToggled ? (
+                    <BrainCircuit size={16} className="text-white/70 flex-shrink-0" />
                   ) : (
                     <Brain size={16} className="text-gray-500 flex-shrink-0" />
                   )}
@@ -7805,21 +7755,19 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           ? 'opacity-100 scale-100 visible'
                           : 'opacity-0 scale-95 invisible'
                         }
-                        w-72 bg-[#19191a] border border-[#2a2a2d] rounded-lg shadow-xl
-                        max-h-[70vh] overflow-hidden flex flex-col
+                        w-72 bg-[#111113] border border-[#1e1e21] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)]
+                        max-h-[60vh] overflow-hidden flex flex-col
                 `}>
                   {/* Scrollable Content */}
                   <div className="flex-1 overflow-y-auto">
                     <div>
                           {groupedModels.map((group) => {
                               const isExpanded = expandedCompanies.has(group.companyName);
-                              const isActiveCompany = getCompanyNameFromModelId(selectedModel.id) === group.companyName;
                               return (
                                   <div key={group.companyName}>
-                                      <button
+                                      <div
                                           onClick={() => {
                                               setExpandedCompanies(prev => {
-                                                  // If already expanded, collapse it. Otherwise, set only this one expanded.
                                                   if (prev.has(group.companyName)) {
                                                       return new Set();
                                                   } else {
@@ -7827,48 +7775,51 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                   }
                                               });
                                           }}
-                                          className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
-                                              isExpanded ? 'bg-white/5' : 'hover:bg-white/5'
-                                          }`}
+                                          className="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-white/[0.03] transition-colors border-b border-[#1e1e21]/50"
                                       >
-                                          <span className={`text-sm ${isActiveCompany ? 'text-white' : 'text-gray-400'}`}>
+                                          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-wider">
                                             {group.companyName}
                                           </span>
-                                          <ChevronDown size={14} className={`text-gray-600 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-                                      </button>
+                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}><path d="M6 9l6 6 6-6" /></svg>
+                                      </div>
 
                                       {/* Expanded Models List */}
-                                      <div className={`overflow-hidden transition-all duration-200 ${
-                                        isExpanded ? 'max-h-[400px]' : 'max-h-0'
-                                      }`}>
-                                        <div className="pb-1">
-                                              {group.models.map((model) => (
-                                                <button
-                                                  key={model.id}
-                                                  onClick={() => handleModelSelect(model)}
-                                                  className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
-                                                    selectedModel.id === model.id
-                                                      ? 'bg-white/10'
-                                                      : 'hover:bg-white/5'
-                                                  }`}
-                                                >
-                                                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                    <span className={`text-sm truncate ${
-                                                      selectedModel.id === model.id ? 'text-white' : 'text-gray-400'
-                                                    }`}>
-                                                      {model.name}
-                                                    </span>
-                                                    <span className="text-[10px] text-gray-600 flex-shrink-0">
-                                                      {formatTokens(model.maxTokens)}
-                                                    </span>
-                                                  </div>
-                                                  {selectedModel.id === model.id && (
-                                                    <Check size={14} className="text-gray-400 flex-shrink-0" />
-                                                  )}
-                                                </button>
-                                              ))}
+                                      {isExpanded && group.models.map((model) => (
+                                        <div
+                                          key={model.id}
+                                          onClick={() => handleModelSelect(model)}
+                                          className={`px-3 py-2 flex items-center justify-between cursor-pointer transition-colors ${
+                                            selectedModel.id === model.id
+                                              ? 'bg-white/10 text-white'
+                                              : 'text-gray-400 hover:bg-white/[0.05] hover:text-white'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                                            <span className="text-[13px] truncate">
+                                              {model.name}
+                                            </span>
+                                            {modelHasReasoningCapability(model.id, model) !== 'disabled' && (
+                                              <BrainCircuit
+                                                size={13}
+                                                className={`flex-shrink-0 cursor-pointer transition-colors ${selectedModel.id === model.id && isReasonToggled ? 'text-white/70' : 'text-white/20'}`}
+                                                title={selectedModel.id === model.id ? (isReasonToggled ? 'Reasoning ON — click to disable' : 'Reasoning OFF — click to enable') : 'Reasoning capable'}
+                                                onClick={(e) => {
+                                                  if (selectedModel.id === model.id) {
+                                                    e.stopPropagation();
+                                                    setIsReasonToggled(!isReasonToggled);
+                                                  }
+                                                }}
+                                              />
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[11px] text-white/25">{formatTokens(model.maxTokens)}</span>
+                                            {selectedModel.id === model.id && (
+                                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2"><path d="M20 6L9 17l-5-5" /></svg>
+                                            )}
+                                          </div>
                                         </div>
-                                      </div>
+                                      ))}
                                   </div>
                               );
                           })}
@@ -7883,8 +7834,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   setIsMessageSearchOpen(!isMessageSearchOpen);
                   if (isMessageSearchOpen) setMessageSearchQuery('');
                 }}
-                className={`flex items-center justify-center bg-[#19191a] border rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${
-                  isMessageSearchOpen ? 'border-gray-500' : 'border-[#3a3a3d]'
+                className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${
+                  isMessageSearchOpen ? 'border-gray-500' : 'border-[#1e1e21]'
                 }`}
                 aria-label="Search messages"
                 title="Search in conversation"
@@ -7896,7 +7847,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               <button
                   ref={settingsButtonRef}
                   onClick={() => setIsSettingsModalOpen(!isSettingsModalOpen)}
-                  className="flex items-center gap-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9"
+                  className="flex items-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9"
                   aria-label="Settings"
                   title="Settings"
               >
@@ -7911,7 +7862,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       ? 'opacity-100 scale-100 visible'
                       : 'opacity-0 scale-95 invisible'
                     }
-                    bg-[#19191a] border border-[#2a2a2d] rounded-lg shadow-xl
+                    bg-[#0e0e10] border border-[#2a2a2d] rounded-lg shadow-xl
                     overflow-hidden
             `}
             style={{ width: 'calc(36px + 10rem + 36px + 24px)' }}>
@@ -7924,8 +7875,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       onClick={() => setChatAlignment(chatAlignment === 'left' ? 'center' : 'left')}
                       className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         chatAlignment === 'left'
-                          ? 'bg-[#19191a] border-gray-500 text-white'
-                          : 'bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
+                          ? 'bg-[#0e0e10] border-gray-500 text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
                       }`}
                     >
                       Left
@@ -7934,8 +7885,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       onClick={() => setChatAlignment('center')}
                       className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         chatAlignment === 'center'
-                          ? 'bg-[#19191a] border-gray-500 text-white'
-                          : 'bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
+                          ? 'bg-[#0e0e10] border-gray-500 text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
                       }`}
                     >
                       Center
@@ -7944,8 +7895,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       onClick={() => setChatAlignment(chatAlignment === 'right' ? 'center' : 'right')}
                       className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         chatAlignment === 'right'
-                          ? 'bg-[#19191a] border-gray-500 text-white'
-                          : 'bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
+                          ? 'bg-[#0e0e10] border-gray-500 text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
                       }`}
                     >
                       Right
@@ -7959,8 +7910,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     onClick={() => setIsWideChatEnabled(!isWideChatEnabled)}
                     className={`w-full px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                       isWideChatEnabled
-                        ? 'bg-[#19191a] border-gray-500 text-white'
-                        : 'bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
+                        ? 'bg-[#0e0e10] border-gray-500 text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
                     }`}
                   >
                     Wide
@@ -7977,8 +7928,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     }}
                     className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
                       chatFontSize === 'small'
-                        ? 'bg-[#19191a] border-gray-500 text-white'
-                        : 'bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
+                        ? 'bg-[#0e0e10] border-gray-500 text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
                     }`}
                     title="Small text"
                   >
@@ -7991,8 +7942,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     }}
                     className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
                       chatFontSize === 'medium'
-                        ? 'bg-[#19191a] border-gray-500 text-white'
-                        : 'bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
+                        ? 'bg-[#0e0e10] border-gray-500 text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
                     }`}
                     title="Medium text"
                   >
@@ -8005,8 +7956,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     }}
                     className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
                       chatFontSize === 'large'
-                        ? 'bg-[#19191a] border-gray-500 text-white'
-                        : 'bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
+                        ? 'bg-[#0e0e10] border-gray-500 text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
                     }`}
                     title="Large text"
                   >
@@ -8032,8 +7983,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       disabled={maxInterfacesReached}
                       className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         maxInterfacesReached
-                          ? 'bg-[#19191a] border-[#2a2a2d] text-gray-600 cursor-not-allowed'
-                          : 'bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'
+                          ? 'border-white/[0.04] text-gray-600 cursor-not-allowed'
+                          : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
                       }`}
                     >
                       <Plus size={14} />
@@ -8046,7 +7997,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           onCloseInterface(interfaceId);
                           setIsSettingsModalOpen(false);
                         }}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-red-500/50 hover:text-red-400 transition-colors"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border bg-[#0e0e10] border-[#1e1e21] text-gray-400 hover:border-red-500/50 hover:text-red-400 transition-colors"
                       >
                         <X size={14} />
                         <span>Close Interface</span>
@@ -8066,7 +8017,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         handleExportConversation();
                         setIsSettingsModalOpen(false);
                       }}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border bg-[#19191a] border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white transition-colors"
+                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white transition-colors"
                     >
                       <Download size={14} />
                       <span>Export as Markdown</span>
@@ -8078,15 +8029,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             </div>
           </div>
           </div>
-          {/* Spacer line - relative to buttons bottom edge */}
-          <div className="w-full mt-3 -mx-4 px-0" style={{ width: 'calc(100% + 2rem)' }}>
-            <div className="h-[1px] bg-[#2a2a2d]" />
-          </div>
         </div>
 
         {/* Message Search Bar */}
         {isMessageSearchOpen && (
-          <div className="w-full px-4 py-2 bg-[#121212] border-b border-[#2a2a2d]">
+          <div className="w-full px-4 py-2 bg-[#0a0a0b] border-b border-[#2a2a2d]">
             <div className={`${isMultiInterface ? 'max-w-full' : (isWideChatEnabled ? 'max-w-[67.5rem]' : 'max-w-[45rem]')} mx-auto`}>
               <div className="relative">
                 <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
@@ -8096,7 +8043,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   value={messageSearchQuery}
                   onChange={(e) => setMessageSearchQuery(e.target.value)}
                   autoFocus
-                  className="w-full bg-[#19191a] border border-[#3a3a3d] rounded-lg py-2 pl-10 pr-10 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
+                  className="w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg py-2 pl-10 pr-10 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
                 />
                 {messageSearchQuery && (
                   <button
@@ -8182,7 +8129,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         return (
                             <div key={message.id} className="flex justify-start w-full pl-[1.125rem]">
                                 {isRefinementPlaceholder ? (
-                                    <div className="flex items-center gap-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-sm">
+                                    <div className="flex items-center gap-2 bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-3 py-1.5 text-sm">
                                         <span className="flex h-2 w-2 relative mr-1">
                                             <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-500 animate-pulse"></span>
                                         </span>
@@ -8206,7 +8153,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         return (
                             <div key={message.id} className="group relative flex justify-start w-full">
                                 <div className="flex items-center"> {/* Flex row for both elements */}
-                                    <div className="flex items-center gap-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-sm text-gray-400 italic">
+                                    <div className="flex items-center gap-2 bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-3 py-1.5 text-sm text-gray-400 italic">
                                         <MessageSquareX size={16} className="mr-1 flex-shrink-0" /> 
                                         <span>{message.isXenoSearchCancelled ? message.text : 'Request Aborted'}</span>
                                     </div>
@@ -8244,7 +8191,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                            {isUser ? (
                                editingMessageId === message.id ? (
                                      <div
-                                         className="chat-message-bubble flex flex-col bg-[#19191a] border border-[#3a3a3d] rounded-2xl rounded-br-none p-3 max-w-[90%] md:max-w-[75%] w-full text-white overflow-hidden"
+                                         className="chat-message-bubble flex flex-col bg-[#0e0e10] border border-[#1e1e21] rounded-2xl rounded-br-none p-3 max-w-[90%] md:max-w-[75%] w-full text-white overflow-hidden"
                                      >
                                          <textarea
                                              ref={editInputRef}
@@ -8266,7 +8213,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                   ) : (
                                      <div data-message-id={message.id} className="chat-message-bubble group flex flex-col items-end max-w-[90%] md:max-w-[75%] min-w-0">
                                            <div
-                                              className="bg-[#19191a] border border-[#3a3a3d] rounded-2xl rounded-br-none p-3 text-white overflow-hidden"
+                                              className="bg-[#0e0e10] border border-[#1e1e21] rounded-2xl rounded-br-none p-3 text-white overflow-hidden"
                                            >
                                                <p className="text-sm leading-snug whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{message.text}</p>
                                            </div>
@@ -8277,7 +8224,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                         ? URL.createObjectURL(message.userImageAttachment.file)
                                                         : `data:${message.userImageAttachment.type};base64,${message.userImageAttachment.base64Data}`}
                                                  alt={message.userImageAttachment.name}
-                                                 className="max-w-full h-auto rounded-lg border border-[#3a3a3d] cursor-pointer"
+                                                 className="max-w-full h-auto rounded-lg border border-[#1e1e21] cursor-pointer"
                                                  onClick={() => {
                                                    if (message.userImageAttachment) {
                                                       if (message.userImageAttachment.file) {
@@ -8295,7 +8242,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            )}
                                            {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content) && (
                                             <div
-                                              className="mt-2 ml-auto mr-0 max-w-[250px] p-2 flex items-center gap-2 bg-[#2a2a2d]/50 border border-[#3a3a3d]/50 rounded-lg cursor-pointer hover:bg-[#2a2a2d] transition-colors"
+                                              className="mt-2 ml-auto mr-0 max-w-[250px] p-2 flex items-center gap-2 bg-[#2a2a2d]/50 border border-[#1e1e21]/50 rounded-lg cursor-pointer hover:bg-[#2a2a2d] transition-colors"
                                               onClick={() => {
                                                 if (message.userFileAttachment) {
                                                   if (message.userFileAttachment.file) {
@@ -8342,7 +8289,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                                       {/* Full message edit mode - transforms entire container into input box */}
                                       {editingAiMessageId === message.id ? (
-                                        <div className="w-full bg-[#19191a] border border-[#3a3a3d] rounded-2xl p-4">
+                                        <div className="w-full bg-[#0e0e10] border border-[#1e1e21] rounded-2xl p-4">
                                           <div className="flex items-center gap-2 mb-3">
                                             <Pencil size={14} className="text-gray-500" />
                                             <span className="text-sm text-gray-400">Editing Response</span>
@@ -8351,7 +8298,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           <textarea
                                             value={editingAiContent}
                                             onChange={(e) => setEditingAiContent(e.target.value)}
-                                            className="w-full min-h-[300px] max-h-[600px] p-4 bg-[#121214] border border-[#3a3a3d] rounded-xl text-white text-sm resize-y focus:outline-none focus:border-gray-500 leading-relaxed"
+                                            className="w-full min-h-[300px] max-h-[600px] p-4 bg-[#121214] border border-[#1e1e21] rounded-xl text-white text-sm resize-y focus:outline-none focus:border-gray-500 leading-relaxed"
                                             placeholder="Edit AI response..."
                                             autoFocus
                                             spellCheck={false}
@@ -8376,11 +8323,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       {/* 1. Thoughts (Expanded) */}
                                       {message.hasThinking && showThinkingId === message.id && (
                                           <div className="w-full pl-[1.125rem] mb-4">
-                                          <div className="flex flex-col w-full bg-[#19191a] border border-[#3a3a3d] rounded-lg overflow-hidden">
+                                          <div className="flex flex-col w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg overflow-hidden">
                                               {/* Header */}
                                               <div
                                                   onClick={() => setShowThinkingId(null)}
-                                                  className="flex items-center justify-between w-full px-4 py-2.5 cursor-pointer hover:bg-[#19191a]/50 transition-colors"
+                                                  className="flex items-center justify-between w-full px-4 py-2.5 cursor-pointer hover:bg-[#0e0e10]/50 transition-colors"
                                               >
                                                   <div className="flex items-center gap-2">
                                                       <Lightbulb size={16} className="text-gray-500" />
@@ -8396,7 +8343,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                                               {/* Content */}
                                               <div className="px-4 pb-4">
-                                                  <div className="pt-3 border-t border-[#3a3a3d] w-full text-sm prose prose-sm prose-invert max-w-none text-gray-300 prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-gray-200 prose-headings:font-medium leading-relaxed"> 
+                                                  <div className="pt-3 border-t border-[#1e1e21] w-full text-sm prose prose-sm prose-invert max-w-none text-gray-300 prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-gray-200 prose-headings:font-medium leading-relaxed"> 
                                                 {message.thinkingContent ? (
                                                               <ReactMarkdown 
                                                                   remarkPlugins={[remarkGfm]}
@@ -8457,7 +8404,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           <div className="w-full pl-[1.125rem] mb-4">
                                               <div
                                                   onClick={() => setShowThinkingId(message.id)}
-                                                  className="flex items-center justify-between w-full bg-[#19191a] border border-[#3a3a3d] rounded-lg px-4 py-2.5 cursor-pointer hover:border-gray-500 transition-colors"
+                                                  className="flex items-center justify-between w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-4 py-2.5 cursor-pointer hover:border-gray-500 transition-colors"
                                               >
                                                   <div className="flex items-center gap-2">
                                                       <Lightbulb size={16} className="text-gray-500" />
@@ -8530,7 +8477,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                             const actualUrl = extractActualUrl(source.uri);
                                                                             const favicon = sourceMetadataCache[actualUrl]?.favicon;
                                                                             return (
-                                                                                <div key={idx} className="w-6 h-6 rounded-full bg-[#2a2a2d] border-2 border-[#1a1a1b] flex items-center justify-center overflow-hidden shadow-sm">
+                                                                                <div key={idx} className="w-6 h-6 rounded-full bg-[#2a2a2d] border-2 border-[#111113] flex items-center justify-center overflow-hidden shadow-sm">
                                                                                     {favicon ? (
                                                                                         <img src={favicon} alt="" className="w-4 h-4 object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                                                                     ) : (
@@ -8540,7 +8487,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                             );
                                                                         })}
                                                                         {sourceCount > 4 && (
-                                                                            <div className="w-6 h-6 rounded-full bg-[#3a3a3d] border-2 border-[#1a1a1b] flex items-center justify-center text-xs text-gray-300 font-medium shadow-sm">
+                                                                            <div className="w-6 h-6 rounded-full bg-[#1e1e21] border-2 border-[#111113] flex items-center justify-center text-xs text-gray-300 font-medium shadow-sm">
                                                                                 +{sourceCount - 4}
                                                                             </div>
                                                                         )}
@@ -8777,7 +8724,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {showScrollToBottom && (
           <button
             onClick={scrollToBottom}
-            className="absolute bottom-20 right-4 z-20 p-2 text-gray-400 bg-[#19191a]/80 hover:bg-[#2a2a2d] rounded-full shadow-lg hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
+            className="absolute bottom-20 right-4 z-20 p-2 text-gray-400 bg-[#0e0e10]/80 hover:bg-[#2a2a2d] rounded-full shadow-lg hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
             style={{ right: isContextPanelOpen ? `calc(${contextPanelWidth}px + 1rem)` : '1rem' }} // Adjust position based on panel
             aria-label="Scroll to bottom"
           >
@@ -8797,7 +8744,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         >
           {/* Queue Container */}
           {queue.messages.length > 0 && (
-            <div className="mb-3 bg-[#19191a] border border-[#3a3a3d] rounded-lg shadow-md">
+            <div className="mb-3 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-md">
               <div className="w-full flex items-center justify-between p-3 text-left text-gray-300 rounded-lg">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{queue.messages.length} in queue</span>
@@ -8818,10 +8765,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   {queue.messages.map((queuedMessage, index) => (
                     <div 
                       key={queuedMessage.id}
-                      className="flex items-center justify-between p-2 bg-[#19191a]/80 rounded-md border border-[#3a3a3d]/50"
+                      className="flex items-center justify-between p-2 bg-[#0e0e10]/80 rounded-md border border-[#1e1e21]/50"
                     >
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <div className="w-4 h-4 rounded-full border-2 border-[#3a3a3d] flex-shrink-0"></div>
+                        <div className="w-4 h-4 rounded-full border-2 border-[#1e1e21] flex-shrink-0"></div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-gray-300 truncate">
                             {queuedMessage.text || `Task ${index + 1}`}
@@ -8848,7 +8795,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           )}
 
           {/* Input Box Area */}
-          <div className="chat-input-container relative bg-[#19191a] border border-[#3a3a3d] rounded-2xl p-3 md:p-4 shadow-lg input-box-top-fade">
+          <div className="chat-input-container relative bg-[#0e0e10] border border-[#1e1e21] rounded-xl p-2.5 md:p-3 input-box-top-fade" style={{ boxShadow: '0 -20px 40px 10px #0a0a0b' }}>
             {isContextLimitReached && (
               <div className="mb-3 p-2.5 border border-red-600/70 bg-red-900/30 rounded-lg text-red-400 text-xs shadow-md">
                 {contextLimitWarning}
@@ -8866,7 +8813,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     <img
                                         src={URL.createObjectURL(file.fileObject)}
                                         alt={file.name}
-                                        className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-[#3a3a3d] group-hover:border-[#6b7280] transition-all duration-200 ease-out cursor-pointer group-hover:scale-[1.02]"
+                                        className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-[#1e1e21] group-hover:border-[#6b7280] transition-all duration-200 ease-out cursor-pointer group-hover:scale-[1.02]"
                                         onClick={() => {
                                             if (file.fileObject) {
                                                 setFullScreenImageUrl(URL.createObjectURL(file.fileObject));
@@ -8880,7 +8827,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             e.stopPropagation();
                                             handleRemoveAttachedFile(file.id);
                                         }}
-                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[#19191a] border border-[#3a3a3d] text-gray-400 hover:text-white hover:border-red-500 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
+                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[#0e0e10] border border-[#1e1e21] text-gray-400 hover:text-white hover:border-red-500 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
                                         aria-label="Remove file"
                                     >
                                         <X size={10} />
@@ -8889,7 +8836,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             ) : (
                                 <div className="relative">
                                     <div
-                                        className={`h-11 rounded-lg flex items-center gap-2 px-3 bg-[#19191a] border border-[#3a3a3d] group-hover:border-[#6b7280] transition-all duration-200 ease-out text-[13px] text-gray-300 group-hover:text-white ${file.fileObject ? 'cursor-pointer group-hover:scale-[1.01]' : 'cursor-default opacity-70'}`}
+                                        className={`h-11 rounded-lg flex items-center gap-2 px-3 bg-[#0e0e10] border border-[#1e1e21] group-hover:border-[#6b7280] transition-all duration-200 ease-out text-[13px] text-gray-300 group-hover:text-white ${file.fileObject ? 'cursor-pointer group-hover:scale-[1.01]' : 'cursor-default opacity-70'}`}
                                         onClick={() => {
                                             if (file.fileObject) {
                                                 handleShowFileInContextPanel(file);
@@ -8907,7 +8854,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             e.stopPropagation();
                                             handleRemoveAttachedFile(file.id);
                                         }}
-                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[#19191a] border border-[#3a3a3d] text-gray-400 hover:text-white hover:border-red-500 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
+                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[#0e0e10] border border-[#1e1e21] text-gray-400 hover:text-white hover:border-red-500 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
                                         aria-label="Remove file"
                                     >
                                         <X size={10} />
@@ -8937,20 +8884,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   }
                   // Shift+Enter adds a new line (default behavior)
                 }}
-                className="w-full bg-transparent text-white placeholder-gray-400 pl-2 pr-4 py-2 outline-none resize-none flex-grow focus:ring-0 border-none focus:outline-none focus:shadow-none text-base scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent"
-                style={{ maxHeight: '150px' }}
+                className="w-full bg-transparent text-white placeholder-gray-400 pl-2 pr-4 py-1 outline-none resize-none flex-grow focus:ring-0 border-none focus:outline-none focus:shadow-none text-sm scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent"
+                style={{ maxHeight: '120px' }}
               />
             </div>
             
             {/* Controls Row */}
-            <div className="chat-input-controls flex items-center justify-between mt-2 md:mt-3 gap-2">
+            <div className="chat-input-controls flex items-center justify-between mt-1.5 md:mt-2 gap-2">
               <div className="flex items-center gap-1 md:gap-2 relative">
                   {/* Attach Button */}
                   <div className="relative">
                       <button
                           ref={attachButtonRef}
                           onClick={toggleAttachMenu}
-                          className="flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg p-2 text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[#3a3a3d] disabled:hover:text-gray-300 transition-colors shadow-inner"
+                          className="flex items-center justify-center border border-white/[0.08] rounded-lg p-2 text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-white/[0.08] disabled:hover:text-gray-300 transition-colors"
                           aria-label="Attach file"
                           disabled={!modelSupportsVision(selectedModel)}
                           title={modelSupportsVision(selectedModel) ? "Attach file" : "File/image attachment not supported by this model"}
@@ -8962,7 +8909,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           ref={attachMenuRef}
                           className={`
                               absolute bottom-full left-0 mb-2 z-30 
-                              w-64 bg-[#19191a] border border-[#3a3a3d] rounded-lg shadow-xl 
+                              w-64 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-xl 
                               transition-all duration-200 ease-out origin-bottom-left 
                               ${isAttachMenuOpen 
                                   ? 'opacity-100 scale-100 visible' 
@@ -8975,7 +8922,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                    <FolderUp size={18} />
                                    <span>Upload a file</span>
                                </button>
-                               <div className="border-t border-[#3a3a3d] mx-1 my-1"></div>
+                               <div className="border-t border-[#1e1e21] mx-1 my-1"></div>
                                <button onClick={handleShowRecent} className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-300 hover:bg-[#2a2a2d] rounded-md text-left">
                                    <div className="flex items-center gap-3">
                                       <FileClock size={18} />
@@ -8991,7 +8938,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             className={`
                                 hide-scrollbar
                                 absolute bottom-full left-full ml-2 mb-2 z-30 
-                                w-72 bg-[#19191a] border border-[#3a3a3d] rounded-lg shadow-xl 
+                                w-72 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-xl 
                                 max-h-[300px] overflow-y-auto 
                                 transition-all duration-200 ease-out origin-bottom-left 
                                 ${isRecentFilesOpen && isAttachMenuOpen 
@@ -9011,7 +8958,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            placeholder="Search files..."
                                            value={recentFilesSearchQuery}
                                            onChange={(e) => setRecentFilesSearchQuery(e.target.value)}
-                                           className="w-full bg-[#121212] border border-[#3a3a3d] rounded-md py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
+                                           className="w-full bg-[#0a0a0b] border border-[#1e1e21] rounded-md py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
                                          />
                                        </div>
                                      )}
@@ -9065,96 +9012,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           </div>
                         </div>
                       </div>
-                      {/* Toggle Button Group with Settings */}
-                      <div className="flex items-center">
-                        {/* Original Toggle Button Group - solid background */}
-                      <div className="flex items-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-1 py-1 shadow-inner relative z-20">
-                        {/* Reason Toggle - uses dynamic modelHasReasoningCapability helper */}
-                        {(() => {
-                            const reasoningCapability = modelHasReasoningCapability(selectedModel.id);
-                            const isVisuallyActive = (reasoningCapability === 'alwaysOn') || (reasoningCapability === 'toggleable' && isReasonToggled);
-                            const isClickable = reasoningCapability === 'toggleable';
-                            const isDisabledVisual = reasoningCapability === 'disabled';
-                            let title = '';
-                            if (reasoningCapability === 'alwaysOn') title = 'Reasoning is always active for this model';
-                            else if (reasoningCapability === 'toggleable') title = 'Toggle thinking process output';
-                            else title = 'Reasoning output not supported for this model';
-                            let buttonClass = `px-3 py-1 rounded-md text-sm font-medium transition-colors `;
-                            if (isDisabledVisual) buttonClass += 'text-gray-500 cursor-not-allowed';
-                            else if (isVisuallyActive) { buttonClass += 'bg-gray-300 text-zinc-900 shadow-sm'; if (!isClickable) buttonClass += ' cursor-not-allowed'; }
-                            else buttonClass += 'text-gray-300 hover:bg-[#3a3a3d]';
-                            return (<button onClick={isClickable ? toggleReason : undefined} disabled={!isClickable} className={buttonClass} title={title}>Reason</button>);
-                        })()}
-                        <div className="w-px h-4 bg-[#3a3a3d] mx-1"></div>
-                                                    {/* Search Toggle with Provider Selector - Google & Brave only */}
-                        <div className="relative flex items-center">
-                          {/* Google Button */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSearchProvider('google');
-                              if (!isXenoSearchEnabled) {
-                                setIsXenoSearchEnabled(true);
-                              }
-                            }}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-l-md text-sm font-medium transition-all duration-200 ${searchProvider === 'google' && isXenoSearchEnabled ? 'bg-gray-300 text-zinc-900 shadow-sm' : 'text-gray-300 hover:bg-[#3a3a3d]'}`}
-                            title="Google Search"
-                          >
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                            </svg>
-                          </button>
-                          {/* Brave Button */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSearchProvider('brave');
-                              if (!isXenoSearchEnabled) {
-                                setIsXenoSearchEnabled(true);
-                              }
-                            }}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-r-md text-sm font-medium transition-all duration-200 border-l ${searchProvider === 'brave' && isXenoSearchEnabled ? 'bg-gray-300 text-zinc-900 border-zinc-400' : 'text-gray-300 hover:bg-[#3a3a3d] border-[#3a3a3d]'}`}
-                            title="Brave Search"
-                          >
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M12 0L1.5 4.5v6c0 5.55 4.5 10.74 10.5 12 6-1.26 10.5-6.45 10.5-12v-6L12 0zm0 2.18l8.5 3.64v4.68c0 4.54-3.68 8.79-8.5 9.94-4.82-1.15-8.5-5.4-8.5-9.94V5.82L12 2.18z" fill="#FB542B"/>
-                              <path d="M12 4L5 7v4c0 3.87 3 7.47 7 8.47 4-1 7-4.6 7-8.47V7l-7-3z" fill="#FB542B"/>
-                            </svg>
-                          </button>
-                        </div>
-                        </div>
-                        
-                                {/* Xeno Search Settings Button - slides from behind Xeno Search button */}
-        {/* <button
-          className={`w-6 h-6 flex items-center justify-center rounded-r-md bg-[#19191a] border border-[#3a3a3d] text-sm font-medium transition-all duration-300 ease-out bg-[#3a3a3d] text-gray-300 hover:bg-[#4a4a4d] ${isXenoSearchHovered ? '-ml-px' : '-ml-6'}`}
-                          style={{ 
-                            zIndex: isXenoSearchHovered ? 10 : 5,
-                            transform: isXenoSearchHovered ? 'translateX(0)' : 'translateX(-20px)'
-                          }}
-                          onMouseEnter={() => {
-                            if (hoverEndTimeoutRef.current) {
-                              clearTimeout(hoverEndTimeoutRef.current);
-                              hoverEndTimeoutRef.current = null;
-                            }
-                            setIsXenoSearchHovered(true);
-                          }}
-                          onMouseLeave={() => {
-                            hoverEndTimeoutRef.current = setTimeout(() => {
-                              setIsXenoSearchHovered(false);
-                            }, 300);
-                          }}
-                                    onClick={(e) => {
-            e.stopPropagation();
-            setIsXenoDeepMode(!isXenoDeepMode);
-            console.log(`[Xeno Mode Toggle] Switched to ${!isXenoDeepMode ? 'Xeno Deep' : 'Xeno Search'} mode`);
-                      }}
-                        >
-                          <ArrowLeftRight size={10} />
-                        </button> */}
-                </div>
+                      {/* Toggle buttons removed — search is auto-detected from user intent, reasoning is per-model */}
               </div>
                   <div className="flex items-center space-x-3">
                      {/* Token Context Window Display with Compress Button - Hidden on mobile (shown in header instead) */}
@@ -9193,23 +9051,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                        );
                      })()}
 
-                    {/* Voice Input Button - MOVED HERE */}
-                    <button
-                      onClick={handleToggleVoiceInput}
-                      className={`p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-[#2a2a2d] transition-colors relative ${isVoiceInputActive ? 'bg-[#2a2a2d]/70' : 'bg-[#19191a]'}`}
-                      aria-label={isVoiceInputActive ? 'Stop voice input' : 'Start voice input'}
-                      title={isVoiceInputActive ? 'Stop voice input' : 'Start voice input'}
-                    >
-                      {/* Pinging element - rendered when active, behind the icon */}
-                      {isVoiceInputActive && (
-                        <span className="absolute inset-0 flex items-center justify-center">
-                          <span className="animate-ping h-3.5 w-3.5 rounded-full bg-red-500 opacity-75"></span>
-                        </span>
-                      )}
-                      {/* Mic icon - sits on top of the ping */}
-                      <Mic size={18} className={`relative ${isVoiceInputActive ? 'text-red-500' : 'text-gray-400'}`} />
-                    </button>
-
                   {isLoading ? (
                     // Show Queue button if there's text in input during generation, otherwise show Stop
                     (inputValue.trim() || attachedFiles.length > 0) ? (
@@ -9229,13 +9070,28 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         <StopCircle size={16} />
                       </button>
                     )
-                  ) : (
+                  ) : (inputValue.trim() || attachedFiles.length > 0) ? (
                     <button
                       onClick={handleGenerate}
-                      className="bg-gray-400 text-zinc-900 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed h-10 flex items-center justify-center shadow-md"
-                      disabled={(!inputValue.trim() && attachedFiles.length === 0) || isContextLimitReached}
+                      className="w-10 h-10 rounded-lg bg-white hover:bg-white/90 flex items-center justify-center transition-all shadow-md"
+                      disabled={isContextLimitReached}
+                      title="Send"
                     >
-                        <span>Send</span>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleToggleVoiceInput}
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all relative ${isVoiceInputActive ? 'bg-[#2a2a2d]/70' : 'bg-[#0e0e10] hover:bg-[#2a2a2d]'}`}
+                      aria-label={isVoiceInputActive ? 'Stop voice input' : 'Start voice input'}
+                      title={isVoiceInputActive ? 'Stop voice input' : 'Start voice input'}
+                    >
+                      {isVoiceInputActive && (
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          <span className="animate-ping h-3.5 w-3.5 rounded-full bg-red-500 opacity-75"></span>
+                        </span>
+                      )}
+                      <Mic size={18} className={`relative ${isVoiceInputActive ? 'text-red-500' : 'text-gray-400'}`} />
                     </button>
                   )}
                 </div>
@@ -9287,75 +9143,47 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {(() => {
           const historySidebarContent = (
             <>
-              {/* Backdrop overlay - click to close sidebar */}
-              {isHistoryOpen && (
-                <div
-                  className={`${isMultiInterface ? 'absolute' : 'fixed'} inset-0 bg-black/40 z-[49] transition-opacity duration-300`}
-                  onClick={() => setIsHistoryOpen(false)}
-                  aria-hidden="true"
-                />
-              )}
               <div
-                className={`chat-history-sidebar ${isMultiInterface ? 'absolute' : 'fixed'} top-0 h-full ${isMultiInterface ? 'w-64' : 'w-80'} bg-[#121212] border-r border-[#2a2a2d] z-[50] transition-all duration-300 ease-in-out ${!isHistoryOpen && isMobile ? 'chat-history-sidebar-closed' : ''}`}
+                ref={historySidebarRef}
+                className={`chat-history-sidebar ${isMultiInterface ? 'absolute' : 'fixed'} z-[50] transition-all duration-300 ease-in-out ${isMultiInterface ? 'w-60' : 'w-[260px]'} bg-[#0e0e10] border border-[#1e1e21] rounded-lg overflow-hidden ${!isHistoryOpen && isMobile ? 'chat-history-sidebar-closed' : ''}`}
                 style={{
-                  // On mobile, CSS handles full width; on desktop, use inline styles
+                  top: '12px',
+                  bottom: '12px',
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
                   left: isMobile
-                    ? (isHistoryOpen ? '0px' : '-100%')
+                    ? (isHistoryOpen ? '12px' : '-100%')
                     : (isMultiInterface
-                        ? (isHistoryOpen ? '0px' : '-256px')  // w-64 = 256px
-                        : (isHistoryOpen
-                            ? (isStandalone ? '0px' : '52px')
-                            : (isStandalone ? '-320px' : '-268px')))  // w-80 = 320px, -320px or -(320-52)px
+                        ? (isHistoryOpen ? '12px' : '-260px')
+                        : (isHistoryOpen ? (isTaskbarHidden ? '8px' : '60px') : (isTaskbarHidden ? '-268px' : '-212px'))),
+                  pointerEvents: isHistoryOpen ? 'auto' : 'none'
                 }}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
               >
-              {/* Header with close button for mobile and multi-interface */}
-              {(isMultiInterface || isMobile) && (
-                <>
-                  <div className="flex items-center justify-between px-3 pt-3 pb-3">
-                    {/* Close button with text - left side */}
-                    <button
-                      onClick={() => setIsHistoryOpen(false)}
-                      className="flex items-center gap-2 px-3 py-1.5 text-gray-400 hover:text-white hover:bg-[#2a2a2d] rounded-lg transition-colors"
-                    >
-                      <X size={16} />
-                      <span className="text-sm font-medium">Close</span>
-                    </button>
-                    {/* History text - right side */}
-                    <span className="text-sm font-medium text-gray-300">History</span>
+              {/* Sidebar content — matches bento demo */}
+              <div className="flex flex-col h-full overflow-hidden">
+                {/* Search */}
+                <div className="p-2.5 border-b border-[#1e1e21]">
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#141416] border border-[#1e1e21] cursor-pointer hover:border-[#1e1e21] transition-colors">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+                    <input
+                      type="search"
+                      placeholder="Search..."
+                      value={historySearchTerm}
+                      onChange={(e) => setHistorySearchTerm(e.target.value)}
+                      className="w-full bg-transparent text-[11px] text-gray-300 placeholder-white/25 focus:outline-none"
+                    />
                   </div>
-                  {/* Horizontal line separator */}
-                  <div className="mx-3 h-[1px] bg-[#2a2a2d]" />
-                </>
-              )}
-              {/* Search - aligned with top bar buttons */}
-              <div className={`px-3 pb-3`} style={{ paddingTop: (isMultiInterface || isMobile) ? '0px' : '16px' }}>
-                <div className="relative">
-                  <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 pointer-events-none" />
-                  <input
-                    type="search"
-                    placeholder="Search..."
-                    value={historySearchTerm}
-                    onChange={(e) => setHistorySearchTerm(e.target.value)}
-                    className="w-full bg-[#19191a] border border-[#3a3a3d] rounded-lg py-1.5 pl-9 pr-3 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500 transition-colors h-9"
-                  />
                 </div>
-                {/* Vertical line indicator */}
-                <div className="mt-3 h-[1px] bg-[#2a2a2d]" />
-              </div>
 
-              {/* History List */}
-              <div className="flex-1 overflow-y-auto px-3 py-2 hide-scrollbar" style={{ height: (isMultiInterface || isMobile) ? 'calc(100% - 120px)' : 'calc(100vh - 180px)' }}>
-                {conversationHistory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <Clock size={32} className="text-gray-600 mb-3" />
-                    <p className="text-gray-500 text-sm">No conversations yet</p>
-                    <p className="text-gray-600 text-xs mt-1">Start a new chat to begin</p>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {conversationHistory
+                {/* Conversation list */}
+                <div className="flex-1 overflow-y-auto px-1.5 py-1.5 space-y-0.5 hide-scrollbar">
+                  {conversationHistory.length === 0 ? (
+                    <div className="px-2 py-8 text-center">
+                      <p className="text-[12px] text-white/20">No conversations yet</p>
+                    </div>
+                  ) : (
+                    conversationHistory
                       .filter(convo => {
                         const searchTermLower = historySearchTerm.toLowerCase();
                         if (!searchTermLower) return true;
@@ -9368,97 +9196,40 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       .map(convo => {
                         const isActive = activeConversationId === convo.id;
                         return (
-                          <div
-                            key={convo.id}
-                            className={`group relative rounded-lg transition-colors ${isActive ? 'bg-[#2a2a2d]' : 'hover:bg-[#19191a]'}`}
+                          <div key={convo.id} className={`px-2.5 py-1.5 rounded-md text-[13px] truncate cursor-pointer transition-colors group relative ${isActive ? 'text-white/90 bg-white/[0.05]' : 'text-white/40 hover:text-white/60'}`}
+                            onClick={() => { if (editingConversationId !== convo.id) { handleLoadConversation(convo.id); toggleHistory(); } }}
                           >
-                            <button
-                              onClick={() => {
-                                if (editingConversationId !== convo.id) {
-                                  handleLoadConversation(convo.id);
-                                  toggleHistory();
-                                }
-                              }}
-                              className="block w-full text-left p-3"
-                              disabled={editingConversationId === convo.id}
-                            >
-                              <div className="pr-8">
-                                {editingConversationId === convo.id ? (
-                                  <input
-                                    id={`edit-title-${convo.id}-${interfaceId}`}
-                                    type="text"
-                                    value={editTitleText}
-                                    onChange={(e) => setEditTitleText(e.target.value)}
-                                    onBlur={handleSaveConversationTitle}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        handleSaveConversationTitle();
-                                      } else if (e.key === 'Escape') {
-                                        setEditingConversationId(null);
-                                        setEditTitleText('');
-                                      }
-                                    }}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="w-full bg-[#19191a] border border-[#3a3a3d] rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-gray-500"
-                                  />
-                                ) : (
-                                  <p className="text-sm text-gray-200 truncate">{convo.title}</p>
-                                )}
-                                <p className="text-xs text-gray-500 mt-1">
-                                  {new Date(convo.timestamp).toLocaleDateString()} · {formatTokens(convo.messages.reduce((acc, msg) => acc + estimateTokens(msg.sender === 'user' ? msg.text : (msg.parsedAnswer || msg.text || '')), 0))} tokens
-                                </p>
-                              </div>
-                            </button>
-                            {/* Action buttons */}
-                            <div className={`absolute top-1/2 right-2 transform -translate-y-1/2 flex items-center gap-0.5 transition-opacity duration-150 ${
-                              editingConversationId === convo.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                            }`}>
+                            {editingConversationId === convo.id ? (
+                              <input
+                                id={`edit-title-${convo.id}-${interfaceId}`}
+                                type="text"
+                                value={editTitleText}
+                                onChange={(e) => setEditTitleText(e.target.value)}
+                                onBlur={handleSaveConversationTitle}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') { e.preventDefault(); handleSaveConversationTitle(); }
+                                  else if (e.key === 'Escape') { setEditingConversationId(null); setEditTitleText(''); }
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-full bg-[#0e0e10] border border-[#1e1e21] rounded px-2 py-0.5 text-[13px] text-white focus:outline-none focus:border-gray-500"
+                              />
+                            ) : convo.title}
+                            {/* Hover actions */}
+                            <div className={`absolute top-1/2 right-1 transform -translate-y-1/2 flex items-center gap-0.5 transition-opacity duration-150 ${editingConversationId === convo.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                               {editingConversationId === convo.id ? (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleSaveConversationTitle(); }}
-                                  className="p-1.5 text-green-400 hover:bg-green-600/20 rounded-md"
-                                  aria-label="Confirm rename"
-                                >
-                                  <Check size={14} />
-                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); handleSaveConversationTitle(); }} className="p-1 text-green-400 hover:bg-green-600/20 rounded" aria-label="Confirm rename"><Check size={12} /></button>
                               ) : (
                                 <>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingConversationId(convo.id);
-                                      setEditTitleText(convo.title);
-                                      setTimeout(() => {
-                                        const inputElement = document.getElementById(`edit-title-${convo.id}-${interfaceId}`);
-                                        inputElement?.focus();
-                                      }, 50);
-                                    }}
-                                    className="p-1.5 text-gray-500 hover:text-white hover:bg-[#2a2a2d] rounded-md"
-                                    aria-label="Edit conversation title"
-                                  >
-                                    <FilePenLine size={14} />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const title = conversationHistory.find(c => c.id === convo.id)?.title || 'this chat';
-                                      setDeleteConfirmationModal({ isOpen: true, conversationId: convo.id, conversationTitle: title });
-                                    }}
-                                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-900/20 rounded-md"
-                                    aria-label="Delete conversation"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
+                                  <button onClick={(e) => { e.stopPropagation(); setEditingConversationId(convo.id); setEditTitleText(convo.title); setTimeout(() => document.getElementById(`edit-title-${convo.id}-${interfaceId}`)?.focus(), 50); }} className="p-1 text-white/20 hover:text-white/50 rounded" aria-label="Rename"><FilePenLine size={12} /></button>
+                                  <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmationModal({ isOpen: true, conversationId: convo.id, conversationTitle: convo.title }); }} className="p-1 text-white/20 hover:text-red-400 rounded" aria-label="Delete"><Trash2 size={12} /></button>
                                 </>
                               )}
                             </div>
                           </div>
                         );
                       })
-                    }
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
             </>

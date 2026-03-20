@@ -179,17 +179,32 @@ const OverviewContent: React.FC = () => {
     };
   }, []);
 
+  const [isTaskbarHidden, setIsTaskbarHidden] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.shiftKey && e.key === 'H') {
+        e.preventDefault();
+        setIsTaskbarHidden(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   return (
     <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'row', overflow: 'hidden', margin: 0, padding: 0 }}>
       <LayoutContext.Provider value={{ isSidebarCollapsed }}>
         {/* Left Taskbar - Original taskbar with OS button and AI interfaces */}
-        <OverviewTaskbar 
+        <div style={{ transition: 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1), margin 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)', transform: isTaskbarHidden ? 'translateX(-100%)' : 'translateX(0)', marginRight: isTaskbarHidden ? '-52px' : '0', zIndex: 60, position: 'relative' }}>
+        <OverviewTaskbar
           labs={labs}
           onCreateLab={handleCreateLab}
           onCollapseChange={handleSidebarCollapseChange}
           onToggleInterface={toggleInterfaceMode}
           isCleanMode={isCleanMode}
         />
+        </div>
         
         {/* Main content area - full width, minus taskbar width */}
         <div style={{ flex: 1, overflow: 'hidden' }}>

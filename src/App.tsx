@@ -67,7 +67,7 @@ function App() {
           {/* Standalone Chat Interface - Full viewport */}
           <Route path="/" element={
             <ProtectedRoute>
-              <div className="w-full h-screen bg-[#121212]">
+              <div className="w-full h-screen bg-[#0a0a0b]">
                 <MultiChatContainer isStandalone={true} />
               </div>
             </ProtectedRoute>

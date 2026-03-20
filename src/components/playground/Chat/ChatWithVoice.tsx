@@ -2039,8 +2039,8 @@ const styleTag = document.getElementById('chat-with-voice-styles') || document.c
 styleTag.id = 'chat-with-voice-styles';
 styleTag.textContent = `
   :root {
-    --primary-bg: #121212;
-    --secondary-bg: #1E1E1E;
+    --primary-bg: #0a0a0b;
+    --secondary-bg: #111113;
     --text-primary: #FFFFFF;
     --text-secondary: #E0E0E0;
     --glassmorphism-bg: rgba(255, 255, 255, 0.05);

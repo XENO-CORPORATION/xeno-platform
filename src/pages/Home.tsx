@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import Header from '../components/landing/Header';
 import HeroSection from '../components/landing/HeroSection';
-import UseCasesShowcase from '../components/landing/UseCasesShowcase';
+import UseCasesShowcase from '../components/landing/UseCasesSection';
 import Footer from '../components/landing/Footer';
 
 function Home() {

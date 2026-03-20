@@ -18,11 +18,9 @@ export default defineConfig({
   server: {
     host: true, // Accept connections from any host
     allowedHosts: ['.trycloudflare.com', 'localhost', '127.0.0.1'],
-    port: 4040,
+    port: 5183,
     strictPort: false,
-    hmr: {
-      port: 4040,
-    },
+    hmr: true,
     // Completely disable host checking by removing allowedHosts restriction
     watch: {
       ignored: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/coverage/**'],
@@ -46,7 +44,7 @@ export default defineConfig({
       // General /api proxy - points to our backend server
       // Note: File uploads bypass this proxy and go directly to backend due to Vite's 1MB body limit
       '/api': {
-        target: process.env.DOCKER_ENV ? 'http://backend:8080' : (process.env.NODE_ENV === 'production' ? 'http://backend:8080' : 'http://127.0.0.1:8080'),
+        target: process.env.DOCKER_ENV ? 'http://backend:8080' : (process.env.NODE_ENV === 'production' ? 'http://backend:8080' : 'https://xenostudio.ai'),
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {
