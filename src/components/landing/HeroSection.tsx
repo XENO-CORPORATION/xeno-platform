@@ -214,6 +214,7 @@ function DemoChatInterface() {
   const [expandedCompany, setExpandedCompany] = useState<string | null>('Anthropic');
   const [showCustomPrompt, setShowCustomPrompt] = useState(false);
   const [customPromptText, setCustomPromptText] = useState('');
+  const [thinkingOpen, setThinkingOpen] = useState(false);
 
   const toggle = (name: string) => {
     setOpenDropdown(prev => prev === name ? null : name);
@@ -260,6 +261,17 @@ function DemoChatInterface() {
     { name: 'Custom', desc: 'Custom prompt' },
   ];
 
+  // Simple inline markdown: **bold** → <strong>
+  const renderInline = (text: string) => {
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i} className="text-white/90 font-semibold">{part.slice(2, -2)}</strong>;
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
   const msgs = [
     { role: 'user', text: 'Explain quantum computing in simple terms' },
     { role: 'ai', thinking: 'Analyzing the concept of quantum computing and finding accessible analogies...', text: 'Think of a regular computer bit like a light switch — it\'s either on (1) or off (0). A quantum bit, or **qubit**, is like a coin spinning in the air — it can be both heads and tails at the same time until it lands.\n\nThis "superposition" lets quantum computers explore many possibilities simultaneously, making them incredibly powerful for certain problems like:\n\n- **Cryptography** — breaking and building encryption\n- **Drug discovery** — simulating molecular interactions\n- **Optimization** — solving complex logistics problems\n- **Machine learning** — training models exponentially faster' },
@@ -275,16 +287,16 @@ function DemoChatInterface() {
     <div className="relative h-full bg-[#0a0a0b] rounded-xl overflow-hidden pointer-events-none" onClick={() => { if (openDropdown) { setOpenDropdown(null); setShowCustomPrompt(false); } }}>
       {/* Floating history sidebar */}
       {showHistory && (
-        <div className="absolute top-3 left-3 bottom-3 w-[200px] z-10 bg-[#121212] border border-[#2a2a2d] rounded-xl flex flex-col overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
-          <div className="p-2.5 border-b border-[#2a2a2d]">
-            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#19191a] border border-[#2a2a2d] pointer-events-auto cursor-pointer hover:border-[#3a3a3d] transition-colors">
+        <div className="absolute top-3 left-3 bottom-3 w-[200px] z-10 bg-[#0e0e10] border border-[#1e1e21] rounded-xl flex flex-col overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
+          <div className="p-2.5 border-b border-[#1e1e21]">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#141416] border border-[#1e1e21] pointer-events-auto cursor-pointer hover:border-[#1e1e21] transition-colors">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
               <span className="text-[11px] text-white/25">Search...</span>
             </div>
           </div>
           <div className="flex-1 overflow-hidden px-1.5 py-1.5 space-y-0.5">
             {history.map((h, i) => (
-              <div key={i} className={`px-2.5 py-2 rounded-lg text-[12px] truncate pointer-events-auto cursor-pointer transition-colors ${i === 0 ? 'bg-[#2a2a2d] text-white/80' : 'text-white/40 hover:bg-[#19191a]'}`}>
+              <div key={i} className={`px-2.5 py-2 rounded-lg text-[12px] truncate pointer-events-auto cursor-pointer transition-colors ${i === 0 ? 'bg-[#1a1a1d] text-white/80' : 'text-white/40 hover:bg-[#141416]'}`}>
                 <div className="truncate">{h.title}</div>
                 <div className="text-[10px] text-white/20 mt-0.5">{h.date}</div>
               </div>
@@ -307,22 +319,22 @@ function DemoChatInterface() {
           </div>
           {/* Persona dropdown */}
           {openDropdown === 'persona' && (
-            <div className="absolute top-full left-0 mt-2 bg-[#19191a] border border-[#2a2a2d] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto overflow-hidden" style={{ width: showCustomPrompt ? '18rem' : '12rem' }} onClick={(e) => e.stopPropagation()}>
+            <div className="absolute top-full left-0 mt-2 bg-[#111113] border border-[#1e1e21] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto overflow-hidden" style={{ width: showCustomPrompt ? '18rem' : '12rem' }} onClick={(e) => e.stopPropagation()}>
               {showCustomPrompt ? (
                 <div className="p-3 space-y-2">
                   <textarea
-                    className="w-full h-32 bg-[#0a0a0b] border border-[#2a2a2d] rounded-lg p-3 text-[13px] text-white/80 placeholder-white/20 resize-none focus:outline-none focus:border-gray-500 transition-colors pointer-events-auto"
+                    className="w-full h-32 bg-[#0a0a0b] border border-[#1e1e21] rounded-lg p-3 text-[13px] text-white/80 placeholder-white/20 resize-none focus:outline-none focus:border-gray-500 transition-colors pointer-events-auto"
                     placeholder="Enter custom system prompt..."
                     value={customPromptText}
                     onChange={(e) => setCustomPromptText(e.target.value)}
                     autoFocus
                   />
                   <div className="flex items-center justify-between">
-                    <div className="h-8 px-3 rounded-lg border border-[#3a3a3d] flex items-center text-[12px] text-gray-400 cursor-pointer hover:border-gray-500 hover:text-white transition-colors"
+                    <div className="h-8 px-3 rounded-lg border border-[#2a2a2d] flex items-center text-[12px] text-gray-400 cursor-pointer hover:border-gray-500 hover:text-white transition-colors"
                       onClick={() => setShowCustomPrompt(false)}>
                       Back
                     </div>
-                    <div className={`h-8 px-3 rounded-lg border flex items-center text-[12px] cursor-pointer transition-colors ${customPromptText.trim() ? 'border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white' : 'border-[#2a2a2d] text-gray-600 cursor-not-allowed'}`}
+                    <div className={`h-8 px-3 rounded-lg border flex items-center text-[12px] cursor-pointer transition-colors ${customPromptText.trim() ? 'border-[#2a2a2d] text-gray-400 hover:border-gray-500 hover:text-white' : 'border-[#1e1e21] text-gray-600 cursor-not-allowed'}`}
                       onClick={() => { if (customPromptText.trim()) { setSelectedPersona('Custom'); setOpenDropdown(null); setShowCustomPrompt(false); } }}>
                       Save
                     </div>
@@ -331,7 +343,7 @@ function DemoChatInterface() {
               ) : (
                 <>
                   {personas.map((p) => (
-                    <div key={p.name} className={`px-3 py-2.5 text-[13px] cursor-pointer transition-colors border-b border-[#2a2a2d] last:border-0 ${selectedPersona === p.name ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'}`}
+                    <div key={p.name} className={`px-3 py-2.5 text-[13px] cursor-pointer transition-colors border-b border-[#1e1e21] last:border-0 ${selectedPersona === p.name ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/[0.05]'}`}
                       onClick={() => {
                         if (p.name === 'Custom') { setShowCustomPrompt(true); }
                         else { setSelectedPersona(p.name); setOpenDropdown(null); }
@@ -370,10 +382,10 @@ function DemoChatInterface() {
           </div>
           {/* Model dropdown */}
           {openDropdown === 'model' && (
-            <div className="absolute top-full right-0 mt-2 w-72 max-h-[60vh] overflow-y-auto bg-[#19191a] border border-[#2a2a2d] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="absolute top-full right-0 mt-2 w-72 max-h-[60vh] overflow-y-auto bg-[#111113] border border-[#1e1e21] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto" onClick={(e) => e.stopPropagation()}>
               {Object.entries(models).map(([company, items]) => (
                 <div key={company}>
-                  <div className="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-white/[0.03] transition-colors border-b border-[#2a2a2d]/50"
+                  <div className="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-white/[0.03] transition-colors border-b border-[#1e1e21]/50"
                     onClick={() => setExpandedCompany(expandedCompany === company ? null : company)}>
                     <span className="text-[12px] font-semibold text-white/50 uppercase tracking-wider">{company}</span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{ transform: expandedCompany === company ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}><path d="M6 9l6 6 6-6" /></svg>
@@ -406,36 +418,36 @@ function DemoChatInterface() {
           </div>
           {/* Settings dropdown */}
           {openDropdown === 'settings' && (
-            <div className="absolute top-full right-0 mt-2 w-56 bg-[#19191a] border border-[#2a2a2d] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto p-3 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="absolute top-full right-0 mt-2 w-56 bg-[#111113] border border-[#1e1e21] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto p-3 space-y-3" onClick={(e) => e.stopPropagation()}>
               {/* Alignment */}
               <div>
                 <div className="text-[11px] text-white/30 mb-1.5">Alignment</div>
                 <div className="flex gap-1">
                   {(['left','center','right'] as const).map((a) => (
-                    <div key={a} className={`flex-1 h-8 rounded-lg border flex items-center justify-center text-[11px] capitalize cursor-pointer transition-colors ${alignment === a ? 'border-gray-500 text-white' : 'border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'}`}
+                    <div key={a} className={`flex-1 h-8 rounded-lg border flex items-center justify-center text-[11px] capitalize cursor-pointer transition-colors ${alignment === a ? 'border-gray-500 text-white' : 'border-[#2a2a2d] text-gray-400 hover:border-gray-500 hover:text-white'}`}
                       onClick={() => setAlignment(a)}>{a}</div>
                   ))}
                 </div>
               </div>
-              <div className="border-t border-[#2a2a2d]" />
+              <div className="border-t border-[#1e1e21]" />
               {/* Font size */}
               <div>
                 <div className="text-[11px] text-white/30 mb-1.5">Text Size</div>
                 <div className="flex gap-1">
                   {([['small','A','text-[10px]'],['medium','A','text-xs'],['large','A','text-sm']] as const).map(([size, label, cls]) => (
-                    <div key={size} className={`flex-1 h-8 rounded-lg border flex items-center justify-center cursor-pointer transition-colors ${cls} ${fontSize === size ? 'border-gray-500 text-white' : 'border-[#3a3a3d] text-gray-400 hover:border-gray-500 hover:text-white'}`}
+                    <div key={size} className={`flex-1 h-8 rounded-lg border flex items-center justify-center cursor-pointer transition-colors ${cls} ${fontSize === size ? 'border-gray-500 text-white' : 'border-[#2a2a2d] text-gray-400 hover:border-gray-500 hover:text-white'}`}
                       onClick={() => setFontSize(size)}>{label}</div>
                   ))}
                 </div>
               </div>
-              <div className="border-t border-[#2a2a2d]" />
+              <div className="border-t border-[#1e1e21]" />
               {/* Interface actions */}
               <div className="space-y-1">
-                <div className="h-8 px-3 rounded-lg border border-[#3a3a3d] flex items-center gap-2 text-[12px] text-gray-400 cursor-pointer hover:border-gray-500 hover:text-white transition-colors">
+                <div className="h-8 px-3 rounded-lg border border-[#2a2a2d] flex items-center gap-2 text-[12px] text-gray-400 cursor-pointer hover:border-gray-500 hover:text-white transition-colors">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
                   New Interface
                 </div>
-                <div className="h-8 px-3 rounded-lg border border-[#3a3a3d] flex items-center gap-2 text-[12px] text-gray-400 cursor-pointer hover:border-gray-500 hover:text-white transition-colors">
+                <div className="h-8 px-3 rounded-lg border border-[#2a2a2d] flex items-center gap-2 text-[12px] text-gray-400 cursor-pointer hover:border-gray-500 hover:text-white transition-colors">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
                   Export as Markdown
                 </div>
@@ -448,7 +460,7 @@ function DemoChatInterface() {
       {/* Search bar */}
       {openDropdown === 'search' && (
         <div className="absolute top-14 z-20 px-3 pointer-events-auto" style={{ left: showHistory ? 'calc(12px + 200px + 12px)' : '12px', right: '12px' }}>
-          <div className="flex items-center gap-2 px-3 h-9 bg-[#19191a] border border-[#2a2a2d] rounded-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2 px-3 h-9 bg-[#111113] border border-[#1e1e21] rounded-lg" onClick={(e) => e.stopPropagation()}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
             <span className="text-[13px] text-white/25">Search messages...</span>
           </div>
@@ -462,64 +474,112 @@ function DemoChatInterface() {
 
         {/* Messages area */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
+          <div className="max-w-[45rem] mx-auto px-6 py-6 space-y-2">
             {msgs.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className="max-w-[85%]">
-                  {/* Thinking section for AI */}
-                  {m.role === 'ai' && (m as any).thinking && (
-                    <div className="mb-2 px-3 py-2 rounded-lg bg-[#19191a]/50 border border-[#2a2a2d]/50">
-                      <div className="flex items-center gap-1.5 text-[11px] text-white/30">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                        Thoughts · 1.2s
-                      </div>
-                      <div className="text-[11px] text-white/20 mt-1">{(m as any).thinking}</div>
+              <div key={i} className={`${m.role === 'user' ? 'flex justify-end' : ''}`}>
+                {m.role === 'user' ? (
+                  /* User message — bubble, right-aligned */
+                  <div className="max-w-[90%] md:max-w-[75%]">
+                    <div className="bg-[#111113] border border-[#1e1e21] rounded-2xl rounded-br-none p-3 text-[13px] text-white/90 leading-relaxed">
+                      {m.text}
                     </div>
-                  )}
-                  <div className={`px-4 py-3 rounded-2xl text-[13px] leading-relaxed ${
-                    m.role === 'user'
-                      ? 'bg-[#19191a] border border-[#3a3a3d] text-white/90 rounded-br-none'
-                      : 'bg-[#19191a] border border-[#3a3a3d] text-white/70 rounded-bl-none'
-                  }`}>
-                    {m.text.split('\n\n').map((p, j) => (
-                      <p key={j} className={j > 0 ? 'mt-3' : ''}>
-                        {p.startsWith('- **') ? (
-                          <span className="block ml-2">{p}</span>
-                        ) : p}
-                      </p>
-                    ))}
-                    {/* Code block */}
-                    {(m as any).code && (
-                      <div className="mt-3 rounded-lg bg-[#0a0a0b] border border-[#2a2a2d] overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#2a2a2d] bg-[#121212]">
-                          <span className="text-[10px] text-white/30">python</span>
-                          <div className="flex items-center gap-1">
-                            <div className="px-2 py-0.5 rounded text-[10px] text-white/30 pointer-events-auto cursor-pointer hover:text-white/50 transition-colors">Copy</div>
-                            <div className="px-2 py-0.5 rounded text-[10px] text-green-400/60 pointer-events-auto cursor-pointer hover:text-green-400 transition-colors">Run</div>
-                          </div>
+                  </div>
+                ) : (
+                  /* AI message — no bubble, full width, prose style */
+                  <div className="w-full">
+                    {/* Thinking section — collapsible */}
+                    {(m as any).thinking && (
+                      <div className="mb-2 bg-[#111113] border border-[#1e1e21] rounded-lg overflow-hidden pointer-events-auto">
+                        <div className="flex items-center gap-1.5 px-3 py-2 cursor-pointer select-none" onClick={(e) => { e.stopPropagation(); setThinkingOpen(!thinkingOpen); }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 006 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" /><path d="M9 18h6" /><path d="M10 22h4" /></svg>
+                          <span className="text-[12px] text-white/40">Thoughts</span>
+                          <span className="text-[11px] text-white/20">· 1.2s</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" className={`ml-auto transition-transform ${thinkingOpen ? '' : 'rotate-180'}`}><path d="M18 15l-6-6-6 6" /></svg>
                         </div>
-                        <pre className="p-3 text-[11px] text-white/50 leading-relaxed overflow-x-auto"><code>{(m as any).code}</code></pre>
+                        {thinkingOpen && (
+                          <div className="px-3 pb-2 text-[12px] text-white/25 leading-relaxed border-t border-[#1e1e21]">
+                            <div className="pt-2">{(m as any).thinking}</div>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                  {/* AI message footer */}
-                  {m.role === 'ai' && (
-                    <div className="flex items-center gap-1 mt-1.5 ml-1">
-                      {['Copy', '👍', '👎', 'Info'].map((a, ai) => (
-                        <div key={ai} className="px-1.5 py-0.5 rounded text-[10px] text-white/15 pointer-events-auto cursor-pointer hover:text-white/30 transition-colors">{a}</div>
-                      ))}
+                    {/* AI text — prose style, no bubble */}
+                    <div className="text-[13px] text-white/70 leading-relaxed">
+                      {m.text.split('\n\n').map((block, j) => {
+                        // Check if block contains list items
+                        const lines = block.split('\n');
+                        const isList = lines.every(l => l.startsWith('- '));
+                        if (isList) {
+                          return (
+                            <ul key={j} className={`${j > 0 ? 'mt-3' : ''} space-y-1.5 ml-1`}>
+                              {lines.map((line, li) => (
+                                <li key={li} className="flex gap-2">
+                                  <span className="text-white/30 mt-px">•</span>
+                                  <span>{renderInline(line.slice(2))}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          );
+                        }
+                        return <p key={j} className={j > 0 ? 'mt-3' : ''}>{renderInline(block)}</p>;
+                      })}
+                      {/* Code block */}
+                      {(m as any).code && (
+                        <div className="mt-3 rounded-lg bg-[#0e0e10] border border-[#1e1e21] overflow-hidden not-prose">
+                          <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#1e1e21] bg-[#141416]">
+                            <span className="text-[10px] text-white/30 uppercase tracking-wider">python</span>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-white/30 pointer-events-auto cursor-pointer hover:text-white/50 transition-colors">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
+                                Copy
+                              </div>
+                              <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-green-400/60 pointer-events-auto cursor-pointer hover:text-green-400 transition-colors">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                                Run
+                              </div>
+                              <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-white/30 pointer-events-auto cursor-pointer hover:text-white/50 transition-colors">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                                Edit
+                              </div>
+                            </div>
+                          </div>
+                          <pre className="p-3 text-[11px] text-white/50 leading-relaxed overflow-x-auto"><code>{(m as any).code}</code></pre>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                    {/* AI action buttons */}
+                    <div className="flex items-center gap-0.5 mt-1.5">
+                      <div className="p-1 text-gray-500 pointer-events-auto cursor-pointer hover:text-gray-300 transition-colors" title="Regenerate">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0115-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 01-15 6.7L3 16" /></svg>
+                      </div>
+                      <div className="p-1 text-gray-500 pointer-events-auto cursor-pointer hover:text-gray-300 transition-colors" title="Copy">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
+                      </div>
+                      <div className="p-1 text-gray-500 pointer-events-auto cursor-pointer hover:text-gray-300 transition-colors" title="Edit">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                      </div>
+                      <div className="p-1 text-gray-500 pointer-events-auto cursor-pointer hover:text-gray-300 transition-colors" title="Good response">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12" /><path d="M15 5.88L14 10h5.83a2 2 0 011.92 2.56l-2.33 8A2 2 0 0117.5 22H4a2 2 0 01-2-2v-8a2 2 0 012-2h2.76a2 2 0 001.79-1.11L12 2h0a3.13 3.13 0 013 3.88z" /></svg>
+                      </div>
+                      <div className="p-1 text-gray-500 pointer-events-auto cursor-pointer hover:text-gray-300 transition-colors" title="Bad response">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 14V2" /><path d="M9 18.12L10 14H4.17a2 2 0 01-1.92-2.56l2.33-8A2 2 0 016.5 2H20a2 2 0 012 2v8a2 2 0 01-2 2h-2.76a2 2 0 00-1.79 1.11L12 22h0a3.13 3.13 0 01-3-3.88z" /></svg>
+                      </div>
+                      <div className="p-1 text-gray-500 pointer-events-auto cursor-pointer hover:text-gray-300 transition-colors" title="Info">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             {/* Typing indicator */}
-            <div className="flex justify-start">
-              <div className="px-4 py-3 rounded-2xl rounded-bl-none bg-[#19191a] border border-[#3a3a3d] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-white/30 animate-pulse" />
-                <span className="w-1.5 h-1.5 rounded-full bg-white/30 animate-pulse" style={{ animationDelay: '0.15s' }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-white/30 animate-pulse" style={{ animationDelay: '0.3s' }} />
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" style={{ animationDelay: '0.15s' }} />
+                <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" style={{ animationDelay: '0.3s' }} />
               </div>
+              <span className="text-[12px] text-white/25">Generating response...</span>
             </div>
           </div>
         </div>
@@ -527,7 +587,7 @@ function DemoChatInterface() {
         {/* Input area */}
         <div className="shrink-0 px-6 pb-4">
           <div className="max-w-3xl mx-auto">
-            <div className="bg-[#19191a] border border-[#3a3a3d] rounded-2xl p-3 md:p-4">
+            <div className="bg-[#111113] border border-[#1e1e21] rounded-2xl p-3 md:p-4">
               <div className="text-[13px] text-white/20 mb-3 min-h-[20px]">Ask anything...</div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
