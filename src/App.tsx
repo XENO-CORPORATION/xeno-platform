@@ -18,6 +18,7 @@ import { OSAuthWithContainers } from './components/dashboard/OSAuthWithContainer
 import OSContainerWizard from './components/os/OSContainerWizard';
 import JoinSession from './components/os/JoinSession';
 import { AuthProvider } from './contexts/AuthContext';
+import { WorkspaceProvider } from './contexts/WorkspaceContext';
 import { CollaborationProvider } from './contexts/CollaborationContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
@@ -88,6 +89,7 @@ function App() {
   // Default: Full xeno-studio.com experience
   return (
     <AuthProvider>
+      <WorkspaceProvider>
       <CollaborationProvider>
         <OSStateProvider>
           <Routes>
@@ -170,6 +172,7 @@ function App() {
           </Routes>
         </OSStateProvider>
       </CollaborationProvider>
+      </WorkspaceProvider>
     </AuthProvider>
   );
 }

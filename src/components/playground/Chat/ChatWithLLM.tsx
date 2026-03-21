@@ -1311,6 +1311,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Close history when entering multi-interface mode
+  useEffect(() => {
+    if (isMultiInterface && isHistoryOpen) setIsHistoryOpen(false);
+  }, [isMultiInterface]);
+
   // Close history sidebar on click outside
   useEffect(() => {
     if (!isHistoryOpen) return;
@@ -4517,9 +4522,6 @@ Please provide a well-structured response using this search context and any mult
     setIsHistoryOpen(!isHistoryOpen);
   };
 
-  const toggleReason = () => {
-    setIsReasonToggled(!isReasonToggled);
-  };
 
   const toggleSearch = () => {
     const newSearchState = !isSearchToggled;
@@ -4768,23 +4770,10 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   // (Extracted from handleModelSelect to be reusable)
   // Uses dynamic modelHasReasoningCapability helper instead of hardcoded lists
   const syncTogglesForModel = (model: Model) => {
-     const modelId = model.id;
-     const reasoningCapability = modelHasReasoningCapability(modelId);
-
-     let newReasonToggleState: boolean;
-     if (reasoningCapability === 'alwaysOn') {
-         newReasonToggleState = true;
-     } else if (reasoningCapability === 'toggleable') {
-         newReasonToggleState = true; // Default toggleable to ON
-     } else {
-         newReasonToggleState = false;
-     }
-     setIsReasonToggled(newReasonToggleState);
-
-     // Xeno Search is available for all models - it's a platform feature
-     // No need to disable it based on model
-
-     console.log(`[Sync] Toggles synced for model: ${modelId}. Reason Capability: ${reasoningCapability}. Reason Toggle set to: ${newReasonToggleState}.`);
+     const capability = modelHasReasoningCapability(model.id);
+     if (capability === 'alwaysOn') setIsReasonToggled(true);
+     else if (capability === 'disabled') setIsReasonToggled(false);
+     // toggleable: keep current state (user preference persists across model switches)
   };
   // --- END NEW Helper --- 
 
@@ -7494,15 +7483,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           {/* Left side - History, System Prompt, Clear/Save */}
           <div ref={leftButtonsRef} className={`chat-top-bar-buttons relative flex items-center ${isMultiInterface ? 'gap-1' : 'gap-2 md:gap-2'} transition-all duration-300 ease-in-out`}
             style={{ marginLeft: !isMultiInterface && isHistoryOpen && !isMobile ? (isTaskbarHidden ? '272px' : '264px') : '0px' }}>
-              {/* History */}
+              {/* History — hidden in multi-interface mode (each panel has its own conversation selector) */}
+              {!isMultiInterface && (
               <button
                   onClick={toggleHistory}
-                  className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${isHistoryOpen ? 'border-gray-500' : ''}`}
+                  className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 ${isHistoryOpen ? 'border-gray-500' : ''}`}
                   aria-label="Toggle History"
-                  title="History"
               >
                   <Lightbulb size={16} />
               </button>
+              )}
               {/* System Prompt */}
               <div className="relative">
                 <button
@@ -7510,7 +7500,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   onClick={toggleSystemPrompt}
                   onMouseEnter={() => setIsSystemPromptButtonHovered(true)}
                   onMouseLeave={() => setIsSystemPromptButtonHovered(false)}
-                  className={`chat-system-prompt-btn flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'} ${selectedPersona ? 'border-gray-500' : ''}`}
+                  className={`chat-system-prompt-btn flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'} ${selectedPersona ? 'border-gray-500' : ''}`}
                 >
                   <FilePenLine size={16} className="flex-shrink-0" />
                   <span className="truncate hidden md:inline">
@@ -7532,15 +7522,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 >
                   {PERSONAS.map((persona) => (
                     <button key={persona.id} onClick={() => handlePersonaSelect(persona.id)}
-                      className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === persona.id ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-gray-500 hover:text-white'}`}
+                      className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === persona.id ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'}`}
                     >{persona.label}</button>
                   ))}
                   <button onClick={() => { setIsSystemPromptOpen(false); setIsCustomPromptOpen(true); }}
-                    className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === 'custom' ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-gray-500 hover:text-white'}`}
+                    className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === 'custom' ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'}`}
                   >Custom</button>
                   {selectedPersona && (
                     <button onClick={handleClearSystemPrompt}
-                      className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} border-[#1e1e21] text-gray-400 hover:border-red-500/50 hover:text-red-400`}
+                      className="flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} border-[#1e1e21] text-gray-400 hover:border-red-500/50 hover:text-red-400"
                     >Clear</button>
                   )}
                 </div>
@@ -7551,21 +7541,23 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className="w-full h-32 p-3 text-sm text-gray-200 placeholder-gray-500 outline-none bg-[#0e0e10] border-b border-[#2a2a2d] scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent resize-none" />
                   <div className="flex gap-2 p-2">
                     <button onClick={() => { setIsCustomPromptOpen(false); setIsSystemPromptOpen(true); }}
-                      className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white transition-colors">Back</button>
+                      className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white transition-colors">Back</button>
                     <button onClick={() => { setSavedSystemPrompt(systemPrompt); setIsCustomPromptOpen(false); setSelectedPersona('custom'); setIsSystemPromptSaved(true); setTimeout(() => setIsSystemPromptSaved(false), 1500); }}
                       disabled={!systemPrompt.trim()}
-                      className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${systemPrompt.trim() ? 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white' : 'border-white/[0.04] text-gray-600 cursor-not-allowed'}`}>Save</button>
+                      className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${systemPrompt.trim() ? 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white' : 'border-white/[0.04] text-gray-600 cursor-not-allowed'}`}>Save</button>
                   </div>
                 </div>
               </div>
-              {/* Clear/Save */}
+              {/* Clear/Save — hidden in multi-interface */}
+              {!isMultiInterface && (
               <button
                   onClick={selectedPersona ? handleClearSystemPrompt : undefined}
-                  className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 transition-colors h-9 ${selectedPersona ? 'text-gray-400 hover:border-red-500/50 hover:text-red-400 cursor-pointer' : 'text-gray-600 cursor-default'}`}
+                  className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 transition-colors h-9 ${selectedPersona ? 'text-gray-400 hover:border-red-500/50 hover:text-red-400 hover:bg-black/20 cursor-pointer' : 'text-gray-600 cursor-default'}`}
                   disabled={!selectedPersona}
               >
                   {selectedPersona ? <X size={16} /> : <Save size={16} />}
               </button>
+              )}
                       </div>
 
           {/* Center - Token Count (mobile only, non-multi-interface) - absolutely centered */}
@@ -7592,7 +7584,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               <button
                 ref={conversationSelectorButtonRef}
                 onClick={() => setIsConversationSelectorOpen(!isConversationSelectorOpen)}
-                className={`flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 max-w-[14rem] ${isConversationSelectorOpen ? 'border-gray-500' : ''}`}
+                className={`flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 max-w-[14rem] ${isConversationSelectorOpen ? 'border-gray-500' : ''}`}
               >
                 <MessageSquarePlus size={16} className="text-gray-500 flex-shrink-0" />
                 <span className="truncate max-w-[10rem]">
@@ -7706,18 +7698,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <button
                     onClick={handleRefreshConversation}
                     disabled={isRefreshing}
-                    className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     aria-label="Refresh conversation"
-                    title="Refresh conversation from database"
                 >
                     <RefreshCcw size={16} className={isRefreshing ? 'animate-spin' : ''} />
                 </button>
               )}
               <button
                   onClick={handleNewChat}
-                  className="flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9"
+                  className="flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9"
                   aria-label="Start New Chat"
-                  title="New Chat"
               >
                   <SquarePen size={16} />
               </button>
@@ -7729,7 +7719,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       }}
                   onMouseEnter={() => setIsModelSelectorButtonHovered(true)}
                   onMouseLeave={() => setIsModelSelectorButtonHovered(false)}
-                  className={`chat-model-selector flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'}`}
+                  className={`chat-model-selector flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'}`}
                 >
                   {isModelsLoading ? (
                     <Loader2 size={16} className="text-gray-500 flex-shrink-0 animate-spin" />
@@ -7799,17 +7789,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               {model.name}
                                             </span>
                                             {modelHasReasoningCapability(model.id, model) !== 'disabled' && (
-                                              <BrainCircuit
-                                                size={13}
-                                                className={`flex-shrink-0 cursor-pointer transition-colors ${selectedModel.id === model.id && isReasonToggled ? 'text-white/70' : 'text-white/20'}`}
-                                                title={selectedModel.id === model.id ? (isReasonToggled ? 'Reasoning ON — click to disable' : 'Reasoning OFF — click to enable') : 'Reasoning capable'}
-                                                onClick={(e) => {
-                                                  if (selectedModel.id === model.id) {
-                                                    e.stopPropagation();
-                                                    setIsReasonToggled(!isReasonToggled);
-                                                  }
-                                                }}
-                                              />
+                                              <Brain size={13} className="text-white/25 flex-shrink-0" />
                                             )}
                                           </div>
                                           <div className="flex items-center gap-2">
@@ -7834,11 +7814,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   setIsMessageSearchOpen(!isMessageSearchOpen);
                   if (isMessageSearchOpen) setMessageSearchQuery('');
                 }}
-                className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${
+                className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 ${
                   isMessageSearchOpen ? 'border-gray-500' : 'border-[#1e1e21]'
                 }`}
                 aria-label="Search messages"
-                title="Search in conversation"
               >
                 <Search size={16} />
               </button>
@@ -7847,9 +7826,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               <button
                   ref={settingsButtonRef}
                   onClick={() => setIsSettingsModalOpen(!isSettingsModalOpen)}
-                  className="flex items-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9"
+                  className="flex items-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9"
                   aria-label="Settings"
-                  title="Settings"
               >
                   <Settings size={16} />
               </button>
@@ -7876,7 +7854,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         chatAlignment === 'left'
                           ? 'bg-[#0e0e10] border-gray-500 text-white'
-                          : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
                       }`}
                     >
                       Left
@@ -7886,7 +7864,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         chatAlignment === 'center'
                           ? 'bg-[#0e0e10] border-gray-500 text-white'
-                          : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
                       }`}
                     >
                       Center
@@ -7896,7 +7874,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         chatAlignment === 'right'
                           ? 'bg-[#0e0e10] border-gray-500 text-white'
-                          : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
                       }`}
                     >
                       Right
@@ -7911,7 +7889,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className={`w-full px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                       isWideChatEnabled
                         ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
                     }`}
                   >
                     Wide
@@ -7929,9 +7907,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
                       chatFontSize === 'small'
                         ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
                     }`}
-                    title="Small text"
                   >
                     <span className="text-[10px]">A</span>
                   </button>
@@ -7943,9 +7920,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
                       chatFontSize === 'medium'
                         ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
                     }`}
-                    title="Medium text"
                   >
                     <span className="text-xs">A</span>
                   </button>
@@ -7957,9 +7933,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
                       chatFontSize === 'large'
                         ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
                     }`}
-                    title="Large text"
                   >
                     <span className="text-sm">A</span>
                   </button>
@@ -7984,7 +7959,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         maxInterfacesReached
                           ? 'border-white/[0.04] text-gray-600 cursor-not-allowed'
-                          : 'border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
                       }`}
                     >
                       <Plus size={14} />
@@ -8017,7 +7992,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         handleExportConversation();
                         setIsSettingsModalOpen(false);
                       }}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-gray-500 hover:text-white transition-colors"
+                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white transition-colors"
                     >
                       <Download size={14} />
                       <span>Export as Markdown</span>
@@ -8404,7 +8379,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           <div className="w-full pl-[1.125rem] mb-4">
                                               <div
                                                   onClick={() => setShowThinkingId(message.id)}
-                                                  className="flex items-center justify-between w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-4 py-2.5 cursor-pointer hover:border-gray-500 transition-colors"
+                                                  className="flex items-center justify-between w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-4 py-2.5 cursor-pointer hover:border-white/[0.04] hover:bg-black/20 transition-colors"
                                               >
                                                   <div className="flex items-center gap-2">
                                                       <Lightbulb size={16} className="text-gray-500" />
@@ -8783,7 +8758,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <button
                         onClick={() => removeFromQueue(queuedMessage.id)}
                         className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-900/30 rounded transition-colors"
-                        title="Remove from queue"
                       >
                         <X size={14} />
                       </button>
@@ -8897,10 +8871,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <button
                           ref={attachButtonRef}
                           onClick={toggleAttachMenu}
-                          className="flex items-center justify-center border border-white/[0.08] rounded-lg p-2 text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-white/[0.08] disabled:hover:text-gray-300 transition-colors"
+                          className="flex items-center justify-center border border-white/[0.08] rounded-lg p-2 text-gray-300 hover:border-white/[0.04] hover:bg-black/20 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-white/[0.08] disabled:hover:bg-transparent disabled:hover:text-gray-300 transition-colors"
                           aria-label="Attach file"
                           disabled={!modelSupportsVision(selectedModel)}
-                          title={modelSupportsVision(selectedModel) ? "Attach file" : "File/image attachment not supported by this model"}
                       >
                           <Paperclip size={16} />
                       </button>
@@ -9002,7 +8975,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                handleRemoveRecentFile(file.id);
                                              }}
                                              className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                                             title="Remove from recent files"
                                            >
                                                  <X size={14} />
                                              </button>
@@ -9012,7 +8984,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           </div>
                         </div>
                       </div>
-                      {/* Toggle buttons removed — search is auto-detected from user intent, reasoning is per-model */}
+                      {/* Reasoning toggle */}
+                      {modelHasReasoningCapability(selectedModel.id, selectedModel) === 'toggleable' && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsReasonToggled(prev => !prev);
+                          }}
+                          className={`flex items-center justify-center border border-white/[0.08] rounded-lg p-2 cursor-pointer select-none hover:bg-black/20 ${isReasonToggled ? 'text-white/70' : 'text-white/15'}`}
+                        >
+                          <Brain size={16} />
+                        </button>
+                      )}
               </div>
                   <div className="flex items-center space-x-3">
                      {/* Token Context Window Display with Compress Button - Hidden on mobile (shown in header instead) */}
@@ -9033,7 +9018,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                              onClick={() => compactConversation(selectedModel)}
                              disabled={isLoading}
                              className="group text-xs text-orange-400 hover:text-orange-300 transition-all cursor-pointer disabled:opacity-50 tabular-nums"
-                             title="Click to compress conversation history"
                            >
                              <span className="group-hover:hidden">
                                {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
@@ -9057,7 +9041,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <button
                         onClick={addToQueue}
                         className="bg-gray-400 text-zinc-900 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors h-10 flex items-center justify-center"
-                        title="Add to Queue"
                       >
                         <span className="text-sm font-semibold">Queue</span>
                       </button>
@@ -9065,7 +9048,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <button
                         onClick={handleStopGeneration}
                         className="bg-gray-400 text-zinc-900 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors h-10 flex items-center justify-center"
-                        title="Stop Generation"
                       >
                         <StopCircle size={16} />
                       </button>
@@ -9075,7 +9057,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       onClick={handleGenerate}
                       className="w-10 h-10 rounded-lg bg-white hover:bg-white/90 flex items-center justify-center transition-all shadow-md"
                       disabled={isContextLimitReached}
-                      title="Send"
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </button>
@@ -9084,7 +9065,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       onClick={handleToggleVoiceInput}
                       className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all relative ${isVoiceInputActive ? 'bg-[#2a2a2d]/70' : 'bg-[#0e0e10] hover:bg-[#2a2a2d]'}`}
                       aria-label={isVoiceInputActive ? 'Stop voice input' : 'Start voice input'}
-                      title={isVoiceInputActive ? 'Stop voice input' : 'Start voice input'}
                     >
                       {isVoiceInputActive && (
                         <span className="absolute inset-0 flex items-center justify-center">
