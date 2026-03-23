@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { authService } from '../../services/authService';
 import ClaimCreditsModal from '../modals/ClaimCreditsModal';
 import {
@@ -37,6 +38,9 @@ import {
   BarChart3,
   HelpCircle,
   ChevronRight,
+  ChevronDown,
+  Building2,
+  Check,
   Gift,
   Coins,
   Megaphone,
@@ -237,10 +241,12 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { workspaces, activeWorkspace, switchWorkspace, isTeam } = useWorkspace();
   const isCollapsed = true; // Always collapsed
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [showWorkspaceSwitcher, setShowWorkspaceSwitcher] = useState(false);
   const [showClaimCreditsModal, setShowClaimCreditsModal] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isClosingMobileMenu, setIsClosingMobileMenu] = useState(false);
@@ -1139,136 +1145,120 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
       </div>
       </div>
 
-      {/* Account Modal - Redesigned */}
+      {/* Account Modal — XENO Design System compliant */}
       {showAccountModal && (
         <div
           data-container="account"
-          className="absolute bg-[#0c0c0e]/98 backdrop-blur-xl border border-white/[0.08] rounded-md shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-50 overflow-hidden"
-          style={{
-            left: 'calc(100% + 8px)',
-            bottom: '8px',
-            width: '260px'
-          }}
+          className="absolute bg-[#0c0c0e] border border-white/[0.08] rounded-md z-50 overflow-hidden"
+          style={{ left: 'calc(100% + 8px)', bottom: '8px', width: '248px' }}
         >
-          {/* User Info Header */}
-          <div className="p-4 border-b border-white/[0.06]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/[0.05] border border-white/[0.1] flex items-center justify-center">
+          {/* ── Identity ── */}
+          <div className="px-3 py-2.5 border-b border-white/[0.06]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-sm bg-white/[0.05] border border-white/[0.06] flex items-center justify-center flex-shrink-0">
                 {user?.avatar_url ? (
-                  <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                  <img src={user.avatar_url} alt="" className="w-full h-full rounded-sm object-cover" />
                 ) : (
-                  <User size={18} className="text-white/40" />
+                  <User size={14} className="text-white/30" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-white truncate">{user?.display_name || 'User'}</div>
-                <div className="text-xs text-white/40 truncate">{user?.email}</div>
+                <div className="text-[12px] font-medium text-white/80 truncate">{user?.display_name || 'User'}</div>
+                <div className="text-[10px] text-white/25 truncate">{user?.email || 'user@example.com'}</div>
               </div>
             </div>
           </div>
 
-          {/* Credits Section */}
-          <div className="p-4 border-b border-white/[0.06]">
-            {/* Claim button */}
-            {user && !user.bonus_credits_claimed && (
-              <button
-                onClick={handleClaimCredits}
-                className="w-full flex items-center justify-center gap-1.5 mb-3 px-3 py-2 text-xs font-medium text-white/80 bg-white/[0.08] hover:bg-white/[0.12] rounded-md transition-colors"
-              >
-                <Gift size={12} />
-                Claim 1,000 Free Credits
-              </button>
+          {/* ── Plan ── */}
+          <div className="px-3 py-2 border-b border-white/[0.06] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] px-1.5 py-px rounded-sm bg-white/[0.06] text-white/45 font-medium uppercase tracking-[0.03em]">
+                {user?.plan || 'Free'}
+              </span>
+              <span className="text-[10px] text-white/20 tabular-nums">{user?.credits?.toLocaleString() || 0} credits</span>
+            </div>
+            <button
+              onClick={() => { setShowAccountModal(false); navigate('/overview/billing'); }}
+              className="text-[10px] text-white/30 hover:text-white/55 transition-[color] duration-75"
+            >
+              Upgrade
+            </button>
+          </div>
+
+          {/* ── Workspace ── */}
+          <div className="border-b border-white/[0.06]">
+            <button
+              className="w-full flex items-center justify-between px-3 h-[28px] hover:bg-white/[0.03] transition-[background-color] duration-75"
+              onClick={() => setShowWorkspaceSwitcher(!showWorkspaceSwitcher)}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-5 h-5 rounded-sm bg-white/[0.04] border border-white/[0.06] flex items-center justify-center flex-shrink-0">
+                  {isTeam ? <Building2 size={10} className="text-white/30" /> : <User size={10} className="text-white/30" />}
+                </div>
+                <span className="text-[12px] text-white/55 truncate">{activeWorkspace?.name || 'Workspace'}</span>
+              </div>
+              <ChevronDown size={12} className={`text-white/15 transition-transform duration-75 ${showWorkspaceSwitcher ? 'rotate-180' : ''}`} />
+            </button>
+            {showWorkspaceSwitcher && (
+              <div className="px-1.5 pb-1.5">
+                {workspaces.map(ws => (
+                  <button
+                    key={ws.id}
+                    onClick={() => { switchWorkspace(ws.id); setShowWorkspaceSwitcher(false); }}
+                    className={`w-full flex items-center gap-2 px-1.5 h-[24px] rounded-sm text-left transition-[background-color,color] duration-75 ${
+                      activeWorkspace?.id === ws.id ? 'bg-white/[0.05] text-white/65' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.03]'
+                    }`}
+                  >
+                    <div className="w-4 h-4 rounded-sm bg-white/[0.04] flex items-center justify-center flex-shrink-0">
+                      {ws.workspace_type === 'team' ? <Building2 size={8} className="text-white/25" /> : <User size={8} className="text-white/25" />}
+                    </div>
+                    <span className="text-[11px] truncate flex-1">{ws.name}</span>
+                    {activeWorkspace?.id === ws.id && <Check size={10} className="text-white/35 flex-shrink-0" />}
+                  </button>
+                ))}
+              </div>
             )}
-
-            {/* Progress bar with labels */}
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
-                <Coins size={14} className="text-white/40" />
-                <span className="text-xs font-medium text-white/60">Credits</span>
-              </div>
-              <span className="text-xs text-white/40">{user?.credits?.toLocaleString() || 0} / 1,000</span>
-            </div>
-            <div className="w-full h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-white/30 to-white/50 rounded-full transition-all duration-500"
-                style={{ width: user?.credits ? `${Math.min((user.credits / 1000) * 100, 100)}%` : '0%' }}
-              />
-            </div>
-
-            {/* Upgrade button */}
-            <button className="w-full mt-3 py-2 text-xs font-medium text-[#08080a] bg-white hover:bg-white/90 rounded-lg transition-colors">
-              Upgrade Plan
-            </button>
           </div>
 
-          {/* Navigation Links */}
-          <div className="p-2">
-            <button
-              onClick={() => {
-                setShowAccountModal(false);
-                navigate('/overview/profile');
-              }}
-              className="w-full flex items-center justify-between p-2.5 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.04] transition-colors group"
-            >
-              <div className="flex items-center gap-3">
-                <User size={15} className="text-white/40 group-hover:text-white/60" />
-                <span className="text-[13px]">Profile</span>
-              </div>
-              <ChevronRight size={14} className="text-white/20 group-hover:text-white/40" />
-            </button>
-
-            <button
-              onClick={() => {
-                setShowAccountModal(false);
-                navigate('/overview/usage-analytics');
-              }}
-              className="w-full flex items-center justify-between p-2.5 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.04] transition-colors group"
-            >
-              <div className="flex items-center gap-3">
-                <BarChart3 size={15} className="text-white/40 group-hover:text-white/60" />
-                <span className="text-[13px]">Usage Analytics</span>
-              </div>
-              <ChevronRight size={14} className="text-white/20 group-hover:text-white/40" />
-            </button>
-
-            <button
-              onClick={() => {
-                setShowAccountModal(false);
-                navigate('/overview/settings');
-              }}
-              className="w-full flex items-center justify-between p-2.5 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.04] transition-colors group"
-            >
-              <div className="flex items-center gap-3">
-                <Settings size={15} className="text-white/40 group-hover:text-white/60" />
-                <span className="text-[13px]">Settings</span>
-              </div>
-              <ChevronRight size={14} className="text-white/20 group-hover:text-white/40" />
-            </button>
-
-            <button
-              onClick={() => {
-                setShowAccountModal(false);
-                navigate('/overview/help');
-              }}
-              className="w-full flex items-center justify-between p-2.5 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.04] transition-colors group"
-            >
-              <div className="flex items-center gap-3">
-                <HelpCircle size={15} className="text-white/40 group-hover:text-white/60" />
-                <span className="text-[13px]">Help Center</span>
-              </div>
-              <ChevronRight size={14} className="text-white/20 group-hover:text-white/40" />
-            </button>
+          {/* ── Navigation ── */}
+          <div className="py-0.5">
+            {[
+              { icon: User, label: 'Profile', path: '/overview/profile' },
+              { icon: Coins, label: 'Billing', path: '/overview/billing' },
+              ...(isTeam ? [{ icon: Building2, label: 'Team', path: '/overview/team' }] : []),
+              { icon: BarChart3, label: 'Usage', path: '/overview/usage-analytics' },
+              { icon: Settings, label: 'Settings', path: '/overview/settings' },
+              { icon: Code, label: 'API Keys', path: '/overview/api-keys' },
+            ].map(item => (
+              <button
+                key={item.path}
+                onClick={() => { setShowAccountModal(false); navigate(item.path); }}
+                className="w-full flex items-center justify-between px-3 h-[28px] hover:bg-white/[0.03] transition-[background-color] duration-75 group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <item.icon size={14} className="text-white/20 group-hover:text-white/35" />
+                  <span className="text-[12px] text-white/55 group-hover:text-white/75">{item.label}</span>
+                </div>
+                <ChevronRight size={12} className="text-white/8 group-hover:text-white/20" />
+              </button>
+            ))}
           </div>
 
-          {/* Logout */}
-          <div className="p-2 pt-0">
-            <div className="h-px bg-white/[0.06] mb-2" />
+          {/* ── Utility ── */}
+          <div className="border-t border-white/[0.06] py-0.5">
+            <button
+              onClick={() => { setShowAccountModal(false); navigate('/overview/help'); }}
+              className="w-full flex items-center gap-2.5 px-3 h-[28px] hover:bg-white/[0.03] transition-[background-color] duration-75 group"
+            >
+              <HelpCircle size={14} className="text-white/15 group-hover:text-white/30" />
+              <span className="text-[12px] text-white/35 group-hover:text-white/55">Help & Support</span>
+            </button>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 p-2.5 rounded-lg text-white/50 hover:text-white/70 hover:bg-white/[0.04] transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 h-[28px] hover:bg-white/[0.03] transition-[background-color] duration-75 group"
             >
-              <LogOut size={15} />
-              <span className="text-[13px]">Log out</span>
+              <LogOut size={14} className="text-white/15 group-hover:text-white/30" />
+              <span className="text-[12px] text-white/35 group-hover:text-white/55">Log out</span>
             </button>
           </div>
         </div>

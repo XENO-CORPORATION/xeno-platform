@@ -60,6 +60,8 @@ import DownloadToolsInterface from '../components/playground/Download/DownloadTo
 import ProfilePage from '../components/account/ProfilePage';
 import SettingsPage from '../components/account/SettingsPage';
 import UsageAnalyticsPage from '../components/account/UsageAnalyticsPage';
+import BillingPage from '../components/account/BillingPage';
+import TeamPage from '../components/account/TeamPage';
 // Import Content Creation pages
 import YouTubeChannelManager from '../components/youtube/YouTubeChannelManager';
 import AllChannelsPage from '../components/youtube/AllChannelsPage';
@@ -293,7 +295,9 @@ const OverviewContent: React.FC = () => {
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="usage-analytics" element={<UsageAnalyticsPage />} />
-            <Route path="subscription" element={<div className="h-full flex items-center justify-center"><h1 className="text-xl font-bold text-white">Subscription - Coming Soon</h1></div>} />
+            <Route path="billing" element={<BillingPage />} />
+            <Route path="team" element={<TeamPage />} />
+            <Route path="subscription" element={<BillingPage />} />
             <Route path="help" element={<div className="h-full flex items-center justify-center"><h1 className="text-xl font-bold text-white">Help Center - Coming Soon</h1></div>} />
             {/* Individual lab routes */}
             <Route path="labs/:labId" element={<div><h1 className="text-xl font-bold text-white">Lab Editor</h1></div>} />

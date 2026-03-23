@@ -10,6 +10,7 @@
     "client": "vite",
     "dev": "concurrently \"npm run server\" \"npm run start\"",
     "build": "vite build",
+    "smoke:public-auth": "node scripts/smoke-public-auth.mjs",
     "setup": "node setup-dev.js",
     "install-server": "powershell -Command \"cd src/server; npm install\"",
     "xeno-api": "cd libs/xeno-edit/server && cargo run --release",

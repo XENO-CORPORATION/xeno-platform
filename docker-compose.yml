@@ -319,12 +319,13 @@ services:
     ports:
       - "127.0.0.1:4040:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - xenostudio-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "test -f /usr/share/nginx/html/index.html || exit 1"]
+      test: ["CMD-SHELL", "test -f /usr/share/nginx/html/index.html && wget -qO- http://127.0.0.1/health >/dev/null && wget -qO- http://127.0.0.1/api/status >/dev/null"]
       interval: 30s
       timeout: 10s
       retries: 3
