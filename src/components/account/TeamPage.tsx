@@ -202,6 +202,8 @@ const timeAgo = (iso: string) => {
   return `${Math.floor(d / 86400)}d ago`;
 };
 
+const formatRelative = timeAgo;
+
 const actionLabel: Record<string, string> = {
   invited: 'Sent invite to', role_changed: 'Changed role', joined: 'Joined workspace',
   removed: 'Removed', settings_changed: 'Updated', left: 'Left workspace',
@@ -254,6 +256,33 @@ const TeamPage: React.FC = () => {
   const [auditOpen, setAuditOpen] = useState(false);
   const [inviteLinkOpen, setInviteLinkOpen] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
+  const [ssoOpen, setSsoOpen] = useState(false);
+  const [scimOpen, setScimOpen] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [rolesOpen, setRolesOpen] = useState(false);
+
+  // SSO/SAML state
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [ssoIdpUrl, setSsoIdpUrl] = useState('');
+  const [ssoCert, setSsoCert] = useState('');
+  const [ssoEntityId, setSsoEntityId] = useState('');
+
+  // SCIM state
+  const [scimEnabled, setScimEnabled] = useState(false);
+  const [scimToken] = useState('xk-scim-' + Math.random().toString(36).slice(2, 14));
+  const [scimTokenCopied, setScimTokenCopied] = useState(false);
+
+  // Sessions
+  const [sessions] = useState<SessionEntry[]>(DEV_SESSIONS);
+
+  // Custom roles
+  const [roles, setRoles] = useState<CustomRole[]>(DEV_ROLES);
+  const [editingRole, setEditingRole] = useState<string | null>(null);
+  const [newRoleName, setNewRoleName] = useState('');
+
+  // Bulk actions
+  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
 
   // Settings state
   const [wsName, setWsName] = useState('');
@@ -582,52 +611,104 @@ const TeamPage: React.FC = () => {
                     {search ? 'No members match your search' : 'No members found'}
                   </p>
                 </div>
-              ) : filteredMembers.map(member => (
+              ) : (<>
+                {/* Bulk action bar */}
+                {selectedMembers.size > 0 && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '4px 8px', background: C.ghost, borderRadius: 4, marginBottom: 2,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button onClick={() => setSelectedMembers(new Set())} style={{ ...ghostBtn(), height: 22, padding: '0 4px', borderRadius: 3 }}>
+                        <X size={10} />
+                      </button>
+                      <span style={{ fontSize: 10, color: C.textSecondary }}>{selectedMembers.size} selected</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <button onClick={() => setBulkAction('role')} style={{ ...ghostBtn(), height: 22, padding: '0 6px', fontSize: 9, borderRadius: 3, color: C.textTertiary }} {...hover.ghost}>Change Role</button>
+                      <button onClick={() => setBulkAction('remove')} style={{ height: 22, padding: '0 6px', fontSize: 9, fontWeight: 500, background: 'transparent', border: `1px solid ${C.destructive.border}`, borderRadius: 3, color: C.destructive.text, cursor: 'pointer' }}>Remove</button>
+                      <button onClick={() => {
+                        const rows = filteredMembers.filter(m => selectedMembers.has(m.id)).map(m => {
+                          const ex = DEV_MEMBER_EXTRA[m.id];
+                          return `${m.user?.display_name},${m.user?.email},${m.member_role},${ex?.last_active || ''},${ex?.has_2fa || false},${ex?.login_method || ''},${ex?.credits_used || 0}`;
+                        });
+                        const csv = 'Name,Email,Role,Last Active,2FA,Login Method,Credits Used\n' + rows.join('\n');
+                        const blob = new Blob([csv], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a'); a.href = url; a.download = 'members-export.csv'; a.click();
+                        URL.revokeObjectURL(url);
+                      }} style={{ ...ghostBtn(), height: 22, padding: '0 6px', fontSize: 9, borderRadius: 3, color: C.textTertiary }} {...hover.ghost}>
+                        <Download size={9} /> Export
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {filteredMembers.map(member => {
+                const extra = DEV_MEMBER_EXTRA[member.id];
+                const isSelected = selectedMembers.has(member.id);
+                return (
                 <div
                   key={member.id}
                   style={{
-                    display: 'grid', gridTemplateColumns: '36px 1fr auto',
-                    alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 4,
+                    display: 'grid', gridTemplateColumns: canManage ? '18px 32px 1fr auto' : '32px 1fr auto',
+                    alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 4,
                     transition: 'background-color 80ms ease',
+                    background: isSelected ? C.ghost : undefined,
                   }}
                   {...hover.row}
                 >
+                  {/* Checkbox for bulk select */}
+                  {canManage && (
+                    <button
+                      onClick={() => setSelectedMembers(prev => {
+                        const next = new Set(prev);
+                        if (next.has(member.id)) next.delete(member.id); else next.add(member.id);
+                        return next;
+                      })}
+                      style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                    >
+                      {isSelected ? <CheckSquare size={13} style={{ color: C.textBody }} /> : <Square size={13} style={{ color: C.textDim }} />}
+                    </button>
+                  )}
+
                   {/* Avatar */}
                   <div style={{
-                    width: 36, height: 36, borderRadius: 6,
+                    width: 32, height: 32, borderRadius: 4,
                     background: C.surface1, border: `1px solid ${C.border}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     position: 'relative',
                   }}>
                     {member.user?.avatar_url ? (
-                      <img src={member.user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6 }} />
+                      <img src={member.user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 4 }} />
                     ) : (
-                      <span style={{ fontSize: 15, fontWeight: 500, color: C.textSecondary }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: C.textSecondary }}>
                         {(member.user?.display_name || '?').charAt(0).toUpperCase()}
                       </span>
                     )}
-                    {/* Online indicator */}
-                    <div style={{
-                      position: 'absolute', bottom: -1, right: -1,
-                      width: 8, height: 8, borderRadius: '50%',
-                      background: member.member_status === 'active' ? 'rgba(255,255,255,0.50)' : C.textDim,
-                      border: '2px solid #0a0a0b',
-                    }} />
                   </div>
 
-                  {/* Info */}
+                  {/* Info + Last Active + meta */}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 12, color: C.textBody, fontWeight: 500 }}>
+                      <span style={{ fontSize: 11, color: C.textBody, fontWeight: 500 }}>
                         {member.user?.display_name || member.user?.username || 'Unknown'}
                       </span>
-                      {roleIcon(member.member_role)}
                       {roleBadge(member.member_role)}
+                      {extra?.has_2fa && <Fingerprint size={10} style={{ color: C.textTertiary }} />}
+                      {extra?.login_method && extra.login_method !== 'password' && (
+                        <span style={{ ...S.badge, fontSize: 8 }}>{loginMethodLabel[extra.login_method]}</span>
+                      )}
                     </div>
                     <div style={{ fontSize: 10, color: C.textDim, lineHeight: '14px', display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span>{member.user?.email}</span>
-                      <span style={{ color: C.textTertiary }}>·</span>
-                      <span>joined {formatDate(member.created_at)}</span>
+                      {extra?.last_active && (<>
+                        <span style={{ color: C.textTertiary }}>·</span>
+                        <span>{formatRelative(extra.last_active)}</span>
+                      </>)}
+                      {extra?.credits_used !== undefined && (<>
+                        <span style={{ color: C.textTertiary }}>·</span>
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{extra.credits_used.toLocaleString()} cr</span>
+                      </>)}
                     </div>
                   </div>
 
@@ -670,7 +751,9 @@ const TeamPage: React.FC = () => {
                     </div>
                   )}
                 </div>
-              ))}
+              );
+              })}
+              </>)}
             </div>
           </div>
         </div>
@@ -838,6 +921,236 @@ const TeamPage: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* ── SSO / SAML ── */}
+          {canManage && (
+            <div style={S.panel}>
+              <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setSsoOpen(o => !o)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Globe size={11} style={{ color: C.textTertiary }} />
+                  <span style={S.headingLabel}>SSO / SAML</span>
+                  {ssoEnabled && <span style={{ ...S.badge, fontSize: 8 }}>Active</span>}
+                </div>
+                <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: ssoOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
+              </div>
+              {ssoOpen && (
+                <div style={{ ...S.panelBody, padding: '8px 10px', display: 'grid', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 10, color: C.textSecondary }}>Enable SAML SSO</span>
+                    <button onClick={() => setSsoEnabled(!ssoEnabled)} style={{
+                      width: 32, height: 16, borderRadius: 3, border: 'none', cursor: 'pointer',
+                      background: ssoEnabled ? C.textBody : C.ghost,
+                      position: 'relative', transition: 'background-color 80ms ease',
+                    }}>
+                      <div style={{
+                        width: 12, height: 12, borderRadius: ssoEnabled ? 3 : 2,
+                        background: ssoEnabled ? '#0a0a0b' : C.textDim,
+                        position: 'absolute', top: 2,
+                        left: ssoEnabled ? 18 : 2,
+                        transition: 'left 150ms ease, border-radius 150ms ease',
+                      }} />
+                    </button>
+                  </div>
+                  {ssoEnabled && (<>
+                    <div>
+                      <label style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, display: 'block' }}>IdP Login URL</label>
+                      <input value={ssoIdpUrl} onChange={e => setSsoIdpUrl(e.target.value)} placeholder="https://idp.example.com/sso/saml" style={{ width: '100%', height: 24, background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3, color: C.textBody, fontSize: 10, padding: '0 6px', outline: 'none' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, display: 'block' }}>Entity ID</label>
+                      <input value={ssoEntityId} onChange={e => setSsoEntityId(e.target.value)} placeholder="urn:xeno:workspace" style={{ width: '100%', height: 24, background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3, color: C.textBody, fontSize: 10, padding: '0 6px', outline: 'none' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, display: 'block' }}>X.509 Certificate</label>
+                      <textarea value={ssoCert} onChange={e => setSsoCert(e.target.value)} placeholder="-----BEGIN CERTIFICATE-----" rows={3} style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3, color: C.textBody, fontSize: 10, padding: '4px 6px', outline: 'none', resize: 'vertical', fontFamily: 'monospace' }} />
+                    </div>
+                    <button style={{ height: 24, padding: '0 10px', fontSize: 10, fontWeight: 500, background: C.ghost, border: 'none', borderRadius: 3, color: C.textSecondary, cursor: 'pointer', alignSelf: 'flex-start', transition: 'background-color 80ms ease' }}>Save Configuration</button>
+                  </>)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── SCIM Provisioning ── */}
+          {canManage && (
+            <div style={S.panel}>
+              <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setScimOpen(o => !o)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Server size={11} style={{ color: C.textTertiary }} />
+                  <span style={S.headingLabel}>SCIM Provisioning</span>
+                  {scimEnabled && <span style={{ ...S.badge, fontSize: 8 }}>Active</span>}
+                </div>
+                <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: scimOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
+              </div>
+              {scimOpen && (
+                <div style={{ ...S.panelBody, padding: '8px 10px', display: 'grid', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 10, color: C.textSecondary }}>Enable SCIM</span>
+                    <button onClick={() => setScimEnabled(!scimEnabled)} style={{
+                      width: 32, height: 16, borderRadius: 3, border: 'none', cursor: 'pointer',
+                      background: scimEnabled ? C.textBody : C.ghost,
+                      position: 'relative', transition: 'background-color 80ms ease',
+                    }}>
+                      <div style={{
+                        width: 12, height: 12, borderRadius: scimEnabled ? 3 : 2,
+                        background: scimEnabled ? '#0a0a0b' : C.textDim,
+                        position: 'absolute', top: 2,
+                        left: scimEnabled ? 18 : 2,
+                        transition: 'left 150ms ease, border-radius 150ms ease',
+                      }} />
+                    </button>
+                  </div>
+                  {scimEnabled && (<>
+                    <div>
+                      <label style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, display: 'block' }}>SCIM Base URL</label>
+                      <div style={{ height: 24, display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3, padding: '0 6px' }}>
+                        <span style={{ fontSize: 10, color: C.textTertiary, fontFamily: 'monospace', flex: 1 }}>https://api.xenostudio.ai/scim/v2</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, display: 'block' }}>Bearer Token</label>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <div style={{ flex: 1, height: 24, display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3, padding: '0 6px' }}>
+                          <span style={{ fontSize: 10, color: C.textTertiary, fontFamily: 'monospace' }}>{scimToken}</span>
+                        </div>
+                        <button onClick={() => { navigator.clipboard.writeText(scimToken); setScimTokenCopied(true); setTimeout(() => setScimTokenCopied(false), 1500); }} style={{ ...ghostBtn(), height: 24, padding: '0 6px', borderRadius: 3 }} {...hover.ghost}>
+                          {scimTokenCopied ? <Check size={10} /> : <Copy size={10} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 9, color: C.textDim }}>
+                      Configure your IdP (Okta, Azure AD, OneLogin) with these credentials to auto-sync users.
+                    </div>
+                  </>)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Sessions ── */}
+          {canManage && (
+            <div style={S.panel}>
+              <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setSessionsOpen(o => !o)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Monitor size={11} style={{ color: C.textTertiary }} />
+                  <span style={S.headingLabel}>Active Sessions</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={S.headingMeta}>{sessions.length}</span>
+                  <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: sessionsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
+                </div>
+              </div>
+              {sessionsOpen && (
+                <div style={{ ...S.panelBody, padding: 4 }}>
+                  {sessions.map(s => (
+                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', borderRadius: 4, transition: 'background-color 80ms ease' }} {...hover.row}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {s.device.includes('iPhone') || s.device.includes('Android') ? <Smartphone size={12} style={{ color: C.textTertiary }} /> : <Monitor size={12} style={{ color: C.textTertiary }} />}
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ fontSize: 10, color: C.textBody }}>{s.user_name}</span>
+                            <span style={{ fontSize: 10, color: C.textDim }}>· {s.device}</span>
+                            {s.current && <span style={{ ...S.badge, fontSize: 8 }}>Current</span>}
+                          </div>
+                          <div style={{ fontSize: 9, color: C.textDim }}>{s.ip} · {s.location} · {formatRelative(s.last_active)}</div>
+                        </div>
+                      </div>
+                      {!s.current && (
+                        <button style={{ ...ghostBtn(), height: 22, padding: '0 6px', fontSize: 9, borderRadius: 3, color: C.textTertiary }} {...hover.ghost}>
+                          <LogOut size={9} /> Revoke
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Custom Roles ── */}
+          {canManage && (
+            <div style={S.panel}>
+              <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setRolesOpen(o => !o)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Layers size={11} style={{ color: C.textTertiary }} />
+                  <span style={S.headingLabel}>Roles & Permissions</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={S.headingMeta}>{roles.length}</span>
+                  <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: rolesOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
+                </div>
+              </div>
+              {rolesOpen && (
+                <div style={{ ...S.panelBody, padding: 4 }}>
+                  {roles.map(role => (
+                    <div key={role.id} style={{ padding: '5px 8px', borderRadius: 4, transition: 'background-color 80ms ease' }} {...hover.row}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 10, color: C.textBody, fontWeight: 500 }}>{role.name}</span>
+                          {role.builtin && <span style={{ ...S.badge, fontSize: 8 }}>Built-in</span>}
+                        </div>
+                        {!role.builtin && (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => setEditingRole(editingRole === role.id ? null : role.id)} style={{ ...ghostBtn(), height: 20, padding: '0 4px', borderRadius: 3 }} {...hover.ghost}>
+                              <Settings size={9} />
+                            </button>
+                            <button onClick={() => setRoles(prev => prev.filter(r => r.id !== role.id))} style={{ ...ghostBtn(), height: 20, padding: '0 4px', borderRadius: 3, color: C.textDim }} {...hover.ghost}>
+                              <X size={9} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {/* Permission editor */}
+                      {editingRole === role.id && (
+                        <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {ALL_PERMISSIONS.map(perm => {
+                            const has = role.permissions.includes(perm);
+                            return (
+                              <button key={perm} onClick={() => {
+                                setRoles(prev => prev.map(r => r.id !== role.id ? r : {
+                                  ...r, permissions: has ? r.permissions.filter(p => p !== perm) : [...r.permissions, perm]
+                                }));
+                              }} style={{
+                                height: 20, padding: '0 6px', fontSize: 9, borderRadius: 2,
+                                background: has ? C.ghost : 'transparent',
+                                border: `1px solid ${has ? C.borderStrong : C.border}`,
+                                color: has ? C.textBody : C.textDim,
+                                cursor: 'pointer', transition: 'all 80ms ease',
+                              }}>{perm}</button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* Permission summary */}
+                      {editingRole !== role.id && (
+                        <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>
+                          {role.permissions.includes('*') ? 'All permissions' : role.permissions.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {/* Add new role */}
+                  <div style={{ padding: '5px 8px', display: 'flex', gap: 4 }}>
+                    <input value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="New role name..." style={{
+                      flex: 1, height: 24, background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3,
+                      color: C.textBody, fontSize: 10, padding: '0 6px', outline: 'none',
+                    }} />
+                    <button disabled={!newRoleName.trim()} onClick={() => {
+                      if (!newRoleName.trim()) return;
+                      setRoles(prev => [...prev, { id: `r-${Date.now()}`, name: newRoleName.trim(), permissions: ['view'], builtin: false }]);
+                      setNewRoleName('');
+                    }} style={{
+                      height: 24, padding: '0 8px', fontSize: 10, fontWeight: 500,
+                      background: newRoleName.trim() ? C.ghost : 'transparent',
+                      border: 'none', borderRadius: 3,
+                      color: newRoleName.trim() ? C.textSecondary : C.textDim,
+                      cursor: newRoleName.trim() ? 'pointer' : 'not-allowed',
+                    }}>Add</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Transfer Ownership */}
           {isOwner && members.filter(m => m.member_role !== 'owner').length > 0 && (
