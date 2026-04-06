@@ -1,5 +1,5 @@
 import React, { useState, createContext, useContext, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import OverviewTaskbar from '../components/overview/OverviewTaskbar';
 import OSAuthInterface from '../components/os/OSAuthInterface';
@@ -104,6 +104,7 @@ export const useLayout = () => useContext(LayoutContext);
 // Create a separate component for the main content to use WindowManager hook
 const OverviewContent: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const [labs] = useState(mockLabs);
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
@@ -112,6 +113,7 @@ const OverviewContent: React.FC = () => {
   // Taskbar is always collapsed
   const isSidebarCollapsed = true;
   const [isCleanMode, setIsCleanMode] = useState(localStorage.getItem('isCleanMode') === 'true');
+  const isImageGenerationCopyRoute = location.pathname === '/overview/generation/image2-copy' || location.pathname.endsWith('/generation/image2-copy');
   
   // Window management integration
   const { openWindow } = useWindowManager();
@@ -210,7 +212,7 @@ const OverviewContent: React.FC = () => {
         
         {/* Main content area - full width, minus taskbar width */}
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <DisplayContainer>
+          <DisplayContainer background={isImageGenerationCopyRoute ? '#000000' : undefined}>
           <Routes>
             {/* Full-screen canvas view - no header or sidebar */}
             <Route path="/labs/:labId/canvas" element={<CanvasView />} />

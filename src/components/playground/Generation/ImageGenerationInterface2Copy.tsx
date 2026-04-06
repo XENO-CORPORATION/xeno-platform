@@ -344,6 +344,30 @@ const aiCompanies = [
   },
 ];
 
+function renderCompanyLogo(
+  company: (typeof aiCompanies)[number] | null | undefined,
+  isActive: boolean,
+) {
+  if (!company) return null;
+
+  if (company.name === 'Black Forest') {
+    return (
+      <img
+        src="/flux-logo.svg"
+        alt="Flux"
+        className="w-5 h-5"
+        draggable={false}
+        style={{
+          opacity: isActive ? 1 : 0.52,
+          filter: isActive ? 'none' : 'grayscale(1) brightness(0.9)',
+        }}
+      />
+    );
+  }
+
+  return company.logo;
+}
+
 // Model capabilities interface
 interface ModelCapabilities {
   maxCount: number; // Max images per generation
@@ -670,6 +694,10 @@ const GalleryImageTile = React.memo(function GalleryImageTile({
   const [longPressActive, setLongPressActive] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const supportsHover = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches,
+    []
+  );
 
   // Long press detection for mobile
   const handleTouchStart = useCallback(() => {
@@ -679,8 +707,6 @@ const GalleryImageTile = React.memo(function GalleryImageTile({
         // Enter selection mode and select this tile
         onEnterSelectionMode();
         onToggleSelect?.();
-      } else {
-        setLongPressActive(true);
       }
     }, 500);
   }, [selectionMode, onEnterSelectionMode, onToggleSelect]);
@@ -698,7 +724,7 @@ const GalleryImageTile = React.memo(function GalleryImageTile({
   }, []);
 
   // Combined overlay visibility: hover on desktop OR long press on mobile — never in selection mode
-  const showOverlay = (outerHoverState || longPressActive) && !selectionMode;
+  const showOverlay = supportsHover && outerHoverState && !selectionMode;
 
   useEffect(() => {
     if (longPressTimerRef.current) {
@@ -768,7 +794,7 @@ const GalleryImageTile = React.memo(function GalleryImageTile({
                   borderRadius: cardRadius,
                   opacity: imageLoaded ? 1 : 0,
                   transition: 'opacity 0.3s ease, filter 0.3s ease',
-                  filter: (innerHoverState || longPressActive) ? 'brightness(1.1)' : 'brightness(1)',
+                  filter: (supportsHover && innerHoverState) ? 'brightness(1.1)' : 'brightness(1)',
                   WebkitUserSelect: 'none',
                   userSelect: 'none',
                   WebkitTouchCallout: 'none',
@@ -916,11 +942,13 @@ const ImageGenerationInterface2: React.FC = () => {
   const [showAiCompanies, setShowAiCompanies] = useState(false);
   const [desktopAiCompaniesClosing, setDesktopAiCompaniesClosing] = useState(false);
   const [desktopAiCompaniesMode, setDesktopAiCompaniesMode] = useState<'all' | 'selected'>('all');
+  const [desktopCompanyFilterTarget, setDesktopCompanyFilterTarget] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [closingCompanyModels, setClosingCompanyModels] = useState<string | null>(null);
   const [hoveredModel, setHoveredModel] = useState<ModelDetails | null>(null);
   const modelHoverTimeoutRef = useRef<number | null>(null);
   const modelHoverLockUntilRef = useRef<number>(0);
+const desktopCompanyFilterTimeoutRef = useRef<number | null>(null);
 const mobileSettingsCloseTimeoutRef = useRef<number | null>(null);
 const mobileCountControlsCloseTimeoutRef = useRef<number | null>(null);
 const mobileResolutionsCloseTimeoutRef = useRef<number | null>(null);
@@ -939,6 +967,25 @@ const mobilePromptClosingLockRef = useRef<number | null>(null);
     modelHoverLockUntilRef.current = Date.now() + ms;
     clearModelHoverState();
   }, [clearModelHoverState]);
+  const resetDesktopCompanyRow = useCallback(() => {
+    if (desktopCompanyFilterTimeoutRef.current) {
+      window.clearTimeout(desktopCompanyFilterTimeoutRef.current);
+      desktopCompanyFilterTimeoutRef.current = null;
+    }
+    setDesktopCompanyFilterTarget(null);
+    setDesktopAiCompaniesMode('all');
+  }, []);
+  const focusDesktopCompanyRow = useCallback((companyName: string) => {
+    if (desktopCompanyFilterTimeoutRef.current) {
+      window.clearTimeout(desktopCompanyFilterTimeoutRef.current);
+    }
+    setDesktopCompanyFilterTarget(companyName);
+    desktopCompanyFilterTimeoutRef.current = window.setTimeout(() => {
+      setDesktopAiCompaniesMode('selected');
+      setDesktopCompanyFilterTarget(null);
+      desktopCompanyFilterTimeoutRef.current = null;
+    }, 180);
+  }, []);
   const handleModelHoverEnter = useCallback((model: ModelDetails) => {
     if (Date.now() < modelHoverLockUntilRef.current) return;
     if (modelHoverTimeoutRef.current) window.clearTimeout(modelHoverTimeoutRef.current);
@@ -952,6 +999,10 @@ const mobilePromptClosingLockRef = useRef<number | null>(null);
   );
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [activeImageId, setActiveImageId] = useState<string | null>(null);
+  const activeUploadedImage = useMemo(
+    () => uploadedImages.find((img) => img.id === activeImageId) ?? null,
+    [uploadedImages, activeImageId]
+  );
   const [mobilePromptExpanded, setMobilePromptExpanded] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -1070,6 +1121,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const [viewportHeight, setViewportHeight] = useState(() => typeof window !== 'undefined' ? window.innerHeight : 800);
   const MOBILE_INLINE_STAGGER_MS = 45;
   const MOBILE_INLINE_DURATION_MS = 220;
   const MOBILE_INLINE_OPEN_DURATION_MS = 280;
@@ -1080,6 +1132,14 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     `${isClosing ? 'mobileInlineItemFadeOut' : 'mobileInlineItemFadeIn'} ${isClosing ? MOBILE_INLINE_DURATION_MS : MOBILE_INLINE_OPEN_DURATION_MS}ms ${isClosing ? 'ease-in' : 'ease-out'} ${(total - 1 - index) * MOBILE_INLINE_STAGGER_MS}ms both`;
   const isMobilePromptCloseLocked = () =>
     mobilePromptClosingLockRef.current !== null && mobilePromptClosingLockRef.current > Date.now();
+  const isMobileLandscape = isMobile && viewportWidth > viewportHeight;
+  const mobilePromptCollapsedHeight = uploadedImages.length > 0 ? 88 : 40;
+  const mobilePromptExpandedHeight = uploadedImages.length > 0
+    ? (isMobileLandscape ? 120 : 136)
+    : (isMobileLandscape ? 88 : 104);
+  const mobilePromptInnerHeight = uploadedImages.length > 0
+    ? (mobilePromptExpanded ? (isMobileLandscape ? 56 : 72) : 40)
+    : (mobilePromptExpanded ? (isMobileLandscape ? 56 : 72) : 40);
   const shouldFadeMobileReferenceTray =
     selectedCompany !== null ||
     closingCompanyModels !== null ||
@@ -1208,6 +1268,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     const updateSize = () => {
       setIsMobile(window.innerWidth < 768);
       setViewportWidth(window.innerWidth);
+      setViewportHeight(window.innerHeight);
     };
     const onResize = () => {
       updateSize();
@@ -1216,6 +1277,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       if (width >= 768 && width < 960) {
         setShowAiCompanies(false);
         setSelectedCompany(null);
+        setClosingCompanyModels(null);
+        resetDesktopCompanyRow();
         setShowGallerySearch(false);
         setGallerySearchQuery('');
       }
@@ -1240,13 +1303,14 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
         setDesktopAiCompaniesClosing(true);
         setSelectedCompany(null);
         setClosingCompanyModels(null);
+        resetDesktopCompanyRow();
         clearModelHoverState();
         setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 550);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isMobile, showAiCompanies, clearModelHoverState]);
+  }, [isMobile, showAiCompanies, clearModelHoverState, resetDesktopCompanyRow]);
   // Measure available width for search bar + prompt collision limit
   useEffect(() => {
     if (isMobile) return;
@@ -1398,8 +1462,11 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       if (desktopSearchCloseTimeoutRef.current) {
         window.clearTimeout(desktopSearchCloseTimeoutRef.current);
       }
+      if (desktopCompanyFilterTimeoutRef.current) {
+        window.clearTimeout(desktopCompanyFilterTimeoutRef.current);
+      }
     };
-  }, []);
+  }, [resetDesktopCompanyRow]);
 
   useEffect(() => {
     if (!showAspectRatios) return;
@@ -1599,9 +1666,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     };
   }, [showHistory, gridItems.length]);
 
-  const galleryItemLayout = useMemo(() => {
-    const layout = new Map<string, { width: number; height: number }>();
-    if (gridItems.length === 0) return layout;
+  const galleryLayoutData = useMemo(() => {
+    const itemLayout = new Map<string, { width: number; height: number }>();
+    const renderedRows: Array<{ items: GalleryGridItem[]; rowHeight: number; knownSize: number }> = [];
+    if (gridItems.length === 0) {
+      return { itemLayout, renderedRows };
+    }
 
     const effectiveWidth = galleryViewportWidth > 0 ? galleryViewportWidth : 1200;
     const targetRowHeight = Math.min(galleryRowHeightPx, galleryMaxRowHeightPx);
@@ -1638,12 +1708,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       return aspectSum * height + gapsWidth;
     };
 
-    const rows: Array<Array<{ key: string; aspect: number }>> = [];
-    let currentRow: Array<{ key: string; aspect: number }> = [];
+    const rows: Array<Array<{ item: GalleryGridItem; key: string; aspect: number }>> = [];
+    let currentRow: Array<{ item: GalleryGridItem; key: string; aspect: number }> = [];
 
     gridItems.forEach((item) => {
       const aspect = Math.max(0.35, Math.min(2.8, resolveAspect(item)));
-      currentRow.push({ key: item.key, aspect });
+      currentRow.push({ item, key: item.key, aspect });
 
       if (currentRow.length < 2) {
         return;
@@ -1688,8 +1758,6 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     }
 
     rows.forEach((row, rowIndex) => {
-      const aspectSum = row.reduce((sum, entry) => sum + entry.aspect, 0);
-      const gapsWidth = galleryGapPx * Math.max(0, row.length - 1);
       const justifiedRowHeight = Math.max(1, getRowHeight(row));
       const isLastRow = rowIndex === rows.length - 1;
       const shouldBoundLastRow = isLastRow && (row.length === 1 || justifiedRowHeight > galleryMaxRowHeightPx);
@@ -1709,7 +1777,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
         row.forEach((entry) => {
           const width = Math.max(90, boundedRowHeight * entry.aspect);
-          layout.set(entry.key, { width, height: boundedRowHeight });
+          itemLayout.set(entry.key, { width, height: boundedRowHeight });
+        });
+        renderedRows.push({
+          items: row.map((entry) => entry.item),
+          rowHeight: boundedRowHeight,
+          knownSize: boundedRowHeight + galleryGapPx,
         });
         return;
       }
@@ -1717,11 +1790,16 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       // Fully justified rows preserve every image ratio and fill the viewport width exactly.
       row.forEach((entry) => {
         const width = Math.max(90, justifiedRowHeight * entry.aspect);
-        layout.set(entry.key, { width, height: justifiedRowHeight });
+        itemLayout.set(entry.key, { width, height: justifiedRowHeight });
+      });
+      renderedRows.push({
+        items: row.map((entry) => entry.item),
+        rowHeight: justifiedRowHeight,
+        knownSize: justifiedRowHeight + galleryGapPx,
       });
     });
 
-    return layout;
+    return { itemLayout, renderedRows };
   }, [
     gridItems,
     galleryViewportWidth,
@@ -1733,28 +1811,13 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     galleryMinItemWidthPx,
   ]);
 
+  const galleryItemLayout = galleryLayoutData.itemLayout;
+
   // Build virtualized row data for Virtuoso
   const virtualizedRows = useMemo(() => {
-    if (gridItems.length === 0 || galleryViewportWidth === 0) return [];
-    const rows: Array<{ items: typeof gridItems; rowHeight: number; knownSize: number }> = [];
-    let curItems: typeof gridItems = [];
-    let curWidth = 0;
-    let curHeight = galleryRowHeightPx;
-    gridItems.forEach((item) => {
-      const il = galleryItemLayout.get(item.key);
-      const iw = il?.width ?? galleryMinItemWidthPx;
-      const ih = il?.height ?? galleryRowHeightPx;
-      const projected = curWidth + (curItems.length > 0 ? galleryGapPx : 0) + iw;
-      if (curItems.length > 0 && projected > galleryViewportWidth + 2) {
-        rows.push({ items: curItems, rowHeight: curHeight, knownSize: curHeight + galleryGapPx });
-        curItems = [item]; curWidth = iw; curHeight = ih;
-      } else {
-        curItems.push(item); curWidth = projected; curHeight = Math.max(curHeight, ih);
-      }
-    });
-    if (curItems.length > 0) rows.push({ items: curItems, rowHeight: curHeight, knownSize: curHeight + galleryGapPx });
-    return rows;
-  }, [gridItems, galleryItemLayout, galleryViewportWidth, galleryGapPx, galleryRowHeightPx, galleryMinItemWidthPx]);
+    if (galleryViewportWidth === 0) return [];
+    return galleryLayoutData.renderedRows;
+  }, [galleryLayoutData, galleryViewportWidth]);
 
   const mobileGallerySections = useMemo(() => {
     const visibleItems = gridItems.filter((item): item is Extract<GalleryGridItem, { kind: 'image' | 'collage' }> => item.kind === 'image' || item.kind === 'collage');
@@ -2450,7 +2513,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
   }, [selectedImageKeys, libraryImages, handleDownloadSingleImage, exitSelectionMode]);
 
   const handleBulkCreateCollection = useCallback(() => {
-    if (selectedImageKeys.size < 2) return;
+    if (selectedImageKeys.size < 1) return;
     const keys = Array.from(selectedImageKeys);
     setCollages(prev => [...prev, {
       id: `col_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -2842,7 +2905,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
         {/* Generation Header Container - Sticky */}
         <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
-        <div className={`generation-header flex flex-col items-center gap-3 sticky top-0 z-50 transition-colors duration-200 ${isScrolled ? 'bg-[#0a0a0b]' : 'bg-transparent'}`} style={{ width: '100%' }}>
+        <div className={`generation-header flex flex-col items-center gap-3 sticky top-0 z-50 transition-colors duration-200 ${isScrolled ? 'bg-[#0a0a0b]' : 'bg-transparent'}`} style={{ width: '100%', backgroundColor: 'rgba(0, 80, 255, 0.18)' }}>
         <div className="w-full hidden md:flex flex-col gap-3 relative">
           {/* Desktop Row: All controls in one row (hidden on mobile) */}
           <div className={`w-full hidden md:flex flex-row items-start justify-between gap-3 relative px-3 ${uploadedImages.length > 0 ? 'pb-16' : ''}`}>
@@ -2857,9 +2920,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   if (showAiCompanies) {
                     setDesktopAiCompaniesClosing(true);
                     setSelectedCompany(null);
+                    setClosingCompanyModels(null);
+                    resetDesktopCompanyRow();
                     setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 550);
                   } else {
                     setDesktopAiCompaniesMode('all');
+                    setDesktopCompanyFilterTarget(null);
                     lockModelHover();
                     setShowAiCompanies(true);
                   }
@@ -2872,7 +2938,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                 className="p-2 rounded flex items-center justify-center"
               >
                 {selectedModelCompany ? (
-                  <span className="w-6 h-6 flex items-center justify-center text-white/70">{selectedModelCompany.logo}</span>
+                  <span className="w-6 h-6 flex items-center justify-center text-white/70">{renderCompanyLogo(selectedModelCompany, true)}</span>
                 ) : (
                   <svg className="w-5 h-5 text-[#6b7280]" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="2" y="12.8" width="10" height="2.4" rx="1.2" transform="rotate(-45 7 14)" />
@@ -2892,10 +2958,13 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                       if (showAiCompanies) {
                         setDesktopAiCompaniesClosing(true);
                         setSelectedCompany(null);
+                        setClosingCompanyModels(null);
+                        resetDesktopCompanyRow();
                         setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 550);
                       } else {
                         setDesktopAiCompaniesMode('selected');
                         setSelectedCompany(selectedModelCompany?.name ?? null);
+                        setDesktopCompanyFilterTarget(null);
                         setShowAiCompanies(true);
                       }
                       setShowSettings(false);
@@ -2909,19 +2978,27 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
             </div>
             {/* AI Company icons — inline horizontal, right of model button */}
             {(showAiCompanies || desktopAiCompaniesClosing) && (() => {
-              const visibleCompanies = desktopAiCompaniesMode === 'selected' && selectedModelCompany
-                ? [selectedModelCompany]
+              const focusedCompany = aiCompanies.find((company) => company.name === selectedCompany) ?? selectedModelCompany ?? null;
+              const visibleCompanies = desktopAiCompaniesMode === 'selected' && focusedCompany
+                ? [focusedCompany]
                 : aiCompanies;
               return visibleCompanies.map((company, index) => {
                 const total = visibleCompanies.length;
                 const enterDelay = index * 50;
                 const exitDelay = (total - 1 - index) * 50;
+                const isFilteringOut = desktopCompanyFilterTarget !== null && company.name !== desktopCompanyFilterTarget;
                 return (
                   <div key={company.name}
                     className={`relative ${desktopAiCompaniesClosing ? '' : 'animate-fade-in'}`}
                     style={desktopAiCompaniesClosing
                       ? { animation: `desktopCompanyExit 300ms ease-out ${exitDelay}ms both` }
-                      : { animationDelay: `${enterDelay}ms` }
+                      : {
+                          animationDelay: `${enterDelay}ms`,
+                          opacity: isFilteringOut ? 0 : 1,
+                          transform: isFilteringOut ? 'translateX(-8px) scale(0.92)' : 'translateX(0) scale(1)',
+                          transition: 'opacity 180ms ease-out, transform 180ms ease-out',
+                          pointerEvents: isFilteringOut ? 'none' : 'auto',
+                        }
                     }
                     data-desktop-header-popout="true"
                   >
@@ -2931,15 +3008,26 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                           // Close: animate models out, then clear
                           setClosingCompanyModels(company.name);
                           const modelCount = company.models.length;
-                          setTimeout(() => { setSelectedCompany(null); setClosingCompanyModels(null); }, getCompanyModelCloseMs(modelCount));
+                          setTimeout(() => {
+                            setSelectedCompany(null);
+                            setClosingCompanyModels(null);
+                            resetDesktopCompanyRow();
+                          }, getCompanyModelCloseMs(modelCount));
                         } else if (selectedCompany && selectedCompany !== company.name) {
                           // Switch: animate old out, then show new
                           const oldCompany = aiCompanies.find(c => c.name === selectedCompany);
                           const oldCount = oldCompany?.models.length ?? 0;
                           setClosingCompanyModels(selectedCompany);
-                          setTimeout(() => { setClosingCompanyModels(null); setSelectedCompany(company.name); }, getCompanyModelCloseMs(oldCount));
+                          setTimeout(() => {
+                            setClosingCompanyModels(null);
+                            setSelectedCompany(company.name);
+                            setDesktopAiCompaniesMode('all');
+                            focusDesktopCompanyRow(company.name);
+                          }, getCompanyModelCloseMs(oldCount));
                         } else {
                           setSelectedCompany(company.name);
+                          setDesktopAiCompaniesMode('all');
+                          focusDesktopCompanyRow(company.name);
                         }
                         setShowSettings(false);
                       }}
@@ -2949,10 +3037,10 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         selectedCompany && selectedCompany !== company.name ? 'opacity-40' : 'opacity-100'
                       }`}
                     >
-                      <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
+                      <span className="w-5 h-5 flex items-center justify-center">{renderCompanyLogo(company, selectedCompany === company.name)}</span>
                     </button>
                     {(selectedCompany === company.name || closingCompanyModels === company.name) && (
-                      <div className="absolute left-0 top-full mt-2 flex flex-col gap-1.5 z-[110]">
+                      <div className="absolute left-full top-1/2 ml-2 flex -translate-y-1/2 flex-row flex-wrap items-center gap-1.5 z-[110]">
                         {company.models.map((model, modelIndex) => {
                           const isClosing = closingCompanyModels === company.name;
                           const total = company.models.length;
@@ -2980,6 +3068,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                                 setShowAiCompanies(false);
                                 setDesktopAiCompaniesClosing(false);
                                 setSelectedCompany(null);
+                                resetDesktopCompanyRow();
                                 clearModelHoverState();
                               }}
                               className={`h-8 px-3 border border-[#27272a] rounded-md flex items-center gap-2 text-white/80 text-sm hover:bg-[#252525] hover:text-white transition-colors duration-300 whitespace-nowrap ${selectedModel === model.name ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c]'}`}
@@ -3069,14 +3158,14 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                 Add Ingredient
               </div>
             )}
-            <div
-              className={`min-h-[32px] lg:min-h-[40px] border rounded-md flex flex-col relative transition-all duration-300 overflow-visible ${
-                isAnyDropHover
-                  ? 'border-[#3a3a3d] bg-[#222224]'
+              <div
+                className={`min-h-[32px] lg:min-h-[40px] border rounded-md flex flex-col relative transition-all duration-300 overflow-visible ${
+                  isAnyDropHover
+                  ? 'border-[#272B33] bg-[#111419]'
                   : isDragActive
-                    ? 'border-[#333336] bg-[#1a1a1c]'
-                    : 'border-[#27272a] bg-[#1a1a1c]'
-              }`}
+                    ? 'border-[#20252D] bg-[#090B0F]'
+                    : 'border-[#171A20] bg-[#090B0F]'
+                }`}
               style={{
                 ...(isDragActive && !isAnyDropHover ? { animation: 'promptDropPulse 2s ease-in-out infinite' } : {}),
               }}
@@ -3087,7 +3176,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   onClick={handleImageClick}
                   className="p-2 ml-1 rounded-md flex items-center justify-center transition-all hover:bg-white/[0.08]"
                 >
-                  <svg className="w-5 h-5 text-[#6b7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-[#727B88]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 </button>
@@ -3117,10 +3206,10 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         }}
                         maxLength={charLimit}
                         placeholder="Describe what you want to generate..."
-                        className="flex-1 bg-transparent text-[#E0E0E0] text-sm placeholder:text-[#4b5563] outline-none focus:outline-none focus:ring-0 border-0 px-1"
+                        className="flex-1 bg-transparent text-[#E7EAF0] text-sm placeholder:text-[#727B88]/70 outline-none focus:outline-none focus:ring-0 border-0 px-1"
                       />
                       {/* Character Counter */}
-                      <span className={`text-xs mr-2 ${prompt.length >= warningThreshold ? 'text-red-400' : 'text-[#4b5563]'}`}>
+                      <span className={`text-xs mr-2 ${prompt.length >= warningThreshold ? 'text-red-400' : 'text-[#727B88]'}`}>
                         {prompt.length}/{charLimit}
                       </span>
                     </>
@@ -3161,7 +3250,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                       setActiveImageId(null);
                       setHoveredRefImage(null);
                     }}
-                    className="ml-auto flex items-center justify-center bg-[#1a1a1c] hover:bg-[#252525] border border-[#27272a] rounded-md text-[#6b7280] hover:text-white transition-colors duration-300 self-end"
+                    className="ml-auto flex items-center justify-center bg-[#090B0F] hover:bg-[#111419] border border-[#171A20] rounded-md text-[#727B88] hover:text-white transition-colors duration-300 self-end"
                     style={{ width: 24, height: 24, minWidth: 24, minHeight: 24, padding: 0 }}
                   >
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3187,7 +3276,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
               }}
             >
               <div
-                className="absolute inset-0 h-10 w-full rounded-md bg-[#1a1a1c] pr-10 flex items-center"
+                className="absolute inset-0 h-10 w-full rounded-md bg-[#090B0F] border border-[#171A20] pr-10 flex items-center"
                 style={{
                   opacity: showGallerySearch ? 1 : 0,
                   transition: 'opacity 220ms ease-in-out',
@@ -3211,7 +3300,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                     onKeyDown={(e) => { if (e.key === 'Escape') closeDesktopGallerySearch(); }}
                     maxLength={500}
                     placeholder="Search..."
-                    className="w-full min-w-0 bg-transparent text-[#E0E0E0] text-sm placeholder:text-[#4b5563] border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
+                    className="w-full min-w-0 bg-transparent text-[#E7EAF0] text-sm placeholder:text-[#727B88]/70 border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
                   />
                 </div>
               </div>
@@ -3230,7 +3319,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                 className="absolute right-0 top-0 z-10 h-10 w-10 flex items-center justify-center"
                 aria-label="Toggle search"
               >
-                <svg className={`w-5 h-5 transition-colors ${showGallerySearch || gallerySearchQuery ? 'text-white' : 'text-[#6b7280]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-5 h-5 transition-colors ${showGallerySearch || gallerySearchQuery ? 'text-white' : 'text-[#727B88]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <circle cx="11" cy="11" r="7" strokeWidth="2" />
                   <path strokeLinecap="round" strokeWidth="2" d="M20 20L16.65 16.65" />
                 </svg>
@@ -3615,7 +3704,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
         {/* Image History Container - Scrollable */}
         <div
-          className="image-history-container h-full rounded-md mt-6 flex-1 relative overflow-y-auto bg-black"
+          className="image-history-container h-full rounded-md mt-3 flex-1 relative overflow-y-auto bg-black"
           style={{ width: '100%', scrollbarGutter: 'stable' }}
         >
           {/* History View - When showHistory is true (but NOT favorites — favorites uses the gallery grid) */}
@@ -3651,11 +3740,14 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
             </div>
           ) : (
           /* Vertical stack of image answer containers - Midjourney style */
-          <div className="flex flex-col-reverse md:flex-col gap-6 py-4">
+          <div className="flex flex-col-reverse md:flex-col gap-6 pt-2 pb-4">
             {/* Virtualized grid library view — React Virtuoso windowed rendering */}
             {gridItems.length > 0 && (
               <GalleryErrorBoundary>
-              <div className="image-answer-container rounded-md py-0 md:py-4 px-4 md:px-8 lg:px-12 relative bg-black">
+              <div
+                className="image-answer-container ml-3 mt-2 rounded-md py-0 px-0 md:ml-0 md:mt-0 md:py-4 md:px-3 relative bg-black"
+                style={{ backgroundColor: 'rgba(255, 0, 0, 0.18)' }}
+              >
                 <div className="image-preview-container-wrapper relative w-full" style={{ flexGrow: 1 }}>
                   <div id="DndDescribedBy-0" style={{ display: 'none' }}>Press space bar to start a drag.</div>
                   <div ref={galleryContainerRef} className="w-full" style={{ overflowAnchor: 'none' }}>
@@ -4116,7 +4208,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   onTouchStart={handleMobileViewerTouchStart}
                   onTouchEnd={handleMobileViewerTouchEnd}
                 >
-                  <div className="absolute top-0 left-0 right-0 px-4 pt-6 pb-4 flex items-start justify-between z-20 bg-gradient-to-b from-black/55 via-black/10 to-transparent">
+                  <div className={`absolute top-0 left-0 right-0 flex items-start justify-between z-20 bg-gradient-to-b from-black/55 via-black/10 to-transparent ${isMobileLandscape ? 'px-3 pt-3 pb-2' : 'px-4 pt-6 pb-4'}`}>
                     <button
                       onClick={() => setViewingImage(null)}
                       className="h-11 w-11 rounded-full text-white/90 flex items-center justify-center"
@@ -4258,27 +4350,27 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   </div>
 
                   <div
-                    className="absolute inset-0 px-4 flex items-center justify-center"
+                    className={`absolute inset-0 flex items-center justify-center ${isMobileLandscape ? 'px-2 pt-12 pb-14' : 'px-4'}`}
                     onClick={() => setShowDetailsOverlay((prev) => !prev)}
                   >
                     <img
                       src={currentImageUrl}
                       alt="Enlarged view"
-                      className="relative z-10 w-full h-auto rounded-xl select-none shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
+                      className={`relative z-10 rounded-xl select-none shadow-[0_20px_50px_rgba(0,0,0,0.35)] ${isMobileLandscape ? 'max-h-full w-auto max-w-full h-full object-contain' : 'w-full h-auto object-contain'}`}
                     />
                   </div>
 
                   {!showDetailsOverlay && (
-                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 rounded-full bg-black/35 px-3 py-1.5 text-[11px] text-white/65 backdrop-blur-xl">
+                    <div className={`absolute left-1/2 -translate-x-1/2 z-10 rounded-full bg-black/35 px-3 py-1.5 text-[11px] text-white/65 backdrop-blur-xl ${isMobileLandscape ? 'bottom-3' : 'bottom-8'}`}>
                       Tap image for details
                     </div>
                   )}
 
                   <div className={`absolute inset-x-0 bottom-0 z-20 transition-all duration-300 ${showDetailsOverlay ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-10 pointer-events-none'}`}>
-                    <div className="bg-gradient-to-t from-black via-black/92 to-transparent px-4 pb-6 pt-20">
+                    <div className={`bg-gradient-to-t from-black via-black/92 to-transparent ${isMobileLandscape ? 'px-3 pb-3 pt-10' : 'px-4 pb-6 pt-20'}`}>
                       <div className="flex items-end gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className={`text-[15px] leading-6 text-white/[0.94] ${mobileViewerPromptExpanded ? '' : 'line-clamp-3'}`}>
+                          <p className={`text-white/[0.94] ${isMobileLandscape ? 'text-[13px] leading-5' : 'text-[15px] leading-6'} ${mobileViewerPromptExpanded ? '' : 'line-clamp-3'}`}>
                             {currentGen.prompt}
                           </p>
                           {currentGen.prompt.length > 140 && (
@@ -4303,13 +4395,13 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
                       </div>
 
-                      <div className="mt-5 flex items-center gap-3">
+                      <div className={`flex items-center gap-3 ${isMobileLandscape ? 'mt-3' : 'mt-5'}`}>
                         <button
                           onClick={() => {
                             handleRerun(currentGen);
                             setViewingImage(null);
                           }}
-                          className="flex-1 rounded-xl bg-white text-black py-2.5 text-[13px] font-semibold shadow-[0_8px_20px_rgba(255,255,255,0.08)]"
+                          className={`flex-1 rounded-xl bg-white text-black font-semibold shadow-[0_8px_20px_rgba(255,255,255,0.08)] ${isMobileLandscape ? 'py-2 text-[12px]' : 'py-2.5 text-[13px]'}`}
                         >
                           Recreate
                         </button>
@@ -4317,7 +4409,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                           onClick={() => {
                             handleUseImageAsReference(currentImageUrl);
                           }}
-                          className="flex-1 rounded-xl border border-white/14 bg-white/[0.08] text-white py-2.5 text-[13px] font-semibold backdrop-blur-xl"
+                          className={`flex-1 rounded-xl border border-white/14 bg-white/[0.08] text-white font-semibold backdrop-blur-xl ${isMobileLandscape ? 'py-2 text-[12px]' : 'py-2.5 text-[13px]'}`}
                         >
                           Use as
                         </button>
@@ -4637,7 +4729,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
                   title={company.name}
                 >
-                  <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
+                  <span className="w-5 h-5 flex items-center justify-center">{renderCompanyLogo(company, selectedCompany === company.name)}</span>
                 </button>
                 {selectedCompany === company.name && (
                   <div className="absolute bottom-full mb-2 left-0 flex flex-col gap-1.5 z-[110]">
@@ -5177,7 +5269,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                 {showCollectionMenu && (
                   <div className="absolute bottom-full mb-2 right-0 bg-[#1a1a1c] border border-[#27272a] rounded-md p-1 z-[260] w-48 max-h-[200px] overflow-y-auto animate-fade-in">
                     {/* New Collection */}
-                    {selectedImageKeys.size >= 2 && (
+                    {selectedImageKeys.size >= 1 && (
                       <button
                         onClick={handleBulkCreateCollection}
                         className="w-full h-8 px-3 flex items-center gap-2 rounded-md text-sm text-white/80 hover:bg-[#252525] hover:text-white transition-colors duration-300"
@@ -5191,7 +5283,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                     {/* Existing Collections */}
                     {collages.length > 0 && (
                       <>
-                        {selectedImageKeys.size >= 2 && <div className="h-px bg-[#27272a] my-1" />}
+                        {selectedImageKeys.size >= 1 && <div className="h-px bg-[#27272a] my-1" />}
                         {collages.map(c => (
                           <button
                             key={c.id}
@@ -5204,8 +5296,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         ))}
                       </>
                     )}
-                    {collages.length === 0 && selectedImageKeys.size < 2 && (
-                      <div className="px-3 py-2 text-xs text-[#6b7280]">Select 2+ images to create a collection</div>
+                    {collages.length === 0 && selectedImageKeys.size < 1 && (
+                      <div className="px-3 py-2 text-xs text-[#6b7280]">Select at least 1 image to create a collection</div>
                     )}
                   </div>
                 )}
@@ -5263,7 +5355,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
             }}
           >
             <div
-              className="absolute inset-0 h-10 w-full bg-[#1a1a1c]/95 backdrop-blur-md border border-[#27272a] rounded-md pl-3 pr-11 shadow-[0_10px_30px_rgba(0,0,0,0.35)] flex items-center"
+              className="absolute inset-0 h-10 w-full bg-[#090B0F]/96 backdrop-blur-md border border-[#171A20] rounded-md pl-3 pr-11 shadow-[0_10px_30px_rgba(0,0,0,0.35)] flex items-center"
               style={{
                 opacity: showGallerySearch ? 1 : 0,
                 transition: 'opacity 220ms ease-in-out',
@@ -5286,12 +5378,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                     value={gallerySearchQuery}
                     onChange={(e) => setGallerySearchQuery(e.target.value.slice(0, 500))}
                     placeholder="Search generated prompts..."
-                    className="flex-1 min-w-0 bg-transparent text-[#E0E0E0] text-sm placeholder:text-[#4b5563] border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
+                    className="flex-1 min-w-0 bg-transparent text-[#E7EAF0] text-sm placeholder:text-[#727B88]/70 border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
                   />
                   {gallerySearchQuery && (
                     <button
                       onClick={() => setGallerySearchQuery('')}
-                      className="shrink-0 text-[#6b7280] hover:text-white transition-colors"
+                      className="shrink-0 text-[#727B88] hover:text-white transition-colors"
                       style={{ WebkitTapHighlightColor: 'transparent', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none', outline: 'none' }}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5312,7 +5404,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   setShowAiCompanies(false);
                 }
               }}
-              className="absolute right-0 top-0 z-10 h-10 w-10 rounded-md flex items-center justify-center text-[#6b7280] bg-transparent hover:text-white transition-colors duration-300"
+              className="absolute right-0 top-0 z-10 h-10 w-10 rounded-md flex items-center justify-center text-[#727B88] bg-transparent hover:text-white transition-colors duration-300"
               style={{ WebkitTapHighlightColor: 'transparent', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none', outline: 'none' }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5325,7 +5417,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       </div>
       )}
       {!selectionMode && (
-      <div className="fixed bottom-0 left-0 right-0 md:hidden z-[200] flex flex-col" style={{ background: 'linear-gradient(to top, #000 80%, transparent)' }}>
+      <div className={`fixed bottom-0 left-0 right-0 md:hidden z-[200] flex flex-col ${isMobileLandscape ? 'pb-1' : ''}`} style={{ background: 'linear-gradient(to top, #000 80%, transparent)' }}>
 
         {/* Upward panels — model picker, settings */}
         {/* Model Picker — vertical stack above model button, same animation as desktop */}
@@ -5367,7 +5459,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                           selectedCompany === company.name ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c]'
                         }`}
                       >
-                        <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
+                        <span className="w-5 h-5 flex items-center justify-center">{renderCompanyLogo(company, selectedCompany === company.name)}</span>
                       </button>
                       {/* Models — appear to the right of the company icon */}
                       {(selectedCompany === company.name || closingCompanyModels === company.name) && (
@@ -5646,7 +5738,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
         {/* Image References — shows when images are attached */}
         {/* Main Bottom Row: Model + Prompt + Actions */}
-        <div className="px-3 pb-3 pt-1 flex items-end gap-2">
+        <div className={`px-3 pt-1 flex items-end gap-2 ${isMobileLandscape ? 'pb-2' : 'pb-3'}`}>
           {/* Model Button */}
           <div className="relative shrink-0 self-end">
             {(showAiCompanies || desktopAiCompaniesClosing) && (() => {
@@ -5683,11 +5775,11 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                                 setSelectedCompany(company.name);
                               }
                             }}
-                            className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-white/80 hover:bg-[#252525] hover:text-white transition-colors duration-300 ${
-                              selectedCompany === company.name ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c]'
+                            className={`h-8 w-8 border border-[#171A20] rounded-md flex items-center justify-center text-[#727B88] hover:bg-[#111419] hover:text-white transition-colors duration-300 ${
+                              selectedCompany === company.name ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F]'
                             }`}
                           >
-                            <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
+                            <span className="w-5 h-5 flex items-center justify-center">{renderCompanyLogo(company, selectedCompany === company.name)}</span>
                           </button>
                           {(selectedCompany === company.name || closingCompanyModels === company.name) && (
                             <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 z-10">
@@ -5700,8 +5792,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                                   return (
                                     <button
                                       key={model.name}
-                                      className={`h-6 px-2 border border-[#27272a] rounded-md text-[9px] leading-none whitespace-nowrap text-white/80 hover:bg-[#252525] hover:text-white transition-colors duration-300 ${
-                                        selectedModel === model.name ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c]'
+                                      className={`h-6 px-2 border border-[#171A20] rounded-md text-[9px] leading-none whitespace-nowrap text-[#727B88] hover:bg-[#111419] hover:text-white transition-colors duration-300 ${
+                                        selectedModel === model.name ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F]'
                                       }`}
                                       style={isClosing
                                         ? { animation: `mobileInlineItemFadeOutReverse ${COMPANY_MODEL_CLOSE_DURATION_MS}ms ease-in ${mExitDelay}ms both` }
@@ -5746,12 +5838,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                 setShowAspectRatios(false);
                 setShowGallerySearch(false);
               }}
-              className="h-10 w-10 border border-[#27272a] rounded-md flex items-center justify-center bg-[#1a1a1c] hover:bg-[#252525] transition-colors duration-300"
+              className="h-10 w-10 border border-[#171A20] rounded-md flex items-center justify-center bg-[#090B0F] hover:bg-[#111419] transition-colors duration-300"
             >
               {selectedModel && selectedModelCompany ? (
-                <span className="w-5 h-5 flex items-center justify-center text-white/80">{selectedModelCompany.logo}</span>
+                <span className="w-5 h-5 flex items-center justify-center text-white/80">{renderCompanyLogo(selectedModelCompany, true)}</span>
               ) : (
-                <svg className="w-5 h-5 text-[#6b7280]" viewBox="0 0 24 24" fill="currentColor">
+                <svg className="w-5 h-5 text-[#727B88]" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="2" y="12.8" width="10" height="2.4" rx="1.2" transform="rotate(-45 7 14)" />
                   <rect x="11.5" y="12.8" width="3.5" height="2.4" rx="1.2" transform="rotate(-45 7 14)" fill="white" stroke="currentColor" strokeWidth="0.5" />
                   <path d="M17.5 5.5 Q18.2 7.7 20.5 8.5 Q18.2 9.3 17.5 11.5 Q16.8 9.3 14.5 8.5 Q16.8 7.7 17.5 5.5 Z" />
@@ -5763,116 +5855,134 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
           </div>
 
           {/* Prompt Input */}
-          <div
-            ref={mobilePromptContainerRef}
-            className={`flex-1 min-w-0 overflow-hidden rounded-md border border-[#27272a] bg-[#1a1a1c] transition-[height] duration-[220ms] ease-in-out ${
-              uploadedImages.length === 0
-                ? (mobilePromptExpanded ? 'h-[104px]' : 'h-10')
-                : (mobilePromptExpanded ? 'h-[136px]' : 'h-[88px]')
-            }`}
-            onPointerDown={(e) => {
-              if ((e.target as HTMLElement).closest('button')) return;
-              if (isMobilePromptCloseLocked()) return;
-              if (mobilePromptExpanded) return;
-              setMobilePromptExpanded(true);
-              window.requestAnimationFrame(() => {
-                mobilePromptInputRef.current?.focus();
-              });
-            }}
-          >
-            {uploadedImages.length > 0 && (
-              <div
-                style={{
-                  opacity: shouldFadeMobileReferenceTray ? 0 : 1,
-                  maxHeight: shouldFadeMobileReferenceTray ? 0 : 72,
-                  overflow: 'hidden',
-                  transition: 'opacity 180ms ease-out, max-height 220ms ease-out',
-                  pointerEvents: shouldFadeMobileReferenceTray ? 'none' : 'auto',
-                }}
-              >
-              <div className="flex items-center gap-1.5 border-b border-white/[0.06] px-2 py-1.5">
-                <div className="min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-                  <div className="flex w-max items-center gap-2 pr-1">
-                    {uploadedImages.map((img) => (
-                      <div
-                        key={img.id}
-                        className={`relative h-11 w-11 shrink-0 overflow-hidden rounded-md border transition-colors duration-300 ${
-                          activeImageId === img.id ? 'border-white/60' : 'border-[#27272a]'
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setActiveImageId(activeImageId === img.id ? null : img.id)}
-                          className="h-full w-full"
-                        >
-                          <img src={img.url} alt="" className="h-full w-full object-cover" />
-                          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-black/70 to-transparent" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteImage(img.id)}
-                          className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/65 text-white/85"
-                        >
-                          <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
-                    {uploadedImages.length < 10 && (
-                      <button
-                        type="button"
-                        onClick={handleImageClick}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-dashed border-[#3a3a3d] bg-[#161618] text-[#6b7280] transition-colors duration-300 hover:border-[#52525b] hover:text-white"
-                      >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14M5 12h14" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
+          <div className="relative flex-1 min-w-0">
+            {activeUploadedImage && uploadedImages.length > 0 && !shouldFadeMobileReferenceTray && (
+              <div className="pointer-events-none absolute bottom-full left-2 z-[220] mb-2">
+                <div className={`pointer-events-auto relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#151517] shadow-[0_12px_28px_rgba(0,0,0,0.42)] ${isMobileLandscape ? 'h-24 w-[72px]' : 'h-32 w-24'}`}>
+                  <img src={activeUploadedImage.url} alt="" className="h-full w-full object-cover" />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { setUploadedImages([]); setActiveImageId(null); }}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#6b7280] transition-colors duration-300 hover:bg-[#252525] hover:text-white"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
               </div>
             )}
-            <div className={`flex transition-[height] duration-[220ms] ease-in-out ${mobilePromptExpanded ? 'items-end' : 'items-center'} ${uploadedImages.length > 0 ? (mobilePromptExpanded ? 'h-[72px]' : 'h-10') : 'h-full'}`}>
-              {uploadedImages.length === 0 && (
-                <>
-                  <button onClick={handleImageClick} className="p-2 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-[#6b7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </button>
-                  <div className="w-px h-5 bg-white/[0.08]"></div>
-                </>
+            <div
+              ref={mobilePromptContainerRef}
+              className={`overflow-hidden rounded-md border border-[#171A20] bg-[#090B0F] transition-[height] duration-[220ms] ease-in-out ${
+                mobilePromptExpanded
+                  ? ''
+                  : ''
+              }`}
+              style={{ height: `${mobilePromptExpanded ? mobilePromptExpandedHeight : mobilePromptCollapsedHeight}px` }}
+              onPointerDown={(e) => {
+                if ((e.target as HTMLElement).closest('button')) return;
+                if (isMobilePromptCloseLocked()) return;
+                if (mobilePromptExpanded) return;
+                setMobilePromptExpanded(true);
+                window.requestAnimationFrame(() => {
+                  mobilePromptInputRef.current?.focus();
+                });
+              }}
+            >
+              {uploadedImages.length > 0 && (
+                <div
+                  style={{
+                    opacity: shouldFadeMobileReferenceTray ? 0 : 1,
+                    maxHeight: shouldFadeMobileReferenceTray ? 0 : (isMobileLandscape ? 60 : 72),
+                    overflow: 'hidden',
+                    transition: 'opacity 180ms ease-out, max-height 220ms ease-out',
+                    pointerEvents: shouldFadeMobileReferenceTray ? 'none' : 'auto',
+                  }}
+                >
+                  <div className={`flex items-center gap-1.5 border-b border-white/[0.06] px-2 ${isMobileLandscape ? 'py-1' : 'py-1.5'}`}>
+                    <div className="min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                      <div className="flex w-max items-center gap-2 pr-1">
+                        {uploadedImages.map((img) => (
+                          <div
+                            key={img.id}
+                            className={`relative h-11 w-11 shrink-0 overflow-hidden rounded-md border transition-colors duration-300 ${
+                              activeImageId === img.id ? 'border-white/60' : 'border-[#171A20]'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setActiveImageId(activeImageId === img.id ? null : img.id)}
+                              className="h-full w-full"
+                            >
+                              <img src={img.url} alt="" className="h-full w-full object-cover" />
+                              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-black/70 to-transparent" />
+                            </button>
+                            {activeImageId === img.id && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteImage(img.id)}
+                                className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white"
+                              >
+                                <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {uploadedImages.length < 10 && (
+                          <button
+                            type="button"
+                            onClick={handleImageClick}
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-dashed border-[#171A20] bg-[#090B0F] text-[#727B88] transition-colors duration-300 hover:border-[#272B33] hover:bg-[#111419] hover:text-white"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14M5 12h14" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setUploadedImages([]); setActiveImageId(null); }}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#727B88] transition-colors duration-300 hover:bg-[#111419] hover:text-white"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               )}
-              <textarea
-                ref={mobilePromptInputRef}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value.slice(0, resolution === '4k' ? 800 : resolution === '2k' ? 650 : 500))}
-                onFocus={() => {
-                  if (isMobilePromptCloseLocked()) return;
-                  setMobilePromptExpanded(true);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !isGenerating && (DEMO_MOCK_GENERATION_ENABLED || (prompt.trim() && selectedModel))) {
-                    e.preventDefault();
-                    handleGenerate();
-                  }
-                }}
-                placeholder="Describe..."
-                rows={1}
-                className={`flex-1 resize-none overflow-hidden bg-transparent text-[#E0E0E0] text-sm placeholder:text-[#4b5563] border-0 outline-none focus:outline-none focus:ring-0 shadow-none transition-[height,padding] duration-[220ms] ease-in-out ${uploadedImages.length > 0 ? 'px-3 py-2' : 'px-2'} ${mobilePromptExpanded ? 'h-[72px] py-3' : 'h-10 py-2'}`}
-              />
+              <div className={`flex transition-[height] duration-[220ms] ease-in-out ${mobilePromptExpanded ? 'items-end' : 'items-center'} ${uploadedImages.length > 0 || mobilePromptExpanded ? '' : 'h-full'}`} style={{ height: uploadedImages.length > 0 || mobilePromptExpanded ? `${mobilePromptInnerHeight}px` : undefined }}>
+                {uploadedImages.length === 0 && (
+                  <>
+                    <button onClick={handleImageClick} className="p-2 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-[#727B88]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </button>
+                    <div className="w-px h-5 bg-white/[0.08]"></div>
+                  </>
+                )}
+                <textarea
+                  ref={mobilePromptInputRef}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value.slice(0, resolution === '4k' ? 800 : resolution === '2k' ? 650 : 500))}
+                  onFocus={() => {
+                    if (isMobilePromptCloseLocked()) return;
+                    setMobilePromptExpanded(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !isGenerating && (DEMO_MOCK_GENERATION_ENABLED || (prompt.trim() && selectedModel))) {
+                      e.preventDefault();
+                      handleGenerate();
+                    }
+                  }}
+                  placeholder="Describe..."
+                  rows={1}
+                  className={`flex-1 resize-none overflow-hidden bg-transparent text-[#E7EAF0] text-base placeholder:text-[#727B88]/70 border-0 outline-none focus:outline-none focus:ring-0 shadow-none transition-[height,padding] duration-[220ms] ease-in-out ${uploadedImages.length > 0 ? 'px-3' : 'px-2'}`}
+                  style={{
+                    height: `${mobilePromptInnerHeight}px`,
+                    fontSize: '16px',
+                    paddingTop: mobilePromptExpanded ? (isMobileLandscape ? 8 : 12) : 8,
+                    paddingBottom: mobilePromptExpanded ? (isMobileLandscape ? 8 : 12) : 8,
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -5907,18 +6017,18 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         <div className="flex w-max max-w-[calc(100vw-4.5rem)] flex-wrap content-start justify-end gap-1 px-1.5 py-1.5">
                       <button
                         onClick={handleDecrement}
-                        className="h-6 min-w-[26px] px-1.5 border border-[#27272a] rounded-md flex items-center justify-center text-white/60 hover:text-white hover:bg-[#252525] bg-[#1a1a1c] transition-colors duration-300 disabled:opacity-40"
+                        className="h-6 min-w-[26px] px-1.5 border border-[#171A20] rounded-md flex items-center justify-center text-[#727B88] hover:text-white hover:bg-[#111419] bg-[#090B0F] transition-colors duration-300 disabled:opacity-40"
                         disabled={count <= 1}
                         style={{ animation: getSettingsInlineAnimation(closingMobileCountControls, 0, 3) }}
                       >
                         <span className="text-lg leading-none">-</span>
                       </button>
-                      <div className="h-6 min-w-[30px] px-1.5 border border-[#3a3a3d] rounded-md flex items-center justify-center bg-[#252525] text-white text-[10px] font-medium" style={{ animation: getSettingsInlineAnimation(closingMobileCountControls, 1, 3) }}>
+                      <div className="h-6 min-w-[30px] px-1.5 border border-[#272B33] rounded-md flex items-center justify-center bg-[#111419] text-white text-[10px] font-medium" style={{ animation: getSettingsInlineAnimation(closingMobileCountControls, 1, 3) }}>
                         {count}
                       </div>
                       <button
                         onClick={handleIncrement}
-                        className="h-6 min-w-[26px] px-1.5 border border-[#27272a] rounded-md flex items-center justify-center text-white/60 hover:text-white hover:bg-[#252525] bg-[#1a1a1c] transition-colors duration-300 disabled:opacity-40"
+                        className="h-6 min-w-[26px] px-1.5 border border-[#171A20] rounded-md flex items-center justify-center text-[#727B88] hover:text-white hover:bg-[#111419] bg-[#090B0F] transition-colors duration-300 disabled:opacity-40"
                         disabled={count >= (currentModelCapabilities?.maxCount || 10)}
                         style={{ animation: getSettingsInlineAnimation(closingMobileCountControls, 2, 3) }}
                       >
@@ -5944,8 +6054,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         setClosingMobileResolutions(false);
                       }
                     }}
-                    className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-[11px] font-medium transition-colors duration-300 ${
-                      showMobileCountControls ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
+                    className={`h-8 w-8 border border-[#171A20] rounded-md flex items-center justify-center text-[11px] font-medium transition-colors duration-300 ${
+                      showMobileCountControls ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F] text-[#727B88] hover:bg-[#111419] hover:text-white'
                     }`}
                   >
                     {count}
@@ -5960,8 +6070,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         <button
                           key={res.value}
                           onClick={() => { setResolution(res.value); closeMobileResolutionsAnimated(); }}
-                          className={`h-6 px-1.5 border border-[#27272a] rounded-md flex items-center justify-center text-[9px] leading-none whitespace-nowrap font-medium transition-colors duration-300 ${
-                            res.value === resolution ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
+                          className={`h-6 px-1.5 border border-[#171A20] rounded-md flex items-center justify-center text-[9px] leading-none whitespace-nowrap font-medium transition-colors duration-300 ${
+                            res.value === resolution ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F] text-[#727B88] hover:bg-[#111419] hover:text-white'
                           }`}
                           style={{ animation: getSettingsInlineAnimation(closingMobileResolutions, index, filtered.length) }}
                         >
@@ -5988,8 +6098,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         setClosingMobileCountControls(false);
                       }
                     }}
-                    className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.08em] transition-colors duration-300 ${
-                      showResolutions ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
+                    className={`h-8 w-8 border border-[#171A20] rounded-md flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.08em] transition-colors duration-300 ${
+                      showResolutions ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F] text-[#727B88] hover:bg-[#111419] hover:text-white'
                     }`}
                   >
                     {(selectedResolution?.label || resolution).replace(/\s+/g, '')}
@@ -6004,12 +6114,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         <button
                           key={ar.value}
                           onClick={() => { setAspectRatio(ar.value); closeMobileAspectRatiosAnimated(); }}
-                          className={`h-6 px-1.5 border border-[#27272a] rounded-md flex items-center justify-center gap-0.5 text-[9px] leading-none whitespace-nowrap text-center transition-colors duration-300 ${
-                            ar.value === aspectRatio ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
+                          className={`h-6 px-1.5 border border-[#171A20] rounded-md flex items-center justify-center gap-0.5 text-[9px] leading-none whitespace-nowrap text-center transition-colors duration-300 ${
+                            ar.value === aspectRatio ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F] text-[#727B88] hover:bg-[#111419] hover:text-white'
                           }`}
                           style={{ animation: getSettingsInlineAnimation(closingMobileAspectRatios, index, filtered.length) }}
                         >
-                          <span className="inline-flex h-full w-2.5 items-center justify-center leading-none text-white/60 -translate-y-px">{ar.icon}</span>
+                          <span className={`inline-flex h-full w-2.5 items-center justify-center leading-none -translate-y-px ${ar.value === aspectRatio ? 'text-white' : 'text-[#727B88]'}`}>{ar.icon}</span>
                           <span className="inline-flex h-full items-center leading-none">{ar.value}</span>
                         </button>
                       ))}
@@ -6033,11 +6143,11 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         setClosingMobileCountControls(false);
                       }
                     }}
-                    className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-sm transition-colors duration-300 ${
-                      showAspectRatios ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
+                    className={`h-8 w-8 border border-[#171A20] rounded-md flex items-center justify-center text-sm transition-colors duration-300 ${
+                      showAspectRatios ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F] text-[#727B88] hover:bg-[#111419] hover:text-white'
                     }`}
                   >
-                    <span className="inline-flex h-full items-center justify-center leading-none text-white/70 -translate-y-px">{selectedAspectRatio?.icon || '□'}</span>
+                    <span className={`inline-flex h-full items-center justify-center leading-none -translate-y-px ${showAspectRatios ? 'text-white' : 'text-[#727B88]'}`}>{selectedAspectRatio?.icon || '□'}</span>
                   </button>
                 </div>
               </div>
@@ -6062,9 +6172,9 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                 setSelectedCompany(null);
                 setShowGallerySearch(false);
               }}
-              className="h-10 w-10 border border-[#27272a] rounded-md flex items-center justify-center bg-[#1a1a1c] hover:bg-[#252525] transition-colors duration-300"
+              className="h-10 w-10 border border-[#171A20] rounded-md flex items-center justify-center bg-[#090B0F] hover:bg-[#111419] transition-colors duration-300"
             >
-              <svg className={`w-4 h-4 ${showSettings ? 'text-white' : 'text-[#6b7280]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-4 h-4 ${showSettings ? 'text-white' : 'text-[#727B88]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
