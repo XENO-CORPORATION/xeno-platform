@@ -344,6 +344,30 @@ const aiCompanies = [
   },
 ];
 
+function renderCompanyLogo(
+  company: (typeof aiCompanies)[number] | null | undefined,
+  isActive: boolean,
+) {
+  if (!company) return null;
+
+  if (company.name === 'Black Forest') {
+    return (
+      <img
+        src="/flux-logo.svg"
+        alt="Flux"
+        className="w-5 h-5"
+        draggable={false}
+        style={{
+          opacity: isActive ? 1 : 0.52,
+          filter: isActive ? 'none' : 'grayscale(1) brightness(0.9)',
+        }}
+      />
+    );
+  }
+
+  return company.logo;
+}
+
 // Model capabilities interface
 interface ModelCapabilities {
   maxCount: number; // Max images per generation
@@ -918,11 +942,13 @@ const ImageGenerationInterface2: React.FC = () => {
   const [showAiCompanies, setShowAiCompanies] = useState(false);
   const [desktopAiCompaniesClosing, setDesktopAiCompaniesClosing] = useState(false);
   const [desktopAiCompaniesMode, setDesktopAiCompaniesMode] = useState<'all' | 'selected'>('all');
+  const [desktopCompanyFilterTarget, setDesktopCompanyFilterTarget] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [closingCompanyModels, setClosingCompanyModels] = useState<string | null>(null);
   const [hoveredModel, setHoveredModel] = useState<ModelDetails | null>(null);
   const modelHoverTimeoutRef = useRef<number | null>(null);
   const modelHoverLockUntilRef = useRef<number>(0);
+const desktopCompanyFilterTimeoutRef = useRef<number | null>(null);
 const mobileSettingsCloseTimeoutRef = useRef<number | null>(null);
 const mobileCountControlsCloseTimeoutRef = useRef<number | null>(null);
 const mobileResolutionsCloseTimeoutRef = useRef<number | null>(null);
@@ -941,6 +967,25 @@ const mobilePromptClosingLockRef = useRef<number | null>(null);
     modelHoverLockUntilRef.current = Date.now() + ms;
     clearModelHoverState();
   }, [clearModelHoverState]);
+  const resetDesktopCompanyRow = useCallback(() => {
+    if (desktopCompanyFilterTimeoutRef.current) {
+      window.clearTimeout(desktopCompanyFilterTimeoutRef.current);
+      desktopCompanyFilterTimeoutRef.current = null;
+    }
+    setDesktopCompanyFilterTarget(null);
+    setDesktopAiCompaniesMode('all');
+  }, []);
+  const focusDesktopCompanyRow = useCallback((companyName: string) => {
+    if (desktopCompanyFilterTimeoutRef.current) {
+      window.clearTimeout(desktopCompanyFilterTimeoutRef.current);
+    }
+    setDesktopCompanyFilterTarget(companyName);
+    desktopCompanyFilterTimeoutRef.current = window.setTimeout(() => {
+      setDesktopAiCompaniesMode('selected');
+      setDesktopCompanyFilterTarget(null);
+      desktopCompanyFilterTimeoutRef.current = null;
+    }, 180);
+  }, []);
   const handleModelHoverEnter = useCallback((model: ModelDetails) => {
     if (Date.now() < modelHoverLockUntilRef.current) return;
     if (modelHoverTimeoutRef.current) window.clearTimeout(modelHoverTimeoutRef.current);
@@ -1232,6 +1277,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       if (width >= 768 && width < 960) {
         setShowAiCompanies(false);
         setSelectedCompany(null);
+        setClosingCompanyModels(null);
+        resetDesktopCompanyRow();
         setShowGallerySearch(false);
         setGallerySearchQuery('');
       }
@@ -1256,13 +1303,14 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
         setDesktopAiCompaniesClosing(true);
         setSelectedCompany(null);
         setClosingCompanyModels(null);
+        resetDesktopCompanyRow();
         clearModelHoverState();
         setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 550);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isMobile, showAiCompanies, clearModelHoverState]);
+  }, [isMobile, showAiCompanies, clearModelHoverState, resetDesktopCompanyRow]);
   // Measure available width for search bar + prompt collision limit
   useEffect(() => {
     if (isMobile) return;
@@ -1414,8 +1462,11 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       if (desktopSearchCloseTimeoutRef.current) {
         window.clearTimeout(desktopSearchCloseTimeoutRef.current);
       }
+      if (desktopCompanyFilterTimeoutRef.current) {
+        window.clearTimeout(desktopCompanyFilterTimeoutRef.current);
+      }
     };
-  }, []);
+  }, [resetDesktopCompanyRow]);
 
   useEffect(() => {
     if (!showAspectRatios) return;
@@ -1615,9 +1666,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     };
   }, [showHistory, gridItems.length]);
 
-  const galleryItemLayout = useMemo(() => {
-    const layout = new Map<string, { width: number; height: number }>();
-    if (gridItems.length === 0) return layout;
+  const galleryLayoutData = useMemo(() => {
+    const itemLayout = new Map<string, { width: number; height: number }>();
+    const renderedRows: Array<{ items: GalleryGridItem[]; rowHeight: number; knownSize: number }> = [];
+    if (gridItems.length === 0) {
+      return { itemLayout, renderedRows };
+    }
 
     const effectiveWidth = galleryViewportWidth > 0 ? galleryViewportWidth : 1200;
     const targetRowHeight = Math.min(galleryRowHeightPx, galleryMaxRowHeightPx);
@@ -1654,12 +1708,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       return aspectSum * height + gapsWidth;
     };
 
-    const rows: Array<Array<{ key: string; aspect: number }>> = [];
-    let currentRow: Array<{ key: string; aspect: number }> = [];
+    const rows: Array<Array<{ item: GalleryGridItem; key: string; aspect: number }>> = [];
+    let currentRow: Array<{ item: GalleryGridItem; key: string; aspect: number }> = [];
 
     gridItems.forEach((item) => {
       const aspect = Math.max(0.35, Math.min(2.8, resolveAspect(item)));
-      currentRow.push({ key: item.key, aspect });
+      currentRow.push({ item, key: item.key, aspect });
 
       if (currentRow.length < 2) {
         return;
@@ -1704,8 +1758,6 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     }
 
     rows.forEach((row, rowIndex) => {
-      const aspectSum = row.reduce((sum, entry) => sum + entry.aspect, 0);
-      const gapsWidth = galleryGapPx * Math.max(0, row.length - 1);
       const justifiedRowHeight = Math.max(1, getRowHeight(row));
       const isLastRow = rowIndex === rows.length - 1;
       const shouldBoundLastRow = isLastRow && (row.length === 1 || justifiedRowHeight > galleryMaxRowHeightPx);
@@ -1725,7 +1777,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
         row.forEach((entry) => {
           const width = Math.max(90, boundedRowHeight * entry.aspect);
-          layout.set(entry.key, { width, height: boundedRowHeight });
+          itemLayout.set(entry.key, { width, height: boundedRowHeight });
+        });
+        renderedRows.push({
+          items: row.map((entry) => entry.item),
+          rowHeight: boundedRowHeight,
+          knownSize: boundedRowHeight + galleryGapPx,
         });
         return;
       }
@@ -1733,11 +1790,16 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       // Fully justified rows preserve every image ratio and fill the viewport width exactly.
       row.forEach((entry) => {
         const width = Math.max(90, justifiedRowHeight * entry.aspect);
-        layout.set(entry.key, { width, height: justifiedRowHeight });
+        itemLayout.set(entry.key, { width, height: justifiedRowHeight });
+      });
+      renderedRows.push({
+        items: row.map((entry) => entry.item),
+        rowHeight: justifiedRowHeight,
+        knownSize: justifiedRowHeight + galleryGapPx,
       });
     });
 
-    return layout;
+    return { itemLayout, renderedRows };
   }, [
     gridItems,
     galleryViewportWidth,
@@ -1749,28 +1811,13 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     galleryMinItemWidthPx,
   ]);
 
+  const galleryItemLayout = galleryLayoutData.itemLayout;
+
   // Build virtualized row data for Virtuoso
   const virtualizedRows = useMemo(() => {
-    if (gridItems.length === 0 || galleryViewportWidth === 0) return [];
-    const rows: Array<{ items: typeof gridItems; rowHeight: number; knownSize: number }> = [];
-    let curItems: typeof gridItems = [];
-    let curWidth = 0;
-    let curHeight = galleryRowHeightPx;
-    gridItems.forEach((item) => {
-      const il = galleryItemLayout.get(item.key);
-      const iw = il?.width ?? galleryMinItemWidthPx;
-      const ih = il?.height ?? galleryRowHeightPx;
-      const projected = curWidth + (curItems.length > 0 ? galleryGapPx : 0) + iw;
-      if (curItems.length > 0 && projected > galleryViewportWidth + 2) {
-        rows.push({ items: curItems, rowHeight: curHeight, knownSize: curHeight + galleryGapPx });
-        curItems = [item]; curWidth = iw; curHeight = ih;
-      } else {
-        curItems.push(item); curWidth = projected; curHeight = Math.max(curHeight, ih);
-      }
-    });
-    if (curItems.length > 0) rows.push({ items: curItems, rowHeight: curHeight, knownSize: curHeight + galleryGapPx });
-    return rows;
-  }, [gridItems, galleryItemLayout, galleryViewportWidth, galleryGapPx, galleryRowHeightPx, galleryMinItemWidthPx]);
+    if (galleryViewportWidth === 0) return [];
+    return galleryLayoutData.renderedRows;
+  }, [galleryLayoutData, galleryViewportWidth]);
 
   const mobileGallerySections = useMemo(() => {
     const visibleItems = gridItems.filter((item): item is Extract<GalleryGridItem, { kind: 'image' | 'collage' }> => item.kind === 'image' || item.kind === 'collage');
@@ -2858,7 +2905,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
         {/* Generation Header Container - Sticky */}
         <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
-        <div className={`generation-header flex flex-col items-center gap-3 sticky top-0 z-50 transition-colors duration-200 ${isScrolled ? 'bg-[#0a0a0b]' : 'bg-transparent'}`} style={{ width: '100%' }}>
+        <div className={`generation-header flex flex-col items-center gap-3 sticky top-0 z-50 transition-colors duration-200 ${isScrolled ? 'bg-[#0a0a0b]' : 'bg-transparent'}`} style={{ width: '100%', backgroundColor: 'rgba(0, 80, 255, 0.18)' }}>
         <div className="w-full hidden md:flex flex-col gap-3 relative">
           {/* Desktop Row: All controls in one row (hidden on mobile) */}
           <div className={`w-full hidden md:flex flex-row items-start justify-between gap-3 relative px-3 ${uploadedImages.length > 0 ? 'pb-16' : ''}`}>
@@ -2873,9 +2920,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   if (showAiCompanies) {
                     setDesktopAiCompaniesClosing(true);
                     setSelectedCompany(null);
+                    setClosingCompanyModels(null);
+                    resetDesktopCompanyRow();
                     setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 550);
                   } else {
                     setDesktopAiCompaniesMode('all');
+                    setDesktopCompanyFilterTarget(null);
                     lockModelHover();
                     setShowAiCompanies(true);
                   }
@@ -2888,7 +2938,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                 className="p-2 rounded flex items-center justify-center"
               >
                 {selectedModelCompany ? (
-                  <span className="w-6 h-6 flex items-center justify-center text-white/70">{selectedModelCompany.logo}</span>
+                  <span className="w-6 h-6 flex items-center justify-center text-white/70">{renderCompanyLogo(selectedModelCompany, true)}</span>
                 ) : (
                   <svg className="w-5 h-5 text-[#6b7280]" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="2" y="12.8" width="10" height="2.4" rx="1.2" transform="rotate(-45 7 14)" />
@@ -2908,10 +2958,13 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                       if (showAiCompanies) {
                         setDesktopAiCompaniesClosing(true);
                         setSelectedCompany(null);
+                        setClosingCompanyModels(null);
+                        resetDesktopCompanyRow();
                         setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 550);
                       } else {
                         setDesktopAiCompaniesMode('selected');
                         setSelectedCompany(selectedModelCompany?.name ?? null);
+                        setDesktopCompanyFilterTarget(null);
                         setShowAiCompanies(true);
                       }
                       setShowSettings(false);
@@ -2925,19 +2978,27 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
             </div>
             {/* AI Company icons — inline horizontal, right of model button */}
             {(showAiCompanies || desktopAiCompaniesClosing) && (() => {
-              const visibleCompanies = desktopAiCompaniesMode === 'selected' && selectedModelCompany
-                ? [selectedModelCompany]
+              const focusedCompany = aiCompanies.find((company) => company.name === selectedCompany) ?? selectedModelCompany ?? null;
+              const visibleCompanies = desktopAiCompaniesMode === 'selected' && focusedCompany
+                ? [focusedCompany]
                 : aiCompanies;
               return visibleCompanies.map((company, index) => {
                 const total = visibleCompanies.length;
                 const enterDelay = index * 50;
                 const exitDelay = (total - 1 - index) * 50;
+                const isFilteringOut = desktopCompanyFilterTarget !== null && company.name !== desktopCompanyFilterTarget;
                 return (
                   <div key={company.name}
                     className={`relative ${desktopAiCompaniesClosing ? '' : 'animate-fade-in'}`}
                     style={desktopAiCompaniesClosing
                       ? { animation: `desktopCompanyExit 300ms ease-out ${exitDelay}ms both` }
-                      : { animationDelay: `${enterDelay}ms` }
+                      : {
+                          animationDelay: `${enterDelay}ms`,
+                          opacity: isFilteringOut ? 0 : 1,
+                          transform: isFilteringOut ? 'translateX(-8px) scale(0.92)' : 'translateX(0) scale(1)',
+                          transition: 'opacity 180ms ease-out, transform 180ms ease-out',
+                          pointerEvents: isFilteringOut ? 'none' : 'auto',
+                        }
                     }
                     data-desktop-header-popout="true"
                   >
@@ -2947,15 +3008,26 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                           // Close: animate models out, then clear
                           setClosingCompanyModels(company.name);
                           const modelCount = company.models.length;
-                          setTimeout(() => { setSelectedCompany(null); setClosingCompanyModels(null); }, getCompanyModelCloseMs(modelCount));
+                          setTimeout(() => {
+                            setSelectedCompany(null);
+                            setClosingCompanyModels(null);
+                            resetDesktopCompanyRow();
+                          }, getCompanyModelCloseMs(modelCount));
                         } else if (selectedCompany && selectedCompany !== company.name) {
                           // Switch: animate old out, then show new
                           const oldCompany = aiCompanies.find(c => c.name === selectedCompany);
                           const oldCount = oldCompany?.models.length ?? 0;
                           setClosingCompanyModels(selectedCompany);
-                          setTimeout(() => { setClosingCompanyModels(null); setSelectedCompany(company.name); }, getCompanyModelCloseMs(oldCount));
+                          setTimeout(() => {
+                            setClosingCompanyModels(null);
+                            setSelectedCompany(company.name);
+                            setDesktopAiCompaniesMode('all');
+                            focusDesktopCompanyRow(company.name);
+                          }, getCompanyModelCloseMs(oldCount));
                         } else {
                           setSelectedCompany(company.name);
+                          setDesktopAiCompaniesMode('all');
+                          focusDesktopCompanyRow(company.name);
                         }
                         setShowSettings(false);
                       }}
@@ -2965,10 +3037,10 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         selectedCompany && selectedCompany !== company.name ? 'opacity-40' : 'opacity-100'
                       }`}
                     >
-                      <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
+                      <span className="w-5 h-5 flex items-center justify-center">{renderCompanyLogo(company, selectedCompany === company.name)}</span>
                     </button>
                     {(selectedCompany === company.name || closingCompanyModels === company.name) && (
-                      <div className="absolute left-0 top-full mt-2 flex flex-col gap-1.5 z-[110]">
+                      <div className="absolute left-full top-1/2 ml-2 flex -translate-y-1/2 flex-row flex-wrap items-center gap-1.5 z-[110]">
                         {company.models.map((model, modelIndex) => {
                           const isClosing = closingCompanyModels === company.name;
                           const total = company.models.length;
@@ -2996,6 +3068,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                                 setShowAiCompanies(false);
                                 setDesktopAiCompaniesClosing(false);
                                 setSelectedCompany(null);
+                                resetDesktopCompanyRow();
                                 clearModelHoverState();
                               }}
                               className={`h-8 px-3 border border-[#27272a] rounded-md flex items-center gap-2 text-white/80 text-sm hover:bg-[#252525] hover:text-white transition-colors duration-300 whitespace-nowrap ${selectedModel === model.name ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c]'}`}
@@ -3631,7 +3704,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
         {/* Image History Container - Scrollable */}
         <div
-          className="image-history-container h-full rounded-md mt-6 flex-1 relative overflow-y-auto bg-black"
+          className="image-history-container h-full rounded-md mt-3 flex-1 relative overflow-y-auto bg-black"
           style={{ width: '100%', scrollbarGutter: 'stable' }}
         >
           {/* History View - When showHistory is true (but NOT favorites — favorites uses the gallery grid) */}
@@ -3667,11 +3740,14 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
             </div>
           ) : (
           /* Vertical stack of image answer containers - Midjourney style */
-          <div className="flex flex-col-reverse md:flex-col gap-6 py-4">
+          <div className="flex flex-col-reverse md:flex-col gap-6 pt-2 pb-4">
             {/* Virtualized grid library view — React Virtuoso windowed rendering */}
             {gridItems.length > 0 && (
               <GalleryErrorBoundary>
-              <div className="image-answer-container rounded-md py-0 md:py-4 px-4 md:px-8 lg:px-12 relative bg-black">
+              <div
+                className="image-answer-container ml-3 mt-2 rounded-md py-0 px-0 md:ml-0 md:mt-0 md:py-4 md:px-3 relative bg-black"
+                style={{ backgroundColor: 'rgba(255, 0, 0, 0.18)' }}
+              >
                 <div className="image-preview-container-wrapper relative w-full" style={{ flexGrow: 1 }}>
                   <div id="DndDescribedBy-0" style={{ display: 'none' }}>Press space bar to start a drag.</div>
                   <div ref={galleryContainerRef} className="w-full" style={{ overflowAnchor: 'none' }}>
@@ -4653,7 +4729,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.4)' }}
                   title={company.name}
                 >
-                  <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
+                  <span className="w-5 h-5 flex items-center justify-center">{renderCompanyLogo(company, selectedCompany === company.name)}</span>
                 </button>
                 {selectedCompany === company.name && (
                   <div className="absolute bottom-full mb-2 left-0 flex flex-col gap-1.5 z-[110]">
@@ -5383,7 +5459,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                           selectedCompany === company.name ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c]'
                         }`}
                       >
-                        <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
+                        <span className="w-5 h-5 flex items-center justify-center">{renderCompanyLogo(company, selectedCompany === company.name)}</span>
                       </button>
                       {/* Models — appear to the right of the company icon */}
                       {(selectedCompany === company.name || closingCompanyModels === company.name) && (
@@ -5699,11 +5775,11 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                                 setSelectedCompany(company.name);
                               }
                             }}
-                            className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-white/80 hover:bg-[#252525] hover:text-white transition-colors duration-300 ${
-                              selectedCompany === company.name ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c]'
+                            className={`h-8 w-8 border border-[#171A20] rounded-md flex items-center justify-center text-[#727B88] hover:bg-[#111419] hover:text-white transition-colors duration-300 ${
+                              selectedCompany === company.name ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F]'
                             }`}
                           >
-                            <span className="w-5 h-5 flex items-center justify-center">{company.logo}</span>
+                            <span className="w-5 h-5 flex items-center justify-center">{renderCompanyLogo(company, selectedCompany === company.name)}</span>
                           </button>
                           {(selectedCompany === company.name || closingCompanyModels === company.name) && (
                             <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 z-10">
@@ -5716,8 +5792,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                                   return (
                                     <button
                                       key={model.name}
-                                      className={`h-6 px-2 border border-[#27272a] rounded-md text-[9px] leading-none whitespace-nowrap text-white/80 hover:bg-[#252525] hover:text-white transition-colors duration-300 ${
-                                        selectedModel === model.name ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c]'
+                                      className={`h-6 px-2 border border-[#171A20] rounded-md text-[9px] leading-none whitespace-nowrap text-[#727B88] hover:bg-[#111419] hover:text-white transition-colors duration-300 ${
+                                        selectedModel === model.name ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F]'
                                       }`}
                                       style={isClosing
                                         ? { animation: `mobileInlineItemFadeOutReverse ${COMPANY_MODEL_CLOSE_DURATION_MS}ms ease-in ${mExitDelay}ms both` }
@@ -5765,7 +5841,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
               className="h-10 w-10 border border-[#171A20] rounded-md flex items-center justify-center bg-[#090B0F] hover:bg-[#111419] transition-colors duration-300"
             >
               {selectedModel && selectedModelCompany ? (
-                <span className="w-5 h-5 flex items-center justify-center text-white/80">{selectedModelCompany.logo}</span>
+                <span className="w-5 h-5 flex items-center justify-center text-white/80">{renderCompanyLogo(selectedModelCompany, true)}</span>
               ) : (
                 <svg className="w-5 h-5 text-[#727B88]" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="2" y="12.8" width="10" height="2.4" rx="1.2" transform="rotate(-45 7 14)" />
@@ -5941,18 +6017,18 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         <div className="flex w-max max-w-[calc(100vw-4.5rem)] flex-wrap content-start justify-end gap-1 px-1.5 py-1.5">
                       <button
                         onClick={handleDecrement}
-                        className="h-6 min-w-[26px] px-1.5 border border-[#27272a] rounded-md flex items-center justify-center text-white/60 hover:text-white hover:bg-[#252525] bg-[#1a1a1c] transition-colors duration-300 disabled:opacity-40"
+                        className="h-6 min-w-[26px] px-1.5 border border-[#171A20] rounded-md flex items-center justify-center text-[#727B88] hover:text-white hover:bg-[#111419] bg-[#090B0F] transition-colors duration-300 disabled:opacity-40"
                         disabled={count <= 1}
                         style={{ animation: getSettingsInlineAnimation(closingMobileCountControls, 0, 3) }}
                       >
                         <span className="text-lg leading-none">-</span>
                       </button>
-                      <div className="h-6 min-w-[30px] px-1.5 border border-[#3a3a3d] rounded-md flex items-center justify-center bg-[#252525] text-white text-[10px] font-medium" style={{ animation: getSettingsInlineAnimation(closingMobileCountControls, 1, 3) }}>
+                      <div className="h-6 min-w-[30px] px-1.5 border border-[#272B33] rounded-md flex items-center justify-center bg-[#111419] text-white text-[10px] font-medium" style={{ animation: getSettingsInlineAnimation(closingMobileCountControls, 1, 3) }}>
                         {count}
                       </div>
                       <button
                         onClick={handleIncrement}
-                        className="h-6 min-w-[26px] px-1.5 border border-[#27272a] rounded-md flex items-center justify-center text-white/60 hover:text-white hover:bg-[#252525] bg-[#1a1a1c] transition-colors duration-300 disabled:opacity-40"
+                        className="h-6 min-w-[26px] px-1.5 border border-[#171A20] rounded-md flex items-center justify-center text-[#727B88] hover:text-white hover:bg-[#111419] bg-[#090B0F] transition-colors duration-300 disabled:opacity-40"
                         disabled={count >= (currentModelCapabilities?.maxCount || 10)}
                         style={{ animation: getSettingsInlineAnimation(closingMobileCountControls, 2, 3) }}
                       >
@@ -5978,8 +6054,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         setClosingMobileResolutions(false);
                       }
                     }}
-                    className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-[11px] font-medium transition-colors duration-300 ${
-                      showMobileCountControls ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
+                    className={`h-8 w-8 border border-[#171A20] rounded-md flex items-center justify-center text-[11px] font-medium transition-colors duration-300 ${
+                      showMobileCountControls ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F] text-[#727B88] hover:bg-[#111419] hover:text-white'
                     }`}
                   >
                     {count}
@@ -5994,8 +6070,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         <button
                           key={res.value}
                           onClick={() => { setResolution(res.value); closeMobileResolutionsAnimated(); }}
-                          className={`h-6 px-1.5 border border-[#27272a] rounded-md flex items-center justify-center text-[9px] leading-none whitespace-nowrap font-medium transition-colors duration-300 ${
-                            res.value === resolution ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
+                          className={`h-6 px-1.5 border border-[#171A20] rounded-md flex items-center justify-center text-[9px] leading-none whitespace-nowrap font-medium transition-colors duration-300 ${
+                            res.value === resolution ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F] text-[#727B88] hover:bg-[#111419] hover:text-white'
                           }`}
                           style={{ animation: getSettingsInlineAnimation(closingMobileResolutions, index, filtered.length) }}
                         >
@@ -6022,8 +6098,8 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         setClosingMobileCountControls(false);
                       }
                     }}
-                    className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.08em] transition-colors duration-300 ${
-                      showResolutions ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
+                    className={`h-8 w-8 border border-[#171A20] rounded-md flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.08em] transition-colors duration-300 ${
+                      showResolutions ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F] text-[#727B88] hover:bg-[#111419] hover:text-white'
                     }`}
                   >
                     {(selectedResolution?.label || resolution).replace(/\s+/g, '')}
@@ -6038,12 +6114,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         <button
                           key={ar.value}
                           onClick={() => { setAspectRatio(ar.value); closeMobileAspectRatiosAnimated(); }}
-                          className={`h-6 px-1.5 border border-[#27272a] rounded-md flex items-center justify-center gap-0.5 text-[9px] leading-none whitespace-nowrap text-center transition-colors duration-300 ${
-                            ar.value === aspectRatio ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
+                          className={`h-6 px-1.5 border border-[#171A20] rounded-md flex items-center justify-center gap-0.5 text-[9px] leading-none whitespace-nowrap text-center transition-colors duration-300 ${
+                            ar.value === aspectRatio ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F] text-[#727B88] hover:bg-[#111419] hover:text-white'
                           }`}
                           style={{ animation: getSettingsInlineAnimation(closingMobileAspectRatios, index, filtered.length) }}
                         >
-                          <span className="inline-flex h-full w-2.5 items-center justify-center leading-none text-white/60 -translate-y-px">{ar.icon}</span>
+                          <span className={`inline-flex h-full w-2.5 items-center justify-center leading-none -translate-y-px ${ar.value === aspectRatio ? 'text-white' : 'text-[#727B88]'}`}>{ar.icon}</span>
                           <span className="inline-flex h-full items-center leading-none">{ar.value}</span>
                         </button>
                       ))}
@@ -6067,11 +6143,11 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         setClosingMobileCountControls(false);
                       }
                     }}
-                    className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-sm transition-colors duration-300 ${
-                      showAspectRatios ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
+                    className={`h-8 w-8 border border-[#171A20] rounded-md flex items-center justify-center text-sm transition-colors duration-300 ${
+                      showAspectRatios ? 'bg-[#111419] text-white border-[#272B33]' : 'bg-[#090B0F] text-[#727B88] hover:bg-[#111419] hover:text-white'
                     }`}
                   >
-                    <span className="inline-flex h-full items-center justify-center leading-none text-white/70 -translate-y-px">{selectedAspectRatio?.icon || '□'}</span>
+                    <span className={`inline-flex h-full items-center justify-center leading-none -translate-y-px ${showAspectRatios ? 'text-white' : 'text-[#727B88]'}`}>{selectedAspectRatio?.icon || '□'}</span>
                   </button>
                 </div>
               </div>
