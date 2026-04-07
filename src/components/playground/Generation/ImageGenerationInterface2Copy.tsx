@@ -37,6 +37,7 @@ interface ViewerImageItem {
 const DEMO_MOCK_GENERATION_ENABLED = true;
 const DEMO_MOCK_HISTORY_MOBILE_ENABLED = false;
 const DEFAULT_DEMO_MODEL = 'Flux 2 Max';
+const allowedAspectRatioValues = new Set(['16:9', '4:3', '1:1', '3:4', '9:16']);
 
 function buildMockImageUrls(prompt: string, count: number, width: number, height: number): string[] {
   const safeWidth = Math.max(256, width);
@@ -688,12 +689,22 @@ const GalleryImageTile = React.memo(function GalleryImageTile({
   onToggleSelect,
   onEnterSelectionMode,
 }: GalleryImageTileProps) {
-  const [imageLoaded, setImageLoaded] = useState(() => loadedImageUrlsRef.current.has(imageUrl));
+  const alreadyCached = loadedImageUrlsRef.current.has(imageUrl);
+  const [imageLoaded, setImageLoaded] = useState(() => alreadyCached);
+  const [imageRevealed, setImageRevealed] = useState(() => alreadyCached);
   const [outerHoverState, setOuterHoverState] = useState(false);
   const [innerHoverState, setInnerHoverState] = useState(false);
   const [longPressActive, setLongPressActive] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    if (imageLoaded && !imageRevealed) {
+      revealTimerRef.current = setTimeout(() => setImageRevealed(true), 1500);
+    }
+    return () => { if (revealTimerRef.current) clearTimeout(revealTimerRef.current); };
+  }, [imageLoaded, imageRevealed]);
   const supportsHover = useMemo(
     () => typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches,
     []
@@ -793,8 +804,10 @@ const GalleryImageTile = React.memo(function GalleryImageTile({
                 style={{
                   borderRadius: cardRadius,
                   opacity: imageLoaded ? 1 : 0,
-                  transition: 'opacity 0.3s ease, filter 0.3s ease',
-                  filter: (supportsHover && innerHoverState) ? 'brightness(1.1)' : 'brightness(1)',
+                  transition: 'opacity 0.3s ease, filter 0.8s ease-out',
+                  filter: imageRevealed
+                    ? (supportsHover && innerHoverState) ? 'brightness(1.1)' : 'brightness(1)'
+                    : 'blur(20px) brightness(0.7)',
                   WebkitUserSelect: 'none',
                   userSelect: 'none',
                   WebkitTouchCallout: 'none',
@@ -804,6 +817,20 @@ const GalleryImageTile = React.memo(function GalleryImageTile({
                   setImageLoaded(true);
                 }}
               />
+              {/* Xenomorphing text overlay — fades out together with the blur */}
+              <div
+                className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
+                style={{
+                  opacity: imageRevealed ? 0 : 1,
+                  transition: 'opacity 0.8s ease-out',
+                }}
+              >
+                <span className="text-white/60 text-[11px] font-medium tracking-[0.25em] uppercase">
+                  {'xenomorphing'.split('').map((letter, i) => (
+                    <span key={i} className="inline-block" style={{ animation: 'letterWave 2.4s ease-in-out infinite', animationDelay: `${i * 0.12}s` }}>{letter}</span>
+                  ))}
+                </span>
+              </div>
               {/* Selection mode checkbox — only on selected images */}
               {selectionMode && isSelected && (
                 <>
@@ -928,6 +955,11 @@ type Collage = { id: string; name: string; imageKeys: string[]; isFavorite?: boo
 const ImageGenerationInterface2: React.FC = () => {
   const desktopAspectRatioTriggerRef = useRef<HTMLDivElement | null>(null);
   const mobileAspectRatioTriggerRef = useRef<HTMLDivElement | null>(null);
+  const [desktopSettingsClosing, setDesktopSettingsClosing] = useState(false);
+  const [desktopSettingsClosingView, setDesktopSettingsClosingView] = useState<'default' | 'resolutions' | 'aspects'>('default');
+  const [desktopSettingsView, setDesktopSettingsView] = useState<'default' | 'resolutions' | 'aspects'>('default');
+  const [desktopAspectOptionsVisible, setDesktopAspectOptionsVisible] = useState(false);
+  const [desktopResolutionOptionsVisible, setDesktopResolutionOptionsVisible] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [count, setCount] = useState(1);
   const [aspectRatio, setAspectRatio] = useState('3:4');
@@ -942,19 +974,37 @@ const ImageGenerationInterface2: React.FC = () => {
   const [showAiCompanies, setShowAiCompanies] = useState(false);
   const [desktopAiCompaniesClosing, setDesktopAiCompaniesClosing] = useState(false);
   const [desktopAiCompaniesMode, setDesktopAiCompaniesMode] = useState<'all' | 'selected'>('all');
-  const [desktopCompanyFilterTarget, setDesktopCompanyFilterTarget] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [closingCompanyModels, setClosingCompanyModels] = useState<string | null>(null);
+  const [showDesktopModelControls, setShowDesktopModelControls] = useState(false);
+  const [desktopModelControlsClosing, setDesktopModelControlsClosing] = useState(false);
+  const [desktopModelControlsView, setDesktopModelControlsView] = useState<'companies' | 'models'>('companies');
+  const [desktopModelControlsClosingView, setDesktopModelControlsClosingView] = useState<'companies' | 'models'>('companies');
+  const [desktopModelActiveCompany, setDesktopModelActiveCompany] = useState<string | null>(null);
+  const [desktopModelCompaniesVisible, setDesktopModelCompaniesVisible] = useState(false);
+  const [desktopModelOptionsVisible, setDesktopModelOptionsVisible] = useState(false);
+  const [desktopModelCompanyMorph, setDesktopModelCompanyMorph] = useState<string | null>(null);
+  const [desktopModelSelectMorph, setDesktopModelSelectMorph] = useState<string | null>(null);
+  const desktopModelLabelRef = useRef<HTMLButtonElement | null>(null);
+  const [desktopModelTransitionInFlight, setDesktopModelTransitionInFlight] = useState(false);
   const [hoveredModel, setHoveredModel] = useState<ModelDetails | null>(null);
   const modelHoverTimeoutRef = useRef<number | null>(null);
   const modelHoverLockUntilRef = useRef<number>(0);
-const desktopCompanyFilterTimeoutRef = useRef<number | null>(null);
 const mobileSettingsCloseTimeoutRef = useRef<number | null>(null);
 const mobileCountControlsCloseTimeoutRef = useRef<number | null>(null);
 const mobileResolutionsCloseTimeoutRef = useRef<number | null>(null);
 const mobileAspectRatiosCloseTimeoutRef = useRef<number | null>(null);
 const mobileSearchCloseTimeoutRef = useRef<number | null>(null);
 const desktopSearchCloseTimeoutRef = useRef<number | null>(null);
+const desktopSettingsCloseTimeoutRef = useRef<number | null>(null);
+const desktopModelControlsCloseTimeoutRef = useRef<number | null>(null);
+const desktopAspectOptionsRevealTimeoutRef = useRef<number | null>(null);
+const desktopResolutionOptionsRevealTimeoutRef = useRef<number | null>(null);
+const desktopModelCompaniesRevealTimeoutRef = useRef<number | null>(null);
+const desktopModelOptionsRevealTimeoutRef = useRef<number | null>(null);
+const desktopModelCompanyMorphTimeoutRef = useRef<number | null>(null);
+const desktopModelCompanyMorphFrameRef = useRef<number | null>(null);
+const DESKTOP_MODEL_COMPANY_SHIFT_MS = 280;
 const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
 const mobilePromptContainerRef = useRef<HTMLDivElement | null>(null);
 const mobilePromptInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -967,25 +1017,131 @@ const mobilePromptClosingLockRef = useRef<number | null>(null);
     modelHoverLockUntilRef.current = Date.now() + ms;
     clearModelHoverState();
   }, [clearModelHoverState]);
-  const resetDesktopCompanyRow = useCallback(() => {
-    if (desktopCompanyFilterTimeoutRef.current) {
-      window.clearTimeout(desktopCompanyFilterTimeoutRef.current);
-      desktopCompanyFilterTimeoutRef.current = null;
+  const clearDesktopModelSharedTransition = useCallback(() => {
+    if (desktopModelCompanyMorphTimeoutRef.current) {
+      window.clearTimeout(desktopModelCompanyMorphTimeoutRef.current);
+      desktopModelCompanyMorphTimeoutRef.current = null;
     }
-    setDesktopCompanyFilterTarget(null);
-    setDesktopAiCompaniesMode('all');
-  }, []);
-  const focusDesktopCompanyRow = useCallback((companyName: string) => {
-    if (desktopCompanyFilterTimeoutRef.current) {
-      window.clearTimeout(desktopCompanyFilterTimeoutRef.current);
+    if (desktopModelCompanyMorphFrameRef.current) {
+      window.cancelAnimationFrame(desktopModelCompanyMorphFrameRef.current);
+      desktopModelCompanyMorphFrameRef.current = null;
     }
-    setDesktopCompanyFilterTarget(companyName);
-    desktopCompanyFilterTimeoutRef.current = window.setTimeout(() => {
-      setDesktopAiCompaniesMode('selected');
-      setDesktopCompanyFilterTarget(null);
-      desktopCompanyFilterTimeoutRef.current = null;
-    }, 180);
+    setDesktopModelCompanyMorph(null);
+    setDesktopModelTransitionInFlight(false);
   }, []);
+  const clearDesktopModelControlTimers = useCallback(() => {
+    if (desktopModelControlsCloseTimeoutRef.current) {
+      window.clearTimeout(desktopModelControlsCloseTimeoutRef.current);
+      desktopModelControlsCloseTimeoutRef.current = null;
+    }
+    if (desktopModelCompaniesRevealTimeoutRef.current) {
+      window.clearTimeout(desktopModelCompaniesRevealTimeoutRef.current);
+      desktopModelCompaniesRevealTimeoutRef.current = null;
+    }
+    if (desktopModelOptionsRevealTimeoutRef.current) {
+      window.clearTimeout(desktopModelOptionsRevealTimeoutRef.current);
+      desktopModelOptionsRevealTimeoutRef.current = null;
+    }
+  }, []);
+  const hideDesktopModelControlsImmediate = useCallback(() => {
+    clearDesktopModelControlTimers();
+    clearDesktopModelSharedTransition();
+    clearModelHoverState();
+    setShowDesktopModelControls(false);
+    setDesktopModelControlsClosing(false);
+    setDesktopModelControlsView('companies');
+    setDesktopModelControlsClosingView('companies');
+    setDesktopModelActiveCompany(null);
+    setDesktopModelCompaniesVisible(false);
+    setDesktopModelOptionsVisible(false);
+  }, [clearDesktopModelControlTimers, clearDesktopModelSharedTransition, clearModelHoverState]);
+  const openDesktopModelCompanies = useCallback(() => {
+    clearDesktopModelControlTimers();
+    clearDesktopModelSharedTransition();
+    clearModelHoverState();
+    setDesktopModelControlsClosing(false);
+    setDesktopModelControlsClosingView('companies');
+    setDesktopModelActiveCompany(null);
+    setDesktopModelOptionsVisible(false);
+    setShowDesktopModelControls(true);
+    setDesktopModelControlsView('companies');
+  }, [clearDesktopModelControlTimers, clearDesktopModelSharedTransition, clearModelHoverState]);
+  const setDesktopModelOptionsState = useCallback((companyName: string) => {
+    clearDesktopModelControlTimers();
+    clearDesktopModelSharedTransition();
+    clearModelHoverState();
+    setDesktopModelControlsClosing(false);
+    setDesktopModelControlsClosingView('models');
+    setDesktopModelCompaniesVisible(false);
+    setDesktopModelActiveCompany(companyName);
+    setShowDesktopModelControls(true);
+    setDesktopModelControlsView('models');
+  }, [clearDesktopModelControlTimers, clearDesktopModelSharedTransition, clearModelHoverState]);
+  const openDesktopModelOptions = useCallback((companyName: string) => {
+    setDesktopModelOptionsState(companyName);
+  }, [setDesktopModelOptionsState]);
+  const morphDesktopCompanyIntoRoot = useCallback((companyName: string, sourceButton: HTMLButtonElement) => {
+    if (desktopModelTransitionInFlight) return;
+
+    const rootEl = desktopModelRootButtonRef.current;
+    if (!rootEl) return;
+
+    const rootRect = rootEl.getBoundingClientRect();
+    const sourceRect = sourceButton.getBoundingClientRect();
+    const deltaX = sourceRect.left - rootRect.left;
+
+    clearDesktopModelControlTimers();
+    clearDesktopModelSharedTransition();
+    clearModelHoverState();
+    setDesktopModelControlsClosing(false);
+    setDesktopModelControlsClosingView('models');
+    setDesktopModelActiveCompany(null);
+    setShowDesktopModelControls(true);
+    setDesktopModelControlsView('companies');
+    setDesktopModelCompaniesVisible(true);
+    setDesktopModelOptionsVisible(false);
+    setDesktopModelTransitionInFlight(true);
+    setDesktopModelCompanyMorph(companyName);
+
+    // Animate the clicked chip directly via Web Animations API
+    const chipWrapper = sourceButton.parentElement;
+    const finishMorph = () => {
+      setDesktopModelControlsClosing(false);
+      setDesktopModelControlsClosingView('models');
+      setDesktopModelActiveCompany(companyName);
+      setShowDesktopModelControls(true);
+      setDesktopModelControlsView('models');
+      setDesktopModelCompaniesVisible(false);
+      setDesktopModelOptionsVisible(false);
+      setDesktopModelCompanyMorph(null);
+      setDesktopModelTransitionInFlight(false);
+      desktopModelCompanyMorphTimeoutRef.current = null;
+    };
+
+    if (chipWrapper) {
+      chipWrapper.style.zIndex = '10';
+      const anim = chipWrapper.animate(
+        [
+          { transform: 'translateX(0px)' },
+          { transform: `translateX(-${deltaX}px)` },
+        ],
+        {
+          duration: DESKTOP_MODEL_COMPANY_SHIFT_MS,
+          easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+          fill: 'forwards',
+        },
+      );
+      anim.finished.then(finishMorph).catch(finishMorph);
+    } else {
+      desktopModelCompanyMorphTimeoutRef.current = window.setTimeout(finishMorph, DESKTOP_MODEL_COMPANY_SHIFT_MS);
+    }
+  }, [
+    DESKTOP_MODEL_COMPANY_SHIFT_MS,
+    clearDesktopModelControlTimers,
+    clearDesktopModelSharedTransition,
+    clearModelHoverState,
+    desktopModelTransitionInFlight,
+  ]);
   const handleModelHoverEnter = useCallback((model: ModelDetails) => {
     if (Date.now() < modelHoverLockUntilRef.current) return;
     if (modelHoverTimeoutRef.current) window.clearTimeout(modelHoverTimeoutRef.current);
@@ -997,6 +1153,7 @@ const mobilePromptClosingLockRef = useRef<number | null>(null);
     () => aiCompanies.find((company) => company.models.some((model) => model.name === selectedModel)) ?? null,
     [selectedModel]
   );
+  const showDesktopModelPanel = showDesktopModelControls || desktopModelControlsClosing;
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [activeImageId, setActiveImageId] = useState<string | null>(null);
   const activeUploadedImage = useMemo(
@@ -1053,10 +1210,15 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
   const [promptDropHover, setPromptDropHover] = useState(false);
   const desktopPromptContainerRef = useRef<HTMLDivElement | null>(null);
   const desktopModelControlsRef = useRef<HTMLDivElement | null>(null);
+  const desktopModelRootButtonRef = useRef<HTMLButtonElement | null>(null);
   const desktopSettingsButtonRef = useRef<HTMLDivElement | null>(null);
+  const desktopSelectedResolutionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const desktopLeadingResolutionButtonRef = useRef<HTMLButtonElement | null>(null);
   const desktopSearchSlotRef = useRef<HTMLDivElement | null>(null);
   const desktopSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [desktopLibrarySearchWidth, setDesktopLibrarySearchWidth] = useState(48);
+  const [desktopSelectedResolutionButtonWidth, setDesktopSelectedResolutionButtonWidth] = useState(48);
+  const [desktopLeadingResolutionButtonWidth, setDesktopLeadingResolutionButtonWidth] = useState(0);
   const [desktopPromptCollisionLimit, setDesktopPromptCollisionLimit] = useState<number | null>(null);
   const [ingredientImages, setIngredientImages] = useState<{ id: string; url: string }[]>([]);
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -1126,8 +1288,19 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
   const MOBILE_INLINE_DURATION_MS = 220;
   const MOBILE_INLINE_OPEN_DURATION_MS = 280;
   const COMPANY_MODEL_CLOSE_DURATION_MS = 180;
+  const DESKTOP_SETTINGS_STAGGER_MS = 70;
+  const DESKTOP_SETTINGS_DURATION_MS = 220;
+  const DESKTOP_ASPECT_OPTIONS_REVEAL_DELAY_MS = 280;
+  const DESKTOP_RESOLUTION_OPTIONS_REVEAL_DELAY_MS = 180;
+  const DESKTOP_SETTINGS_BASE_GAP_PX = 6;
+  const DESKTOP_MODEL_COMPANIES_REVEAL_DELAY_MS = 40;
+  const DESKTOP_MODEL_OPTIONS_REVEAL_DELAY_MS = 180;
   const getCompanyModelCloseMs = (itemCount: number) =>
     COMPANY_MODEL_CLOSE_DURATION_MS + MOBILE_INLINE_STAGGER_MS * Math.max(itemCount - 1, 0);
+  const getDesktopSettingsCloseMs = (itemCount: number) =>
+    DESKTOP_SETTINGS_DURATION_MS + DESKTOP_SETTINGS_STAGGER_MS * Math.max(itemCount - 1, 0);
+  const getDesktopModelCloseMs = (itemCount: number) =>
+    DESKTOP_SETTINGS_DURATION_MS + DESKTOP_SETTINGS_STAGGER_MS * Math.max(itemCount - 1, 0);
   const getSettingsInlineAnimation = (isClosing: boolean, index: number, total: number) =>
     `${isClosing ? 'mobileInlineItemFadeOut' : 'mobileInlineItemFadeIn'} ${isClosing ? MOBILE_INLINE_DURATION_MS : MOBILE_INLINE_OPEN_DURATION_MS}ms ${isClosing ? 'ease-in' : 'ease-out'} ${(total - 1 - index) * MOBILE_INLINE_STAGGER_MS}ms both`;
   const isMobilePromptCloseLocked = () =>
@@ -1249,6 +1422,88 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     }
     setClosingMobileAspectRatios(false);
   }, [showAspectRatios]);
+  const closeDesktopModelControls = useCallback(() => {
+    if (desktopModelTransitionInFlight) return;
+    clearDesktopModelControlTimers();
+    clearDesktopModelSharedTransition();
+    clearModelHoverState();
+    if (!showDesktopModelControls && !desktopModelControlsClosing) return;
+    const closingView = desktopModelControlsClosing ? desktopModelControlsClosingView : desktopModelControlsView;
+    const activeCompany = desktopModelActiveCompany
+      ? aiCompanies.find((company) => company.name === desktopModelActiveCompany) ?? null
+      : null;
+    const visibleCount = closingView === 'models'
+      ? 1 + (activeCompany?.models.length ?? 0)
+      : aiCompanies.length;
+    setDesktopModelControlsClosingView(closingView);
+    setDesktopModelControlsClosing(true);
+    setShowDesktopModelControls(false);
+    desktopModelControlsCloseTimeoutRef.current = window.setTimeout(() => {
+      setDesktopModelControlsView('companies');
+      setDesktopModelControlsClosingView('companies');
+      setDesktopModelControlsClosing(false);
+      setDesktopModelActiveCompany(null);
+      setDesktopModelCompaniesVisible(false);
+      setDesktopModelOptionsVisible(false);
+      desktopModelControlsCloseTimeoutRef.current = null;
+    }, getDesktopModelCloseMs(visibleCount));
+  }, [
+    clearDesktopModelControlTimers,
+    clearDesktopModelSharedTransition,
+    clearModelHoverState,
+    desktopModelTransitionInFlight,
+    desktopModelActiveCompany,
+    desktopModelControlsClosing,
+    desktopModelControlsClosingView,
+    desktopModelControlsView,
+    showDesktopModelControls,
+  ]);
+  function closeDesktopSettings() {
+      if (desktopSettingsCloseTimeoutRef.current) {
+        window.clearTimeout(desktopSettingsCloseTimeoutRef.current);
+        desktopSettingsCloseTimeoutRef.current = null;
+      }
+      if (desktopAspectOptionsRevealTimeoutRef.current) {
+        window.clearTimeout(desktopAspectOptionsRevealTimeoutRef.current);
+        desktopAspectOptionsRevealTimeoutRef.current = null;
+      }
+      if (desktopResolutionOptionsRevealTimeoutRef.current) {
+        window.clearTimeout(desktopResolutionOptionsRevealTimeoutRef.current);
+        desktopResolutionOptionsRevealTimeoutRef.current = null;
+      }
+    if (!showSettings && !desktopSettingsClosing) return;
+    const closingView: 'default' | 'resolutions' | 'aspects' = desktopSettingsClosing
+      ? desktopSettingsClosingView
+      : desktopSettingsView;
+    const supportedResolutionCount = desktopResolutionOptionsVisible ? resolutions.filter((res) => {
+      if (res.value === resolution) return false;
+      if (!currentModelCapabilities) return true;
+      if (currentModelCapabilities.supportedResolutions.length === 0) return true;
+      return currentModelCapabilities.supportedResolutions.includes(res.value);
+    }).length : 0;
+    const supportedAspectRatioCount = desktopAspectOptionsVisible ? aspectRatios.filter((ratioOption) => {
+      if (!allowedAspectRatioValues.has(ratioOption.value)) return false;
+      if (ratioOption.value === aspectRatio) return false;
+      if (!currentModelCapabilities) return true;
+      if (currentModelCapabilities.supportedAspectRatios.length === 0) return true;
+      return currentModelCapabilities.supportedAspectRatios.includes(ratioOption.value);
+    }).length : 0;
+    const visibleCount = closingView === 'resolutions'
+      ? 1 + supportedResolutionCount
+      : closingView === 'aspects'
+        ? 1 + supportedAspectRatioCount
+      : 3;
+      setDesktopSettingsClosingView(closingView);
+      setDesktopSettingsClosing(true);
+      setShowSettings(false);
+      desktopSettingsCloseTimeoutRef.current = window.setTimeout(() => {
+        setDesktopSettingsView('default');
+        setDesktopAspectOptionsVisible(false);
+        setDesktopResolutionOptionsVisible(false);
+        setDesktopSettingsClosing(false);
+        desktopSettingsCloseTimeoutRef.current = null;
+      }, getDesktopSettingsCloseMs(visibleCount));
+    }
   const isViewportConstrained = !isMobile && viewportWidth < 1280;
   const desktopPromptMaxWidth = useMemo(() => {
     const fluidWidth = Math.round(viewportWidth * (isViewportConstrained ? 0.46 : 0.52));
@@ -1256,12 +1511,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     // Single shrink — prompt shrinks once when either models or search opens.
     // Opening the second one does NOT cause additional shrink.
     const shrinkScale = isViewportConstrained ? Math.max(0.6, (1280 - viewportWidth) / 500) : 0;
-    const needsShrink = (showAiCompanies || showGallerySearch) && isViewportConstrained;
+    const needsShrink = (showDesktopModelPanel || showGallerySearch) && isViewportConstrained;
     const shrink = needsShrink ? Math.round(72 + 80 * shrinkScale) : 0;
     maxWidth -= shrink;
     const collisionCapped = Math.min(maxWidth, desktopPromptCollisionLimit ?? maxWidth);
     return Math.max(200, collisionCapped);
-  }, [viewportWidth, isViewportConstrained, showGallerySearch, showAiCompanies, desktopPromptCollisionLimit]);
+  }, [viewportWidth, isViewportConstrained, showDesktopModelPanel, showGallerySearch, desktopPromptCollisionLimit]);
 
   // Track viewport state for responsive header behavior
   useEffect(() => {
@@ -1275,10 +1530,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       // Auto-close model flyout and search only on actual resize, not on state change
       const width = window.innerWidth;
       if (width >= 768 && width < 960) {
-        setShowAiCompanies(false);
-        setSelectedCompany(null);
-        setClosingCompanyModels(null);
-        resetDesktopCompanyRow();
+        hideDesktopModelControlsImmediate();
         setShowGallerySearch(false);
         setGallerySearchQuery('');
       }
@@ -1286,31 +1538,25 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     updateSize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [hideDesktopModelControlsImmediate]);
 
-  // Click outside to close company icons + model dropdowns
+  // Click outside to close desktop model controls
   useEffect(() => {
     if (isMobile) return;
-    if (!showAiCompanies) return;
+    if (!showDesktopModelControls) return;
     const handleClickOutside = (e: MouseEvent) => {
       const modelControls = desktopModelControlsRef.current;
-      const searchSlot = desktopSearchSlotRef.current;
       const target = e.target as Node;
-      // Don't close if clicking inside model controls or the search bar
-      if (modelControls && !modelControls.contains(target) &&
-          !(searchSlot && searchSlot.contains(target))) {
-        // Trigger the same closing animation as the button click
-        setDesktopAiCompaniesClosing(true);
-        setSelectedCompany(null);
-        setClosingCompanyModels(null);
-        resetDesktopCompanyRow();
-        clearModelHoverState();
-        setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 550);
+      if (modelControls && !modelControls.contains(target)) {
+        // Also check if click is inside the popout panel (company/model chips)
+        const popout = (target as Element).closest?.('[data-desktop-header-popout]');
+        if (popout) return;
+        closeDesktopModelControls();
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isMobile, showAiCompanies, clearModelHoverState, resetDesktopCompanyRow]);
+  }, [closeDesktopModelControls, isMobile, showDesktopModelControls]);
   // Measure available width for search bar + prompt collision limit
   useEffect(() => {
     if (isMobile) return;
@@ -1345,10 +1591,6 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
     // Predictive search width — computes the search bar target from the prompt's
     // FINAL width (desktopPromptMaxWidth) instead of its current DOM position.
-    // The prompt is centered (absolute left-1/2 -translate-x-1/2) in its parent row,
-    // so we can predict its right edge: parentCenter + desktopPromptMaxWidth / 2.
-    // The settings button position is static (doesn't move when search opens).
-    // This eliminates the DOM race condition that caused the two-step stutter.
     const computeSearchWidth = () => {
       const parentRow = desktopPromptContainerRef.current?.parentElement;
       const settingsRect = desktopSettingsButtonRef.current?.getBoundingClientRect();
@@ -1358,7 +1600,6 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       // Prompt's predicted right edge after its transition completes
       const predictedPromptRight = parentCenter + desktopPromptMaxWidth / 2;
       // Available = total space minus two equal gaps (prompt-to-search and search-to-settings)
-      // This creates symmetric spacing on both sides of the expanded search bar
       const available = settingsRect.left - predictedPromptRight - flexGapPx * 2;
       setDesktopLibrarySearchWidth(Math.max(40, available));
     };
@@ -1376,10 +1617,10 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     const t1 = setTimeout(measureCollision, 50);
     const t2 = setTimeout(measureCollision, 150);
     const t3 = setTimeout(measureCollision, 350);
-    const t4 = showAiCompanies ? setTimeout(measureAll, 600) : null;
+    const t4 = showDesktopModelPanel ? setTimeout(measureAll, 600) : null;
     window.addEventListener('resize', debouncedMeasure);
     return () => { window.removeEventListener('resize', debouncedMeasure); if (debounceId) clearTimeout(debounceId); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); if (t4) clearTimeout(t4); };
-  }, [isMobile, viewportWidth, showAiCompanies, showGallerySearch, selectedModel, selectedCompany, closingCompanyModels, desktopPromptMaxWidth]);
+  }, [desktopModelActiveCompany, desktopModelControlsClosing, desktopModelControlsView, isMobile, viewportWidth, showDesktopModelPanel, showGallerySearch, selectedModel, desktopPromptMaxWidth]);
 
   // Track scroll position for header background
   useEffect(() => {
@@ -1399,9 +1640,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       const settingsPanel = document.querySelector('[data-settings-panel]');
       const target = e.target as Node;
       if (settingsBtn && !settingsBtn.contains(target) && (!settingsPanel || !settingsPanel.contains(target))) {
-        setShowSettings(false);
-        setShowResolutions(false);
-        setShowAspectRatios(false);
+        closeDesktopSettings();
       }
     };
     // Delay to avoid closing immediately from the same click that opened it
@@ -1409,7 +1648,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       window.addEventListener('click', handleClickOutside);
     }, 10);
     return () => { clearTimeout(timer); window.removeEventListener('click', handleClickOutside); };
-  }, [isMobile, showSettings]);
+  }, [closeDesktopSettings, isMobile, showSettings]);
 
   useEffect(() => {
     if (!showGallerySearch) return;
@@ -1432,15 +1671,133 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     return () => window.cancelAnimationFrame(focusId);
   }, [isMobile, showGallerySearch]);
 
+  // Click outside to close desktop gallery search
   useEffect(() => {
-    if (showSettings) return;
+    if (isMobile) return;
+    if (!showGallerySearch) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const searchSlot = desktopSearchSlotRef.current;
+      const target = e.target as Node;
+      if (searchSlot && !searchSlot.contains(target)) {
+        closeDesktopGallerySearch();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [closeDesktopGallerySearch, isMobile, showGallerySearch]);
+
+  useEffect(() => {
+    if (isMobile) return;
+    const measureSelectedResolutionButton = () => {
+      const selectedWidth = desktopSelectedResolutionButtonRef.current?.getBoundingClientRect().width;
+      if (selectedWidth) {
+        setDesktopSelectedResolutionButtonWidth(Math.ceil(selectedWidth));
+      }
+      const leadingWidth = desktopLeadingResolutionButtonRef.current?.getBoundingClientRect().width;
+      if (leadingWidth) {
+        setDesktopLeadingResolutionButtonWidth(Math.ceil(leadingWidth));
+      } else {
+        setDesktopLeadingResolutionButtonWidth(0);
+      }
+    };
+    const frameId = window.requestAnimationFrame(measureSelectedResolutionButton);
+    window.addEventListener('resize', measureSelectedResolutionButton);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', measureSelectedResolutionButton);
+    };
+  }, [desktopSettingsClosing, desktopSettingsView, isMobile, resolution, showSettings]);
+
+  useEffect(() => {
+    if (showSettings || desktopSettingsClosing) return;
     setShowResolutions(false);
     setShowAspectRatios(false);
+    setDesktopSettingsView('default');
+    setDesktopAspectOptionsVisible(false);
+    setDesktopResolutionOptionsVisible(false);
     setShowMobileCountControls(false);
     setClosingMobileResolutions(false);
     setClosingMobileAspectRatios(false);
     setClosingMobileCountControls(false);
-  }, [showSettings]);
+  }, [desktopSettingsClosing, showSettings]);
+
+  useEffect(() => {
+    if (desktopAspectOptionsRevealTimeoutRef.current) {
+      window.clearTimeout(desktopAspectOptionsRevealTimeoutRef.current);
+      desktopAspectOptionsRevealTimeoutRef.current = null;
+    }
+
+    if (desktopSettingsView !== 'aspects') {
+      setDesktopAspectOptionsVisible(false);
+      return;
+    }
+
+    setDesktopAspectOptionsVisible(false);
+    desktopAspectOptionsRevealTimeoutRef.current = window.setTimeout(() => {
+      setDesktopAspectOptionsVisible(true);
+      desktopAspectOptionsRevealTimeoutRef.current = null;
+    }, DESKTOP_ASPECT_OPTIONS_REVEAL_DELAY_MS);
+  }, [DESKTOP_ASPECT_OPTIONS_REVEAL_DELAY_MS, desktopSettingsView]);
+
+  useEffect(() => {
+    if (desktopModelCompaniesRevealTimeoutRef.current) {
+      window.clearTimeout(desktopModelCompaniesRevealTimeoutRef.current);
+      desktopModelCompaniesRevealTimeoutRef.current = null;
+    }
+    if (desktopModelTransitionInFlight) {
+      // Don't hide companies during morph — the animation needs them in the DOM
+      return;
+    }
+    if (desktopModelControlsClosing) return;
+    if (!showDesktopModelControls || desktopModelControlsView !== 'companies') {
+      setDesktopModelCompaniesVisible(false);
+      return;
+    }
+    setDesktopModelCompaniesVisible(false);
+    desktopModelCompaniesRevealTimeoutRef.current = window.setTimeout(() => {
+      setDesktopModelCompaniesVisible(true);
+      desktopModelCompaniesRevealTimeoutRef.current = null;
+    }, DESKTOP_MODEL_COMPANIES_REVEAL_DELAY_MS);
+  }, [DESKTOP_MODEL_COMPANIES_REVEAL_DELAY_MS, desktopModelControlsClosing, desktopModelControlsView, desktopModelTransitionInFlight, showDesktopModelControls]);
+
+  useEffect(() => {
+    if (desktopModelOptionsRevealTimeoutRef.current) {
+      window.clearTimeout(desktopModelOptionsRevealTimeoutRef.current);
+      desktopModelOptionsRevealTimeoutRef.current = null;
+    }
+    if (desktopModelTransitionInFlight) {
+      setDesktopModelOptionsVisible(false);
+      return;
+    }
+    if (desktopModelControlsClosing) return;
+    if (!showDesktopModelControls || desktopModelControlsView !== 'models') {
+      setDesktopModelOptionsVisible(false);
+      return;
+    }
+    setDesktopModelOptionsVisible(false);
+    desktopModelOptionsRevealTimeoutRef.current = window.setTimeout(() => {
+      setDesktopModelOptionsVisible(true);
+      desktopModelOptionsRevealTimeoutRef.current = null;
+    }, DESKTOP_MODEL_OPTIONS_REVEAL_DELAY_MS);
+  }, [DESKTOP_MODEL_OPTIONS_REVEAL_DELAY_MS, desktopModelControlsClosing, desktopModelControlsView, desktopModelTransitionInFlight, showDesktopModelControls, desktopModelActiveCompany]);
+
+  useEffect(() => {
+    if (desktopResolutionOptionsRevealTimeoutRef.current) {
+      window.clearTimeout(desktopResolutionOptionsRevealTimeoutRef.current);
+      desktopResolutionOptionsRevealTimeoutRef.current = null;
+    }
+
+    if (desktopSettingsView !== 'resolutions') {
+      setDesktopResolutionOptionsVisible(false);
+      return;
+    }
+
+    setDesktopResolutionOptionsVisible(false);
+    desktopResolutionOptionsRevealTimeoutRef.current = window.setTimeout(() => {
+      setDesktopResolutionOptionsVisible(true);
+      desktopResolutionOptionsRevealTimeoutRef.current = null;
+    }, DESKTOP_RESOLUTION_OPTIONS_REVEAL_DELAY_MS);
+  }, [DESKTOP_RESOLUTION_OPTIONS_REVEAL_DELAY_MS, desktopSettingsView]);
 
   useEffect(() => {
     return () => {
@@ -1462,11 +1819,32 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       if (desktopSearchCloseTimeoutRef.current) {
         window.clearTimeout(desktopSearchCloseTimeoutRef.current);
       }
-      if (desktopCompanyFilterTimeoutRef.current) {
-        window.clearTimeout(desktopCompanyFilterTimeoutRef.current);
+      if (desktopSettingsCloseTimeoutRef.current) {
+        window.clearTimeout(desktopSettingsCloseTimeoutRef.current);
+      }
+      if (desktopModelControlsCloseTimeoutRef.current) {
+        window.clearTimeout(desktopModelControlsCloseTimeoutRef.current);
+      }
+      if (desktopAspectOptionsRevealTimeoutRef.current) {
+        window.clearTimeout(desktopAspectOptionsRevealTimeoutRef.current);
+      }
+      if (desktopResolutionOptionsRevealTimeoutRef.current) {
+        window.clearTimeout(desktopResolutionOptionsRevealTimeoutRef.current);
+      }
+      if (desktopModelCompaniesRevealTimeoutRef.current) {
+        window.clearTimeout(desktopModelCompaniesRevealTimeoutRef.current);
+      }
+      if (desktopModelOptionsRevealTimeoutRef.current) {
+        window.clearTimeout(desktopModelOptionsRevealTimeoutRef.current);
+      }
+      if (desktopModelCompanyMorphTimeoutRef.current) {
+        window.clearTimeout(desktopModelCompanyMorphTimeoutRef.current);
+      }
+      if (desktopModelCompanyMorphFrameRef.current) {
+        window.cancelAnimationFrame(desktopModelCompanyMorphFrameRef.current);
       }
     };
-  }, [resetDesktopCompanyRow]);
+  }, []);
 
   useEffect(() => {
     if (!showAspectRatios) return;
@@ -2875,8 +3253,69 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
     }
   };
 
-  const selectedAspectRatio = aspectRatios.find(ar => ar.value === aspectRatio);
+  const availableAspectRatios = aspectRatios.filter((ar) => allowedAspectRatioValues.has(ar.value));
+  const supportedAspectRatios = availableAspectRatios.filter((ar) => isAspectRatioSupported(ar.value));
+  const selectedAspectRatio = availableAspectRatios.find(ar => ar.value === aspectRatio);
   const selectedResolution = resolutions.find(res => res.value === resolution);
+  const desktopModelControlsMode: 'companies' | 'models' =
+    desktopModelControlsClosing ? desktopModelControlsClosingView : desktopModelControlsView;
+  const desktopActiveModelCompany = desktopModelActiveCompany
+    ? aiCompanies.find((company) => company.name === desktopModelActiveCompany) ?? null
+    : null;
+  const desktopModelTriggerCompany =
+    desktopModelControlsMode === 'models' && desktopActiveModelCompany
+      ? desktopActiveModelCompany
+      : selectedModelCompany;
+  const showDesktopModelLabel = Boolean(selectedModel) && (
+    !showDesktopModelPanel ||
+    (desktopModelControlsMode === 'models' && desktopModelActiveCompany === selectedModelCompany?.name)
+  );
+  const desktopCompanyOptions = aiCompanies.filter((company) => company.name !== desktopModelTriggerCompany?.name);
+  const desktopModelOptions = (desktopActiveModelCompany?.models ?? []).filter((model) => {
+    if (!selectedModel || desktopActiveModelCompany?.name !== selectedModelCompany?.name) {
+      return true;
+    }
+    return model.name !== selectedModel;
+  });
+  const desktopModelAnimationItems = desktopModelControlsMode === 'models'
+    ? desktopModelOptions
+    : desktopCompanyOptions;
+  const desktopModelAnimationMaxIndex = Math.max(desktopModelAnimationItems.length - 1, 0);
+  const desktopModelCompanyButtonWidthPx = viewportWidth >= 1024 ? 40 : 32;
+  const desktopResolutionOptions = resolutions.filter((res) => isResolutionSupported(res.value) && res.value !== resolution);
+  const desktopAspectRatioOptions = supportedAspectRatios.filter((ar) => ar.value !== aspectRatio);
+  const desktopSettingsMode: 'default' | 'resolutions' | 'aspects' =
+    desktopSettingsClosing ? desktopSettingsClosingView : desktopSettingsView;
+  const showDesktopSettingsPanel = showSettings || desktopSettingsClosing;
+  const hideDesktopSearchSlot = showSettings || desktopSettingsClosing;
+  const desktopResolutionWidthDelta = desktopSelectedResolutionButtonWidth - desktopLeadingResolutionButtonWidth;
+  const desktopQualityExpandedEdgeGapPx = desktopLeadingResolutionButtonWidth > 0
+    ? Math.max(
+        DESKTOP_SETTINGS_BASE_GAP_PX,
+        Math.min(
+          DESKTOP_SETTINGS_BASE_GAP_PX + 2,
+          DESKTOP_SETTINGS_BASE_GAP_PX + 1 + Math.round(desktopResolutionWidthDelta / 8),
+        ),
+      )
+    : DESKTOP_SETTINGS_BASE_GAP_PX + 1;
+  const desktopSettingsAnimationMaxIndex =
+    desktopSettingsMode === 'resolutions'
+      ? desktopResolutionOptions.length
+      : desktopSettingsMode === 'aspects'
+        ? desktopAspectRatioOptions.length
+        : 2;
+  const getDesktopSettingsAnimation = (visualIndex: number, maxVisualIndex: number) => {
+    const delay = desktopSettingsClosing
+      ? (maxVisualIndex - visualIndex) * DESKTOP_SETTINGS_STAGGER_MS
+      : visualIndex * DESKTOP_SETTINGS_STAGGER_MS;
+    return `${desktopSettingsClosing ? 'desktopSettingsHide' : 'desktopSettingsReveal'} ${DESKTOP_SETTINGS_DURATION_MS}ms ease-in-out ${delay}ms both`;
+  };
+  const getDesktopModelAnimation = (visualIndex: number, maxVisualIndex: number) => {
+    const delay = desktopModelControlsClosing
+      ? (maxVisualIndex - visualIndex) * DESKTOP_SETTINGS_STAGGER_MS
+      : visualIndex * DESKTOP_SETTINGS_STAGGER_MS;
+    return `${desktopModelControlsClosing ? 'desktopModelHide' : 'desktopModelReveal'} ${DESKTOP_SETTINGS_DURATION_MS}ms ease-in-out ${delay}ms both`;
+  };
 
   return (
     <div className="generation-interface-surface h-full w-full flex flex-col py-3 pb-52 md:pb-3 overflow-y-auto relative bg-black">
@@ -2899,46 +3338,75 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
         @keyframes desktopCompanyExit { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(10px); } }
         @keyframes modelExit { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-10px); } }
         @keyframes promptDropPulse { 0%, 100% { box-shadow: 0 0 10px rgba(255, 255, 255, 0.04); } 50% { box-shadow: 0 0 18px rgba(255, 255, 255, 0.08); } }
+        @keyframes desktopSettingsReveal { from { opacity: 0; transform: translateX(10px) scale(0.985); } to { opacity: 1; transform: translateX(0) scale(1); } }
+        @keyframes desktopSettingsHide { from { opacity: 1; transform: translateX(0) scale(1); } to { opacity: 0; transform: translateX(10px) scale(0.985); } }
+        @keyframes desktopModelReveal { from { opacity: 0; transform: translateX(-10px) scale(0.985); } to { opacity: 1; transform: translateX(0) scale(1); } }
+        @keyframes desktopModelHide { from { opacity: 1; transform: translateX(0) scale(1); } to { opacity: 0; transform: translateX(-10px) scale(0.985); } }
+        @keyframes star-ring {
+          0%, 20% { opacity: 1; transform: scale(0); stroke-width: 16; }
+          35% { opacity: 0.5; transform: scale(1); stroke-width: 16; }
+          50%, 100% { opacity: 0; transform: scale(1); stroke-width: 0; }
+        }
+        @keyframes star-fill {
+          0%, 40% { transform: scale(0); }
+          60% { transform: scale(1.2); }
+          80% { transform: scale(0.9); }
+          100% { transform: scale(1); }
+        }
+        @keyframes star-stroke {
+          0% { transform: scale(1); }
+          20%, 100% { transform: scale(0); }
+        }
+        @keyframes star-line {
+          0%, 40% { stroke-dasharray: 1 23; stroke-dashoffset: 1; }
+          60%, 100% { stroke-dasharray: 12 13; stroke-dashoffset: -13; }
+        }
+        .animate-star-ring { animation: star-ring 0.7s ease-out forwards; }
+        .animate-star-fill { animation: star-fill 0.7s ease-out forwards; }
+        .animate-star-stroke { animation: star-stroke 0.7s ease-out forwards; }
+        .animate-star-line { animation: star-line 0.7s ease-out forwards; }
+        @keyframes gear-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .animate-gear-spin { animation: gear-spin 0.5s ease-out forwards; }
       `}</style>
       {/* Parent Container - Wraps both Generation Header and Image History - Responsive width, centered */}
       <div className="w-full mx-auto relative flex flex-col flex-1">
 
         {/* Generation Header Container - Sticky */}
         <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
-        <div className={`generation-header flex flex-col items-center gap-3 sticky top-0 z-50 transition-colors duration-200 ${isScrolled ? 'bg-[#0a0a0b]' : 'bg-transparent'}`} style={{ width: '100%', backgroundColor: 'rgba(0, 80, 255, 0.18)' }}>
+        <div className={`generation-header flex flex-col items-center gap-3 sticky top-0 z-50 transition-colors duration-200 ${isScrolled ? 'bg-[#0a0a0b]' : 'bg-transparent'}`} style={{ width: '100%' }}>
         <div className="w-full hidden md:flex flex-col gap-3 relative">
           {/* Desktop Row: All controls in one row (hidden on mobile) */}
           <div className={`w-full hidden md:flex flex-row items-start justify-between gap-3 relative px-3 ${uploadedImages.length > 0 ? 'pb-16' : ''}`}>
             {/* Model Selector Container - Desktop: icon-only when no model, expands with text after selection */}
-            <div ref={desktopModelControlsRef} className="relative flex items-center gap-3">
-            <div
-              className={`h-8 lg:h-10 border border-[#27272a] rounded-md flex items-center relative bg-[#1a1a1c] hover:bg-[#252525] transition-colors duration-300 ${selectedModel ? 'w-[88px] lg:w-[108px] pl-1 pr-2' : 'w-8 lg:w-10 justify-center px-0'}`}
+            <div ref={desktopModelControlsRef} className="relative flex items-center gap-0 min-w-0">
+            {/* Company icon button — always square */}
+            <button
+              ref={desktopModelRootButtonRef}
+              onClick={() => {
+                if (showDesktopModelControls && desktopModelControlsMode === 'companies' && !desktopModelControlsClosing) {
+                  closeDesktopModelControls();
+                } else {
+                  openDesktopModelCompanies();
+                }
+                setShowSettings(false);
+                closeDesktopGallerySearch();
+                setActiveImageId(null);
+                setShowTools(false);
+                setSelectedTool(null);
+              }}
+              className={`h-8 w-8 lg:h-10 lg:w-10 border rounded-md flex items-center justify-center text-white/80 hover:text-white transition-[background-color,border-color] duration-300 ease-out ${
+                selectedModel && !showDesktopModelPanel
+                  ? 'border-transparent bg-transparent delay-200'
+                  : 'border-[#27272a] bg-[#1a1a1c] hover:bg-[#252525] delay-0'
+              }`}
+              style={{
+                ...(desktopModelCompanyMorph ? { opacity: 0, visibility: 'hidden' as const } : {}),
+                pointerEvents: desktopModelTransitionInFlight ? 'none' : 'auto',
+              }}
             >
-              {/* Icon area — click opens full company chooser */}
-              <button
-                onClick={() => {
-                  if (showAiCompanies) {
-                    setDesktopAiCompaniesClosing(true);
-                    setSelectedCompany(null);
-                    setClosingCompanyModels(null);
-                    resetDesktopCompanyRow();
-                    setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 550);
-                  } else {
-                    setDesktopAiCompaniesMode('all');
-                    setDesktopCompanyFilterTarget(null);
-                    lockModelHover();
-                    setShowAiCompanies(true);
-                  }
-                  setSelectedCompany(null);
-                  setShowSettings(false);
-                  setActiveImageId(null);
-                  setShowTools(false);
-                  setSelectedTool(null);
-                }}
-                className="p-2 rounded flex items-center justify-center"
-              >
-                {selectedModelCompany ? (
-                  <span className="w-6 h-6 flex items-center justify-center text-white/70">{renderCompanyLogo(selectedModelCompany, true)}</span>
+              <span className="w-5 h-5 flex items-center justify-center">
+                {desktopModelTriggerCompany ? (
+                  renderCompanyLogo(desktopModelTriggerCompany, true)
                 ) : (
                   <svg className="w-5 h-5 text-[#6b7280]" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="2" y="12.8" width="10" height="2.4" rx="1.2" transform="rotate(-45 7 14)" />
@@ -2948,143 +3416,164 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                     <path d="M15 12 Q15.4 13 16.5 13.4 Q15.4 13.8 15 14.8 Q14.6 13.8 13.5 13.4 Q14.6 13 15 12 Z" />
                   </svg>
                 )}
+              </span>
+            </button>
+            {/* Divider between company icon and model name — visible only in idle state */}
+            {showDesktopModelLabel && (
+              <div
+                className={`w-px h-4 transition-opacity duration-300 ease-out ${
+                  selectedModel && !showDesktopModelPanel ? 'opacity-100 delay-200' : 'opacity-0'
+                }`}
+                style={{ marginLeft: `${DESKTOP_SETTINGS_BASE_GAP_PX}px`, backgroundColor: 'rgba(255,255,255,0.1)' }}
+              />
+            )}
+            {/* Model name button — separate, to the right of company icon */}
+            {showDesktopModelLabel && (
+              <button
+                ref={desktopModelLabelRef}
+                onClick={() => {
+                  if (!selectedModelCompany) return;
+                  if (
+                    showDesktopModelControls &&
+                    desktopModelControlsMode === 'models' &&
+                    desktopModelActiveCompany === selectedModelCompany.name &&
+                    !desktopModelControlsClosing
+                  ) {
+                    closeDesktopModelControls();
+                  } else {
+                    openDesktopModelOptions(selectedModelCompany.name);
+                  }
+                  setShowSettings(false);
+                  closeDesktopGallerySearch();
+                }}
+                className={`h-6 px-2 border rounded flex items-center text-[11px] font-medium transition-[background-color,border-color,color,box-shadow] duration-300 ease-out cursor-pointer ${
+                  showDesktopModelPanel && desktopModelControlsMode === 'models'
+                    ? 'border-white/10 bg-[#1a1a1c] text-white/85 hover:bg-[#252525] hover:text-white shadow-[0_8px_20px_rgba(0,0,0,0.22)]'
+                    : 'border-transparent bg-transparent text-white/50 hover:text-white/80 shadow-none'
+                }`}
+                style={{
+                  marginLeft: `${DESKTOP_SETTINGS_BASE_GAP_PX - 1}px`,
+                  ...(desktopModelSelectMorph ? { opacity: 0, visibility: 'hidden' as const } : {}),
+                }}
+              >
+                <span className="font-medium">{selectedModel}</span>
               </button>
-              {/* Text area — click opens only selected company's model list */}
-              {selectedModel && (
-                <>
-                  <div className="w-px h-6 bg-white/[0.08] ml-1"></div>
-                  <button
-                    onClick={() => {
-                      if (showAiCompanies) {
-                        setDesktopAiCompaniesClosing(true);
-                        setSelectedCompany(null);
-                        setClosingCompanyModels(null);
-                        resetDesktopCompanyRow();
-                        setTimeout(() => { setShowAiCompanies(false); setDesktopAiCompaniesClosing(false); }, 550);
-                      } else {
-                        setDesktopAiCompaniesMode('selected');
-                        setSelectedCompany(selectedModelCompany?.name ?? null);
-                        setDesktopCompanyFilterTarget(null);
-                        setShowAiCompanies(true);
-                      }
-                      setShowSettings(false);
-                    }}
-                    className="flex-1 flex items-center justify-center overflow-hidden px-1 rounded cursor-pointer"
-                  >
-                    <span className="text-[#9ca3af] text-xs font-medium truncate max-w-full">{selectedModel}</span>
-                  </button>
-                </>
-              )}
-            </div>
+            )}
             {/* AI Company icons — inline horizontal, right of model button */}
-            {(showAiCompanies || desktopAiCompaniesClosing) && (() => {
-              const focusedCompany = aiCompanies.find((company) => company.name === selectedCompany) ?? selectedModelCompany ?? null;
-              const visibleCompanies = desktopAiCompaniesMode === 'selected' && focusedCompany
-                ? [focusedCompany]
-                : aiCompanies;
-              return visibleCompanies.map((company, index) => {
-                const total = visibleCompanies.length;
-                const enterDelay = index * 50;
-                const exitDelay = (total - 1 - index) * 50;
-                const isFilteringOut = desktopCompanyFilterTarget !== null && company.name !== desktopCompanyFilterTarget;
-                return (
-                  <div key={company.name}
-                    className={`relative ${desktopAiCompaniesClosing ? '' : 'animate-fade-in'}`}
-                    style={desktopAiCompaniesClosing
-                      ? { animation: `desktopCompanyExit 300ms ease-out ${exitDelay}ms both` }
-                      : {
-                          animationDelay: `${enterDelay}ms`,
-                          opacity: isFilteringOut ? 0 : 1,
-                          transform: isFilteringOut ? 'translateX(-8px) scale(0.92)' : 'translateX(0) scale(1)',
-                          transition: 'opacity 180ms ease-out, transform 180ms ease-out',
-                          pointerEvents: isFilteringOut ? 'none' : 'auto',
-                        }
-                    }
-                    data-desktop-header-popout="true"
-                  >
-                    <button
-                      onClick={() => {
-                        if (selectedCompany === company.name) {
-                          // Close: animate models out, then clear
-                          setClosingCompanyModels(company.name);
-                          const modelCount = company.models.length;
-                          setTimeout(() => {
-                            setSelectedCompany(null);
-                            setClosingCompanyModels(null);
-                            resetDesktopCompanyRow();
-                          }, getCompanyModelCloseMs(modelCount));
-                        } else if (selectedCompany && selectedCompany !== company.name) {
-                          // Switch: animate old out, then show new
-                          const oldCompany = aiCompanies.find(c => c.name === selectedCompany);
-                          const oldCount = oldCompany?.models.length ?? 0;
-                          setClosingCompanyModels(selectedCompany);
-                          setTimeout(() => {
-                            setClosingCompanyModels(null);
-                            setSelectedCompany(company.name);
-                            setDesktopAiCompaniesMode('all');
-                            focusDesktopCompanyRow(company.name);
-                          }, getCompanyModelCloseMs(oldCount));
-                        } else {
-                          setSelectedCompany(company.name);
-                          setDesktopAiCompaniesMode('all');
-                          focusDesktopCompanyRow(company.name);
-                        }
-                        setShowSettings(false);
+            {showDesktopModelPanel && (
+              <div
+                data-desktop-header-popout="true"
+                className="relative flex items-center gap-0 min-w-0"
+                style={{
+                  pointerEvents: desktopModelControlsClosing || desktopModelTransitionInFlight ? 'none' : 'auto',
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {desktopModelControlsMode === 'companies' && (desktopModelCompaniesVisible || desktopModelControlsClosing) && (
+                  desktopCompanyOptions.map((company, index) => (
+                    <div
+                      key={company.name}
+                      className="min-w-0"
+                      style={{
+                        marginLeft: `${DESKTOP_SETTINGS_BASE_GAP_PX}px`,
+                        ...(desktopModelCompanyMorph && desktopModelCompanyMorph !== company.name
+                          ? { visibility: 'hidden' as const, opacity: 0 }
+                          : {}),
                       }}
-                      className={`h-9 w-9 border border-[#27272a] rounded-md flex items-center justify-center text-white/80 hover:bg-[#252525] hover:text-white transition-colors duration-300 ${
-                        selectedCompany === company.name ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c]'
-                      } ${
-                        selectedCompany && selectedCompany !== company.name ? 'opacity-40' : 'opacity-100'
-                      }`}
                     >
-                      <span className="w-5 h-5 flex items-center justify-center">{renderCompanyLogo(company, selectedCompany === company.name)}</span>
-                    </button>
-                    {(selectedCompany === company.name || closingCompanyModels === company.name) && (
-                      <div className="absolute left-full top-1/2 ml-2 flex -translate-y-1/2 flex-row flex-wrap items-center gap-1.5 z-[110]">
-                        {company.models.map((model, modelIndex) => {
-                          const isClosing = closingCompanyModels === company.name;
-                          const total = company.models.length;
-                          const enterDelay = modelIndex * 50;
-                          const exitDelay = (total - 1 - modelIndex) * 50;
-                          return (
-                          <div key={model.name}
-                            className={isClosing ? 'relative h-8' : 'relative h-8 animate-fade-in'}
-                            style={isClosing
-                              ? { animation: `modelExit 250ms ease-out ${exitDelay}ms both` }
-                              : { animationDelay: `${enterDelay}ms` }
-                            }
-                            onMouseEnter={() => handleModelHoverEnter(model)}
-                            onMouseLeave={handleModelHoverLeave}
-                          >
-                            {hoveredModel && hoveredModel.name === model.name && (
-                              <div className="absolute left-0 top-full mt-2 w-56 bg-[#222224] border border-[#27272a] rounded-md p-3 z-[120]">
-                                <h3 className="text-white font-semibold text-xs">{hoveredModel.name}</h3>
-                                <p className="text-white/60 text-[11px] mb-2 leading-tight">{hoveredModel.description}</p>
-                              </div>
-                            )}
-                            <button
-                              onClick={() => {
-                                setSelectedModel(model.name);
-                                setShowAiCompanies(false);
-                                setDesktopAiCompaniesClosing(false);
-                                setSelectedCompany(null);
-                                resetDesktopCompanyRow();
-                                clearModelHoverState();
-                              }}
-                              className={`h-8 px-3 border border-[#27272a] rounded-md flex items-center gap-2 text-white/80 text-sm hover:bg-[#252525] hover:text-white transition-colors duration-300 whitespace-nowrap ${selectedModel === model.name ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c]'}`}
-                              style={{ boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.4)' }}
-                            >
-                              <span className="font-medium text-xs">{model.name}</span>
-                            </button>
-                          </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              });
-            })()}
+                      <button
+                        onClick={(e) => {
+                          setShowSettings(false);
+                          closeDesktopGallerySearch();
+                          setShowTools(false);
+                          setSelectedTool(null);
+                          morphDesktopCompanyIntoRoot(company.name, e.currentTarget);
+                        }}
+                        className="h-8 w-8 lg:h-10 lg:w-10 border border-[#27272a] rounded-md flex items-center justify-center text-white/80 hover:bg-[#252525] hover:text-white transition-all duration-200 ease-in-out bg-[#1a1a1c] shadow-[0_8px_20px_rgba(0,0,0,0.22)]"
+                        style={{
+                          animation: desktopModelCompanyMorph ? undefined : getDesktopModelAnimation(index, desktopModelAnimationMaxIndex),
+                          pointerEvents: desktopModelTransitionInFlight ? 'none' : 'auto',
+                        }}
+                      >
+                        <span className="w-5 h-5 flex items-center justify-center">{renderCompanyLogo(company, false)}</span>
+                      </button>
+                    </div>
+                  ))
+                )}
+
+                {desktopModelControlsMode === 'models' && (desktopModelOptionsVisible || desktopModelControlsClosing) && (
+                  desktopModelOptions.map((model, index) => (
+                    <div
+                      key={model.name}
+                      className="relative opacity-0"
+                      style={{
+                        animation: desktopModelSelectMorph ? undefined : getDesktopModelAnimation(index, desktopModelAnimationMaxIndex),
+                        marginLeft: `${DESKTOP_SETTINGS_BASE_GAP_PX}px`,
+                        ...(desktopModelSelectMorph && desktopModelSelectMorph !== model.name
+                          ? { visibility: 'hidden' as const, opacity: 0 }
+                          : desktopModelSelectMorph === model.name
+                            ? { opacity: 1 }
+                            : {}),
+                      }}
+                      onMouseEnter={() => handleModelHoverEnter(model)}
+                      onMouseLeave={handleModelHoverLeave}
+                    >
+                      {hoveredModel?.name === model.name && (
+                        <div className="absolute left-0 top-full mt-2 w-56 bg-[#222224] border border-[#27272a] rounded-md p-3 z-[120]">
+                          <h3 className="text-white font-semibold text-xs">{hoveredModel.name}</h3>
+                          <p className="text-white/60 text-[11px] mb-2 leading-tight">{hoveredModel.description}</p>
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          const sourceBtn = e.currentTarget;
+                          const labelEl = desktopModelLabelRef.current;
+                          const rootEl = desktopModelRootButtonRef.current;
+                          const sourceRect = sourceBtn.getBoundingClientRect();
+                          // Slide to label position if it exists, otherwise to right of company button + divider gap
+                          const targetLeft = labelEl
+                            ? labelEl.getBoundingClientRect().left
+                            : rootEl
+                              ? rootEl.getBoundingClientRect().right + DESKTOP_SETTINGS_BASE_GAP_PX + 1 + (DESKTOP_SETTINGS_BASE_GAP_PX - 1)
+                              : sourceRect.left;
+                          const deltaX = sourceRect.left - targetLeft;
+                          const chipWrapper = sourceBtn.parentElement;
+
+                          if (chipWrapper && deltaX > 0) {
+                            setDesktopModelSelectMorph(model.name);
+                            chipWrapper.style.zIndex = '10';
+                            const anim = chipWrapper.animate(
+                              [
+                                { transform: 'translateX(0px)' },
+                                { transform: `translateX(-${deltaX}px)` },
+                              ],
+                              {
+                                duration: DESKTOP_MODEL_COMPANY_SHIFT_MS,
+                                easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                                fill: 'forwards',
+                              },
+                            );
+                            const finish = () => {
+                              setSelectedModel(model.name);
+                              setDesktopModelSelectMorph(null);
+                              hideDesktopModelControlsImmediate();
+                            };
+                            anim.finished.then(finish).catch(finish);
+                          } else {
+                            setSelectedModel(model.name);
+                            hideDesktopModelControlsImmediate();
+                          }
+                        }}
+                        className="h-6 px-2 border border-white/10 rounded flex items-center gap-2 text-white/75 text-[11px] font-medium bg-[#131416] shadow-[0_8px_20px_rgba(0,0,0,0.22)] hover:border-transparent hover:bg-[#1a1b1e] hover:text-white transition-all duration-200 ease-in-out whitespace-nowrap"
+                      >
+                        <span>{model.name}</span>
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
             </div>
 
             {/* Tools Container - Desktop - HIDDEN: Will be implemented in Image Studio later
@@ -3158,14 +3647,14 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                 Add Ingredient
               </div>
             )}
-              <div
-                className={`min-h-[32px] lg:min-h-[40px] border rounded-md flex flex-col relative transition-all duration-300 overflow-visible ${
-                  isAnyDropHover
-                  ? 'border-[#272B33] bg-[#111419]'
+            <div
+              className={`min-h-[32px] lg:min-h-[40px] border rounded-md flex flex-col relative transition-all duration-300 overflow-visible ${
+                isAnyDropHover
+                  ? 'border-[#3a3a3d] bg-[#222224]'
                   : isDragActive
-                    ? 'border-[#20252D] bg-[#090B0F]'
-                    : 'border-[#171A20] bg-[#090B0F]'
-                }`}
+                    ? 'border-[#333336] bg-[#1a1a1c]'
+                    : 'border-[#27272a] bg-[#1a1a1c]'
+              }`}
               style={{
                 ...(isDragActive && !isAnyDropHover ? { animation: 'promptDropPulse 2s ease-in-out infinite' } : {}),
               }}
@@ -3176,7 +3665,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   onClick={handleImageClick}
                   className="p-2 ml-1 rounded-md flex items-center justify-center transition-all hover:bg-white/[0.08]"
                 >
-                  <svg className="w-5 h-5 text-[#727B88]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-[#6b7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 </button>
@@ -3206,10 +3695,10 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                         }}
                         maxLength={charLimit}
                         placeholder="Describe what you want to generate..."
-                        className="flex-1 bg-transparent text-[#E7EAF0] text-sm placeholder:text-[#727B88]/70 outline-none focus:outline-none focus:ring-0 border-0 px-1"
+                        className="flex-1 bg-transparent text-[#E0E0E0] text-sm placeholder:text-[#4b5563] outline-none focus:outline-none focus:ring-0 border-0 px-1"
                       />
                       {/* Character Counter */}
-                      <span className={`text-xs mr-2 ${prompt.length >= warningThreshold ? 'text-red-400' : 'text-[#727B88]'}`}>
+                      <span className={`text-xs mr-2 ${prompt.length >= warningThreshold ? 'text-red-400' : 'text-[#4b5563]'}`}>
                         {prompt.length}/{charLimit}
                       </span>
                     </>
@@ -3250,7 +3739,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                       setActiveImageId(null);
                       setHoveredRefImage(null);
                     }}
-                    className="ml-auto flex items-center justify-center bg-[#090B0F] hover:bg-[#111419] border border-[#171A20] rounded-md text-[#727B88] hover:text-white transition-colors duration-300 self-end"
+                    className="ml-auto flex items-center justify-center bg-[#1a1a1c] hover:bg-[#252525] border border-[#27272a] rounded-md text-[#6b7280] hover:text-white transition-colors duration-300 self-end"
                     style={{ width: 24, height: 24, minWidth: 24, minHeight: 24, padding: 0 }}
                   >
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3270,13 +3759,15 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
               ref={desktopSearchSlotRef}
               className="relative overflow-hidden"
               style={{
-                width: showGallerySearch ? `${desktopLibrarySearchWidth}px` : '2.5rem',
-                transition: 'width 220ms ease-in-out',
+                width: hideDesktopSearchSlot ? '0rem' : showGallerySearch ? `${desktopLibrarySearchWidth}px` : '2.5rem',
+                opacity: hideDesktopSearchSlot ? 0 : 1,
+                transition: 'width 220ms ease-in-out, opacity 180ms ease-in-out',
                 height: '2.5rem',
+                pointerEvents: hideDesktopSearchSlot ? 'none' : 'auto',
               }}
             >
               <div
-                className="absolute inset-0 h-10 w-full rounded-md bg-[#090B0F] border border-[#171A20] pr-10 flex items-center"
+                className="absolute inset-0 h-10 w-full rounded-md bg-[#1a1a1c] pr-10 flex items-center"
                 style={{
                   opacity: showGallerySearch ? 1 : 0,
                   transition: 'opacity 220ms ease-in-out',
@@ -3300,7 +3791,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                     onKeyDown={(e) => { if (e.key === 'Escape') closeDesktopGallerySearch(); }}
                     maxLength={500}
                     placeholder="Search..."
-                    className="w-full min-w-0 bg-transparent text-[#E7EAF0] text-sm placeholder:text-[#727B88]/70 border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
+                    className="w-full min-w-0 bg-transparent text-[#E0E0E0] text-sm placeholder:text-[#4b5563] border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
                   />
                 </div>
               </div>
@@ -3313,13 +3804,14 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                       window.clearTimeout(desktopSearchCloseTimeoutRef.current);
                       desktopSearchCloseTimeoutRef.current = null;
                     }
+                    hideDesktopModelControlsImmediate();
                     setShowGallerySearch(true);
                   }
                 }}
                 className="absolute right-0 top-0 z-10 h-10 w-10 flex items-center justify-center"
                 aria-label="Toggle search"
               >
-                <svg className={`w-5 h-5 transition-colors ${showGallerySearch || gallerySearchQuery ? 'text-white' : 'text-[#727B88]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-5 h-5 transition-colors ${showGallerySearch || gallerySearchQuery ? 'text-white' : 'text-[#6b7280]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <circle cx="11" cy="11" r="7" strokeWidth="2" />
                   <path strokeLinecap="round" strokeWidth="2" d="M20 20L16.65 16.65" />
                 </svg>
@@ -3332,9 +3824,32 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                 onClick={() => {
                     setAnimatingSettingsButton(true);
                     setTimeout(() => setAnimatingSettingsButton(false), 500);
-                    setShowSettings(!showSettings);
-                    setShowAiCompanies(false);
-                    setSelectedCompany(null);
+                    if (showSettings) {
+                      closeDesktopSettings();
+                    } else {
+                      if (desktopSettingsCloseTimeoutRef.current) {
+                        window.clearTimeout(desktopSettingsCloseTimeoutRef.current);
+                        desktopSettingsCloseTimeoutRef.current = null;
+                      }
+                      if (desktopAspectOptionsRevealTimeoutRef.current) {
+                        window.clearTimeout(desktopAspectOptionsRevealTimeoutRef.current);
+                        desktopAspectOptionsRevealTimeoutRef.current = null;
+                      }
+                      if (desktopResolutionOptionsRevealTimeoutRef.current) {
+                        window.clearTimeout(desktopResolutionOptionsRevealTimeoutRef.current);
+                        desktopResolutionOptionsRevealTimeoutRef.current = null;
+                      }
+                      setDesktopSettingsClosing(false);
+                      setDesktopSettingsClosingView('default');
+                      setShowResolutions(false);
+                      setShowAspectRatios(false);
+                      setDesktopSettingsView('default');
+                      setDesktopAspectOptionsVisible(false);
+                      setDesktopResolutionOptionsVisible(false);
+                      setShowSettings(true);
+                    }
+                    setShowGallerySearch(false);
+                    hideDesktopModelControlsImmediate();
                     setShowTools(false);
                     setSelectedTool(null);
                   }}
@@ -3343,7 +3858,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   className="h-full w-full flex items-center justify-center"
                 >
                   <svg
-                    className={`w-5 h-5 ${showSettings ? 'text-white' : 'text-[#6b7280]'} ${animatingSettingsButton ? 'animate-gear-spin' : ''}`}
+                    className={`w-5 h-5 ${(showSettings || desktopSettingsClosing) ? 'text-white' : 'text-[#6b7280]'} ${animatingSettingsButton ? 'animate-gear-spin' : ''}`}
                     style={{ transformOrigin: 'center' }}
                     fill="none" stroke="currentColor" viewBox="0 0 24 24"
                   >
@@ -3352,6 +3867,144 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   </svg>
                 </button>
               </div>
+              {showDesktopSettingsPanel && (
+                <div
+                  data-settings-panel
+                  className="absolute right-full top-1/2 z-50 mr-2 hidden -translate-y-1/2 md:flex flex-row-reverse items-center gap-2"
+                  style={{ pointerEvents: desktopSettingsClosing ? 'none' : 'auto' }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="relative flex flex-row-reverse items-center gap-0">
+                    <div
+                      className="relative h-8 overflow-hidden min-w-0 transition-[width,opacity,margin] duration-300 ease-in-out"
+                        style={{
+                          width: desktopSettingsMode === 'aspects' ? '0px' : `${desktopSelectedResolutionButtonWidth}px`,
+                          opacity: desktopSettingsMode === 'aspects' ? 0 : 1,
+                          marginLeft: `${desktopSettingsMode === 'resolutions' ? desktopQualityExpandedEdgeGapPx : DESKTOP_SETTINGS_BASE_GAP_PX}px`,
+                        }}
+                      >
+                      <div className="absolute right-0 top-0 opacity-0" style={{ animation: getDesktopSettingsAnimation(0, desktopSettingsAnimationMaxIndex) }}>
+                        <button
+                          ref={desktopSelectedResolutionButtonRef}
+                          onClick={() => {
+                            if (desktopAspectOptionsRevealTimeoutRef.current) {
+                              window.clearTimeout(desktopAspectOptionsRevealTimeoutRef.current);
+                              desktopAspectOptionsRevealTimeoutRef.current = null;
+                            }
+                            setDesktopAspectOptionsVisible(false);
+                            setDesktopSettingsView((current) => current === 'resolutions' ? 'default' : 'resolutions');
+                          }}
+                          className="h-8 px-3 border border-white/10 rounded-md flex items-center gap-2 text-white/85 text-sm bg-[#1a1a1c] shadow-[0_8px_20px_rgba(0,0,0,0.22)] hover:border-transparent hover:bg-[#252525] hover:text-white transition-all duration-200 ease-in-out"
+                          style={{ pointerEvents: desktopSettingsMode === 'aspects' ? 'none' : 'auto' }}
+                        >
+                          <span className="font-medium">{selectedResolution?.label}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {desktopSettingsMode === 'resolutions' && (desktopResolutionOptionsVisible || desktopSettingsClosing) && (
+                      desktopResolutionOptions.map((res, index) => (
+                        <button
+                          key={res.value}
+                          ref={index === 0 ? desktopLeadingResolutionButtonRef : null}
+                          onClick={() => {
+                            setResolution(res.value);
+                            setDesktopSettingsView('default');
+                          }}
+                          className="h-8 px-3 border border-white/10 rounded-md flex items-center gap-2 text-white/75 text-sm bg-[#131416] shadow-[0_8px_20px_rgba(0,0,0,0.22)] hover:border-transparent hover:bg-[#1a1b1e] hover:text-white transition-all duration-200 ease-in-out opacity-0"
+                            style={{
+                              animation: getDesktopSettingsAnimation(index + 1, desktopSettingsAnimationMaxIndex),
+                              marginLeft: `${DESKTOP_SETTINGS_BASE_GAP_PX}px`,
+                              transform: 'translateX(6px)',
+                            }}
+                          >
+                          <span className="font-medium">{res.label}</span>
+                        </button>
+                      ))
+                    )}
+
+                    <div
+                      ref={desktopAspectRatioTriggerRef}
+                      className="relative overflow-hidden min-w-0 transition-[max-width,opacity,margin,transform] duration-300 ease-in-out"
+                      style={{
+                        maxWidth: desktopSettingsMode === 'resolutions' ? '0px' : '96px',
+                        opacity: desktopSettingsMode === 'resolutions' ? 0 : 1,
+                        marginLeft: desktopSettingsMode === 'aspects' ? '0px' : `${DESKTOP_SETTINGS_BASE_GAP_PX}px`,
+                        transform: desktopSettingsMode === 'aspects' ? 'translateX(6px)' : 'translateX(0)',
+                      }}
+                    >
+                      <div className="relative opacity-0" style={{ animation: getDesktopSettingsAnimation(desktopSettingsMode === 'aspects' ? 0 : 1, desktopSettingsAnimationMaxIndex) }}>
+                        <button
+                          onClick={() => {
+                            if (desktopResolutionOptionsRevealTimeoutRef.current) {
+                              window.clearTimeout(desktopResolutionOptionsRevealTimeoutRef.current);
+                              desktopResolutionOptionsRevealTimeoutRef.current = null;
+                            }
+                            setDesktopResolutionOptionsVisible(false);
+                            setDesktopSettingsView((current) => current === 'aspects' ? 'default' : 'aspects');
+                          }}
+                          className="h-8 px-3 border border-white/10 rounded-md flex items-center gap-2 text-white/85 text-sm bg-[#1a1a1c] shadow-[0_8px_20px_rgba(0,0,0,0.22)] hover:border-transparent hover:bg-[#252525] hover:text-white transition-all duration-200 ease-in-out"
+                          style={{ pointerEvents: desktopSettingsMode === 'resolutions' ? 'none' : 'auto' }}
+                        >
+                          <span className="font-medium">{aspectRatio}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {desktopSettingsMode === 'aspects' && (desktopAspectOptionsVisible || desktopSettingsClosing) && (
+                      desktopAspectRatioOptions.map((ar, index) => (
+                        <button
+                          key={ar.value}
+                          onClick={() => {
+                            setAspectRatio(ar.value);
+                            setDesktopSettingsView('default');
+                          }}
+                          className="h-8 px-3 border border-white/10 rounded-md flex items-center gap-2 text-white/75 text-sm bg-[#131416] shadow-[0_8px_20px_rgba(0,0,0,0.22)] hover:border-transparent hover:bg-[#1a1b1e] hover:text-white transition-all duration-200 ease-in-out opacity-0"
+                          style={{
+                            animation: desktopSettingsClosing
+                              ? getDesktopSettingsAnimation(index + 1, desktopSettingsAnimationMaxIndex)
+                              : `desktopSettingsReveal ${DESKTOP_SETTINGS_DURATION_MS}ms ease-in-out ${index * DESKTOP_SETTINGS_STAGGER_MS}ms both`,
+                            marginLeft: `${DESKTOP_SETTINGS_BASE_GAP_PX}px`,
+                            transform: 'translateX(6px)',
+                          }}
+                        >
+                          <span className="font-medium">{ar.value}</span>
+                        </button>
+                      ))
+                    )}
+
+                    <div
+                      className="overflow-hidden min-w-0 transition-[max-width,opacity,margin] duration-300 ease-in-out"
+                      style={{
+                        maxWidth: desktopSettingsMode === 'default' ? '80px' : '0px',
+                        opacity: desktopSettingsMode === 'default' ? 1 : 0,
+                        marginLeft: `${DESKTOP_SETTINGS_BASE_GAP_PX}px`,
+                      }}
+                    >
+                      <div className="h-8 border border-white/10 rounded-md flex items-center px-1 gap-0 bg-[#131416] opacity-0 shadow-[0_8px_20px_rgba(0,0,0,0.22)]" style={{ animation: getDesktopSettingsAnimation(2, desktopSettingsAnimationMaxIndex) }}>
+                        <button
+                          onClick={handleDecrement}
+                          className="w-7 h-7 flex items-center justify-center rounded-md bg-transparent text-white/60 hover:bg-transparent hover:text-white transition-colors duration-200 ease-in-out cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          disabled={count <= 1}
+                        >
+                          <span className="text-lg leading-none translate-x-[2px]">-</span>
+                        </button>
+                        <div className="w-6 flex items-center justify-center">
+                          <span className="text-white/80 text-sm font-medium">{count}</span>
+                        </div>
+                        <button
+                          onClick={handleIncrement}
+                          className="w-7 h-7 flex items-center justify-center rounded-md bg-transparent text-white/60 hover:bg-transparent hover:text-white transition-colors duration-200 ease-in-out cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          disabled={count >= (currentModelCapabilities?.maxCount || 10)}
+                        >
+                          <span className="text-lg leading-none">+</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Favorites Button Container */}
@@ -3372,8 +4025,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   setShowHistory(false);
                 }
                 setShowSettings(false);
-                setShowAiCompanies(false);
-                setSelectedCompany(null);
+                hideDesktopModelControlsImmediate();
                 setShowTools(false);
                 setSelectedTool(null);
               }}
@@ -3568,115 +4220,6 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
 
         {/* Uploaded Images Container - moved inside prompt container */}
 
-        {/* Settings Controls - Desktop only (hidden on mobile, mobile has its own at bottom) */}
-        {showSettings && (
-          <div data-settings-panel className={`absolute left-0 right-0 hidden md:flex flex-row flex-wrap md:flex-row-reverse items-start gap-2 justify-start p-2 z-50 ${uploadedImages.length > 0 ? 'top-14 mt-1' : 'top-full'}`}>
-            {/* Resolution Selector - Appears first (rightmost) */}
-            <div
-              className="relative animate-fade-in"
-              style={{ animationDelay: '0ms' }}
-            >
-              <button
-                onClick={() => {
-                  setShowResolutions(!showResolutions);
-                  setShowAspectRatios(false);
-                }}
-                className="h-8 px-3 border border-[#27272a] rounded-md flex items-center gap-2 text-white/80 text-sm bg-[#1a1a1c] hover:bg-[#252525] hover:text-white transition-colors duration-300"
-              >
-                <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                </svg>
-                <span className="font-medium">{selectedResolution?.label}</span>
-              </button>
-
-              {/* Resolution Dropdown */}
-              {showResolutions && (
-                <div className="absolute top-full right-0 mt-2 w-40 bg-[#222224] border border-[#27272a] rounded-md overflow-hidden z-50 p-1">
-                  {resolutions.filter((res) => isResolutionSupported(res.value)).map((res) => (
-                    <button
-                      key={res.value}
-                      onClick={() => {
-                        setResolution(res.value);
-                        setShowResolutions(false);
-                      }}
-                      className={`w-full h-7 px-3 flex items-center justify-between rounded-md transition-colors duration-300 hover:bg-[#2a2a2d] cursor-pointer ${res.value === resolution ? 'bg-[#2a2a2d] text-white' : ''}`}
-                    >
-                      <span className="text-sm font-medium text-white/80">{res.label}</span>
-                      <span className="text-xs text-white/50">{res.time}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Aspect Ratio Selector - Appears second */}
-            <div
-              ref={desktopAspectRatioTriggerRef}
-              className="relative animate-fade-in"
-              style={{ animationDelay: '100ms' }}
-            >
-              <button
-                onClick={() => {
-                  setShowAspectRatios(!showAspectRatios);
-                  setShowResolutions(false);
-                }}
-                className="h-8 px-3 border border-[#27272a] rounded-md flex items-center gap-2 text-white/80 text-sm bg-[#1a1a1c] hover:bg-[#252525] hover:text-white transition-colors duration-300"
-              >
-                <span className="text-base text-white/60">{selectedAspectRatio?.icon}</span>
-                <span className="font-medium">{aspectRatio}</span>
-              </button>
-
-              {/* Aspect Ratio Dropdown */}
-              {showAspectRatios && (
-                <div
-                  className="absolute top-full mt-2 bg-[#222224] border border-[#27272a] rounded-md overflow-y-auto overflow-x-hidden z-50 p-1"
-                  style={{
-                    ...desktopAspectRatioDropdownStyle,
-                  }}
-                >
-                  {aspectRatios.filter((ar) => isAspectRatioSupported(ar.value)).map((ar) => (
-                      <button
-                        key={ar.value}
-                        onClick={() => {
-                          setAspectRatio(ar.value);
-                          setShowAspectRatios(false);
-                        }}
-                        className={`w-full h-7 px-3 flex items-center gap-3 rounded-md transition-colors duration-300 hover:bg-[#2a2a2d] cursor-pointer ${ar.value === aspectRatio ? 'bg-[#2a2a2d] text-white' : ''}`}
-                      >
-                        <span className="text-base text-white/60">{ar.icon}</span>
-                        <span className="text-sm font-medium text-white/80">{ar.value}</span>
-                        <span className="text-sm ml-auto text-white/50">{ar.label}</span>
-                      </button>
-                    ))}
-                </div>
-              )}
-            </div>
-
-            {/* Counter Control - Appears third (leftmost) */}
-            <div
-              className="h-8 border border-[#27272a] rounded-md flex items-center px-1 gap-1 animate-fade-in bg-[#1a1a1c]"
-              style={{ animationDelay: '200ms' }}
-            >
-              <button
-                onClick={handleDecrement}
-                className="w-7 h-7 flex items-center justify-center text-white/60 hover:text-white hover:bg-[#252525] rounded-md transition-colors duration-300"
-                disabled={count <= 1}
-              >
-                <span className="text-lg leading-none">−</span>
-              </button>
-              <div className="w-8 flex items-center justify-center">
-                <span className="text-white/80 text-sm font-medium">{count}</span>
-              </div>
-              <button
-                onClick={handleIncrement}
-                className="w-7 h-7 flex items-center justify-center text-white/60 hover:text-white hover:bg-[#252525] rounded-md transition-colors duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled={count >= (currentModelCapabilities?.maxCount || 10)}
-              >
-                <span className="text-lg leading-none">+</span>
-              </button>
-            </div>
-          </div>
-        )}
         </div>
 
         {/* Error Display */}
@@ -3740,12 +4283,12 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
             </div>
           ) : (
           /* Vertical stack of image answer containers - Midjourney style */
-          <div className="flex flex-col-reverse md:flex-col gap-6 pt-2 pb-4">
+          <div className="flex flex-col-reverse md:flex-col gap-6 pt-0 pb-4">
             {/* Virtualized grid library view — React Virtuoso windowed rendering */}
             {gridItems.length > 0 && (
               <GalleryErrorBoundary>
               <div
-                className="image-answer-container ml-3 mt-2 rounded-md py-0 px-0 md:ml-0 md:mt-0 md:py-4 md:px-3 relative bg-black"
+                className="image-answer-container ml-3 mt-0 rounded-md py-0 px-0 md:ml-0 md:mt-0 md:py-0 md:px-3 relative bg-black"
                 style={{ backgroundColor: 'rgba(255, 0, 0, 0.18)' }}
               >
                 <div className="image-preview-container-wrapper relative w-full" style={{ flexGrow: 1 }}>
@@ -3753,7 +4296,11 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                   <div ref={galleryContainerRef} className="w-full" style={{ overflowAnchor: 'none' }}>
                     <style>{`
                       @keyframes sweep { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-                      @keyframes letterFade { 0%,8% { opacity: 0; } 16%,92% { opacity: 1; } 100% { opacity: 0; } }
+                      @keyframes letterWave {
+                        0%, 100% { opacity: 0.5; transform: translateY(0); text-shadow: none; }
+                        30% { opacity: 1; transform: translateY(-2px); text-shadow: 0 0 6px rgba(255,255,255,0.25); }
+                        60% { opacity: 0.7; transform: translateY(0); text-shadow: none; }
+                      }
                       @keyframes virtuosoTileFadeIn { 0% { opacity: 0; transform: translateY(12px); } 100% { opacity: 1; transform: translateY(0); } }
                       @keyframes searchBarExpand { 0% { opacity: 0; transform: scaleX(0.3); } 100% { opacity: 1; transform: scaleX(1); } }
                       @keyframes desktopCompanyEnter { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
@@ -3782,7 +4329,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
                               const tw = il?.width ?? galleryMinItemWidthPx;
                               const th = il?.height ?? galleryRowHeightPx;
                               const cardStyle: React.CSSProperties = { borderRadius: `${cardRadius}px`, overflow: 'hidden', width: `${tw}px`, height: `${th}px`, flex: '0 0 auto' };
-                              if (item.kind === 'loading') return (<div key={item.key} data-tile-id={item.key} className="relative group border border-[#2a2a2d] virtuoso-tile-mount" style={{ ...cardStyle, backgroundColor: '#0a0a0c', animationDelay: `${tileIndex * 60}ms` }}><div className="w-full h-full relative overflow-hidden bg-[#111113]"><div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)', backgroundSize: '200% 100%', animation: 'sweep 2s ease-in-out infinite' }} /><div className="absolute inset-0 flex items-center justify-center z-10"><span className="text-white/40 text-sm font-medium tracking-wide">{'xenomorphing'.split('').map((letter, i) => (<span key={i} style={{ animation: 'letterFade 3.6s infinite', animationDelay: `${i * 0.3}s` }}>{letter}</span>))}</span></div></div></div>);
+                              if (item.kind === 'loading') return (<div key={item.key} data-tile-id={item.key} className="relative group border border-[#2a2a2d] virtuoso-tile-mount" style={{ ...cardStyle, backgroundColor: '#0a0a0c', animationDelay: `${tileIndex * 60}ms` }}><div className="w-full h-full relative overflow-hidden bg-[#111113]"><div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)', backgroundSize: '200% 100%', animation: 'sweep 2s ease-in-out infinite' }} /><div className="absolute inset-0 flex items-center justify-center z-10"><span className="text-white/60 text-[11px] font-medium tracking-[0.25em] uppercase">{'xenomorphing'.split('').map((letter, i) => (<span key={i} className="inline-block" style={{ animation: 'letterWave 2.4s ease-in-out infinite', animationDelay: `${i * 0.12}s` }}>{letter}</span>))}</span></div></div></div>);
                               if (item.kind === 'collage') { const { collage, assets: ca } = item; const cover = ca[0]?.imageUrl; return (<DroppableTile key={item.key} id={item.key}>{({ dropNodeRef, isOver: colOver }) => (<div ref={dropNodeRef} data-tile-id={collage.id} role="button" tabIndex={0} className={`relative group cursor-pointer overflow-hidden transition-all duration-200 ${colOver ? 'shadow-[0_0_20px_rgba(255,255,255,0.2)]' : 'hover:shadow-[0_0_15px_rgba(255,255,255,0.12)]'}`} style={{ ...cardStyle, background: '#0c0c0e', WebkitTapHighlightColor: 'transparent', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none', outline: 'none' }} onClick={() => setExpandedCollageId(expandedCollageId === collage.id ? null : collage.id)}>{cover && <img src={cover} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" style={{ filter: 'blur(40px) brightness(0.35) saturate(1.4)', transform: 'scale(1.3)', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }} />}<div className="absolute inset-0 flex items-center justify-center" style={{ perspective: '800px' }}><div style={{ position: 'relative', width: '65%', height: '62%' }}>{ca.slice(0, Math.min(3, ca.length)).reverse().map((img, ci, arr) => { const t=arr.length; const rot=t===1?0:(ci-(t-1)/2)*12; const xs=t===1?0:(ci-(t-1)/2)*8; const sc=t===1?1:0.88+ci*0.06; return <img key={img.key} src={img.imageUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" style={{ borderRadius: 6, transform: `rotate(${rot}deg) translateX(${xs}px) scale(${sc})`, boxShadow: `0 ${6+ci*3}px ${14+ci*6}px rgba(0,0,0,${0.35+ci*0.1})`, zIndex: ci, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }} />; })}</div></div><div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" /><div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20"><div className="relative"><button onClick={(e) => { e.stopPropagation(); setInlineRenamingCollageId(collage.id); }} className="image-action-button p-2 rounded-lg backdrop-blur-md bg-[#1a1a1c]/95 text-white/80 hover:bg-[#3a3a3d] hover:text-white transition-all"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button><span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">Rename</span></div><div className="relative"><button onClick={(e) => { e.stopPropagation(); setCollages(prev => prev.map(c => c.id === collage.id ? { ...c, isFavorite: !c.isFavorite } : c)); }} className={`image-action-button p-2 rounded-lg backdrop-blur-sm transition-all ${collage.isFavorite ? 'bg-[#27272a] text-white' : 'bg-[#1a1a1c]/95 text-white/80 hover:bg-[#3a3a3d] hover:text-white'}`}><svg className="w-4 h-4" fill={collage.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg></button><span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">Favorite</span></div><div className="relative"><button onClick={(e) => { e.stopPropagation(); setCollages(prev => prev.filter(c => c.id !== collage.id)); }} className="image-action-button p-2 rounded-lg backdrop-blur-sm bg-[#1a1a1c]/80 text-white/80 hover:bg-white/20 hover:text-white transition-all"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button><span className="image-action-tooltip pointer-events-none absolute top-full mt-1 right-0 whitespace-nowrap rounded-md bg-black px-2 py-1 text-[10px] text-white transition-all z-30">Delete</span></div></div><div className="absolute inset-x-0 bottom-0 px-3 pb-3 pt-8 bg-gradient-to-t from-black/90 to-transparent z-10 flex items-end justify-between">{inlineRenamingCollageId === collage.id ? (<div className="flex items-center gap-1.5 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}><input ref={inlineRenameInputRef} type="text" defaultValue={collage.name} autoFocus className="font-semibold text-white/95 bg-transparent border-none outline-none focus:outline-none focus:ring-0 focus:border-none shadow-none p-0 m-0 min-w-0 flex-1" style={{ fontSize: '30px', boxShadow: 'none' }} onKeyDown={(e) => { if (e.key==='Enter'){const v=e.currentTarget.value.trim();if(v)setCollages(prev=>prev.map(c=>c.id===collage.id?{...c,name:v}:c));setInlineRenamingCollageId(null);}if(e.key==='Escape')setInlineRenamingCollageId(null);}} onBlur={(e)=>{const v=e.currentTarget.value.trim();if(v)setCollages(prev=>prev.map(c=>c.id===collage.id?{...c,name:v}:c));setInlineRenamingCollageId(null);}} /><button onClick={()=>{const v=inlineRenameInputRef.current?.value.trim();if(v)setCollages(prev=>prev.map(c=>c.id===collage.id?{...c,name:v}:c));setInlineRenamingCollageId(null);}} className="p-0.5 text-white/70 hover:text-white transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></button><button onClick={()=>setInlineRenamingCollageId(null)} className="p-0.5 text-white/70 hover:text-white transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button></div>) : (<p className="font-semibold text-white/95 truncate" style={{ fontSize: '30px' }}>{collage.name}</p>)}<span className="shrink-0 bg-white/20 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{collage.imageKeys.length}</span></div></div>)}</DroppableTile>); }
                               if (item.kind !== 'image') return null;
                               const { asset } = item;
@@ -5503,238 +6050,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
           );
         })()}
 
-        {/* Settings Panel — opens upward */}
-        {false && showSettings && (
-          <div className="px-3 pb-2 animate-fade-in">
-            <div className="bg-[#1a1a1c] border border-[#27272a] rounded-md p-3 flex flex-wrap items-center gap-3">
-              {/* Count */}
-              <div className="h-8 border border-[#27272a] rounded-md flex items-center px-1 gap-1 bg-[#1a1a1c]">
-                <button onClick={handleDecrement} className="w-7 h-7 flex items-center justify-center text-white/60 hover:text-white hover:bg-[#252525] rounded-md transition-colors duration-300" disabled={count <= 1}>
-                  <span className="text-lg leading-none">−</span>
-                </button>
-                <div className="w-8 flex items-center justify-center">
-                  <span className="text-white/80 text-sm font-medium">{count}</span>
-                </div>
-                <button onClick={handleIncrement} className="w-7 h-7 flex items-center justify-center text-white/60 hover:text-white hover:bg-[#252525] rounded-md transition-colors duration-300 disabled:opacity-40" disabled={count >= (currentModelCapabilities?.maxCount || 10)}>
-                  <span className="text-lg leading-none">+</span>
-                </button>
-              </div>
-              {/* Aspect Ratio */}
-              <div className="relative">
-                <button
-                  onClick={() => { setShowAspectRatios(!showAspectRatios); setShowResolutions(false); }}
-                  className="h-8 px-3 border border-[#27272a] rounded-md flex items-center gap-2 text-white/80 text-sm bg-[#1a1a1c] hover:bg-[#252525] transition-colors duration-300"
-                >
-                  <span className="text-white/60">{selectedAspectRatio?.icon}</span>
-                  <span>{aspectRatio}</span>
-                </button>
-                {showAspectRatios && (
-                  <div className="absolute bottom-full mb-2 left-0 bg-[#222224] border border-[#27272a] rounded-md p-1 z-[210] max-h-[200px] overflow-y-auto">
-                    {aspectRatios.filter((ar) => isAspectRatioSupported(ar.value)).map((ar) => (
-                      <button key={ar.value} onClick={() => { setAspectRatio(ar.value); setShowAspectRatios(false); }}
-                        className={`w-full h-7 px-3 flex items-center gap-2 rounded-md text-sm transition-colors duration-300 hover:bg-[#2a2a2d] ${ar.value === aspectRatio ? 'bg-[#2a2a2d] text-white' : 'text-white/80'}`}
-                      >
-                        <span className="text-white/60">{ar.icon}</span>
-                        <span>{ar.value}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {/* Resolution */}
-              <div className="relative">
-                <button
-                  onClick={() => { setShowResolutions(!showResolutions); setShowAspectRatios(false); }}
-                  className="h-8 px-3 border border-[#27272a] rounded-md flex items-center gap-2 text-white/80 text-sm bg-[#1a1a1c] hover:bg-[#252525] transition-colors duration-300"
-                >
-                  <span>{selectedResolution?.label}</span>
-                </button>
-                {showResolutions && (
-                  <div className="absolute bottom-full mb-2 right-0 bg-[#222224] border border-[#27272a] rounded-md p-1 z-[210] w-36">
-                    {resolutions.filter((res) => isResolutionSupported(res.value)).map((res) => (
-                      <button key={res.value} onClick={() => { setResolution(res.value); setShowResolutions(false); }}
-                        className={`w-full h-7 px-3 flex items-center justify-between rounded-md text-sm transition-colors duration-300 hover:bg-[#2a2a2d] ${res.value === resolution ? 'bg-[#2a2a2d] text-white' : 'text-white/80'}`}
-                      >
-                        <span>{res.label}</span>
-                        <span className="text-white/50 text-xs">{res.time}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Search Panel — opens upward */}
-        {false && (showSettings || mobileSettingsClosing) && (
-          <div
-            className="absolute bottom-full right-3 mb-2 flex flex-col-reverse items-end gap-2 z-[210]"
-            data-settings-panel
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-          >
-            <div className="relative flex items-center gap-2 z-10" style={{ animation: mobileSettingsClosing ? 'mobileControlFadeOut 220ms ease-in 0ms both' : 'mobileControlFadeIn 280ms ease-out 140ms both' }}>
-              {(showMobileCountControls || closingMobileCountControls) && (
-                <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 flex w-max max-w-[calc(100vw-4.5rem)] flex-wrap content-start justify-end gap-1">
-                  <button
-                    onClick={handleDecrement}
-                    className="h-6 min-w-[26px] px-1.5 border border-[#27272a] rounded-md flex items-center justify-center text-white/60 hover:text-white hover:bg-[#252525] bg-[#1a1a1c] transition-colors duration-300 disabled:opacity-40"
-                    disabled={count <= 1}
-                    style={{ animation: `${closingMobileCountControls ? 'mobileInlineItemFadeOut' : 'mobileInlineItemFadeIn'} ${closingMobileCountControls ? MOBILE_INLINE_DURATION_MS : 280}ms ${closingMobileCountControls ? 'ease-in' : 'ease-out'} ${closingMobileCountControls ? MOBILE_INLINE_STAGGER_MS * 2 : MOBILE_INLINE_STAGGER_MS * 2}ms both` }}
-                  >
-                    <span className="text-lg leading-none">-</span>
-                  </button>
-                  <div className="h-6 min-w-[30px] px-1.5 border border-[#3a3a3d] rounded-md flex items-center justify-center bg-[#252525] text-white text-[10px] font-medium" style={{ animation: `${closingMobileCountControls ? 'mobileInlineItemFadeOut' : 'mobileInlineItemFadeIn'} ${closingMobileCountControls ? MOBILE_INLINE_DURATION_MS : 280}ms ${closingMobileCountControls ? 'ease-in' : 'ease-out'} ${MOBILE_INLINE_STAGGER_MS}ms both` }}>
-                    {count}
-                  </div>
-                  <button
-                    onClick={handleIncrement}
-                    className="h-6 min-w-[26px] px-1.5 border border-[#27272a] rounded-md flex items-center justify-center text-white/60 hover:text-white hover:bg-[#252525] bg-[#1a1a1c] transition-colors duration-300 disabled:opacity-40"
-                    disabled={count >= (currentModelCapabilities?.maxCount || 10)}
-                    style={{ animation: `${closingMobileCountControls ? 'mobileInlineItemFadeOut' : 'mobileInlineItemFadeIn'} ${closingMobileCountControls ? MOBILE_INLINE_DURATION_MS : 280}ms ${closingMobileCountControls ? 'ease-in' : 'ease-out'} ${closingMobileCountControls ? 0 : 0}ms both` }}
-                  >
-                    <span className="inline-flex h-full items-center justify-center leading-none -translate-y-px text-lg">+</span>
-                  </button>
-                </div>
-              )}
-              <button
-                onClick={() => {
-                  if (showMobileCountControls || closingMobileCountControls) {
-                    closeMobileCountControlsAnimated();
-                  } else {
-                    if (mobileCountControlsCloseTimeoutRef.current) {
-                      window.clearTimeout(mobileCountControlsCloseTimeoutRef.current);
-                      mobileCountControlsCloseTimeoutRef.current = null;
-                    }
-                    setClosingMobileCountControls(false);
-                    setShowMobileCountControls(true);
-                    setShowAspectRatios(false);
-                    setShowResolutions(false);
-                    setClosingMobileAspectRatios(false);
-                    setClosingMobileResolutions(false);
-                  }
-                }}
-                className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-[11px] font-medium transition-colors duration-300 ${
-                  showMobileCountControls ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
-                }`}
-              >
-                {count}
-              </button>
-            </div>
-
-            <div className="relative flex items-center gap-2 z-10" style={{ animation: mobileSettingsClosing ? 'mobileControlFadeOut 220ms ease-in 70ms both' : 'mobileControlFadeIn 280ms ease-out 70ms both' }}>
-              {(showResolutions || closingMobileResolutions) && (
-                <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 flex w-max max-w-[calc(100vw-4.5rem)] flex-wrap content-start justify-end gap-1">
-                  {resolutions.filter((res) => isResolutionSupported(res.value)).map((res, index, filtered) => (
-                    <button
-                      key={res.value}
-                      onClick={() => { setResolution(res.value); closeMobileResolutionsAnimated(); }}
-                      className={`h-6 px-1.5 border border-[#27272a] rounded-md flex items-center justify-center text-[9px] leading-none whitespace-nowrap font-medium transition-colors duration-300 ${
-                        res.value === resolution ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
-                      }`}
-                      style={{ animation: `${closingMobileResolutions ? 'mobileInlineItemFadeOut' : 'mobileInlineItemFadeIn'} ${closingMobileResolutions ? MOBILE_INLINE_DURATION_MS : 280}ms ${closingMobileResolutions ? 'ease-in' : 'ease-out'} ${(closingMobileResolutions ? (filtered.length - 1 - index) : (filtered.length - 1 - index)) * MOBILE_INLINE_STAGGER_MS}ms both` }}
-                    >
-                      <span className="inline-flex h-full items-center justify-center leading-none -translate-y-px">{res.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <button
-                onClick={() => {
-                  if (showResolutions || closingMobileResolutions) {
-                    closeMobileResolutionsAnimated();
-                  } else {
-                    if (mobileResolutionsCloseTimeoutRef.current) {
-                      window.clearTimeout(mobileResolutionsCloseTimeoutRef.current);
-                      mobileResolutionsCloseTimeoutRef.current = null;
-                    }
-                    setClosingMobileResolutions(false);
-                    setShowResolutions(true);
-                    setShowAspectRatios(false);
-                    setShowMobileCountControls(false);
-                    setClosingMobileAspectRatios(false);
-                    setClosingMobileCountControls(false);
-                  }
-                }}
-                className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.08em] transition-colors duration-300 ${
-                  showResolutions ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
-                }`}
-              >
-                {(selectedResolution?.label || resolution).replace(/\s+/g, '')}
-              </button>
-            </div>
-
-            <div className="relative flex items-center gap-2 z-10" style={{ animation: mobileSettingsClosing ? 'mobileControlFadeOut 220ms ease-in 140ms both' : 'mobileControlFadeIn 280ms ease-out 0ms both' }}>
-              {(showAspectRatios || closingMobileAspectRatios) && (
-                <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 flex w-max max-w-[calc(100vw-4.5rem)] flex-wrap content-start justify-end gap-1">
-                  {aspectRatios.filter((ar) => isAspectRatioSupported(ar.value)).map((ar, index, filtered) => (
-                    <button
-                      key={ar.value}
-                      onClick={() => { setAspectRatio(ar.value); closeMobileAspectRatiosAnimated(); }}
-                      className={`h-6 px-1.5 border border-[#27272a] rounded-md flex items-center justify-center gap-0.5 text-[9px] leading-none whitespace-nowrap text-center transition-colors duration-300 ${
-                        ar.value === aspectRatio ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
-                      }`}
-                      style={{ animation: `${closingMobileAspectRatios ? 'mobileInlineItemFadeOut' : 'mobileInlineItemFadeIn'} ${closingMobileAspectRatios ? MOBILE_INLINE_DURATION_MS : 280}ms ${closingMobileAspectRatios ? 'ease-in' : 'ease-out'} ${(closingMobileAspectRatios ? (filtered.length - 1 - index) : (filtered.length - 1 - index)) * MOBILE_INLINE_STAGGER_MS}ms both` }}
-                    >
-                      <span className="inline-flex h-full w-2.5 items-center justify-center leading-none text-white/60 -translate-y-px">{ar.icon}</span>
-                      <span className="inline-flex h-full items-center leading-none">{ar.value}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <button
-                onClick={() => {
-                  if (showAspectRatios || closingMobileAspectRatios) {
-                    closeMobileAspectRatiosAnimated();
-                  } else {
-                    if (mobileAspectRatiosCloseTimeoutRef.current) {
-                      window.clearTimeout(mobileAspectRatiosCloseTimeoutRef.current);
-                      mobileAspectRatiosCloseTimeoutRef.current = null;
-                    }
-                    setClosingMobileAspectRatios(false);
-                    setShowAspectRatios(true);
-                    setShowResolutions(false);
-                    setShowMobileCountControls(false);
-                    setClosingMobileResolutions(false);
-                    setClosingMobileCountControls(false);
-                  }
-                }}
-                className={`h-8 w-8 border border-[#27272a] rounded-md flex items-center justify-center text-sm transition-colors duration-300 ${
-                  showAspectRatios ? 'bg-[#252525] text-white border-[#3a3a3d]' : 'bg-[#1a1a1c] text-white/80 hover:bg-[#252525] hover:text-white'
-                }`}
-              >
-                <span className="inline-flex h-full items-center justify-center leading-none text-white/70 -translate-y-px">{selectedAspectRatio?.icon || '□'}</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {false && showGallerySearch && (
-          <div className="px-3 pb-2 animate-fade-in">
-            <div className="h-10 bg-[#1a1a1c] border border-[#27272a] rounded-md flex items-center px-3 gap-2">
-              <svg className="w-4 h-4 text-[#6b7280] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="7" strokeWidth="2" />
-                <path strokeLinecap="round" strokeWidth="2" d="M20 20L16.65 16.65" />
-              </svg>
-              <input
-                type="text"
-                value={gallerySearchQuery}
-                onChange={(e) => setGallerySearchQuery(e.target.value.slice(0, 500))}
-                autoFocus
-                placeholder="Search generated prompts..."
-                className="flex-1 bg-transparent text-[#E0E0E0] text-sm placeholder:text-[#4b5563] border-0 outline-none focus:outline-none focus:ring-0 shadow-none"
-              />
-              {gallerySearchQuery && (
-                <button onClick={() => setGallerySearchQuery('')} className="text-[#6b7280] hover:text-white transition-colors">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Image References — shows when images are attached */}
         {/* Main Bottom Row: Model + Prompt + Actions */}
