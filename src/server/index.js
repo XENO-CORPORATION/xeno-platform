@@ -41,6 +41,7 @@ const gzipAsync = promisify(zlib.gzip);
 import { integrateContainerProvisioning } from './containerIntegration.js';
 import fileSystemRoutes from './routes/fileSystemRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import cliAuthRoutes from './routes/cliAuthRoutes.js';
 import conversionRoutes from './routes/conversionRoutes.js';
 import videoRoutes from './routes/videoRoutes.js';
 import imageRoutes, { imagePublicRoutes } from './routes/imageRoutes.js';
@@ -417,6 +418,14 @@ const cleanTextContent = (text) => {
 
 // Integrate custom routes
 console.log('🔧 Integrating custom routes...');
+
+// CLI authentication routes (mounted BEFORE /api/auth so the more-specific
+// path always wins). Browser-OAuth + device-code flows for xeno-agent-cli.
+// authMiddleware is applied inline only on /complete and /device-code/verify
+// inside cliAuthRoutes.js — the other endpoints are public (the session_id
+// IS the secret).
+app.use('/api/auth/cli', databaseMiddleware, cliAuthRoutes);
+console.log('🔐 CLI auth routes integrated: /api/auth/cli/*');
 
 // Authentication routes with database middleware
 app.use('/api/auth', databaseMiddleware, authRoutes);

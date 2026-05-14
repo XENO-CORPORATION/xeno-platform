@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Connect XENO CLI · XENO Studio</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg" />
+<meta name="referrer" content="no-referrer" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none';" />
+<style>
+  :root {
+    --bg: #08080a;
+    --surface: #0e0e10;
+    --surface-2: #141418;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.16);
+    --text: #e8e8ea;
+    --text-dim: rgba(232,232,234,0.55);
+    --text-faint: rgba(232,232,234,0.35);
+    --accent: #ffffff;
+    --accent-text: #08080a;
+    --danger: #ff6b6b;
+    --success: #6bd47d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 32px;
+    color: var(--text-dim);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .card {
+    width: 100%;
+    max-width: 440px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px 28px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    margin: 0 0 24px;
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    letter-spacing: 0.02em;
+  }
+  input[type="email"], input[type="password"], input[type="text"] {
+    width: 100%;
+    padding: 11px 13px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.15s ease;
+  }
+  input:focus { outline: none; border-color: var(--border-strong); }
+  input.code {
+    font-family: ui-monospace, SFMono-Regular, 'Menlo', 'Consolas', monospace;
+    letter-spacing: 0.18em;
+    font-size: 18px;
+    text-align: center;
+    text-transform: uppercase;
+    padding: 14px 13px;
+  }
+  .field { margin-bottom: 14px; }
+  button {
+    cursor: pointer;
+    padding: 11px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--border-strong); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  button.primary:hover:not(:disabled) { opacity: 0.9; }
+  .actions { display: flex; gap: 10px; margin-top: 22px; }
+  .actions > button { flex: 1; }
+  .user-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 22px;
+  }
+  .avatar {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2b2b30, #15151a);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .user-name { font-size: 13px; color: var(--text); margin: 0; }
+  .user-email { font-size: 12px; color: var(--text-dim); margin: 1px 0 0; }
+  .signout {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--text-faint);
+    font-size: 12px;
+    padding: 6px 8px;
+  }
+  .signout:hover { color: var(--text); }
+  .warn {
+    font-size: 12px;
+    color: var(--text-faint);
+    line-height: 1.55;
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(255,107,107,0.05);
+    border-left: 2px solid rgba(255,107,107,0.45);
+    border-radius: 4px;
+  }
+  .warn strong { color: var(--danger); font-weight: 600; }
+  .error {
+    color: var(--danger);
+    font-size: 13px;
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  .status {
+    text-align: center;
+    padding: 12px 0;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  .footer {
+    margin-top: 28px;
+    color: var(--text-faint);
+    font-size: 12px;
+    text-align: center;
+  }
+  .footer a { color: var(--text-dim); text-decoration: none; }
+  .footer a:hover { color: var(--text); }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-top-color: var(--text);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: -2px;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .check {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    border: 1.5px solid var(--success);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px;
+    color: var(--success);
+    font-size: 22px;
+    line-height: 1;
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="brand"><span class="dot"></span><span>XENO Studio</span></div>
+
+<div class="card" id="card">
+
+  <!-- LOADING -->
+  <div id="view-loading">
+    <div class="status"><span class="spinner"></span>Checking your session…</div>
+  </div>
+
+  <!-- LOGIN -->
+  <div id="view-login" class="hidden">
+    <h1>Sign in to continue</h1>
+    <p class="subtitle">Sign in to your XENO account, then enter the code from your terminal.</p>
+    <form id="login-form">
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" required autocomplete="username" />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" type="password" required autocomplete="current-password" />
+      </div>
+      <div class="error" id="login-error"></div>
+      <div class="actions">
+        <button type="submit" class="primary" id="login-btn">Sign in</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- CODE ENTRY -->
+  <div id="view-code" class="hidden">
+    <h1>Connect XENO CLI</h1>
+    <p class="subtitle">Enter the one-time code shown in your terminal to authorize the device.</p>
+    <div class="user-row">
+      <div class="avatar" id="avatar">X</div>
+      <div>
+        <p class="user-name" id="display-name">—</p>
+        <p class="user-email" id="user-email">—</p>
+      </div>
+      <button type="button" class="signout" id="signout-btn">Sign out</button>
+    </div>
+    <form id="code-form">
+      <div class="field">
+        <label for="code">One-time code</label>
+        <input id="code" class="code" type="text" autocomplete="one-time-code" inputmode="text" maxlength="9" placeholder="XXXX-XXXX" required />
+      </div>
+      <div class="error" id="code-error"></div>
+      <div class="actions">
+        <button type="submit" class="primary" id="verify-btn">Connect</button>
+      </div>
+    </form>
+    <div class="warn">
+      <strong>Heads up:</strong> Device codes are a common phishing target. Only enter a code you generated yourself by running <code>xeno</code> in your terminal. Never share this code with anyone.
+    </div>
+  </div>
+
+  <!-- DONE -->
+  <div id="view-done" class="hidden">
+    <div class="check">&#10003;</div>
+    <h1 style="text-align:center;">Connected</h1>
+    <p class="subtitle" style="text-align:center;">Return to your terminal — the CLI is now authorized. You can close this tab.</p>
+  </div>
+
+</div>
+
+<div class="footer">XENO Studio &middot; <a href="/">xenostudio.ai</a></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var views = ['loading', 'login', 'code', 'done'];
+  function show(name) {
+    views.forEach(function (v) {
+      var el = $('view-' + v);
+      if (el) el.classList.toggle('hidden', v !== name);
+    });
+  }
+
+  var TOKEN_KEY = 'xeno_token';
+  var token = null;
+  try { token = localStorage.getItem(TOKEN_KEY); } catch (e) { token = null; }
+  var currentUser = null;
+
+  function setError(id, msg) {
+    var el = $(id);
+    if (el) el.textContent = msg || '';
+  }
+
+  async function api(path, opts) {
+    opts = opts || {};
+    var headers = opts.headers || {};
+    headers['Content-Type'] = 'application/json';
+    if (opts.auth && token) headers['Authorization'] = 'Bearer ' + token;
+    var res = await fetch(path, {
+      method: opts.method || 'GET',
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      credentials: 'same-origin',
+    });
+    var data = null;
+    try { data = await res.json(); } catch (e) {}
+    return { status: res.status, ok: res.ok, data: data };
+  }
+
+  function renderUser(u) {
+    currentUser = u;
+    var name = u.display_name || u.username || u.email || 'Account';
+    $('display-name').textContent = name;
+    $('user-email').textContent = u.email || '';
+    var initial = (name.trim().charAt(0) || 'X').toUpperCase();
+    $('avatar').textContent = initial;
+  }
+
+  async function checkToken() {
+    if (!token) return false;
+    var r = await api('/api/auth/me', { auth: true });
+    if (r.ok && r.data && r.data.user) { renderUser(r.data.user); return true; }
+    if (r.status === 401) {
+      try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+      token = null;
+    }
+    return false;
+  }
+
+  async function init() {
+    show('loading');
+    var ok = await checkToken();
+    if (ok) {
+      show('code');
+      setTimeout(function () { var el = $('code'); if (el) el.focus(); }, 30);
+    } else {
+      show('login');
+      setTimeout(function () { var el = $('email'); if (el) el.focus(); }, 30);
+    }
+  }
+
+  // Auto-format code input
+  $('code').addEventListener('input', function (e) {
+    var v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (v.length > 8) v = v.slice(0, 8);
+    if (v.length > 4) v = v.slice(0, 4) + '-' + v.slice(4);
+    e.target.value = v;
+  });
+
+  $('login-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    setError('login-error', '');
+    var btn = $('login-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Signing in…';
+    try {
+      var email = $('email').value.trim();
+      var password = $('password').value;
+      var r = await api('/api/auth/login', {
+        method: 'POST',
+        body: { email: email, password: password },
+      });
+      if (r.ok && r.data && r.data.token) {
+        token = r.data.token;
+        try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
+        if (r.data.user) renderUser(r.data.user); else await checkToken();
+        show('code');
+        setTimeout(function () { var el = $('code'); if (el) el.focus(); }, 30);
+      } else {
+        var msg = (r.data && (r.data.error || r.data.message)) || 'Sign-in failed. Check your email and password.';
+        setError('login-error', msg);
+      }
+    } catch (err) {
+      setError('login-error', 'Network error. Please try again.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    }
+  });
+
+  $('code-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    setError('code-error', '');
+    var raw = $('code').value.trim().toUpperCase();
+    if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(raw)) {
+      setError('code-error', 'Code must be 8 characters (XXXX-XXXX).');
+      return;
+    }
+    var btn = $('verify-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Connecting…';
+    try {
+      var r = await api('/api/auth/cli/device-code/verify', {
+        method: 'POST',
+        auth: true,
+        body: { user_code: raw },
+      });
+      if (r.ok) {
+        show('done');
+      } else if (r.status === 404) {
+        setError('code-error', 'Invalid code. Double-check the code in your terminal.');
+      } else if (r.status === 410) {
+        setError('code-error', 'This code has expired. Restart sign-in in your terminal.');
+      } else if (r.status === 409) {
+        setError('code-error', 'This code was already used.');
+      } else if (r.status === 401) {
+        try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+        token = null;
+        show('login');
+      } else {
+        setError('code-error', (r.data && r.data.error) || 'Could not verify. Please try again.');
+      }
+    } catch (err) {
+      setError('code-error', 'Network error. Please try again.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Connect';
+    }
+  });
+
+  $('signout-btn').addEventListener('click', function () {
+    try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    token = null;
+    currentUser = null;
+    show('login');
+    setTimeout(function () { var el = $('email'); if (el) el.focus(); }, 30);
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

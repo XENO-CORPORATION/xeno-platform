@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Authorize XENO CLI · XENO Studio</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg" />
+<meta name="referrer" content="no-referrer" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none';" />
+<style>
+  :root {
+    --bg: #08080a;
+    --surface: #0e0e10;
+    --surface-2: #141418;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.16);
+    --text: #e8e8ea;
+    --text-dim: rgba(232,232,234,0.55);
+    --text-faint: rgba(232,232,234,0.35);
+    --accent: #ffffff;
+    --accent-text: #08080a;
+    --danger: #ff6b6b;
+    --success: #6bd47d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 32px;
+    color: var(--text-dim);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .brand .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px 28px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    margin: 0 0 24px;
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    letter-spacing: 0.02em;
+  }
+  input[type="email"], input[type="password"], input[type="text"] {
+    width: 100%;
+    padding: 11px 13px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.15s ease;
+  }
+  input:focus {
+    outline: none;
+    border-color: var(--border-strong);
+  }
+  .field { margin-bottom: 14px; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  button {
+    cursor: pointer;
+    padding: 11px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--border-strong); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  button.primary:hover:not(:disabled) { opacity: 0.9; }
+  .actions { display: flex; gap: 10px; margin-top: 22px; }
+  .actions > button { flex: 1; }
+  .user-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 24px;
+  }
+  .avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2b2b30, #15151a);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .user-name { font-size: 14px; color: var(--text); margin: 0; }
+  .user-email { font-size: 12px; color: var(--text-dim); margin: 2px 0 0; }
+  .scope {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.55;
+    padding: 12px 14px;
+    background: var(--surface-2);
+    border-radius: 8px;
+    border-left: 2px solid var(--border-strong);
+  }
+  .scope strong { color: var(--text); font-weight: 500; }
+  .error {
+    color: var(--danger);
+    font-size: 13px;
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  .status {
+    text-align: center;
+    padding: 12px 0;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  .status.success { color: var(--success); }
+  .footer {
+    margin-top: 28px;
+    color: var(--text-faint);
+    font-size: 12px;
+    text-align: center;
+  }
+  .footer a { color: var(--text-dim); text-decoration: none; }
+  .footer a:hover { color: var(--text); }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-top-color: var(--text);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: -2px;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="brand"><span class="dot"></span><span>XENO Studio</span></div>
+
+<div class="card" id="card">
+  <!-- ERROR (no session) -->
+  <div id="view-invalid" class="hidden">
+    <h1>Invalid CLI auth link</h1>
+    <p class="subtitle">This link is missing a session identifier. Please rerun the <code>xeno</code> sign-in command from your terminal.</p>
+  </div>
+
+  <!-- LOADING -->
+  <div id="view-loading">
+    <div class="status"><span class="spinner"></span>Checking your session…</div>
+  </div>
+
+  <!-- LOGIN -->
+  <div id="view-login" class="hidden">
+    <h1>Sign in to XENO</h1>
+    <p class="subtitle">A XENO command-line tool is requesting access. Sign in to continue.</p>
+    <form id="login-form">
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" required autocomplete="username" />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" type="password" required autocomplete="current-password" />
+      </div>
+      <div class="error" id="login-error"></div>
+      <div class="actions">
+        <button type="submit" class="primary" id="login-btn">Sign in</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- AUTHORIZE -->
+  <div id="view-authorize" class="hidden">
+    <h1>Authorize XENO CLI</h1>
+    <p class="subtitle">A XENO command-line tool wants to sign in to your account.</p>
+    <div class="user-row">
+      <div class="avatar" id="avatar">X</div>
+      <div>
+        <p class="user-name" id="display-name">—</p>
+        <p class="user-email" id="user-email">—</p>
+      </div>
+    </div>
+    <div class="scope">
+      Granting access lets the CLI sign in as <strong id="scope-email">you</strong> and use your XENO plan and credits. You can revoke access at any time by running <code>xeno /logout</code> or by signing out from your account settings.
+    </div>
+    <div class="error" id="auth-error"></div>
+    <div class="actions">
+      <button id="cancel-btn">Cancel</button>
+      <button id="authorize-btn" class="primary">Authorize</button>
+    </div>
+  </div>
+
+  <!-- DONE -->
+  <div id="view-done" class="hidden">
+    <h1>You're signed in</h1>
+    <p class="subtitle">Return to your terminal — the CLI should now be authenticated. You can close this tab.</p>
+  </div>
+
+  <!-- CANCELLED -->
+  <div id="view-cancelled" class="hidden">
+    <h1>Cancelled</h1>
+    <p class="subtitle">The CLI sign-in request was cancelled. You can close this tab.</p>
+  </div>
+
+  <!-- EXPIRED / NOT FOUND -->
+  <div id="view-expired" class="hidden">
+    <h1>Link expired</h1>
+    <p class="subtitle">This sign-in link is no longer valid. Please rerun the <code>xeno</code> command in your terminal to start a new sign-in.</p>
+  </div>
+</div>
+
+<div class="footer">XENO Studio &middot; <a href="/">xenostudio.ai</a></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var views = ['invalid', 'loading', 'login', 'authorize', 'done', 'cancelled', 'expired'];
+  function show(name) {
+    views.forEach(function (v) {
+      var el = $('view-' + v);
+      if (el) el.classList.toggle('hidden', v !== name);
+    });
+  }
+
+  var qs = new URLSearchParams(window.location.search);
+  var sessionId = qs.get('session');
+  if (!sessionId) {
+    show('invalid');
+    return;
+  }
+
+  var TOKEN_KEY = 'xeno_token';
+  var token = null;
+  try { token = localStorage.getItem(TOKEN_KEY); } catch (e) { token = null; }
+  var currentUser = null;
+
+  function setError(id, msg) {
+    var el = $(id);
+    if (el) el.textContent = msg || '';
+  }
+
+  async function api(path, opts) {
+    opts = opts || {};
+    var headers = opts.headers || {};
+    headers['Content-Type'] = 'application/json';
+    if (opts.auth && token) headers['Authorization'] = 'Bearer ' + token;
+    var res = await fetch(path, {
+      method: opts.method || 'GET',
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      credentials: 'same-origin',
+    });
+    var data = null;
+    try { data = await res.json(); } catch (e) { /* no body */ }
+    return { status: res.status, ok: res.ok, data: data };
+  }
+
+  function renderUser(u) {
+    currentUser = u;
+    var name = u.display_name || u.username || u.email || 'Account';
+    var email = u.email || '';
+    $('display-name').textContent = name;
+    $('user-email').textContent = email;
+    $('scope-email').textContent = email || name;
+    var initial = (name.trim().charAt(0) || 'X').toUpperCase();
+    $('avatar').textContent = initial;
+  }
+
+  async function checkToken() {
+    if (!token) return false;
+    var r = await api('/api/auth/me', { auth: true });
+    if (r.ok && r.data && r.data.user) {
+      renderUser(r.data.user);
+      return true;
+    }
+    if (r.status === 401) {
+      try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+      token = null;
+    }
+    return false;
+  }
+
+  async function init() {
+    show('loading');
+    var ok = await checkToken();
+    if (ok) {
+      show('authorize');
+    } else {
+      show('login');
+      setTimeout(function () { var el = $('email'); if (el) el.focus(); }, 30);
+    }
+  }
+
+  // Login
+  $('login-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    setError('login-error', '');
+    var btn = $('login-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Signing in…';
+    try {
+      var email = $('email').value.trim();
+      var password = $('password').value;
+      var r = await api('/api/auth/login', {
+        method: 'POST',
+        body: { email: email, password: password },
+      });
+      if (r.ok && r.data && r.data.token) {
+        token = r.data.token;
+        try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
+        if (r.data.user) {
+          renderUser(r.data.user);
+        } else {
+          await checkToken();
+        }
+        show('authorize');
+      } else {
+        var msg = (r.data && (r.data.error || r.data.message)) || 'Sign-in failed. Check your email and password.';
+        setError('login-error', msg);
+      }
+    } catch (err) {
+      setError('login-error', 'Network error. Please try again.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    }
+  });
+
+  // Authorize
+  $('authorize-btn').addEventListener('click', async function () {
+    setError('auth-error', '');
+    var btn = $('authorize-btn');
+    btn.disabled = true;
+    $('cancel-btn').disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Authorizing…';
+    try {
+      var r = await api('/api/auth/cli/complete', {
+        method: 'POST',
+        auth: true,
+        body: { session_id: sessionId },
+      });
+      if (r.ok && r.data && r.data.redirect_uri) {
+        // Tell the user-agent to drop a referrer-free navigation to localhost.
+        // Some browsers (Safari) get tetchy about https→http transitions; using
+        // window.location.href is the most reliable.
+        window.location.href = r.data.redirect_uri;
+        // Fallback display in case the redirect is blocked.
+        setTimeout(function () { show('done'); }, 1200);
+      } else if (r.status === 401) {
+        try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+        token = null;
+        show('login');
+      } else if (r.status === 404) {
+        show('expired');
+      } else if (r.status === 410) {
+        show('expired');
+      } else if (r.status === 409) {
+        setError('auth-error', 'This session was already completed.');
+      } else {
+        setError('auth-error', (r.data && r.data.error) || 'Could not authorize. Please try again.');
+      }
+    } catch (err) {
+      setError('auth-error', 'Network error. Please try again.');
+    } finally {
+      btn.disabled = false;
+      $('cancel-btn').disabled = false;
+      btn.textContent = 'Authorize';
+    }
+  });
+
+  // Cancel
+  $('cancel-btn').addEventListener('click', async function () {
+    var btn = $('cancel-btn');
+    btn.disabled = true;
+    $('authorize-btn').disabled = true;
+    try {
+      await api('/api/auth/cli/cancel', { method: 'POST', body: { session_id: sessionId } });
+    } catch (e) { /* best-effort */ }
+    show('cancelled');
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>
