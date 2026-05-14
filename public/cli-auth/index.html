@@ -186,6 +186,46 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .hidden { display: none !important; }
+  .oauth-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin: 0 0 18px;
+  }
+  .oauth-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    text-decoration: none;
+  }
+  .oauth-btn:hover { background: #1a1a20; border-color: var(--border-strong); }
+  .oauth-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 6px 0 18px;
+    color: var(--text-faint);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .divider::before, .divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
 </style>
 </head>
 <body>
@@ -208,6 +248,21 @@
   <div id="view-login" class="hidden">
     <h1>Sign in to XENO</h1>
     <p class="subtitle">A XENO command-line tool is requesting access. Sign in to continue.</p>
+    <div class="oauth-grid">
+      <a id="oauth-google" class="oauth-btn" href="#" title="Sign in with Google">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" d="M21.35 11.1H12v3.21h5.35c-.23 1.4-.94 2.58-2.02 3.36v2.78h3.26c1.9-1.75 3-4.33 3-7.36 0-.7-.07-1.37-.18-2z"/><path fill="#fff" opacity=".85" d="M12 21c2.7 0 4.96-.9 6.6-2.45l-3.26-2.78c-.9.6-2.06.97-3.34.97-2.57 0-4.74-1.74-5.52-4.07H3.13v2.55C4.78 18.78 8.13 21 12 21z"/><path fill="#fff" opacity=".75" d="M6.48 12.67A5.4 5.4 0 0 1 6.18 11c0-.58.1-1.15.3-1.67V6.78H3.13A8.99 8.99 0 0 0 2.18 11c0 1.46.35 2.83.95 4.22l3.35-2.55z"/><path fill="#fff" opacity=".65" d="M12 5.9c1.45 0 2.75.5 3.78 1.47l2.83-2.83C16.96 2.95 14.7 2 12 2 8.13 2 4.78 4.22 3.13 7.45L6.48 10c.78-2.33 2.95-4.1 5.52-4.1z"/></svg>
+        Google
+      </a>
+      <a id="oauth-github" class="oauth-btn" href="#" title="Sign in with GitHub">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.15-1.1-1.46-1.1-1.46-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.34 1.09 2.9.83.1-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.1.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.03a9.6 9.6 0 0 1 5 0c1.9-1.3 2.75-1.03 2.75-1.03.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.69 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.76c0 .26.18.58.69.48A10 10 0 0 0 12 2z"/></svg>
+        GitHub
+      </a>
+      <a id="oauth-twitter" class="oauth-btn" href="#" title="Sign in with X">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" d="M18.244 2H21.5l-7.43 8.49L22.74 22h-6.83l-5.34-6.99L4.4 22H1.14l7.94-9.07L1.26 2h7l4.82 6.37L18.24 2zm-2.4 18.18h1.86L8.24 3.7H6.27l9.57 16.48z"/></svg>
+        X
+      </a>
+    </div>
+    <div class="divider">or sign in with email</div>
     <form id="login-form">
       <div class="field">
         <label for="email">Email</label>
@@ -288,8 +343,32 @@
 
   var TOKEN_KEY = 'xeno_token';
   var token = null;
-  try { token = localStorage.getItem(TOKEN_KEY); } catch (e) { token = null; }
+
+  // OAuth providers bounce back here with ?token=<jwt>&isNew=<bool>. Capture
+  // the token, persist it like a normal email/password login, and strip those
+  // params so a refresh doesn't carry them around.
+  var oauthToken = qs.get('token');
+  if (oauthToken) {
+    try { localStorage.setItem(TOKEN_KEY, oauthToken); } catch (e) {}
+    token = oauthToken;
+    qs.delete('token');
+    qs.delete('isNew');
+    var clean = window.location.pathname + (qs.toString() ? '?' + qs.toString() : '');
+    window.history.replaceState({}, '', clean);
+  } else {
+    try { token = localStorage.getItem(TOKEN_KEY); } catch (e) { token = null; }
+  }
   var currentUser = null;
+
+  // Wire OAuth provider buttons. The platform's /api/auth/<provider> endpoint
+  // takes a returnUrl, signs the user in, then redirects back to that URL
+  // with ?token=<jwt>&isNew=<bool> appended.
+  var returnUrl = '/cli-auth?session=' + encodeURIComponent(sessionId);
+  var providers = ['google', 'github', 'twitter'];
+  providers.forEach(function (p) {
+    var btn = $('oauth-' + p);
+    if (btn) btn.href = '/api/auth/' + p + '?returnUrl=' + encodeURIComponent(returnUrl);
+  });
 
   function setError(id, msg) {
     var el = $(id);

@@ -75,7 +75,9 @@ function buildOAuthRedirectUrl(returnUrl, token, isNew) {
     const sep = returnUrl.includes("?") ? "&" : "?";
     return `${returnUrl}${sep}token=${token}&isNew=${isNew}`;
   }
-  return `${FRONTEND_URL}${returnUrl}?token=${token}&isNew=${isNew}`;
+  // Respect any existing query string on returnUrl (e.g. /cli-auth?session=XXX).
+  const sep = returnUrl && returnUrl.includes("?") ? "&" : "?";
+  return `${FRONTEND_URL}${returnUrl}${sep}token=${token}&isNew=${isNew}`;
 }
 
 // For desktop app: serve an HTML page that triggers the deep link
