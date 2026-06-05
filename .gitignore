@@ -28,3 +28,10 @@ dist-ssr
 .env.local
 .env.development
 .env.production
+
+# Design references (local-only, large AI mockups)
+art/
+
+# Local dev logs & scratch
+.dev-logs/
+tmp-*

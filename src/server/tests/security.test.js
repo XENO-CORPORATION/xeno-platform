@@ -75,6 +75,7 @@ async function testUnauthenticatedEndpoints() {
   });
 
   await assertRequest('GET', '/api/ai/models', 401, 'GET /api/ai/models requires auth');
+  await assertRequest('GET', '/api/ai/local-model-catalog', 401, 'GET /api/ai/local-model-catalog requires auth');
 
   // OpenAI proxy endpoints
   await assertRequest('POST', '/api/openai/images/generations', 401, 'POST /api/openai/images/generations requires auth', {

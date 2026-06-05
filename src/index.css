@@ -1,9 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Header mega-menu preview cross-fade */
+@keyframes xenoMenuFade {
+  from { opacity: 0; transform: translateY(4px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Showcase content morph — opacity only, so the frame stays static */
+@keyframes xenoFadeContent {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Demo panel reveal — expands the container downward on right-click */
+@keyframes xenoExpandDown {
+  from { max-height: 0; opacity: 0; }
+  to   { max-height: 480px; opacity: 1; }
+}
+
+/* Animated click-hint icon: cursor presses, then spark lines burst from the click point */
+@keyframes hintCursorPress {
+  0%, 48% { transform: translate(0, 0); }
+  56%     { transform: translate(-1px, -1px); }
+  66%, 100% { transform: translate(0, 0); }
+}
+@keyframes hintSpark {
+  0%, 52% { opacity: 0; transform: scale(0.1); }
+  64%     { opacity: 1; transform: scale(1); }
+  82%     { opacity: 0; transform: scale(1.25); }
+  100%    { opacity: 0; transform: scale(1.25); }
+}
+.hint-cursor { animation: hintCursorPress 2s ease-in-out infinite; }
+.hint-sparks {
+  animation: hintSpark 2s ease-in-out infinite;
+  transform-box: view-box;
+  transform-origin: 9px 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hint-cursor, .hint-sparks { animation: none; }
+  .hint-sparks { opacity: 1; transform: none; }
+}
+
 :root {
+  color-scheme: dark;
   /* Colors */
   --primary-bg: #0a0a0b;
   --secondary-bg: #111113;
