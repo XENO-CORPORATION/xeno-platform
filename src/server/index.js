@@ -55,6 +55,7 @@ import collaborationRoutes from './routes/collaborationRoutes.js';
 import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
+import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import { databaseMiddleware } from './middleware/database.js';
 import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
@@ -72,6 +73,7 @@ import { requestLoggerMiddleware, logger } from './middleware/requestLogger.js';
 import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } from './middleware/cdnOptimization.js';
 import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter } from './middleware/rateLimiter.js';
 import { runAllMigrations } from './services/migrationRunner.js';
+import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
 
 // PostgreSQL connection
@@ -522,6 +524,13 @@ console.log('🔄 Replicate API proxy available at: /api/image/replicate/*');
 // Xeno AI proxy routes (credit-tracked generation)
 app.use('/api/xeno', databaseMiddleware, authMiddleware, xenoRoutes);
 console.log('🎯 Xeno AI proxy routes integrated: /api/xeno/*');
+
+// Marketplace routes (catalog, commerce, developer publishing, admin review).
+// Auth is applied PER-ROUTE inside the router: catalog/listing reads use
+// optionalAuthMiddleware (public, entitlement-aware), while commerce/developer/
+// admin routes require authMiddleware. Mounting with only databaseMiddleware.
+app.use('/api/marketplace', databaseMiddleware, marketplaceRoutes);
+console.log('🛒 Marketplace routes integrated: /api/marketplace/*');
 
 // Image Studio public routes (no auth required for xeno-flow)
 app.use('/api/image', databaseMiddleware, imagePublicRoutes);
@@ -5167,10 +5176,13 @@ runMigrations(pool).catch(err => {
   console.error('Migration warning:', err.message);
 });
 
-// Run versioned migrations (Round 8 infrastructure tables)
-runAllMigrations(pool).catch(err => {
-  console.error('[Migrations] Versioned migration warning:', err.message);
-});
+// Run versioned migrations (Round 8 infrastructure tables + marketplace),
+// then seed the first-party `official` marketplace catalog (idempotent).
+runAllMigrations(pool)
+  .then(() => seedMarketplace(pool))
+  .catch(err => {
+    console.error('[Migrations] Versioned migration/seed warning:', err.message);
+  });
 
 // Initialize background job queues
 initBackgroundJobs(pool).catch(err => {
