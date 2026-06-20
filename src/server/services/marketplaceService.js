@@ -56,6 +56,16 @@ export function serializeListingSummary(row) {
     installCount: Number(row.install_count ?? 0),
     pricing: Array.isArray(row.pricing) ? row.pricing.map(serializePricing) : [],
     publishedAt: row.published_at,
+    // Install metadata for app-native listings (executableName, installDirName,
+    // versionUrl). Consumed by Hub to drive the creativeApps install pipeline.
+    installMeta: row.install_meta ?? null,
+    // The first-party creative-app id an app-native listing maps onto (seed slug
+    // convention is `app-<id>`, e.g. app-pixel → pixel). Explicit so Hub need not
+    // parse the slug.
+    nativeAppId:
+      row.kind === 'app-native' && typeof row.slug === 'string' && row.slug.startsWith('app-')
+        ? row.slug.slice(4)
+        : null,
   };
 }
 
