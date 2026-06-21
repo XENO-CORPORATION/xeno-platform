@@ -100,6 +100,23 @@ try {
   const dir = mkdtempSync(join(tmpdir(), 'xeno-remote-runner-'));
   const runner = join(dir, 'runner.mjs');
   writeFileSync(runner, "console.log('runner:' + process.env.XENO_REMOTE_PROMPT);\nsetTimeout(() => console.log('runner:done'), 100);\n");
+
+  process.env.XENO_REMOTE_RUNNER_COMMAND = join(dir, 'missing-runner.exe');
+  delete process.env.XENO_REMOTE_RUNNER_ARGS_JSON;
+
+  const missingCommandStatus = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/status`);
+  const missingCommandPayload = await missingCommandStatus.json();
+  assert.equal(missingCommandPayload.ok, false);
+  assert.deepEqual(missingCommandPayload.capabilities, []);
+  assert.match(missingCommandPayload.error, /command not found/i);
+
+  const missingCommandStart = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'missing command' }),
+  });
+  assert.equal(missingCommandStart.status, 503);
+
   process.env.XENO_REMOTE_RUNNER_COMMAND = process.execPath;
   process.env.XENO_REMOTE_RUNNER_ARGS_JSON = JSON.stringify([42]);
 
