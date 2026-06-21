@@ -95,6 +95,7 @@ async function testUnauthenticatedEndpoints() {
   await assertRequest('POST', '/api/xeno-search', 401, 'POST /api/xeno-search requires auth', {
     body: { query: 'test' },
   });
+  await assertRequest('GET', '/api/xeno/remote/status', 401, 'GET /api/xeno/remote/status requires auth');
   await assertRequest('POST', '/api/fetch-metadata', 401, 'POST /api/fetch-metadata requires auth', {
     body: { url: 'https://example.com' },
   });
