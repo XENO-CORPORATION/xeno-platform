@@ -3,6 +3,9 @@
  * so we can check/deduct per-user credits on the server side.
  */
 
+import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
+
 import { Router } from 'express';
 import Xeno from 'xeno-ai';
 import { getCreditCost } from '../utils/creditCosts.js';
@@ -10,6 +13,8 @@ import { deductCredits, refundCredits, logUsage } from '../utils/creditTransacti
 
 const router = Router();
 const XENO_API_KEY = process.env.XENO_API_KEY || '';
+const remoteRuns = new Map();
+const MAX_REMOTE_EVENTS = 500;
 
 const xenoClient = XENO_API_KEY
   ? new Xeno({
@@ -105,16 +110,193 @@ function insufficientCreditsResponse(res, required, currentCredits) {
   });
 }
 
+function remoteRunnerCommand() {
+  return process.env.XENO_REMOTE_RUNNER_COMMAND?.trim() || '';
+}
+
+function remoteRunnerCapabilities() {
+  return remoteRunnerCommand()
+    ? ['runs.start', 'runs.get', 'runs.events', 'runs.attach', 'runs.stop']
+    : [];
+}
+
+function remoteRunRef(run) {
+  return {
+    runId: run.runId,
+    status: run.status,
+    url: `/api/xeno/remote/runs/${run.runId}`,
+  };
+}
+
+function remoteRunFor(req, res) {
+  const run = remoteRuns.get(req.params.runId);
+  if (!run) {
+    res.status(404).json({ error: 'Remote run not found' });
+    return null;
+  }
+  if (run.userId !== (req.user?.id || 'anonymous')) {
+    res.status(404).json({ error: 'Remote run not found' });
+    return null;
+  }
+  return run;
+}
+
+function addRemoteEvent(run, event) {
+  const next = { timestamp: new Date().toISOString(), ...event };
+  run.events.push(next);
+  if (run.events.length > MAX_REMOTE_EVENTS) run.events.splice(0, run.events.length - MAX_REMOTE_EVENTS);
+  for (const subscriber of run.subscribers) subscriber(next);
+}
+
+function remoteRunnerArgs(run, request) {
+  let args = ['run', '--json', '{prompt}'];
+  if (process.env.XENO_REMOTE_RUNNER_ARGS_JSON) {
+    const parsed = JSON.parse(process.env.XENO_REMOTE_RUNNER_ARGS_JSON);
+    if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string')) {
+      throw new Error('XENO_REMOTE_RUNNER_ARGS_JSON must be a JSON string array');
+    }
+    args = parsed;
+  }
+  const replacements = {
+    '{runId}': run.runId,
+    '{prompt}': request.prompt,
+    '{cwd}': request.cwd || '',
+    '{model}': request.model || '',
+    '{permissionMode}': request.permissionMode || '',
+  };
+  return args.map((arg) => replacements[arg] ?? arg);
+}
+
+function startRemoteRunner(run, request) {
+  const command = remoteRunnerCommand();
+  if (!command) throw new Error('Hosted remote runner is not configured');
+
+  const child = spawn(command, remoteRunnerArgs(run, request), {
+    cwd: process.env.XENO_REMOTE_RUNNER_CWD || process.cwd(),
+    env: {
+      ...process.env,
+      XENO_REMOTE_RUN_ID: run.runId,
+      XENO_REMOTE_USER_ID: run.userId,
+      XENO_REMOTE_PROMPT: request.prompt,
+      XENO_REMOTE_REQUESTED_CWD: request.cwd || '',
+      XENO_REMOTE_MODEL: request.model || '',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+
+  run.child = child;
+  run.status = 'running';
+  addRemoteEvent(run, { type: 'run_started', runId: run.runId });
+
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (text) => addRemoteEvent(run, { type: 'stdout', text }));
+  child.stderr.on('data', (text) => addRemoteEvent(run, { type: 'stderr', text }));
+  child.on('error', (error) => {
+    run.status = 'failed';
+    run.endedAt = new Date().toISOString();
+    addRemoteEvent(run, { type: 'run_failed', error: error.message });
+  });
+  child.on('close', (code, signal) => {
+    run.exitCode = code;
+    run.signal = signal;
+    run.endedAt = new Date().toISOString();
+    if (run.status !== 'cancelled') run.status = code === 0 ? 'completed' : 'failed';
+    addRemoteEvent(run, { type: 'run_finished', exitCode: code, signal, status: run.status });
+  });
+}
+
 // ---------- GET /api/xeno/remote/status ----------
 router.get('/remote/status', (_req, res) => {
+  const capabilities = remoteRunnerCapabilities();
   res.json({
     schemaVersion: 1,
     ok: true,
     service: 'xeno-platform-remote',
     version: process.env.npm_package_version || '1.0.0',
-    capabilities: [],
-    message: 'Hosted remote runs are not deployed on this backend yet.',
+    capabilities,
+    message: capabilities.includes('runs.start')
+      ? 'Hosted remote runner is configured.'
+      : 'Hosted remote runs are not deployed on this backend yet.',
   });
+});
+
+// ---------- POST /api/xeno/remote/runs ----------
+router.post('/remote/runs', (req, res) => {
+  if (!remoteRunnerCommand()) {
+    return res.status(503).json({ error: 'Hosted remote runner is not configured' });
+  }
+  const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
+  if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+
+  const run = {
+    runId: `remote_${randomUUID()}`,
+    userId: req.user?.id || 'anonymous',
+    status: 'queued',
+    prompt,
+    requestedCwd: req.body?.cwd,
+    createdAt: new Date().toISOString(),
+    events: [],
+    subscribers: new Set(),
+  };
+  remoteRuns.set(run.runId, run);
+
+  try {
+    startRemoteRunner(run, { ...req.body, prompt });
+  } catch (error) {
+    run.status = 'failed';
+    run.endedAt = new Date().toISOString();
+    addRemoteEvent(run, { type: 'run_failed', error: error.message });
+  }
+
+  return res.status(202).json({ schemaVersion: 1, run: remoteRunRef(run) });
+});
+
+// ---------- GET /api/xeno/remote/runs/:runId ----------
+router.get('/remote/runs/:runId', (req, res) => {
+  const run = remoteRunFor(req, res);
+  if (!run) return;
+  res.json({ schemaVersion: 1, run: remoteRunRef(run) });
+});
+
+router.get('/remote/runs/:runId/events', (req, res) => {
+  const run = remoteRunFor(req, res);
+  if (!run) return;
+  const tail = Math.max(0, Number(req.query.tail) || run.events.length);
+  res.json({ schemaVersion: 1, events: run.events.slice(-tail) });
+});
+
+router.get('/remote/runs/:runId/attach', (req, res) => {
+  const run = remoteRunFor(req, res);
+  if (!run) return;
+  const tail = Math.max(0, Number(req.query.tail) || run.events.length);
+  if (req.query.follow !== 'true') {
+    return res.json({ schemaVersion: 1, run: remoteRunRef(run), events: run.events.slice(-tail) });
+  }
+
+  res.writeHead(200, {
+    'content-type': 'text/event-stream',
+    'cache-control': 'no-cache',
+    connection: 'keep-alive',
+  });
+  for (const event of run.events.slice(-tail)) res.write(`data: ${JSON.stringify(event)}\n\n`);
+  const subscriber = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+  run.subscribers.add(subscriber);
+  req.on('close', () => run.subscribers.delete(subscriber));
+  if (['completed', 'failed', 'cancelled'].includes(run.status)) res.end();
+});
+
+router.post('/remote/runs/:runId/stop', (req, res) => {
+  const run = remoteRunFor(req, res);
+  if (!run) return;
+  if (!['completed', 'failed', 'cancelled'].includes(run.status)) {
+    run.status = 'cancelled';
+    run.endedAt = new Date().toISOString();
+    run.child?.kill('SIGTERM');
+    addRemoteEvent(run, { type: 'run_cancelled', runId: run.runId });
+  }
+  res.json({ schemaVersion: 1, run: remoteRunRef(run) });
 });
 
 // ---------- POST /api/xeno/images/generate ----------

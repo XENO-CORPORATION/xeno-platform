@@ -55,7 +55,7 @@ All routes are mounted under `/api/`. See `API_REFERENCE.md` for every endpoint.
 | `/api/image` | imageRoutes.js | Mixed | Image generation (Replicate, Xeno Flow), projects, assets, sessions |
 | `/api/video` | videoRoutes.js | JWT | Video projects, assets, rendering, export, sessions |
 | `/api/ai` | aiRoutes.js | JWT | AI chat completions, model catalog |
-| `/api/xeno` | xenoRoutes.js | JWT | Unified generation API plus CLI remote status metadata |
+| `/api/xeno` | xenoRoutes.js | JWT | Unified generation API plus env-gated CLI remote runs |
 | `/api/youtube` | youtubeRoutes.js | Mixed | YouTube channel management, analytics, videos, groups |
 | `/api/filesystem` | fileSystemRoutes.js | Mixed | Cloud file storage, folders, upload, search, history |
 | `/api/conversion` | conversionRoutes.js | Optional | File format conversion (batch, HTML-to-DOCX, etc.) |
