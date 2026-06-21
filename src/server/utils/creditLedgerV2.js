@@ -258,7 +258,7 @@ async function insertUsageLog(client, userId, event, costMicro) {
      VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,'ok',$9,$10,'POST', now())`,
     [
       userId, event.surface, event.operation, event.model ?? null, event.provider ?? null,
-      costMicro.toString(), event.inputTokens ?? null, event.outputTokens ?? null, event.transactionId,
+      costMicro.toString(), event.inputTokens ?? 0, event.outputTokens ?? 0, event.transactionId,
       `/api/v2/ledger/usage:${event.operation}`,
     ],
   );
