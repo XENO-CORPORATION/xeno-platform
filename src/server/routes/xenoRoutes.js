@@ -5,6 +5,8 @@
 
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
+import { existsSync } from 'fs';
+import { delimiter, isAbsolute, join } from 'path';
 
 import { Router } from 'express';
 import Xeno from 'xeno-ai';
@@ -127,8 +129,25 @@ function remoteRunnerArgsTemplate() {
   return parsed;
 }
 
+function remoteRunnerCommandExists(command) {
+  if (isAbsolute(command) || command.includes('/') || command.includes('\\')) {
+    return existsSync(command);
+  }
+
+  const extensions = process.platform === 'win32'
+    ? ['', ...(process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';')]
+    : [''];
+  return (process.env.PATH || '').split(delimiter).some((dir) => (
+    dir && extensions.some((extension) => existsSync(join(dir, `${command}${extension}`)))
+  ));
+}
+
 function remoteRunnerConfigError() {
-  if (!remoteRunnerCommand()) return '';
+  const command = remoteRunnerCommand();
+  if (!command) return '';
+  if (!remoteRunnerCommandExists(command)) {
+    return `Hosted remote runner command not found: ${command}`;
+  }
   try {
     remoteRunnerArgsTemplate();
     return '';
