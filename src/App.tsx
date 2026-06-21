@@ -11,6 +11,7 @@ import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import Learn from "./pages/Learn";
 import LearnTutorial from "./pages/LearnTutorial";
+import RemoteRuns from "./pages/RemoteRuns";
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import OverviewPage from './pages/Overview';
@@ -106,6 +107,11 @@ function App() {
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/learn/:slug" element={<LearnTutorial />} />
+            <Route path="/remote/runs" element={
+              <ProtectedRoute>
+                <RemoteRuns />
+              </ProtectedRoute>
+            } />
 
             {/* Auth Layout Routes - Shared video panel, swappable right content */}
             <Route element={<AuthLayout />}>
