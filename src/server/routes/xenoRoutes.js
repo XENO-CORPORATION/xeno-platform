@@ -5,7 +5,7 @@
 
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
-import { existsSync, statSync } from 'fs';
+import { accessSync, constants, statSync } from 'fs';
 import { delimiter, isAbsolute, join } from 'path';
 
 import { Router } from 'express';
@@ -136,16 +136,26 @@ function remoteRunnerCwd() {
   return process.env.XENO_REMOTE_RUNNER_CWD?.trim() || '';
 }
 
+function isExecutableCommandPath(path) {
+  try {
+    if (!statSync(path).isFile()) return false;
+    if (process.platform !== 'win32') accessSync(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function remoteRunnerCommandExists(command) {
   if (isAbsolute(command) || command.includes('/') || command.includes('\\')) {
-    return existsSync(command);
+    return isExecutableCommandPath(command);
   }
 
   const extensions = process.platform === 'win32'
     ? ['', ...(process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';')]
     : [''];
   return (process.env.PATH || '').split(delimiter).some((dir) => (
-    dir && extensions.some((extension) => existsSync(join(dir, `${command}${extension}`)))
+    dir && extensions.some((extension) => isExecutableCommandPath(join(dir, `${command}${extension}`)))
   ));
 }
 
