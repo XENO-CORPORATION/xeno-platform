@@ -21,6 +21,7 @@ const DEFAULT_REMOTE_MAX_CONCURRENT = 1;
 const DEFAULT_REMOTE_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_REMOTE_RETENTION = 100;
 const DEFAULT_REMOTE_MAX_PROMPT_CHARS = 20000;
+const DEFAULT_REMOTE_MAX_EVENT_TEXT_CHARS = 16000;
 const MAX_REMOTE_OPTION_CHARS = 2048;
 const REMOTE_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
@@ -193,6 +194,10 @@ function remoteRetentionLimit() {
 
 function remoteMaxPromptChars() {
   return positiveIntegerEnv('XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS', DEFAULT_REMOTE_MAX_PROMPT_CHARS);
+}
+
+function remoteMaxEventTextChars() {
+  return positiveIntegerEnv('XENO_REMOTE_RUNNER_MAX_EVENT_TEXT_CHARS', DEFAULT_REMOTE_MAX_EVENT_TEXT_CHARS);
 }
 
 function remoteRunnerCapabilities() {
@@ -416,6 +421,12 @@ function pruneRemoteRuns() {
 
 function addRemoteEvent(run, event) {
   const next = { timestamp: new Date().toISOString(), ...event };
+  const maxText = remoteMaxEventTextChars();
+  if (typeof next.text === 'string' && next.text.length > maxText) {
+    next.textOriginalLength = next.text.length;
+    next.textTruncated = true;
+    next.text = `${next.text.slice(0, Math.max(0, maxText - 3))}...`;
+  }
   run.events.push(next);
   if (run.events.length > MAX_REMOTE_EVENTS) run.events.splice(0, run.events.length - MAX_REMOTE_EVENTS);
   persistRemoteEventSoon(run, next);

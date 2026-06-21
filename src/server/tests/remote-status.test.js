@@ -225,6 +225,26 @@ try {
   const stopped = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}/stop`, { method: 'POST' });
   assert.equal((await stopped.json()).run.runId, runId);
 
+  const noisyRunner = join(dir, 'noisy-runner.mjs');
+  writeFileSync(noisyRunner, "console.log('abcdefghijklmnopqrst');\n");
+  process.env.XENO_REMOTE_RUNNER_ARGS_JSON = JSON.stringify([noisyRunner]);
+  process.env.XENO_REMOTE_RUNNER_MAX_EVENT_TEXT_CHARS = '8';
+  const noisy = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'noisy' }),
+  });
+  assert.equal(noisy.status, 202);
+  const noisyRun = await noisy.json();
+  const noisyFollow = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${noisyRun.run.runId}/attach?follow=true`);
+  assert.match(await noisyFollow.text(), /run_finished/);
+  const noisyEvents = remoteDb.events.get(noisyRun.run.runId) || [];
+  const noisyOutput = noisyEvents.map((entry) => entry.event).find((event) => event.type === 'stdout');
+  assert.equal(noisyOutput.text, 'abcde...');
+  assert.equal(noisyOutput.textTruncated, true);
+  assert.ok(noisyOutput.textOriginalLength > 8);
+  delete process.env.XENO_REMOTE_RUNNER_MAX_EVENT_TEXT_CHARS;
+
   const slowRunner = join(dir, 'slow-runner.mjs');
   writeFileSync(slowRunner, "setTimeout(() => console.log('slow:done'), 1000);\n");
   process.env.XENO_REMOTE_RUNNER_ARGS_JSON = JSON.stringify([slowRunner]);
@@ -264,6 +284,7 @@ try {
   delete process.env.XENO_REMOTE_RUNNER_MAX_CONCURRENT;
   delete process.env.XENO_REMOTE_RUNNER_TIMEOUT_MS;
   delete process.env.XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS;
+  delete process.env.XENO_REMOTE_RUNNER_MAX_EVENT_TEXT_CHARS;
   delete process.env.XENO_REMOTE_RUNNER_CWD;
   await new Promise((resolve) => server.close(resolve));
 }
