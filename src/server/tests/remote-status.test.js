@@ -77,9 +77,43 @@ try {
   const stopped = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}/stop`, { method: 'POST' });
   assert.equal((await stopped.json()).run.runId, runId);
 
+  const slowRunner = join(dir, 'slow-runner.mjs');
+  writeFileSync(slowRunner, "setTimeout(() => console.log('slow:done'), 1000);\n");
+  process.env.XENO_REMOTE_RUNNER_ARGS_JSON = JSON.stringify([slowRunner]);
+  process.env.XENO_REMOTE_RUNNER_MAX_CONCURRENT = '1';
+
+  const firstSlow = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'slow one' }),
+  });
+  assert.equal(firstSlow.status, 202);
+  const firstSlowRun = await firstSlow.json();
+
+  const secondSlow = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'slow two' }),
+  });
+  assert.equal(secondSlow.status, 429);
+  await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${firstSlowRun.run.runId}/stop`, { method: 'POST' });
+
+  process.env.XENO_REMOTE_RUNNER_TIMEOUT_MS = '50';
+  const timed = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'times out' }),
+  });
+  assert.equal(timed.status, 202);
+  const timedRun = await timed.json();
+  const timedFollow = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${timedRun.run.runId}/attach?follow=true`);
+  assert.match(await timedFollow.text(), /run_timed_out/);
+
   console.log('remote-status.test.js passed');
 } finally {
   delete process.env.XENO_REMOTE_RUNNER_COMMAND;
   delete process.env.XENO_REMOTE_RUNNER_ARGS_JSON;
+  delete process.env.XENO_REMOTE_RUNNER_MAX_CONCURRENT;
+  delete process.env.XENO_REMOTE_RUNNER_TIMEOUT_MS;
   await new Promise((resolve) => server.close(resolve));
 }
