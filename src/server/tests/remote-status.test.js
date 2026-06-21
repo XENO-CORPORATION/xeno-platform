@@ -112,7 +112,13 @@ try {
 
   const dir = mkdtempSync(join(tmpdir(), 'xeno-remote-runner-'));
   const runner = join(dir, 'runner.mjs');
-  writeFileSync(runner, "console.log('runner:' + process.env.XENO_REMOTE_PROMPT);\nsetTimeout(() => console.log('runner:done'), 100);\n");
+  writeFileSync(runner, [
+    "console.log('runner:' + process.env.XENO_REMOTE_PROMPT);",
+    "console.log('secret:' + (process.env.XENO_REMOTE_SECRET_SHOULD_NOT_LEAK || ''));",
+    "setTimeout(() => console.log('runner:done'), 100);",
+    '',
+  ].join('\n'));
+  process.env.XENO_REMOTE_SECRET_SHOULD_NOT_LEAK = 'leaked-secret';
 
   const commandDir = join(dir, 'command-dir');
   mkdirSync(commandDir);
@@ -240,6 +246,7 @@ try {
   const events = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}/events`);
   const eventPayload = await events.json();
   assert.ok(eventPayload.events.some((event) => event.type === 'stdout' && event.text.includes('runner:hello remote')));
+  assert.ok(!eventPayload.events.some((event) => String(event.text || '').includes('leaked-secret')));
 
   const attach = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}/attach?tail=2`);
   const attachPayload = await attach.json();
@@ -310,6 +317,8 @@ try {
   delete process.env.XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS;
   delete process.env.XENO_REMOTE_RUNNER_MAX_EVENT_TEXT_CHARS;
   delete process.env.XENO_REMOTE_RUNNER_CWD;
+  delete process.env.XENO_REMOTE_RUNNER_ENV_ALLOWLIST;
+  delete process.env.XENO_REMOTE_SECRET_SHOULD_NOT_LEAK;
   await new Promise((resolve) => unauthServer.close(resolve));
   await new Promise((resolve) => server.close(resolve));
 }
