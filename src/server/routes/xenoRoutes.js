@@ -5,7 +5,7 @@
 
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { delimiter, isAbsolute, join } from 'path';
 
 import { Router } from 'express';
@@ -131,6 +131,10 @@ function remoteRunnerArgsTemplate() {
   return parsed;
 }
 
+function remoteRunnerCwd() {
+  return process.env.XENO_REMOTE_RUNNER_CWD?.trim() || '';
+}
+
 function remoteRunnerCommandExists(command) {
   if (isAbsolute(command) || command.includes('/') || command.includes('\\')) {
     return existsSync(command);
@@ -144,12 +148,24 @@ function remoteRunnerCommandExists(command) {
   ));
 }
 
+function remoteRunnerCwdError() {
+  const cwd = remoteRunnerCwd();
+  if (!cwd) return '';
+  try {
+    return statSync(cwd).isDirectory() ? '' : `Hosted remote runner cwd is not a directory: ${cwd}`;
+  } catch {
+    return `Hosted remote runner cwd not found: ${cwd}`;
+  }
+}
+
 function remoteRunnerConfigError() {
   const command = remoteRunnerCommand();
   if (!command) return '';
   if (!remoteRunnerCommandExists(command)) {
     return `Hosted remote runner command not found: ${command}`;
   }
+  const cwdError = remoteRunnerCwdError();
+  if (cwdError) return cwdError;
   try {
     remoteRunnerArgsTemplate();
     return '';
@@ -428,7 +444,7 @@ function startRemoteRunner(run, request) {
   const timeoutMs = remoteTimeoutMs();
 
   const child = spawn(command, remoteRunnerArgs(run, request), {
-    cwd: process.env.XENO_REMOTE_RUNNER_CWD || process.cwd(),
+    cwd: remoteRunnerCwd() || process.cwd(),
     env: {
       ...process.env,
       XENO_REMOTE_RUN_ID: run.runId,
