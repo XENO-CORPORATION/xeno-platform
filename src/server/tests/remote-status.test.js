@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -100,6 +100,17 @@ try {
   const dir = mkdtempSync(join(tmpdir(), 'xeno-remote-runner-'));
   const runner = join(dir, 'runner.mjs');
   writeFileSync(runner, "console.log('runner:' + process.env.XENO_REMOTE_PROMPT);\nsetTimeout(() => console.log('runner:done'), 100);\n");
+
+  const commandDir = join(dir, 'command-dir');
+  mkdirSync(commandDir);
+  process.env.XENO_REMOTE_RUNNER_COMMAND = commandDir;
+  delete process.env.XENO_REMOTE_RUNNER_ARGS_JSON;
+
+  const directoryCommandStatus = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/status`);
+  const directoryCommandPayload = await directoryCommandStatus.json();
+  assert.equal(directoryCommandPayload.ok, false);
+  assert.deepEqual(directoryCommandPayload.capabilities, []);
+  assert.match(directoryCommandPayload.error, /command not found/i);
 
   process.env.XENO_REMOTE_RUNNER_COMMAND = join(dir, 'missing-runner.exe');
   delete process.env.XENO_REMOTE_RUNNER_ARGS_JSON;
