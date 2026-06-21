@@ -127,11 +127,14 @@ export default function RemoteRuns() {
     setSelectedRunId('');
     setEvents([]);
     void refresh();
+  }, [workspace]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       void refresh();
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [workspace]);
+  }, [workspace, selectedRunId]);
 
   useEffect(() => {
     void loadEvents();
