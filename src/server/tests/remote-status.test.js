@@ -35,7 +35,7 @@ try {
 
   const dir = mkdtempSync(join(tmpdir(), 'xeno-remote-runner-'));
   const runner = join(dir, 'runner.mjs');
-  writeFileSync(runner, "console.log('runner:' + process.env.XENO_REMOTE_PROMPT);\n");
+  writeFileSync(runner, "console.log('runner:' + process.env.XENO_REMOTE_PROMPT);\nsetTimeout(() => console.log('runner:done'), 100);\n");
   process.env.XENO_REMOTE_RUNNER_COMMAND = process.execPath;
   process.env.XENO_REMOTE_RUNNER_ARGS_JSON = JSON.stringify([runner]);
 
@@ -53,7 +53,14 @@ try {
   const runId = startPayload.run.runId;
   assert.equal(startPayload.run.status, 'running');
 
-  await new Promise((resolve) => setTimeout(resolve, 250));
+  const followAbort = new AbortController();
+  const followTimeout = setTimeout(() => followAbort.abort(), 2000);
+  const follow = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}/attach?tail=10&follow=true`, {
+    signal: followAbort.signal,
+  });
+  const followText = await follow.text();
+  clearTimeout(followTimeout);
+  assert.match(followText, /run_finished/);
 
   const run = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}`);
   assert.equal((await run.json()).run.runId, runId);

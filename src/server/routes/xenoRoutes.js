@@ -148,6 +148,10 @@ function addRemoteEvent(run, event) {
   for (const subscriber of run.subscribers) subscriber(next);
 }
 
+function isRemoteTerminalEvent(event) {
+  return ['run_finished', 'run_failed', 'run_cancelled'].includes(event.type);
+}
+
 function remoteRunnerArgs(run, request) {
   let args = ['run', '--json', '{prompt}'];
   if (process.env.XENO_REMOTE_RUNNER_ARGS_JSON) {
@@ -281,7 +285,10 @@ router.get('/remote/runs/:runId/attach', (req, res) => {
     connection: 'keep-alive',
   });
   for (const event of run.events.slice(-tail)) res.write(`data: ${JSON.stringify(event)}\n\n`);
-  const subscriber = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+  const subscriber = (event) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+    if (isRemoteTerminalEvent(event)) res.end();
+  };
   run.subscribers.add(subscriber);
   req.on('close', () => run.subscribers.delete(subscriber));
   if (['completed', 'failed', 'cancelled'].includes(run.status)) res.end();
