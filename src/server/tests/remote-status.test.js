@@ -9,10 +9,67 @@ import express from 'express';
 
 import xenoRoutes from '../routes/xenoRoutes.js';
 
+function createRemoteRunDb() {
+  let nextEventId = 1;
+  const records = new Map();
+  const events = new Map();
+  return {
+    records,
+    events,
+    async query(sql, params = []) {
+      const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase();
+      if (normalized.includes('insert into xeno_remote_runs')) {
+        records.set(params[0], {
+          run_id: params[0],
+          user_id: params[1],
+          status: params[2],
+          prompt: params[3],
+          requested_cwd: params[4],
+          model: params[5],
+          permission_mode: params[6],
+          created_at: params[7],
+          started_at: params[8],
+          ended_at: params[9],
+          exit_code: params[10],
+          signal: params[11],
+        });
+        return { rows: [], rowCount: 1 };
+      }
+      if (normalized.includes('insert into xeno_remote_run_events')) {
+        const list = events.get(params[0]) || [];
+        list.push({ id: nextEventId++, event: JSON.parse(params[2]) });
+        events.set(params[0], list);
+        return { rows: [], rowCount: 1 };
+      }
+      if (normalized.includes('from xeno_remote_runs')) {
+        const record = records.get(params[0]);
+        return { rows: record && record.user_id === params[1] ? [record] : [] };
+      }
+      if (normalized.includes('from xeno_remote_run_events')) {
+        const list = events.get(params[0]) || [];
+        const limit = Number(params[1]) || list.length;
+        return { rows: list.slice(-limit).reverse().map((entry) => ({ event: entry.event })) };
+      }
+      throw new Error(`Unexpected SQL in remote status test: ${normalized}`);
+    },
+  };
+}
+
+async function waitFor(predicate, message) {
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.fail(message);
+}
+
+const remoteDb = createRemoteRunDb();
 const app = express();
 app.use(express.json());
 app.use((_req, _res, next) => {
   _req.user = { id: 'test-user' };
+  _req.db = remoteDb;
   next();
 });
 app.use('/api/xeno', (_req, _res, next) => next(), xenoRoutes);
@@ -61,6 +118,15 @@ try {
   const followText = await follow.text();
   clearTimeout(followTimeout);
   assert.match(followText, /run_finished/);
+  await waitFor(
+    () => remoteDb.records.get(runId)?.status === 'completed',
+    'expected completed remote run to be persisted'
+  );
+  await waitFor(
+    () => (remoteDb.events.get(runId) || []).some((entry) => entry.event.type === 'run_finished'),
+    'expected terminal remote event to be persisted'
+  );
+  assert.equal(remoteDb.records.get(runId)?.prompt, 'hello remote');
 
   const run = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}`);
   assert.equal((await run.json()).run.runId, runId);
