@@ -149,17 +149,140 @@ function remoteRunRef(run) {
   };
 }
 
-function remoteRunFor(req, res) {
-  const run = remoteRuns.get(req.params.runId);
-  if (!run) {
+function remoteRunDatabase(reqOrRun) {
+  const db = reqOrRun?.db;
+  return db && typeof db.query === 'function' ? db : null;
+}
+
+function isoFromDb(value) {
+  if (!value) return undefined;
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
+function remoteRunFromRow(row, events = [], db) {
+  return {
+    runId: row.run_id,
+    userId: row.user_id,
+    status: row.status,
+    prompt: row.prompt,
+    requestedCwd: row.requested_cwd || undefined,
+    model: row.model || undefined,
+    permissionMode: row.permission_mode || undefined,
+    createdAt: isoFromDb(row.created_at),
+    startedAt: isoFromDb(row.started_at),
+    endedAt: isoFromDb(row.ended_at),
+    exitCode: row.exit_code,
+    signal: row.signal,
+    events,
+    subscribers: new Set(),
+    db,
+  };
+}
+
+async function persistRemoteRun(run) {
+  const db = remoteRunDatabase(run);
+  if (!db) return;
+  await db.query(
+    `
+      INSERT INTO xeno_remote_runs (
+        run_id, user_id, status, prompt, requested_cwd, model, permission_mode,
+        created_at, started_at, ended_at, exit_code, signal
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      ON CONFLICT (run_id) DO UPDATE SET
+        status = EXCLUDED.status,
+        requested_cwd = EXCLUDED.requested_cwd,
+        model = EXCLUDED.model,
+        permission_mode = EXCLUDED.permission_mode,
+        started_at = COALESCE(EXCLUDED.started_at, xeno_remote_runs.started_at),
+        ended_at = EXCLUDED.ended_at,
+        exit_code = EXCLUDED.exit_code,
+        signal = EXCLUDED.signal
+    `,
+    [
+      run.runId,
+      run.userId,
+      run.status,
+      run.prompt,
+      run.requestedCwd || null,
+      run.model || null,
+      run.permissionMode || null,
+      run.createdAt,
+      run.startedAt || null,
+      run.endedAt || null,
+      Number.isInteger(run.exitCode) ? run.exitCode : null,
+      run.signal || null,
+    ]
+  );
+}
+
+function persistRemoteRunSoon(run) {
+  persistRemoteRun(run).catch((error) => {
+    console.error('[XenoRoutes] Failed to persist remote run:', error.message);
+  });
+}
+
+async function persistRemoteEvent(run, event) {
+  const db = remoteRunDatabase(run);
+  if (!db) return;
+  await db.query(
+    `
+      INSERT INTO xeno_remote_run_events (run_id, event_type, event)
+      VALUES ($1, $2, $3::jsonb)
+    `,
+    [run.runId, event.type || 'event', JSON.stringify(event)]
+  );
+}
+
+function persistRemoteEventSoon(run, event) {
+  persistRemoteEvent(run, event).catch((error) => {
+    console.error('[XenoRoutes] Failed to persist remote run event:', error.message);
+  });
+}
+
+async function loadRemoteEvents(db, runId, tail = MAX_REMOTE_EVENTS) {
+  const limit = Math.max(0, Number(tail) || MAX_REMOTE_EVENTS);
+  if (limit === 0) return [];
+  const { rows } = await db.query(
+    `
+      SELECT event
+      FROM xeno_remote_run_events
+      WHERE run_id = $1
+      ORDER BY id DESC
+      LIMIT $2
+    `,
+    [runId, limit]
+  );
+  return rows.reverse().map((row) => (
+    typeof row.event === 'string' ? JSON.parse(row.event) : row.event
+  ));
+}
+
+async function remoteRunFor(req, res) {
+  const liveRun = remoteRuns.get(req.params.runId);
+  if (liveRun) {
+    if (liveRun.userId === (req.user?.id || 'anonymous')) return liveRun;
     res.status(404).json({ error: 'Remote run not found' });
     return null;
   }
-  if (run.userId !== (req.user?.id || 'anonymous')) {
-    res.status(404).json({ error: 'Remote run not found' });
-    return null;
+
+  const db = remoteRunDatabase(req);
+  if (db) {
+    const { rows } = await db.query(
+      `
+        SELECT run_id, user_id, status, prompt, requested_cwd, model, permission_mode,
+               created_at, started_at, ended_at, exit_code, signal
+        FROM xeno_remote_runs
+        WHERE run_id = $1 AND user_id = $2
+      `,
+      [req.params.runId, req.user?.id || 'anonymous']
+    );
+    if (rows[0]) {
+      return remoteRunFromRow(rows[0], await loadRemoteEvents(db, req.params.runId), db);
+    }
   }
-  return run;
+
+  res.status(404).json({ error: 'Remote run not found' });
+  return null;
 }
 
 function isRemoteTerminalStatus(status) {
@@ -184,6 +307,7 @@ function addRemoteEvent(run, event) {
   const next = { timestamp: new Date().toISOString(), ...event };
   run.events.push(next);
   if (run.events.length > MAX_REMOTE_EVENTS) run.events.splice(0, run.events.length - MAX_REMOTE_EVENTS);
+  persistRemoteEventSoon(run, next);
   for (const subscriber of run.subscribers) subscriber(next);
 }
 
@@ -234,10 +358,13 @@ function startRemoteRunner(run, request) {
     if (isRemoteTerminalStatus(run.status)) return;
     run.status = 'failed';
     run.endedAt = new Date().toISOString();
+    persistRemoteRunSoon(run);
     addRemoteEvent(run, { type: 'run_timed_out', timeoutMs });
     child.kill('SIGTERM');
   }, timeoutMs);
   run.status = 'running';
+  run.startedAt = new Date().toISOString();
+  persistRemoteRunSoon(run);
   addRemoteEvent(run, { type: 'run_started', runId: run.runId });
 
   child.stdout.setEncoding('utf8');
@@ -248,6 +375,7 @@ function startRemoteRunner(run, request) {
     run.status = 'failed';
     run.endedAt = new Date().toISOString();
     clearTimeout(run.timeout);
+    persistRemoteRunSoon(run);
     addRemoteEvent(run, { type: 'run_failed', error: error.message });
     pruneRemoteRuns();
   });
@@ -257,6 +385,7 @@ function startRemoteRunner(run, request) {
     run.endedAt = new Date().toISOString();
     clearTimeout(run.timeout);
     if (run.status !== 'cancelled') run.status = code === 0 ? 'completed' : 'failed';
+    persistRemoteRunSoon(run);
     addRemoteEvent(run, { type: 'run_finished', exitCode: code, signal, status: run.status });
     pruneRemoteRuns();
   });
@@ -278,7 +407,7 @@ router.get('/remote/status', (_req, res) => {
 });
 
 // ---------- POST /api/xeno/remote/runs ----------
-router.post('/remote/runs', (req, res) => {
+router.post('/remote/runs', async (req, res) => {
   if (!remoteRunnerCommand()) {
     return res.status(503).json({ error: 'Hosted remote runner is not configured' });
   }
@@ -299,10 +428,21 @@ router.post('/remote/runs', (req, res) => {
     status: 'queued',
     prompt,
     requestedCwd: req.body?.cwd,
+    model: req.body?.model,
+    permissionMode: req.body?.permissionMode,
     createdAt: new Date().toISOString(),
     events: [],
     subscribers: new Set(),
+    db: remoteRunDatabase(req),
   };
+
+  try {
+    await persistRemoteRun(run);
+  } catch (error) {
+    console.error('[XenoRoutes] Failed to create durable remote run:', error.message);
+    return res.status(500).json({ error: 'Failed to create durable remote run' });
+  }
+
   remoteRuns.set(run.runId, run);
 
   try {
@@ -310,6 +450,7 @@ router.post('/remote/runs', (req, res) => {
   } catch (error) {
     run.status = 'failed';
     run.endedAt = new Date().toISOString();
+    persistRemoteRunSoon(run);
     addRemoteEvent(run, { type: 'run_failed', error: error.message });
   }
 
@@ -317,25 +458,30 @@ router.post('/remote/runs', (req, res) => {
 });
 
 // ---------- GET /api/xeno/remote/runs/:runId ----------
-router.get('/remote/runs/:runId', (req, res) => {
-  const run = remoteRunFor(req, res);
+router.get('/remote/runs/:runId', async (req, res) => {
+  const run = await remoteRunFor(req, res);
   if (!run) return;
   res.json({ schemaVersion: 1, run: remoteRunRef(run) });
 });
 
-router.get('/remote/runs/:runId/events', (req, res) => {
-  const run = remoteRunFor(req, res);
+router.get('/remote/runs/:runId/events', async (req, res) => {
+  const run = await remoteRunFor(req, res);
   if (!run) return;
   const tail = Math.max(0, Number(req.query.tail) || run.events.length);
   res.json({ schemaVersion: 1, events: run.events.slice(-tail) });
 });
 
-router.get('/remote/runs/:runId/attach', (req, res) => {
-  const run = remoteRunFor(req, res);
+router.get('/remote/runs/:runId/attach', async (req, res) => {
+  const run = await remoteRunFor(req, res);
   if (!run) return;
   const tail = Math.max(0, Number(req.query.tail) || run.events.length);
   if (req.query.follow !== 'true') {
     return res.json({ schemaVersion: 1, run: remoteRunRef(run), events: run.events.slice(-tail) });
+  }
+
+  const liveRun = remoteRuns.get(req.params.runId);
+  if (!liveRun && !isRemoteTerminalStatus(run.status)) {
+    return res.status(409).json({ error: 'Remote run is not live on this server' });
   }
 
   res.writeHead(200, {
@@ -353,14 +499,18 @@ router.get('/remote/runs/:runId/attach', (req, res) => {
   if (['completed', 'failed', 'cancelled'].includes(run.status)) res.end();
 });
 
-router.post('/remote/runs/:runId/stop', (req, res) => {
-  const run = remoteRunFor(req, res);
+router.post('/remote/runs/:runId/stop', async (req, res) => {
+  const run = await remoteRunFor(req, res);
   if (!run) return;
+  if (!remoteRuns.has(req.params.runId) && !isRemoteTerminalStatus(run.status)) {
+    return res.status(409).json({ error: 'Remote run is not live on this server' });
+  }
   if (!['completed', 'failed', 'cancelled'].includes(run.status)) {
     run.status = 'cancelled';
     run.endedAt = new Date().toISOString();
     clearTimeout(run.timeout);
     run.child?.kill('SIGTERM');
+    persistRemoteRunSoon(run);
     addRemoteEvent(run, { type: 'run_cancelled', runId: run.runId });
   }
   pruneRemoteRuns();
