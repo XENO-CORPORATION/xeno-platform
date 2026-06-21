@@ -169,11 +169,17 @@ function remoteRunnerEnvAllowlist() {
     .filter(Boolean);
 }
 
+function remoteRunnerApiKeyEnv() {
+  return process.env.XENO_REMOTE_RUNNER_API_KEY_ENV?.trim() || '';
+}
+
 function remoteRunnerEnv(run, request) {
   const env = {};
   for (const key of [...REMOTE_RUNNER_BASE_ENV, ...remoteRunnerEnvAllowlist()]) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
   }
+  const apiKeyEnv = remoteRunnerApiKeyEnv();
+  if (apiKeyEnv && process.env[apiKeyEnv]) env.XENO_API_KEY = process.env[apiKeyEnv];
   return {
     ...env,
     XENO_REMOTE_RUN_ID: run.runId,
@@ -223,6 +229,10 @@ function remoteRunnerConfigError() {
   if (!command) return '';
   if (!remoteRunnerCommandExists(command)) {
     return `Hosted remote runner command not found: ${command}`;
+  }
+  const apiKeyEnv = remoteRunnerApiKeyEnv();
+  if (apiKeyEnv && !process.env[apiKeyEnv]) {
+    return `Hosted remote runner API key env is not set: ${apiKeyEnv}`;
   }
   const cwdError = remoteRunnerCwdError();
   if (cwdError) return cwdError;

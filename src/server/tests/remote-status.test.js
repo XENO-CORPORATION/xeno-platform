@@ -126,11 +126,14 @@ try {
   const runner = join(dir, 'runner.mjs');
   writeFileSync(runner, [
     "console.log('runner:' + process.env.XENO_REMOTE_PROMPT);",
+    "console.log('mapped-key:' + (process.env.XENO_API_KEY || ''));",
     "console.log('secret:' + (process.env.XENO_REMOTE_SECRET_SHOULD_NOT_LEAK || ''));",
     "setTimeout(() => console.log('runner:done'), 100);",
     '',
   ].join('\n'));
   process.env.XENO_REMOTE_SECRET_SHOULD_NOT_LEAK = 'leaked-secret';
+  process.env.XENO_REMOTE_RUNNER_API_KEY_ENV = 'XENO_REMOTE_RUNNER_TEST_KEY';
+  process.env.XENO_REMOTE_RUNNER_TEST_KEY = 'mapped-test-key';
 
   const commandDir = join(dir, 'command-dir');
   mkdirSync(commandDir);
@@ -311,6 +314,7 @@ try {
   const events = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}/events`);
   const eventPayload = await events.json();
   assert.ok(eventPayload.events.some((event) => event.type === 'stdout' && event.text.includes('runner:hello remote')));
+  assert.ok(eventPayload.events.some((event) => event.type === 'stdout' && event.text.includes('mapped-key:mapped-test-key')));
   assert.ok(!eventPayload.events.some((event) => String(event.text || '').includes('leaked-secret')));
 
   const attach = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}/attach?tail=2`);
@@ -340,6 +344,8 @@ try {
   assert.equal(noisyOutput.textTruncated, true);
   assert.ok(noisyOutput.textOriginalLength > 8);
   delete process.env.XENO_REMOTE_RUNNER_MAX_EVENT_TEXT_CHARS;
+  delete process.env.XENO_REMOTE_RUNNER_API_KEY_ENV;
+  delete process.env.XENO_REMOTE_RUNNER_TEST_KEY;
 
   const slowRunner = join(dir, 'slow-runner.mjs');
   writeFileSync(slowRunner, "setTimeout(() => console.log('slow:done'), 1000);\n");
