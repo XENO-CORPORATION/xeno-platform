@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
+    "@xeno-corporation/xeno-agent-cli": "^0.4.22",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
     "bull": "^4.12.0",
