@@ -56,6 +56,7 @@ import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
+import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
 import { databaseMiddleware } from './middleware/database.js';
 import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
@@ -530,6 +531,16 @@ console.log('🎯 Xeno AI proxy routes integrated: /api/xeno/*');
 // optionalAuthMiddleware (public, entitlement-aware), while commerce/developer/
 // admin routes require authMiddleware. Mounting with only databaseMiddleware.
 app.use('/api/marketplace', databaseMiddleware, marketplaceRoutes);
+
+// ── Account & Ledger v2 (additive, flag-gated) ───────────────────────────────
+// Mounted ONLY when LEDGER_V2_ENABLED=true, so the default (flag off) is a
+// byte-for-byte no-op — the routes don't exist. This is the double-entry,
+// idempotent, micro-credit spend surface the @xeno/account-client SDK calls.
+// See 'XENO ACCOUNT - ARCHITECTURE.md' + database/migrate-account-v2.js.
+if (process.env.LEDGER_V2_ENABLED === 'true') {
+  app.use('/api/v2/ledger', databaseMiddleware, authMiddleware, v2LedgerRoutes);
+  console.log('💳 Ledger v2 routes integrated: /api/v2/ledger/* (LEDGER_V2_ENABLED)');
+}
 console.log('🛒 Marketplace routes integrated: /api/marketplace/*');
 
 // Image Studio public routes (no auth required for xeno-flow)
