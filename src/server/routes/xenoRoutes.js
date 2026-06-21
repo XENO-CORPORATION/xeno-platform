@@ -137,7 +137,7 @@ function remoteRetentionLimit() {
 
 function remoteRunnerCapabilities() {
   return remoteRunnerCommand()
-    ? ['runs.start', 'runs.get', 'runs.events', 'runs.attach', 'runs.stop']
+    ? ['runs.start', 'runs.list', 'runs.get', 'runs.events', 'runs.attach', 'runs.stop']
     : [];
 }
 
@@ -146,6 +146,22 @@ function remoteRunRef(run) {
     runId: run.runId,
     status: run.status,
     url: `/api/xeno/remote/runs/${run.runId}`,
+  };
+}
+
+function truncateRemotePrompt(prompt) {
+  if (typeof prompt !== 'string') return undefined;
+  return prompt.length > 160 ? `${prompt.slice(0, 157)}...` : prompt;
+}
+
+function remoteRunSummary(run) {
+  return {
+    ...remoteRunRef(run),
+    createdAt: run.createdAt,
+    ...(run.startedAt ? { startedAt: run.startedAt } : {}),
+    ...(run.endedAt ? { endedAt: run.endedAt } : {}),
+    ...(run.model ? { model: run.model } : {}),
+    ...(run.prompt ? { promptPreview: truncateRemotePrompt(run.prompt) } : {}),
   };
 }
 
@@ -285,6 +301,30 @@ async function remoteRunFor(req, res) {
   return null;
 }
 
+async function listRemoteRuns(req, limit) {
+  const userId = req.user?.id || 'anonymous';
+  const db = remoteRunDatabase(req);
+  if (db) {
+    const { rows } = await db.query(
+      `
+        SELECT run_id, user_id, status, prompt, requested_cwd, model, permission_mode,
+               created_at, started_at, ended_at, exit_code, signal
+        FROM xeno_remote_runs
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+      `,
+      [userId, limit]
+    );
+    return rows.map((row) => remoteRunFromRow(row, [], db));
+  }
+
+  return [...remoteRuns.values()]
+    .filter((run) => run.userId === userId)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, limit);
+}
+
 function isRemoteTerminalStatus(status) {
   return REMOTE_TERMINAL_STATUSES.has(status);
 }
@@ -407,6 +447,12 @@ router.get('/remote/status', (_req, res) => {
 });
 
 // ---------- POST /api/xeno/remote/runs ----------
+router.get('/remote/runs', async (req, res) => {
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+  const runs = await listRemoteRuns(req, limit);
+  return res.json({ schemaVersion: 1, runs: runs.map(remoteRunSummary) });
+});
+
 router.post('/remote/runs', async (req, res) => {
   if (!remoteRunnerCommand()) {
     return res.status(503).json({ error: 'Hosted remote runner is not configured' });
