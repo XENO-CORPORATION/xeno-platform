@@ -81,11 +81,24 @@ app.use((_req, _res, next) => {
 });
 app.use('/api/xeno', (_req, _res, next) => next(), xenoRoutes);
 
+const unauthApp = express();
+unauthApp.use(express.json());
+unauthApp.use('/api/xeno', xenoRoutes);
+
+const unauthServer = createServer(unauthApp);
+unauthServer.listen(0, '127.0.0.1');
+await once(unauthServer, 'listening');
+
 const server = createServer(app);
 server.listen(0, '127.0.0.1');
 await once(server, 'listening');
 
 try {
+  const { port: unauthPort } = unauthServer.address();
+  const unauthResponse = await fetch(`http://127.0.0.1:${unauthPort}/api/xeno/remote/status`);
+  assert.equal(unauthResponse.status, 401);
+  assert.equal((await unauthResponse.json()).error, 'Not authenticated');
+
   const { port } = server.address();
   const response = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/status`);
   assert.equal(response.status, 200);
@@ -297,5 +310,6 @@ try {
   delete process.env.XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS;
   delete process.env.XENO_REMOTE_RUNNER_MAX_EVENT_TEXT_CHARS;
   delete process.env.XENO_REMOTE_RUNNER_CWD;
+  await new Promise((resolve) => unauthServer.close(resolve));
   await new Promise((resolve) => server.close(resolve));
 }
