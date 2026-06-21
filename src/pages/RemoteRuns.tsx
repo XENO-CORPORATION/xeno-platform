@@ -53,7 +53,7 @@ export default function RemoteRuns() {
       headers: requestHeaders(),
     }));
     setRuns(payload.runs);
-    if (!selectedRunId && payload.runs[0]) setSelectedRunId(payload.runs[0].runId);
+    if (!payload.runs.some((run) => run.runId === selectedRunId)) setSelectedRunId(payload.runs[0]?.runId ?? '');
   };
 
   const loadEvents = async (runId = selectedRunId) => {
