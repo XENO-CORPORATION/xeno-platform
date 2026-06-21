@@ -136,7 +136,7 @@ AI chat completions and model listing.
 
 ## Xeno Unified Generation (`/api/xeno`) -- xenoRoutes.js
 
-Unified API for image, video, and audio generation via multiple providers.
+Unified API for image, video, audio, and CLI remote-run metadata.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
@@ -144,6 +144,14 @@ Unified API for image, video, and audio generation via multiple providers.
 | POST | `/xeno/images/edit` | JWT | Edit/transform images |
 | POST | `/xeno/videos/generate` | JWT | Generate videos |
 | POST | `/xeno/audio/generate` | JWT | Generate audio |
+| GET | `/xeno/remote/status` | JWT | CLI remote protocol status; advertises run capabilities when `XENO_REMOTE_RUNNER_COMMAND` is configured |
+| POST | `/xeno/remote/runs` | JWT | Start an env-gated hosted remote run |
+| GET | `/xeno/remote/runs/:runId` | JWT | Get hosted remote run status |
+| GET | `/xeno/remote/runs/:runId/events` | JWT | Read hosted remote run events |
+| GET | `/xeno/remote/runs/:runId/attach` | JWT | Attach to hosted remote run events |
+| POST | `/xeno/remote/runs/:runId/stop` | JWT | Stop a hosted remote run |
+
+`/xeno/remote/status` also reports deployment readiness, storage mode, active run capacity, and optional local CPU autoscaling state. Enable autoscaled worker slots with `XENO_REMOTE_RUNNER_AUTOSCALE=true` plus `XENO_REMOTE_RUNNER_AUTOSCALE_MIN` / `XENO_REMOTE_RUNNER_AUTOSCALE_MAX`; otherwise `XENO_REMOTE_RUNNER_MAX_CONCURRENT` is used as a fixed cap.
 
 ---
 
