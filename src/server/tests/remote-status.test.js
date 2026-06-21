@@ -134,6 +134,22 @@ try {
   assert.equal(invalidStart.status, 503);
 
   process.env.XENO_REMOTE_RUNNER_ARGS_JSON = JSON.stringify([runner]);
+  process.env.XENO_REMOTE_RUNNER_CWD = join(dir, 'missing-cwd');
+
+  const missingCwdStatus = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/status`);
+  const missingCwdPayload = await missingCwdStatus.json();
+  assert.equal(missingCwdPayload.ok, false);
+  assert.deepEqual(missingCwdPayload.capabilities, []);
+  assert.match(missingCwdPayload.error, /cwd not found/i);
+
+  const missingCwdStart = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'missing cwd' }),
+  });
+  assert.equal(missingCwdStart.status, 503);
+
+  delete process.env.XENO_REMOTE_RUNNER_CWD;
 
   const enabledStatus = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/status`);
   const enabledPayload = await enabledStatus.json();
@@ -248,5 +264,6 @@ try {
   delete process.env.XENO_REMOTE_RUNNER_MAX_CONCURRENT;
   delete process.env.XENO_REMOTE_RUNNER_TIMEOUT_MS;
   delete process.env.XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS;
+  delete process.env.XENO_REMOTE_RUNNER_CWD;
   await new Promise((resolve) => server.close(resolve));
 }
