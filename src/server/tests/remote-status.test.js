@@ -244,6 +244,27 @@ try {
     run.promptPreview === 'hello remote'
   )));
 
+  const staleRunId = 'remote_stale_after_restart';
+  remoteDb.records.set(staleRunId, {
+    run_id: staleRunId,
+    user_id: 'test-user',
+    status: 'running',
+    prompt: 'stale run',
+    requested_cwd: null,
+    model: null,
+    permission_mode: null,
+    created_at: new Date().toISOString(),
+    started_at: new Date().toISOString(),
+    ended_at: null,
+    exit_code: null,
+    signal: null,
+  });
+  const staleRun = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${staleRunId}`);
+  assert.equal((await staleRun.json()).run.status, 'failed');
+  assert.equal(remoteDb.records.get(staleRunId)?.status, 'failed');
+  assert.equal(remoteDb.records.get(staleRunId)?.signal, 'server_restart');
+  assert.ok((remoteDb.events.get(staleRunId) || []).some((entry) => entry.event.type === 'run_recovered_failed'));
+
   const events = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}/events`);
   const eventPayload = await events.json();
   assert.ok(eventPayload.events.some((event) => event.type === 'stdout' && event.text.includes('runner:hello remote')));
