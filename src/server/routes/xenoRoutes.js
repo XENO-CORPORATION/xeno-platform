@@ -327,6 +327,25 @@ function remoteRunFromRow(row, events = [], db) {
   };
 }
 
+async function reconcilePersistedRemoteRun(run) {
+  const liveRun = remoteRuns.get(run.runId);
+  if (liveRun) return liveRun;
+  if (isRemoteTerminalStatus(run.status)) return run;
+
+  run.status = 'failed';
+  run.endedAt = new Date().toISOString();
+  run.signal = 'server_restart';
+  const event = {
+    timestamp: new Date().toISOString(),
+    type: 'run_recovered_failed',
+    reason: 'Hosted remote runner process is no longer live on this server.',
+  };
+  run.events.push(event);
+  await persistRemoteRun(run);
+  await persistRemoteEvent(run, event);
+  return run;
+}
+
 async function persistRemoteRun(run) {
   const db = remoteRunDatabase(run);
   if (!db) return;
@@ -425,7 +444,9 @@ async function remoteRunFor(req, res) {
       [req.params.runId, req.user.id]
     );
     if (rows[0]) {
-      return remoteRunFromRow(rows[0], await loadRemoteEvents(db, req.params.runId), db);
+      return reconcilePersistedRemoteRun(
+        remoteRunFromRow(rows[0], await loadRemoteEvents(db, req.params.runId), db)
+      );
     }
   }
 
@@ -448,7 +469,7 @@ async function listRemoteRuns(req, limit) {
       `,
       [userId, limit]
     );
-    return rows.map((row) => remoteRunFromRow(row, [], db));
+    return Promise.all(rows.map((row) => reconcilePersistedRemoteRun(remoteRunFromRow(row, [], db))));
   }
 
   return [...remoteRuns.values()]
