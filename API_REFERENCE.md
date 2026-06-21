@@ -136,7 +136,7 @@ AI chat completions and model listing.
 
 ## Xeno Unified Generation (`/api/xeno`) -- xenoRoutes.js
 
-Unified API for image, video, and audio generation via multiple providers.
+Unified API for image, video, audio, and CLI remote-readiness metadata.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
@@ -144,6 +144,7 @@ Unified API for image, video, and audio generation via multiple providers.
 | POST | `/xeno/images/edit` | JWT | Edit/transform images |
 | POST | `/xeno/videos/generate` | JWT | Generate videos |
 | POST | `/xeno/audio/generate` | JWT | Generate audio |
+| GET | `/xeno/remote/status` | JWT | CLI remote protocol status; currently advertises no hosted run capabilities |
 
 ---
 

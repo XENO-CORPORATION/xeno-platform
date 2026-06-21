@@ -105,6 +105,18 @@ function insufficientCreditsResponse(res, required, currentCredits) {
   });
 }
 
+// ---------- GET /api/xeno/remote/status ----------
+router.get('/remote/status', (_req, res) => {
+  res.json({
+    schemaVersion: 1,
+    ok: true,
+    service: 'xeno-platform-remote',
+    version: process.env.npm_package_version || '1.0.0',
+    capabilities: [],
+    message: 'Hosted remote runs are not deployed on this backend yet.',
+  });
+});
+
 // ---------- POST /api/xeno/images/generate ----------
 router.post('/images/generate', async (req, res) => {
   if (!ensureXenoConfigured(res)) {
