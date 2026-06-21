@@ -61,6 +61,7 @@ function getUserId(req, res) {
 
 function requireUser(req, res, next) {
   if (!getUserId(req, res)) return;
+  res.set('Cache-Control', 'no-store');
   next();
 }
 
