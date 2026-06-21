@@ -41,6 +41,13 @@ function createRemoteRunDb() {
         events.set(params[0], list);
         return { rows: [], rowCount: 1 };
       }
+      if (normalized.includes('from xeno_remote_runs') && normalized.includes('where user_id = $1')) {
+        const rows = [...records.values()]
+          .filter((record) => record.user_id === params[0])
+          .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+          .slice(0, Number(params[1]) || 50);
+        return { rows };
+      }
       if (normalized.includes('from xeno_remote_runs')) {
         const record = records.get(params[0]);
         return { rows: record && record.user_id === params[1] ? [record] : [] };
@@ -99,6 +106,7 @@ try {
   const enabledStatus = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/status`);
   const enabledPayload = await enabledStatus.json();
   assert.ok(enabledPayload.capabilities.includes('runs.start'));
+  assert.ok(enabledPayload.capabilities.includes('runs.list'));
 
   const started = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
     method: 'POST',
@@ -130,6 +138,14 @@ try {
 
   const run = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}`);
   assert.equal((await run.json()).run.runId, runId);
+
+  const runList = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs?limit=5`);
+  const runListPayload = await runList.json();
+  assert.ok(runListPayload.runs.some((run) => (
+    run.runId === runId &&
+    run.status === 'completed' &&
+    run.promptPreview === 'hello remote'
+  )));
 
   const events = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}/events`);
   const eventPayload = await events.json();
