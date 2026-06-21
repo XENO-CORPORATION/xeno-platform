@@ -41,6 +41,11 @@ function getUserId(req, res) {
   return userId;
 }
 
+function requireUser(req, res, next) {
+  if (!getUserId(req, res)) return;
+  next();
+}
+
 function ensureXenoConfigured(res) {
   if (!XENO_API_KEY || !xenoClient) {
     res.status(500).json({ error: 'XENO_API_KEY is not configured on the server' });
@@ -362,7 +367,7 @@ async function loadRemoteEvents(db, runId, tail = MAX_REMOTE_EVENTS) {
 async function remoteRunFor(req, res) {
   const liveRun = remoteRuns.get(req.params.runId);
   if (liveRun) {
-    if (liveRun.userId === (req.user?.id || 'anonymous')) return liveRun;
+    if (liveRun.userId === req.user.id) return liveRun;
     res.status(404).json({ error: 'Remote run not found' });
     return null;
   }
@@ -376,7 +381,7 @@ async function remoteRunFor(req, res) {
         FROM xeno_remote_runs
         WHERE run_id = $1 AND user_id = $2
       `,
-      [req.params.runId, req.user?.id || 'anonymous']
+      [req.params.runId, req.user.id]
     );
     if (rows[0]) {
       return remoteRunFromRow(rows[0], await loadRemoteEvents(db, req.params.runId), db);
@@ -388,7 +393,7 @@ async function remoteRunFor(req, res) {
 }
 
 async function listRemoteRuns(req, limit) {
-  const userId = req.user?.id || 'anonymous';
+  const userId = req.user.id;
   const db = remoteRunDatabase(req);
   if (db) {
     const { rows } = await db.query(
@@ -516,6 +521,8 @@ function startRemoteRunner(run, request) {
   });
 }
 
+router.use('/remote', requireUser);
+
 // ---------- GET /api/xeno/remote/status ----------
 router.get('/remote/status', (_req, res) => {
   const capabilities = remoteRunnerCapabilities();
@@ -580,7 +587,7 @@ router.post('/remote/runs', async (req, res) => {
 
   const run = {
     runId: `remote_${randomUUID()}`,
-    userId: req.user?.id || 'anonymous',
+    userId: req.user.id,
     status: 'queued',
     prompt,
     requestedCwd: remoteRequest.cwd,
