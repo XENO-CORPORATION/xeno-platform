@@ -101,6 +101,21 @@ try {
   const runner = join(dir, 'runner.mjs');
   writeFileSync(runner, "console.log('runner:' + process.env.XENO_REMOTE_PROMPT);\nsetTimeout(() => console.log('runner:done'), 100);\n");
   process.env.XENO_REMOTE_RUNNER_COMMAND = process.execPath;
+  process.env.XENO_REMOTE_RUNNER_ARGS_JSON = JSON.stringify([42]);
+
+  const invalidStatus = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/status`);
+  const invalidPayload = await invalidStatus.json();
+  assert.equal(invalidPayload.ok, false);
+  assert.deepEqual(invalidPayload.capabilities, []);
+  assert.match(invalidPayload.error, /XENO_REMOTE_RUNNER_ARGS_JSON/);
+
+  const invalidStart = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'bad config' }),
+  });
+  assert.equal(invalidStart.status, 503);
+
   process.env.XENO_REMOTE_RUNNER_ARGS_JSON = JSON.stringify([runner]);
 
   const enabledStatus = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/status`);

@@ -118,6 +118,25 @@ function remoteRunnerCommand() {
   return process.env.XENO_REMOTE_RUNNER_COMMAND?.trim() || '';
 }
 
+function remoteRunnerArgsTemplate() {
+  if (!process.env.XENO_REMOTE_RUNNER_ARGS_JSON) return ['run', '--json', '{prompt}'];
+  const parsed = JSON.parse(process.env.XENO_REMOTE_RUNNER_ARGS_JSON);
+  if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string')) {
+    throw new Error('XENO_REMOTE_RUNNER_ARGS_JSON must be a JSON string array');
+  }
+  return parsed;
+}
+
+function remoteRunnerConfigError() {
+  if (!remoteRunnerCommand()) return '';
+  try {
+    remoteRunnerArgsTemplate();
+    return '';
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
 function positiveIntegerEnv(name, fallback) {
   const value = Number(process.env[name]);
   return Number.isInteger(value) && value > 0 ? value : fallback;
@@ -136,7 +155,7 @@ function remoteRetentionLimit() {
 }
 
 function remoteRunnerCapabilities() {
-  return remoteRunnerCommand()
+  return remoteRunnerCommand() && !remoteRunnerConfigError()
     ? ['runs.start', 'runs.list', 'runs.get', 'runs.events', 'runs.attach', 'runs.stop']
     : [];
 }
@@ -356,14 +375,7 @@ function isRemoteTerminalEvent(event) {
 }
 
 function remoteRunnerArgs(run, request) {
-  let args = ['run', '--json', '{prompt}'];
-  if (process.env.XENO_REMOTE_RUNNER_ARGS_JSON) {
-    const parsed = JSON.parse(process.env.XENO_REMOTE_RUNNER_ARGS_JSON);
-    if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string')) {
-      throw new Error('XENO_REMOTE_RUNNER_ARGS_JSON must be a JSON string array');
-    }
-    args = parsed;
-  }
+  const args = remoteRunnerArgsTemplate();
   const replacements = {
     '{runId}': run.runId,
     '{prompt}': request.prompt,
@@ -434,15 +446,17 @@ function startRemoteRunner(run, request) {
 // ---------- GET /api/xeno/remote/status ----------
 router.get('/remote/status', (_req, res) => {
   const capabilities = remoteRunnerCapabilities();
+  const configError = remoteRunnerConfigError();
   res.json({
     schemaVersion: 1,
-    ok: true,
+    ok: !configError,
     service: 'xeno-platform-remote',
     version: process.env.npm_package_version || '1.0.0',
     capabilities,
+    ...(configError ? { error: configError } : {}),
     message: capabilities.includes('runs.start')
       ? 'Hosted remote runner is configured.'
-      : 'Hosted remote runs are not deployed on this backend yet.',
+      : configError || 'Hosted remote runs are not deployed on this backend yet.',
   });
 });
 
@@ -454,8 +468,12 @@ router.get('/remote/runs', async (req, res) => {
 });
 
 router.post('/remote/runs', async (req, res) => {
+  const configError = remoteRunnerConfigError();
   if (!remoteRunnerCommand()) {
     return res.status(503).json({ error: 'Hosted remote runner is not configured' });
+  }
+  if (configError) {
+    return res.status(503).json({ error: configError });
   }
   pruneRemoteRuns();
   const maxConcurrent = remoteMaxConcurrent();
