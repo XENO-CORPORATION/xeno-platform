@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 type RemoteRun = {
   runId: string;
   status?: string;
+  workspace?: string;
   createdAt?: string;
   promptPreview?: string;
 };
@@ -20,11 +21,6 @@ const authHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-const jsonHeaders = () => ({
-  ...authHeaders(),
-  'Content-Type': 'application/json',
-});
-
 async function readJson<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -38,13 +34,23 @@ export default function RemoteRuns() {
   const [events, setEvents] = useState<RemoteEvent[]>([]);
   const [selectedRunId, setSelectedRunId] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [workspace, setWorkspace] = useState(() => localStorage.getItem('xeno_remote_workspace') ?? '');
   const [status, setStatus] = useState('Loading');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const requestHeaders = (json = false) => {
+    const scoped = workspace.trim();
+    return {
+      ...authHeaders(),
+      ...(scoped ? { 'x-xeno-workspace': scoped } : {}),
+      ...(json ? { 'Content-Type': 'application/json' } : {}),
+    };
+  };
+
   const loadRuns = async () => {
     const payload = await readJson<{ runs: RemoteRun[] }>(await fetch('/api/xeno/remote/runs?limit=50', {
-      headers: authHeaders(),
+      headers: requestHeaders(),
     }));
     setRuns(payload.runs);
     if (!selectedRunId && payload.runs[0]) setSelectedRunId(payload.runs[0].runId);
@@ -57,7 +63,7 @@ export default function RemoteRuns() {
     }
     const payload = await readJson<{ events: RemoteEvent[] }>(
       await fetch(`/api/xeno/remote/runs/${encodeURIComponent(runId)}/events?tail=80`, {
-        headers: authHeaders(),
+        headers: requestHeaders(),
       }),
     );
     setEvents(payload.events);
@@ -67,7 +73,7 @@ export default function RemoteRuns() {
     try {
       setError('');
       const remote = await readJson<{ capabilities: string[]; message?: string }>(await fetch('/api/xeno/remote/status', {
-        headers: authHeaders(),
+        headers: requestHeaders(),
       }));
       setStatus(remote.capabilities.includes('runs.start') ? 'Ready' : remote.message ?? 'Not configured');
       await loadRuns();
@@ -84,7 +90,7 @@ export default function RemoteRuns() {
       setError('');
       const payload = await readJson<{ run: RemoteRun }>(await fetch('/api/xeno/remote/runs', {
         method: 'POST',
-        headers: jsonHeaders(),
+        headers: requestHeaders(true),
         body: JSON.stringify({ prompt: prompt.trim() }),
       }));
       setPrompt('');
@@ -105,7 +111,7 @@ export default function RemoteRuns() {
       setError('');
       await readJson(await fetch(`/api/xeno/remote/runs/${encodeURIComponent(selectedRunId)}/stop`, {
         method: 'POST',
-        headers: authHeaders(),
+        headers: requestHeaders(),
       }));
       await loadRuns();
       await loadEvents();
@@ -117,12 +123,15 @@ export default function RemoteRuns() {
   };
 
   useEffect(() => {
+    localStorage.setItem('xeno_remote_workspace', workspace);
+    setSelectedRunId('');
+    setEvents([]);
     void refresh();
     const timer = window.setInterval(() => {
       void refresh();
     }, 5000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [workspace]);
 
   useEffect(() => {
     void loadEvents();
@@ -180,6 +189,12 @@ export default function RemoteRuns() {
 
           <section className="flex min-h-[520px] flex-col border border-white/10">
             <div className="flex flex-wrap gap-2 border-b border-white/10 p-3">
+              <input
+                className="h-10 w-full bg-white/5 px-3 text-sm text-white outline-none ring-1 ring-white/10 focus:ring-white/30 sm:w-56"
+                onChange={(event) => setWorkspace(event.target.value)}
+                placeholder="Workspace"
+                value={workspace}
+              />
               <input
                 className="h-10 min-w-0 flex-1 bg-white/5 px-3 text-sm text-white outline-none ring-1 ring-white/10 focus:ring-white/30"
                 onChange={(event) => setPrompt(event.target.value)}
