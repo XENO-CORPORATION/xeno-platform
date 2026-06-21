@@ -15,6 +15,10 @@ const router = Router();
 const XENO_API_KEY = process.env.XENO_API_KEY || '';
 const remoteRuns = new Map();
 const MAX_REMOTE_EVENTS = 500;
+const DEFAULT_REMOTE_MAX_CONCURRENT = 1;
+const DEFAULT_REMOTE_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_REMOTE_RETENTION = 100;
+const REMOTE_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 const xenoClient = XENO_API_KEY
   ? new Xeno({
@@ -114,6 +118,23 @@ function remoteRunnerCommand() {
   return process.env.XENO_REMOTE_RUNNER_COMMAND?.trim() || '';
 }
 
+function positiveIntegerEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function remoteMaxConcurrent() {
+  return positiveIntegerEnv('XENO_REMOTE_RUNNER_MAX_CONCURRENT', DEFAULT_REMOTE_MAX_CONCURRENT);
+}
+
+function remoteTimeoutMs() {
+  return positiveIntegerEnv('XENO_REMOTE_RUNNER_TIMEOUT_MS', DEFAULT_REMOTE_TIMEOUT_MS);
+}
+
+function remoteRetentionLimit() {
+  return positiveIntegerEnv('XENO_REMOTE_RUNNER_RETENTION', DEFAULT_REMOTE_RETENTION);
+}
+
 function remoteRunnerCapabilities() {
   return remoteRunnerCommand()
     ? ['runs.start', 'runs.get', 'runs.events', 'runs.attach', 'runs.stop']
@@ -139,6 +160,24 @@ function remoteRunFor(req, res) {
     return null;
   }
   return run;
+}
+
+function isRemoteTerminalStatus(status) {
+  return REMOTE_TERMINAL_STATUSES.has(status);
+}
+
+function activeRemoteRunCount() {
+  return [...remoteRuns.values()].filter((run) => !isRemoteTerminalStatus(run.status)).length;
+}
+
+function pruneRemoteRuns() {
+  const removable = [...remoteRuns.values()]
+    .filter((run) => isRemoteTerminalStatus(run.status))
+    .sort((a, b) => String(a.endedAt || a.createdAt).localeCompare(String(b.endedAt || b.createdAt)));
+  while (remoteRuns.size > remoteRetentionLimit() && removable.length > 0) {
+    const run = removable.shift();
+    remoteRuns.delete(run.runId);
+  }
 }
 
 function addRemoteEvent(run, event) {
@@ -174,6 +213,7 @@ function remoteRunnerArgs(run, request) {
 function startRemoteRunner(run, request) {
   const command = remoteRunnerCommand();
   if (!command) throw new Error('Hosted remote runner is not configured');
+  const timeoutMs = remoteTimeoutMs();
 
   const child = spawn(command, remoteRunnerArgs(run, request), {
     cwd: process.env.XENO_REMOTE_RUNNER_CWD || process.cwd(),
@@ -190,6 +230,13 @@ function startRemoteRunner(run, request) {
   });
 
   run.child = child;
+  run.timeout = setTimeout(() => {
+    if (isRemoteTerminalStatus(run.status)) return;
+    run.status = 'failed';
+    run.endedAt = new Date().toISOString();
+    addRemoteEvent(run, { type: 'run_timed_out', timeoutMs });
+    child.kill('SIGTERM');
+  }, timeoutMs);
   run.status = 'running';
   addRemoteEvent(run, { type: 'run_started', runId: run.runId });
 
@@ -200,14 +247,18 @@ function startRemoteRunner(run, request) {
   child.on('error', (error) => {
     run.status = 'failed';
     run.endedAt = new Date().toISOString();
+    clearTimeout(run.timeout);
     addRemoteEvent(run, { type: 'run_failed', error: error.message });
+    pruneRemoteRuns();
   });
   child.on('close', (code, signal) => {
     run.exitCode = code;
     run.signal = signal;
     run.endedAt = new Date().toISOString();
+    clearTimeout(run.timeout);
     if (run.status !== 'cancelled') run.status = code === 0 ? 'completed' : 'failed';
     addRemoteEvent(run, { type: 'run_finished', exitCode: code, signal, status: run.status });
+    pruneRemoteRuns();
   });
 }
 
@@ -230,6 +281,14 @@ router.get('/remote/status', (_req, res) => {
 router.post('/remote/runs', (req, res) => {
   if (!remoteRunnerCommand()) {
     return res.status(503).json({ error: 'Hosted remote runner is not configured' });
+  }
+  pruneRemoteRuns();
+  const maxConcurrent = remoteMaxConcurrent();
+  if (activeRemoteRunCount() >= maxConcurrent) {
+    return res.status(429).json({
+      error: 'Hosted remote runner concurrency limit reached',
+      maxConcurrent,
+    });
   }
   const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
   if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
@@ -300,9 +359,11 @@ router.post('/remote/runs/:runId/stop', (req, res) => {
   if (!['completed', 'failed', 'cancelled'].includes(run.status)) {
     run.status = 'cancelled';
     run.endedAt = new Date().toISOString();
+    clearTimeout(run.timeout);
     run.child?.kill('SIGTERM');
     addRemoteEvent(run, { type: 'run_cancelled', runId: run.runId });
   }
+  pruneRemoteRuns();
   res.json({ schemaVersion: 1, run: remoteRunRef(run) });
 });
 
