@@ -249,14 +249,17 @@ export async function voidHoldV2(pool, userId, holdId) {
 }
 
 async function insertUsageLog(client, userId, event, costMicro) {
+  // api_usage_logs requires NOT NULL: user_id, endpoint, method, status.
+  // The v2 ledger route is the "endpoint" that incurred the cost; method = POST.
   await client.query(
     `INSERT INTO api_usage_logs
        (user_id, surface, operation, model, provider, actual_cost_micro, estimated_cost_micro,
-        input_tokens, output_tokens, status, request_id, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,'ok',$9, now())`,
+        input_tokens, output_tokens, status, request_id, endpoint, method, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,'ok',$9,$10,'POST', now())`,
     [
       userId, event.surface, event.operation, event.model ?? null, event.provider ?? null,
       costMicro.toString(), event.inputTokens ?? null, event.outputTokens ?? null, event.transactionId,
+      `/api/v2/ledger/usage:${event.operation}`,
     ],
   );
 }
