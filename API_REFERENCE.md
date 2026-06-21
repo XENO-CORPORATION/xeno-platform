@@ -151,6 +151,8 @@ Unified API for image, video, audio, and CLI remote-run metadata.
 | GET | `/xeno/remote/runs/:runId/attach` | JWT | Attach to hosted remote run events |
 | POST | `/xeno/remote/runs/:runId/stop` | JWT | Stop a hosted remote run |
 
+`/xeno/remote/status` also reports deployment readiness, storage mode, active run capacity, and optional local CPU autoscaling state. Enable autoscaled worker slots with `XENO_REMOTE_RUNNER_AUTOSCALE=true` plus `XENO_REMOTE_RUNNER_AUTOSCALE_MIN` / `XENO_REMOTE_RUNNER_AUTOSCALE_MAX`; otherwise `XENO_REMOTE_RUNNER_MAX_CONCURRENT` is used as a fixed cap.
+
 ---
 
 ## YouTube (`/api/youtube`) -- youtubeRoutes.js

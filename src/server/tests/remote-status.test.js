@@ -111,6 +111,16 @@ try {
   assert.equal(payload.service, 'xeno-platform-remote');
   assert.deepEqual(payload.capabilities, []);
   assert.ok(!payload.capabilities.includes('runs.start'));
+  assert.deepEqual(payload.deployment, {
+    configured: false,
+    ready: false,
+    storage: 'durable',
+    rolloutState: 'disabled',
+  });
+  assert.equal(payload.capacity.activeRuns, 0);
+  assert.equal(payload.capacity.maxConcurrent, 1);
+  assert.equal(payload.capacity.availableSlots, 1);
+  assert.equal(payload.capacity.autoscale.enabled, false);
 
   const dir = mkdtempSync(join(tmpdir(), 'xeno-remote-runner-'));
   const runner = join(dir, 'runner.mjs');
@@ -187,6 +197,22 @@ try {
   const enabledPayload = await enabledStatus.json();
   assert.ok(enabledPayload.capabilities.includes('runs.start'));
   assert.ok(enabledPayload.capabilities.includes('runs.list'));
+  assert.equal(enabledPayload.deployment.ready, true);
+  assert.equal(enabledPayload.deployment.rolloutState, 'ready');
+
+  process.env.XENO_REMOTE_RUNNER_AUTOSCALE = 'true';
+  process.env.XENO_REMOTE_RUNNER_AUTOSCALE_MIN = '2';
+  process.env.XENO_REMOTE_RUNNER_AUTOSCALE_MAX = '2';
+  const autoscaleStatus = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/status`);
+  const autoscalePayload = await autoscaleStatus.json();
+  assert.equal(autoscalePayload.capacity.maxConcurrent, 2);
+  assert.equal(autoscalePayload.capacity.availableSlots, 2);
+  assert.equal(autoscalePayload.capacity.autoscale.enabled, true);
+  assert.equal(autoscalePayload.capacity.autoscale.mode, 'local-cpu');
+  assert.equal(autoscalePayload.capacity.autoscale.targetConcurrent, 2);
+  delete process.env.XENO_REMOTE_RUNNER_AUTOSCALE;
+  delete process.env.XENO_REMOTE_RUNNER_AUTOSCALE_MIN;
+  delete process.env.XENO_REMOTE_RUNNER_AUTOSCALE_MAX;
 
   process.env.XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS = '8';
   const oversizedPrompt = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
@@ -334,6 +360,8 @@ try {
     body: JSON.stringify({ prompt: 'slow two' }),
   });
   assert.equal(secondSlow.status, 429);
+  assert.equal(secondSlow.headers.get('retry-after'), '15');
+  assert.equal((await secondSlow.json()).capacity.availableSlots, 0);
   await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${firstSlowRun.run.runId}/stop`, { method: 'POST' });
 
   process.env.XENO_REMOTE_RUNNER_TIMEOUT_MS = '50';
@@ -353,6 +381,9 @@ try {
   delete process.env.XENO_REMOTE_RUNNER_ARGS_JSON;
   delete process.env.XENO_REMOTE_RUNNER_MAX_CONCURRENT;
   delete process.env.XENO_REMOTE_RUNNER_TIMEOUT_MS;
+  delete process.env.XENO_REMOTE_RUNNER_AUTOSCALE;
+  delete process.env.XENO_REMOTE_RUNNER_AUTOSCALE_MIN;
+  delete process.env.XENO_REMOTE_RUNNER_AUTOSCALE_MAX;
   delete process.env.XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS;
   delete process.env.XENO_REMOTE_RUNNER_MAX_EVENT_TEXT_CHARS;
   delete process.env.XENO_REMOTE_RUNNER_CWD;

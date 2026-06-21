@@ -6,6 +6,7 @@
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { accessSync, constants, statSync } from 'fs';
+import { availableParallelism } from 'os';
 import { delimiter, isAbsolute, join } from 'path';
 
 import { Router } from 'express';
@@ -22,6 +23,7 @@ const DEFAULT_REMOTE_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_REMOTE_RETENTION = 100;
 const DEFAULT_REMOTE_MAX_PROMPT_CHARS = 20000;
 const DEFAULT_REMOTE_MAX_EVENT_TEXT_CHARS = 16000;
+const DEFAULT_REMOTE_AUTOSCALE_MIN = 1;
 const MAX_REMOTE_OPTION_CHARS = 2048;
 const REMOTE_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 const REMOTE_RUNNER_BASE_ENV = [
@@ -237,8 +239,42 @@ function positiveIntegerEnv(name, fallback) {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-function remoteMaxConcurrent() {
+function booleanEnv(name) {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env[name] || '').trim().toLowerCase());
+}
+
+function remoteFixedMaxConcurrent() {
   return positiveIntegerEnv('XENO_REMOTE_RUNNER_MAX_CONCURRENT', DEFAULT_REMOTE_MAX_CONCURRENT);
+}
+
+function remoteAutoscaleCapacity() {
+  const enabled = booleanEnv('XENO_REMOTE_RUNNER_AUTOSCALE');
+  const fixedMax = remoteFixedMaxConcurrent();
+  if (!enabled) {
+    return {
+      enabled: false,
+      maxConcurrent: fixedMax,
+    };
+  }
+
+  const minConcurrent = positiveIntegerEnv('XENO_REMOTE_RUNNER_AUTOSCALE_MIN', DEFAULT_REMOTE_AUTOSCALE_MIN);
+  const maxConcurrent = Math.max(
+    minConcurrent,
+    positiveIntegerEnv('XENO_REMOTE_RUNNER_AUTOSCALE_MAX', fixedMax)
+  );
+  const hostWorkers = Math.max(1, Math.floor(availableParallelism() / 2));
+  return {
+    enabled: true,
+    mode: 'local-cpu',
+    minConcurrent,
+    maxConcurrent,
+    targetConcurrent: Math.max(minConcurrent, Math.min(maxConcurrent, hostWorkers)),
+  };
+}
+
+function remoteMaxConcurrent() {
+  const autoscale = remoteAutoscaleCapacity();
+  return autoscale.enabled ? autoscale.targetConcurrent : autoscale.maxConcurrent;
 }
 
 function remoteTimeoutMs() {
@@ -501,6 +537,17 @@ function activeRemoteRunCount() {
   return [...remoteRuns.values()].filter((run) => !isRemoteTerminalStatus(run.status)).length;
 }
 
+function remoteCapacityReport() {
+  const activeRuns = activeRemoteRunCount();
+  const maxConcurrent = remoteMaxConcurrent();
+  return {
+    activeRuns,
+    maxConcurrent,
+    availableSlots: Math.max(0, maxConcurrent - activeRuns),
+    autoscale: remoteAutoscaleCapacity(),
+  };
+}
+
 function pruneRemoteRuns() {
   const removable = [...remoteRuns.values()]
     .filter((run) => isRemoteTerminalStatus(run.status))
@@ -595,15 +642,27 @@ function startRemoteRunner(run, request) {
 router.use('/remote', requireUser);
 
 // ---------- GET /api/xeno/remote/status ----------
-router.get('/remote/status', (_req, res) => {
+router.get('/remote/status', (req, res) => {
   const capabilities = remoteRunnerCapabilities();
   const configError = remoteRunnerConfigError();
+  const capacity = remoteCapacityReport();
   res.json({
     schemaVersion: 1,
     ok: !configError,
     service: 'xeno-platform-remote',
     version: process.env.npm_package_version || '1.0.0',
     capabilities,
+    deployment: {
+      configured: Boolean(remoteRunnerCommand()),
+      ready: capabilities.includes('runs.start'),
+      storage: remoteRunDatabase(req) ? 'durable' : 'memory',
+      rolloutState: capabilities.includes('runs.start')
+        ? 'ready'
+        : remoteRunnerCommand()
+          ? 'misconfigured'
+          : 'disabled',
+    },
+    capacity,
     ...(configError ? { error: configError } : {}),
     message: capabilities.includes('runs.start')
       ? 'Hosted remote runner is configured.'
@@ -631,9 +690,11 @@ router.post('/remote/runs', async (req, res) => {
   pruneRemoteRuns();
   const maxConcurrent = remoteMaxConcurrent();
   if (activeRemoteRunCount() >= maxConcurrent) {
+    res.set('Retry-After', '15');
     return res.status(429).json({
       error: 'Hosted remote runner concurrency limit reached',
       maxConcurrent,
+      capacity: remoteCapacityReport(),
     });
   }
   const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
