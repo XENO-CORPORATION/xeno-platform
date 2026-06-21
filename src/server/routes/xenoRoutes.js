@@ -24,6 +24,24 @@ const DEFAULT_REMOTE_MAX_PROMPT_CHARS = 20000;
 const DEFAULT_REMOTE_MAX_EVENT_TEXT_CHARS = 16000;
 const MAX_REMOTE_OPTION_CHARS = 2048;
 const REMOTE_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+const REMOTE_RUNNER_BASE_ENV = [
+  'PATH',
+  'Path',
+  'PATHEXT',
+  'SystemRoot',
+  'WINDIR',
+  'COMSPEC',
+  'ComSpec',
+  'HOME',
+  'USERPROFILE',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'TMP',
+  'TEMP',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+];
 
 const xenoClient = XENO_API_KEY
   ? new Xeno({
@@ -139,6 +157,28 @@ function remoteRunnerArgsTemplate() {
 
 function remoteRunnerCwd() {
   return process.env.XENO_REMOTE_RUNNER_CWD?.trim() || '';
+}
+
+function remoteRunnerEnvAllowlist() {
+  return (process.env.XENO_REMOTE_RUNNER_ENV_ALLOWLIST || '')
+    .split(',')
+    .map((key) => key.trim())
+    .filter(Boolean);
+}
+
+function remoteRunnerEnv(run, request) {
+  const env = {};
+  for (const key of [...REMOTE_RUNNER_BASE_ENV, ...remoteRunnerEnvAllowlist()]) {
+    if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
+  return {
+    ...env,
+    XENO_REMOTE_RUN_ID: run.runId,
+    XENO_REMOTE_USER_ID: run.userId,
+    XENO_REMOTE_PROMPT: request.prompt,
+    XENO_REMOTE_REQUESTED_CWD: request.cwd || '',
+    XENO_REMOTE_MODEL: request.model || '',
+  };
 }
 
 function isExecutableCommandPath(path) {
@@ -471,14 +511,7 @@ function startRemoteRunner(run, request) {
 
   const child = spawn(command, remoteRunnerArgs(run, request), {
     cwd: remoteRunnerCwd() || process.cwd(),
-    env: {
-      ...process.env,
-      XENO_REMOTE_RUN_ID: run.runId,
-      XENO_REMOTE_USER_ID: run.userId,
-      XENO_REMOTE_PROMPT: request.prompt,
-      XENO_REMOTE_REQUESTED_CWD: request.cwd || '',
-      XENO_REMOTE_MODEL: request.model || '',
-    },
+    env: remoteRunnerEnv(run, request),
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
