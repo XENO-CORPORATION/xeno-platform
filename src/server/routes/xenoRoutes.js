@@ -179,6 +179,7 @@ function remoteRunnerEnv(run, request) {
     XENO_REMOTE_PROMPT: request.prompt,
     XENO_REMOTE_REQUESTED_CWD: request.cwd || '',
     XENO_REMOTE_MODEL: request.model || '',
+    XENO_REMOTE_WORKSPACE: request.workspace || '',
   };
 }
 
@@ -273,11 +274,16 @@ function optionalRemoteText(value, field) {
   return { value: trimmed };
 }
 
+function remoteWorkspace(req) {
+  return optionalRemoteText(req.get('x-xeno-workspace') || req.body?.workspace || req.query.workspace, 'workspace');
+}
+
 function remoteRunRef(run) {
   return {
     runId: run.runId,
     status: run.status,
     url: `/api/xeno/remote/runs/${run.runId}`,
+    ...(run.workspace ? { workspace: run.workspace } : {}),
   };
 }
 
@@ -293,6 +299,7 @@ function remoteRunSummary(run) {
     ...(run.startedAt ? { startedAt: run.startedAt } : {}),
     ...(run.endedAt ? { endedAt: run.endedAt } : {}),
     ...(run.model ? { model: run.model } : {}),
+    ...(run.workspace ? { workspace: run.workspace } : {}),
     ...(run.prompt ? { promptPreview: truncateRemotePrompt(run.prompt) } : {}),
   };
 }
@@ -311,6 +318,7 @@ function remoteRunFromRow(row, events = [], db) {
   return {
     runId: row.run_id,
     userId: row.user_id,
+    workspace: row.workspace || undefined,
     status: row.status,
     prompt: row.prompt,
     requestedCwd: row.requested_cwd || undefined,
@@ -352,10 +360,11 @@ async function persistRemoteRun(run) {
   await db.query(
     `
       INSERT INTO xeno_remote_runs (
-        run_id, user_id, status, prompt, requested_cwd, model, permission_mode,
+        run_id, user_id, workspace, status, prompt, requested_cwd, model, permission_mode,
         created_at, started_at, ended_at, exit_code, signal
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       ON CONFLICT (run_id) DO UPDATE SET
+        workspace = EXCLUDED.workspace,
         status = EXCLUDED.status,
         requested_cwd = EXCLUDED.requested_cwd,
         model = EXCLUDED.model,
@@ -368,6 +377,7 @@ async function persistRemoteRun(run) {
     [
       run.runId,
       run.userId,
+      run.workspace || null,
       run.status,
       run.prompt,
       run.requestedCwd || null,
@@ -425,9 +435,14 @@ async function loadRemoteEvents(db, runId, tail = MAX_REMOTE_EVENTS) {
 }
 
 async function remoteRunFor(req, res) {
+  const workspace = remoteWorkspace(req);
+  if (workspace.error) {
+    res.status(400).json({ error: workspace.error });
+    return null;
+  }
   const liveRun = remoteRuns.get(req.params.runId);
   if (liveRun) {
-    if (liveRun.userId === req.user.id) return liveRun;
+    if (liveRun.userId === req.user.id && (!workspace.value || liveRun.workspace === workspace.value)) return liveRun;
     res.status(404).json({ error: 'Remote run not found' });
     return null;
   }
@@ -436,12 +451,12 @@ async function remoteRunFor(req, res) {
   if (db) {
     const { rows } = await db.query(
       `
-        SELECT run_id, user_id, status, prompt, requested_cwd, model, permission_mode,
+        SELECT run_id, user_id, workspace, status, prompt, requested_cwd, model, permission_mode,
                created_at, started_at, ended_at, exit_code, signal
         FROM xeno_remote_runs
-        WHERE run_id = $1 AND user_id = $2
+        WHERE run_id = $1 AND user_id = $2 AND ($3::text IS NULL OR workspace = $3)
       `,
-      [req.params.runId, req.user.id]
+      [req.params.runId, req.user.id, workspace.value || null]
     );
     if (rows[0]) {
       return reconcilePersistedRemoteRun(
@@ -454,26 +469,26 @@ async function remoteRunFor(req, res) {
   return null;
 }
 
-async function listRemoteRuns(req, limit) {
+async function listRemoteRuns(req, limit, workspace) {
   const userId = req.user.id;
   const db = remoteRunDatabase(req);
   if (db) {
     const { rows } = await db.query(
       `
-        SELECT run_id, user_id, status, prompt, requested_cwd, model, permission_mode,
+        SELECT run_id, user_id, workspace, status, prompt, requested_cwd, model, permission_mode,
                created_at, started_at, ended_at, exit_code, signal
         FROM xeno_remote_runs
-        WHERE user_id = $1
+        WHERE user_id = $1 AND ($3::text IS NULL OR workspace = $3)
         ORDER BY created_at DESC
         LIMIT $2
       `,
-      [userId, limit]
+      [userId, limit, workspace || null]
     );
     return Promise.all(rows.map((row) => reconcilePersistedRemoteRun(remoteRunFromRow(row, [], db))));
   }
 
   return [...remoteRuns.values()]
-    .filter((run) => run.userId === userId)
+    .filter((run) => run.userId === userId && (!workspace || run.workspace === workspace))
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     .slice(0, limit);
 }
@@ -522,6 +537,7 @@ function remoteRunnerArgs(run, request) {
     '{cwd}': request.cwd || '',
     '{model}': request.model || '',
     '{permissionMode}': request.permissionMode || '',
+    '{workspace}': request.workspace || '',
   };
   return args.map((arg) => replacements[arg] ?? arg);
 }
@@ -598,7 +614,9 @@ router.get('/remote/status', (_req, res) => {
 // ---------- POST /api/xeno/remote/runs ----------
 router.get('/remote/runs', async (req, res) => {
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
-  const runs = await listRemoteRuns(req, limit);
+  const workspace = remoteWorkspace(req);
+  if (workspace.error) return res.status(400).json({ error: workspace.error });
+  const runs = await listRemoteRuns(req, limit, workspace.value);
   return res.json({ schemaVersion: 1, runs: runs.map(remoteRunSummary) });
 });
 
@@ -630,7 +648,8 @@ router.post('/remote/runs', async (req, res) => {
   const cwd = optionalRemoteText(req.body?.cwd, 'cwd');
   const model = optionalRemoteText(req.body?.model, 'model');
   const permissionMode = optionalRemoteText(req.body?.permissionMode, 'permissionMode');
-  for (const field of [cwd, model, permissionMode]) {
+  const workspace = remoteWorkspace(req);
+  for (const field of [cwd, model, permissionMode, workspace]) {
     if (field.error) return res.status(400).json({ error: field.error });
   }
   const remoteRequest = {
@@ -638,11 +657,13 @@ router.post('/remote/runs', async (req, res) => {
     cwd: cwd.value,
     model: model.value,
     permissionMode: permissionMode.value,
+    workspace: workspace.value,
   };
 
   const run = {
     runId: `remote_${randomUUID()}`,
     userId: req.user.id,
+    workspace: remoteRequest.workspace,
     status: 'queued',
     prompt,
     requestedCwd: remoteRequest.cwd,

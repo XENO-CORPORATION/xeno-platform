@@ -22,16 +22,17 @@ function createRemoteRunDb() {
         records.set(params[0], {
           run_id: params[0],
           user_id: params[1],
-          status: params[2],
-          prompt: params[3],
-          requested_cwd: params[4],
-          model: params[5],
-          permission_mode: params[6],
-          created_at: params[7],
-          started_at: params[8],
-          ended_at: params[9],
-          exit_code: params[10],
-          signal: params[11],
+          workspace: params[2],
+          status: params[3],
+          prompt: params[4],
+          requested_cwd: params[5],
+          model: params[6],
+          permission_mode: params[7],
+          created_at: params[8],
+          started_at: params[9],
+          ended_at: params[10],
+          exit_code: params[11],
+          signal: params[12],
         });
         return { rows: [], rowCount: 1 };
       }
@@ -43,14 +44,14 @@ function createRemoteRunDb() {
       }
       if (normalized.includes('from xeno_remote_runs') && normalized.includes('where user_id = $1')) {
         const rows = [...records.values()]
-          .filter((record) => record.user_id === params[0])
+          .filter((record) => record.user_id === params[0] && (!params[2] || record.workspace === params[2]))
           .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
           .slice(0, Number(params[1]) || 50);
         return { rows };
       }
       if (normalized.includes('from xeno_remote_runs')) {
         const record = records.get(params[0]);
-        return { rows: record && record.user_id === params[1] ? [record] : [] };
+        return { rows: record && record.user_id === params[1] && (!params[2] || record.workspace === params[2]) ? [record] : [] };
       }
       if (normalized.includes('from xeno_remote_run_events')) {
         const list = events.get(params[0]) || [];
@@ -207,7 +208,7 @@ try {
 
   const started = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-xeno-workspace': 'workspace-a' },
     body: JSON.stringify({ prompt: 'hello remote' }),
   });
   assert.equal(started.status, 202);
@@ -232,9 +233,15 @@ try {
     'expected terminal remote event to be persisted'
   );
   assert.equal(remoteDb.records.get(runId)?.prompt, 'hello remote');
+  assert.equal(remoteDb.records.get(runId)?.workspace, 'workspace-a');
 
   const run = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}`);
   assert.equal((await run.json()).run.runId, runId);
+
+  const wrongWorkspaceRun = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs/${runId}`, {
+    headers: { 'x-xeno-workspace': 'workspace-b' },
+  });
+  assert.equal(wrongWorkspaceRun.status, 404);
 
   const runList = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs?limit=5`);
   const runListPayload = await runList.json();
@@ -243,6 +250,16 @@ try {
     run.status === 'completed' &&
     run.promptPreview === 'hello remote'
   )));
+
+  const scopedRunList = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs?limit=5`, {
+    headers: { 'x-xeno-workspace': 'workspace-a' },
+  });
+  assert.ok((await scopedRunList.json()).runs.some((run) => run.runId === runId && run.workspace === 'workspace-a'));
+
+  const emptyScopedRunList = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs?limit=5`, {
+    headers: { 'x-xeno-workspace': 'workspace-b' },
+  });
+  assert.ok(!(await emptyScopedRunList.json()).runs.some((run) => run.runId === runId));
 
   const staleRunId = 'remote_stale_after_restart';
   remoteDb.records.set(staleRunId, {
