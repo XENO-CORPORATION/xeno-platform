@@ -140,6 +140,24 @@ try {
   assert.ok(enabledPayload.capabilities.includes('runs.start'));
   assert.ok(enabledPayload.capabilities.includes('runs.list'));
 
+  process.env.XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS = '8';
+  const oversizedPrompt = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'hello remote' }),
+  });
+  assert.equal(oversizedPrompt.status, 413);
+  assert.equal((await oversizedPrompt.json()).maxPromptChars, 8);
+  delete process.env.XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS;
+
+  const badCwd = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'ok', cwd: { nested: true } }),
+  });
+  assert.equal(badCwd.status, 400);
+  assert.match((await badCwd.json()).error, /cwd must be a string/);
+
   const started = await fetch(`http://127.0.0.1:${port}/api/xeno/remote/runs`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -229,5 +247,6 @@ try {
   delete process.env.XENO_REMOTE_RUNNER_ARGS_JSON;
   delete process.env.XENO_REMOTE_RUNNER_MAX_CONCURRENT;
   delete process.env.XENO_REMOTE_RUNNER_TIMEOUT_MS;
+  delete process.env.XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS;
   await new Promise((resolve) => server.close(resolve));
 }

@@ -20,6 +20,8 @@ const MAX_REMOTE_EVENTS = 500;
 const DEFAULT_REMOTE_MAX_CONCURRENT = 1;
 const DEFAULT_REMOTE_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_REMOTE_RETENTION = 100;
+const DEFAULT_REMOTE_MAX_PROMPT_CHARS = 20000;
+const MAX_REMOTE_OPTION_CHARS = 2048;
 const REMOTE_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 const xenoClient = XENO_API_KEY
@@ -173,10 +175,25 @@ function remoteRetentionLimit() {
   return positiveIntegerEnv('XENO_REMOTE_RUNNER_RETENTION', DEFAULT_REMOTE_RETENTION);
 }
 
+function remoteMaxPromptChars() {
+  return positiveIntegerEnv('XENO_REMOTE_RUNNER_MAX_PROMPT_CHARS', DEFAULT_REMOTE_MAX_PROMPT_CHARS);
+}
+
 function remoteRunnerCapabilities() {
   return remoteRunnerCommand() && !remoteRunnerConfigError()
     ? ['runs.start', 'runs.list', 'runs.get', 'runs.events', 'runs.attach', 'runs.stop']
     : [];
+}
+
+function optionalRemoteText(value, field) {
+  if (value === undefined || value === null || value === '') return { value: undefined };
+  if (typeof value !== 'string') return { error: `${field} must be a string` };
+  const trimmed = value.trim();
+  if (!trimmed) return { value: undefined };
+  if (trimmed.length > MAX_REMOTE_OPTION_CHARS) {
+    return { error: `${field} must be ${MAX_REMOTE_OPTION_CHARS} characters or fewer` };
+  }
+  return { value: trimmed };
 }
 
 function remoteRunRef(run) {
@@ -504,15 +521,34 @@ router.post('/remote/runs', async (req, res) => {
   }
   const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
   if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+  const maxPromptChars = remoteMaxPromptChars();
+  if (prompt.length > maxPromptChars) {
+    return res.status(413).json({
+      error: `Prompt must be ${maxPromptChars} characters or fewer`,
+      maxPromptChars,
+    });
+  }
+  const cwd = optionalRemoteText(req.body?.cwd, 'cwd');
+  const model = optionalRemoteText(req.body?.model, 'model');
+  const permissionMode = optionalRemoteText(req.body?.permissionMode, 'permissionMode');
+  for (const field of [cwd, model, permissionMode]) {
+    if (field.error) return res.status(400).json({ error: field.error });
+  }
+  const remoteRequest = {
+    prompt,
+    cwd: cwd.value,
+    model: model.value,
+    permissionMode: permissionMode.value,
+  };
 
   const run = {
     runId: `remote_${randomUUID()}`,
     userId: req.user?.id || 'anonymous',
     status: 'queued',
     prompt,
-    requestedCwd: req.body?.cwd,
-    model: req.body?.model,
-    permissionMode: req.body?.permissionMode,
+    requestedCwd: remoteRequest.cwd,
+    model: remoteRequest.model,
+    permissionMode: remoteRequest.permissionMode,
     createdAt: new Date().toISOString(),
     events: [],
     subscribers: new Set(),
@@ -529,7 +565,7 @@ router.post('/remote/runs', async (req, res) => {
   remoteRuns.set(run.runId, run);
 
   try {
-    startRemoteRunner(run, { ...req.body, prompt });
+    startRemoteRunner(run, remoteRequest);
   } catch (error) {
     run.status = 'failed';
     run.endedAt = new Date().toISOString();
