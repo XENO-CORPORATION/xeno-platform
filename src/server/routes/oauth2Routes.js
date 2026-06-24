@@ -34,8 +34,10 @@ router.get('/jwks', async (req, res) => {
   try { res.json(await jwks(req.db)); } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
-// GET /oauth2/.well-known/openid-configuration (also mounted at root in index.js)
+// Discovery — served at both /api/oauth2/openid-configuration and the standard
+// /api/oauth2/.well-known/openid-configuration.
 router.get('/openid-configuration', (req, res) => res.json(discovery()));
+router.get('/.well-known/openid-configuration', (req, res) => res.json(discovery()));
 
 // POST /oauth2/authorize — authenticated; issues an auth code, returns the redirect.
 // (API-driven: the platform frontend calls this with the logged-in user's token,

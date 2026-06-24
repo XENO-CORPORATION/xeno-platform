@@ -55,8 +55,9 @@ export async function getSigningKey(db) {
   return cachedKey;
 }
 
-/** JWKS document (public keys only). */
+/** JWKS document (public keys only). Ensures a key exists (lazy generation). */
 export async function jwks(db) {
+  await getSigningKey(db); // generate-on-first-use so JWKS is never empty
   const rows = await db.query("SELECT public_jwk FROM oidc_signing_keys WHERE active = true");
   return { keys: rows.rows.map((r) => r.public_jwk) };
 }
