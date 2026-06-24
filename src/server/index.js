@@ -57,6 +57,10 @@ import downloadRoutes from './routes/downloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
+import oauth2Routes from './routes/oauth2Routes.js';
+import v2MeRoutes from './routes/v2MeRoutes.js';
+import { oidcAuth } from './middleware/oidcAuth.js';
+import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
 import { databaseMiddleware } from './middleware/database.js';
 import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
@@ -538,8 +542,20 @@ app.use('/api/marketplace', databaseMiddleware, marketplaceRoutes);
 // idempotent, micro-credit spend surface the @xeno/account-client SDK calls.
 // See 'XENO ACCOUNT - ARCHITECTURE.md' + database/migrate-account-v2.js.
 if (process.env.LEDGER_V2_ENABLED === 'true') {
-  app.use('/api/v2/ledger', databaseMiddleware, authMiddleware, v2LedgerRoutes);
+  // oidcAuth accepts BOTH the new RS256 OIDC token and the legacy HS256 token.
+  app.use('/api/v2/ledger', databaseMiddleware, oidcAuth, v2LedgerRoutes);
   console.log('💳 Ledger v2 routes integrated: /api/v2/ledger/* (LEDGER_V2_ENABLED)');
+}
+
+// ── OIDC provider v2 (additive, flag-gated) ──────────────────────────────────
+// Mounted ONLY when OIDC_ENABLED=true → default (flag off) is a no-op. The
+// legacy HS256 /api/auth/* surface is UNTOUCHED (Identity Plan R2). New RS256 +
+// JWKS surface for "Sign in with XENO" across the ecosystem.
+if (process.env.OIDC_ENABLED === 'true') {
+  app.use('/oauth2', databaseMiddleware, oauth2Routes);
+  app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
+  app.get('/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery()));
+  console.log('🔐 OIDC provider integrated: /oauth2/* + /api/v2/me (OIDC_ENABLED)');
 }
 console.log('🛒 Marketplace routes integrated: /api/marketplace/*');
 

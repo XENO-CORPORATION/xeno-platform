@@ -1,0 +1,271 @@
+/**
+ * OIDC Provider v2 — the identity (login) half of the XENO unified account.
+ *
+ * ADDITIVE + flag-gated (OIDC_ENABLED). Implements the relying-party surface the
+ * @xeno/account-client SDK expects (see XENO ACCOUNT - ARCHITECTURE.md §2):
+ *  - Authorization Code + PKCE (S256) — web/native (RFC 8252)
+ *  - Device Authorization Grant (RFC 8628) — CLI / headless
+ *  - RS256 signing + JWKS (RFC 7517), key material in oidc_signing_keys
+ *  - Refresh-token rotation with reuse detection (RFC 9700 §2.2.2): a replayed
+ *    refresh token revokes the whole family.
+ *
+ * Tokens are signed RS256 with a key persisted in the DB (so all backend
+ * replicas share it). The legacy HS256 JWT + /api/auth/* are UNTOUCHED — this is
+ * a brand-new, separate surface (Identity Plan R2).
+ */
+import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
+
+const ACCESS_TTL_SEC = 10 * 60; // 10 min
+const ID_TTL_SEC = 10 * 60;
+const REFRESH_TTL_SEC = 30 * 24 * 60 * 60; // 30 days
+const CODE_TTL_SEC = 5 * 60;
+const DEVICE_TTL_SEC = 10 * 60;
+
+function issuer() {
+  return (process.env.OIDC_ISSUER || 'https://xenostudio.ai').replace(/\/+$/, '');
+}
+
+// ── Signing key (RS256) ─────────────────────────────────────────────────────
+
+let cachedKey = null;
+
+/** Load the active signing key, generating + persisting one on first use. */
+export async function getSigningKey(db) {
+  if (cachedKey) return cachedKey;
+  const existing = await db.query(
+    "SELECT kid, private_pem, public_jwk FROM oidc_signing_keys WHERE active = true ORDER BY created_at DESC LIMIT 1",
+  );
+  if (existing.rows.length > 0) {
+    const r = existing.rows[0];
+    cachedKey = { kid: r.kid, privatePem: r.private_pem, publicJwk: r.public_jwk };
+    return cachedKey;
+  }
+  // Generate a fresh RSA-2048 keypair.
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const kid = crypto.randomBytes(8).toString('hex');
+  const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const jwk = publicKey.export({ format: 'jwk' });
+  const publicJwk = { ...jwk, kid, use: 'sig', alg: 'RS256' };
+  await db.query(
+    "INSERT INTO oidc_signing_keys (kid, alg, private_pem, public_jwk, active) VALUES ($1,'RS256',$2,$3::jsonb,true)",
+    [kid, privatePem, JSON.stringify(publicJwk)],
+  );
+  cachedKey = { kid, privatePem, publicJwk };
+  return cachedKey;
+}
+
+/** JWKS document (public keys only). */
+export async function jwks(db) {
+  const rows = await db.query("SELECT public_jwk FROM oidc_signing_keys WHERE active = true");
+  return { keys: rows.rows.map((r) => r.public_jwk) };
+}
+
+/** OIDC discovery document. */
+export function discovery() {
+  const iss = issuer();
+  return {
+    issuer: iss,
+    authorization_endpoint: `${iss}/oauth2/authorize`,
+    token_endpoint: `${iss}/oauth2/token`,
+    device_authorization_endpoint: `${iss}/oauth2/device_authorization`,
+    jwks_uri: `${iss}/oauth2/jwks`,
+    userinfo_endpoint: `${iss}/api/v2/me`,
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],
+    code_challenge_methods_supported: ['S256'],
+    token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
+    id_token_signing_alg_values_supported: ['RS256'],
+    scopes_supported: ['openid', 'profile', 'email', 'ledger'],
+  };
+}
+
+// ── Clients ─────────────────────────────────────────────────────────────────
+
+export async function getClient(db, clientId) {
+  const r = await db.query('SELECT * FROM oauth_clients WHERE client_id = $1', [clientId]);
+  return r.rows[0] || null;
+}
+
+function clientAllowsRedirect(client, redirectUri) {
+  return Array.isArray(client.redirect_uris) && client.redirect_uris.includes(redirectUri);
+}
+
+// ── Token minting ───────────────────────────────────────────────────────────
+
+async function userClaims(db, userId) {
+  const r = await db.query(
+    'SELECT id, email, username, display_name, avatar_url, email_verified FROM users WHERE id = $1 AND is_active = true',
+    [userId],
+  );
+  return r.rows[0] || null;
+}
+
+async function mintTokens(db, { user, clientId, scope, sid }) {
+  const key = await getSigningKey(db);
+  const now = Math.floor(Date.now() / 1000);
+  const base = { iss: issuer(), iat: now, sid };
+  const accessToken = jwt.sign(
+    { ...base, sub: user.id, aud: 'xeno-api', client_id: clientId, scope, typ: 'at+jwt' },
+    key.privatePem,
+    { algorithm: 'RS256', keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: 'at+jwt', kid: key.kid } },
+  );
+  const idToken = jwt.sign(
+    { ...base, sub: user.id, aud: clientId, email: user.email, email_verified: user.email_verified ?? false,
+      name: user.display_name || user.username, preferred_username: user.username },
+    key.privatePem,
+    { algorithm: 'RS256', keyid: key.kid, expiresIn: ID_TTL_SEC },
+  );
+  // Opaque refresh token, hashed at rest, with a rotation family.
+  const familyId = crypto.randomUUID();
+  const refreshToken = await issueRefreshToken(db, { userId: user.id, clientId, scope, sid, familyId });
+  return {
+    access_token: accessToken,
+    token_type: 'Bearer',
+    expires_in: ACCESS_TTL_SEC,
+    refresh_token: refreshToken,
+    id_token: idToken,
+    scope,
+  };
+}
+
+function sha256(s) {
+  return crypto.createHash('sha256').update(s).digest('hex');
+}
+
+async function issueRefreshToken(db, { userId, clientId, scope, sid, familyId }) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  await db.query(
+    `INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, family_id, scope, sid, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6, now() + interval '${REFRESH_TTL_SEC} seconds')`,
+    [sha256(token), clientId, userId, familyId, scope, sid],
+  );
+  return token;
+}
+
+// ── Authorization Code flow ─────────────────────────────────────────────────
+
+/**
+ * Issue an authorization code for an ALREADY-AUTHENTICATED user (the caller
+ * proves identity with a valid platform token → authMiddleware → req.user).
+ * First-party clients skip the consent screen (Identity Plan §2.3).
+ */
+export async function createAuthorizationCode(db, { clientId, userId, redirectUri, scope, codeChallenge, nonce }) {
+  const client = await getClient(db, clientId);
+  if (!client) throw oauthError('invalid_client', 'unknown client');
+  if (!clientAllowsRedirect(client, redirectUri)) throw oauthError('invalid_request', 'redirect_uri mismatch');
+  if (!codeChallenge) throw oauthError('invalid_request', 'code_challenge required (PKCE S256)');
+  const code = crypto.randomBytes(32).toString('base64url');
+  await db.query(
+    `INSERT INTO oauth_authorization_codes (code, client_id, user_id, redirect_uri, scope, code_challenge, nonce, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7, now() + interval '${CODE_TTL_SEC} seconds')`,
+    [code, clientId, userId, redirectUri, scope || 'openid profile email', codeChallenge, nonce || null],
+  );
+  return code;
+}
+
+export async function exchangeAuthorizationCode(db, { code, clientId, redirectUri, codeVerifier }) {
+  const r = await db.query('SELECT * FROM oauth_authorization_codes WHERE code = $1', [code]);
+  const row = r.rows[0];
+  if (!row || row.consumed) throw oauthError('invalid_grant', 'code invalid or already used');
+  if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('invalid_grant', 'code expired');
+  if (row.client_id !== clientId) throw oauthError('invalid_grant', 'client mismatch');
+  if (row.redirect_uri !== redirectUri) throw oauthError('invalid_grant', 'redirect_uri mismatch');
+  // PKCE S256 verification.
+  const challenge = crypto.createHash('sha256').update(codeVerifier || '').digest('base64url');
+  if (challenge !== row.code_challenge) throw oauthError('invalid_grant', 'PKCE verification failed');
+  await db.query('UPDATE oauth_authorization_codes SET consumed = true WHERE code = $1', [code]);
+  const user = await userClaims(db, row.user_id);
+  if (!user) throw oauthError('invalid_grant', 'user not found');
+  return mintTokens(db, { user, clientId, scope: row.scope, sid: crypto.randomUUID() });
+}
+
+// ── Refresh rotation + reuse detection ──────────────────────────────────────
+
+export async function refreshTokenGrant(db, { refreshToken, clientId }) {
+  const hash = sha256(refreshToken);
+  const r = await db.query('SELECT * FROM oauth_refresh_tokens WHERE token_hash = $1', [hash]);
+  const row = r.rows[0];
+  if (!row) throw oauthError('invalid_grant', 'unknown refresh token');
+  if (row.client_id !== clientId) throw oauthError('invalid_grant', 'client mismatch');
+  if (row.revoked) throw oauthError('invalid_grant', 'refresh token revoked');
+  if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('invalid_grant', 'refresh token expired');
+  if (row.rotated) {
+    // REUSE DETECTED → revoke the whole family (RFC 9700 §2.2.2).
+    await db.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE family_id = $1', [row.family_id]);
+    throw oauthError('invalid_grant', 'refresh token reuse detected — family revoked');
+  }
+  await db.query('UPDATE oauth_refresh_tokens SET rotated = true WHERE id = $1', [row.id]);
+  const user = await userClaims(db, row.user_id);
+  if (!user) throw oauthError('invalid_grant', 'user not found');
+  const key = await getSigningKey(db);
+  const now = Math.floor(Date.now() / 1000);
+  const access = jwt.sign(
+    { iss: issuer(), iat: now, sub: user.id, aud: 'xeno-api', client_id: clientId, scope: row.scope, sid: row.sid, typ: 'at+jwt' },
+    key.privatePem, { algorithm: 'RS256', keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: 'at+jwt', kid: key.kid } },
+  );
+  const newRefresh = await issueRefreshToken(db, { userId: user.id, clientId, scope: row.scope, sid: row.sid, familyId: row.family_id });
+  return { access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL_SEC, refresh_token: newRefresh, scope: row.scope };
+}
+
+// ── Device Authorization Grant (RFC 8628) ───────────────────────────────────
+
+export async function startDeviceAuthorization(db, { clientId, scope }) {
+  const client = await getClient(db, clientId);
+  if (!client) throw oauthError('invalid_client', 'unknown client');
+  const deviceCode = crypto.randomBytes(32).toString('base64url');
+  const userCode = `${rand4()}-${rand4()}`;
+  await db.query(
+    `INSERT INTO oauth_device_codes (device_code, user_code, client_id, scope, interval_secs, expires_at)
+     VALUES ($1,$2,$3,$4,5, now() + interval '${DEVICE_TTL_SEC} seconds')`,
+    [deviceCode, userCode, clientId, scope || 'openid profile email ledger'],
+  );
+  const iss = issuer();
+  return {
+    device_code: deviceCode,
+    user_code: userCode,
+    verification_uri: `${iss}/activate`,
+    verification_uri_complete: `${iss}/activate?code=${userCode}`,
+    expires_in: DEVICE_TTL_SEC,
+    interval: 5,
+  };
+}
+
+/** Approve a device code for an authenticated user (called from the activate UI/API). */
+export async function approveDevice(db, { userCode, userId }) {
+  const r = await db.query(
+    "UPDATE oauth_device_codes SET approved = true, user_id = $1 WHERE user_code = $2 AND approved = false AND denied = false AND expires_at > now() RETURNING device_code",
+    [userId, userCode.toUpperCase()],
+  );
+  if (r.rows.length === 0) throw oauthError('invalid_request', 'invalid or expired user_code');
+  return { ok: true };
+}
+
+export async function deviceTokenGrant(db, { deviceCode, clientId }) {
+  const r = await db.query('SELECT * FROM oauth_device_codes WHERE device_code = $1 AND client_id = $2', [deviceCode, clientId]);
+  const row = r.rows[0];
+  if (!row) throw oauthError('invalid_grant', 'unknown device_code');
+  if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('expired_token', 'device code expired');
+  if (row.denied) throw oauthError('access_denied', 'user denied');
+  if (!row.approved) throw oauthError('authorization_pending', 'pending user approval');
+  const user = await userClaims(db, row.user_id);
+  if (!user) throw oauthError('invalid_grant', 'user not found');
+  await db.query('DELETE FROM oauth_device_codes WHERE device_code = $1', [deviceCode]);
+  return mintTokens(db, { user, clientId, scope: row.scope, sid: crypto.randomUUID() });
+}
+
+// ── helpers ─────────────────────────────────────────────────────────────────
+
+function rand4() {
+  const A = 'BCDFGHJKLMNPQRSTVWXZ23456789';
+  let s = '';
+  for (let i = 0; i < 4; i += 1) s += A[crypto.randomInt(A.length)];
+  return s;
+}
+
+export function oauthError(error, description) {
+  const e = new Error(description || error);
+  e.oauthError = error;
+  e.statusCode = error === 'invalid_client' ? 401 : 400;
+  return e;
+}
