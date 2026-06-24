@@ -64,12 +64,13 @@ export async function jwks(db) {
 /** OIDC discovery document. */
 export function discovery() {
   const iss = issuer();
+  // Endpoints live under /api/* because the edge routes only /api to the backend.
   return {
     issuer: iss,
-    authorization_endpoint: `${iss}/oauth2/authorize`,
-    token_endpoint: `${iss}/oauth2/token`,
-    device_authorization_endpoint: `${iss}/oauth2/device_authorization`,
-    jwks_uri: `${iss}/oauth2/jwks`,
+    authorization_endpoint: `${iss}/api/oauth2/authorize`,
+    token_endpoint: `${iss}/api/oauth2/token`,
+    device_authorization_endpoint: `${iss}/api/oauth2/device_authorization`,
+    jwks_uri: `${iss}/api/oauth2/jwks`,
     userinfo_endpoint: `${iss}/api/v2/me`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],

@@ -552,10 +552,11 @@ if (process.env.LEDGER_V2_ENABLED === 'true') {
 // legacy HS256 /api/auth/* surface is UNTOUCHED (Identity Plan R2). New RS256 +
 // JWKS surface for "Sign in with XENO" across the ecosystem.
 if (process.env.OIDC_ENABLED === 'true') {
-  app.use('/oauth2', databaseMiddleware, oauth2Routes);
+  // Mounted under /api/* because the edge only routes /api to the backend.
+  app.use('/api/oauth2', databaseMiddleware, oauth2Routes);
   app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
-  app.get('/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery()));
-  console.log('🔐 OIDC provider integrated: /oauth2/* + /api/v2/me (OIDC_ENABLED)');
+  app.get('/api/oauth2/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery()));
+  console.log('🔐 OIDC provider integrated: /api/oauth2/* + /api/v2/me (OIDC_ENABLED)');
 }
 console.log('🛒 Marketplace routes integrated: /api/marketplace/*');
 
