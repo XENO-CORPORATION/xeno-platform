@@ -59,6 +59,7 @@ import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
+import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import { oidcAuth } from './middleware/oidcAuth.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
 import { databaseMiddleware } from './middleware/database.js';
@@ -555,8 +556,9 @@ if (process.env.OIDC_ENABLED === 'true') {
   // Mounted under /api/* because the edge only routes /api to the backend.
   app.use('/api/oauth2', databaseMiddleware, oauth2Routes);
   app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
+  app.use('/api/v2/authz', databaseMiddleware, oidcAuth, v2AuthzRoutes);
   app.get('/api/oauth2/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery()));
-  console.log('🔐 OIDC provider integrated: /api/oauth2/* + /api/v2/me (OIDC_ENABLED)');
+  console.log('🔐 OIDC provider integrated: /api/oauth2/* + /api/v2/me + /api/v2/authz (OIDC_ENABLED)');
 }
 console.log('🛒 Marketplace routes integrated: /api/marketplace/*');
 

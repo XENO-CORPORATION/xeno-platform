@@ -106,6 +106,22 @@ CREATE TABLE IF NOT EXISTS oidc_signing_keys (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- Authorization (Arch §3): Zanzibar-style relationship tuples — object#relation@subject.
+-- RBAC roles are modeled as relations; agents are subjects with a scoped relation.
+-- Postgres MVP (swappable for OpenFGA later, exactly as the ledger is pre-TigerBeetle).
+CREATE TABLE IF NOT EXISTS relationship_tuples (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  object_type  varchar(64)  NOT NULL,
+  object_id    varchar(128) NOT NULL,
+  relation     varchar(64)  NOT NULL,
+  subject_type varchar(64)  NOT NULL,
+  subject_id   varchar(128) NOT NULL,
+  created_at   timestamptz  NOT NULL DEFAULT now(),
+  UNIQUE (object_type, object_id, relation, subject_type, subject_id)
+);
+CREATE INDEX IF NOT EXISTS idx_reltuples_lookup
+  ON relationship_tuples (object_type, object_id, subject_type, subject_id);
+
 -- Additions on EXISTING live tables — guarded by to_regclass so the migration
 -- is safe to run on a DB where those tables aren't present yet (e.g. tests).
 DO $$ BEGIN
