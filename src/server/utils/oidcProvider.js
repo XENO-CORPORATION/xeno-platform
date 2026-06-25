@@ -71,6 +71,9 @@ export function discovery() {
     authorization_endpoint: `${iss}/api/oauth2/authorize`,
     token_endpoint: `${iss}/api/oauth2/token`,
     device_authorization_endpoint: `${iss}/api/oauth2/device_authorization`,
+    revocation_endpoint: `${iss}/api/oauth2/revoke`,
+    introspection_endpoint: `${iss}/api/oauth2/introspect`,
+    end_session_endpoint: `${iss}/api/oauth2/end_session`,
     jwks_uri: `${iss}/api/oauth2/jwks`,
     userinfo_endpoint: `${iss}/api/v2/me`,
     response_types_supported: ['code'],
@@ -276,6 +279,47 @@ export async function deviceTokenGrant(db, { deviceCode, clientId }) {
   if (!user) throw oauthError('invalid_grant', 'user not found');
   await db.query('DELETE FROM oauth_device_codes WHERE device_code = $1', [deviceCode]);
   return mintTokens(db, { user, clientId, scope: row.scope, sid: crypto.randomUUID() });
+}
+
+// ── Revocation (RFC 7009) + Introspection (RFC 7662) ────────────────────────
+
+/**
+ * Revoke a refresh token and its whole rotation family (RFC 7009). Also accepts
+ * a `sid` to kill every refresh token for a session (RP-initiated / global
+ * logout, Arch §2.5). Always succeeds (no token enumeration). Access-token JWTs
+ * expire on their own via the 10-min TTL.
+ */
+export async function revokeToken(db, { token, sid }) {
+  if (sid) {
+    await db.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE sid = $1', [sid]);
+    return { revoked: true };
+  }
+  if (!token) return { revoked: true };
+  const r = await db.query('SELECT family_id FROM oauth_refresh_tokens WHERE token_hash = $1', [sha256(token)]);
+  if (r.rows[0]) {
+    await db.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE family_id = $1', [r.rows[0].family_id]);
+  }
+  return { revoked: true };
+}
+
+/**
+ * Introspect a token (RFC 7662) — the phantom-token edge-validation surface
+ * (Arch §2.4). Returns {active:false} for anything invalid/expired/revoked.
+ */
+export async function introspectToken(db, { token }) {
+  if (!token) return { active: false };
+  // Try as an RS256 access token first.
+  try {
+    const key = await getSigningKey(db);
+    const pub = crypto.createPublicKey(key.privatePem);
+    const p = jwt.verify(token, pub, { algorithms: ['RS256'] });
+    return { active: true, token_type: 'access_token', sub: p.sub, scope: p.scope, client_id: p.client_id, aud: p.aud, sid: p.sid, exp: p.exp, iss: p.iss };
+  } catch { /* not a valid access JWT — fall through */ }
+  // Else try as an opaque refresh token.
+  const r = await db.query('SELECT * FROM oauth_refresh_tokens WHERE token_hash = $1', [sha256(token)]);
+  const row = r.rows[0];
+  if (!row || row.revoked || new Date(row.expires_at).getTime() < Date.now()) return { active: false };
+  return { active: true, token_type: 'refresh_token', sub: row.user_id, scope: row.scope, client_id: row.client_id, sid: row.sid };
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────

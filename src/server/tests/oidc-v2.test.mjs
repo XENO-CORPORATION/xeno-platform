@@ -9,6 +9,7 @@ import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import {
   getSigningKey, jwks, createAuthorizationCode, exchangeAuthorizationCode,
   refreshTokenGrant, startDeviceAuthorization, approveDevice, deviceTokenGrant,
+  revokeToken, introspectToken,
 } from '../utils/oidcProvider.js';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -20,6 +21,8 @@ async function main() {
   // The migration adds an idempotency index on credit_transactions (exists on
   // live); stub it here so the OIDC-only test can run the additive migration.
   await pool.query(`CREATE TABLE IF NOT EXISTS credit_transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, reference_type varchar(64), reference_id varchar(128))`);
+  // mintTokens records the surface link (Arch §2.1) → needs external_identity_links.
+  await pool.query(`CREATE TABLE IF NOT EXISTS external_identity_links (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), source_system varchar(64) NOT NULL, external_user_id text, external_email text, platform_user_id uuid NOT NULL, metadata jsonb, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())`);
   await migrateAccountV2(pool);
   // Minimal users table for the test.
   await pool.query(`CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text, username text, display_name text, avatar_url text, email_verified boolean DEFAULT true, is_active boolean DEFAULT true)`);
@@ -75,6 +78,20 @@ async function main() {
   await approveDevice(pool, { userCode: dev.user_code, userId });
   const devTokens = await deviceTokenGrant(pool, { deviceCode: dev.device_code, clientId: 'xeno-post' });
   ok(devTokens.access_token && devTokens.refresh_token, 'approved device grant issues tokens');
+
+  // 7. introspection (RFC 7662): active access + active refresh
+  const ia = await introspectToken(pool, { token: devTokens.access_token });
+  ok(ia.active === true && ia.token_type === 'access_token' && ia.sub === userId, 'introspect: access token active, sub correct');
+  const ir = await introspectToken(pool, { token: devTokens.refresh_token });
+  ok(ir.active === true && ir.token_type === 'refresh_token', 'introspect: refresh token active');
+  ok((await introspectToken(pool, { token: 'garbage.token.value' })).active === false, 'introspect: garbage token inactive');
+
+  // 8. revocation (RFC 7009): revoke refresh → introspect inactive + refresh grant fails
+  await revokeToken(pool, { token: devTokens.refresh_token });
+  ok((await introspectToken(pool, { token: devTokens.refresh_token })).active === false, 'revoke: refresh token now inactive');
+  let revoked = null;
+  try { await refreshTokenGrant(pool, { refreshToken: devTokens.refresh_token, clientId: 'xeno-post' }); } catch (e) { revoked = e.message; }
+  ok(/revoked/.test(revoked || ''), 'revoke: refresh grant rejected after revocation');
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} oidc-v2: ${pass} passed, ${fail} failed`);
   await pool.end();

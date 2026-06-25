@@ -20,6 +20,8 @@ import {
   startDeviceAuthorization,
   approveDevice,
   deviceTokenGrant,
+  revokeToken,
+  introspectToken,
 } from '../utils/oidcProvider.js';
 
 const router = express.Router();
@@ -109,6 +111,31 @@ router.post('/token', async (req, res) => {
 router.post('/device_authorization', async (req, res) => {
   try {
     res.json(await startDeviceAuthorization(req.db, { clientId: (req.body || {}).client_id, scope: (req.body || {}).scope }));
+  } catch (e) { sendOauthError(res, e); }
+});
+
+// POST /oauth2/revoke — RFC 7009; revoke a refresh token + its family (or by sid
+// for RP-initiated / global logout). Always 200 (no token enumeration).
+router.post('/revoke', async (req, res) => {
+  try {
+    await revokeToken(req.db, { token: (req.body || {}).token, sid: (req.body || {}).sid });
+    res.status(200).json({});
+  } catch (e) { res.status(200).json({}); }
+});
+
+// POST /oauth2/introspect — RFC 7662; phantom-token edge validation.
+router.post('/introspect', async (req, res) => {
+  try {
+    res.json(await introspectToken(req.db, { token: (req.body || {}).token }));
+  } catch (e) { res.json({ active: false }); }
+});
+
+// POST /oauth2/end_session — RP-initiated / global logout (Arch §2.5): kill every
+// refresh token for the session (sid), so no branch can mint new tokens.
+router.post('/end_session', authMiddleware, async (req, res) => {
+  try {
+    await revokeToken(req.db, { sid: (req.body || {}).sid });
+    res.status(200).json({ ended: true });
   } catch (e) { sendOauthError(res, e); }
 });
 
