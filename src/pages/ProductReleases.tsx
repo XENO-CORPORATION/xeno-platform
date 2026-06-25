@@ -19,7 +19,7 @@ const ProductReleases: React.FC = () => {
     fetchReleases(product).then((r) => { setReleases(r); setLoading(false); });
   }, [product]);
 
-  if (!product) return <Navigate to="/v3" replace />;
+  if (!product) return <Navigate to="/" replace />;
 
   return (
     <div className="min-h-screen bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">

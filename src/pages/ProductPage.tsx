@@ -43,7 +43,7 @@ const ProductPage: React.FC = () => {
     }
   }, [product]);
 
-  if (!product) return <Navigate to="/v3" replace />;
+  if (!product) return <Navigate to="/" replace />;
 
   const latest = latestRelease(releases);
   const downloadUrl = (o: OS): string | null => {
@@ -68,7 +68,7 @@ const ProductPage: React.FC = () => {
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[380px] bg-[radial-gradient(ellipse_55%_75%_at_50%_-10%,rgba(167,96,255,0.10),transparent_70%)]" />
           <div className="relative mx-auto max-w-[820px]">
             <Reveal>
-              <Link to="/v3" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">
+              <Link to="/" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">
                 <ArrowLeft className="h-3.5 w-3.5" /> All products
               </Link>
             </Reveal>

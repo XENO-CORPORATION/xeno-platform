@@ -100,10 +100,11 @@ function App() {
       <CollaborationProvider>
         <OSStateProvider>
           <Routes>
-            {/* Landing Page - Show this first */}
-            <Route path="/" element={<Home />} />
+            {/* Landing Page — the v3 redesign is now the default homepage */}
+            <Route path="/" element={<Home3 />} />
+            <Route path="/v3" element={<Home3 />} />{/* alias — keep existing links working */}
+            <Route path="/v1" element={<Home />} />{/* previous homepage, preserved */}
             <Route path="/v2" element={<Home2 />} />
-            <Route path="/v3" element={<Home3 />} />
             <Route path="/marketplace" element={<Marketplace />} />
             {/* Product pages — registry-driven, one template for all products */}
             <Route path="/product/:slug" element={<ProductPage />} />

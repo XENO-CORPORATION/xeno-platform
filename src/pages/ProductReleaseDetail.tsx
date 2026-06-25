@@ -25,7 +25,7 @@ const ProductReleaseDetail: React.FC = () => {
     });
   }, [product, version]);
 
-  if (!product) return <Navigate to="/v3" replace />;
+  if (!product) return <Navigate to="/" replace />;
 
   const isHotfix = release?.type === 'hotfix';
   return (

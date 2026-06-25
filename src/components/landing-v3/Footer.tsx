@@ -50,7 +50,7 @@ const Footer: React.FC = () => {
         <div className="grid grid-cols-2 gap-x-[clamp(24px,2.6vw,52px)] gap-y-[clamp(32px,4vh,48px)] md:grid-cols-6">
           {/* Brand */}
           <div className="col-span-2 md:col-span-2">
-            <Link to="/v3" className="mb-[clamp(14px,1.6vh,20px)] flex items-center gap-2.5">
+            <Link to="/" className="mb-[clamp(14px,1.6vh,20px)] flex items-center gap-2.5">
               <img src="/xeno-logo.svg" alt="" className="h-6 w-6 invert" />
               <span className="text-[clamp(14px,1vw,16px)] font-semibold tracking-tight text-white">XENO AI</span>
             </Link>

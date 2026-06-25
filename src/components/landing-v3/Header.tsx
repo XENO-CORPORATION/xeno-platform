@@ -477,7 +477,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
         <div className="relative flex h-[56px] w-full items-center justify-between px-[1.4vw]">
           {/* ── Left: Logo + breadcrumb ─────────────────────────────── */}
           <div className="flex items-center gap-8">
-            <Link to="/v3" className="group flex items-center gap-2.5" aria-label="XENO AI home">
+            <Link to="/" className="group flex items-center gap-2.5" aria-label="XENO AI home">
               <img
                 src="/xeno-logo.svg"
                 alt=""
