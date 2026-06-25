@@ -1,0 +1,117 @@
+==================================================================
+XENO PLATFORM — VIDEO GENERATION INTERFACE  ·  CLAUDE CODE BRIEF
+==================================================================
+Paste this whole file into Claude Code as your first message.
+
+------------------------------------------------------------------
+0) WHO YOU ARE / WHAT THIS IS
+------------------------------------------------------------------
+You are working in `xeno-platform`, the full-stack web app behind
+xenostudio.ai (React 18 + TypeScript + Vite + Tailwind frontend,
+Node/Express backend). Repo: XENO-CORPORATION/xeno-platform.
+
+Your ONE job in this session: build / improve the VIDEO GENERATION
+INTERFACE in the AI workspace ("playground"). Do not touch anything
+else (see the "DO NOT TOUCH" list). Another developer owns the
+marketing/landing pages on a separate branch.
+
+------------------------------------------------------------------
+1) GET SET UP
+------------------------------------------------------------------
+# get the latest project state, then make your own branch
+git fetch origin
+git checkout landing-redesign-v3      # base branch with the latest code
+git checkout -b video-gen-interface   # YOUR branch — commit here only
+
+# install deps
+npm install
+( cd src/server && npm install )
+
+# run it (two terminals)
+npm run start     # frontend (Vite)   -> http://localhost:5183
+npm run server    # backend (Express) -> http://localhost:8090
+# (npm run dev tries to run both via concurrently; if it errors with
+#  EPERM on Windows, just run the two commands above in 2 terminals.)
+
+The AI workspace is at:  http://localhost:5183/overview
+(You may need to sign in / the auth + workspace API may show 500/404
+in console on local — that's a known backend quirk, the UI still loads
+with fallback data. It does NOT block the video UI work.)
+
+------------------------------------------------------------------
+2) THE FILES YOU OWN
+------------------------------------------------------------------
+PRIMARY (this is the main one):
+  src/components/playground/Generation/VideoGenerationInterface.tsx   (~2260 lines)
+
+RELATED (only if the task needs them):
+  src/components/playground/Studio/VideoStudioInterface.tsx           (stub, 3 lines)
+  src/components/playground/Enhance/VideoEnhanceInterface.tsx         (~1255 lines)
+  src/components/nodes/video-models/VideoModelInterface.ts            (model types)
+  src/components/nodes/video-upscale-models/VideoUpscaleModelInterface.ts
+
+REFERENCE (read for patterns, do not break — these are siblings):
+  src/components/playground/Generation/ImageGenerationInterface2.tsx
+  src/components/playground/Generation/ImageGenerationInterface2Copy.tsx
+  (the image interface is the most polished sibling — match its
+   structure, service-call patterns, state mgmt, and styling.)
+
+BACKEND (the API the video UI calls):
+  src/server/routes/videoRoutes.js   ->  mounted at  /api/video/*
+  Frontend service layers live in:   src/services/  (look for a
+  video/generation service; if none, mirror the image one.)
+
+------------------------------------------------------------------
+3) DO NOT TOUCH (another dev's work / out of scope)
+------------------------------------------------------------------
+  src/components/landing-v2/**        (v2 marketing page)
+  src/components/landing-v3/**        (v3 marketing page)
+  src/pages/Home.tsx, Home2.tsx, Home3.tsx
+  src/components/landing-v3/Header.tsx and the whole header/nav
+  src/components/account/**           (Billing / Team pages)
+  src/index.css  (shared — only add scoped classes if truly needed,
+                  never restyle existing globals)
+Do not run git commands that touch other branches. Stay on
+`video-gen-interface`. Do not merge or rebase onto main without asking.
+
+------------------------------------------------------------------
+4) CONVENTIONS (match the codebase, don't invent)
+------------------------------------------------------------------
+- React 18 function components + hooks. TypeScript. No class comps.
+- Styling: Tailwind CSS, dark theme. Match the EXISTING playground
+  look (dark glass panels, subtle borders like border-white/[0.07],
+  purple accent ~ #8a2be2 / #a760ff). The warm "landing" palette is
+  NOT used inside the app — match the surrounding playground UI.
+- Path alias: `@/` -> `src/`.
+- Components: PascalCase. Services: camelCase in src/services/.
+- Keep the file's existing architecture; refactor in place, don't
+  rewrite from scratch unless asked.
+- Before debugging any weird symptom, grep the ecosystem learnings:
+  `grep -i "<keyword>" ../docs/engineering-learnings.md` (one dir up).
+
+------------------------------------------------------------------
+5) WORKFLOW EXPECTATIONS
+------------------------------------------------------------------
+- Read VideoGenerationInterface.tsx fully before changing it.
+- Make focused edits; run `npm run build` to typecheck after changes.
+- Verify visually in the browser at /overview (the video gen tab).
+- Commit small, descriptive commits to the `video-gen-interface`
+  branch. Push when asked. Open a PR against `landing-redesign-v3`
+  (or `main` once that's merged) when the feature is ready.
+- If a change would touch a shared file or another dev's area, STOP
+  and flag it instead of editing.
+
+------------------------------------------------------------------
+6) FIRST STEPS FOR YOU (the agent)
+------------------------------------------------------------------
+1. Confirm you're on branch `video-gen-interface`.
+2. Read VideoGenerationInterface.tsx and the image-interface sibling
+   to learn the patterns.
+3. Skim videoRoutes.js to see the available /api/video/* endpoints.
+4. Summarize back: current state of the video gen interface, how it
+   wires to the backend, and a short plan — THEN wait for the specific
+   task before making large changes.
+
+==================================================================
+(Replace this line with the specific video-interface task to do.)
+==================================================================

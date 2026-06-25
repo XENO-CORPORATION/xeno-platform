@@ -5,6 +5,7 @@ import Header from '../components/landing-v3/Header';
 import HeroSection from '../components/landing-v3/HeroSection';
 import UseCasesShowcase from '../components/landing-v3/UseCasesSection';
 import ProductsShowcase from '../components/landing-v3/ProductsShowcase';
+import ModelsStrip from '../components/landing-v3/ModelsStrip';
 import FlowSection from '../components/landing-v3/FlowSection';
 import PrivacyPricingSection from '../components/landing-v3/PrivacyPricingSection';
 import CreateWithoutLimitsSection from '../components/landing-v3/CreateWithoutLimitsSection';
@@ -23,9 +24,10 @@ function Home3() {
 
       <main>
         <HeroSection />
-        <UseCasesShowcase />
         <ProductsShowcase />
+        <ModelsStrip />
         <FlowSection />
+        <UseCasesShowcase />
         <PrivacyPricingSection />
         <CreateWithoutLimitsSection />
       </main>
