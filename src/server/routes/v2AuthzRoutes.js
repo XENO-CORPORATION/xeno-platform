@@ -30,7 +30,10 @@ router.post('/write', async (req, res) => {
     const objects = [...(b.writes || []), ...(b.deletes || [])].map((t) => t.object);
     for (const object of new Set(objects)) {
       const existing = await listObjectTuples(req.db, object);
-      if (existing.length === 0) continue; // bootstrap
+      // Bootstrap-first-owner is allowed for user-owned objects, but NEVER for
+      // system:* (a random user must not be able to claim system:credits, etc.).
+      const isSystem = String(object).startsWith('system:');
+      if (existing.length === 0 && !isSystem) continue;
       const can = await check(req.db, { object, relation: 'admin', subject: me });
       if (!can.allowed) {
         return res.status(403).json({ error: { code: 'FORBIDDEN', message: `not an admin of ${object}` } });

@@ -50,10 +50,18 @@ async function main() {
   const v1 = await verifyChainV2(pool, userId);
   ok(v1.ok && v1.entries === 3, `chain intact: ok=${v1.ok}, entries=${v1.entries}`);
 
-  // 4. TAMPER: silently change a posted amount → chain must break
+  // 4a. DB-level append-only (§4.2): a normal UPDATE is blocked by the trigger.
+  let blocked = null;
+  try { await pool.query("UPDATE credit_transactions SET amount = amount - 1 WHERE user_id=$1 AND reference_id='txn-1'", [userId]); }
+  catch (e) { blocked = e.message; }
+  ok(/append-only/.test(blocked || ''), 'DB trigger BLOCKS update on credit_transactions (append-only)');
+
+  // 4b. Defense in depth: even if the trigger is bypassed, the hash chain catches it.
+  await pool.query("SET session_replication_role = 'replica'");
   await pool.query("UPDATE credit_transactions SET amount = amount - 1000000 WHERE user_id=$1 AND reference_id='txn-1'", [userId]);
+  await pool.query("SET session_replication_role = 'origin'");
   const v2 = await verifyChainV2(pool, userId);
-  ok(!v2.ok && v2.transactionId === 'txn-1', `tamper DETECTED at txn-1 (ok=${v2.ok}, brokenAt=${v2.brokenAt})`);
+  ok(!v2.ok && v2.transactionId === 'txn-1', `tamper (trigger bypassed) DETECTED by hash chain at txn-1`);
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} ledger-chain: ${pass} passed, ${fail} failed`);
   await pool.end();

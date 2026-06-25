@@ -151,6 +151,13 @@ CREATE TABLE IF NOT EXISTS relationship_tuples (
 CREATE INDEX IF NOT EXISTS idx_reltuples_lookup
   ON relationship_tuples (object_type, object_id, subject_type, subject_id);
 
+-- Append-only enforcement at the DB level (Arch §4.2): credit_transactions can
+-- only ever be INSERTed. Corrections = reversing entries, never edits. (Trigger,
+-- not a role GRANT, because the app connects as a superuser which bypasses GRANTs.)
+CREATE OR REPLACE FUNCTION credit_txn_immutable() RETURNS trigger AS $fn$
+BEGIN RAISE EXCEPTION 'credit_transactions is append-only (Arch §4.2); use a reversing entry'; END;
+$fn$ LANGUAGE plpgsql;
+
 -- Additions on EXISTING live tables — guarded by to_regclass so the migration
 -- is safe to run on a DB where those tables aren't present yet (e.g. tests).
 DO $$ BEGIN
@@ -165,6 +172,9 @@ DO $$ BEGIN
   IF to_regclass('public.credit_transactions') IS NOT NULL THEN
     ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS prev_hash  text;
     ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS entry_hash text;
+    DROP TRIGGER IF EXISTS trg_credit_txn_immutable ON credit_transactions;
+    CREATE TRIGGER trg_credit_txn_immutable BEFORE UPDATE OR DELETE ON credit_transactions
+      FOR EACH ROW EXECUTE FUNCTION credit_txn_immutable();
   END IF;
 END $$;
 `;
