@@ -118,6 +118,10 @@ async function mintTokens(db, { user, clientId, scope, sid }) {
     key.privatePem,
     { algorithm: 'RS256', keyid: key.kid, expiresIn: ID_TTL_SEC },
   );
+  // Identity-by-(provider,subject): record that this canonical user is linked to
+  // the client's SURFACE (Arch §2.1, §0.4). This is the "from where" join key —
+  // /api/v2/me reads linkedSurfaces from here, never from email.
+  await recordSurfaceLink(db, { userId: user.id, clientId, email: user.email });
   // Opaque refresh token, hashed at rest, with a rotation family.
   const familyId = crypto.randomUUID();
   const refreshToken = await issueRefreshToken(db, { userId: user.id, clientId, scope, sid, familyId });
@@ -133,6 +137,24 @@ async function mintTokens(db, { user, clientId, scope, sid }) {
 
 function sha256(s) {
   return crypto.createHash('sha256').update(s).digest('hex');
+}
+
+/**
+ * Upsert the (surface → canonical user) link on sign-in. `source_system` is the
+ * client's declared surface (xeno_post, …). Keyed on (source_system,
+ * platform_user_id) so it's idempotent. external_user_id is later backfilled by
+ * the branch (it owns its local id); email is contact-only.
+ */
+async function recordSurfaceLink(db, { userId, clientId, email }) {
+  const c = await getClient(db, clientId);
+  const surface = c?.surface || clientId;
+  await db.query(
+    `INSERT INTO external_identity_links (source_system, platform_user_id, external_email, updated_at)
+     VALUES ($1, $2, $3, now())
+     ON CONFLICT (source_system, platform_user_id)
+       DO UPDATE SET external_email = EXCLUDED.external_email, updated_at = now()`,
+    [surface, userId, email || null],
+  );
 }
 
 async function issueRefreshToken(db, { userId, clientId, scope, sid, familyId }) {

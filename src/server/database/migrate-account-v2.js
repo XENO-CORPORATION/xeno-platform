@@ -105,6 +105,11 @@ CREATE TABLE IF NOT EXISTS oidc_signing_keys (
   active      boolean NOT NULL DEFAULT true,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- Identity-by-(provider,subject): one (surface → canonical user) link, idempotent
+-- upsert target for sign-in. (Arch §2.1 / §0.4 — the "from where" join, not email.)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_eil_source_platform
+  ON external_identity_links (source_system, platform_user_id);
 `;
 
 export async function migrateAccountV2(pool) {
