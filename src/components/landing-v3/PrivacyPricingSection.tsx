@@ -1,153 +1,149 @@
 import React from 'react';
-import { ArrowRight, Check, Cloud, Laptop, Shield, ShieldCheck, UserCog } from 'lucide-react';
+import { Check, Cloud, Laptop, ShieldCheck, UserCog, ArrowRight } from 'lucide-react';
+import { Eyebrow, Reveal, SectionHeading, cx } from './primitives';
 
 const privacyFeatures = [
-  {
-    icon: ShieldCheck,
-    title: 'We never train on your work',
-    sub: 'Your data stays yours. Always.',
-  },
-  {
-    icon: Laptop,
-    title: 'Local-first',
-    sub: 'Work offline with full performance.',
-  },
-  {
-    icon: Cloud,
-    title: 'Cloud or local models',
-    sub: 'Choose the environment that fits you.',
-  },
-  {
-    icon: UserCog,
-    title: 'Permission-based agents',
-    sub: 'You control access and actions.',
-  },
+  { icon: ShieldCheck, title: 'Never trained on your work', sub: 'Your data stays yours. Always.' },
+  { icon: Laptop, title: 'Local-first', sub: 'Work offline at full performance.' },
+  { icon: Cloud, title: 'Cloud or local models', sub: 'Choose the environment that fits.' },
+  { icon: UserCog, title: 'Permission-based agents', sub: 'You control every access and action.' },
 ];
 
-const planPerks = [
-  'Access to XENO workspace',
-  'All core AI models',
-  'Image, video, audio, 3D tools',
-  'Visual workflows',
-  'Local-first projects',
-  'Community & support',
+interface Plan {
+  name: string;
+  price: React.ReactNode;
+  unit: string;
+  tagline: string;
+  perks: string[];
+  cta: string;
+  href: string;
+  highlight?: boolean;
+}
+
+const plans: Plan[] = [
+  {
+    name: 'Free',
+    price: '1000',
+    unit: 'free credits / month',
+    tagline: 'Everything you need to explore and create.',
+    perks: ['Full XENO workspace', 'All core AI models', 'Image, video, audio & 3D tools', 'Community support'],
+    cta: 'Get started free',
+    href: '/auth',
+  },
+  {
+    name: 'Pay As You Grow',
+    price: <>$1<span className="mx-1.5 text-[#69635b]">=</span>1000</>,
+    unit: 'credits · no subscription',
+    tagline: 'Only pay for what you use, when you use it.',
+    perks: ['Everything in Free', 'Unlimited usage, billed per credit', 'Priority access to frontier models', 'Local + cloud inference', 'Visual workflows & agents'],
+    cta: 'Start building',
+    href: '/auth',
+    highlight: true,
+  },
+  {
+    name: 'Enterprise',
+    price: 'Custom',
+    unit: 'for teams & organizations',
+    tagline: 'Security, scale and control for your whole org.',
+    perks: ['Everything in Pay As You Grow', 'SSO & team management', 'Private / on-prem deployment', 'Dedicated support & SLA', 'Custom agents & integrations'],
+    cta: 'Talk to us',
+    href: '#contact',
+  },
 ];
 
 const PrivacyPricingSection: React.FC = () => {
   return (
-    <section className="bg-[#060606] px-[1vw] pb-[clamp(64px,9vh,120px)] pt-[clamp(40px,5vh,72px)]">
-      <div className="mx-auto flex w-full flex-col gap-[1vw]">
-        {/* ──────────────────────────────────────────────────────────
-         * PRIVACY CARD — floating rounded container
-         * ────────────────────────────────────────────────────────── */}
-        <div className="rounded-[16px] border border-white/[0.08] bg-[#151515] px-[clamp(24px,2.4vw,52px)] py-[clamp(28px,3.6vh,52px)]">
-          <div className="grid grid-cols-1 gap-[clamp(28px,3vw,52px)] lg:grid-cols-[minmax(260px,28%)_1fr]">
+    <section className="page-gutter border-t border-white/[0.06] bg-[#060606] py-[clamp(80px,11vh,150px)]">
+      {/* ── Privacy card ─────────────────────────────────────────── */}
+      <Reveal>
+        <div className="relative mx-auto overflow-hidden rounded-[20px] border border-white/[0.05] bg-[#101010] px-[clamp(24px,2.6vw,56px)] py-[clamp(32px,4.4vh,60px)]">
+          <div className="pointer-events-none absolute -left-24 -top-24 h-64 w-64 rounded-[4px] bg-[radial-gradient(circle,rgba(167,96,255,0.20),transparent_70%)]" />
+          <div className="relative grid grid-cols-1 gap-[clamp(28px,3vw,56px)] lg:grid-cols-[minmax(260px,34%)_1fr]">
             <div>
-              <span className="text-[clamp(10.5px,0.75vw,12px)] font-semibold uppercase tracking-[0.22em] text-[#756f66]">
-                Private by default
-              </span>
-              <h2 className="mt-[clamp(10px,1.4vh,20px)] text-[clamp(1.6rem,2vw,2.4rem)] font-light leading-[1.2] tracking-tight text-white">
+              <Eyebrow>Private by default</Eyebrow>
+              <h2 className="mt-[clamp(14px,1.8vh,22px)] text-[clamp(1.6rem,2.1vw,2.6rem)] font-semibold leading-[1.12] tracking-[-0.01em] text-[#ece7df]">
                 Powerful anywhere.<br />Your work stays yours.
               </h2>
+              <p className="mt-[clamp(12px,1.6vh,20px)] max-w-[380px] text-[clamp(13px,0.95vw,15px)] leading-[1.6] text-[#948d83]">
+                Run XENO on your machine or in the cloud. Your data is encrypted, never sold, and never used to train models.
+              </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-[clamp(20px,1.8vw,36px)] lg:grid-cols-4">
-              {privacyFeatures.map((f) => (
-                <div key={f.title} className="flex flex-col gap-[clamp(10px,1.2vh,18px)]">
-                  <div className="grid h-[clamp(36px,3vw,44px)] w-[clamp(36px,3vw,44px)] place-items-center rounded-full border border-white/[0.18] text-[#d8d2ca]">
-                    <f.icon className="h-[44%] w-[44%]" strokeWidth={1.5} />
+            <div className="grid grid-cols-1 gap-[clamp(16px,1.6vw,28px)] sm:grid-cols-2">
+              {privacyFeatures.map((f, i) => (
+                <Reveal key={f.title} delay={i * 70} className="flex gap-3.5">
+                  <div className="grid h-[clamp(38px,3vw,46px)] w-[clamp(38px,3vw,46px)] shrink-0 place-items-center rounded-[10px] bg-[#1a1029]/45 text-[#c2aef0]">
+                    <f.icon className="h-[44%] w-[44%]" strokeWidth={1.6} />
                   </div>
                   <div>
-                    <div className="text-[clamp(13px,0.95vw,15.5px)] font-medium leading-[1.25] text-white">
-                      {f.title}
-                    </div>
-                    <div className="mt-1.5 max-w-[200px] text-[clamp(11px,0.78vw,12.5px)] leading-[1.45] text-[#8a847b]">
-                      {f.sub}
-                    </div>
+                    <div className="text-[clamp(13.5px,0.98vw,16px)] font-semibold leading-tight text-[#e3ded5]">{f.title}</div>
+                    <div className="mt-1.5 text-[clamp(11.5px,0.8vw,13px)] leading-[1.45] text-[#8a847b]">{f.sub}</div>
                   </div>
-                </div>
+                </Reveal>
               ))}
             </div>
           </div>
         </div>
+      </Reveal>
 
-        {/* ──────────────────────────────────────────────────────────
-         * PRICING — title left | plan cards | feature checklist right
-         * ────────────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 gap-[clamp(28px,3vw,52px)] py-[clamp(32px,4vh,64px)] lg:grid-cols-[minmax(220px,22%)_1fr_minmax(220px,22%)]">
-          {/* Left: title */}
-          <div className="flex flex-col">
-            <span className="text-[clamp(10.5px,0.75vw,12px)] font-semibold uppercase tracking-[0.22em] text-[#756f66]">
-              Start free
-            </span>
-            <h2 className="mt-[clamp(10px,1.4vh,20px)] text-[clamp(1.6rem,2vw,2.4rem)] font-light leading-[1.2] tracking-tight text-white">
-              Scale when you<br />need more.
-            </h2>
-            <p className="mt-[clamp(12px,1.4vh,20px)] text-[clamp(12px,0.85vw,14px)] leading-[1.5] text-[#948d83]">
-              Simple, transparent pricing.
-            </p>
-          </div>
+      {/* ── Pricing ──────────────────────────────────────────────── */}
+      <div className="mt-[clamp(48px,6vh,88px)]">
+        <SectionHeading
+          eyebrow="Pricing"
+          title="Start free. Scale when you need more."
+          sub="Simple, transparent, credit-based pricing — no lock-in, no surprises."
+        />
 
-          {/* Middle: 2 plan cards */}
-          <div className="grid grid-cols-1 gap-[1vw] sm:grid-cols-2">
-            {/* Free plan */}
-            <div className="flex flex-col rounded-[16px] border border-white/[0.08] bg-[#151515] p-[clamp(20px,1.8vw,32px)]">
-              <div className="text-[clamp(13.5px,1vw,16px)] font-medium text-[#d8d2ca]">Free Plan</div>
-              <div className="mt-[clamp(16px,2vh,28px)] flex items-baseline gap-2.5">
-                <span className="text-[clamp(2.4rem,3.2vw,4rem)] font-light leading-none tracking-tight text-white">
-                  1000
+        <div className="mx-auto mt-[clamp(40px,6vh,72px)] grid max-w-[1040px] grid-cols-1 items-stretch gap-[clamp(16px,1.2vw,24px)] md:grid-cols-3">
+          {plans.map((plan, i) => (
+            <Reveal
+              key={plan.name}
+              delay={i * 80}
+              className={cx(
+                'relative flex flex-col rounded-[18px] border p-[clamp(22px,1.8vw,34px)] transition-colors',
+                plan.highlight
+                  ? 'border-[#9f6fff]/45 bg-[#14101f] shadow-[0_30px_80px_-32px_rgba(167,96,255,0.55)]'
+                  : 'border-white/[0.05] bg-[#151515] hover:border-white/[0.12]',
+              )}
+            >
+              {plan.highlight && (
+                <span className="absolute right-5 top-5 rounded-[4px] border border-[#9f6fff]/40 bg-[#1a1029] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#bf85ff]">
+                  Most popular
                 </span>
-                <span className="text-[clamp(11.5px,0.85vw,13.5px)] text-[#8a847b]">free credits / month</span>
+              )}
+              <div className="text-[clamp(13.5px,1vw,16px)] font-semibold text-[#d8d2ca]">{plan.name}</div>
+              <div className="mt-[clamp(16px,2vh,28px)] flex items-baseline gap-2">
+                <span className="text-[clamp(2.2rem,3vw,3.4rem)] font-light leading-none tracking-tight text-[#ece7df]">{plan.price}</span>
               </div>
-              <p className="mt-[clamp(10px,1.4vh,18px)] text-[clamp(12px,0.85vw,14px)] text-[#948d83]">
-                Perfect to explore and create.
-              </p>
-              <a
-                href="/auth"
-                className="mt-auto inline-flex h-[clamp(40px,4.4vh,52px)] w-full items-center justify-center rounded-[8px] border border-white/15 bg-white/[0.02] text-[clamp(12.5px,0.9vw,14.5px)] font-medium text-white transition-colors hover:border-white/30 hover:bg-white/[0.04]"
-              >
-                Get Started Free
-              </a>
-            </div>
+              <div className="mt-2 text-[clamp(11.5px,0.85vw,13.5px)] text-[#8a847b]">{plan.unit}</div>
+              <p className="mt-[clamp(12px,1.6vh,18px)] text-[clamp(12px,0.85vw,14px)] leading-[1.5] text-[#948d83]">{plan.tagline}</p>
 
-            {/* Pay as you grow */}
-            <div className="flex flex-col rounded-[16px] border border-white/[0.08] bg-[#151515] p-[clamp(20px,1.8vw,32px)]">
-              <div className="text-[clamp(13.5px,1vw,16px)] font-medium text-[#d8d2ca]">Pay As You Grow</div>
-              <div className="mt-[clamp(16px,2vh,28px)] flex items-baseline gap-2.5">
-                <span className="text-[clamp(2.4rem,3.2vw,4rem)] font-light leading-none tracking-tight text-white">
-                  $1
-                </span>
-                <span className="text-[clamp(2.4rem,3.2vw,4rem)] font-light leading-none tracking-tight text-[#948d83]">
-                  =
-                </span>
-                <span className="text-[clamp(2.4rem,3.2vw,4rem)] font-light leading-none tracking-tight text-white">
-                  1000
-                </span>
-                <span className="text-[clamp(11.5px,0.85vw,13.5px)] text-[#8a847b]">credits</span>
-              </div>
-              <p className="mt-[clamp(10px,1.4vh,18px)] text-[clamp(12px,0.85vw,14px)] text-[#948d83]">
-                No subscription. Pay for what you use.
-              </p>
-              <a
-                href="#pricing"
-                className="mt-auto inline-flex h-[clamp(40px,4.4vh,52px)] w-full items-center justify-center rounded-[8px] border border-white/15 bg-transparent text-[clamp(12.5px,0.9vw,14.5px)] font-medium text-[#d8d2ca] transition-colors hover:border-white/30 hover:bg-white/[0.03]"
-              >
-                View pricing details
-              </a>
-            </div>
-          </div>
+              <ul className="mt-[clamp(18px,2.4vh,28px)] flex flex-col gap-[clamp(9px,1.2vh,14px)]">
+                {plan.perks.map((perk) => (
+                  <li key={perk} className="flex items-start gap-2.5 text-[clamp(12px,0.86vw,14px)] leading-snug text-[#c2bbb2]">
+                    <span className={cx('mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-[4px]', plan.highlight ? 'bg-[#a760ff]/20 text-[#bf85ff]' : 'bg-white/[0.06] text-[#b6afa5]')}>
+                      <Check className="h-2.5 w-2.5" strokeWidth={2.4} />
+                    </span>
+                    {perk}
+                  </li>
+                ))}
+              </ul>
 
-          {/* Right: feature checklist */}
-          <ul className="flex flex-col gap-[clamp(10px,1.4vh,18px)]">
-            {planPerks.map((perk) => (
-              <li key={perk} className="flex items-center gap-3 text-[clamp(12.5px,0.9vw,14.5px)] text-[#c2bbb2]">
-                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-white/20 text-[#b6afa5]">
-                  <Check className="h-3 w-3" strokeWidth={2.2} />
-                </span>
-                {perk}
-              </li>
-            ))}
-          </ul>
+              <a
+                href={plan.href}
+                className={cx(
+                  'group mt-auto inline-flex h-[clamp(42px,4.4vh,52px)] w-full items-center justify-center gap-2 rounded-[9px] text-[clamp(12.5px,0.9vw,14.5px)] font-semibold transition-colors',
+                  plan.highlight
+                    ? 'bg-white text-black hover:bg-white/90'
+                    : 'border border-white/[0.12] bg-white/[0.02] text-[#e3ded5] hover:border-white/25 hover:bg-white/[0.05]',
+                )}
+                style={{ marginTop: 'clamp(22px,3vh,34px)' }}
+              >
+                {plan.cta}
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+              </a>
+            </Reveal>
+          ))}
         </div>
       </div>
     </section>

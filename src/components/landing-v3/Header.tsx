@@ -1,6 +1,38 @@
 import React, { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, ChevronDown, Download, Menu, X } from 'lucide-react';
+import { slugify } from '../../lib/productCatalog';
+
+/* XENO wordmark with a soft light that follows the cursor, masked inside the glyphs */
+function Wordmark() {
+  const ref = useRef<HTMLSpanElement>(null);
+  const onMove = (e: React.MouseEvent<HTMLSpanElement>) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', `${e.clientX - r.left}px`);
+    el.style.setProperty('--my', `${e.clientY - r.top}px`);
+  };
+  return (
+    <span ref={ref} onMouseMove={onMove} className="group/wm relative inline-block text-[17px] font-semibold tracking-tight">
+      <span className="text-white">XENO AI</span>
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 ease-out group-hover/wm:opacity-100"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle 55px at var(--mx, 50%) var(--my, 50%), rgba(216,206,255,0.85), rgba(216,206,255,0) 70%)',
+          WebkitBackgroundClip: 'text',
+          backgroundClip: 'text',
+          color: 'transparent',
+          WebkitTextFillColor: 'transparent',
+        }}
+      >
+        XENO AI
+      </span>
+    </span>
+  );
+}
 
 /* Animated cursor-click hint icon (cursor presses, spark lines burst out) */
 function ClickHintIcon({ className }: { className?: string }) {
@@ -79,10 +111,10 @@ const navItems: NavEntry[] = [
       {
         label: 'Generate',
         items: [
-          { label: 'Image', href: '#', subtitle: 'Text to image', desc: 'Generate images from a prompt with 20+ models.', tint: radial('rgba(170,140,255,0.30)', '#1a1428') },
-          { label: 'Video', href: '#', subtitle: 'Text to video', desc: 'Generate and edit video with AI pipelines.', tint: radial('rgba(255,150,210,0.24)', '#1c1422') },
-          { label: 'Audio', href: '#', subtitle: 'Voice & music', desc: 'Generate voice, music and sound effects.', tint: radial('rgba(140,170,255,0.26)', '#11142a') },
-          { label: '3D', href: '#', subtitle: 'Text to 3D', desc: 'Generate 3D models & scenes from a prompt.', tint: radial('rgba(190,170,255,0.26)', '#16142a') },
+          { label: 'XENO Image', href: '#', subtitle: 'Text to image', desc: 'Generate images from a prompt with 20+ models.', tint: radial('rgba(170,140,255,0.30)', '#1a1428') },
+          { label: 'XENO Video', href: '#', subtitle: 'Text to video', desc: 'Generate and edit video with AI pipelines.', tint: radial('rgba(255,150,210,0.24)', '#1c1422') },
+          { label: 'XENO Audio', href: '#', subtitle: 'Voice & music', desc: 'Generate voice, music and sound effects.', tint: radial('rgba(140,170,255,0.26)', '#11142a') },
+          { label: 'XENO 3D Gen', href: '#', subtitle: 'Text to 3D', desc: 'Generate 3D models & scenes from a prompt.', tint: radial('rgba(190,170,255,0.26)', '#16142a') },
         ],
       },
       {
@@ -126,8 +158,8 @@ const navItems: NavEntry[] = [
         items: [
           { label: 'XENO Comms', href: '#', subtitle: 'Messaging', desc: 'Human & agent communication for teams.', tint: radial('rgba(140,200,255,0.24)', '#10182a') },
           { label: 'XENO Post', href: '#', subtitle: 'Social media', desc: '25+ platform social command center.', tint: radial('rgba(255,140,190,0.24)', '#1d1019') },
-          { label: 'XENO Sites', href: '#', subtitle: 'Websites', desc: 'Build & publish sites and landing pages.', tint: radial('rgba(140,230,200,0.22)', '#0d1d18') },
-          { label: 'XENO Extension', href: '#', subtitle: 'Browser agent', desc: 'AI agent that works in your browser.', tint: radial('rgba(150,140,255,0.28)', '#13122a') },
+          { label: 'XENO Browser', href: '#', subtitle: 'AI browser', desc: 'Agent-native browser that works the web for you.', tint: radial('rgba(120,205,255,0.26)', '#0b1622') },
+          { label: 'XENO Extension', href: '#', subtitle: 'For Chrome & Edge', desc: 'Bring the XENO agent to other browsers.', tint: radial('rgba(150,140,255,0.28)', '#13122a') },
         ],
       },
       {
@@ -146,6 +178,32 @@ const navItems: NavEntry[] = [
           { label: 'XENO SDK', href: '#', subtitle: 'Agent SDK', desc: 'Embed XENO agents into any app.', tint: radial('rgba(170,150,255,0.26)', '#15122a') },
           { label: 'XENO RT', href: '#', subtitle: 'Local runtime', desc: 'Run models locally — private & fast.', tint: radial('rgba(140,180,255,0.24)', '#0e162a') },
           { label: 'XENO Shell', href: '#', subtitle: 'Desktop OS', desc: 'The XENO desktop environment for every app.', tint: radial('rgba(200,200,210,0.20)', '#15161a') },
+          { label: 'XENO Swarm', href: '#', subtitle: 'Agent swarms', desc: 'Always-on Minds that coordinate as a swarm.', tint: radial('rgba(180,140,255,0.28)', '#15102a') },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Marketplace',
+    href: '/marketplace',
+    menu: [
+      {
+        label: 'Browse',
+        items: [
+          { label: 'Apps', href: '/marketplace?kind=app-native', subtitle: 'Native & sandboxed apps' },
+          { label: 'Panels', href: '/marketplace?kind=panel', subtitle: 'Composable UI panels' },
+          { label: 'Plugins & MCP', href: '/marketplace?kind=plugin', subtitle: 'Extend agents & apps' },
+          { label: 'Models', href: '/marketplace?kind=model', subtitle: 'GGUF & ONNX models' },
+          { label: 'Minds & Swarms', href: '/marketplace?kind=mind', subtitle: 'Buy, subscribe or rent agents' },
+        ],
+      },
+      {
+        label: 'Create',
+        items: [
+          { label: 'Become a creator', href: '/marketplace?tab=sell', subtitle: 'Publish & earn credits' },
+          { label: 'Publish a panel', href: '/marketplace?tab=sell', subtitle: 'Ship with the Panel SDK' },
+          { label: 'Sell a Mind', href: '/marketplace?tab=sell', subtitle: 'Monetize your agents' },
+          { label: 'Developer docs', href: '/learn', subtitle: 'Build for the platform' },
         ],
       },
     ],
@@ -155,42 +213,26 @@ const navItems: NavEntry[] = [
     href: '#solutions',
     menu: [
       {
-        label: 'By need',
+        label: 'By industry',
         items: [
-          { label: 'Generate', href: '#' },
-          { label: 'Edit', href: '#' },
-          { label: 'Automate', href: '#' },
-          { label: 'Collaborate', href: '#' },
+          { label: 'Marketing & Advertising', href: '#', subtitle: 'Campaigns that convert' },
+          { label: 'Media & Entertainment', href: '#', subtitle: 'Film, video & content' },
+          { label: 'Gaming', href: '#', subtitle: 'Build worlds, faster' },
+          { label: 'Architecture & Design', href: '#', subtitle: 'Concept to construction' },
+          { label: 'E-commerce & Retail', href: '#', subtitle: 'Product visuals that sell' },
+          { label: 'Agencies & Studios', href: '#', subtitle: 'Deliver more for clients' },
+          { label: 'Education', href: '#', subtitle: 'Teach & learn with AI' },
         ],
       },
       {
         label: 'By team',
         items: [
-          { label: 'Marketing', href: '#' },
-          { label: 'Design', href: '#' },
-          { label: 'Engineering', href: '#' },
-        ],
-      },
-    ],
-  },
-  {
-    label: 'Use Cases',
-    href: '#use-cases',
-    menu: [
-      {
-        label: 'Industries',
-        items: [
-          { label: 'Marketing', href: '#' },
-          { label: 'Content Creation', href: '#' },
-          { label: 'Business & Teams', href: '#' },
-        ],
-      },
-      {
-        label: 'Disciplines',
-        items: [
-          { label: 'Product Design', href: '#' },
-          { label: 'Game Development', href: '#' },
-          { label: 'Architecture & 3D', href: '#' },
+          { label: 'Designers', href: '#', subtitle: 'Design, prototype, ship' },
+          { label: 'Marketers', href: '#', subtitle: 'Content that performs' },
+          { label: 'Content Creators', href: '#', subtitle: 'Create more, everywhere' },
+          { label: 'Video & Film', href: '#', subtitle: 'Edit & generate video' },
+          { label: 'Developers', href: '#', subtitle: 'Build with the SDK & CLI' },
+          { label: 'Enterprise & Teams', href: '#', subtitle: 'Private, secure, at scale' },
         ],
       },
     ],
@@ -204,8 +246,23 @@ const navItems: NavEntry[] = [
  * Mega-menu row — rich (title + subtitle) or compact (title only)
  * ────────────────────────────────────────────────────────────────────── */
 
+/* Renders a product name with a muted "XENO" lead-in (keeps the brand, kills the repetition) */
+function ProductLabel({ label }: { label: string }) {
+  if (label.startsWith('XENO ')) {
+    return (
+      <span>
+        <span className="font-normal" style={{ color: C.label }}>XENO&nbsp;</span>
+        {label.slice(5)}
+      </span>
+    );
+  }
+  return <span>{label}</span>;
+}
+
 function MenuRow({ item, onHover, onPreview }: { item: MenuItem; onHover: (el: HTMLElement, item: MenuItem) => void; onPreview?: (item: MenuItem) => void }) {
   const rich = Boolean(item.subtitle);
+  // Placeholder product rows ('#' + "XENO X" label) resolve to their product page.
+  const resolvedHref = item.href === '#' && /^XENO\s+/i.test(item.label) ? `/product/${slugify(item.label)}` : item.href;
   const handleEnter = (e: React.MouseEvent<HTMLElement>) => onHover(e.currentTarget, item);
   const handleContext = onPreview ? (e: React.MouseEvent) => { e.preventDefault(); onPreview(item); } : undefined;
 
@@ -216,32 +273,32 @@ function MenuRow({ item, onHover, onPreview }: { item: MenuItem; onHover: (el: H
   const inner = rich ? (
     <>
       <span className="flex items-center gap-1 text-[13.5px] font-medium leading-tight transition-colors" style={{ color: C.title }}>
-        {item.label}
+        <ProductLabel label={item.label} />
         <ArrowUpRight className="h-3 w-3 -translate-x-1 opacity-0 transition-all duration-150 group-hover/row:translate-x-0 group-hover/row:opacity-100" style={{ color: C.desc }} />
       </span>
       <span className="mt-0.5 block text-[11px] leading-snug" style={{ color: C.desc }}>{item.subtitle}</span>
     </>
   ) : (
     <>
-      <span className="text-[13.5px] font-medium leading-none transition-colors" style={{ color: C.title }}>{item.label}</span>
+      <span className="text-[13.5px] font-medium leading-none transition-colors" style={{ color: C.title }}><ProductLabel label={item.label} /></span>
       <ArrowUpRight className="h-3.5 w-3.5 -translate-x-1 opacity-0 transition-all duration-150 group-hover/row:translate-x-0 group-hover/row:opacity-100" style={{ color: C.desc }} />
     </>
   );
 
-  if (item.href.startsWith('/')) {
+  if (resolvedHref.startsWith('/')) {
     return (
-      <Link to={item.href} className={cls} onMouseEnter={handleEnter} onContextMenu={handleContext}>
+      <Link to={resolvedHref} className={cls} onMouseEnter={handleEnter} onContextMenu={handleContext}>
         {inner}
       </Link>
     );
   }
   return (
     <a
-      href={item.href}
+      href={resolvedHref}
       className={cls}
       onMouseEnter={handleEnter}
       onContextMenu={handleContext}
-      onClick={item.href === '#' ? (e) => e.preventDefault() : undefined}
+      onClick={resolvedHref === '#' ? (e) => e.preventDefault() : undefined}
       target={item.external ? '_blank' : undefined}
       rel={item.external ? 'noopener noreferrer' : undefined}
     >
@@ -258,7 +315,7 @@ function ShowcasePane({ item }: { item: MenuItem }) {
   return (
     // Full-width demo panel — expands in on right-click; only the tint inside morphs after that
     <div className="w-full overflow-hidden px-3 pb-3 pt-0" style={{ backgroundColor: C.card, animation: 'xenoExpandDown 300ms cubic-bezier(0.2,0.7,0.2,1)' }}>
-      <div className="relative h-[420px] w-full overflow-hidden rounded-[10px]" style={{ border: `1px solid ${C.border}` }}>
+      <div className="relative h-[460px] w-full overflow-hidden rounded-[10px]" style={{ border: `1px solid ${C.border}` }}>
         <div key={item.label} className={`absolute inset-0 ${item.tint ?? ''}`} style={{ animation: 'xenoFadeContent 260ms ease' }} />
         <div className="absolute inset-x-4 top-3.5 flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-[2px] bg-white/20" />
@@ -290,7 +347,7 @@ function NavDropdown({ entry, onOpen, onClose }: { entry: NavEntry; onOpen: () =
   const list = (
     <div
       onMouseLeave={hideHl}
-      className="relative flex gap-1 p-2.5"
+      className="relative flex gap-1 px-2.5 pb-2.5 pt-3"
       style={{ backgroundColor: C.card }}
     >
       {/* Sliding highlight that follows the hovered row */}
@@ -309,9 +366,16 @@ function NavDropdown({ entry, onOpen, onClose }: { entry: NavEntry; onOpen: () =
         }}
       />
       {entry.menu!.map((section) => (
-        <div key={section.label} className="w-[150px]">
-          <div className="mb-1.5 px-2.5 pt-1 text-[10px] font-semibold uppercase leading-none tracking-[0.2em]" style={{ color: C.label }}>
-            {section.label}
+        <div key={section.label} className={`group/cat ${entry.showcase ? 'w-[150px]' : 'w-[190px]'}`}>
+          <div className="pl-3.5 pr-2.5 pt-0">
+            <div className="inline-flex flex-col">
+              <span className="text-[10px] font-semibold uppercase leading-none tracking-[0.2em] text-[#827b71] transition-colors duration-300 ease-out group-hover/cat:text-[#a89f95]">
+                {section.label}
+              </span>
+              <div className="relative mb-2 mt-1.5 h-px w-full">
+                <span className="absolute left-0 top-0 h-px w-8 transition-transform duration-300 ease-out group-hover/cat:translate-x-1" style={{ backgroundColor: C.border }} />
+              </div>
+            </div>
           </div>
           {section.items.map((item) => (
             <MenuRow key={item.label} item={item} onHover={onHover} onPreview={entry.showcase ? togglePreview : undefined} />
@@ -413,13 +477,13 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
         <div className="relative flex h-[56px] w-full items-center justify-between px-[1.4vw]">
           {/* ── Left: Logo + breadcrumb ─────────────────────────────── */}
           <div className="flex items-center gap-8">
-            <Link to="/v3" className="group flex items-center gap-2.5" aria-label="XENO AI home">
+            <Link to="/" className="group flex items-center gap-2.5" aria-label="XENO AI home">
               <img
                 src="/xeno-logo.svg"
                 alt=""
                 className="h-6 w-6 invert drop-shadow-[0_0_10px_rgba(255,255,255,0.18)] transition-transform duration-300 group-hover:scale-105"
               />
-              <span className="text-[17px] font-semibold tracking-tight text-white">XENO AI</span>
+              <Wordmark />
             </Link>
 
             <nav className="hidden items-center gap-2 text-[9.5px] font-semibold tracking-[0.22em] md:flex">
