@@ -60,6 +60,60 @@ async function mirrorLegacy(client, userId, balanceMicro) {
   await client.query('UPDATE users SET credits = $1 WHERE id = $2', [whole.toString(), userId]);
 }
 
+const GENESIS = 'GENESIS';
+function chainHash(prevHash, e) {
+  return crypto.createHash('sha256')
+    .update([prevHash, e.userId, e.type, e.amount, e.balanceAfter, e.refType, e.refId].join('|'))
+    .digest('hex');
+}
+
+/**
+ * Append a journal entry with a per-account hash chain (Arch §5, CloudTrail
+ * pattern): entry_hash = SHA256(prev_hash ‖ user ‖ type ‖ amount ‖ balance_after
+ * ‖ ref). Altering or deleting any past row breaks every subsequent hash → the
+ * money journal is tamper-evident. Runs inside the caller's account-locked
+ * transaction (credit_accounts FOR UPDATE), so the prev-hash read is race-free.
+ */
+async function insertLedgerEntry(client, e) {
+  const prev = await client.query(
+    'SELECT entry_hash FROM credit_transactions WHERE account_id=$1 AND entry_hash IS NOT NULL ORDER BY created_at DESC, id DESC LIMIT 1',
+    [e.accountId],
+  );
+  const prevHash = prev.rows[0]?.entry_hash || GENESIS;
+  const entryHash = chainHash(prevHash, e);
+  await client.query(
+    `INSERT INTO credit_transactions
+       (user_id, account_id, type, amount, balance_after, reference_type, reference_id, description, metadata, prev_hash, entry_hash)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)`,
+    [e.userId, e.accountId, e.type, e.amount, e.balanceAfter, e.refType, e.refId, e.description, e.metadata, prevHash, entryHash],
+  );
+  return entryHash;
+}
+
+/** Walk a user's journal, recompute the chain, report the first break (Arch §5). */
+export async function verifyChainV2(pool, userId) {
+  const acct = await pool.query('SELECT id FROM credit_accounts WHERE user_id=$1', [userId]);
+  if (acct.rows.length === 0) return { ok: true, entries: 0 };
+  const rows = (await pool.query(
+    `SELECT type, amount, balance_after, reference_type, reference_id, prev_hash, entry_hash
+       FROM credit_transactions WHERE account_id=$1 AND entry_hash IS NOT NULL
+       ORDER BY created_at ASC, id ASC`,
+    [acct.rows[0].id],
+  )).rows;
+  let prevHash = GENESIS;
+  for (let i = 0; i < rows.length; i += 1) {
+    const r = rows[i];
+    const expect = chainHash(prevHash, {
+      userId, type: r.type, amount: r.amount, balanceAfter: r.balance_after, refType: r.reference_type, refId: r.reference_id,
+    });
+    if (r.prev_hash !== prevHash || r.entry_hash !== expect) {
+      return { ok: false, entries: rows.length, brokenAt: i, transactionId: r.reference_id };
+    }
+    prevHash = r.entry_hash;
+  }
+  return { ok: true, entries: rows.length, head: prevHash };
+}
+
 /** Posted / pending / available balance (micro). */
 export async function getBalanceV2(pool, userId) {
   const client = await pool.connect();
@@ -132,16 +186,12 @@ export async function recordUsageV2(pool, userId, event) {
       'UPDATE credit_accounts SET balance = $1, lifetime_spent = lifetime_spent + $2, updated_at = now() WHERE id = $3',
       [newBalance.toString(), costMicro.toString(), acct.id],
     );
-    await client.query(
-      `INSERT INTO credit_transactions
-         (user_id, account_id, type, amount, balance_after, reference_type, reference_id, description, metadata)
-       VALUES ($1, $2, 'debit', $3, $4, $5, $6, $7, $8::jsonb)`,
-      [
-        userId, acct.id, (-costMicro).toString(), newBalance.toString(), REF_TYPE, event.transactionId,
-        `${event.surface}:${event.operation}`,
-        JSON.stringify({ surface: event.surface, operation: event.operation, model: event.model ?? null, ...event.dimensions }),
-      ],
-    );
+    await insertLedgerEntry(client, {
+      userId, accountId: acct.id, type: 'debit', amount: (-costMicro).toString(), balanceAfter: newBalance.toString(),
+      refType: REF_TYPE, refId: event.transactionId,
+      description: `${event.surface}:${event.operation}`,
+      metadata: JSON.stringify({ surface: event.surface, operation: event.operation, model: event.model ?? null, ...event.dimensions }),
+    });
     await insertUsageLog(client, userId, event, costMicro);
     await mirrorLegacy(client, userId, newBalance);
 
@@ -216,11 +266,12 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro) {
       [newBalance.toString(), actual.toString(), acct.id]);
     await client.query("UPDATE credit_holds SET state='settled', settled_micro=$1, updated_at=now() WHERE id=$2",
       [actual.toString(), hold.id]);
-    await client.query(
-      `INSERT INTO credit_transactions (user_id, account_id, type, amount, balance_after, reference_type, reference_id, description, metadata)
-       VALUES ($1,$2,'debit',$3,$4,'xeno.hold',$5,$6,$7::jsonb)`,
-      [userId, acct.id, (-actual).toString(), newBalance.toString(), holdId, `${hold.surface}:${hold.operation}`,
-       JSON.stringify({ surface: hold.surface, operation: hold.operation, holdId })]);
+    await insertLedgerEntry(client, {
+      userId, accountId: acct.id, type: 'debit', amount: (-actual).toString(), balanceAfter: newBalance.toString(),
+      refType: 'xeno.hold', refId: holdId,
+      description: `${hold.surface}:${hold.operation}`,
+      metadata: JSON.stringify({ surface: hold.surface, operation: hold.operation, holdId }),
+    });
     await insertUsageLog(client, userId, { surface: hold.surface, operation: hold.operation, transactionId: holdId }, actual);
     await mirrorLegacy(client, userId, newBalance);
     await client.query('COMMIT');

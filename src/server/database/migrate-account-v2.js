@@ -106,10 +106,22 @@ CREATE TABLE IF NOT EXISTS oidc_signing_keys (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- Identity-by-(provider,subject): one (surface → canonical user) link, idempotent
--- upsert target for sign-in. (Arch §2.1 / §0.4 — the "from where" join, not email.)
-CREATE UNIQUE INDEX IF NOT EXISTS uq_eil_source_platform
-  ON external_identity_links (source_system, platform_user_id);
+-- Additions on EXISTING live tables — guarded by to_regclass so the migration
+-- is safe to run on a DB where those tables aren't present yet (e.g. tests).
+DO $$ BEGIN
+  -- Identity-by-(provider,subject): one (surface → canonical user) link, the
+  -- idempotent upsert target for sign-in (Arch §2.1/§0.4 — "from where", not email).
+  IF to_regclass('public.external_identity_links') IS NOT NULL THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_eil_source_platform
+      ON external_identity_links (source_system, platform_user_id);
+  END IF;
+  -- Tamper-evident money: per-account hash chain on the journal (Arch §5,
+  -- CloudTrail). Legacy rows keep NULL; the chain starts at the first v2 entry.
+  IF to_regclass('public.credit_transactions') IS NOT NULL THEN
+    ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS prev_hash  text;
+    ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS entry_hash text;
+  END IF;
+END $$;
 `;
 
 export async function migrateAccountV2(pool) {

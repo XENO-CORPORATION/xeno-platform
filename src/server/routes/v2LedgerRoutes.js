@@ -16,6 +16,7 @@ import {
   holdV2,
   settleHoldV2,
   voidHoldV2,
+  verifyChainV2,
 } from '../utils/creditLedgerV2.js';
 
 const router = express.Router();
@@ -31,6 +32,15 @@ function sendErr(res, err) {
   if (status === 500) console.error('[v2/ledger] error:', err.message);
   res.status(status).json({ error: { code: err.code || 'PLATFORM_ERROR', message: err.message } });
 }
+
+// GET /api/v2/ledger/verify — tamper-evidence: recompute the hash chain (Arch §5)
+router.get('/verify', async (req, res) => {
+  try {
+    res.json(await verifyChainV2(req.db, req.user.id));
+  } catch (err) {
+    sendErr(res, err);
+  }
+});
 
 // GET /api/v2/ledger/balance
 router.get('/balance', async (req, res) => {
