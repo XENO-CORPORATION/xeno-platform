@@ -114,11 +114,12 @@ router.post('/device_authorization', async (req, res) => {
   } catch (e) { sendOauthError(res, e); }
 });
 
-// POST /oauth2/revoke — RFC 7009; revoke a refresh token + its family (or by sid
-// for RP-initiated / global logout). Always 200 (no token enumeration).
+// POST /oauth2/revoke — RFC 7009; revoke a refresh token + its family. Public, so
+// it accepts ONLY a token (proof of possession) — NEVER a sid (that would let
+// anyone log out any session). sid-based logout is on /end_session (authed).
 router.post('/revoke', async (req, res) => {
   try {
-    await revokeToken(req.db, { token: (req.body || {}).token, sid: (req.body || {}).sid });
+    await revokeToken(req.db, { token: (req.body || {}).token });
     res.status(200).json({});
   } catch (e) { res.status(200).json({}); }
 });
