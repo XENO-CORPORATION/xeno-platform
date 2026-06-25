@@ -106,6 +106,35 @@ CREATE TABLE IF NOT EXISTS oidc_signing_keys (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- Credit grants = drawdown lots (Arch §4.7). Spend draws down lots in order:
+-- priority ASC → soonest-expiry → free-before-paid → FIFO. balance = Σ remaining
+-- of unexpired lots (credit_accounts.balance is the cached total).
+CREATE TABLE IF NOT EXISTS credit_grants (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       uuid NOT NULL,
+  account_id    uuid,
+  amount_micro    bigint NOT NULL,
+  remaining_micro bigint NOT NULL,
+  kind          varchar(16) NOT NULL DEFAULT 'paid',   -- free | promo | paid
+  priority      int NOT NULL DEFAULT 100,              -- lower drains first
+  source_ref    varchar(128),
+  expires_at    timestamptz,                           -- null = never
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_grants_drawdown
+  ON credit_grants (user_id, priority, expires_at, created_at) WHERE remaining_micro > 0;
+
+-- Spend caps as a settlement INVARIANT (Arch §4.6): a debit that would exceed the
+-- window cap is rejected, not just alerted.
+CREATE TABLE IF NOT EXISTS spend_caps (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL,
+  window_sec  int NOT NULL,
+  limit_micro bigint NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, window_sec)
+);
+
 -- Authorization (Arch §3): Zanzibar-style relationship tuples — object#relation@subject.
 -- RBAC roles are modeled as relations; agents are subjects with a scoped relation.
 -- Postgres MVP (swappable for OpenFGA later, exactly as the ledger is pre-TigerBeetle).

@@ -54,6 +54,108 @@ async function activeHoldsMicro(client, userId) {
   return BigInt(r.rows[0].held);
 }
 
+// ── Drawdown lots (Arch §4.7) ───────────────────────────────────────────────
+
+const KIND_RANK = { free: 0, promo: 1, paid: 2 };
+
+/**
+ * Lazily migrate an account to lots: if it has balance but no live grants, seed a
+ * single 'paid' lot = balance. Keeps existing accounts working under the new model.
+ */
+async function syncGrants(client, account, userId) {
+  const g = await client.query(
+    "SELECT COALESCE(SUM(remaining_micro),0)::bigint s FROM credit_grants WHERE user_id=$1 AND remaining_micro>0 AND (expires_at IS NULL OR expires_at>now())",
+    [userId],
+  );
+  const grantSum = BigInt(g.rows[0].s);
+  const balance = BigInt(account.balance);
+  if (grantSum === 0n && balance > 0n) {
+    await client.query(
+      "INSERT INTO credit_grants (user_id, account_id, amount_micro, remaining_micro, kind, priority, source_ref) VALUES ($1,$2,$3,$3,'paid',100,'backfill')",
+      [userId, account.id, balance.toString()],
+    );
+  }
+}
+
+/** Σ remaining of unexpired lots. */
+async function grantsAvailable(client, userId) {
+  const r = await client.query(
+    "SELECT COALESCE(SUM(remaining_micro),0)::bigint s FROM credit_grants WHERE user_id=$1 AND remaining_micro>0 AND (expires_at IS NULL OR expires_at>now())",
+    [userId],
+  );
+  return BigInt(r.rows[0].s);
+}
+
+/** Draw `costMicro` from lots in §4.7 order. Caller has checked availability. */
+async function drawdownGrants(client, userId, costMicro) {
+  let need = costMicro;
+  const lots = await client.query(
+    `SELECT id, remaining_micro, kind FROM credit_grants
+      WHERE user_id=$1 AND remaining_micro>0 AND (expires_at IS NULL OR expires_at>now())
+      ORDER BY priority ASC, expires_at ASC NULLS LAST, created_at ASC, id ASC
+      FOR UPDATE`,
+    [userId],
+  );
+  // Stable tiebreak: free-before-paid within equal priority/expiry.
+  const ordered = lots.rows.slice().sort((a, b) => (KIND_RANK[a.kind] ?? 9) - (KIND_RANK[b.kind] ?? 9) || 0);
+  for (const lot of ordered) {
+    if (need <= 0n) break;
+    const take = BigInt(lot.remaining_micro) < need ? BigInt(lot.remaining_micro) : need;
+    await client.query('UPDATE credit_grants SET remaining_micro = remaining_micro - $1 WHERE id = $2', [take.toString(), lot.id]);
+    need -= take;
+  }
+  return need; // 0 if fully covered
+}
+
+/** Add a grant (credit top-up / promo / free allotment). */
+export async function addGrant(pool, userId, { amountMicro, kind = 'paid', priority, expiresAt = null, sourceRef = null }) {
+  const amt = BigInt(Math.max(1, Math.round(amountMicro)));
+  const prio = priority ?? (kind === 'free' ? 10 : kind === 'promo' ? 50 : 100);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const acct = await ensureAccount(client, userId);
+    await client.query(
+      'INSERT INTO credit_grants (user_id, account_id, amount_micro, remaining_micro, kind, priority, source_ref, expires_at) VALUES ($1,$2,$3,$3,$4,$5,$6,$7)',
+      [userId, acct.id, amt.toString(), kind, prio, sourceRef, expiresAt],
+    );
+    const newBalance = BigInt(acct.balance) + amt;
+    await client.query('UPDATE credit_accounts SET balance=$1, lifetime_earned=lifetime_earned+$2, updated_at=now() WHERE id=$3',
+      [newBalance.toString(), amt.toString(), acct.id]);
+    await mirrorLegacy(client, userId, newBalance);
+    await client.query('COMMIT');
+    return { granted: true, amountMicro: Number(amt), kind, balance: balanceView(newBalance, await activeHoldsMicro(pool, userId).catch(() => 0n)) };
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+}
+
+// ── Spend caps (Arch §4.6) ──────────────────────────────────────────────────
+
+export async function setSpendCap(pool, userId, { windowSec, limitMicro }) {
+  await pool.query(
+    `INSERT INTO spend_caps (user_id, window_sec, limit_micro) VALUES ($1,$2,$3)
+     ON CONFLICT (user_id, window_sec) DO UPDATE SET limit_micro=EXCLUDED.limit_micro`,
+    [userId, windowSec, BigInt(Math.max(0, Math.round(limitMicro))).toString()],
+  );
+  return { ok: true };
+}
+
+/** Throw SPEND_CAP_EXCEEDED if posting costMicro now would breach any window cap. */
+async function assertWithinCaps(client, userId, costMicro) {
+  const caps = await client.query('SELECT window_sec, limit_micro FROM spend_caps WHERE user_id=$1', [userId]);
+  for (const cap of caps.rows) {
+    const spent = await client.query(
+      `SELECT COALESCE(SUM(-amount),0)::bigint s FROM credit_transactions
+        WHERE user_id=$1 AND type='debit' AND created_at > now() - ($2 || ' seconds')::interval`,
+      [userId, cap.window_sec],
+    );
+    if (BigInt(spent.rows[0].s) + costMicro > BigInt(cap.limit_micro)) {
+      const e = new Error(`spend cap exceeded (${cap.window_sec}s window)`);
+      e.code = 'SPEND_CAP_EXCEEDED';
+      throw e;
+    }
+  }
+}
+
 /** Mirror the new authoritative balance down to legacy users.credits (whole). */
 async function mirrorLegacy(client, userId, balanceMicro) {
   const whole = balanceMicro / BigInt(MICRO_PER_CREDIT); // floor for BigInt division
@@ -114,6 +216,31 @@ export async function verifyChainV2(pool, userId) {
   return { ok: true, entries: rows.length, head: prevHash };
 }
 
+/**
+ * Unified usage aggregation (Arch §4.5/§7 "where/what" view). groupBy is a
+ * dimension (surface/operation/model/provider) — no platform conditionals.
+ */
+export async function usageSummary(pool, userId, { from, to, groupBy = 'surface' }) {
+  const col = { surface: 'surface', operation: 'operation', model: 'model', provider: 'provider' }[groupBy] || 'surface';
+  const r = await pool.query(
+    `SELECT ${col} AS key, COUNT(*)::int AS events,
+            COALESCE(SUM(actual_cost_micro),0)::bigint AS cost_micro,
+            COALESCE(SUM(input_tokens),0)::bigint  AS input_tokens,
+            COALESCE(SUM(output_tokens),0)::bigint AS output_tokens
+       FROM api_usage_logs
+      WHERE user_id=$1 AND created_at >= $2 AND created_at < $3
+      GROUP BY ${col} ORDER BY cost_micro DESC`,
+    [userId, from, to],
+  );
+  return {
+    from, to, groupBy,
+    rows: r.rows.map((x) => ({
+      key: x.key, events: x.events, costMicro: Number(x.cost_micro),
+      inputTokens: Number(x.input_tokens), outputTokens: Number(x.output_tokens),
+    })),
+  };
+}
+
 /** Posted / pending / available balance (micro). */
 export async function getBalanceV2(pool, userId) {
   const client = await pool.connect();
@@ -172,6 +299,8 @@ export async function recordUsageV2(pool, userId, event) {
       err.code = 'ACCOUNT_FROZEN';
       throw err;
     }
+    await syncGrants(client, acct, userId);          // lazily migrate to lots (§4.7)
+    await assertWithinCaps(client, userId, costMicro); // spend-cap invariant (§4.6)
     const balance = BigInt(acct.balance);
     const held = await activeHoldsMicro(client, userId);
     if (balance - held < costMicro) {
@@ -181,6 +310,7 @@ export async function recordUsageV2(pool, userId, event) {
       throw err;
     }
 
+    await drawdownGrants(client, userId, costMicro);  // draw from lots in §4.7 order
     const newBalance = balance - costMicro;
     await client.query(
       'UPDATE credit_accounts SET balance = $1, lifetime_spent = lifetime_spent + $2, updated_at = now() WHERE id = $3',
@@ -261,6 +391,8 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro) {
     }
     const actual = BigInt(Math.min(Math.max(0, Math.round(actualCostMicro)), Number(hold.amount_micro)));
     const acct = await ensureAccount(client, userId);
+    await syncGrants(client, acct, userId);
+    if (actual > 0n) await drawdownGrants(client, userId, actual); // draw from lots (§4.7)
     const newBalance = BigInt(acct.balance) - actual;
     await client.query('UPDATE credit_accounts SET balance=$1, lifetime_spent=lifetime_spent+$2, updated_at=now() WHERE id=$3',
       [newBalance.toString(), actual.toString(), acct.id]);
