@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, ChevronDown, Download, Menu, X } from 'lucide-react';
+import { slugify } from '../../lib/productCatalog';
 
 /* XENO wordmark with a soft light that follows the cursor, masked inside the glyphs */
 function Wordmark() {
@@ -260,6 +261,8 @@ function ProductLabel({ label }: { label: string }) {
 
 function MenuRow({ item, onHover, onPreview }: { item: MenuItem; onHover: (el: HTMLElement, item: MenuItem) => void; onPreview?: (item: MenuItem) => void }) {
   const rich = Boolean(item.subtitle);
+  // Placeholder product rows ('#' + "XENO X" label) resolve to their product page.
+  const resolvedHref = item.href === '#' && /^XENO\s+/i.test(item.label) ? `/product/${slugify(item.label)}` : item.href;
   const handleEnter = (e: React.MouseEvent<HTMLElement>) => onHover(e.currentTarget, item);
   const handleContext = onPreview ? (e: React.MouseEvent) => { e.preventDefault(); onPreview(item); } : undefined;
 
@@ -282,20 +285,20 @@ function MenuRow({ item, onHover, onPreview }: { item: MenuItem; onHover: (el: H
     </>
   );
 
-  if (item.href.startsWith('/')) {
+  if (resolvedHref.startsWith('/')) {
     return (
-      <Link to={item.href} className={cls} onMouseEnter={handleEnter} onContextMenu={handleContext}>
+      <Link to={resolvedHref} className={cls} onMouseEnter={handleEnter} onContextMenu={handleContext}>
         {inner}
       </Link>
     );
   }
   return (
     <a
-      href={item.href}
+      href={resolvedHref}
       className={cls}
       onMouseEnter={handleEnter}
       onContextMenu={handleContext}
-      onClick={item.href === '#' ? (e) => e.preventDefault() : undefined}
+      onClick={resolvedHref === '#' ? (e) => e.preventDefault() : undefined}
       target={item.external ? '_blank' : undefined}
       rel={item.external ? 'noopener noreferrer' : undefined}
     >
@@ -474,7 +477,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
         <div className="relative flex h-[56px] w-full items-center justify-between px-[1.4vw]">
           {/* ── Left: Logo + breadcrumb ─────────────────────────────── */}
           <div className="flex items-center gap-8">
-            <Link to="/v3" className="group flex items-center gap-2.5" aria-label="XENO AI home">
+            <Link to="/" className="group flex items-center gap-2.5" aria-label="XENO AI home">
               <img
                 src="/xeno-logo.svg"
                 alt=""
