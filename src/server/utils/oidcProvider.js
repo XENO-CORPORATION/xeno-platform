@@ -299,8 +299,48 @@ export async function deviceTokenGrant(db, { deviceCode, clientId }) {
  * logout, Arch §2.5). Always succeeds (no token enumeration). Access-token JWTs
  * expire on their own via the 10-min TTL.
  */
+const LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout';
+
+/**
+ * OIDC Back-Channel Logout (Arch §2.5): for every relying party that holds a
+ * session under `sid` and has registered a `backchannel_logout_uri`, POST a
+ * signed Logout Token so it can kill its local session — the only reliable
+ * cross-app logout (no browser). Best-effort; never throws into the caller.
+ */
+export async function emitBackchannelLogout(db, sid) {
+  if (!sid) return;
+  let rows;
+  try {
+    rows = await db.query(
+      `SELECT DISTINCT rt.client_id, rt.user_id, c.backchannel_logout_uri
+         FROM oauth_refresh_tokens rt JOIN oauth_clients c ON c.client_id = rt.client_id
+        WHERE rt.sid = $1 AND c.backchannel_logout_uri IS NOT NULL`,
+      [sid],
+    );
+  } catch { return; } // column may not exist yet on older DBs
+  if (rows.rows.length === 0) return;
+  const key = await getSigningKey(db);
+  const now = Math.floor(Date.now() / 1000);
+  await Promise.all(rows.rows.map(async (r) => {
+    const logoutToken = jwt.sign(
+      { iss: issuer(), aud: r.client_id, sub: r.user_id, sid, iat: now, jti: crypto.randomBytes(8).toString('hex'), events: { [LOGOUT_EVENT]: {} } },
+      key.privatePem, { algorithm: key.alg, keyid: key.kid, expiresIn: 120, header: { typ: 'logout+jwt', kid: key.kid } },
+    );
+    try {
+      // First-party RPs receive JSON (we control both ends). Spec RPs use
+      // application/x-www-form-urlencoded `logout_token=…` — a trivial swap when
+      // onboarding third parties.
+      await fetch(r.backchannel_logout_uri, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ logout_token: logoutToken }),
+      });
+    } catch { /* RP unreachable — best effort */ }
+  }));
+}
+
 export async function revokeToken(db, { token, sid }) {
   if (sid) {
+    await emitBackchannelLogout(db, sid).catch(() => {});
     await db.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE sid = $1', [sid]);
     return { revoked: true };
   }

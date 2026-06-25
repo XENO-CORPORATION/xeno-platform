@@ -151,6 +151,9 @@ CREATE TABLE IF NOT EXISTS relationship_tuples (
 CREATE INDEX IF NOT EXISTS idx_reltuples_lookup
   ON relationship_tuples (object_type, object_id, subject_type, subject_id);
 
+-- Back-channel logout (Arch §2.5): where the origin POSTs a signed Logout Token.
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS backchannel_logout_uri text;
+
 -- Append-only enforcement at the DB level (Arch §4.2): credit_transactions can
 -- only ever be INSERTed. Corrections = reversing entries, never edits. (Trigger,
 -- not a role GRANT, because the app connects as a superuser which bypasses GRANTs.)
