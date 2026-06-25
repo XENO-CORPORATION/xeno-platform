@@ -41,93 +41,34 @@ router.get('/jwks', async (req, res) => {
 router.get('/openid-configuration', (req, res) => res.json(discovery()));
 router.get('/.well-known/openid-configuration', (req, res) => res.json(discovery()));
 
-// GET /oauth2/authorize — browser entry point for "Sign in with XENO". This IS
-// the XENO auth screen (served on the xenostudio.ai origin, like Google's consent
-// page): if the user already has a session (localStorage 'xenoos_auth_token') it
-// auto-continues; otherwise it shows a sign-in / create-account form, signs them
-// in against /api/auth/*, then continues — so the user never hits a dead end.
-// First-party clients auto-approve the grant (Identity Plan §2.3).
+// GET /oauth2/authorize — browser entry point for "Sign in with XENO". If the
+// user already has a XENO session (localStorage 'xenoos_auth_token') it
+// auto-approves the grant and continues; otherwise it sends them to the REAL
+// branded platform login (/auth) — full email/password + social (GitHub) + MFA —
+// with returnUrl set back to this authorize URL, so once they sign in by ANY
+// method they land right back here and the flow completes. No dead end, no
+// duplicated login UI. First-party clients auto-approve (Identity Plan §2.3).
 router.get('/authorize', (req, res) => {
   res.set('content-type', 'text/html; charset=utf-8');
   res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Sign in with XENO</title><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-*{box-sizing:border-box}body{font:15px/1.5 system-ui,-apple-system,sans-serif;background:radial-gradient(1200px 600px at 50% -10%,#16161c,#0a0a0c);color:#e7e7ea;display:grid;place-items:center;min-height:100vh;margin:0}
-.card{width:360px;max-width:92vw;padding:32px 28px;background:#101015;border:1px solid #23232b;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-.brand{font-weight:700;letter-spacing:.5px;font-size:13px;color:#9aa0aa;text-transform:uppercase;margin-bottom:6px}
-h1{font-size:20px;margin:0 0 4px}.sub{color:#9aa0aa;font-size:13px;margin:0 0 20px}
-label{display:block;font-size:12px;color:#9aa0aa;margin:12px 0 4px}
-input{width:100%;padding:10px 12px;background:#16161d;border:1px solid #2a2a34;border-radius:9px;color:#fff;font-size:14px}
-input:focus{outline:none;border-color:#7aa2ff}
-button{width:100%;margin-top:18px;padding:11px;background:#5b7cff;border:0;border-radius:9px;color:#fff;font-weight:600;font-size:14px;cursor:pointer}
-button:disabled{opacity:.6;cursor:default}
-.muted{color:#9aa0aa;font-size:13px;text-align:center;margin-top:14px}.muted a{color:#7aa2ff;cursor:pointer;text-decoration:none}
-.err{color:#ff7a7a;font-size:13px;margin-top:10px;min-height:18px}
-.status{text-align:center;color:#cfd2d8}.hide{display:none}
-</style></head>
-<body><div class="card">
-  <div class="brand">XENO</div>
-  <h1 id="title">Sign in to continue</h1>
-  <p class="sub" id="appsub">Authorize <b id="app">this app</b> to use your XENO account.</p>
-  <div id="status" class="status">Checking your XENO session…</div>
-  <form id="form" class="hide" autocomplete="on">
-    <div id="nameRow" class="hide"><label>Name</label><input id="name" type="text" placeholder="Jane Doe"></div>
-    <label>Email</label><input id="email" type="email" placeholder="you@company.com" required>
-    <label>Password</label><input id="password" type="password" placeholder="••••••••" required>
-    <div class="err" id="err"></div>
-    <button id="submit" type="submit">Sign in &amp; continue</button>
-    <p class="muted"><span id="toggleText">New to XENO?</span> <a id="toggle">Create an account</a></p>
-  </form>
-</div>
+<style>body{font:15px/1.5 system-ui,-apple-system,sans-serif;background:radial-gradient(1200px 600px at 50% -10%,#16161c,#0a0a0c);color:#cfd2d8;display:grid;place-items:center;min-height:100vh;margin:0}
+.c{text-align:center}.s{opacity:.8;font-size:14px}a{color:#7aa2ff}</style></head>
+<body><div class="c"><div id="s" class="s">Connecting you to XENO…</div></div>
 <script>
 (function(){
   var p=new URLSearchParams(location.search);
-  var $=function(id){return document.getElementById(id)};
-  $('app').textContent=p.get('client_id')||'this app';
-  var mode='signin';
-  function show(el,on){el.classList[on?'remove':'add']('hide')}
-  function setStatus(t){show($('status'),true);show($('form'),false);$('status').textContent=t}
-  function showForm(msg){show($('status'),false);show($('form'),true);$('err').textContent=msg||''}
-  function fail(msg){$('err').textContent=msg;$('submit').disabled=false;$('submit').textContent=mode==='signup'?'Create account & continue':'Sign in & continue'}
-
+  var s=document.getElementById('s');
+  function toAuth(){ location.replace('/auth?returnUrl='+encodeURIComponent(location.pathname+location.search)); }
   function continueWith(tok){
-    setStatus('Signing you in…');
     fetch('/api/oauth2/authorize',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+tok},
       body:JSON.stringify({client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),state:p.get('state')})})
-    .then(function(r){ if(r.status===401){ localStorage.removeItem('xenoos_auth_token'); showForm('Your XENO session expired — please sign in again.'); throw 0;} return r.json(); })
-    .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
-    .catch(function(e){ if(e!==0) showForm('Error: '+(e&&e.message||e)); });
+    .then(function(r){ if(r.status===401){ localStorage.removeItem('xenoos_auth_token'); toAuth(); throw 0; } return r.json(); })
+    .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else { s.textContent='Authorization error: '+((d&&(d.error_description||d.error))||'failed'); } })
+    .catch(function(e){ if(e!==0) s.textContent='Error: '+(e&&e.message||e); });
   }
-
-  $('toggle').onclick=function(){
-    mode=mode==='signin'?'signup':'signin';
-    show($('nameRow'),mode==='signup');
-    $('title').textContent=mode==='signup'?'Create your XENO account':'Sign in to continue';
-    $('submit').textContent=mode==='signup'?'Create account & continue':'Sign in & continue';
-    $('toggleText').textContent=mode==='signup'?'Already have an account?':'New to XENO?';
-    $('toggle').textContent=mode==='signup'?'Sign in':'Create an account';
-    $('err').textContent='';
-  };
-
-  $('form').onsubmit=function(e){
-    e.preventDefault();
-    var email=$('email').value.trim(), password=$('password').value, name=$('name').value.trim();
-    if(!email||!password){ return fail('Email and password are required.'); }
-    $('submit').disabled=true; $('submit').textContent='Please wait…'; $('err').textContent='';
-    var url=mode==='signup'?'/api/auth/register':'/api/auth/login';
-    var body=mode==='signup'
-      ? {email:email,password:password,username:email.split('@')[0].slice(0,20),display_name:name||email.split('@')[0]}
-      : {email:email,password:password};
-    fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})
-      .then(function(r){return r.json()}).then(function(d){
-        if(d&&d.token){ localStorage.setItem('xenoos_auth_token',d.token); continueWith(d.token); }
-        else { fail((d&&d.error)||'Sign-in failed. Check your details and try again.'); }
-      }).catch(function(e){ fail('Network error: '+(e&&e.message||e)); });
-  };
-
-  // Entry: already signed in → continue; else show the sign-in form.
   var tok=localStorage.getItem('xenoos_auth_token');
-  if(tok){ continueWith(tok); } else { showForm(''); }
+  if(tok){ continueWith(tok); } else { toAuth(); }
 })();
 </script></body></html>`);
 });
