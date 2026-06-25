@@ -1,59 +1,47 @@
 import React from 'react';
 import { Layers, Sparkles, SlidersVertical, Workflow, Upload } from 'lucide-react';
+import { Reveal, SectionHeading, cx } from './primitives';
 
 const steps = [
-  { label: 'Prompt',   sub: 'Describe your idea',          icon: Layers },
-  { label: 'Generate', sub: 'AI creates possibilities',    icon: Sparkles },
-  { label: 'Edit',     sub: 'Refine and perfect',          icon: SlidersVertical },
-  { label: 'Automate', sub: 'Build intelligent workflows', icon: Workflow },
-  { label: 'Publish',  sub: 'Deliver anywhere',            icon: Upload },
+  { label: 'Prompt',   sub: 'Describe your idea in plain language',  icon: Layers },
+  { label: 'Generate', sub: 'AI explores possibilities in seconds',  icon: Sparkles },
+  { label: 'Edit',     sub: 'Refine and perfect with precision',     icon: SlidersVertical },
+  { label: 'Automate', sub: 'Agents run the repeatable work',        icon: Workflow },
+  { label: 'Publish',  sub: 'Ship to any channel or format',         icon: Upload },
 ];
 
 const FlowSection: React.FC = () => {
   return (
-    <section className="border-t border-white/[0.06] bg-[#060606] px-[1vw] py-[clamp(56px,8vh,100px)]">
-      <div className="mx-auto grid w-full grid-cols-1 items-center gap-[clamp(40px,5vw,72px)] lg:grid-cols-[minmax(260px,26%)_1fr]">
-        {/* ── Left: title block ───────────────────────────── */}
-        <div className="flex flex-col">
-          <span className="text-[clamp(10.5px,0.75vw,12px)] font-semibold uppercase tracking-[0.22em] text-[#756f66]">
-            From idea to production
-          </span>
-          <h2 className="mt-[clamp(10px,1.4vh,20px)] text-[clamp(1.8rem,2.2vw,2.8rem)] font-light leading-[1.15] tracking-tight text-white">
-            One flow.<br />Infinite possibilities.
-          </h2>
-        </div>
+    <section className="page-gutter relative border-t border-white/[0.06] bg-[#060606] py-[clamp(80px,11vh,150px)]">
+      <SectionHeading
+        eyebrow="From idea to production"
+        title={<>One flow.<br className="sm:hidden" /> Infinite possibilities.</>}
+        sub="Generate, refine, automate and ship — without ever leaving XENO. Every stage hands off to the next, and an agent can run the entire pipeline for you."
+      />
 
-        {/* ── Right: 5 steps connected by dotted lines ───── */}
-        <div className="flex items-start justify-between gap-2">
+      <div className="mx-auto mt-[clamp(48px,7vh,96px)]">
+        <ol className="flex flex-col items-stretch gap-y-9 md:flex-row md:items-stretch md:justify-between md:gap-y-0">
           {steps.map((step, i) => (
             <React.Fragment key={step.label}>
-              <div className="flex flex-col items-center text-center">
-                <div className="grid h-[clamp(44px,3.6vw,58px)] w-[clamp(44px,3.6vw,58px)] place-items-center rounded-[10px] border border-white/[0.18] text-[#d8d2ca]">
-                  <step.icon className="h-[44%] w-[44%]" strokeWidth={1.4} />
+              <Reveal as="li" delay={i * 90} className="flex flex-1 flex-col items-center text-center md:px-2">
+                <div className="relative grid h-[clamp(52px,4vw,70px)] w-[clamp(52px,4vw,70px)] place-items-center rounded-[16px] border border-white/[0.12] bg-[#151515] text-[#d8d2ca] transition-colors duration-300 hover:border-[#9f6fff]/40">
+                  <step.icon className="h-[42%] w-[42%]" strokeWidth={1.4} />
+                  <span className="absolute -right-2 -top-2 grid h-[22px] w-[22px] place-items-center rounded-[4px] border border-[#9f6fff]/40 bg-[#1a1029] text-[9.5px] font-bold tabular-nums text-[#bf85ff]">
+                    {i + 1}
+                  </span>
                 </div>
-                <div className="mt-[clamp(10px,1.2vh,18px)] text-[clamp(13px,1vw,17px)] font-medium text-white">
-                  {step.label}
-                </div>
-                <div className="mt-1 max-w-[140px] text-[clamp(10.5px,0.75vw,12.5px)] leading-[1.4] text-[#807970]">
-                  {step.sub}
-                </div>
-              </div>
+                <div className="mt-[clamp(14px,1.6vh,22px)] text-[clamp(14px,1.05vw,18px)] font-semibold text-white">{step.label}</div>
+                <div className="mt-1.5 max-w-[170px] text-[clamp(11px,0.78vw,13px)] leading-[1.45] text-[#807970]">{step.sub}</div>
+              </Reveal>
+
               {i < steps.length - 1 && (
-                <div
-                  className="mt-[clamp(20px,1.7vw,28px)] h-px shrink-0 grow-0 self-start"
-                  style={{
-                    flex: '1 1 0',
-                    backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.30) 1px, transparent 1.5px)',
-                    backgroundSize: '6px 1px',
-                    backgroundRepeat: 'repeat-x',
-                    backgroundPosition: 'center',
-                    height: '2px',
-                  }}
-                />
+                <li aria-hidden="true" className="hidden flex-1 self-start md:block" style={{ marginTop: 'clamp(25px,2vw,34px)' }}>
+                  <div className={cx('xeno-flow-line w-full')} />
+                </li>
               )}
             </React.Fragment>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   );
