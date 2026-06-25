@@ -34,8 +34,8 @@ async function main() {
   const r = await eraseSubject(pool, userId);
   ok(r.erased && r.linksRemoved === 1, 'erase: PII links removed');
 
-  const usr = (await pool.query('SELECT email, display_name, is_active FROM users WHERE id=$1', [userId])).rows[0];
-  ok(usr.email.includes('@erased.invalid') && usr.display_name === null && usr.is_active === false, 'user PII tombstoned, deactivated');
+  const usr = (await pool.query('SELECT email, display_name, username, is_active FROM users WHERE id=$1', [userId])).rows[0];
+  ok(usr.email.includes('@erased.invalid') && usr.display_name === 'Erased User' && usr.username.startsWith('erased_') && usr.is_active === false, 'user PII tombstoned to non-identifying sentinels, deactivated');
   ok((await pool.query('SELECT count(*)::int n FROM external_identity_links WHERE platform_user_id=$1', [userId])).rows[0].n === 0, 'identity links gone');
 
   // The financial facts survive AND the chain still verifies.

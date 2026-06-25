@@ -13,11 +13,15 @@ export async function eraseSubject(pool, userId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // 1. Tombstone PII on the canonical user (keep the row + id for FK/ledger integrity).
+    // 1. Tombstone PII on the canonical user (keep the row + id for FK/ledger
+    //    integrity). display_name/username are NOT NULL on live, so tombstone to
+    //    a non-identifying, id-derived sentinel rather than NULL.
     await client.query(
       `UPDATE users
           SET email = 'erased+' || id || '@erased.invalid',
-              display_name = NULL, avatar_url = NULL, username = NULL,
+              display_name = 'Erased User',
+              username = 'erased_' || replace(id::text, '-', ''),
+              avatar_url = NULL,
               is_active = false
         WHERE id = $1`,
       [userId],
