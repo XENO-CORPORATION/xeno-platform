@@ -33,26 +33,36 @@ let cachedKey = null;
 /** Load the active signing key, generating + persisting one on first use. */
 export async function getSigningKey(db) {
   if (cachedKey) return cachedKey;
+  // Prefer an active ES256 key for SIGNING (Arch §2.4: ES256 default). Any
+  // existing RS256 keys stay in the table + JWKS so older tokens keep verifying
+  // (verify-by-kid, see getKeyByKid) — additive, no break.
   const existing = await db.query(
-    "SELECT kid, private_pem, public_jwk FROM oidc_signing_keys WHERE active = true ORDER BY created_at DESC LIMIT 1",
+    "SELECT kid, alg, private_pem, public_jwk FROM oidc_signing_keys WHERE active = true AND alg = 'ES256' ORDER BY created_at DESC LIMIT 1",
   );
   if (existing.rows.length > 0) {
     const r = existing.rows[0];
-    cachedKey = { kid: r.kid, privatePem: r.private_pem, publicJwk: r.public_jwk };
+    cachedKey = { kid: r.kid, alg: r.alg, privatePem: r.private_pem, publicJwk: r.public_jwk };
     return cachedKey;
   }
-  // Generate a fresh RSA-2048 keypair.
-  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  // Generate a fresh ES256 (P-256) keypair.
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
   const kid = crypto.randomBytes(8).toString('hex');
   const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' });
   const jwk = publicKey.export({ format: 'jwk' });
-  const publicJwk = { ...jwk, kid, use: 'sig', alg: 'RS256' };
+  const publicJwk = { ...jwk, kid, use: 'sig', alg: 'ES256' };
   await db.query(
-    "INSERT INTO oidc_signing_keys (kid, alg, private_pem, public_jwk, active) VALUES ($1,'RS256',$2,$3::jsonb,true)",
+    "INSERT INTO oidc_signing_keys (kid, alg, private_pem, public_jwk, active) VALUES ($1,'ES256',$2,$3::jsonb,true)",
     [kid, privatePem, JSON.stringify(publicJwk)],
   );
-  cachedKey = { kid, privatePem, publicJwk };
+  cachedKey = { kid, alg: 'ES256', privatePem, publicJwk };
   return cachedKey;
+}
+
+/** Resolve any signing key (active or not) by kid → public key, for verification. */
+export async function getKeyByKid(db, kid) {
+  const r = await db.query('SELECT alg, private_pem FROM oidc_signing_keys WHERE kid = $1', [kid]);
+  if (!r.rows[0]) return null;
+  return { alg: r.rows[0].alg, publicKey: crypto.createPublicKey(r.rows[0].private_pem) };
 }
 
 /** JWKS document (public keys only). Ensures a key exists (lazy generation). */
@@ -113,13 +123,13 @@ async function mintTokens(db, { user, clientId, scope, sid }) {
   const accessToken = jwt.sign(
     { ...base, sub: user.id, aud: 'xeno-api', client_id: clientId, scope, typ: 'at+jwt' },
     key.privatePem,
-    { algorithm: 'RS256', keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: 'at+jwt', kid: key.kid } },
+    { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: 'at+jwt', kid: key.kid } },
   );
   const idToken = jwt.sign(
     { ...base, sub: user.id, aud: clientId, email: user.email, email_verified: user.email_verified ?? false,
       name: user.display_name || user.username, preferred_username: user.username },
     key.privatePem,
-    { algorithm: 'RS256', keyid: key.kid, expiresIn: ID_TTL_SEC },
+    { algorithm: key.alg, keyid: key.kid, expiresIn: ID_TTL_SEC },
   );
   // Identity-by-(provider,subject): record that this canonical user is linked to
   // the client's SURFACE (Arch §2.1, §0.4). This is the "from where" join key —
@@ -229,7 +239,7 @@ export async function refreshTokenGrant(db, { refreshToken, clientId }) {
   const now = Math.floor(Date.now() / 1000);
   const access = jwt.sign(
     { iss: issuer(), iat: now, sub: user.id, aud: 'xeno-api', client_id: clientId, scope: row.scope, sid: row.sid, typ: 'at+jwt' },
-    key.privatePem, { algorithm: 'RS256', keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: 'at+jwt', kid: key.kid } },
+    key.privatePem, { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: 'at+jwt', kid: key.kid } },
   );
   const newRefresh = await issueRefreshToken(db, { userId: user.id, clientId, scope: row.scope, sid: row.sid, familyId: row.family_id });
   return { access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL_SEC, refresh_token: newRefresh, scope: row.scope };
@@ -308,12 +318,14 @@ export async function revokeToken(db, { token, sid }) {
  */
 export async function introspectToken(db, { token }) {
   if (!token) return { active: false };
-  // Try as an RS256 access token first.
+  // Try as a signed access token (ES256 or RS256), verified by kid.
   try {
-    const key = await getSigningKey(db);
-    const pub = crypto.createPublicKey(key.privatePem);
-    const p = jwt.verify(token, pub, { algorithms: ['RS256'] });
-    return { active: true, token_type: 'access_token', sub: p.sub, scope: p.scope, client_id: p.client_id, aud: p.aud, sid: p.sid, exp: p.exp, iss: p.iss };
+    const header = jwt.decode(token, { complete: true })?.header;
+    const key = header?.kid ? await getKeyByKid(db, header.kid) : null;
+    if (key) {
+      const p = jwt.verify(token, key.publicKey, { algorithms: [key.alg] });
+      return { active: true, token_type: 'access_token', sub: p.sub, scope: p.scope, client_id: p.client_id, aud: p.aud, sid: p.sid, exp: p.exp, iss: p.iss };
+    }
   } catch { /* not a valid access JWT — fall through */ }
   // Else try as an opaque refresh token.
   const r = await db.query('SELECT * FROM oauth_refresh_tokens WHERE token_hash = $1', [sha256(token)]);

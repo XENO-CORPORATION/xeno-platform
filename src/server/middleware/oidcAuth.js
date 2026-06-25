@@ -7,8 +7,7 @@
  * legacy path stays byte-for-byte intact for all existing routes).
  */
 import jwt from 'jsonwebtoken';
-import crypto from 'node:crypto';
-import { getSigningKey } from '../utils/oidcProvider.js';
+import { getKeyByKid } from '../utils/oidcProvider.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 
@@ -18,13 +17,14 @@ export async function oidcAuth(req, res, next) {
     if (!token) return res.status(401).json({ success: false, error: 'Authentication token required' });
 
     let userId = null;
-    const decodedHeader = jwt.decode(token, { complete: true })?.header;
+    const header = jwt.decode(token, { complete: true })?.header;
 
-    if (decodedHeader?.alg === 'RS256') {
-      // New OIDC access token — verify with the active public signing key.
-      const key = await getSigningKey(req.db);
-      const publicKey = crypto.createPublicKey(key.privatePem);
-      const payload = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+    if (header && header.alg !== 'HS256' && header.kid) {
+      // OIDC access token (ES256 or RS256) — verify against the key with this kid,
+      // so tokens issued under any signing key (incl. the old RS256 one) verify.
+      const key = await getKeyByKid(req.db, header.kid);
+      if (!key) return res.status(401).json({ success: false, error: 'Invalid authentication token' });
+      const payload = jwt.verify(token, key.publicKey, { algorithms: [key.alg] });
       userId = payload.sub;
     } else {
       // Legacy HS256 platform token.

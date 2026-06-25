@@ -30,21 +30,21 @@ async function main() {
   const userId = u.rows[0].id;
   await pool.query(`INSERT INTO oauth_clients (client_id, name, redirect_uris, surface) VALUES ('xeno-post','XENO Post', ARRAY['https://post.xenostudio.ai/auth/callback'], 'xeno_post') ON CONFLICT DO NOTHING`);
 
-  // 1. signing key + JWKS
+  // 1. signing key (ES256 default) + JWKS
   const key = await getSigningKey(pool);
-  ok(key.kid && key.privatePem.includes('PRIVATE KEY'), 'RS256 signing key generated + persisted');
+  ok(key.kid && key.alg === 'ES256' && key.privatePem.includes('PRIVATE KEY'), 'ES256 signing key generated + persisted');
   const j = await jwks(pool);
-  ok(j.keys.length === 1 && j.keys[0].kid === key.kid && j.keys[0].kty === 'RSA', 'JWKS serves the public key');
+  ok(j.keys.length === 1 && j.keys[0].kid === key.kid && j.keys[0].kty === 'EC', 'JWKS serves the EC public key');
 
-  // 2. auth-code + PKCE → tokens
+  // 2. auth-code + PKCE → tokens (signed ES256, verified by kid)
   const { v, c } = pkce();
   const code = await createAuthorizationCode(pool, { clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback', scope: 'openid email ledger', codeChallenge: c });
   const tokens = await exchangeAuthorizationCode(pool, { code, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: v });
   ok(tokens.access_token && tokens.id_token && tokens.refresh_token, 'code exchange returns access+id+refresh');
   const pub = crypto.createPublicKey(key.privatePem);
-  const at = jwt.verify(tokens.access_token, pub, { algorithms: ['RS256'] });
-  ok(at.sub === userId && at.typ === 'at+jwt' && at.aud === 'xeno-api', 'access token is RS256, sub=user, typ=at+jwt');
-  const idt = jwt.verify(tokens.id_token, pub, { algorithms: ['RS256'] });
+  const at = jwt.verify(tokens.access_token, pub, { algorithms: ['ES256'] });
+  ok(at.sub === userId && at.typ === 'at+jwt' && at.aud === 'xeno-api', 'access token is ES256, sub=user, typ=at+jwt');
+  const idt = jwt.verify(tokens.id_token, pub, { algorithms: ['ES256'] });
   ok(idt.aud === 'xeno-post' && idt.email === 'a@b.co', 'id_token aud=client, carries email');
 
   // 3. replay the code → rejected
