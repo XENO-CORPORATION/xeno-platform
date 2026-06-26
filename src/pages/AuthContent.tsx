@@ -26,9 +26,37 @@ const AuthContent = () => {
   const location = useLocation();
   const { login, register } = useAuth();
 
+  // Unified-auth CLI/Hub browser-session mode: /auth/cli?session=… hands the
+  // signed-in user back to the local app by completing the cli-auth session.
+  const cliSession = new URLSearchParams(location.search).get('session');
+  const [cliStatus, setCliStatus] = useState('');
+  const finalizeCli = async () => {
+    const tok = localStorage.getItem('xenoos_auth_token');
+    if (!cliSession || !tok || cliStatus === 'authorizing') return;
+    setCliStatus('authorizing');
+    try {
+      const r = await fetch('/api/auth/cli/complete', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` },
+        body: JSON.stringify({ session_id: cliSession }),
+      });
+      const d = await r.json();
+      if (r.ok && d.redirect_uri) { window.location.href = d.redirect_uri; return; }
+      setCliStatus((d && d.error) || 'Authorization failed — please try again.');
+    } catch {
+      setCliStatus('Network error — please try again.');
+    }
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), 50);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Already signed in with a CLI session waiting → auto-complete (first-party).
+  useEffect(() => {
+    if (cliSession && localStorage.getItem('xenoos_auth_token')) finalizeCli();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Smooth tab transition
@@ -85,6 +113,8 @@ const AuthContent = () => {
       }
 
       if (result.success) {
+        // CLI/Hub browser-session: complete the cli-auth session → app callback.
+        if (cliSession) { finalizeCli(); return; }
         // Unified-auth finalize: if we arrived with a returnUrl (the OIDC
         // /api/oauth2/authorize page, or a cli-auth handoff), send the user
         // straight back there instead of the dashboard — a full-page load so
@@ -143,6 +173,13 @@ const AuthContent = () => {
           }`}
           style={{ transitionDelay: '0.15s' }}
         >
+          {/* CLI/Hub session finalize status */}
+          {cliStatus && (
+            <div className="mb-4 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/70">
+              {cliStatus === 'authorizing' ? 'Authorizing — returning you to the app…' : cliStatus}
+            </div>
+          )}
+
           {/* Per-app authorize banner (unified /auth/:app surface) */}
           {authApp && (
             <div className="mb-6 flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
@@ -223,6 +260,7 @@ const AuthContent = () => {
                   // Redirect to OAuth endpoint — carry the unified-auth returnUrl
                   // (OIDC authorize / cli handoff) through social sign-in too.
                   const returnUrl = safeReturnUrl(new URLSearchParams(location.search).get('returnUrl'))
+                    || (cliSession ? location.pathname + location.search : null)
                     || (location.state as any)?.from?.pathname || '/overview';
                   window.location.href = `/api/auth/${social.provider}?returnUrl=${encodeURIComponent(returnUrl)}`;
                 }}
