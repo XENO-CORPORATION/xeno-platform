@@ -52,6 +52,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const isNewUser = urlParams.get('isNew') === 'true';
         const oauthError = urlParams.get('error');
 
+        // Stash a returnUrl (e.g. from the OIDC /api/oauth2/authorize page) so we
+        // can send the user back there after they authenticate by ANY method
+        // (password / social / MFA). Same-tab sessionStorage survives the OAuth
+        // round-trip. Same-origin only (open-redirect guard).
+        const returnUrlParam = urlParams.get('returnUrl');
+        if (returnUrlParam && returnUrlParam.startsWith('/') && !returnUrlParam.startsWith('//')) {
+          sessionStorage.setItem('xeno_return_url', returnUrlParam);
+        }
+
         // Handle OAuth error
         if (oauthError) {
           console.error('OAuth error:', oauthError);
@@ -111,6 +120,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     initAuth();
   }, []);
+
+  // Once authenticated by ANY path (password, register, social/MFA, or restored
+  // session), return the user to a pending OIDC authorize page if one is queued.
+  useEffect(() => {
+    if (!user) return;
+    const rt = sessionStorage.getItem('xeno_return_url');
+    if (rt && rt.startsWith('/') && !rt.startsWith('//')) {
+      sessionStorage.removeItem('xeno_return_url');
+      window.location.href = rt; // full-page load (backend authorize route)
+    }
+  }, [user]);
 
   const login = async (email: string, password: string): Promise<AuthResponse> => {
     try {

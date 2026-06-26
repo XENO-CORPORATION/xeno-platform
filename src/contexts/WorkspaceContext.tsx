@@ -38,7 +38,7 @@ const DEV_WORKSPACES: Workspace[] = [
 ];
 
 const DEV_MEMBERS: WorkspaceMember[] = [
-  { id: 'm1', user_id: 'dev-user', member_role: 'owner', member_status: 'active', created_at: new Date().toISOString(), user: { username: 'emilian', email: 'emilian@bnkrsys.com', display_name: 'Emilian', avatar_url: null } },
+  { id: 'm1', user_id: 'dev-user', member_role: 'owner', member_status: 'active', created_at: new Date().toISOString(), user: { username: 'alice', email: 'alice@example.com', display_name: 'Alice', avatar_url: null } },
   { id: 'm2', user_id: 'u2', member_role: 'admin', member_status: 'active', created_at: new Date().toISOString(), user: { username: 'alex', email: 'alex@xeno.dev', display_name: 'Alex', avatar_url: null } },
   { id: 'm3', user_id: 'u3', member_role: 'member', member_status: 'active', created_at: new Date().toISOString(), user: { username: 'maria', email: 'maria@xeno.dev', display_name: 'Maria', avatar_url: null } },
 ];
