@@ -84,6 +84,9 @@ button:disabled{opacity:.6;cursor:default}
   var p=new URLSearchParams(location.search);
   var $=function(id){return document.getElementById(id)};
   $('app').textContent=p.get('client_id')||'this app';
+  // Unified auth: hand unauthenticated users to the branded /auth/:app login
+  // (full email/password + GitHub/social + MFA), returning here to finish the grant.
+  function toAuth(){ var s=(p.get('client_id')||'app').replace(/^xeno-/,''); location.href='/auth/'+encodeURIComponent(s)+'?returnUrl='+encodeURIComponent(location.pathname+location.search); }
   var mode='signin';
   function show(el,on){el.classList[on?'remove':'add']('hide')}
   function setStatus(t){show($('status'),true);show($('form'),false);$('status').textContent=t}
@@ -94,7 +97,7 @@ button:disabled{opacity:.6;cursor:default}
     setStatus('Signing you in…');
     fetch('/api/oauth2/authorize',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+tok},
       body:JSON.stringify({client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),state:p.get('state')})})
-    .then(function(r){ if(r.status===401){ localStorage.removeItem('xenoos_auth_token'); showForm('Your XENO session expired — please sign in again.'); throw 0;} return r.json(); })
+    .then(function(r){ if(r.status===401){ localStorage.removeItem('xenoos_auth_token'); toAuth(); throw 0;} return r.json(); })
     .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
     .catch(function(e){ if(e!==0) showForm('Error: '+(e&&e.message||e)); });
   }
@@ -127,7 +130,7 @@ button:disabled{opacity:.6;cursor:default}
 
   // Entry: already signed in → continue; else show the sign-in form.
   var tok=localStorage.getItem('xenoos_auth_token');
-  if(tok){ continueWith(tok); } else { showForm(''); }
+  if(tok){ continueWith(tok); } else { toAuth(); }
 })();
 </script></body></html>`);
 });

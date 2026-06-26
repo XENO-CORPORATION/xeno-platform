@@ -127,6 +127,8 @@ function App() {
             {/* Auth Layout Routes - Shared video panel, swappable right content */}
             <Route element={<AuthLayout />}>
               <Route path="/auth" element={<AuthContent />} />
+              {/* Unified branded sign-in per app (XENO UNIFIED AUTH spec) */}
+              <Route path="/auth/:app" element={<AuthContent />} />
               <Route path="/help" element={<HelpContent />} />
               <Route path="/contact" element={<ContactContent />} />
             </Route>

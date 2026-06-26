@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, KeyRound, Mail, User, Eye, EyeOff, Github, ArrowRight } from 'lucide-react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getAuthApp } from '../lib/authApps';
+
+/** Same-origin path guard for returnUrl (open-redirect protection). */
+function safeReturnUrl(raw: string | null): string | null {
+  return raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : null;
+}
 
 const AuthContent = () => {
+  const { app: appSlug } = useParams();
+  const authApp = getAuthApp(appSlug);
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,6 +85,15 @@ const AuthContent = () => {
       }
 
       if (result.success) {
+        // Unified-auth finalize: if we arrived with a returnUrl (the OIDC
+        // /api/oauth2/authorize page, or a cli-auth handoff), send the user
+        // straight back there instead of the dashboard — a full-page load so
+        // the backend authorize route continues the grant.
+        const returnUrl = safeReturnUrl(new URLSearchParams(location.search).get('returnUrl'));
+        if (returnUrl) {
+          window.location.href = returnUrl;
+          return;
+        }
         const from = (location.state as any)?.from?.pathname || '/overview';
         navigate(from, { replace: true });
       } else {
@@ -126,6 +143,22 @@ const AuthContent = () => {
           }`}
           style={{ transitionDelay: '0.15s' }}
         >
+          {/* Per-app authorize banner (unified /auth/:app surface) */}
+          {authApp && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-bold"
+                style={{ backgroundColor: `${authApp.accent}22`, color: authApp.accent }}
+              >
+                {authApp.displayName.replace(/^XENO\s+/, '').charAt(0)}
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold leading-tight">Authorize {authApp.displayName}</div>
+                <div className="truncate text-xs text-white/40">{authApp.tagline}</div>
+              </div>
+            </div>
+          )}
+
           {/* Welcome Text with animation */}
           <div
             className={`mb-8 transition-all duration-500 ease-out ${
@@ -187,8 +220,10 @@ const AuthContent = () => {
                 key={social.icon}
                 type="button"
                 onClick={() => {
-                  // Redirect to OAuth endpoint
-                  const returnUrl = (location.state as any)?.from?.pathname || '/overview';
+                  // Redirect to OAuth endpoint — carry the unified-auth returnUrl
+                  // (OIDC authorize / cli handoff) through social sign-in too.
+                  const returnUrl = safeReturnUrl(new URLSearchParams(location.search).get('returnUrl'))
+                    || (location.state as any)?.from?.pathname || '/overview';
                   window.location.href = `/api/auth/${social.provider}?returnUrl=${encodeURIComponent(returnUrl)}`;
                 }}
                 className={`flex items-center justify-center py-3 rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.08] hover:border-white/[0.15] hover:scale-105 active:scale-95 transition-all duration-300 ease-out group ${
