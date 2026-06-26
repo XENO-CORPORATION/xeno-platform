@@ -129,8 +129,19 @@ button:disabled{opacity:.6;cursor:default}
   };
 
   // Entry: already signed in → continue; else show the sign-in form.
-  var tok=localStorage.getItem('xenoos_auth_token');
-  if(tok){ continueWith(tok); } else { toAuth(); }
+  // Accept a token handed back in the URL (?token=…) by the social-login
+  // callback (buildOAuthRedirectUrl appends it to returnUrl), so "Sign in with
+  // GitHub/Google/X" completes the grant instead of bouncing to the form. Mirror
+  // AuthContext: persist it, strip it from the visible URL, then continue.
+  var urlTok=p.get('token');
+  if(urlTok){
+    try{ localStorage.setItem('xenoos_auth_token',urlTok); }catch(e){}
+    try{ history.replaceState(null,'',location.pathname+location.search.replace(/[?&]token=[^&]*/,'').replace(/[?&]isNew=[^&]*/,'').replace(/^&/,'?')); }catch(e){}
+    continueWith(urlTok);
+  } else {
+    var tok=localStorage.getItem('xenoos_auth_token');
+    if(tok){ continueWith(tok); } else { toAuth(); }
+  }
 })();
 </script></body></html>`);
 });
