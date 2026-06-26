@@ -22,9 +22,13 @@ RUN npm install --omit=dev && npm cache clean --force && chown -R appuser:appgro
 # Copy server source code (with correct ownership — avoids expensive recursive chown)
 COPY --chown=appuser:appgroup src/server/ ./
 
-# Create uploads, conversions, and downloads directories
-RUN mkdir -p uploads sam2-uploads storage conversions downloads && \
-    chown -R appuser:appgroup uploads sam2-uploads storage conversions downloads
+# Create uploads, conversions, and downloads directories.
+# NOTE: fileSystemRoutes.js resolves its upload dir cwd-relative as
+# `process.cwd()/src/server/uploads` → /app/src/server/uploads. The previously
+# deployed image had this baked from an older Dockerfile; recreate it so boot
+# doesn't EACCES on the first mkdir. (Additive parity fix.)
+RUN mkdir -p uploads sam2-uploads storage conversions downloads src/server/uploads && \
+    chown -R appuser:appgroup uploads sam2-uploads storage conversions downloads src/server
 
 # SECURITY: Switch to non-root user
 USER appuser

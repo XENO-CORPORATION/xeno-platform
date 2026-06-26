@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Building2, UserPlus, Mail, Clock, Loader2, RefreshCw, ChevronDown, X, AlertTriangle,
   Search, Shield, Copy, Check, Link2, Settings, Activity, Crown, Users, UserCheck,
@@ -37,7 +38,7 @@ const DEV_MEMBER_EXTRA: Record<string, MemberExtra> = {
 };
 
 const DEV_MEMBERS: WorkspaceMember[] = [
-  { id: 'm1', user_id: 'u1', member_role: 'owner', member_status: 'active', created_at: new Date(now - day * 90).toISOString(), user: { username: 'emilian', email: 'emilian@bnkrsys.com', display_name: 'Emilian', avatar_url: null } },
+  { id: 'm1', user_id: 'u1', member_role: 'owner', member_status: 'active', created_at: new Date(now - day * 90).toISOString(), user: { username: 'alice', email: 'alice@example.com', display_name: 'Alice Roberts', avatar_url: null } },
   { id: 'm2', user_id: 'u2', member_role: 'admin', member_status: 'active', created_at: new Date(now - day * 60).toISOString(), user: { username: 'alex', email: 'alex@xeno.dev', display_name: 'Alex Mercer', avatar_url: null } },
   { id: 'm3', user_id: 'u3', member_role: 'member', member_status: 'active', created_at: new Date(now - day * 30).toISOString(), user: { username: 'maria', email: 'maria@xeno.dev', display_name: 'Maria Silva', avatar_url: null } },
   { id: 'm4', user_id: 'u4', member_role: 'member', member_status: 'active', created_at: new Date(now - day * 20).toISOString(), user: { username: 'james', email: 'james@xeno.dev', display_name: 'James Chen', avatar_url: null } },
@@ -51,8 +52,8 @@ const DEV_INVITES: WorkspaceInvite[] = [
 ];
 
 const DEV_SESSIONS: SessionEntry[] = [
-  { id: 's1', user_id: 'u1', user_name: 'Emilian', device: 'Chrome · macOS', ip: '82.14.210.33', location: 'London, UK', last_active: new Date(now - 300_000).toISOString(), current: true },
-  { id: 's2', user_id: 'u1', user_name: 'Emilian', device: 'Safari · iPhone', ip: '82.14.210.34', location: 'London, UK', last_active: new Date(now - day).toISOString() },
+  { id: 's1', user_id: 'u1', user_name: 'Alice Roberts', device: 'Chrome · macOS', ip: '82.14.210.33', location: 'London, UK', last_active: new Date(now - 300_000).toISOString(), current: true },
+  { id: 's2', user_id: 'u1', user_name: 'Alice Roberts', device: 'Safari · iPhone', ip: '82.14.210.34', location: 'London, UK', last_active: new Date(now - day).toISOString() },
   { id: 's3', user_id: 'u2', user_name: 'Alex Mercer', device: 'Firefox · Windows', ip: '91.23.44.12', location: 'Berlin, DE', last_active: new Date(now - 3_600_000).toISOString() },
   { id: 's4', user_id: 'u5', user_name: 'Sofia Petrov', device: 'Chrome · Linux', ip: '185.12.7.88', location: 'Sofia, BG', last_active: new Date(now - 7200_000).toISOString() },
 ];
@@ -78,119 +79,19 @@ const DEV_API_KEYS: ApiKeyEntry[] = [
 ];
 
 const DEV_AUDIT: AuditEntry[] = [
-  { id: 'a1', action: 'invited', actor: 'Emilian', target: 'stefan@xeno.dev', ts: new Date(now - day * 2).toISOString() },
-  { id: 'a2', action: 'role_changed', actor: 'Emilian', target: 'Sofia Petrov → admin', ts: new Date(now - day * 5).toISOString() },
+  { id: 'a1', action: 'invited', actor: 'Alice Roberts', target: 'stefan@xeno.dev', ts: new Date(now - day * 2).toISOString() },
+  { id: 'a2', action: 'role_changed', actor: 'Alice Roberts', target: 'Sofia Petrov → admin', ts: new Date(now - day * 5).toISOString() },
   { id: 'a3', action: 'joined', actor: 'Daniel Kim', ts: new Date(now - day * 7).toISOString() },
   { id: 'a4', action: 'invited', actor: 'Alex Mercer', target: 'olga@xeno.dev', ts: new Date(now - day).toISOString() },
-  { id: 'a5', action: 'removed', actor: 'Emilian', target: 'tom@xeno.dev', ts: new Date(now - day * 12).toISOString() },
-  { id: 'a6', action: 'settings_changed', actor: 'Emilian', target: 'workspace name', ts: new Date(now - day * 20).toISOString() },
-  { id: 'a7', action: 'sso_enabled', actor: 'Emilian', ts: new Date(now - day * 25).toISOString() },
+  { id: 'a5', action: 'removed', actor: 'Alice Roberts', target: 'tom@xeno.dev', ts: new Date(now - day * 12).toISOString() },
+  { id: 'a6', action: 'settings_changed', actor: 'Alice Roberts', target: 'workspace name', ts: new Date(now - day * 20).toISOString() },
+  { id: 'a7', action: 'sso_enabled', actor: 'Alice Roberts', ts: new Date(now - day * 25).toISOString() },
   { id: 'a8', action: 'api_key_created', actor: 'Alex Mercer', target: 'Production key', ts: new Date(now - day * 30).toISOString() },
 ];
 
 const ALL_PERMISSIONS = ['view', 'use_api', 'invite', 'remove', 'settings', 'billing', 'api_keys', 'audit'] as const;
 
-// ─── Color tokens — aligned with BillingPage ───
-
-const C = {
-  bg:           'transparent',                   // page inherits app background
-  surface1:     'rgba(0,0,0,0.90)',              // container bg — matches sidebar bg-black/90
-  surface2:     'rgba(0,0,0,0.85)',              // panel body — slightly lighter than containers
-  surface3:     'rgba(255,255,255,0.06)',         // panel heading — subtle lift inside panels
-  border:       'rgba(255,255,255,0.08)',         // standard border
-  borderStrong: 'rgba(255,255,255,0.15)',         // strong dividers
-  rowHover:     'rgba(255,255,255,0.05)',         // row hover
-  textPrimary:  'rgba(255,255,255,0.90)',         // headings
-  textBody:     'rgba(255,255,255,0.70)',         // body text
-  textSecondary:'rgba(255,255,255,0.40)',         // secondary text
-  textTertiary: 'rgba(255,255,255,0.22)',         // tertiary/label text
-  textDim:      'rgba(255,255,255,0.12)',         // timestamps
-  iconDim:      'rgba(255,255,255,0.25)',         // dim icons
-  positive:     'rgba(255,255,255,0.60)',         // positive values
-  negative:     'rgba(255,255,255,0.30)',         // negative values
-  ghost:        'rgba(255,255,255,0.08)',         // ghost button bg
-  ghostHover:   'rgba(255,255,255,0.15)',         // ghost button hover
-  error:        { bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.12)', text: 'rgba(239,68,68,0.65)' },
-  destructive:  { border: 'rgba(239,68,68,0.15)', text: 'rgba(239,68,68,0.4)', textHover: 'rgba(239,68,68,0.7)', bgHover: 'rgba(239,68,68,0.08)' },
-};
-
-const S = {
-  panelHeading: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '0 10px', height: 34, flexShrink: 0,
-    background: C.surface1, border: `1px solid ${C.border}`, borderRadius: 6,
-  } as React.CSSProperties,
-  headingLabel: {
-    fontSize: 10, fontWeight: 600, color: C.textSecondary,
-    textTransform: 'uppercase', letterSpacing: '0.04em',
-  } as React.CSSProperties,
-  headingMeta: {
-    fontSize: 10, color: C.textDim, fontVariantNumeric: 'tabular-nums',
-  } as React.CSSProperties,
-  panel: {
-    display: 'flex', flexDirection: 'column', gap: 4,
-  } as React.CSSProperties,
-  panelBody: {
-    background: C.surface1, border: `1px solid ${C.border}`,
-    borderRadius: 6, overflow: 'hidden', flex: 1,
-  } as React.CSSProperties,
-  badge: {
-    fontSize: 9, padding: '1px 5px', borderRadius: 2,
-    background: C.ghost, color: C.textSecondary,
-    fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em',
-  } as React.CSSProperties,
-};
-
-const ghostBtn = (disabled = false): React.CSSProperties => ({
-  height: 28, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 6,
-  background: C.ghost, border: 'none', borderRadius: 4,
-  color: C.textSecondary, fontSize: 11, fontWeight: 500, cursor: 'pointer',
-  opacity: disabled ? 0.3 : 1, transition: 'background-color 80ms ease',
-});
-
-const primaryBtn = (disabled = false): React.CSSProperties => ({
-  height: 28, padding: '0 12px', display: 'flex', alignItems: 'center', gap: 6,
-  background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: 4,
-  color: '#09090b', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-  opacity: disabled ? 0.3 : 1, transition: 'background-color 80ms ease',
-});
-
-const hover = {
-  ghost: {
-    onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.background = C.ghostHover; },
-    onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.background = C.ghost; },
-  },
-  row: {
-    onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.background = C.rowHover; },
-    onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.background = 'transparent'; },
-  },
-  primary: {
-    onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.background = 'rgba(255,255,255,0.8)'; },
-    onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.background = 'rgba(255,255,255,0.9)'; },
-  },
-  destructive: {
-    onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.background = C.destructive.bgHover; e.currentTarget.style.color = C.destructive.textHover; },
-    onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.destructive.text; },
-  },
-};
-
 // ─── Helpers ───
-
-const roleBadge = (role: string) => {
-  const opacity: Record<string, string> = {
-    owner: C.textBody,       // brightest — stands out
-    admin: C.textSecondary,  // medium
-    member: C.textTertiary,  // dimmest
-  };
-  return <span style={{ ...S.badge, color: opacity[role] || C.textTertiary }}>{role}</span>;
-};
-
-const roleIcon = (role: string) => {
-  if (role === 'owner') return <Crown size={10} style={{ color: C.textBody }} />;
-  if (role === 'admin') return <Shield size={10} style={{ color: C.textSecondary }} />;
-  return <Users size={10} style={{ color: C.textTertiary }} />;
-};
-
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -214,14 +115,12 @@ const actionLabel: Record<string, string> = {
 const loginMethodLabel: Record<string, string> = { password: 'Password', sso: 'SSO', github: 'GitHub', google: 'Google' };
 
 type RoleFilter = 'all' | 'owner' | 'admin' | 'member';
-type SortField = 'name' | 'role' | 'joined' | 'last_active' | 'usage';
-type SortDir = 'asc' | 'desc';
 
 // ─── Skeleton ───
 
 const Skeleton: React.FC = () => (
-  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bg }}>
-    <Loader2 size={18} className="animate-spin" style={{ color: C.textDim }} />
+  <div className="h-full flex items-center justify-center">
+    <Loader2 size={18} className="animate-spin text-zinc-600" />
   </div>
 );
 
@@ -247,19 +146,18 @@ const TeamPage: React.FC = () => {
   const [showTransferConfirm, setShowTransferConfirm] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
+  const [sortField, setSortField] = useState<'name' | 'role' | 'last_active'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [expandedMember, setExpandedMember] = useState<string | null>(null);
+  const [roleDropdown, setRoleDropdown] = useState<string | null>(null);
+
+  const toggleSort = (field: 'name' | 'role' | 'last_active') => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('asc'); }
+  };
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Sidebar panels
-  const [invitesOpen, setInvitesOpen] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [securityOpen, setSecurityOpen] = useState(false);
-  const [auditOpen, setAuditOpen] = useState(false);
-  const [inviteLinkOpen, setInviteLinkOpen] = useState(false);
-  const [dangerOpen, setDangerOpen] = useState(false);
-  const [ssoOpen, setSsoOpen] = useState(false);
-  const [scimOpen, setScimOpen] = useState(false);
-  const [sessionsOpen, setSessionsOpen] = useState(false);
-  const [rolesOpen, setRolesOpen] = useState(false);
 
   // SSO/SAML state
   const [ssoEnabled, setSsoEnabled] = useState(false);
@@ -288,20 +186,39 @@ const TeamPage: React.FC = () => {
   const [wsName, setWsName] = useState('');
   const [wsSlug, setWsSlug] = useState('');
 
-  // Security toggles
+  // Security
   const [enforce2fa, setEnforce2fa] = useState(false);
   const [restrictDomains, setRestrictDomains] = useState(false);
   const [allowedDomain, setAllowedDomain] = useState('xeno.dev');
+  const [ipAllowList, setIpAllowList] = useState('');
+  const [ipAllowEnabled, setIpAllowEnabled] = useState(false);
+  const [sessionTimeout, setSessionTimeout] = useState('4h');
+  const [auditRetention, setAuditRetention] = useState('90d');
 
-  // Invite link
-  const [inviteLink] = useState(`https://xeno.dev/invite/xk-${Math.random().toString(36).slice(2, 10)}`);
-  const [linkCopied, setLinkCopied] = useState(false);
+  // Settings
+  const [defaultRole, setDefaultRole] = useState('member');
+  const [notifyOnInvite, setNotifyOnInvite] = useState(true);
+  const [notifyOnJoin, setNotifyOnJoin] = useState(true);
+  const [notifyOnRemove, setNotifyOnRemove] = useState(false);
+  const [apiKeys] = useState([
+    { id: 'k1', name: 'Production', prefix: 'xk_live_...a3f7', created: '2026-02-15', lastUsed: '2 hours ago' },
+    { id: 'k2', name: 'Staging', prefix: 'xk_test_...b2c1', created: '2026-03-01', lastUsed: '3 days ago' },
+  ]);
+  const [newKeyName, setNewKeyName] = useState('');
 
   // Audit
   const [audit] = useState<AuditEntry[]>(DEV_AUDIT);
 
   // Delete confirm
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
+  // Tab navigation — URL-driven
+  type Tab = 'members' | 'settings' | 'security' | 'activity';
+  const { tab: urlTab } = useParams<{ tab?: string }>();
+  const navigate = useNavigate();
+  const validTabs: Tab[] = ['members', 'settings', 'security', 'activity'];
+  const activeTab: Tab = validTabs.includes(urlTab as Tab) ? (urlTab as Tab) : 'members';
+  const setActiveTab = (tab: Tab) => navigate(tab === 'members' ? '/overview/team' : `/overview/team/${tab}`, { replace: true });
 
   const wsId = activeWorkspace?.id;
   const canManage = isOwner || userRole === 'admin';
@@ -396,8 +313,22 @@ const TeamPage: React.FC = () => {
         (m.user?.username || '').toLowerCase().includes(q)
       );
     }
+    // Sort
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'name') cmp = (a.user?.display_name || '').localeCompare(b.user?.display_name || '');
+      else if (sortField === 'role') {
+        const order: Record<string, number> = { owner: 0, admin: 1, member: 2 };
+        cmp = (order[a.member_role] || 9) - (order[b.member_role] || 9);
+      } else if (sortField === 'last_active') {
+        const aTime = DEV_MEMBER_EXTRA[a.id]?.last_active ? new Date(DEV_MEMBER_EXTRA[a.id].last_active).getTime() : 0;
+        const bTime = DEV_MEMBER_EXTRA[b.id]?.last_active ? new Date(DEV_MEMBER_EXTRA[b.id].last_active).getTime() : 0;
+        cmp = bTime - aTime;
+      }
+      return sortDir === 'desc' ? -cmp : cmp;
+    });
     return result;
-  }, [members, roleFilter, search]);
+  }, [members, roleFilter, search, sortField, sortDir]);
 
   // Stats
   const stats = useMemo(() => ({
@@ -414,819 +345,556 @@ const TeamPage: React.FC = () => {
     member: members.filter(m => m.member_role === 'member').length,
   }), [members]);
 
-  if (isLoading) return <Skeleton />;
+  if (isLoading) return (
+    <div className="h-full flex items-center justify-center">
+      <Loader2 size={18} className="animate-spin text-zinc-500" />
+    </div>
+  );
 
   if (!activeWorkspace || activeWorkspace.workspace_type !== 'team') {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bg }}>
-        <div style={{ textAlign: 'center' }}>
-          <Building2 size={28} style={{ color: C.ghost, margin: '0 auto 8px' }} />
-          <p style={{ fontSize: 12, color: C.textSecondary, margin: 0 }}>Switch to a team workspace to manage members</p>
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <Building2 size={24} className="text-zinc-500 mx-auto mb-2" />
+          <p className="text-[12px] text-zinc-500">Switch to a team workspace to manage members</p>
         </div>
       </div>
     );
   }
 
-  const Toggle: React.FC<{ value: boolean; onChange: (v: boolean) => void }> = ({ value, onChange }) => (
-    <button onClick={() => onChange(!value)} style={{
-      width: 28, height: 14, borderRadius: 7, border: 'none', cursor: 'pointer',
-      background: value ? 'rgba(255,255,255,0.25)' : C.border,
-      position: 'relative', transition: 'background 150ms ease', padding: 0,
-    }}>
-      <div style={{
-        width: 10, height: 10, borderRadius: '50%',
-        background: value ? C.textPrimary : C.textDim,
-        position: 'absolute', top: 2, left: value ? 16 : 2,
-        transition: 'left 150ms ease, background 150ms ease',
-      }} />
-    </button>
-  );
+  const allTabs: Tab[] = ['members', 'security', 'activity', 'settings'];
 
   return (
-    <div style={{
-      height: '100%', background: C.bg,
-      display: 'grid', gridTemplateRows: 'auto auto 1fr',
-      overflow: 'hidden',
-    }}>
+    <div className="h-full flex flex-col overflow-hidden">
 
-      {/* ═══ Row 1: Header + Invite form ═══ */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{
-            flex: 1, display: 'flex', alignItems: 'center', gap: 8,
-            padding: '0 10px', height: 34,
-            background: C.surface1, border: `1px solid ${C.border}`, borderRadius: 6,
-          }}>
-            <h1 style={{ fontSize: 12, fontWeight: 600, color: C.textPrimary, margin: 0 }}>Team</h1>
-            <span style={{ fontSize: 10, color: C.textTertiary }}>·</span>
-            <span style={{ fontSize: 10, color: C.textTertiary }}>Members, roles &amp; permissions</span>
-          </div>
-          {canManage && (
-            <button
-              onClick={() => setShowInviteForm(!showInviteForm)}
-              style={{
-                height: 34, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 6,
-                background: C.surface1, border: `1px solid ${showInviteForm ? C.borderStrong : C.border}`, borderRadius: 6,
-                color: showInviteForm ? C.textPrimary : C.textSecondary, fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                transition: 'color 80ms ease',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = C.textPrimary; }}
-              onMouseLeave={e => { e.currentTarget.style.color = showInviteForm ? C.textPrimary : C.textSecondary; }}
-            >
-              <UserPlus size={11} />
-              {showInviteForm ? 'Cancel' : 'Invite'}
-            </button>
-          )}
-          <button onClick={() => loadData(true)} disabled={isRefreshing} style={{
-            height: 34, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 6,
-            background: C.surface1, border: `1px solid ${C.border}`, borderRadius: 6,
-            color: C.textSecondary, fontSize: 11, fontWeight: 500, cursor: 'pointer',
-            opacity: isRefreshing ? 0.3 : 1, transition: 'color 80ms ease',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.color = C.textPrimary; }}
-            onMouseLeave={e => { e.currentTarget.style.color = C.textSecondary; }}
-          >
-            <RefreshCw size={11} className={isRefreshing ? 'animate-spin' : ''} />
-            Refresh
+      {/* ═══ Header — dark container buttons, optically centered with taskbar ═══ */}
+      <div className="flex items-center gap-1 px-2 shrink-0" style={{ paddingTop: 8, paddingBottom: 8 }}>
+        {/* Workspace context */}
+        <span className="text-[13px] font-semibold text-zinc-300 mr-2 pl-1">{activeWorkspace?.name || 'Team'}</span>
+        <span className="text-zinc-600 mr-2">/</span>
+
+        {/* Tabs */}
+        {allTabs.map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={`h-7 px-3 text-[13px] font-medium capitalize rounded-md border transition-colors ${
+              activeTab === tab
+                ? 'bg-black/90 border-white/[0.08] text-zinc-300'
+                : 'bg-transparent border-transparent text-zinc-600 hover:text-zinc-400 hover:bg-black/50'
+            }`}>
+            {tab}
           </button>
-        </div>
-
-        {/* Invite form */}
-        {showInviteForm && canManage && (
-          <div style={{ marginTop: 6, padding: '8px 10px', background: C.surface1, border: `1px solid ${C.border}`, borderRadius: 6 }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input
-                type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
-                placeholder="Email address" autoFocus
-                style={{
-                  flex: 1, height: 28, padding: '0 8px', boxSizing: 'border-box',
-                  background: C.bg, border: `1px solid ${C.border}`,
-                  borderRadius: 4, color: C.textBody, fontSize: 12, outline: 'none',
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = C.borderStrong; }}
-                onBlur={e => { e.currentTarget.style.borderColor = C.border; }}
-                onKeyDown={e => { if (e.key === 'Enter') handleInvite(); }}
-              />
-              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{
-                height: 28, padding: '0 8px', background: C.bg, border: `1px solid ${C.border}`,
-                borderRadius: 4, color: C.textSecondary, fontSize: 11, outline: 'none', cursor: 'pointer',
-              }}>
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-              </select>
-              <button onClick={handleInvite} disabled={isInviting || !inviteEmail.trim()} style={primaryBtn(isInviting || !inviteEmail.trim())} {...hover.primary}>
-                {isInviting ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
-                Send
-              </button>
-            </div>
-            {inviteError && <div style={{ fontSize: 11, color: C.error.text, marginTop: 4 }}>{inviteError}</div>}
-          </div>
-        )}
-
-        {error && (
-          <div style={{ marginTop: 6, padding: '5px 10px', borderRadius: 4, background: C.error.bg, border: `1px solid ${C.error.border}`, color: C.error.text, fontSize: 11 }}>
-            {error}
-          </div>
-        )}
-      </div>
-
-      {/* ═══ Row 2: Stats ═══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 6 }}>
-        {([
-          { icon: <Users size={11} style={{ color: C.iconDim }} />, label: 'Total Members', value: stats.total, sub: 'in workspace' },
-          { icon: <UserCheck size={11} style={{ color: C.iconDim }} />, label: 'Active', value: stats.active, sub: 'online' },
-          { icon: <Shield size={11} style={{ color: C.iconDim }} />, label: 'Admins', value: stats.admins, sub: 'with elevated access' },
-          { icon: <Mail size={11} style={{ color: C.iconDim }} />, label: 'Pending', value: stats.pending, sub: `invite${stats.pending !== 1 ? 's' : ''}` },
-        ] as const).map((stat) => (
-          <div key={stat.label} style={{ background: C.surface1, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-              {stat.icon}
-              <span style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>{stat.label}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, fontVariantNumeric: 'tabular-nums' }}>{stat.value}</span>
-              <span style={{ fontSize: 9, color: C.textDim }}>{stat.sub}</span>
-            </div>
-          </div>
         ))}
+
+        <div className="flex-1" />
+
+        {/* Contextual stats — right side of header */}
+        {activeTab === 'members' && (
+          <div className="flex items-center gap-3 mr-3 text-[12px]">
+            <span className="text-zinc-500">{stats.total} <span className="text-zinc-600">members</span></span>
+            <span className="text-zinc-500">{stats.active} <span className="text-zinc-600">active</span></span>
+            <span className="text-zinc-500">{stats.admins} <span className="text-zinc-600">admins</span></span>
+            {invites.length > 0 && <span className="text-zinc-500">{invites.length} <span className="text-zinc-600">pending</span></span>}
+          </div>
+        )}
+        {activeTab === 'security' && (
+          <div className="flex items-center gap-3 mr-3 text-[12px]">
+            <span className={ssoEnabled ? 'text-zinc-400' : 'text-zinc-600'}>SSO {ssoEnabled ? 'on' : 'off'}</span>
+            <span className={enforce2fa ? 'text-zinc-400' : 'text-zinc-600'}>2FA {enforce2fa ? 'on' : 'off'}</span>
+            <span className="text-zinc-500">{sessions.length} <span className="text-zinc-600">sessions</span></span>
+          </div>
+        )}
+        {activeTab === 'activity' && (
+          <div className="flex items-center gap-3 mr-3 text-[12px]">
+            <span className="text-zinc-500">{audit.length} <span className="text-zinc-600">events</span></span>
+            <button onClick={() => {
+              const h = 'Date,Action,Actor,Target\n';
+              const r = audit.map(e => `${formatDate(e.ts)},${actionLabel[e.action] || e.action},${e.actor},${e.target || ''}`).join('\n');
+              const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([h + r], { type: 'text/csv' })); a.download = 'audit-log.csv'; a.click();
+            }} className="text-zinc-600 hover:text-zinc-400 transition-colors flex items-center gap-1">
+              <Download size={10} /> CSV
+            </button>
+          </div>
+        )}
+        {activeTab === 'settings' && (
+          <div className="flex items-center gap-3 mr-3 text-[12px]">
+            <span className="text-zinc-500">{roles.length} <span className="text-zinc-600">roles</span></span>
+            <span className="text-zinc-500">{apiKeys.length} <span className="text-zinc-600">keys</span></span>
+          </div>
+        )}
+
+        {activeTab === 'members' && canManage && (
+          <button onClick={() => setShowInviteForm(!showInviteForm)}
+            className={`h-7 px-3 flex items-center gap-1.5 rounded-md border text-[13px] font-medium transition-colors ${
+              showInviteForm
+                ? 'bg-black/90 border-white/[0.15] text-zinc-300'
+                : 'bg-black/90 border-white/[0.08] text-zinc-500 hover:text-zinc-400'
+            }`}>
+            <UserPlus size={12} /> {showInviteForm ? 'Cancel' : 'Invite'}
+          </button>
+        )}
       </div>
 
-      {/* ═══ Row 3: Members list + sidebar ═══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 6, margin: '6px 0 0', minHeight: 0 }}>
 
-        {/* ── Members List ── */}
-        <div style={{ ...S.panel, minHeight: 0 }}>
-          <div style={S.panelHeading}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={S.headingLabel}>Members</span>
-              {/* Role filter tabs */}
-              <div style={{ display: 'flex', gap: 0 }}>
-                {(['all', 'owner', 'admin', 'member'] as RoleFilter[]).map(f => {
-                  const active = roleFilter === f;
-                  return (
-                    <button key={f} onClick={() => setRoleFilter(f)} style={{
-                      height: 24, padding: '0 10px', fontSize: 9, fontWeight: 500,
-                      background: 'transparent', border: 'none', cursor: 'pointer',
-                      borderBottom: active ? '2px solid rgba(255,255,255,0.5)' : '2px solid transparent',
-                      color: active ? C.textBody : C.textTertiary,
-                      textTransform: 'uppercase', letterSpacing: '0.03em',
-                      transition: 'all 80ms ease', display: 'flex', alignItems: 'center', gap: 5,
-                    }}>
-                      {f}
-                      <span style={{
-                        fontSize: 8, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
-                        color: active ? C.textSecondary : C.textDim,
-                        background: active ? C.ghost : 'transparent',
-                        borderRadius: 3, padding: '1px 4px', transition: 'all 80ms ease',
-                      }}>
-                        {filterCounts[f]}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Search */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: C.bg, borderRadius: 3, padding: '0 6px', height: 22, marginLeft: 'auto' }}>
-                <Search size={10} style={{ color: C.textTertiary, flexShrink: 0 }} />
-                <input
-                  ref={searchRef}
-                  value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder="Search… ( / )"
-                  style={{
-                    background: 'none', border: 'none', outline: 'none',
-                    fontSize: 10, color: C.textBody, width: 90, padding: 0, height: '100%',
-                  }}
-                />
-              </div>
+      {/* ═══ Invite form — pinned sub-header ═══ */}
+      {activeTab === 'members' && showInviteForm && canManage && (
+        <div className="flex items-center gap-1 px-2 py-2 border-b border-white/[0.05]">
+          <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="Email address" autoFocus
+            className="h-7 px-3 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-300 placeholder-zinc-500 outline-none focus:border-white/[0.15] w-64"
+            onKeyDown={e => { if (e.key === 'Enter') handleInvite(); }} />
+          <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ colorScheme: 'dark' }}
+            className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-400 outline-none cursor-pointer appearance-none">
+            <option value="member">Member</option><option value="admin">Admin</option>
+          </select>
+          <button onClick={handleInvite} disabled={isInviting || !inviteEmail.trim()}
+            className="h-7 px-3 flex items-center gap-1.5 bg-white/90 text-[#09090b] text-[13px] font-semibold rounded disabled:opacity-30 hover:bg-white/80 transition-colors">
+            {isInviting ? <Loader2 size={11} className="animate-spin" /> : <Mail size={11} />} Send
+          </button>
+          {inviteError && <span className="text-[12px] text-red-400/40 ml-2">{inviteError}</span>}
+        </div>
+      )}
+
+      {/* ═══ Filter toolbar — pinned sub-header, full viewport ═══ */}
+      {activeTab === 'members' && (
+        <div className="flex items-center gap-1 px-2 py-2 border-b border-white/[0.05]">
+            {(['all', 'owner', 'admin', 'member'] as RoleFilter[]).map(f => (
+              <button key={f} onClick={() => setRoleFilter(f)}
+                className={`h-7 px-3 text-[13px] font-medium capitalize rounded border transition-colors ${
+                  roleFilter === f ? 'bg-black/90 border-white/[0.08] text-zinc-300' : 'bg-transparent border-transparent text-zinc-600 hover:text-zinc-400 hover:bg-black/50'
+                }`}>{f}</button>
+            ))}
+            <div className="flex-1" />
+            {selectedMembers.size > 0 && (<>
+              <span className="text-[12px] text-zinc-500 mr-1">{selectedMembers.size} selected</span>
+              <button onClick={() => setBulkAction('role')} className="h-7 px-3 rounded bg-black/90 border border-white/[0.08] text-[13px] text-zinc-500 font-medium hover:text-zinc-400 transition-colors">Role</button>
+              <button onClick={() => setBulkAction('remove')} className="h-7 px-3 rounded border border-red-500/15 text-[13px] text-red-400/40 font-medium hover:text-red-400/70 transition-colors">Remove</button>
+              <button onClick={() => {
+                const rows = filteredMembers.filter(m => selectedMembers.has(m.id)).map(m => { const ex = DEV_MEMBER_EXTRA[m.id]; return [m.user?.display_name, m.user?.email, m.member_role, ex?.last_active || ''].join(','); });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['Name,Email,Role,Last Active\n' + rows.join('\n')], { type: 'text/csv' })); a.download = 'members.csv'; a.click();
+              }} className="h-7 w-7 flex items-center justify-center rounded bg-black/90 border border-white/[0.08] text-zinc-500 hover:text-zinc-400 transition-colors"><Download size={11} /></button>
+              <button onClick={() => setSelectedMembers(new Set())} className="h-7 w-7 flex items-center justify-center text-zinc-600 hover:text-zinc-500 transition-colors"><X size={11} /></button>
+            </>)}
+            <div className="flex items-center gap-1.5 h-7 px-3 bg-black/30 border border-white/[0.08] rounded">
+              <Search size={11} className="text-zinc-500" />
+              <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search"
+                className="bg-transparent border-none outline-none text-[13px] text-zinc-300 placeholder-zinc-500 w-20" />
             </div>
-            <span style={S.headingMeta}>{filteredMembers.length}</span>
+          </div>
+      )}
+
+      {/* ═══ Main container — distinct bg, flex-1, scrollable ═══ */}
+      <div className="flex-1 overflow-auto bg-white/[0.02] border-y border-white/[0.05]">
+
+        {/* MEMBERS */}
+        {activeTab === 'members' && (<>
+          {/* Column headers */}
+          <div className="grid gap-3 px-4 py-2 border-b border-white/[0.06]" style={{ gridTemplateColumns: '32px 3fr 1fr 1fr 0.7fr 56px' }}>
+            <span />
+            {([['name', 'Name'], ['role', 'Role'], ['last_active', 'Last Active']] as const).map(([field, label]) => (
+              <button key={field} onClick={() => toggleSort(field)} className="flex items-center gap-1 text-[12px] font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-400 transition-colors text-left">
+                {label} {sortField === field && <ArrowUpDown size={10} className={`text-zinc-400 ${sortDir === 'desc' ? 'rotate-180' : ''}`} />}
+              </button>
+            ))}
+            <span className="text-[12px] font-semibold text-zinc-500 uppercase tracking-wider">2FA</span>
+            <span />
           </div>
 
-          <div style={{ ...S.panelBody, flex: 1, minHeight: 0, overflowY: 'auto', padding: 4 }}>
-            <div style={{ display: 'grid', gap: 1 }}>
-              {filteredMembers.length === 0 ? (
-                <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                  <Users size={24} style={{ color: C.ghost, margin: '0 auto 8px' }} />
-                  <p style={{ fontSize: 11, color: C.textTertiary, margin: 0 }}>
-                    {search ? 'No members match your search' : 'No members found'}
-                  </p>
-                </div>
-              ) : (<>
-                {/* Bulk action bar */}
-                {selectedMembers.size > 0 && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '4px 8px', background: C.ghost, borderRadius: 4, marginBottom: 2,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <button onClick={() => setSelectedMembers(new Set())} style={{ ...ghostBtn(), height: 22, padding: '0 4px', borderRadius: 3 }}>
-                        <X size={10} />
-                      </button>
-                      <span style={{ fontSize: 10, color: C.textSecondary }}>{selectedMembers.size} selected</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <button onClick={() => setBulkAction('role')} style={{ ...ghostBtn(), height: 22, padding: '0 6px', fontSize: 9, borderRadius: 3, color: C.textTertiary }} {...hover.ghost}>Change Role</button>
-                      <button onClick={() => setBulkAction('remove')} style={{ height: 22, padding: '0 6px', fontSize: 9, fontWeight: 500, background: 'transparent', border: `1px solid ${C.destructive.border}`, borderRadius: 3, color: C.destructive.text, cursor: 'pointer' }}>Remove</button>
-                      <button onClick={() => {
-                        const rows = filteredMembers.filter(m => selectedMembers.has(m.id)).map(m => {
-                          const ex = DEV_MEMBER_EXTRA[m.id];
-                          return `${m.user?.display_name},${m.user?.email},${m.member_role},${ex?.last_active || ''},${ex?.has_2fa || false},${ex?.login_method || ''},${ex?.credits_used || 0}`;
-                        });
-                        const csv = 'Name,Email,Role,Last Active,2FA,Login Method,Credits Used\n' + rows.join('\n');
-                        const blob = new Blob([csv], { type: 'text/csv' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a'); a.href = url; a.download = 'members-export.csv'; a.click();
-                        URL.revokeObjectURL(url);
-                      }} style={{ ...ghostBtn(), height: 22, padding: '0 6px', fontSize: 9, borderRadius: 3, color: C.textTertiary }} {...hover.ghost}>
-                        <Download size={9} /> Export
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {filteredMembers.map(member => {
-                const extra = DEV_MEMBER_EXTRA[member.id];
-                const isSelected = selectedMembers.has(member.id);
-                return (
-                <div
-                  key={member.id}
-                  style={{
-                    display: 'grid', gridTemplateColumns: canManage ? '18px 32px 1fr auto' : '32px 1fr auto',
-                    alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 4,
-                    transition: 'background-color 80ms ease',
-                    background: isSelected ? C.ghost : undefined,
-                  }}
-                  {...hover.row}
-                >
-                  {/* Checkbox for bulk select */}
-                  {canManage && (
-                    <button
-                      onClick={() => setSelectedMembers(prev => {
-                        const next = new Set(prev);
-                        if (next.has(member.id)) next.delete(member.id); else next.add(member.id);
-                        return next;
-                      })}
-                      style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-                    >
-                      {isSelected ? <CheckSquare size={13} style={{ color: C.textBody }} /> : <Square size={13} style={{ color: C.textDim }} />}
-                    </button>
-                  )}
+          {/* Pending invites */}
+          {invites.map(inv => (
+            <div key={inv.id} className="grid items-center gap-3 px-4 border-b border-white/[0.05] hover:bg-white/[0.03] transition-colors" style={{ gridTemplateColumns: '32px 3fr 1fr 1fr 0.7fr 56px', minHeight: 44 }}>
+              <div className="w-7 h-7 rounded flex items-center justify-center bg-white/[0.04]"><Mail size={12} className="text-zinc-600" /></div>
+              <div className="min-w-0 py-2">
+                <div className="text-[13px] text-zinc-400 truncate">{inv.invited_email}</div>
+                <div className="text-[11px] text-zinc-600">Invited {timeAgo(inv.created_at)}</div>
+              </div>
+              <span className="text-[11px] px-1.5 py-0.5 rounded bg-white/[0.04] text-zinc-600 uppercase tracking-wide font-medium w-fit">{inv.role}</span>
+              <span className="text-[11px] text-zinc-600 italic">Pending</span>
+              <span />
+              {canManage ? <button onClick={() => handleRevokeInvite(inv.id)} className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors">Revoke</button> : <span />}
+            </div>
+          ))}
 
-                  {/* Avatar */}
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 4,
-                    background: C.surface1, border: `1px solid ${C.border}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    position: 'relative',
-                  }}>
-                    {member.user?.avatar_url ? (
-                      <img src={member.user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 4 }} />
-                    ) : (
-                      <span style={{ fontSize: 13, fontWeight: 500, color: C.textSecondary }}>
-                        {(member.user?.display_name || '?').charAt(0).toUpperCase()}
-                      </span>
+          {/* Members */}
+          {filteredMembers.length === 0 ? (
+            <div className="py-16 text-center text-[12px] text-zinc-600">{search ? 'No matches' : 'No members'}</div>
+          ) : filteredMembers.map(member => {
+            const extra = DEV_MEMBER_EXTRA[member.id];
+            const isSelected = selectedMembers.has(member.id);
+            const isOnline = extra?.last_active && (Date.now() - new Date(extra.last_active).getTime()) < 600000;
+            return (
+              <div key={member.id}>
+                <div className="group grid items-center gap-3 px-4 border-b border-white/[0.05] hover:bg-white/[0.05] transition-colors"
+                  style={{ gridTemplateColumns: '32px 3fr 1fr 1fr 0.7fr 56px', minHeight: 44, cursor: canManage ? 'pointer' : undefined }}
+                  onClick={canManage ? () => setSelectedMembers(prev => { const n = new Set(prev); if (n.has(member.id)) n.delete(member.id); else n.add(member.id); return n; }) : undefined}>
+                  <div className={`w-7 h-7 rounded flex items-center justify-center relative transition-colors ${isSelected ? 'bg-white/[0.12]' : 'bg-white/[0.08]'}`}>
+                    {isSelected ? <Check size={13} className="text-zinc-300" /> :
+                      <span className="text-[13px] font-medium text-zinc-400">{(member.user?.display_name || '?').charAt(0).toUpperCase()}</span>}
+                    {isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-sm bg-zinc-400 border border-[#0a0a0b]" />}
+                  </div>
+                  <div className="min-w-0 py-2">
+                    <div className="text-[13px] font-medium text-zinc-300 truncate">{member.user?.display_name || member.user?.username || 'Unknown'}</div>
+                    <div className="text-[12px] text-zinc-500 truncate">{member.user?.email}</div>
+                  </div>
+                  <div className="relative">
+                    <button onClick={e => { e.stopPropagation(); setRoleDropdown(roleDropdown === member.id ? null : member.id); }}
+                      disabled={!canManage || member.member_role === 'owner'}
+                      className={`text-[11px] px-1.5 py-0.5 rounded bg-white/[0.08] uppercase tracking-wide font-medium transition-colors ${
+                        canManage && member.member_role !== 'owner' ? 'text-zinc-400 hover:bg-white/[0.12] cursor-pointer' : 'text-zinc-500 cursor-default'
+                      }`}>{member.member_role}</button>
+                    {roleDropdown === member.id && canManage && (
+                      <div className="absolute top-full left-0 mt-1 z-20 bg-[#0c0c0e] border border-white/[0.08] rounded overflow-hidden">
+                        {['admin', 'member'].map(role => (
+                          <button key={role} onClick={e => { e.stopPropagation(); handleRoleChange(member.id, role); setRoleDropdown(null); }}
+                            className={`w-full px-3 py-1.5 text-[12px] text-left capitalize transition-colors ${
+                              member.member_role === role ? 'text-zinc-300 bg-white/[0.06]' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-400'
+                            }`}>{role}</button>
+                        ))}
+                      </div>
                     )}
                   </div>
-
-                  {/* Info + Last Active + meta */}
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 11, color: C.textBody, fontWeight: 500 }}>
-                        {member.user?.display_name || member.user?.username || 'Unknown'}
-                      </span>
-                      {roleBadge(member.member_role)}
-                      {extra?.has_2fa && <Fingerprint size={10} style={{ color: C.textTertiary }} />}
-                      {extra?.login_method && extra.login_method !== 'password' && (
-                        <span style={{ ...S.badge, fontSize: 8 }}>{loginMethodLabel[extra.login_method]}</span>
-                      )}
+                  <span className="text-[12px] text-zinc-500 tabular-nums">{extra?.last_active ? formatRelative(extra.last_active) : '—'}</span>
+                  {extra?.has_2fa ? <Fingerprint size={12} className="text-zinc-500" /> : <span className="text-[12px] text-zinc-600">—</span>}
+                  {canManage && member.member_role !== 'owner' ? (
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={e => { e.stopPropagation(); setExpandedMember(expandedMember === member.id ? null : member.id); }}
+                        className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.08] text-zinc-400 hover:bg-white/[0.15] hover:text-zinc-300 transition-colors">
+                        <ChevronDown size={10} className={`transition-transform ${expandedMember === member.id ? 'rotate-180' : ''}`} />
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); handleRemoveMember(member.id); }}
+                        className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.08] text-zinc-400 hover:bg-white/[0.15] hover:text-zinc-300 transition-colors">
+                        <X size={10} />
+                      </button>
                     </div>
-                    <div style={{ fontSize: 10, color: C.textDim, lineHeight: '14px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span>{member.user?.email}</span>
-                      {extra?.last_active && (<>
-                        <span style={{ color: C.textTertiary }}>·</span>
-                        <span>{formatRelative(extra.last_active)}</span>
-                      </>)}
-                      {extra?.credits_used !== undefined && (<>
-                        <span style={{ color: C.textTertiary }}>·</span>
-                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{extra.credits_used.toLocaleString()} cr</span>
-                      </>)}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  {canManage && member.member_role !== 'owner' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {editingMember === member.id ? (
-                        <>
-                          {['member', 'admin'].map(role => (
-                            <button key={role} onClick={() => handleRoleChange(member.id, role)} style={{
-                              height: 24, padding: '0 8px', fontSize: 10, fontWeight: 500,
-                              background: member.member_role === role ? C.ghostHover : C.ghost,
-                              border: 'none', borderRadius: 3,
-                              color: member.member_role === role ? C.textBody : C.textTertiary,
-                              cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.03em',
-                              transition: 'background-color 80ms ease',
-                            }}>{role}</button>
-                          ))}
-                          <button onClick={() => setEditingMember(null)} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.ghost, border: 'none', borderRadius: 3, color: C.textSecondary, cursor: 'pointer' }}>
-                            <X size={10} />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button onClick={() => setEditingMember(member.id)} title="Change role" style={{ ...ghostBtn(), height: 24, padding: '0 6px', fontSize: 10, borderRadius: 3, color: C.textTertiary }} {...hover.ghost}>
-                            <MoreHorizontal size={10} />
-                          </button>
-                          <button onClick={() => handleRemoveMember(member.id)} title="Remove member" style={{
-                            width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 3,
-                            color: C.textTertiary, cursor: 'pointer', transition: 'all 80ms ease',
-                          }}
-                            onMouseEnter={e => { e.currentTarget.style.background = C.ghost; e.currentTarget.style.color = C.textSecondary; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.textTertiary; }}
-                          >
-                            <X size={10} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
+                  ) : <div />}
                 </div>
-              );
-              })}
-              </>)}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Right Sidebar ── */}
-        <div style={{ display: 'grid', gap: 6, alignContent: 'start', minHeight: 0, overflowY: 'auto' }}>
-
-          {/* Pending Invites */}
-          <div style={S.panel}>
-            <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setInvitesOpen(o => !o)}>
-              <span style={S.headingLabel}>Pending Invites</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={S.headingMeta}>{invites.length}</span>
-                <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: invitesOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
-              </div>
-            </div>
-            {invitesOpen && (
-              <div style={{ ...S.panelBody, padding: 6 }}>
-                {invites.length === 0 ? (
-                  <div style={{ padding: '16px 0', textAlign: 'center' }}>
-                    <Mail size={18} style={{ color: C.ghost, margin: '0 auto 6px' }} />
-                    <p style={{ fontSize: 10, color: C.textTertiary, margin: 0 }}>No pending invites</p>
+                {expandedMember === member.id && extra && (
+                  <div className="flex gap-8 px-4 py-3 border-b border-white/[0.05] bg-white/[0.02] text-[12px]" style={{ paddingLeft: 'calc(32px + 12px + 16px)' }}>
+                    <div><span className="text-zinc-500">Login</span> <span className="text-zinc-400 ml-1">{loginMethodLabel[extra.login_method]}</span></div>
+                    <div><span className="text-zinc-500">Credits</span> <span className="text-zinc-400 ml-1 tabular-nums">{extra.credits_used.toLocaleString()}</span></div>
+                    <div><span className="text-zinc-500">Joined</span> <span className="text-zinc-400 ml-1">{formatDate(member.created_at)}</span></div>
+                    <div><span className="text-zinc-500">2FA</span> <span className="text-zinc-400 ml-1">{extra.has_2fa ? 'Enabled' : 'Disabled'}</span></div>
                   </div>
-                ) : (
-                  <div style={{ display: 'grid', gap: 2 }}>
-                    {invites.map(invite => (
-                      <div key={invite.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', borderRadius: 4 }} {...hover.row}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 11, color: C.textBody }}>{invite.invited_email}</div>
-                          <div style={{ fontSize: 9, color: C.textDim, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Clock size={8} /> {timeAgo(invite.created_at)} · {roleBadge(invite.role)}
-                          </div>
+                )}
+              </div>
+            );
+          })}
+        </>)}
+
+        {/* ══════════════════════════════════════════════════ */}
+        {/* SETTINGS */}
+        {/* ══════════════════════════════════════════════════ */}
+        {/* ══════════════════════════════════════════════════ */}
+        {/* SETTINGS */}
+        {/* ══════════════════════════════════════════════════ */}
+        {activeTab === 'settings' && (
+          <div className="p-4 space-y-3">
+
+            {/* ── General ── */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between px-[10px] h-[34px] shrink-0 rounded-md" style={{ background: 'rgba(0,0,0,0.90)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">General</span>
+              </div>
+              <div className="rounded-md divide-y divide-white/[0.04]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[13px] text-zinc-400 w-32 shrink-0">Name</span>
+                  <div className="flex items-center gap-2 flex-1 justify-end">
+                    <input value={wsName} onChange={e => setWsName(e.target.value)} className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-300 outline-none focus:border-white/[0.15] w-64" />
+                    <button className="h-7 px-3 text-[13px] font-medium bg-white/[0.08] text-zinc-400 rounded hover:bg-white/[0.15] hover:text-zinc-300 transition-colors shrink-0">Save</button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[13px] text-zinc-400 w-32 shrink-0">Slug</span>
+                  <input value={wsSlug} onChange={e => setWsSlug(e.target.value)} className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-300 outline-none focus:border-white/[0.15] font-mono w-64" />
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[13px] text-zinc-400 w-32 shrink-0">Default role</span>
+                  <select value={defaultRole} onChange={e => setDefaultRole(e.target.value)} style={{ colorScheme: 'dark' }}
+                    className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-400 outline-none cursor-pointer appearance-none capitalize">
+                    <option value="member">Member</option><option value="admin">Admin</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[13px] text-zinc-400 w-32 shrink-0">Notifications</span>
+                  <div className="flex items-center gap-4">
+                    {([
+                      { label: 'Invite', value: notifyOnInvite, set: setNotifyOnInvite },
+                      { label: 'Join', value: notifyOnJoin, set: setNotifyOnJoin },
+                      { label: 'Remove', value: notifyOnRemove, set: setNotifyOnRemove },
+                    ] as const).map(n => (
+                      <button key={n.label} onClick={() => n.set(!n.value)} className="flex items-center gap-1.5 text-[12px] text-zinc-500">
+                        <div className={`w-8 h-4 rounded relative transition-colors shrink-0 ${n.value ? 'bg-white/[0.20]' : 'bg-white/[0.08]'}`}>
+                          <div className={`w-3 h-3 rounded-sm absolute top-0.5 transition-all ${n.value ? 'left-[18px] bg-[#0a0a0b]' : 'left-0.5 bg-zinc-500'}`} />
                         </div>
-                        {canManage && (
-                          <button onClick={() => handleRevokeInvite(invite.id)}
-                            style={{ height: 22, padding: '0 8px', fontSize: 9, fontWeight: 500, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 3, color: C.textTertiary, cursor: 'pointer', transition: 'all 80ms ease' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = C.ghost; e.currentTarget.style.color = C.textSecondary; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.textTertiary; }}
-                          >Revoke</button>
-                        )}
-                      </div>
+                        {n.label}
+                      </button>
                     ))}
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Invite Link */}
-          <div style={S.panel}>
-            <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setInviteLinkOpen(o => !o)}>
-              <span style={S.headingLabel}>Invite Link</span>
-              <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: inviteLinkOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
-            </div>
-            {inviteLinkOpen && (
-              <div style={{ ...S.panelBody, padding: 10, display: 'grid', gap: 6 }}>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', height: 28, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
-                    <Link2 size={10} style={{ color: C.textTertiary, flexShrink: 0 }} />
-                    <span style={{ fontSize: 10, color: C.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inviteLink}</span>
-                  </div>
-                  <button onClick={() => { navigator.clipboard.writeText(inviteLink); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }}
-                    style={{ ...ghostBtn(), height: 28, padding: '0 8px', borderRadius: 4 }} {...hover.ghost}
-                  >
-                    {linkCopied ? <Check size={10} style={{ color: C.positive }} /> : <Copy size={10} />}
-                  </button>
                 </div>
-                <div style={{ fontSize: 9, color: C.textDim }}>Anyone with this link can request to join the workspace.</div>
-              </div>
-            )}
-          </div>
-
-          {/* Workspace Settings */}
-          <div style={S.panel}>
-            <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setSettingsOpen(o => !o)}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Settings size={10} style={{ color: C.textTertiary }} />
-                <span style={S.headingLabel}>Workspace Settings</span>
-              </div>
-              <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: settingsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
-            </div>
-            {settingsOpen && (
-              <div style={{ ...S.panelBody, padding: 10, display: 'grid', gap: 8 }}>
-                {([
-                  { label: 'Name', val: wsName, set: setWsName },
-                  { label: 'Slug', val: wsSlug, set: setWsSlug },
-                ] as const).map(field => (
-                  <div key={field.label}>
-                    <div style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', marginBottom: 3 }}>{field.label}</div>
-                    <input value={field.val} onChange={e => field.set(e.target.value)} style={{
-                      width: '100%', height: 24, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 3,
-                      color: C.textBody, fontSize: 10, padding: '0 6px', outline: 'none', boxSizing: 'border-box',
-                    }} />
-                  </div>
-                ))}
-                <button style={{ ...ghostBtn(), width: '100%', justifyContent: 'center', height: 24, fontSize: 10 }} {...hover.ghost}>
-                  Save Changes
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Permissions & Security */}
-          <div style={S.panel}>
-            <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setSecurityOpen(o => !o)}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Lock size={10} style={{ color: C.textTertiary }} />
-                <span style={S.headingLabel}>Security</span>
-              </div>
-              <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: securityOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
-            </div>
-            {securityOpen && (
-              <div style={{ ...S.panelBody, padding: 10, display: 'grid', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Key size={10} style={{ color: C.textTertiary }} />
-                    <span style={{ fontSize: 10, color: C.textBody }}>Enforce 2FA</span>
-                  </div>
-                  <Toggle value={enforce2fa} onChange={setEnforce2fa} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Globe size={10} style={{ color: C.textTertiary }} />
-                    <span style={{ fontSize: 10, color: C.textBody }}>Domain restriction</span>
-                  </div>
-                  <Toggle value={restrictDomains} onChange={setRestrictDomains} />
-                </div>
-                {restrictDomains && (
-                  <div>
-                    <div style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', marginBottom: 3 }}>Allowed Domain</div>
-                    <input value={allowedDomain} onChange={e => setAllowedDomain(e.target.value)} style={{
-                      width: '100%', height: 24, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 3,
-                      color: C.textBody, fontSize: 10, padding: '0 6px', outline: 'none', boxSizing: 'border-box',
-                    }} />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Activity Log */}
-          <div style={S.panel}>
-            <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setAuditOpen(o => !o)}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Activity size={10} style={{ color: C.textTertiary }} />
-                <span style={S.headingLabel}>Activity Log</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={S.headingMeta}>{audit.length}</span>
-                <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: auditOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
               </div>
             </div>
-            {auditOpen && (
-              <div style={{ ...S.panelBody, padding: 6, display: 'grid', gap: 2 }}>
-                {audit.map(entry => (
-                  <div key={entry.id} style={{ padding: '5px 8px', borderRadius: 4 }} {...hover.row}>
-                    <div style={{ fontSize: 10, color: C.textBody }}>
-                      <strong style={{ color: C.textSecondary }}>{entry.actor}</strong>{' '}
-                      {actionLabel[entry.action] || entry.action}
-                      {entry.target && <span style={{ color: C.textSecondary }}> {entry.target}</span>}
+
+            {/* ── Roles & Permissions ── */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between px-[10px] h-[34px] shrink-0 rounded-md" style={{ background: 'rgba(0,0,0,0.90)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Roles & Permissions</span>
+                <span className="text-[10px] text-white/[0.12] tabular-nums">{roles.length}</span>
+              </div>
+              <div className="rounded-md divide-y divide-white/[0.04]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {roles.map(role => (
+                  <div key={role.id} className="flex items-start justify-between px-4 py-2.5 hover:bg-white/[0.02] transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] font-medium text-zinc-300">{role.name}</span>
+                        {role.builtin && <span className="text-[11px] px-1 py-px rounded bg-white/[0.06] text-zinc-500 uppercase tracking-wide">Built-in</span>}
+                      </div>
+                      {editingRole === role.id ? (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {ALL_PERMISSIONS.map(perm => { const has = role.permissions.includes(perm); return (
+                            <button key={perm} onClick={() => setRoles(prev => prev.map(r => r.id !== role.id ? r : { ...r, permissions: has ? r.permissions.filter(p => p !== perm) : [...r.permissions, perm] }))}
+                              className={`h-6 px-2 text-[11px] rounded border transition-colors cursor-pointer ${has ? 'bg-white/[0.08] border-white/[0.15] text-zinc-300' : 'border-white/[0.06] text-zinc-600'}`}>{perm}</button>
+                          ); })}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-zinc-500 mt-0.5">{role.permissions.includes('*') ? 'All permissions' : role.permissions.join(', ')}</div>
+                      )}
                     </div>
-                    <div style={{ fontSize: 8, color: C.textDim, marginTop: 1 }}>{timeAgo(entry.ts)}</div>
+                    {!role.builtin && (
+                      <div className="flex gap-1 ml-4 shrink-0">
+                        <button onClick={() => setEditingRole(editingRole === role.id ? null : role.id)} className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.08] text-zinc-400 hover:text-zinc-300 transition-colors"><Settings size={10} /></button>
+                        <button onClick={() => setRoles(prev => prev.filter(r => r.id !== role.id))} className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.08] text-zinc-600 hover:text-zinc-400 transition-colors"><X size={10} /></button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          {/* ── SSO / SAML ── */}
-          {canManage && (
-            <div style={S.panel}>
-              <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setSsoOpen(o => !o)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Globe size={11} style={{ color: C.textTertiary }} />
-                  <span style={S.headingLabel}>SSO / SAML</span>
-                  {ssoEnabled && <span style={{ ...S.badge, fontSize: 8 }}>Active</span>}
-                </div>
-                <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: ssoOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
+              <div className="flex gap-2 px-4 py-2.5 border-t border-white/[0.04]">
+                <input value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="New role…"
+                  className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-300 placeholder-zinc-500 outline-none w-48" />
+                <button disabled={!newRoleName.trim()} onClick={() => { if (!newRoleName.trim()) return; setRoles(prev => [...prev, { id: `r-${Date.now()}`, name: newRoleName.trim(), permissions: ['view'], builtin: false }]); setNewRoleName(''); }}
+                  className="h-7 px-3 text-[13px] font-medium bg-white/[0.08] text-zinc-400 rounded hover:bg-white/[0.15] hover:text-zinc-300 disabled:opacity-30 transition-colors">Add</button>
               </div>
-              {ssoOpen && (
-                <div style={{ ...S.panelBody, padding: '8px 10px', display: 'grid', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 10, color: C.textSecondary }}>Enable SAML SSO</span>
-                    <button onClick={() => setSsoEnabled(!ssoEnabled)} style={{
-                      width: 32, height: 16, borderRadius: 3, border: 'none', cursor: 'pointer',
-                      background: ssoEnabled ? C.textBody : C.ghost,
-                      position: 'relative', transition: 'background-color 80ms ease',
-                    }}>
-                      <div style={{
-                        width: 12, height: 12, borderRadius: ssoEnabled ? 3 : 2,
-                        background: ssoEnabled ? '#0a0a0b' : C.textDim,
-                        position: 'absolute', top: 2,
-                        left: ssoEnabled ? 18 : 2,
-                        transition: 'left 150ms ease, border-radius 150ms ease',
-                      }} />
-                    </button>
+            </div>
+
+            {/* ── API Keys ── */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between px-[10px] h-[34px] shrink-0 rounded-md" style={{ background: 'rgba(0,0,0,0.90)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">API Keys</span>
+                <span className="text-[10px] text-white/[0.12] tabular-nums">{apiKeys.length}</span>
+              </div>
+              <div className="rounded-md divide-y divide-white/[0.04]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {apiKeys.map(k => (
+                  <div key={k.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.02] transition-colors">
+                    <div><div className="text-[13px] text-zinc-300">{k.name}</div><div className="text-[11px] text-zinc-500 font-mono">{k.prefix}</div></div>
+                    <div className="text-[11px] text-zinc-600">{k.lastUsed}</div>
                   </div>
-                  {ssoEnabled && (<>
-                    <div>
-                      <label style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, display: 'block' }}>IdP Login URL</label>
-                      <input value={ssoIdpUrl} onChange={e => setSsoIdpUrl(e.target.value)} placeholder="https://idp.example.com/sso/saml" style={{ width: '100%', height: 24, background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3, color: C.textBody, fontSize: 10, padding: '0 6px', outline: 'none' }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, display: 'block' }}>Entity ID</label>
-                      <input value={ssoEntityId} onChange={e => setSsoEntityId(e.target.value)} placeholder="urn:xeno:workspace" style={{ width: '100%', height: 24, background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3, color: C.textBody, fontSize: 10, padding: '0 6px', outline: 'none' }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, display: 'block' }}>X.509 Certificate</label>
-                      <textarea value={ssoCert} onChange={e => setSsoCert(e.target.value)} placeholder="-----BEGIN CERTIFICATE-----" rows={3} style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3, color: C.textBody, fontSize: 10, padding: '4px 6px', outline: 'none', resize: 'vertical', fontFamily: 'monospace' }} />
-                    </div>
-                    <button style={{ height: 24, padding: '0 10px', fontSize: 10, fontWeight: 500, background: C.ghost, border: 'none', borderRadius: 3, color: C.textSecondary, cursor: 'pointer', alignSelf: 'flex-start', transition: 'background-color 80ms ease' }}>Save Configuration</button>
-                  </>)}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── SCIM Provisioning ── */}
-          {canManage && (
-            <div style={S.panel}>
-              <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setScimOpen(o => !o)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Server size={11} style={{ color: C.textTertiary }} />
-                  <span style={S.headingLabel}>SCIM Provisioning</span>
-                  {scimEnabled && <span style={{ ...S.badge, fontSize: 8 }}>Active</span>}
-                </div>
-                <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: scimOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
+                ))}
               </div>
-              {scimOpen && (
-                <div style={{ ...S.panelBody, padding: '8px 10px', display: 'grid', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 10, color: C.textSecondary }}>Enable SCIM</span>
-                    <button onClick={() => setScimEnabled(!scimEnabled)} style={{
-                      width: 32, height: 16, borderRadius: 3, border: 'none', cursor: 'pointer',
-                      background: scimEnabled ? C.textBody : C.ghost,
-                      position: 'relative', transition: 'background-color 80ms ease',
-                    }}>
-                      <div style={{
-                        width: 12, height: 12, borderRadius: scimEnabled ? 3 : 2,
-                        background: scimEnabled ? '#0a0a0b' : C.textDim,
-                        position: 'absolute', top: 2,
-                        left: scimEnabled ? 18 : 2,
-                        transition: 'left 150ms ease, border-radius 150ms ease',
-                      }} />
-                    </button>
-                  </div>
-                  {scimEnabled && (<>
-                    <div>
-                      <label style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, display: 'block' }}>SCIM Base URL</label>
-                      <div style={{ height: 24, display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3, padding: '0 6px' }}>
-                        <span style={{ fontSize: 10, color: C.textTertiary, fontFamily: 'monospace', flex: 1 }}>https://api.xenostudio.ai/scim/v2</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 9, color: C.textTertiary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, display: 'block' }}>Bearer Token</label>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <div style={{ flex: 1, height: 24, display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3, padding: '0 6px' }}>
-                          <span style={{ fontSize: 10, color: C.textTertiary, fontFamily: 'monospace' }}>{scimToken}</span>
-                        </div>
-                        <button onClick={() => { navigator.clipboard.writeText(scimToken); setScimTokenCopied(true); setTimeout(() => setScimTokenCopied(false), 1500); }} style={{ ...ghostBtn(), height: 24, padding: '0 6px', borderRadius: 3 }} {...hover.ghost}>
-                          {scimTokenCopied ? <Check size={10} /> : <Copy size={10} />}
-                        </button>
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 9, color: C.textDim }}>
-                      Configure your IdP (Okta, Azure AD, OneLogin) with these credentials to auto-sync users.
-                    </div>
-                  </>)}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Sessions ── */}
-          {canManage && (
-            <div style={S.panel}>
-              <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setSessionsOpen(o => !o)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Monitor size={11} style={{ color: C.textTertiary }} />
-                  <span style={S.headingLabel}>Active Sessions</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={S.headingMeta}>{sessions.length}</span>
-                  <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: sessionsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
-                </div>
+              <div className="flex gap-2 px-4 py-2.5 border-t border-white/[0.04]">
+                <input value={newKeyName} onChange={e => setNewKeyName(e.target.value)} placeholder="Key name…"
+                  className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-300 placeholder-zinc-500 outline-none w-48" />
+                <button disabled={!newKeyName.trim()} className="h-7 px-3 text-[13px] font-medium bg-white/[0.08] text-zinc-400 rounded hover:bg-white/[0.15] hover:text-zinc-300 disabled:opacity-30 transition-colors">Create</button>
               </div>
-              {sessionsOpen && (
-                <div style={{ ...S.panelBody, padding: 4 }}>
-                  {sessions.map(s => (
-                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', borderRadius: 4, transition: 'background-color 80ms ease' }} {...hover.row}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {s.device.includes('iPhone') || s.device.includes('Android') ? <Smartphone size={12} style={{ color: C.textTertiary }} /> : <Monitor size={12} style={{ color: C.textTertiary }} />}
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span style={{ fontSize: 10, color: C.textBody }}>{s.user_name}</span>
-                            <span style={{ fontSize: 10, color: C.textDim }}>· {s.device}</span>
-                            {s.current && <span style={{ ...S.badge, fontSize: 8 }}>Current</span>}
-                          </div>
-                          <div style={{ fontSize: 9, color: C.textDim }}>{s.ip} · {s.location} · {formatRelative(s.last_active)}</div>
-                        </div>
-                      </div>
-                      {!s.current && (
-                        <button style={{ ...ghostBtn(), height: 22, padding: '0 6px', fontSize: 9, borderRadius: 3, color: C.textTertiary }} {...hover.ghost}>
-                          <LogOut size={9} /> Revoke
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
-          )}
 
-          {/* ── Custom Roles ── */}
-          {canManage && (
-            <div style={S.panel}>
-              <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setRolesOpen(o => !o)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Layers size={11} style={{ color: C.textTertiary }} />
-                  <span style={S.headingLabel}>Roles & Permissions</span>
+            {/* ── Danger Zone ── */}
+            {isOwner && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between px-[10px] h-[34px] shrink-0 rounded-md" style={{ background: 'rgba(0,0,0,0.90)', border: '1px solid rgba(239,68,68,0.10)' }}>
+                  <span className="text-[10px] font-semibold text-red-400/40 uppercase tracking-wider">Danger Zone</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={S.headingMeta}>{roles.length}</span>
-                  <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: rolesOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
-                </div>
-              </div>
-              {rolesOpen && (
-                <div style={{ ...S.panelBody, padding: 4 }}>
-                  {roles.map(role => (
-                    <div key={role.id} style={{ padding: '5px 8px', borderRadius: 4, transition: 'background-color 80ms ease' }} {...hover.row}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 10, color: C.textBody, fontWeight: 500 }}>{role.name}</span>
-                          {role.builtin && <span style={{ ...S.badge, fontSize: 8 }}>Built-in</span>}
-                        </div>
-                        {!role.builtin && (
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            <button onClick={() => setEditingRole(editingRole === role.id ? null : role.id)} style={{ ...ghostBtn(), height: 20, padding: '0 4px', borderRadius: 3 }} {...hover.ghost}>
-                              <Settings size={9} />
-                            </button>
-                            <button onClick={() => setRoles(prev => prev.filter(r => r.id !== role.id))} style={{ ...ghostBtn(), height: 20, padding: '0 4px', borderRadius: 3, color: C.textDim }} {...hover.ghost}>
-                              <X size={9} />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      {/* Permission editor */}
-                      {editingRole === role.id && (
-                        <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {ALL_PERMISSIONS.map(perm => {
-                            const has = role.permissions.includes(perm);
-                            return (
-                              <button key={perm} onClick={() => {
-                                setRoles(prev => prev.map(r => r.id !== role.id ? r : {
-                                  ...r, permissions: has ? r.permissions.filter(p => p !== perm) : [...r.permissions, perm]
-                                }));
-                              }} style={{
-                                height: 20, padding: '0 6px', fontSize: 9, borderRadius: 2,
-                                background: has ? C.ghost : 'transparent',
-                                border: `1px solid ${has ? C.borderStrong : C.border}`,
-                                color: has ? C.textBody : C.textDim,
-                                cursor: 'pointer', transition: 'all 80ms ease',
-                              }}>{perm}</button>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {/* Permission summary */}
-                      {editingRole !== role.id && (
-                        <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>
-                          {role.permissions.includes('*') ? 'All permissions' : role.permissions.join(', ')}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {/* Add new role */}
-                  <div style={{ padding: '5px 8px', display: 'flex', gap: 4 }}>
-                    <input value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="New role name..." style={{
-                      flex: 1, height: 24, background: 'rgba(0,0,0,0.3)', border: `1px solid ${C.border}`, borderRadius: 3,
-                      color: C.textBody, fontSize: 10, padding: '0 6px', outline: 'none',
-                    }} />
-                    <button disabled={!newRoleName.trim()} onClick={() => {
-                      if (!newRoleName.trim()) return;
-                      setRoles(prev => [...prev, { id: `r-${Date.now()}`, name: newRoleName.trim(), permissions: ['view'], builtin: false }]);
-                      setNewRoleName('');
-                    }} style={{
-                      height: 24, padding: '0 8px', fontSize: 10, fontWeight: 500,
-                      background: newRoleName.trim() ? C.ghost : 'transparent',
-                      border: 'none', borderRadius: 3,
-                      color: newRoleName.trim() ? C.textSecondary : C.textDim,
-                      cursor: newRoleName.trim() ? 'pointer' : 'not-allowed',
-                    }}>Add</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Transfer Ownership */}
-          {isOwner && members.filter(m => m.member_role !== 'owner').length > 0 && (
-            <div style={S.panel}>
-              <div style={{ ...S.panelHeading, cursor: 'pointer' }} onClick={() => setDangerOpen(o => !o)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <AlertTriangle size={11} style={{ color: C.textTertiary }} />
-                  <span style={S.headingLabel}>Danger Zone</span>
-                </div>
-                <ChevronDown size={12} style={{ color: C.textTertiary, transition: 'transform 150ms ease', transform: dangerOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
-              </div>
-              {dangerOpen && (
-                <div style={{ ...S.panelBody, padding: '8px 10px', display: 'grid', gap: 8 }}>
-                  {/* Transfer ownership */}
-                  <div>
-                    <div style={{ fontSize: 10, color: C.textBody, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <ChevronRight size={9} style={{ color: C.textTertiary }} /> Transfer Ownership
-                    </div>
-                    {members.filter(m => m.member_role !== 'owner').map(member => (
-                      <div key={member.id}>
-                        {showTransferConfirm === member.id ? (
-                          <div style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '6px 8px', borderRadius: 4,
-                            background: C.ghost, border: `1px solid ${C.border}`,
-                          }}>
-                            <span style={{ fontSize: 10, color: C.textSecondary }}>Transfer to {member.user?.display_name}?</span>
-                            <div style={{ display: 'flex', gap: 4 }}>
-                              <button onClick={() => setShowTransferConfirm(null)} style={{ ...ghostBtn(), height: 22, padding: '0 6px', fontSize: 9, borderRadius: 3 }}>Cancel</button>
-                              <button onClick={() => handleTransferOwnership(member.user_id)} style={{ height: 22, padding: '0 6px', fontSize: 9, fontWeight: 500, background: C.ghostHover, border: 'none', borderRadius: 3, color: C.textBody, cursor: 'pointer' }}>Confirm</button>
-                            </div>
+                <div className="rounded-md divide-y divide-white/[0.04]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(239,68,68,0.10)' }}>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[13px] text-zinc-400">Transfer ownership</span>
+                    <div className="flex gap-1">
+                      {members.filter(m => m.member_role !== 'owner').map(m => (
+                        showTransferConfirm === m.id ? (
+                          <div key={m.id} className="flex gap-1">
+                            <button onClick={() => setShowTransferConfirm(null)} className="h-6 px-2 text-[11px] rounded bg-white/[0.08] text-zinc-500 hover:text-zinc-400 transition-colors">Cancel</button>
+                            <button onClick={() => handleTransferOwnership(m.user_id)} className="h-6 px-2 text-[11px] font-medium rounded bg-white/[0.12] text-zinc-300 transition-colors">Confirm</button>
                           </div>
                         ) : (
-                          <button onClick={() => setShowTransferConfirm(member.id)}
-                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', borderRadius: 4, background: 'transparent', border: 'none', cursor: 'pointer', transition: 'background-color 80ms ease', marginBottom: 2 }}
-                            {...hover.row}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontSize: 10, color: C.textSecondary }}>{member.user?.display_name}</span>
-                              {roleBadge(member.member_role)}
-                            </div>
-                            <ChevronDown size={10} style={{ color: C.textDim, transform: 'rotate(-90deg)' }} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                          <button key={m.id} onClick={() => setShowTransferConfirm(m.id)} className="h-6 px-2 text-[11px] rounded bg-white/[0.08] text-zinc-500 hover:text-zinc-400 transition-colors">{m.user?.display_name}</button>
+                        )
+                      ))}
+                    </div>
                   </div>
-
-                  {/* Delete workspace */}
-                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
-                    <div style={{ fontSize: 10, color: C.textSecondary, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Trash2 size={9} /> Delete Workspace
-                    </div>
-                    <div style={{ fontSize: 9, color: C.textDim, marginBottom: 6 }}>
-                      Type <strong style={{ color: C.textTertiary }}>{activeWorkspace.name}</strong> to confirm
-                    </div>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder={activeWorkspace.name} style={{
-                        flex: 1, height: 24, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 3,
-                        color: C.textBody, fontSize: 10, padding: '0 6px', outline: 'none',
-                      }} />
-                      <button disabled={deleteConfirmText !== activeWorkspace.name} style={{
-                        height: 24, padding: '0 8px', fontSize: 9, fontWeight: 500,
-                        background: deleteConfirmText === activeWorkspace.name ? C.ghostHover : 'transparent',
-                        border: `1px solid ${C.border}`, borderRadius: 3,
-                        color: deleteConfirmText === activeWorkspace.name ? C.textBody : C.textTertiary,
-                        cursor: deleteConfirmText === activeWorkspace.name ? 'pointer' : 'not-allowed',
-                        opacity: deleteConfirmText === activeWorkspace.name ? 1 : 0.4,
-                      }}>Delete</button>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[13px] text-zinc-400">Delete workspace</span>
+                    <div className="flex gap-1">
+                      <input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder={activeWorkspace?.name}
+                        className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-300 placeholder-zinc-500 outline-none w-36" />
+                      <button disabled={deleteConfirmText !== activeWorkspace?.name}
+                        className="h-7 px-3 text-[13px] font-medium rounded border border-red-500/15 text-red-400/30 disabled:opacity-30 hover:text-red-400/60 transition-colors">Delete</button>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
+
+          </div>
+        )}
+
+
+        {/* ══════════════════════════════════════════════════ */}
+        {/* SECURITY */}
+        {/* ══════════════════════════════════════════════════ */}
+        {activeTab === 'security' && (
+          <div className="p-4 space-y-3">
+
+            {/* ── Authentication ── */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between px-[10px] h-[34px] shrink-0 rounded-md" style={{ background: 'rgba(0,0,0,0.90)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Authentication</span>
+              </div>
+              <div className="rounded-md divide-y divide-white/[0.04]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div><div className="text-[13px] text-zinc-300">SSO / SAML</div><div className="text-[11px] text-zinc-500 mt-0.5">Identity provider sign-on</div></div>
+                  <button onClick={() => setSsoEnabled(!ssoEnabled)} className={`w-8 h-4 rounded relative transition-colors shrink-0 ${ssoEnabled ? 'bg-white/[0.20]' : 'bg-white/[0.08]'}`}>
+                    <div className={`w-3 h-3 rounded-sm absolute top-0.5 transition-all ${ssoEnabled ? 'left-[18px] bg-[#0a0a0b]' : 'left-0.5 bg-zinc-500'}`} />
+                  </button>
+                </div>
+                {ssoEnabled && (
+                  <div className="grid gap-3 px-4 py-3">
+                    <div><label className="text-[11px] text-zinc-500 uppercase tracking-wider block mb-1">IdP URL</label><input value={ssoIdpUrl} onChange={e => setSsoIdpUrl(e.target.value)} placeholder="https://idp.example.com/sso/saml" className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-300 placeholder-zinc-500 outline-none focus:border-white/[0.15] w-full" /></div>
+                    <div><label className="text-[11px] text-zinc-500 uppercase tracking-wider block mb-1">Entity ID</label><input value={ssoEntityId} onChange={e => setSsoEntityId(e.target.value)} placeholder="urn:xeno:workspace" className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-300 placeholder-zinc-500 outline-none focus:border-white/[0.15] w-full" /></div>
+                    <div><label className="text-[11px] text-zinc-500 uppercase tracking-wider block mb-1">Certificate</label><textarea value={ssoCert} onChange={e => setSsoCert(e.target.value)} placeholder="-----BEGIN CERTIFICATE-----" rows={3} className="w-full px-2 py-1.5 bg-black/30 border border-white/[0.08] rounded text-[12px] text-zinc-300 placeholder-zinc-500 outline-none focus:border-white/[0.15] font-mono resize-y" /></div>
+                    <button className="h-7 px-3 text-[13px] font-medium bg-white/[0.08] text-zinc-400 rounded hover:bg-white/[0.15] hover:text-zinc-300 transition-colors self-start">Save</button>
+                  </div>
+                )}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div><div className="text-[13px] text-zinc-300">SCIM Provisioning</div><div className="text-[11px] text-zinc-500 mt-0.5">Auto-sync from IdP</div></div>
+                  <button onClick={() => setScimEnabled(!scimEnabled)} className={`w-8 h-4 rounded relative transition-colors shrink-0 ${scimEnabled ? 'bg-white/[0.20]' : 'bg-white/[0.08]'}`}>
+                    <div className={`w-3 h-3 rounded-sm absolute top-0.5 transition-all ${scimEnabled ? 'left-[18px] bg-[#0a0a0b]' : 'left-0.5 bg-zinc-500'}`} />
+                  </button>
+                </div>
+                {scimEnabled && (
+                  <div className="grid gap-3 px-4 py-3">
+                    <div><label className="text-[11px] text-zinc-500 uppercase tracking-wider block mb-1">Base URL</label><div className="h-7 px-2 flex items-center bg-black/30 border border-white/[0.08] rounded text-[12px] text-zinc-400 font-mono">https://api.xenostudio.ai/scim/v2</div></div>
+                    <div><label className="text-[11px] text-zinc-500 uppercase tracking-wider block mb-1">Token</label><div className="flex gap-1"><div className="h-7 px-2 flex-1 flex items-center bg-black/30 border border-white/[0.08] rounded text-[12px] text-zinc-400 font-mono">{scimToken}</div><button onClick={() => { navigator.clipboard.writeText(scimToken); setScimTokenCopied(true); setTimeout(() => setScimTokenCopied(false), 1500); }} className="w-7 h-7 flex items-center justify-center rounded bg-white/[0.08] text-zinc-500 hover:text-zinc-300 transition-colors">{scimTokenCopied ? <Check size={10} /> : <Copy size={10} />}</button></div></div>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-        </div>
+
+            {/* ── Policies ── */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between px-[10px] h-[34px] shrink-0 rounded-md" style={{ background: 'rgba(0,0,0,0.90)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Policies</span>
+              </div>
+              <div className="rounded-md divide-y divide-white/[0.04]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div><div className="text-[13px] text-zinc-300">Enforce 2FA</div><div className="text-[11px] text-zinc-500 mt-0.5">Require two-factor authentication</div></div>
+                  <button onClick={() => setEnforce2fa(!enforce2fa)} className={`w-8 h-4 rounded relative transition-colors shrink-0 ${enforce2fa ? 'bg-white/[0.20]' : 'bg-white/[0.08]'}`}>
+                    <div className={`w-3 h-3 rounded-sm absolute top-0.5 transition-all ${enforce2fa ? 'left-[18px] bg-[#0a0a0b]' : 'left-0.5 bg-zinc-500'}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div><div className="text-[13px] text-zinc-300">Domain Lock</div><div className="text-[11px] text-zinc-500 mt-0.5">Restrict email domains</div></div>
+                  <button onClick={() => setRestrictDomains(!restrictDomains)} className={`w-8 h-4 rounded relative transition-colors shrink-0 ${restrictDomains ? 'bg-white/[0.20]' : 'bg-white/[0.08]'}`}>
+                    <div className={`w-3 h-3 rounded-sm absolute top-0.5 transition-all ${restrictDomains ? 'left-[18px] bg-[#0a0a0b]' : 'left-0.5 bg-zinc-500'}`} />
+                  </button>
+                </div>
+                {restrictDomains && <div className="px-4 py-2"><input value={allowedDomain} onChange={e => setAllowedDomain(e.target.value)} className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-300 outline-none w-48" /></div>}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div><div className="text-[13px] text-zinc-300">IP Allow List</div><div className="text-[11px] text-zinc-500 mt-0.5">Restrict by IP range</div></div>
+                  <button onClick={() => setIpAllowEnabled(!ipAllowEnabled)} className={`w-8 h-4 rounded relative transition-colors shrink-0 ${ipAllowEnabled ? 'bg-white/[0.20]' : 'bg-white/[0.08]'}`}>
+                    <div className={`w-3 h-3 rounded-sm absolute top-0.5 transition-all ${ipAllowEnabled ? 'left-[18px] bg-[#0a0a0b]' : 'left-0.5 bg-zinc-500'}`} />
+                  </button>
+                </div>
+                {ipAllowEnabled && <div className="px-4 py-2"><textarea value={ipAllowList} onChange={e => setIpAllowList(e.target.value)} placeholder="10.0.0.0/8&#10;One CIDR per line" rows={2} className="w-full px-2 py-1.5 bg-black/30 border border-white/[0.08] rounded text-[12px] text-zinc-300 placeholder-zinc-500 outline-none font-mono resize-y" /></div>}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div><div className="text-[13px] text-zinc-300">Session Timeout</div><div className="text-[11px] text-zinc-500 mt-0.5">Auto-logout after inactivity</div></div>
+                  <select value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)} style={{ colorScheme: 'dark' }}
+                    className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-400 outline-none cursor-pointer appearance-none">
+                    <option value="30m">30 min</option><option value="1h">1 hour</option><option value="4h">4 hours</option><option value="24h">24 hours</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div><div className="text-[13px] text-zinc-300">Audit Retention</div><div className="text-[11px] text-zinc-500 mt-0.5">Log retention period</div></div>
+                  <select value={auditRetention} onChange={e => setAuditRetention(e.target.value)} style={{ colorScheme: 'dark' }}
+                    className="h-7 px-2 bg-black/30 border border-white/[0.08] rounded text-[13px] text-zinc-400 outline-none cursor-pointer appearance-none">
+                    <option value="30d">30 days</option><option value="90d">90 days</option><option value="1y">1 year</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Sessions ── */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between px-[10px] h-[34px] shrink-0 rounded-md" style={{ background: 'rgba(0,0,0,0.90)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Active Sessions</span>
+                <span className="text-[10px] text-white/[0.12] tabular-nums">{sessions.length}</span>
+              </div>
+              <div className="rounded-md divide-y divide-white/[0.04]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {sessions.map(s => (
+                  <div key={s.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.02] transition-colors">
+                    <div className="flex items-center gap-2">
+                      {s.device.includes('iPhone') || s.device.includes('Android') ? <Smartphone size={13} className="text-zinc-500" /> : <Monitor size={13} className="text-zinc-500" />}
+                      <div>
+                        <div className="text-[13px] text-zinc-300">{s.user_name} <span className="text-zinc-500">· {s.device}</span>{s.current && <span className="text-[11px] px-1 py-px rounded bg-white/[0.06] text-zinc-400 uppercase tracking-wide ml-1">Current</span>}</div>
+                        <div className="text-[11px] text-zinc-500">{s.ip} · {s.location} · {formatRelative(s.last_active)}</div>
+                      </div>
+                    </div>
+                    {!s.current && <button className="h-6 px-2 flex items-center gap-1 text-[11px] rounded bg-white/[0.08] text-zinc-500 hover:text-zinc-300 transition-colors"><LogOut size={9} /> Revoke</button>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════ */}
+        {/* ACTIVITY */}
+        {/* ══════════════════════════════════════════════════ */}
+        {activeTab === 'activity' && (
+          <div className="p-4">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between px-[10px] h-[34px] shrink-0 rounded-md" style={{ background: 'rgba(0,0,0,0.90)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Audit Log</span>
+                <span className="text-[10px] text-white/[0.12] tabular-nums">{audit.length} events</span>
+              </div>
+              <div className="rounded-md overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div className="grid gap-3 px-4 py-2 border-b border-white/[0.06]" style={{ gridTemplateColumns: '1fr 2fr 1.5fr 1.5fr' }}>
+                  <span className="text-[12px] font-semibold text-zinc-500 uppercase tracking-wider">Time</span>
+                  <span className="text-[12px] font-semibold text-zinc-500 uppercase tracking-wider">Action</span>
+                  <span className="text-[12px] font-semibold text-zinc-500 uppercase tracking-wider">Actor</span>
+                  <span className="text-[12px] font-semibold text-zinc-500 uppercase tracking-wider">Target</span>
+                </div>
+                <div className="divide-y divide-white/[0.04]">
+                  {audit.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).map(entry => (
+                    <div key={entry.id} className="grid gap-3 px-4 py-2 hover:bg-white/[0.02] transition-colors" style={{ gridTemplateColumns: '1fr 2fr 1.5fr 1.5fr' }}>
+                      <span className="text-[12px] text-zinc-500 tabular-nums">{formatDate(entry.ts)}</span>
+                      <span className="text-[13px] font-medium text-zinc-300">{actionLabel[entry.action] || entry.action}</span>
+                      <span className="text-[13px] text-zinc-400">{entry.actor}</span>
+                      <span className="text-[12px] text-zinc-500">{entry.target || '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* ═══ Footer — viewport bottom ═══ */}
+      <div className="h-7 flex items-center justify-between px-4 text-[11px] text-zinc-600 shrink-0">
+        {activeTab === 'members' && (<>
+          <span>Showing {filteredMembers.length} of {members.length}</span>
+          <span className="tabular-nums">{isRefreshing ? 'Syncing…' : 'Synced'}</span>
+        </>)}
+        {activeTab === 'settings' && (<>
+          <span>{roles.length} roles · {apiKeys.length} keys</span>
+          <span>{isOwner ? 'Owner' : userRole}</span>
+        </>)}
+        {activeTab === 'security' && (<>
+          <span>{[ssoEnabled && 'SSO', enforce2fa && '2FA', restrictDomains && 'Domain', ipAllowEnabled && 'IP'].filter(Boolean).join(' · ') || 'No policies'}</span>
+          <span>{sessions.length} sessions</span>
+        </>)}
+        {activeTab === 'activity' && (<>
+          <span>{audit.length} events</span>
+          <span>{auditRetention} retention</span>
+        </>)}
       </div>
     </div>
   );

@@ -47,22 +47,22 @@ import {
 
 const C = {
   bg:           'transparent',                   // page inherits app background
-  surface1:     'rgba(0,0,0,0.90)',              // container bg — matches sidebar bg-black/90
-  surface2:     'rgba(0,0,0,0.85)',              // panel body — slightly lighter than containers
-  surface3:     'rgba(255,255,255,0.06)',         // panel heading — subtle lift inside panels
+  surface1:     'rgba(0,0,0,0.90)',              // container bg — dark recessed panels
+  surface2:     'rgba(0,0,0,0.85)',              // panel body
+  surface3:     'rgba(255,255,255,0.06)',         // panel heading — subtle lift
   border:       'rgba(255,255,255,0.08)',         // standard border
   borderStrong: 'rgba(255,255,255,0.15)',         // strong dividers
-  rowHover:     'rgba(255,255,255,0.05)',         // row hover
+  rowHover:     'rgba(255,255,255,0.07)',         // row hover
   textPrimary:  'rgba(255,255,255,0.90)',         // headings
   textBody:     'rgba(255,255,255,0.70)',         // body text
   textSecondary:'rgba(255,255,255,0.40)',         // secondary text
   textTertiary: 'rgba(255,255,255,0.22)',         // tertiary/label text
   textDim:      'rgba(255,255,255,0.12)',         // timestamps
-  iconDim:      'rgba(255,255,255,0.25)',         // dim icons
+  iconDim:      'rgba(255,255,255,0.30)',         // dim icons
   positive:     'rgba(255,255,255,0.60)',         // credit amounts
   negative:     'rgba(255,255,255,0.30)',         // debit amounts
-  ghost:        'rgba(255,255,255,0.08)',         // ghost button bg
-  ghostHover:   'rgba(255,255,255,0.15)',         // ghost button hover
+  ghost:        'rgba(255,255,255,0.10)',         // ghost button bg — matches taskbar
+  ghostHover:   'rgba(255,255,255,0.20)',         // ghost button hover — matches taskbar
   chartLine:    'rgba(255,255,255,0.35)',         // chart line stroke
   chartFill:    'rgba(255,255,255,0.06)',         // chart area fill
   chartDot:     'rgba(255,255,255,0.75)',         // chart hover dot
@@ -813,6 +813,7 @@ const BillingPage: React.FC = () => {
       height: '100%', background: C.bg,
       display: 'grid', gridTemplateRows: 'auto auto auto 1fr',
       overflow: 'hidden',
+      padding: '8px 8px 8px 8px',
     }}>
 
       {/* ═══ Row 1: Header row — label bar + standalone refresh ═══ */}

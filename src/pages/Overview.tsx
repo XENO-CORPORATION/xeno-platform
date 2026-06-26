@@ -299,6 +299,7 @@ const OverviewContent: React.FC = () => {
             <Route path="usage-analytics" element={<UsageAnalyticsPage />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="team" element={<TeamPage />} />
+            <Route path="team/:tab" element={<TeamPage />} />
             <Route path="subscription" element={<BillingPage />} />
             <Route path="help" element={<div className="h-full flex items-center justify-center"><h1 className="text-xl font-bold text-white">Help Center - Coming Soon</h1></div>} />
             {/* Individual lab routes */}

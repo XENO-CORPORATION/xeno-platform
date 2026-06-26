@@ -2,6 +2,12 @@ import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
 import Home from "./pages/Home";
+import Home2 from "./pages/Home2";
+import Home3 from "./pages/Home3";
+import Marketplace from "./pages/Marketplace";
+import ProductPage from "./pages/ProductPage";
+import ProductReleases from "./pages/ProductReleases";
+import ProductReleaseDetail from "./pages/ProductReleaseDetail";
 import Download from "./pages/Download";
 import ExtensionDownload from "./pages/ExtensionDownload";
 import ReleaseNotes from "./pages/ReleaseNotes";
@@ -94,8 +100,17 @@ function App() {
       <CollaborationProvider>
         <OSStateProvider>
           <Routes>
-            {/* Landing Page - Show this first */}
-            <Route path="/" element={<Home />} />
+            {/* Landing Page — the v3 redesign is now the default homepage */}
+            <Route path="/" element={<Home3 />} />
+            <Route path="/v3" element={<Home3 />} />{/* alias — keep existing links working */}
+            <Route path="/v1" element={<Home />} />{/* previous homepage, preserved */}
+            <Route path="/v2" element={<Home2 />} />
+            <Route path="/marketplace" element={<Marketplace />} />
+            {/* Product pages — registry-driven, one template for all products */}
+            <Route path="/product/:slug" element={<ProductPage />} />
+            <Route path="/product/:slug/releases" element={<ProductReleases />} />
+            <Route path="/product/:slug/releases/:version" element={<ProductReleaseDetail />} />
+            {/* legacy extension download still served by its own page below */}
             <Route path="/download" element={<Download />} />
             <Route path="/product/extension/download" element={<ExtensionDownload />} />
             <Route path="/releases/:version" element={<ReleaseNotes />} />

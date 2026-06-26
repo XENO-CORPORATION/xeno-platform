@@ -14,7 +14,7 @@ const DisplayContainer: React.FC<DisplayContainerProps> = ({ children, noPadding
         height: '100vh',
         background: background ?? 'var(--primary-bg)',
         boxSizing: 'border-box',
-        padding: noPadding ? '0' : '8px',
+        padding: 0,
         margin: 0,
         minWidth: 0,
       }}

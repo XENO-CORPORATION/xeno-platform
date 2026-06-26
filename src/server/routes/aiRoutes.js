@@ -1,6 +1,13 @@
 import express from 'express';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import { generateSignedUrl } from '../middleware/cdnOptimization.js';
 
 const router = express.Router();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const LOCAL_MODEL_CATALOG_PATH = path.resolve(__dirname, '../data/localModelCatalog.json');
 
 // AI provider configurations
 const PROVIDERS = {
@@ -82,6 +89,39 @@ const GOOGLE_MODEL_IDS = {
   'gemini-1.5-flash': 'gemini-1.5-flash',
   'gemini-pro': 'gemini-pro',
 };
+
+function readLocalModelCatalog() {
+  const raw = readFileSync(LOCAL_MODEL_CATALOG_PATH, 'utf-8');
+  return JSON.parse(raw);
+}
+
+function serializeLocalModelCatalogModel(model) {
+  const installSpec = model.installSpec
+    ? {
+        ...model.installSpec,
+        downloadUrl: model.installSpec.artifactKey
+          ? generateSignedUrl(model.installSpec.artifactKey, 6 * 60 * 60)
+          : null,
+      }
+    : null;
+
+  return {
+    id: model.id,
+    name: model.name,
+    provider: model.provider,
+    category: model.category,
+    description: model.description,
+    size: model.size,
+    sizeBytes: model.sizeBytes ?? null,
+    parameters: model.parameters ?? null,
+    tags: Array.isArray(model.tags) ? model.tags : [],
+    license: model.license ?? null,
+    runtime: model.runtime ?? null,
+    installable: Boolean(model.installable && installSpec?.downloadUrl),
+    installSpec,
+    unavailableReason: model.unavailableReason ?? null,
+  };
+}
 
 /**
  * POST /api/ai/chat
@@ -345,6 +385,27 @@ router.get('/models', (req, res) => {
   res.json({
     success: true,
     models: models,
+  });
+});
+
+/**
+ * GET /api/ai/local-model-catalog
+ * Returns the production local model catalog that Hub should render.
+ */
+router.get('/local-model-catalog', (req, res) => {
+  const catalog = readLocalModelCatalog();
+  const models = Array.isArray(catalog.models)
+    ? catalog.models.map(serializeLocalModelCatalogModel)
+    : [];
+
+  res.setHeader('Cache-Control', 'private, no-cache, must-revalidate');
+  res.json({
+    success: true,
+    source: 'platform',
+    schemaVersion: catalog.schemaVersion ?? 1,
+    catalogVersion: catalog.catalogVersion ?? 'unknown',
+    updatedAt: catalog.updatedAt ?? null,
+    models,
   });
 });
 

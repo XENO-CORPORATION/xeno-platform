@@ -55,6 +55,13 @@ import collaborationRoutes from './routes/collaborationRoutes.js';
 import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
+import marketplaceRoutes from './routes/marketplaceRoutes.js';
+import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
+import oauth2Routes from './routes/oauth2Routes.js';
+import v2MeRoutes from './routes/v2MeRoutes.js';
+import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
+import { oidcAuth } from './middleware/oidcAuth.js';
+import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
 import { databaseMiddleware } from './middleware/database.js';
 import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
@@ -72,6 +79,7 @@ import { requestLoggerMiddleware, logger } from './middleware/requestLogger.js';
 import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } from './middleware/cdnOptimization.js';
 import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter } from './middleware/rateLimiter.js';
 import { runAllMigrations } from './services/migrationRunner.js';
+import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
 
 // PostgreSQL connection
@@ -522,6 +530,37 @@ console.log('🔄 Replicate API proxy available at: /api/image/replicate/*');
 // Xeno AI proxy routes (credit-tracked generation)
 app.use('/api/xeno', databaseMiddleware, authMiddleware, xenoRoutes);
 console.log('🎯 Xeno AI proxy routes integrated: /api/xeno/*');
+
+// Marketplace routes (catalog, commerce, developer publishing, admin review).
+// Auth is applied PER-ROUTE inside the router: catalog/listing reads use
+// optionalAuthMiddleware (public, entitlement-aware), while commerce/developer/
+// admin routes require authMiddleware. Mounting with only databaseMiddleware.
+app.use('/api/marketplace', databaseMiddleware, marketplaceRoutes);
+
+// ── Account & Ledger v2 (additive, flag-gated) ───────────────────────────────
+// Mounted ONLY when LEDGER_V2_ENABLED=true, so the default (flag off) is a
+// byte-for-byte no-op — the routes don't exist. This is the double-entry,
+// idempotent, micro-credit spend surface the @xeno/account-client SDK calls.
+// See 'XENO ACCOUNT - ARCHITECTURE.md' + database/migrate-account-v2.js.
+if (process.env.LEDGER_V2_ENABLED === 'true') {
+  // oidcAuth accepts BOTH the new RS256 OIDC token and the legacy HS256 token.
+  app.use('/api/v2/ledger', databaseMiddleware, oidcAuth, v2LedgerRoutes);
+  console.log('💳 Ledger v2 routes integrated: /api/v2/ledger/* (LEDGER_V2_ENABLED)');
+}
+
+// ── OIDC provider v2 (additive, flag-gated) ──────────────────────────────────
+// Mounted ONLY when OIDC_ENABLED=true → default (flag off) is a no-op. The
+// legacy HS256 /api/auth/* surface is UNTOUCHED (Identity Plan R2). New RS256 +
+// JWKS surface for "Sign in with XENO" across the ecosystem.
+if (process.env.OIDC_ENABLED === 'true') {
+  // Mounted under /api/* because the edge only routes /api to the backend.
+  app.use('/api/oauth2', databaseMiddleware, oauth2Routes);
+  app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
+  app.use('/api/v2/authz', databaseMiddleware, oidcAuth, v2AuthzRoutes);
+  app.get('/api/oauth2/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery()));
+  console.log('🔐 OIDC provider integrated: /api/oauth2/* + /api/v2/me + /api/v2/authz (OIDC_ENABLED)');
+}
+console.log('🛒 Marketplace routes integrated: /api/marketplace/*');
 
 // Image Studio public routes (no auth required for xeno-flow)
 app.use('/api/image', databaseMiddleware, imagePublicRoutes);
@@ -5167,10 +5206,13 @@ runMigrations(pool).catch(err => {
   console.error('Migration warning:', err.message);
 });
 
-// Run versioned migrations (Round 8 infrastructure tables)
-runAllMigrations(pool).catch(err => {
-  console.error('[Migrations] Versioned migration warning:', err.message);
-});
+// Run versioned migrations (Round 8 infrastructure tables + marketplace),
+// then seed the first-party `official` marketplace catalog (idempotent).
+runAllMigrations(pool)
+  .then(() => seedMarketplace(pool))
+  .catch(err => {
+    console.error('[Migrations] Versioned migration/seed warning:', err.message);
+  });
 
 // Initialize background job queues
 initBackgroundJobs(pool).catch(err => {
