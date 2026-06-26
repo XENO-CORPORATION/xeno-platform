@@ -24,7 +24,7 @@ const AuthContent = () => {
   const [tabTransition, setTabTransition] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, register } = useAuth();
+  const { login, register, user } = useAuth();
 
   // Unified-auth CLI/Hub browser-session mode: /auth/cli?session=… hands the
   // signed-in user back to the local app by completing the cli-auth session.
@@ -53,11 +53,14 @@ const AuthContent = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Already signed in with a CLI session waiting → auto-complete (first-party).
+  // Already signed in (or auth just landed via social ?token, which AuthContext
+  // stores) with a CLI session waiting → auto-complete (first-party). Depends on
+  // `user` so it re-fires once the social/restored session resolves, not just on
+  // mount (finalizeCli is idempotent via its 'authorizing' guard).
   useEffect(() => {
-    if (cliSession && localStorage.getItem('xenoos_auth_token')) finalizeCli();
+    if (cliSession && (user || localStorage.getItem('xenoos_auth_token'))) finalizeCli();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   // Smooth tab transition
   const handleTabChange = (tab: 'signin' | 'signup') => {
