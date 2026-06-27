@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Download, AlertTriangle } from 'lucide-react';
-import { R2_BASE, type Release } from '../../lib/productCatalog';
+import { assetUrl, type Release } from '../../lib/productCatalog';
 
 /* Shared renderer for a product's release / patch / hotfix history.
    Used both on the product overview (recent, limited) and the full
@@ -61,7 +61,7 @@ function ReleaseRow({ release, slug, defaultOpen, linkToDetail }: { release: Rel
                     {assets.length === 0 ? (
                       <p className="text-[12px] italic text-[#5d5850]">—</p>
                     ) : assets.map((a) => (
-                      <a key={a.file} href={`${R2_BASE}/${encodeURIComponent(a.file)}`} className="group flex items-center justify-between py-1.5 text-[12.5px] text-[#9b948a] transition-colors hover:text-white">
+                      <a key={a.file} href={assetUrl(slug, a.file)} className="group flex items-center justify-between py-1.5 text-[12.5px] text-[#9b948a] transition-colors hover:text-white">
                         {a.label}<Download className="h-3.5 w-3.5 text-[#5d5850] transition-colors group-hover:text-white" />
                       </a>
                     ))}

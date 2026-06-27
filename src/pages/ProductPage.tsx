@@ -8,7 +8,7 @@ import Footer from '../components/landing-v3/Footer';
 import { Reveal } from '../components/landing-v3/primitives';
 import ReleaseFeed from '../components/product/ReleaseFeed';
 import {
-  getProduct, fetchReleases, latestRelease, R2_BASE, type Release, type Product,
+  getProduct, fetchReleases, latestRelease, downloadLink, type Release, type Product,
 } from '../lib/productCatalog';
 
 type OS = 'windows' | 'mac' | 'linux';
@@ -46,9 +46,11 @@ const ProductPage: React.FC = () => {
   if (!product) return <Navigate to="/" replace />;
 
   const latest = latestRelease(releases);
+  // Stable backend deep-link (302s to the current installer) — present only when
+  // the latest release actually ships a build for that OS.
   const downloadUrl = (o: OS): string | null => {
-    const f = latest?.assets?.[o]?.[0]?.file;
-    return f ? `${R2_BASE}/${encodeURIComponent(f)}` : null;
+    const has = !!latest?.assets?.[o]?.[0]?.file;
+    return has ? downloadLink(product, o) : null;
   };
   const criticalHotfix = latest && latest.type === 'hotfix' && latest.severity === 'critical';
   const copyInstall = () => {
@@ -107,8 +109,8 @@ const ProductPage: React.FC = () => {
                       <Download className="h-4 w-4" />Builds coming soon
                     </span>
                   )}
-                  <Link to={`/product/${product.slug}/releases`} className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/15 px-5 py-3 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]">
-                    All downloads & releases
+                  <Link to={`/product/${product.slug}/download`} className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/15 px-5 py-3 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]">
+                    All platforms & versions
                   </Link>
                   {latest && <span className="text-[12px] text-[#69635b]">Latest v{latest.version}</span>}
                 </div>

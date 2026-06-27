@@ -8,6 +8,7 @@ import Marketplace from "./pages/Marketplace";
 import ProductPage from "./pages/ProductPage";
 import ProductReleases from "./pages/ProductReleases";
 import ProductReleaseDetail from "./pages/ProductReleaseDetail";
+import ProductDownload from "./pages/ProductDownload";
 import Download from "./pages/Download";
 import ExtensionDownload from "./pages/ExtensionDownload";
 import ReleaseNotes from "./pages/ReleaseNotes";
@@ -109,6 +110,7 @@ function App() {
             <Route path="/marketplace" element={<Marketplace />} />
             {/* Product pages — registry-driven, one template for all products */}
             <Route path="/product/:slug" element={<ProductPage />} />
+            <Route path="/product/:slug/download" element={<ProductDownload />} />
             <Route path="/product/:slug/releases" element={<ProductReleases />} />
             <Route path="/product/:slug/releases/:version" element={<ProductReleaseDetail />} />
             {/* legacy extension download still served by its own page below */}

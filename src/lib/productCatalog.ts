@@ -111,7 +111,7 @@ export function getProduct(slug?: string): Product | undefined {
 export type ReleaseType = 'release' | 'patch' | 'hotfix';
 export type ReleaseChannel = 'stable' | 'beta';
 
-export interface ReleaseAsset { label: string; file: string }
+export interface ReleaseAsset { label: string; file: string; size?: number; sha256?: string }
 export interface Release {
   version: string;
   date: string;
@@ -138,4 +138,25 @@ export async function fetchReleases(p: Product): Promise<Release[]> {
 
 export function latestRelease(releases: Release[]): Release | undefined {
   return releases.find((r) => r.latest) ?? releases[0];
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Asset URL helpers (PRODUCT-PAGES-SPEC.md §5.3 / §4). One place builds the
+ * R2 URL so every page agrees on the format.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/** Absolute R2 URL for a release asset. `file` is RELATIVE to apps/:app/
+ *  (e.g. "v0.4.1/Setup.exe"). Encode each path segment (spaces → %20) while
+ *  keeping the "/" separators. Accepts a Product or a bare app/slug string. */
+export function assetUrl(p: Product | string, file: string): string {
+  const app = typeof p === 'string' ? p : (p.r2 ?? p.slug);
+  const path = file.split('/').map(encodeURIComponent).join('/');
+  return `${R2_BASE}/apps/${app}/${path}`;
+}
+
+/** Stable backend download deep-link — 302s to the current installer and never
+ *  changes as versions bump (SPEC §4). Use for "download the latest" CTAs. */
+export function downloadLink(p: Product, os: 'windows' | 'mac' | 'linux', version?: string): string {
+  const o = os === 'windows' ? 'win' : os;
+  return `/product/${p.slug}/download/${o}${version ? `/${encodeURIComponent(version)}` : ''}`;
 }
