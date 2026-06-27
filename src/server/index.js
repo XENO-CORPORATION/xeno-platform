@@ -54,6 +54,7 @@ import youtubeRoutes, { youtubePublicRoutes } from './routes/youtubeRoutes.js';
 import collaborationRoutes from './routes/collaborationRoutes.js';
 import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
+import productDownloadRoutes from './routes/productDownloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
@@ -619,6 +620,10 @@ console.log('🖼️ Office Canvas routes integrated: /api/office-canvas/*');
 // Download API routes (YouTube, Twitter, Instagram, TikTok downloads)
 // Extension releases are public (handled by publicPaths in auth middleware)
 app.use('/api/download', databaseMiddleware, authMiddleware, downloadRoutes);
+// Public, stable product download deep-links (PRODUCT-PAGES-SPEC.md §4).
+// No auth / no DB — resolves the current installer from R2 and 302s to it.
+app.use('/product', productDownloadRoutes);
+console.log('⬇️ Product download deep-links: /product/:slug/download/:os');
 app.use('/api/blog', databaseMiddleware, blogRoutes);
 app.use('/api/learn', databaseMiddleware, learnRoutes);
 console.log('⬇️ Download routes integrated: /api/download/*');
