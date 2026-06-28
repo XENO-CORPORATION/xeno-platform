@@ -112,9 +112,9 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
       <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────── */}
-        <section className="page-gutter relative overflow-hidden pt-[clamp(104px,13vh,160px)] pb-[clamp(48px,7vh,88px)]">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(ellipse_60%_80%_at_60%_-8%,rgba(167,96,255,0.10),transparent_72%)]" />
-          <div className="relative mx-auto grid max-w-[1200px] items-center gap-[clamp(32px,5vw,72px)] lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <section className="px-[max(16px,1.1vw)] relative flex min-h-[100svh] items-center overflow-hidden pt-[clamp(88px,11vh,128px)] pb-[clamp(40px,6vh,72px)]">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-[64vh] bg-[radial-gradient(ellipse_60%_80%_at_60%_-4%,rgba(167,96,255,0.10),transparent_72%)]" />
+          <div className="relative mx-auto grid w-full max-w-[1340px] items-center gap-[clamp(32px,5vw,72px)] lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
             <div>
               <Reveal>
                 <Link to="/products" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">
@@ -161,8 +161,8 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
         {/* ── Highlights ─────────────────────────────────────── */}
         {content.highlights && (
-          <section className="page-gutter pb-[clamp(8px,2vh,24px)]">
-            <div className="mx-auto max-w-[1100px] overflow-hidden rounded-[12px] border border-white/[0.07] bg-[#101010]">
+          <section className="px-[max(16px,1.1vw)] pb-[clamp(8px,2vh,24px)]">
+            <div className="mx-auto max-w-[1240px] overflow-hidden rounded-[12px] border border-white/[0.07] bg-[#101010]">
               <div className="grid grid-cols-2 lg:grid-cols-4">
                 {content.highlights.map((h, i) => (
                   <div key={h.label} className={cx('px-[clamp(18px,1.6vw,30px)] py-[clamp(18px,2.4vh,28px)]', i > 0 && 'lg:border-l lg:border-white/[0.06]', i >= 2 && 'border-t border-white/[0.06] lg:border-t-0', i === 1 && 'border-l border-white/[0.06] lg:border-l')}>
@@ -177,10 +177,10 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
         {/* ── Feature spotlights (bento) ─────────────────────── */}
         {content.features.length > 0 && (
-          <section className="page-gutter border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
+          <section className="px-[max(16px,1.1vw)] border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
             <SectionHeading eyebrow="What you can do" title={`Everything ${product.name} does well.`}
               sub={`The fundamentals done right — built from ${product.name}'s real product, not a template.`} />
-            <div className="mx-auto mt-[clamp(40px,6vh,68px)] grid max-w-[1100px] grid-cols-1 gap-[clamp(14px,1vw,20px)] md:grid-cols-2">
+            <div className="mx-auto mt-[clamp(40px,6vh,68px)] grid max-w-[1240px] grid-cols-1 gap-[clamp(14px,1vw,20px)] md:grid-cols-2">
               {content.features.map((f, i) => {
                 const Icon = f.icon ? ICONS[f.icon] : undefined;
                 return (
@@ -216,8 +216,8 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
         {/* ── Gallery ────────────────────────────────────────── */}
         {content.gallery && content.gallery.length > 0 && (
-          <section className="page-gutter border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
-            <div className="mx-auto grid max-w-[1100px] gap-4 sm:grid-cols-2">
+          <section className="px-[max(16px,1.1vw)] border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
+            <div className="mx-auto grid max-w-[1240px] gap-4 sm:grid-cols-2">
               {content.gallery.map((m, i) => <Reveal key={i}><MediaView media={m} /></Reveal>)}
             </div>
           </section>
@@ -225,9 +225,9 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
         {/* ── Use cases ──────────────────────────────────────── */}
         {content.useCases && content.useCases.length > 0 && (
-          <section className="page-gutter border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
+          <section className="px-[max(16px,1.1vw)] border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
             <SectionHeading eyebrow="Who it’s for" title="Built for the way you work." />
-            <div className="mx-auto mt-[clamp(40px,6vh,68px)] grid max-w-[1100px] gap-[clamp(14px,1vw,20px)] md:grid-cols-3">
+            <div className="mx-auto mt-[clamp(40px,6vh,68px)] grid max-w-[1240px] gap-[clamp(14px,1vw,20px)] md:grid-cols-3">
               {content.useCases.map((u, i) => {
                 const Icon = u.icon ? ICONS[u.icon] : undefined;
                 return (
@@ -249,7 +249,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
         {/* ── How it works ───────────────────────────────────── */}
         {content.howItWorks && content.howItWorks.length > 0 && (
-          <section className="page-gutter border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
+          <section className="px-[max(16px,1.1vw)] border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
             <SectionHeading eyebrow="How it works" title={`Up and running in minutes.`} />
             <div className="mx-auto mt-[clamp(40px,6vh,68px)] grid max-w-[980px] gap-[clamp(20px,3vw,44px)] md:grid-cols-3">
               {content.howItWorks.map((s, i) => (
@@ -265,7 +265,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
         {/* ── Comparison ─────────────────────────────────────── */}
         {content.comparison && (
-          <section className="page-gutter border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
+          <section className="px-[max(16px,1.1vw)] border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
             <SectionHeading eyebrow="How it compares" title={`${product.name} vs ${content.comparison.competitor}`} />
             <div className="mx-auto mt-[clamp(36px,5vh,56px)] max-w-[760px] overflow-hidden rounded-[14px] border border-white/[0.07] bg-[#0a0a0a]">
               <div className="grid grid-cols-[1fr_92px_92px] items-center gap-x-4 border-b border-white/[0.07] bg-white/[0.02] px-5 py-3.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#756f66] sm:grid-cols-[1fr_120px_120px]">
@@ -287,8 +287,8 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
         {/* ── Specs ──────────────────────────────────────────── */}
         {content.specs && content.specs.length > 0 && (
-          <section className="page-gutter border-t border-white/[0.06] py-[clamp(56px,8vh,100px)]">
-            <div className="mx-auto grid max-w-[1100px] grid-cols-2 overflow-hidden rounded-[12px] border border-white/[0.07] bg-[#101010] lg:grid-cols-4">
+          <section className="px-[max(16px,1.1vw)] border-t border-white/[0.06] py-[clamp(56px,8vh,100px)]">
+            <div className="mx-auto grid max-w-[1240px] grid-cols-2 overflow-hidden rounded-[12px] border border-white/[0.07] bg-[#101010] lg:grid-cols-4">
               {content.specs.map((s, i) => (
                 <div key={s.label} className={cx('px-[clamp(18px,1.6vw,28px)] py-[clamp(16px,2.2vh,24px)]', i > 0 && 'lg:border-l lg:border-white/[0.06]', i >= 2 && 'border-t border-white/[0.06] lg:border-t-0', i === 1 && 'border-l border-white/[0.06] lg:border-l')}>
                   <div className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-[#756f66]">{s.label}</div>
@@ -301,7 +301,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
         {/* ── FAQ ────────────────────────────────────────────── */}
         {content.faq && content.faq.length > 0 && (
-          <section className="page-gutter border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
+          <section className="px-[max(16px,1.1vw)] border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
             <SectionHeading eyebrow="Questions" title="Good to know." />
             <div className="mx-auto mt-[clamp(36px,5vh,56px)] max-w-[800px] divide-y divide-white/[0.06] border-y border-white/[0.06]">
               {content.faq.map((f) => (
@@ -318,7 +318,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
         )}
 
         {/* ── Closing CTA + releases ─────────────────────────── */}
-        <section className="page-gutter border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
+        <section className="px-[max(16px,1.1vw)] border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
           <div className="mx-auto max-w-[900px]">
             <div className="relative overflow-hidden rounded-[20px] border border-white/[0.08] px-[clamp(28px,5vw,72px)] py-[clamp(40px,7vh,80px)] text-center">
               <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 70% 120% at 50% -10%, rgba(167,96,255,0.14), transparent 70%), linear-gradient(180deg,#0c0a12,#070707 80%)' }} />
