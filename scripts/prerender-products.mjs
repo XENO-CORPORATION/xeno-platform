@@ -121,6 +121,23 @@ async function main() {
     }
   }
 
+  // /products index page (generic head — it's a grid, not one app).
+  const idxDesc = 'The XENO ecosystem — creative, office, agent, and developer tools, all AI-native.';
+  const indexHead = [
+    `<title>Products — XENO Studio</title>`,
+    `<meta name="description" content="${esc(idxDesc)}">`,
+    `<link rel="canonical" href="${SITE}/products">`,
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:site_name" content="XENO Studio">`,
+    `<meta property="og:title" content="Products — XENO Studio">`,
+    `<meta property="og:description" content="${esc(idxDesc)}">`,
+    `<meta property="og:url" content="${SITE}/products">`,
+    `<meta property="og:image" content="${OG_IMAGE}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+  ].join('\n    ');
+  writePage('products', renderPage(template, null, indexHead));
+  pages++;
+
   // sitemap.xml
   const today = new Date().toISOString().slice(0, 10);
   const sitemap =
