@@ -20,6 +20,8 @@ const comms: ProductContent = {
   features: [
     {
       eyebrow: 'Conversations',
+      icon: 'MessageSquare',
+      accent: 'radial-gradient(ellipse at 72% 26%, rgba(150,200,200,0.16), transparent 60%), linear-gradient(165deg,#10171a,#070707 74%)',
       title: 'Real-time messaging, the way you expect',
       desc: 'Direct messages, groups, and channels with the fundamentals done right — so it feels instant, not like a prototype.',
       bullets: [
@@ -31,6 +33,8 @@ const comms: ProductContent = {
     },
     {
       eyebrow: 'Agents',
+      icon: 'Sparkles',
+      accent: 'radial-gradient(ellipse at 72% 26%, rgba(170,140,255,0.20), transparent 60%), linear-gradient(165deg,#141020,#070707 74%)',
       title: 'AI agents are first-class members',
       desc: 'Add an agent to any conversation and it participates with the full context — alongside people, not in a separate window.',
       bullets: [
@@ -42,6 +46,8 @@ const comms: ProductContent = {
     },
     {
       eyebrow: 'Privacy',
+      icon: 'ShieldCheck',
+      accent: 'radial-gradient(ellipse at 72% 26%, rgba(120,170,255,0.16), transparent 60%), linear-gradient(165deg,#0e1320,#070707 74%)',
       title: 'End-to-end ready, by design',
       desc: 'Device-based encryption is built into the protocol, not bolted on — with verifiable trust between devices.',
       bullets: [
@@ -53,6 +59,8 @@ const comms: ProductContent = {
     },
     {
       eyebrow: 'Everywhere',
+      icon: 'MonitorSmartphone',
+      accent: 'radial-gradient(ellipse at 72% 26%, rgba(220,200,160,0.14), transparent 60%), linear-gradient(165deg,#181614,#070707 74%)',
       title: 'Yours across every device',
       desc: 'One identity across the XENO platform, with multi-device sync and a real, open backend you could run yourself.',
       bullets: [
@@ -64,9 +72,9 @@ const comms: ProductContent = {
     },
   ],
   useCases: [
-    { title: 'Product teams', desc: 'Run standups, reviews, and launches in channels — with an agent that summarizes the thread and tracks the follow-ups.' },
-    { title: 'Human + agent workflows', desc: 'Give an agent a seat in the room so it works from the full conversation, not a copy-pasted snippet.' },
-    { title: 'Privacy-first groups', desc: 'End-to-end-ready conversations for the messages that shouldn’t sit in plaintext on someone else’s server.' },
+    { title: 'Product teams', icon: 'Users', desc: 'Run standups, reviews, and launches in channels — with an agent that summarizes the thread and tracks the follow-ups.' },
+    { title: 'Human + agent workflows', icon: 'Bot', desc: 'Give an agent a seat in the room so it works from the full conversation, not a copy-pasted snippet.' },
+    { title: 'Privacy-first groups', icon: 'Lock', desc: 'End-to-end-ready conversations for the messages that shouldn’t sit in plaintext on someone else’s server.' },
   ],
   howItWorks: [
     { step: '1', title: 'Download & sign in', desc: 'Get the Windows app and sign in with your XENO account.' },

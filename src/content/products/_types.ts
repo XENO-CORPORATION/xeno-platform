@@ -21,6 +21,8 @@ export interface FeatureSpotlight {
   title: string;
   desc: string;
   bullets?: string[];
+  icon?: string;          // lucide icon name (resolved in ProductLanding)
+  accent?: string;        // optional CSS gradient for the card background
   media?: Media;          // the visual for this feature (alternates side-to-side)
 }
 
@@ -35,7 +37,7 @@ export interface ProductContent {
   highlights?: { value: string; label: string }[];
   features: FeatureSpotlight[];                    // ≥1 for a "full" page
   gallery?: Media[];
-  useCases?: { title: string; desc: string }[];
+  useCases?: { title: string; desc: string; icon?: string }[];
   howItWorks?: { step: string; title: string; desc: string }[];
   comparison?: {
     competitor: string;
