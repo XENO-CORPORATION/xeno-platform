@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, BookOpen, Play, FileText, User, ArrowRight } from 'lucide-react';
-import Header from '../components/landing/Header';
-import Footer from '../components/landing/Footer';
+import Header from '../components/landing-v3/Header';
+import Footer from '../components/landing-v3/Footer';
 
 interface Tutorial {
   id: string;

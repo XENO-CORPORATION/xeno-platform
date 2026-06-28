@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Calendar, Tag, ArrowRight, User } from 'lucide-react';
-import Header from '../components/landing/Header';
-import Footer from '../components/landing/Footer';
+import Header from '../components/landing-v3/Header';
+import Footer from '../components/landing-v3/Footer';
 
 interface BlogPost {
   id: string;

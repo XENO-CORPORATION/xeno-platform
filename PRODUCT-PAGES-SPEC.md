@@ -327,7 +327,7 @@ Implemented in **nginx** (static path rules) — see `nginx/default.conf`:
 | `/products/:slug/release-notes` | `/product/:slug/releases` | 301 |
 | `/products/:slug/release-notes/:version` | `/product/:slug/releases/:version` | 301 |
 | `/products/:slug/docs` *(+ subpaths)* | `/product/:slug/docs` | 301 |
-| `/download` | `/products` | 301 |
+| `/download` | `/product/hub/download` | 301 |
 | `/releases/:version` | `/product/hub/releases/:version` | 301 |
 | `/product/extension/download` | `/product/extension/download` *(keep; already canonical)* | — |
 

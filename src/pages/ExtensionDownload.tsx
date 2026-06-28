@@ -10,8 +10,8 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import Header from '../components/landing/Header';
-import Footer from '../components/landing/Footer';
+import Header from '../components/landing-v3/Header';
+import Footer from '../components/landing-v3/Footer';
 
 type BrowserId = 'chrome' | 'edge' | 'safari';
 type ChannelId = 'stable' | 'beta' | 'preview';

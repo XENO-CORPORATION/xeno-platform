@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Download, ChevronDown, ArrowRight, ArrowLeft } from 'lucide-react';
-import Header from '../components/landing/Header';
-import Footer from '../components/landing/Footer';
+import Header from '../components/landing-v3/Header';
+import Footer from '../components/landing-v3/Footer';
 
 type Platform = 'windows' | 'mac' | 'linux';
 
