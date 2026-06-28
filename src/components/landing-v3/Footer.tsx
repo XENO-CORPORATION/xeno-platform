@@ -6,8 +6,8 @@ const footerLinks: Record<string, { label: string; href: string }[]> = {
   Product: [
     { label: 'Features', href: '#features' },
     { label: 'Pricing', href: '#pricing' },
-    { label: 'Download', href: '/download' },
-    { label: "What's New", href: '/releases/latest' },
+    { label: 'Download', href: '/product/hub/download' },
+    { label: "What's New", href: '/product/hub/releases' },
     { label: 'Roadmap', href: '#roadmap' },
   ],
   Resources: [
@@ -45,9 +45,9 @@ const Footer: React.FC = () => {
     <footer className="relative border-t border-white/[0.08] bg-[#060606]">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(167,96,255,0.45),transparent)]" />
 
-      <div className="page-gutter mx-auto w-full pb-[clamp(24px,3vh,40px)] pt-[clamp(48px,6vh,84px)]">
+      <div className="page-gutter mx-auto w-full pb-[clamp(16px,2vh,26px)] pt-[clamp(28px,3.4vh,48px)]">
         {/* ── Top: brand + link columns ─────────────────────────── */}
-        <div className="grid grid-cols-2 gap-x-[clamp(24px,2.6vw,52px)] gap-y-[clamp(32px,4vh,48px)] md:grid-cols-6">
+        <div className="grid grid-cols-2 gap-x-[clamp(24px,2.6vw,52px)] gap-y-[clamp(20px,2.6vh,30px)] md:grid-cols-6">
           {/* Brand */}
           <div className="col-span-2 md:col-span-2">
             <Link to="/" className="mb-[clamp(14px,1.6vh,20px)] flex items-center gap-2.5">
@@ -101,7 +101,7 @@ const Footer: React.FC = () => {
               <h4 className="mb-[clamp(12px,1.4vh,18px)] text-[clamp(11px,0.78vw,12.5px)] font-semibold uppercase tracking-[0.16em] text-[#6f685f]">
                 {category}
               </h4>
-              <ul className="space-y-[clamp(8px,1vh,13px)]">
+              <ul className="space-y-[clamp(6px,0.8vh,10px)]">
                 {links.map((link) => {
                   const cls = 'text-[clamp(11.5px,0.82vw,13.5px)] text-[#948d83] transition-colors hover:text-white';
                   return (
@@ -120,7 +120,7 @@ const Footer: React.FC = () => {
         </div>
 
         {/* ── Bottom bar ──────────────────────────────────────────── */}
-        <div className="mt-[clamp(36px,4.4vh,64px)] flex flex-col items-start justify-between gap-3 border-t border-white/[0.06] pt-[clamp(16px,1.8vh,24px)] sm:flex-row sm:items-center">
+        <div className="mt-[clamp(22px,2.6vh,34px)] flex flex-col items-start justify-between gap-3 border-t border-white/[0.06] pt-[clamp(14px,1.6vh,20px)] sm:flex-row sm:items-center">
           <p className="text-[clamp(11px,0.78vw,13px)] text-[#69635b]">
             © {new Date().getFullYear()} XENO Corporation. All rights reserved.
           </p>
