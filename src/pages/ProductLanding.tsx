@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, ArrowUpRight, ArrowRight, Download, Bell, Check, Copy, Terminal, Github, Minus,
-  MessageSquare, Sparkles, ShieldCheck, MonitorSmartphone, Users, Bot, Lock, Zap, Globe, Boxes,
+  MessageSquare, Sparkles, ShieldCheck, MonitorSmartphone, Users, Bot, Lock, Zap, Globe, Boxes, ChevronDown,
 } from 'lucide-react';
 import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
@@ -112,7 +112,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
       <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────── */}
-        <section className="px-[max(16px,1.1vw)] relative flex min-h-[100svh] items-center overflow-hidden pt-[clamp(88px,11vh,128px)] pb-[clamp(40px,6vh,72px)]">
+        <section className="px-[max(16px,1.1vw)] relative flex min-h-[88svh] items-center overflow-hidden pt-[clamp(88px,11vh,128px)] pb-[clamp(56px,8vh,96px)]">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[64vh] bg-[radial-gradient(ellipse_60%_80%_at_60%_-4%,rgba(167,96,255,0.10),transparent_72%)]" />
           <div className="relative mx-auto grid w-full max-w-[1340px] items-center gap-[clamp(32px,5vw,72px)] lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
             <div>
@@ -156,6 +156,11 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
               </Reveal>
             </div>
             <Reveal delay={150}><MediaView media={content.hero.media} /></Reveal>
+          </div>
+          {/* scroll cue — NN/g: signal there's more below a tall hero */}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-5 mx-auto flex w-fit flex-col items-center gap-1 text-[#5d5850]">
+            <span className="text-[9.5px] font-semibold uppercase tracking-[0.24em]">Scroll</span>
+            <ChevronDown className="h-4 w-4 motion-safe:animate-bounce" />
           </div>
         </section>
 

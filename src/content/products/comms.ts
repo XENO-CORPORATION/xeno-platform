@@ -6,8 +6,8 @@ import type { ProductContent } from './_types';
 const comms: ProductContent = {
   slug: 'comms',
   hero: {
-    headline: 'Messaging for humans and agents — in one place.',
-    sub: 'A real-time messenger where your team and your AI agents share the same conversations. End-to-end-ready, multi-device, and built on an open backend. Now in public test on Windows.',
+    headline: 'AI that’s part of the team.',
+    sub: 'Real-time messaging where human teammates and AI agents share the same conversations — presence, threads, receipts and media, end-to-end-ready. Now in public test on Windows.',
     media: { type: 'mockup', src: 'comms-chat', alt: 'XENO Comms desktop client — conversations with people and an AI agent' },
     badges: ['Windows desktop', 'Agents as members', 'End-to-end ready', 'Free public test'],
   },
