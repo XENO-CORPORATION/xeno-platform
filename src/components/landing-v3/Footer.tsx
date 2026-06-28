@@ -2,34 +2,24 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Twitter, MessageCircle, Youtube, AtSign, ArrowRight } from 'lucide-react';
 
+// Only real, working destinations (PRODUCT-PAGES-SPEC routes + existing pages).
+// No dead "#" anchors — every link resolves to a real route.
 const footerLinks: Record<string, { label: string; href: string }[]> = {
   Product: [
-    { label: 'Features', href: '#features' },
-    { label: 'Pricing', href: '#pricing' },
+    { label: 'All products', href: '/products' },
     { label: 'Download', href: '/product/hub/download' },
-    { label: "What's New", href: '/product/hub/releases' },
-    { label: 'Roadmap', href: '#roadmap' },
+    { label: "What's new", href: '/product/hub/releases' },
+    { label: 'Marketplace', href: '/marketplace' },
   ],
   Resources: [
     { label: 'Blog', href: '/blog' },
-    { label: 'Documentation', href: '#docs' },
     { label: 'Tutorials', href: '/learn' },
-    { label: 'Templates', href: '#templates' },
-    { label: 'API', href: '#api' },
-  ],
-  Company: [
-    { label: 'About', href: '#about' },
-    { label: 'Careers', href: '#careers' },
-    { label: 'Press', href: '#press' },
-    { label: 'Partners', href: '#partners' },
-    { label: 'Contact', href: '#contact' },
+    { label: 'Help center', href: '/help' },
+    { label: 'Contact', href: '/contact' },
   ],
   Legal: [
     { label: 'Privacy', href: '/privacy' },
     { label: 'Terms', href: '/terms' },
-    { label: 'Security', href: '#security' },
-    { label: 'Refunds', href: '#refund' },
-    { label: 'Cookies', href: '#cookies' },
   ],
 };
 
@@ -47,7 +37,7 @@ const Footer: React.FC = () => {
 
       <div className="page-gutter mx-auto w-full pb-[clamp(16px,2vh,26px)] pt-[clamp(28px,3.4vh,48px)]">
         {/* ── Top: brand + link columns ─────────────────────────── */}
-        <div className="grid grid-cols-2 gap-x-[clamp(24px,2.6vw,52px)] gap-y-[clamp(20px,2.6vh,30px)] md:grid-cols-6">
+        <div className="grid grid-cols-2 gap-x-[clamp(24px,2.6vw,52px)] gap-y-[clamp(20px,2.6vh,30px)] md:grid-cols-5">
           {/* Brand */}
           <div className="col-span-2 md:col-span-2">
             <Link to="/" className="mb-[clamp(14px,1.6vh,20px)] flex items-center gap-2.5">
