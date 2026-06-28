@@ -15,7 +15,7 @@ const footerLinks: Record<string, { label: string; href: string }[]> = {
     { label: 'Documentation', href: '/docs' },
     { label: 'Tutorials', href: '/learn' },
     { label: 'Templates', href: '/templates' },
-    { label: 'API', href: '/api' },
+    { label: 'API', href: '/api-reference' },
     { label: 'Blog', href: '/blog' },
   ],
   Company: [

@@ -161,7 +161,7 @@ function App() {
             <Route path="/roadmap" element={<Roadmap />} />
             <Route path="/docs" element={<Docs />} />
             <Route path="/templates" element={<Templates />} />
-            <Route path="/api" element={<ApiReference />} />
+            <Route path="/api-reference" element={<ApiReference />} />
             <Route path="/about" element={<About />} />
             <Route path="/careers" element={<Careers />} />
             <Route path="/press" element={<Press />} />
