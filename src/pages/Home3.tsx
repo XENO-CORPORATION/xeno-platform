@@ -19,10 +19,10 @@ function Home3() {
   };
 
   return (
-    <div className="min-h-screen bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
+    <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
       <Header onGetStarted={handleGetStarted} visible={true} />
 
-      <main>
+      <main className="flex-1">
         <HeroSection />
         <ProductsShowcase />
         <ModelsStrip />

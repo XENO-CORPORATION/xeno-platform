@@ -22,9 +22,9 @@ const ProductReleases: React.FC = () => {
   if (!product) return <Navigate to="/" replace />;
 
   return (
-    <div className="min-h-screen bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
+    <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
       <Header onGetStarted={() => navigate('/auth')} visible={true} />
-      <main className="page-gutter pt-[clamp(92px,12vh,140px)] pb-[clamp(56px,8vh,110px)]">
+      <main className="flex-1 page-gutter pt-[clamp(92px,12vh,140px)] pb-[clamp(56px,8vh,110px)]">
         <div className="mx-auto max-w-[820px]">
           <Reveal>
             <Link to={`/product/${product.slug}`} className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">

@@ -156,10 +156,10 @@ export default function Learn() {
   const totalCount = categories.reduce((sum, c) => sum + parseInt(c.count), 0);
 
   return (
-    <div className="min-h-screen bg-[#08080a] text-white font-['Inter',sans-serif] antialiased">
+    <div className="flex min-h-screen flex-col bg-[#08080a] text-white font-['Inter',sans-serif] antialiased">
       <Header onGetStarted={() => navigate('/auth')} visible={true} />
 
-      <main className="pt-[46px]">
+      <main className="flex-1 pt-[46px]">
         <div className="max-w-5xl mx-auto px-6 pt-20 pb-12">
           <h1 className="text-[36px] font-bold text-white/95 mb-3">Learn</h1>
           <p className="text-[15px] text-white/40 max-w-xl">

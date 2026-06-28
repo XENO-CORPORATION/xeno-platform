@@ -337,9 +337,9 @@ export default function ExtensionDownloadPage() {
   const stableRelease = data?.channels?.stable || null;
 
   return (
-    <div className="min-h-screen bg-[#08080a] font-['Inter',sans-serif] text-white antialiased">
+    <div className="flex min-h-screen flex-col bg-[#08080a] font-['Inter',sans-serif] text-white antialiased">
       <Header onGetStarted={handleGetStarted} visible={true} />
-      <main className="pt-[46px]">
+      <main className="flex-1 pt-[46px]">
         <section className="px-6 py-14 md:py-18">
           <div className="mx-auto max-w-[1260px] space-y-5">
             <div className="mb-6 flex flex-wrap items-center gap-2">

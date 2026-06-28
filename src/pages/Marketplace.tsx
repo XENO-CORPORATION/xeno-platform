@@ -224,10 +224,10 @@ const Marketplace: React.FC = () => {
   }, [listings]);
 
   return (
-    <div className="min-h-screen bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
+    <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
       <Header onGetStarted={() => navigate('/auth')} visible={true} />
 
-      <main>
+      <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────────── */}
         <section className="page-gutter relative overflow-hidden pt-[clamp(96px,13vh,150px)] pb-[clamp(28px,4vh,52px)]">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_60%_80%_at_50%_-10%,rgba(167,96,255,0.12),transparent_70%)]" />

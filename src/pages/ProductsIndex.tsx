@@ -54,9 +54,9 @@ const ProductsIndex: React.FC = () => {
   const groups = groupByCategory(PRODUCTS);
 
   return (
-    <div className="min-h-screen bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
+    <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
       <Header onGetStarted={() => navigate('/auth')} visible={true} />
-      <main className="page-gutter pt-[clamp(92px,12vh,140px)] pb-[clamp(56px,8vh,110px)]">
+      <main className="flex-1 page-gutter pt-[clamp(92px,12vh,140px)] pb-[clamp(56px,8vh,110px)]">
         <div className="mx-auto max-w-[1080px]">
           <Reveal>
             <h1 className="text-[clamp(2rem,3.5vw,3.2rem)] font-semibold tracking-[-0.02em] text-[#ece7df]">Products</h1>
