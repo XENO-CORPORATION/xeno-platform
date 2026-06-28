@@ -10,6 +10,8 @@ import ReleaseFeed from '../components/product/ReleaseFeed';
 import {
   getProduct, fetchReleases, latestRelease, downloadLink, type Release, type Product,
 } from '../lib/productCatalog';
+import { getProductContent } from '../content/products';
+import ProductLanding from './ProductLanding';
 
 type OS = 'windows' | 'mac' | 'linux';
 function detectOS(): OS {
@@ -29,21 +31,17 @@ function StatusPill({ status }: { status: Product['status'] }) {
   return <span className={`rounded-[4px] border px-2 py-0.5 text-[11px] font-medium ${map.cls}`}>{map.label}</span>;
 }
 
-const ProductPage: React.FC = () => {
-  const { slug } = useParams();
+const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
   const navigate = useNavigate();
-  const product = getProduct(slug);
   const [releases, setReleases] = useState<Release[]>([]);
   const [copied, setCopied] = useState(false);
   const os = detectOS();
 
   useEffect(() => {
-    if (product && (product.delivery === 'desktop' || product.delivery === 'cli')) {
+    if (product.delivery === 'desktop' || product.delivery === 'cli') {
       fetchReleases(product).then(setReleases);
     }
   }, [product]);
-
-  if (!product) return <Navigate to="/" replace />;
 
   const latest = latestRelease(releases);
   // Stable backend deep-link (302s to the current installer) — present only when
@@ -165,6 +163,16 @@ const ProductPage: React.FC = () => {
       <Footer />
     </div>
   );
+};
+
+/* Dispatcher: products with a rich content module (src/content/products) render
+ * the full ProductLanding; everything else keeps the lean page (SPEC L3). */
+const ProductPage: React.FC = () => {
+  const { slug } = useParams();
+  const product = getProduct(slug);
+  if (!product) return <Navigate to="/" replace />;
+  const content = getProductContent(slug);
+  return content ? <ProductLanding product={product} content={content} /> : <LeanProductPage product={product} />;
 };
 
 export default ProductPage;

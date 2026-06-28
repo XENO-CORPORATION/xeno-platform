@@ -43,6 +43,23 @@ async function loadCatalog() {
   return import(pathToFileURL(tmp).href);
 }
 
+// Rich landing content (src/content/products) is pure data — bundle it the same
+// way so a product's seo{} can override the prerendered <head> (SPEC §2.1).
+async function loadContent() {
+  try {
+    const out = await build({
+      entryPoints: ['src/content/products/index.ts'],
+      bundle: true, format: 'esm', write: false, platform: 'node', logLevel: 'silent',
+    });
+    const tmp = join(tmpdir(), `content-${process.pid}.mjs`);
+    writeFileSync(tmp, out.outputFiles[0].text);
+    return await import(pathToFileURL(tmp).href);
+  } catch (e) {
+    console.warn('prerender: content modules unavailable, using catalog defaults —', e.message);
+    return { getProductContent: () => undefined };
+  }
+}
+
 function jsonld(p) {
   return JSON.stringify({
     '@context': 'https://schema.org',
@@ -95,15 +112,19 @@ async function main() {
   }
   const template = readFileSync(join(DIST, 'index.html'), 'utf8');
   const { PRODUCTS } = await loadCatalog();
+  const { getProductContent } = await loadContent();
 
   const urls = ['/products'];
   let pages = 0;
   for (const p of PRODUCTS) {
     if (p.status === 'coming-soon') continue; // index only shipping/beta products
 
+    const content = getProductContent(p.slug);
     const baseTitle = `${p.name} — ${p.tagline}`;
+    const title = content?.seo?.title || baseTitle;
+    const desc = content?.seo?.description || p.tagline;
     writePage(`product/${p.slug}`, renderPage(template, p, headFor(p, {
-      title: baseTitle, desc: p.tagline, canonical: `${SITE}/product/${p.slug}`,
+      title, desc, canonical: `${SITE}/product/${p.slug}`,
     })));
     urls.push(`/product/${p.slug}`);
     pages++;
