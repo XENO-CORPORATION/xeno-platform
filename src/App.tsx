@@ -19,6 +19,19 @@ import LearnTutorial from "./pages/LearnTutorial";
 import RemoteRuns from "./pages/RemoteRuns";
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
+import Features from './pages/Features';
+import Pricing from './pages/Pricing';
+import Roadmap from './pages/Roadmap';
+import Docs from './pages/Docs';
+import Templates from './pages/Templates';
+import ApiReference from './pages/ApiReference';
+import About from './pages/About';
+import Careers from './pages/Careers';
+import Press from './pages/Press';
+import Partners from './pages/Partners';
+import Security from './pages/Security';
+import Refunds from './pages/Refunds';
+import Cookies from './pages/Cookies';
 import OverviewPage from './pages/Overview';
 import OSAuthInterface, { OSStateProvider } from './components/os/OSAuthInterface';
 import OSHomeInterface from './components/os/OSHomeInterface';
@@ -142,6 +155,20 @@ function App() {
             {/* Public Legal Pages - No auth required */}
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/terms" element={<Terms />} />
+            {/* Marketing / resource / legal pages (footer) */}
+            <Route path="/features" element={<Features />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/roadmap" element={<Roadmap />} />
+            <Route path="/docs" element={<Docs />} />
+            <Route path="/templates" element={<Templates />} />
+            <Route path="/api" element={<ApiReference />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/careers" element={<Careers />} />
+            <Route path="/press" element={<Press />} />
+            <Route path="/partners" element={<Partners />} />
+            <Route path="/security" element={<Security />} />
+            <Route path="/refunds" element={<Refunds />} />
+            <Route path="/cookies" element={<Cookies />} />
 
             {/* Standalone Video Studio Canvas - Full page interface */}
             <Route path="/studio/video/canvas/:projectId?" element={
