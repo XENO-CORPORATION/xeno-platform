@@ -10,7 +10,6 @@ import ProductReleases from "./pages/ProductReleases";
 import ProductReleaseDetail from "./pages/ProductReleaseDetail";
 import ProductDownload from "./pages/ProductDownload";
 import ProductsIndex from "./pages/ProductsIndex";
-import Download from "./pages/Download";
 import ExtensionDownload from "./pages/ExtensionDownload";
 import ReleaseNotes from "./pages/ReleaseNotes";
 import Blog from "./pages/Blog";
@@ -115,8 +114,9 @@ function App() {
             <Route path="/product/:slug/download" element={<ProductDownload />} />
             <Route path="/product/:slug/releases" element={<ProductReleases />} />
             <Route path="/product/:slug/releases/:version" element={<ProductReleaseDetail />} />
-            {/* legacy extension download still served by its own page below */}
-            <Route path="/download" element={<Download />} />
+            {/* Legacy /download retired → the Hub download page (client-side, so
+                in-app links like the header Download button land there too). */}
+            <Route path="/download" element={<Navigate to="/product/hub/download" replace />} />
             <Route path="/product/extension/download" element={<ExtensionDownload />} />
             <Route path="/releases/:version" element={<ReleaseNotes />} />
             <Route path="/blog" element={<Blog />} />
