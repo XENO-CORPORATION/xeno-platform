@@ -3,6 +3,7 @@ import {
   Search, Hash, Sparkles, CheckCheck, Smile, Plus, SendHorizontal, Video, Phone, Info,
   AtSign, PenSquare, UserPlus, ChevronDown,
 } from 'lucide-react';
+import { Reveal } from '../../landing-v3/primitives';
 
 /* High-fidelity XENO Comms client mockup — the hero's "representative content"
  * (NN/g: every hero visual must serve a purpose, show the real product). Built in
@@ -109,45 +110,55 @@ const CommsChat: React.FC = () => (
 
         <div className="flex flex-1 flex-col justify-end gap-3.5 overflow-hidden px-4 py-4">
           {/* human */}
-          <Msg avatar={<Avatar init="AL" grad={GR.amanda} online size="h-6 w-6" />} name="Amanda Lee" time="9:41 AM">
-            Morning team! How’s the launch plan shaping up?
-          </Msg>
+          <Reveal y={8}>
+            <Msg avatar={<Avatar init="AL" grad={GR.amanda} online size="h-6 w-6" />} name="Amanda Lee" time="9:41 AM">
+              Morning team! How’s the launch plan shaping up?
+            </Msg>
+          </Reveal>
           {/* agent summary card */}
-          <div className="flex items-start gap-2.5">
-            <AgentAvatar size="h-6 w-6" />
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">AI Analyst</span><span className="rounded-[3px] bg-[#9f6fff]/20 px-1 text-[8px] font-bold uppercase text-[#c4a6ff]">AI</span><span className="text-[9.5px] text-[#5d5850]">9:42 AM</span></div>
-              <div className="mt-1 max-w-[400px] rounded-[10px] rounded-tl-[3px] border border-[#9f6fff]/30 bg-[#9f6fff]/[0.06] px-3 py-2.5">
-                <p className="text-[12px] leading-snug text-[#d8d2ca]">The launch is on track. Quick summary:</p>
-                <ul className="mt-1.5 space-y-1 text-[11.5px] text-[#aaa39a]">
-                  <li className="flex gap-1.5"><span style={{ color: V }}>•</span> Market opportunity: $12.4B (28% YoY)</li>
-                  <li className="flex gap-1.5"><span style={{ color: V }}>•</span> Top segment: mid-market SaaS</li>
-                  <li className="flex gap-1.5"><span style={{ color: V }}>•</span> Recommended focus: messaging automation</li>
-                </ul>
-                <div className="mt-2 flex items-center gap-1 text-[10.5px] text-[#827b71]">See the full analysis in the thread <ChevronDown className="h-3 w-3" /></div>
+          <Reveal y={8} delay={70}>
+            <div className="flex items-start gap-2.5">
+              <AgentAvatar size="h-6 w-6" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">AI Analyst</span><span className="rounded-[3px] bg-[#9f6fff]/20 px-1 text-[8px] font-bold uppercase text-[#c4a6ff]">AI</span><span className="text-[9.5px] text-[#5d5850]">9:42 AM</span></div>
+                <div className="mt-1 max-w-[400px] rounded-[10px] rounded-tl-[3px] border border-[#9f6fff]/30 bg-[#9f6fff]/[0.06] px-3 py-2.5">
+                  <p className="text-[12px] leading-snug text-[#d8d2ca]">The launch is on track. Quick summary:</p>
+                  <ul className="mt-1.5 space-y-1 text-[11.5px] text-[#aaa39a]">
+                    <li className="flex gap-1.5"><span style={{ color: V }}>•</span> Market opportunity: $12.4B (28% YoY)</li>
+                    <li className="flex gap-1.5"><span style={{ color: V }}>•</span> Top segment: mid-market SaaS</li>
+                    <li className="flex gap-1.5"><span style={{ color: V }}>•</span> Recommended focus: messaging automation</li>
+                  </ul>
+                  <div className="mt-2 flex items-center gap-1 text-[10.5px] text-[#827b71]">See the full analysis in the thread <ChevronDown className="h-3 w-3" /></div>
+                </div>
               </div>
             </div>
-          </div>
+          </Reveal>
           {/* human */}
-          <Msg avatar={<Avatar init="MJ" grad={GR.marcus} online size="h-6 w-6" />} name="Marcus Johnson" time="9:43 AM">
-            Thanks! What about risks we should watch?
-          </Msg>
+          <Reveal y={8} delay={110}>
+            <Msg avatar={<Avatar init="MJ" grad={GR.marcus} online size="h-6 w-6" />} name="Marcus Johnson" time="9:43 AM">
+              Thanks! What about risks we should watch?
+            </Msg>
+          </Reveal>
           {/* agent reply */}
-          <div className="flex items-start gap-2.5">
-            <AgentAvatar size="h-6 w-6" />
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">AI Analyst</span><span className="text-[9.5px] text-[#5d5850]">9:43 AM</span></div>
-              <p className="mt-1 max-w-[400px] text-[12px] leading-snug text-[#aaa39a]">Top risks: competitor pricing pressure and integration complexity. I’ve added mitigation plans to the launch doc.</p>
+          <Reveal y={8} delay={140}>
+            <div className="flex items-start gap-2.5">
+              <AgentAvatar size="h-6 w-6" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">AI Analyst</span><span className="text-[9.5px] text-[#5d5850]">9:43 AM</span></div>
+                <p className="mt-1 max-w-[400px] text-[12px] leading-snug text-[#aaa39a]">Top risks: competitor pricing pressure and integration complexity. I’ve added mitigation plans to the launch doc.</p>
+              </div>
             </div>
-          </div>
+          </Reveal>
           {/* human with mention + receipt */}
-          <div className="flex items-start gap-2.5">
-            <Avatar init="AL" grad={GR.amanda} online size="h-6 w-6" />
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">Amanda Lee</span><span className="text-[9.5px] text-[#5d5850]">9:44 AM</span><CheckCheck className="h-3 w-3 text-[#69635b]" /></div>
-              <p className="mt-1 text-[12px] leading-snug text-[#aaa39a]">Perfect. Let’s sync with <span className="rounded-[3px] bg-[#9f6fff]/15 px-1 font-medium text-[#c4a6ff]">@Dev&nbsp;Team</span> on the timeline.</p>
+          <Reveal y={8} delay={140}>
+            <div className="flex items-start gap-2.5">
+              <Avatar init="AL" grad={GR.amanda} online size="h-6 w-6" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">Amanda Lee</span><span className="text-[9.5px] text-[#5d5850]">9:44 AM</span><CheckCheck className="h-3 w-3 text-[#69635b]" /></div>
+                <p className="mt-1 text-[12px] leading-snug text-[#aaa39a]">Perfect. Let’s sync with <span className="rounded-[3px] bg-[#9f6fff]/15 px-1 font-medium text-[#c4a6ff]">@Dev&nbsp;Team</span> on the timeline.</p>
+              </div>
             </div>
-          </div>
+          </Reveal>
         </div>
 
         {/* composer */}
