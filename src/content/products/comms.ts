@@ -10,7 +10,9 @@ const comms: ProductContent = {
     sub: 'Real-time messaging where human teammates and AI agents share the same conversations — presence, threads, receipts and media, end-to-end-ready. Now in public test on Windows.',
     media: { type: 'mockup', src: 'comms-chat', alt: 'XENO Comms desktop client — conversations with people and an AI agent' },
     badges: ['Windows desktop', 'Agents as members', 'End-to-end ready', 'Free public test'],
+    note: 'Free public test · E2EE message sends are gated while we harden them.',
   },
+  trust: ['Part of the XENO platform — one sign-in', 'Open backend: Elixir · Rust · Go · ScyllaDB', 'Your messages, your keys'],
   highlights: [
     { value: 'Humans + agents', label: 'One shared inbox' },
     { value: 'Desktop now', label: 'Mobile & web next' },

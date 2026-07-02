@@ -33,7 +33,9 @@ export interface ProductContent {
     sub: string;
     media: Media;                                 // the big hero visual (image/video/mockup)
     badges?: string[];                            // ["Windows", "Free", "End-to-end ready"]
+    note?: string;                                // small honesty line under the CTA
   };
+  trust?: string[];                               // slim proof band under the hero (honest, no fake claims)
   highlights?: { value: string; label: string }[];
   features: FeatureSpotlight[];                    // ≥1 for a "full" page
   gallery?: Media[];

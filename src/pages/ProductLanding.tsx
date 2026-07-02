@@ -154,6 +154,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
                   {latest && <span className="text-[12px] text-[#69635b]">Latest v{latest.version}</span>}
                 </div>
               </Reveal>
+              {content.hero.note && <Reveal delay={250}><p className="mt-4 text-[12px] leading-relaxed text-[#69635b]">{content.hero.note}</p></Reveal>}
             </div>
             <Reveal delay={150}><MediaView media={content.hero.media} /></Reveal>
           </div>
@@ -163,6 +164,20 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
             <ChevronDown className="h-4 w-4 motion-safe:animate-bounce" />
           </div>
         </section>
+
+        {/* ── Trust band (honest proof signals, NN/g social proof) ── */}
+        {content.trust && content.trust.length > 0 && (
+          <section className="px-[max(16px,1.1vw)] pb-[clamp(28px,4vh,52px)]">
+            <div className="mx-auto flex max-w-[1000px] flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[12px] text-[#69635b]">
+              {content.trust.map((t, i) => (
+                <React.Fragment key={t}>
+                  {i > 0 && <span className="hidden h-1 w-1 rounded-full bg-white/20 sm:inline-block" />}
+                  <span>{t}</span>
+                </React.Fragment>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Highlights ─────────────────────────────────────── */}
         {content.highlights && (
