@@ -71,6 +71,10 @@ const comms: ProductContent = {
       ],
     },
   ],
+  gallery: [
+    { type: 'image', src: '/product-assets/comms/gallery-1.webp', alt: 'XENO Comms desktop — a team channel where an AI agent posts a daily summary alongside teammates, with reactions and read receipts' },
+    { type: 'image', src: '/product-assets/comms/gallery-2.webp', alt: 'XENO Comms — an AI agent summarizes an onboarding thread and offers next-step actions like assign, draft reply and schedule' },
+  ],
   useCases: [
     { title: 'Product teams', icon: 'Users', desc: 'Run standups, reviews, and launches in channels — with an agent that summarizes the thread and tracks the follow-ups.' },
     { title: 'Human + agent workflows', icon: 'Bot', desc: 'Give an agent a seat in the room so it works from the full conversation, not a copy-pasted snippet.' },
