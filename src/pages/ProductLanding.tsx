@@ -394,16 +394,17 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
       <Footer />
 
-      {/* Accent switcher — fully hidden until Shift+T; only the colors fan in from the corner */}
-      <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex items-center gap-2.5">
+      {/* Accent switcher — fully hidden until Shift+T; colors rise from the bottom,
+       * right-aligned, one-by-one toward the left (scale + fade, smooth motion). */}
+      <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex items-end gap-2.5">
         {ACCENTS.map((a, i) => (
           <button
             key={a.id}
             type="button"
             onClick={() => setAccent(a.id)}
             aria-label={`${a.id} accent`}
-            className={`h-6 w-6 rounded-full border transition-all duration-300 ease-out ${accent === a.id ? 'border-white/80 ring-2 ring-white/30 ring-offset-2 ring-offset-[#060606]' : 'border-white/25 hover:brightness-125'} ${themeOpen ? 'pointer-events-auto translate-x-0 scale-100 opacity-100' : 'pointer-events-none translate-x-[64px] scale-50 opacity-0'}`}
-            style={{ background: `rgb(${a.rgb})`, transitionDelay: `${(themeOpen ? i : ACCENTS.length - 1 - i) * 70}ms` }}
+            className={`h-6 w-6 rounded-full border transition-all duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${accent === a.id ? 'border-white/80 ring-2 ring-white/30 ring-offset-2 ring-offset-[#060606]' : 'border-white/25 hover:brightness-125'} ${themeOpen ? 'pointer-events-auto translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-7 scale-50 opacity-0'}`}
+            style={{ background: `rgb(${a.rgb})`, transitionDelay: `${(themeOpen ? ACCENTS.length - 1 - i : i) * 85}ms` }}
           />
         ))}
       </div>
