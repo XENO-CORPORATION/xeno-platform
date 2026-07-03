@@ -293,6 +293,12 @@ routes**:
   `<link rel="canonical">` to the **singular** URL, Open Graph + Twitter Card, and
   schema.org `SoftwareApplication` structured data (operatingSystem, applicationCategory,
   softwareVersion, downloadUrl, offers).
+- **Per-product overrides:** if a product has a landing content module
+  (`src/content/products/<slug>.ts` — see `PRODUCT-LANDING-SPEC.md`), its
+  `seo{ title, description }` **overrides** the catalog-derived `<title>`/description
+  at prerender time. `scripts/prerender-products.mjs` esbuild-compiles the content
+  registry alongside the catalog and calls `getProductContent(slug)`; falls back to
+  the catalog tagline when absent.
 - Emit `/sitemap.xml` covering all canonical product URLs and `/robots.txt`
   allowing them.
 - **Retire** `public/products/` and `scripts/add-seo-to-products.js` once prerender
