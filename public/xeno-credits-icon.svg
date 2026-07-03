@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="XENO credits icon with three visible layers">
+  <!-- Transparent background by default -->
+  <g fill="#FFFFFF">
+    <!-- Layer 3: bottom visible slab -->
+    <path d="M108 351 L256 438 L404 351 L384 317 L256 392 L128 317 Z"/>
+
+    <!-- Layer 2: middle visible slab -->
+    <path d="M108 293 L256 380 L404 293 L384 259 L256 334 L128 259 Z"/>
+
+    <!-- Layer 1: top solid slab with sparkle cutout -->
+    <path fill-rule="evenodd" d="M256 104 L424 204 L256 304 L88 204 Z
+      M256 166
+      C268 188 284 198 308 204
+      C284 210 268 220 256 242
+      C244 220 228 210 204 204
+      C228 198 244 188 256 166 Z"/>
+  </g>
+</svg>

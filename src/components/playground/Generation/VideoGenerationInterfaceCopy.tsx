@@ -757,8 +757,8 @@ const CleanModeInputBar: React.FC<CleanModeInputBarProps> = ({
 };
 
 // Main component definition accepting new props
-const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({ 
-  isCleanMode = false, 
+const VideoGenerationInterfaceCopy: React.FC<VideoGenerationInterfaceProps> = ({
+  isCleanMode = false,
   onToggleInterface // Destructure the new props
 }) => {
   // Helper function to check if model has advanced settings
@@ -2437,4 +2437,4 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
   );
 };
 
-export default VideoGenerationInterface;
+export default VideoGenerationInterfaceCopy;

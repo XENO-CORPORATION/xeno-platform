@@ -4,7 +4,10 @@ import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
 import ApiTokenNotice from '../../common/ApiTokenNotice';
 import { analyzeImageWithGemini, initializeGeminiSDK } from '../../../services/geminiService';
 import videoGenerationService from '../../../services/videoGenerationService';
+import generationHistoryService from '../../../services/generationHistoryService';
 import VideoPromptEditor, { VideoPromptEditorHandle } from './components/VideoPromptEditor';
+import VideoResultCard from './components/VideoResultCard';
+import VideoExpandedReel from './components/VideoExpandedReel';
 
 // A single image reference in the prompt composer. Mirrors the multi-reference
 // pattern used by the polished image interface (ImageGenerationInterface2Copy).
@@ -14,6 +17,16 @@ interface UploadedReference {
 }
 
 const MAX_REFERENCES = 6;
+
+// V2 preview mode: when on, Generate drops in a sample video so the result card can be
+// previewed with a real playing video (no backend). Set to false for real generation.
+const DEMO_MOCK_GENERATION_ENABLED = true;
+const DEMO_SAMPLE_VIDEOS = [
+  'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+  'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+  'https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+];
 
 // Stacked reference-pile geometry (mirrors Dreamina's reference group):
 // cards overlap into a tilted pile at rest and fan out into a row on hover.
@@ -78,7 +91,7 @@ const modelFamilies: ModelFamily[] = [
   {
     id: 'wan',
     name: 'Wan AI',
-    icon: <div className="mr-2 rounded-lg bg-blue-500/20 border border-blue-500/30 p-2"><Film size={16} className="text-emerald-400" /></div>,
+    icon: <div className="mr-2 rounded-lg bg-white/10 border border-white/15 p-2"><Film size={16} className="text-white/70" /></div>,
     description: "Wan AI's advanced text-to-video generation models with high-quality output and comprehensive controls.",
     submodels: [
       {
@@ -93,7 +106,7 @@ const modelFamilies: ModelFamily[] = [
   {
     id: 'google',
     name: 'Google',
-    icon: <div className="mr-2 rounded-lg bg-blue-500/20 border border-blue-500/30 p-2"><Sparkles size={16} className="text-purple-400" /></div>,
+    icon: <div className="mr-2 rounded-lg bg-white/10 border border-white/15 p-2"><Sparkles size={16} className="text-white/70" /></div>,
     description: "Google's advanced video generation models with state-of-the-art quality and understanding.",
     submodels: [
       {
@@ -108,7 +121,7 @@ const modelFamilies: ModelFamily[] = [
   {
     id: 'minimax',
     name: 'MiniMax',
-    icon: <div className="mr-2 rounded-lg bg-blue-500/20 border border-blue-500/30 p-2"><Video size={16} className="text-purple-400" /></div>,
+    icon: <div className="mr-2 rounded-lg bg-white/10 border border-white/15 p-2"><Video size={16} className="text-white/70" /></div>,
     description: "MiniMax's AI video generation models with excellent human motion and facial expressions.",
     submodels: [
       {
@@ -130,7 +143,7 @@ const modelFamilies: ModelFamily[] = [
   {
     id: 'hunyuan',
     name: 'Hunyuan',
-    icon: <div className="mr-2 rounded-lg bg-blue-500/20 border border-blue-500/30 p-2"><RefreshCw size={16} className="text-amber-400" /></div>,
+    icon: <div className="mr-2 rounded-lg bg-white/10 border border-white/15 p-2"><RefreshCw size={16} className="text-white/70" /></div>,
     description: "Tencent's advanced video generation platform with customizable resolutions and professional-grade controls.",
     submodels: [
       {
@@ -145,7 +158,7 @@ const modelFamilies: ModelFamily[] = [
   {
     id: 'luma',
     name: 'Luma',
-    icon: <div className="mr-2 rounded-lg bg-blue-500/20 border border-blue-500/30 p-2"><Video size={16} className="text-rose-400" /></div>,
+    icon: <div className="mr-2 rounded-lg bg-white/10 border border-white/15 p-2"><Video size={16} className="text-white/70" /></div>,
     description: "Luma's advanced video generation models with high-quality output, multiple aspect ratios, and professional controls.",
     submodels: [
       {
@@ -160,7 +173,7 @@ const modelFamilies: ModelFamily[] = [
   {
     id: 'pika',
     name: 'Pika',
-    icon: <div className="mr-2 rounded-lg bg-blue-500/20 border border-blue-500/30 p-2"><Video size={16} className="text-sky-400" /></div>,
+    icon: <div className="mr-2 rounded-lg bg-white/10 border border-white/15 p-2"><Video size={16} className="text-white/70" /></div>,
     description: "Pika's advanced text-to-video generation models with high-quality motion, multiple aspect ratios, and negative prompt support.",
     submodels: [
       {
@@ -175,7 +188,7 @@ const modelFamilies: ModelFamily[] = [
   {
     id: 'kling',
     name: 'Kling',
-    icon: <div className="mr-2 rounded-lg bg-blue-500/20 border border-blue-500/30 p-2"><Video size={16} className="text-indigo-400" /></div>,
+    icon: <div className="mr-2 rounded-lg bg-white/10 border border-white/15 p-2"><Video size={16} className="text-white/70" /></div>,
     description: "Kling's advanced image-to-video generation models with high-quality motion and precise control.",
     submodels: [
       {
@@ -225,13 +238,13 @@ const ModelSelector = ({
       case 'fal-ai/kling-video/v1.6/pro/image-to-video':
       case 'fal-ai/kling-video/v2/master/image-to-video':
       case 'kling-video-v1-6':
-        return { type: 'Image', color: 'bg-emerald-500/30 text-emerald-300 border-emerald-500/40' };
+        return { type: 'Image', color: 'bg-white/15 text-white/70 border-white/25' };
       // Mixed models (support both text and image)
       case 'hailuo-video-01-live':
-        return { type: 'Mixed', color: 'bg-purple-500/30 text-purple-300 border-purple-500/40' };
+        return { type: 'Mixed', color: 'bg-white/15 text-white/70 border-white/25' };
       // Text-to-video models (default)
       default:
-        return { type: 'Text', color: 'bg-blue-500/30 text-blue-300 border-blue-500/40' };
+        return { type: 'Text', color: 'bg-white/15 text-white/70 border-white/25' };
     }
   };
 
@@ -317,7 +330,7 @@ const ModelSelector = ({
         disabled={disabled}
       >
         <div className="flex items-center min-w-0 [&>div]:p-1 [&>div]:mr-1.5 [&_svg]:w-3.5 [&_svg]:h-3.5">
-          {selectedDetails ? selectedDetails.family.icon : <div className="mr-2 rounded-lg bg-blue-500/20 border border-blue-500/30 p-2"><Film size={16} className="text-blue-400" /></div>}
+          {selectedDetails ? selectedDetails.family.icon : <div className="mr-2 rounded-lg bg-white/10 border border-white/15 p-2"><Film size={16} className="text-white/70" /></div>}
           <span className="truncate">{selectedDetails ? selectedDetails.model.name : 'Select a model'}</span>
         </div>
         <svg
@@ -339,7 +352,7 @@ const ModelSelector = ({
       {isOpen && (
         <div
           ref={containerRef}
-          className="absolute z-50 bottom-full mb-2 left-0 bg-[rgba(20,20,20,0.97)] border border-white/10 rounded-xl shadow-xl overflow-hidden w-[360px] max-h-[60vh] overflow-y-auto backdrop-blur-sm"
+          className="absolute z-50 bottom-full mb-2 left-0 bg-[rgba(20,20,20,0.97)] border border-white/10 rounded-xl overflow-hidden w-[360px] max-h-[60vh] overflow-y-auto backdrop-blur-sm"
           style={animationStyles}
         >
           {selectedFamily === null ? (
@@ -359,7 +372,7 @@ const ModelSelector = ({
                       <div>
                         <div className="text-sm font-medium text-white flex items-center">
                           {family.name}
-                          {family.isBeta && <span className="ml-2 px-1.5 py-0.5 text-xs bg-orange-500/30 text-orange-300 rounded">BETA</span>}
+                          {family.isBeta && <span className="ml-2 px-1.5 py-0.5 text-xs bg-white/15 text-white/70 rounded">BETA</span>}
                         </div>
                         <div className="text-xs text-white/60 mt-0.5">{family.description}</div>
                       </div>
@@ -402,7 +415,7 @@ const ModelSelector = ({
                       key={model.id}
                       className={`rounded-lg p-3 cursor-pointer transition-all duration-200 border ${
                         selectedModel === model.id
-                          ? 'bg-blue-500/10 border-blue-500/40 shadow-md shadow-blue-500/10'
+                          ? 'bg-white/10 border-white/25'
                           : 'border-white/10 hover:border-white/20 hover:bg-white/5'
                       } ${
                         index < array.length - 1 ? 'mb-2' : ''
@@ -412,7 +425,7 @@ const ModelSelector = ({
                       <div className="flex items-center">
                         <div className={`w-4 h-4 rounded-md mr-3 flex-shrink-0 border flex items-center justify-center transition-all duration-200 ${
                           selectedModel === model.id
-                            ? 'border-blue-500 bg-blue-500'
+                            ? 'border-white/40 bg-white/80'
                             : 'border-white/40 bg-transparent hover:border-white/60'
                         }`}>
                           {selectedModel === model.id && (
@@ -438,7 +451,7 @@ const ModelSelector = ({
                                 );
                               })()}
                               {model.isBeta && (
-                                <span className="px-1.5 py-0.5 text-xs bg-orange-500/30 text-orange-300 rounded font-medium border border-orange-500/40">
+                                <span className="px-1.5 py-0.5 text-xs bg-white/15 text-white/70 rounded font-medium border border-white/25">
                                   BETA
                                 </span>
                               )}
@@ -447,15 +460,15 @@ const ModelSelector = ({
                             <div className="flex items-center gap-1 ml-2">
                               {/* Show specific indicators based on model type */}
                               {model.id.includes('image-to-video') || model.supportsImageUpload ? (
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Image-to-Video"></div>
+                                <div className="w-1.5 h-1.5 rounded-full bg-white/50" title="Image-to-Video"></div>
                               ) : null}
                               {model.id === 'hailuo-video-01-live' ? (
                                 <>
-                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400" title="Text-to-Video"></div>
-                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Image-to-Video"></div>
+                                  <div className="w-1.5 h-1.5 rounded-full bg-white/50" title="Text-to-Video"></div>
+                                  <div className="w-1.5 h-1.5 rounded-full bg-white/50" title="Image-to-Video"></div>
                                 </>
                               ) : !model.id.includes('image-to-video') && !model.supportsImageUpload ? (
-                                <div className="w-1.5 h-1.5 rounded-full bg-blue-400" title="Text-to-Video"></div>
+                                <div className="w-1.5 h-1.5 rounded-full bg-white/50" title="Text-to-Video"></div>
                               ) : null}
                             </div>
                           </div>
@@ -477,49 +490,49 @@ const ModelSelector = ({
                             {/* Credit estimation based on model */}
                             {model.id.includes('wan') && (
                               <span className={`transition-colors ${
-                                selectedModel === model.id ? 'text-emerald-300' : 'text-emerald-400/80'
+                                selectedModel === model.id ? 'text-white/70' : 'text-white/40'
                               }`}>
                                 • Advanced • ~150 credits
                               </span>
                             )}
                             {model.id.includes('veo2') && (
                               <span className={`transition-colors ${
-                                selectedModel === model.id ? 'text-purple-300' : 'text-purple-400/80'
+                                selectedModel === model.id ? 'text-white/70' : 'text-white/40'
                               }`}>
                                 • Premium • ~200 credits
                               </span>
                             )}
                             {model.id.includes('minimax') && (
                               <span className={`transition-colors ${
-                                selectedModel === model.id ? 'text-purple-300' : 'text-purple-400/80'
+                                selectedModel === model.id ? 'text-white/70' : 'text-white/40'
                               }`}>
                                 • Fast • ~100 credits
                               </span>
                             )}
                             {model.id.includes('hunyuan') && (
                               <span className={`transition-colors ${
-                                selectedModel === model.id ? 'text-amber-300' : 'text-amber-400/80'
+                                selectedModel === model.id ? 'text-white/70' : 'text-white/40'
                               }`}>
                                 • Quality • ~120 credits
                               </span>
                             )}
                             {model.id.includes('luma') && (
                               <span className={`transition-colors ${
-                                selectedModel === model.id ? 'text-rose-300' : 'text-rose-400/80'
+                                selectedModel === model.id ? 'text-white/70' : 'text-white/40'
                               }`}>
                                 • High-res • ~180 credits
                               </span>
                             )}
                             {model.id.includes('pika') && (
                               <span className={`transition-colors ${
-                                selectedModel === model.id ? 'text-sky-300' : 'text-sky-400/80'
+                                selectedModel === model.id ? 'text-white/70' : 'text-white/40'
                               }`}>
                                 • Motion • ~130 credits
                               </span>
                             )}
                             {model.id.includes('kling') && (
                               <span className={`transition-colors ${
-                                selectedModel === model.id ? 'text-indigo-300' : 'text-indigo-400/80'
+                                selectedModel === model.id ? 'text-white/70' : 'text-white/40'
                               }`}>
                                 • Image2Video • ~160 credits
                               </span>
@@ -610,7 +623,7 @@ const ToolbarSelect = ({
             transformOrigin: 'bottom center',
             transition: 'opacity 0.28s cubic-bezier(0.16,0.84,0.3,1), transform 0.28s cubic-bezier(0.16,0.84,0.3,1)',
           }}
-          className="absolute bottom-full mb-1.5 left-0 min-w-[150px] bg-[#1a1a1c] border border-white/10 rounded-lg shadow-xl shadow-black/40 p-1 z-50"
+          className="absolute bottom-full mb-1.5 left-0 min-w-[150px] bg-[#1a1a1c] border border-white/10 rounded-lg p-1 z-50"
         >
           {options.map((o) => (
             <button
@@ -666,7 +679,7 @@ const CleanModeInputBar: React.FC<CleanModeInputBarProps> = ({
   };
 
   return (
-    <div className="relative flex items-center bg-[rgba(20,20,20,0.85)] border border-white/10 rounded-xl shadow-xl p-2">
+    <div className="relative flex items-center bg-[rgba(20,20,20,0.85)] border border-white/10 rounded-xl p-2">
       {/* Hidden File Input - needed by the button */}
       <input
         type="file"
@@ -685,7 +698,7 @@ const CleanModeInputBar: React.FC<CleanModeInputBarProps> = ({
           />
                 <button
                   onClick={handleRemoveInputImage}
-            className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-600/80 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 hover:bg-red-700 transition-opacity z-10"
+            className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-white/40 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 hover:bg-white/15 transition-opacity z-10"
                   title="Remove Image"
                 >
             <X size={8} />
@@ -728,9 +741,9 @@ const CleanModeInputBar: React.FC<CleanModeInputBarProps> = ({
           disabled={isGenerating || !prompt.trim()}
         className={`absolute right-14 top-1/2 transform -translate-y-1/2 w-10 h-10 rounded flex items-center justify-center transition-all duration-300 ${
               isGenerating
-            ? 'bg-blue-600/50 text-white/70 cursor-wait'
+            ? 'bg-white/25 text-white/70 cursor-wait'
                 : prompt.trim()
-              ? 'bg-blue-600 text-white hover:bg-blue-500'
+              ? 'bg-white/15 text-white hover:bg-white/80'
               : 'bg-white/10 text-white/40 cursor-not-allowed'
         }`}
         title="Generate Video (Enter)"
@@ -757,8 +770,8 @@ const CleanModeInputBar: React.FC<CleanModeInputBarProps> = ({
 };
 
 // Main component definition accepting new props
-const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({ 
-  isCleanMode = false, 
+const VideoGenerationInterface2: React.FC<VideoGenerationInterfaceProps> = ({
+  isCleanMode = false,
   onToggleInterface // Destructure the new props
 }) => {
   // Helper function to check if model has advanced settings
@@ -785,6 +798,8 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
   const [inputImage, setInputImage] = useState<string | null>(null);
   const [uploadedReferences, setUploadedReferences] = useState<UploadedReference[]>([]);
   const [referenceMode, setReferenceMode] = useState('omni');
+  // V2: settings button at the top-right reveals the controls row at the top edge.
+  const [topControlsOpen, setTopControlsOpen] = useState(false);
   const [referencesExpanded, setReferencesExpanded] = useState(false);
   const [mountedRefIds, setMountedRefIds] = useState<string[]>([]);
   // Hovering an image expands the stack; the + is inert on its own hover, but
@@ -805,7 +820,51 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
   };
   const [showImageUpload, setShowImageUpload] = useState(false);
   const editorRef = useRef<VideoPromptEditorHandle>(null);
-  const [history, setHistory] = useState<Array<{ id: string; video: string; prompt: string; timestamp: Date; metadata?: any }>>([]);
+  // V2 result feed: newest generation sits at the bottom; older ones scroll up.
+  const feedRef = useRef<HTMLDivElement>(null);
+  const [history, setHistory] = useState<Array<{ id: string; video: string; prompt: string; timestamp: Date; metadata?: any; favorite?: boolean }>>([]);
+  // The result the feed is "stopped on" — rendered sharp; the rest are faded/blurred.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  // When set, that result is shown in the expanded (theater) view over the feed.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // The selected feed card's on-screen rect at expand time — the expanded card
+  // travels from here into its expanded position (shared-element FLIP).
+  const [originRect, setOriginRect] = useState<DOMRect | null>(null);
+  // After a new result is added, keep the latest (bottom-most) one in view.
+  useEffect(() => {
+    const el = feedRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [history.length]);
+  // Focus the card occupying the most of the feed viewport (updates as you scroll).
+  useEffect(() => {
+    const root = feedRef.current;
+    if (!root) return;
+    let raf = 0;
+    const updateFocus = () => {
+      const rootRect = root.getBoundingClientRect();
+      let best: string | null = null;
+      let bestVisible = -1;
+      root.querySelectorAll<HTMLElement>('[data-card-id]').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        const visible = Math.max(0, Math.min(r.bottom, rootRect.bottom) - Math.max(r.top, rootRect.top));
+        if (visible > bestVisible) {
+          bestVisible = visible;
+          best = el.dataset.cardId || null;
+        }
+      });
+      if (best) setFocusedId(best);
+    };
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateFocus);
+    };
+    root.addEventListener('scroll', onScroll, { passive: true });
+    updateFocus();
+    return () => {
+      root.removeEventListener('scroll', onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, [history.length]);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [previewVideos, setPreviewVideos] = useState<string[]>([]);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -1015,7 +1074,28 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
       notifications.error('Please enter a prompt');
       return;
     }
-    
+
+    // DEMO PREVIEW: skip real generation; add a sample video so the result card
+    // can be previewed with a playing video (no backend / token required).
+    if (DEMO_MOCK_GENERATION_ENABLED) {
+      setIsGenerating(true);
+      setGenerationError(null);
+      const chosen = DEMO_SAMPLE_VIDEOS[Math.floor(Math.random() * DEMO_SAMPLE_VIDEOS.length)];
+      await new Promise((r) => setTimeout(r, 1100));
+      setHistory((prev) => [
+        {
+          id: Date.now().toString(),
+          prompt,
+          video: chosen,
+          timestamp: new Date(),
+          metadata: { model: selectedModel, duration, aspectRatio },
+        },
+        ...prev,
+      ]);
+      setIsGenerating(false);
+      return;
+    }
+
     if (selectedMode === 'image-to-video' && !inputImage) {
       notifications.error('Please upload an image for image-to-video mode');
       return;
@@ -1240,6 +1320,39 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
     }
   };
 
+  // Pending regenerate: load a clip's prompt/settings into the composer, then fire a
+  // fresh generation once those state updates have applied.
+  const [pendingRegen, setPendingRegen] = useState(false);
+  useEffect(() => {
+    if (pendingRegen && !isGenerating) {
+      setPendingRegen(false);
+      handleGenerate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRegen]);
+
+  // ── ⋯ menu actions ──────────────────────────────────────────────────────────
+  const handleRegenerateVideo = (item: { prompt: string; metadata?: any }) => {
+    setPrompt(item.prompt);
+    if (item.metadata?.model) setSelectedModel(item.metadata.model);
+    if (item.metadata?.aspectRatio) setAspectRatio(item.metadata.aspectRatio);
+    if (item.metadata?.duration) setDuration(item.metadata.duration);
+    setExpandedId(null); // leave the theater so the new generation shows in the feed
+    setPendingRegen(true);
+  };
+
+  const handleDeleteVideo = (item: { id: string }) => {
+    generationHistoryService.deleteGeneration(item.id).catch(() => {}); // real records only; mocks no-op
+    setHistory((prev) => prev.filter((h) => h.id !== item.id));
+    setExpandedId((cur) => (cur === item.id ? null : cur));
+    setFocusedId((cur) => (cur === item.id ? null : cur));
+  };
+
+  const handleToggleFavorite = (item: { id: string }) => {
+    setHistory((prev) => prev.map((h) => (h.id === item.id ? { ...h, favorite: !h.favorite } : h)));
+    generationHistoryService.toggleFavorite(item.id).catch(() => {});
+  };
+
   // Function to trigger the hidden file input
   const handleImageUploadClick = () => {
     if (fileInputRef.current) {
@@ -1357,6 +1470,36 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
     }
   };
 
+  // Download a result video (used by the result card).
+  const handleDownloadVideo = async (videoUrl: string) => {
+    try {
+      const response = await fetch(videoUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = videoUrl.split('/').pop() || `generated-video-${Date.now()}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading video:', error);
+      notifications.error('Failed to download video');
+    }
+  };
+
+  // Copy the video URL to the clipboard as a lightweight "share".
+  const handleShareVideo = async (videoUrl: string) => {
+    try {
+      await navigator.clipboard.writeText(videoUrl);
+      notifications.success('Video link copied to clipboard');
+    } catch {
+      notifications.error('Could not copy link');
+    }
+  };
+
   // Add the handleKeyDown function
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { // Use metaKey for Mac compatibility
@@ -1402,10 +1545,98 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
       ) : (
         // --- Full Mode Interface ---
         // FULL INTERFACE (Existing Layout)
-        <div className="flex flex-col-reverse h-full relative gap-3">
-          {/* Bottom prompt bar (Dreamina-style floating composer) */}
-          <div className="w-full flex-none px-2 pb-1">
-            <div className="relative w-full max-w-3xl mx-auto bg-[#141414]/85 backdrop-blur-xl border border-white/10 rounded-2xl p-2.5 shadow-2xl shadow-black/40">
+        <div className="flex flex-col h-full relative gap-2">
+          {/* Page vignette while the theater (expanded) view is open — darkens the whole
+              page edges (incl. the composer) to focus on the centred video. Covers the
+              viewport, never blocks clicks, clear in the centre. */}
+          {expandedId && (
+            <div className="pointer-events-none fixed inset-0 z-40 overflow-hidden animate-in fade-in-0 duration-500">
+              {/* Oversized + blurred so the radial gradient reads as a smooth blend —
+                  the blur dithers out the 8-bit colour banding; the oversize + clip
+                  keep it from fading at the screen edges. */}
+              <div
+                className="absolute"
+                style={{
+                  inset: '-25%',
+                  background:
+                    'radial-gradient(ellipse at center, transparent 8%, rgba(0,0,0,0.72) 100%)',
+                  filter: 'blur(60px)',
+                }}
+              />
+            </div>
+          )}
+          {/* Result feed area (feed + expanded/theater overlay) */}
+          <div className="relative flex-1 min-h-0">
+            {/* Result feed — oldest at top, newest at the bottom (just above the composer) */}
+            <div ref={feedRef} className="absolute inset-0 overflow-y-auto px-2 scrollbar-thin scrollbar-thumb-white/15 scrollbar-track-transparent">
+              <div className="min-h-full w-full max-w-3xl mx-auto flex flex-col justify-end gap-4 py-3">
+                {[...history].reverse().map((item) => (
+                  <div key={item.id} data-card-id={item.id}>
+                    <VideoResultCard
+                      item={item as any}
+                      now={Date.now()}
+                      focused={focusedId === null || focusedId === item.id}
+                      onDownload={(it) => handleDownloadVideo(it.video)}
+                      onShare={(it) => handleShareVideo(it.video)}
+                      onRegenerate={(it) => handleRegenerateVideo(it)}
+                      onToggleFavorite={(it) => handleToggleFavorite(it)}
+                      onDelete={(it) => handleDeleteVideo(it)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Expand / collapse toggle — right side of the page, outside the video container */}
+            {(expandedId || focusedId) && history.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (expandedId) { setExpandedId(null); return; }
+                  const el = focusedId ? document.querySelector(`[data-card-id="${focusedId}"]`) : null;
+                  setOriginRect(el ? el.getBoundingClientRect() : null);
+                  setExpandedId(focusedId);
+                }}
+                title={expandedId ? 'Close theater' : 'Expand video'}
+                className="absolute top-3 right-3 z-[60] w-9 h-9 flex items-center justify-center rounded-lg bg-black/40 border border-white/10 text-white/70 hover:bg-black/60 hover:text-white transition-colors"
+              >
+                {expandedId ? <Minimize size={16} /> : <Maximize size={16} />}
+              </button>
+            )}
+
+            {/* Expanded (theater) view — scrollable reel of videos over the feed; composer stays below */}
+            {expandedId && (() => {
+              const reelItems = [...history]; // newest first → newest is the focus, older ones above
+              if (!reelItems.some((h) => h.id === expandedId)) return null;
+              return (
+                <>
+                  {/* Background (z-30) sits BELOW the vignette (z-40) and fades in. */}
+                  <div className="absolute inset-0 z-30 bg-[var(--primary-bg)] animate-in fade-in-0 duration-500" />
+                  {/* Reel/card (z-50) rides ABOVE the vignette, so the card is never
+                      darkened by it while it travels from the feed card's position. */}
+                  <div className="absolute inset-0 z-50 overflow-hidden">
+                    <VideoExpandedReel
+                      items={reelItems as any}
+                      activeId={expandedId}
+                      originRect={originRect}
+                      now={Date.now()}
+                      onActiveChange={(id) => { setExpandedId(id); setFocusedId(id); }}
+                      onDownload={(it) => handleDownloadVideo(it.video)}
+                      onShare={(it) => handleShareVideo(it.video)}
+                      onRegenerate={(it) => handleRegenerateVideo(it)}
+                      onToggleFavorite={(it) => handleToggleFavorite(it)}
+                      onDelete={(it) => handleDeleteVideo(it)}
+                    />
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Bottom prompt bar (Dreamina-style floating composer) — sits above the
+              vignette so the prompt input stays clear while the page edges darken. */}
+          <div className="relative z-50 w-full flex-none px-2 pb-1">
+            <div className="relative w-full max-w-3xl mx-auto bg-[#141414]/85 backdrop-blur-xl border border-white/10 rounded-2xl px-2.5 pt-4 pb-2.5">
               
               {/* (model selector moved to the bottom toolbar) */}
               
@@ -1421,8 +1652,8 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                   className="hidden"
                 />
 
-                {/* Reference images — tilted stacked pile that fans out on hover (Dreamina) */}
-                <div className="flex items-center gap-2 mb-2">
+                {/* Reference images row + settings (⚙ right-aligned, reveals controls above) */}
+                <div className="relative flex items-center gap-2 mb-5">
                   {uploadedReferences.length > 0 && (
                     <div
                       className="relative flex-shrink-0"
@@ -1469,7 +1700,7 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                               disabled={isGenerating}
                               title="Remove reference"
                               style={{ transform: `rotate(${-rot}deg)` }}
-                              className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center bg-black/80 border border-white/30 text-white/80 opacity-0 group-hover/ref:opacity-100 hover:bg-red-600/80 transition-all z-10"
+                              className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center bg-black/80 border border-white/30 text-white/80 opacity-0 group-hover/ref:opacity-100 hover:bg-white/40 transition-all z-10"
                             >
                               <X size={9} strokeWidth={2.5} />
                             </button>
@@ -1567,7 +1798,7 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                     transformOrigin: 'bottom center',
                     transition: 'opacity 0.3s cubic-bezier(0.16,0.84,0.3,1), transform 0.3s cubic-bezier(0.16,0.84,0.3,1)',
                   }}
-                  className="absolute bottom-full mb-2 left-0 right-0 mx-auto max-w-3xl bg-[#141414]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-2xl shadow-black/50 max-h-[58vh] overflow-y-auto z-40 space-y-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
+                  className="absolute bottom-full mb-2 left-0 right-0 mx-auto max-w-3xl bg-[#141414]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-3 max-h-[58vh] overflow-y-auto z-40 space-y-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
                 >
 
               {/* Negative prompt for compatible models */}
@@ -1596,19 +1827,19 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                       <>
                         <span className="text-white/90 font-medium">~150 credits</span>
                         <span className="text-white/50 ml-1">per video</span>
-                        <div className="text-emerald-400 text-[10px] mt-0.5">Advanced T2V</div>
+                        <div className="text-white/70 text-[10px] mt-0.5">Advanced T2V</div>
                       </>
                     ) : selectedModel.includes('veo2') ? (
                       <>
                         <span className="text-white/90 font-medium">~200 credits</span>
                         <span className="text-white/50 ml-1">per video</span>
-                        <div className="text-purple-400 text-[10px] mt-0.5">Premium quality</div>
+                        <div className="text-white/70 text-[10px] mt-0.5">Premium quality</div>
                       </>
                     ) : selectedModel.includes('minimax') || selectedModel.includes('hailuo') ? (
                       <>
                         <span className="text-white/90 font-medium">~100 credits</span>
                         <span className="text-white/50 ml-1">per video</span>
-                        <div className="text-purple-400 text-[10px] mt-0.5">
+                        <div className="text-white/70 text-[10px] mt-0.5">
                           {selectedModel.includes('hailuo') ? 'Mixed mode' : 'Fast generation'}
                         </div>
                       </>
@@ -1616,25 +1847,25 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                       <>
                         <span className="text-white/90 font-medium">~120 credits</span>
                         <span className="text-white/50 ml-1">per video</span>
-                        <div className="text-amber-400 text-[10px] mt-0.5">Quality focused</div>
+                        <div className="text-white/70 text-[10px] mt-0.5">Quality focused</div>
                       </>
                     ) : selectedModel.includes('luma') ? (
                       <>
                         <span className="text-white/90 font-medium">~180 credits</span>
                         <span className="text-white/50 ml-1">per video</span>
-                        <div className="text-rose-400 text-[10px] mt-0.5">High-resolution</div>
+                        <div className="text-white/70 text-[10px] mt-0.5">High-resolution</div>
                       </>
                     ) : selectedModel.includes('pika') ? (
                       <>
                         <span className="text-white/90 font-medium">~130 credits</span>
                         <span className="text-white/50 ml-1">per video</span>
-                        <div className="text-sky-400 text-[10px] mt-0.5">Motion quality</div>
+                        <div className="text-white/70 text-[10px] mt-0.5">Motion quality</div>
                       </>
                     ) : selectedModel.includes('kling') ? (
                       <>
                         <span className="text-white/90 font-medium">~160 credits</span>
                         <span className="text-white/50 ml-1">per video</span>
-                        <div className="text-indigo-400 text-[10px] mt-0.5">Image-to-video</div>
+                        <div className="text-white/70 text-[10px] mt-0.5">Image-to-video</div>
                       </>
                     ) : (
                       <>
@@ -1737,7 +1968,7 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                     <span className="text-white/70 text-xs">Seed</span>
                     <button 
                       onClick={() => setSeed(Math.floor(Math.random() * 1000000))}
-                      className="text-xs text-blue-400 hover:text-blue-300"
+                      className="text-xs text-white/70 hover:text-white/70"
                       disabled={isGenerating}
                     >
                       Random
@@ -1763,7 +1994,7 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                       <label htmlFor="promptOptimizerToggle" className="text-white/70 text-xs flex-grow cursor-pointer">Prompt Optimizer</label>
                       <div className="relative inline-block w-8 align-middle select-none flex-shrink-0">
                         <input type="checkbox" id="promptOptimizerToggle" checked={promptOptimizer} onChange={(e) => setPromptOptimizer(e.target.checked)} className="sr-only peer" disabled={isGenerating} />
-                        <div className="block h-4 bg-black/50 rounded-full w-8 peer-checked:bg-blue-600 transition duration-150 ease-in-out"></div>
+                        <div className="block h-4 bg-black/50 rounded-full w-8 peer-checked:bg-white/15 transition duration-150 ease-in-out"></div>
                         <div className="absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white transition transform peer-checked:translate-x-4 duration-150 ease-in-out"></div>
                       </div>
                     </div>
@@ -1773,7 +2004,7 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                       <label htmlFor="loopVideoToggle" className="text-white/70 text-xs flex-grow cursor-pointer">Loop Video</label>
                       <div className="relative inline-block w-8 align-middle select-none flex-shrink-0">
                         <input type="checkbox" id="loopVideoToggle" checked={loopVideo} onChange={(e) => setLoopVideo(e.target.checked)} className="sr-only peer" disabled={isGenerating} />
-                        <div className="block h-4 bg-black/50 rounded-full w-8 peer-checked:bg-blue-600 transition duration-150 ease-in-out"></div>
+                        <div className="block h-4 bg-black/50 rounded-full w-8 peer-checked:bg-white/15 transition duration-150 ease-in-out"></div>
                         <div className="absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white transition transform peer-checked:translate-x-4 duration-150 ease-in-out"></div>
                       </div>
                     </div>
@@ -1902,7 +2133,7 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                         <label htmlFor="hunyuanProModeToggle" className="text-white/70 text-xs flex-grow cursor-pointer">Pro Mode (55 steps)</label>
                         <div className="relative inline-block w-8 align-middle select-none flex-shrink-0">
                           <input type="checkbox" id="hunyuanProModeToggle" checked={hunyuanProMode} onChange={(e) => setHunyuanProMode(e.target.checked)} className="sr-only peer" disabled={isGenerating} />
-                          <div className="block h-4 bg-black/50 rounded-full w-8 peer-checked:bg-blue-600 transition duration-150 ease-in-out"></div>
+                          <div className="block h-4 bg-black/50 rounded-full w-8 peer-checked:bg-white/15 transition duration-150 ease-in-out"></div>
                           <div className="absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white transition transform peer-checked:translate-x-4 duration-150 ease-in-out"></div>
                         </div>
                       </div>
@@ -1911,7 +2142,7 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                         <label htmlFor="hunyuanSafetyToggle" className="text-white/70 text-xs flex-grow cursor-pointer">Safety Checker</label>
                         <div className="relative inline-block w-8 align-middle select-none flex-shrink-0">
                           <input type="checkbox" id="hunyuanSafetyToggle" checked={hunyuanEnableSafetyChecker} onChange={(e) => setHunyuanEnableSafetyChecker(e.target.checked)} className="sr-only peer" disabled={isGenerating} />
-                          <div className="block h-4 bg-black/50 rounded-full w-8 peer-checked:bg-blue-600 transition duration-150 ease-in-out"></div>
+                          <div className="block h-4 bg-black/50 rounded-full w-8 peer-checked:bg-white/15 transition duration-150 ease-in-out"></div>
                           <div className="absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white transition transform peer-checked:translate-x-4 duration-150 ease-in-out"></div>
                         </div>
                       </div>
@@ -1995,7 +2226,7 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                         <label htmlFor="lumaLoopToggle" className="text-white/70 text-xs flex-grow cursor-pointer">Seamless Loop</label>
                         <div className="relative inline-block w-8 align-middle select-none flex-shrink-0">
                           <input type="checkbox" id="lumaLoopToggle" checked={lumaLoop} onChange={(e) => setLumaLoop(e.target.checked)} className="sr-only peer" disabled={isGenerating} />
-                          <div className="block h-4 bg-black/50 rounded-full w-8 peer-checked:bg-blue-600 transition duration-150 ease-in-out"></div>
+                          <div className="block h-4 bg-black/50 rounded-full w-8 peer-checked:bg-white/15 transition duration-150 ease-in-out"></div>
                           <div className="absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white transition transform peer-checked:translate-x-4 duration-150 ease-in-out"></div>
                         </div>
                       </div>
@@ -2173,73 +2404,60 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                 </div>
               )}
 
-              {/* Bottom toolbar — Dreamina pill arrangement: model · aspect · duration · settings · generate */}
+              {/* Bottom toolbar (V2) — model · credits · generate (the rest live in the top settings reveal) */}
               <div className="flex items-center gap-2 mt-2">
-                {/* Model pill (compact) */}
-                <div className="flex-shrink-0 w-36 relative">
+                {/* Model pill (compact) — fades out while the settings reveal is open */}
+                <div
+                  className="flex-shrink-0 w-36 relative"
+                  style={{
+                    opacity: topControlsOpen ? 0 : 1,
+                    pointerEvents: topControlsOpen ? 'none' : 'auto',
+                    transition: `opacity 0.2s ${REF_EASE}`,
+                  }}
+                >
                   <ModelSelector selectedModel={selectedModel} onChange={setSelectedModel} disabled={isGenerating} />
                 </div>
 
-                {/* Reference mode select */}
-                <ToolbarSelect
-                  icon={<Wand2 size={13} className="text-white/50" />}
-                  value={referenceMode}
-                  onChange={setReferenceMode}
-                  disabled={isGenerating}
-                  title="Reference mode"
-                  options={[
-                    { value: 'omni', label: 'Omni reference' },
-                    { value: 'image', label: 'Image reference' },
-                    { value: 'style', label: 'Style reference' },
-                    { value: 'character', label: 'Character reference' },
-                  ]}
-                />
-
-                {/* Aspect ratio select */}
-                <ToolbarSelect
-                  icon={<Maximize size={13} className="text-white/50" />}
-                  value={aspectRatio}
-                  onChange={setAspectRatio}
-                  disabled={isGenerating}
-                  title="Aspect ratio"
-                  options={[
-                    { value: '16:9', label: '16:9' },
-                    { value: '9:16', label: '9:16' },
-                    { value: '1:1', label: '1:1' },
-                  ]}
-                />
-
-                {/* Duration select */}
-                <ToolbarSelect
-                  icon={<Clock size={13} className="text-white/50" />}
-                  value={String(duration)}
-                  onChange={(v) => setDuration(parseInt(v, 10))}
-                  disabled={isGenerating}
-                  title="Duration"
-                  options={[
-                    { value: '3', label: '3s' },
-                    { value: '4', label: '4s' },
-                    { value: '5', label: '5s' },
-                  ]}
-                />
-
-                {/* Number of videos select */}
-                <ToolbarSelect
-                  icon={<Film size={13} className="text-white/50" />}
-                  value={String(numGenerations)}
-                  onChange={(v) => setNumGenerations(parseInt(v, 10))}
-                  disabled={isGenerating}
-                  title="Number of videos"
-                  options={[
-                    { value: '1', label: '1 video' },
-                    { value: '2', label: '2 videos' },
-                    { value: '3', label: '3 videos' },
-                    { value: '4', label: '4 videos' },
-                  ]}
-                />
-
-                {/* Credit cost + Generate */}
+                {/* Settings (between model & credits) · Credit cost · Generate */}
                 <div className="ml-auto flex items-center gap-2.5 flex-shrink-0">
+                  {/* Settings — reveal pills emerge LEFT from behind the ⚙ (reverse on close) */}
+                  <div className="relative flex-shrink-0">
+                    <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 flex items-center gap-2 z-10">
+                      {[
+                        <ToolbarSelect key="aspect" icon={<Maximize size={13} className="text-white/50" />} value={aspectRatio} onChange={setAspectRatio} disabled={isGenerating} title="Aspect ratio" options={[{ value: '16:9', label: '16:9' }, { value: '9:16', label: '9:16' }, { value: '1:1', label: '1:1' }]} />,
+                        <ToolbarSelect key="duration" icon={<Clock size={13} className="text-white/50" />} value={String(duration)} onChange={(v) => setDuration(parseInt(v, 10))} disabled={isGenerating} title="Duration" options={[{ value: '3', label: '3s' }, { value: '4', label: '4s' }, { value: '5', label: '5s' }]} />,
+                        <ToolbarSelect key="number" icon={<Film size={13} className="text-white/50" />} value={String(numGenerations)} onChange={(v) => setNumGenerations(parseInt(v, 10))} disabled={isGenerating} title="Number of videos" options={[{ value: '1', label: '1 video' }, { value: '2', label: '2 videos' }, { value: '3', label: '3 videos' }, { value: '4', label: '4 videos' }]} />,
+                        <ToolbarSelect key="refmode" icon={<Wand2 size={13} className="text-white/50" />} value={referenceMode} onChange={setReferenceMode} disabled={isGenerating} title="Reference mode" options={[{ value: 'omni', label: 'Omni reference' }, { value: 'image', label: 'Image reference' }, { value: 'style', label: 'Style reference' }, { value: 'character', label: 'Character reference' }]} />,
+                      ].map((ctrl, i, arr) => {
+                        const n = arr.length;
+                        // open → emerge from behind ⚙, rightmost (nearest ⚙) first; close → reverse
+                        const delay = topControlsOpen ? (n - 1 - i) * 45 : i * 45;
+                        return (
+                          <div
+                            key={i}
+                            style={{
+                              opacity: topControlsOpen ? 1 : 0,
+                              transform: topControlsOpen ? 'translateX(0) scale(1)' : 'translateX(24px) scale(0.9)',
+                              transition: `opacity 0.22s ${REF_EASE}, transform 0.22s ${REF_EASE}`,
+                              transitionDelay: `${delay}ms`,
+                              pointerEvents: topControlsOpen ? 'auto' : 'none',
+                            }}
+                          >
+                            {ctrl}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTopControlsOpen((o) => !o)}
+                      title="Settings"
+                      className={`relative z-20 w-9 h-9 flex items-center justify-center rounded-lg border transition-colors ${topControlsOpen ? 'bg-white/15 border-white/25 text-white' : 'bg-black/30 border-white/10 text-white/60 hover:text-white/90'}`}
+                    >
+                      <Settings size={15} />
+                    </button>
+                  </div>
+
                   <div className="flex items-center gap-1 text-xs" title="Estimated credit cost">
                     <img src="/xeno-credits-icon.svg" alt="" className="w-5 h-5 object-contain" />
                     <span className="font-medium text-white/85">{creditCostPerVideo(selectedModel) * numGenerations}</span>
@@ -2247,184 +2465,21 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
                   <button
                     onClick={handleGenerate}
                     disabled={isGenerating || !prompt.trim() || (selectedMode === 'image-to-video' && !inputImage)}
-                    className={`h-9 px-4 rounded-lg flex items-center justify-center text-xs font-medium transition-colors ${
+                    className={`h-9 w-[116px] rounded-lg flex items-center justify-center text-xs font-medium transition-colors ${
                       isGenerating
-                        ? 'bg-[#a760ff]/40 text-white/70 cursor-not-allowed'
+                        ? 'bg-white/20 text-white/70 cursor-not-allowed'
                         : prompt.trim() && (selectedMode !== 'image-to-video' || inputImage)
-                          ? 'bg-[#a760ff] text-white hover:bg-[#b06fff]'
+                          ? 'bg-white text-black hover:bg-white/90'
                           : 'bg-white/10 text-white/40 cursor-not-allowed'
                     }`}
                   >
                     {isGenerating ? (
-                      <><RotateCw size={14} className="mr-1.5 animate-spin" />Generating…</>
+                      <><RotateCw size={13} className="mr-1.5 animate-spin" />Generating…</>
                     ) : (
-                      <><Send size={14} className="mr-1.5" />Generate</>
+                      'Generate'
                     )}
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Right side - Preview & History */}
-          <div className="flex-1 min-h-0 px-2 flex flex-col">
-            {/* Container 1: Preview Area */} 
-             <div className="bg-[rgba(30,30,30,0.7)] border border-white/10 rounded-xl p-4 flex flex-col flex-1 min-h-0"
-                   style={{ minHeight: '320px' }}>
-              {/* Preview Controls (Top Right) */}
-              <div className="flex items-center justify-end mb-2 flex-shrink-0">
-                {previewVideos.length > 0 && (
-                  <div className="flex space-x-2">
-                    {/* Clear History Button */} 
-                     <button
-                      onClick={handleClearHistory}
-                      className="p-2 text-red-500/70 hover:text-red-500 hover:bg-red-900/20 rounded-lg transition-colors"
-                      title="Clear History"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                )}
-              </div>
-              
-              {/* Video display area */} 
-               <div className="flex-1 relative rounded-lg overflow-hidden bg-black/20 flex items-center justify-center">
-                {/* Video Container with Grid Layout for Multiple Videos */} 
-                 <div className="absolute inset-0 flex items-center justify-center">
-                  {isGenerating ? (
-                    <div className="text-center z-10 p-4">
-                       <div className="inline-block p-5 bg-blue-900/20 rounded-full shadow-lg mb-3">
-                         <RotateCw className="w-8 h-8 animate-spin text-blue-400" />
-                       </div>
-                       <div className="text-sm text-white/80 font-medium">Generating...</div>
-                    </div>
-                  ) : (
-                    previewVideos.length > 0 ? (
-                      <div className={`relative w-full h-full ${previewVideos.length > 1 ? 'grid grid-cols-2 gap-1' : ''}`}> 
-                         {previewVideos.map((videoUrl, index) => {
-                          const videoKey = `video-${index}`;
-                          const isVideoPlaying = isPlaying[videoKey] || false;
-                          return (
-                            <div key={videoKey} className="relative w-full h-full overflow-hidden border border-white/10 rounded-md group">
-                               <div className="w-full h-full flex items-center justify-center bg-black">
-                                <video 
-                                  src={videoUrl} 
-                                  controls={false}
-                                  autoPlay={false}
-                                  loop
-                                  muted
-                                  playsInline
-                                  className="max-w-full max-h-full object-contain"
-                                  ref={el => { 
-                                    if (el) {
-                                      if (isVideoPlaying) el.play().catch(e => console.error("Play error:", e));
-                                      else el.pause();
-                                    }
-                                  }}
-                                />
-                              </div>
-                               <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-                                <div className="flex items-center space-x-4">
-                                   <button 
-                                    className="p-3 bg-white/20 hover:bg-white/30 rounded-full text-white transition-colors"
-                                    onClick={() => setIsPlaying(prev => ({ ...prev, [videoKey]: !prev[videoKey] }))}
-                                    title={isVideoPlaying ? "Pause" : "Play"}
-                                  >
-                                    {isVideoPlaying ? <Pause size={20} /> : <Play size={20} />}
-                                  </button>
-                                </div>
-                              </div>
-                               <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/70 via-black/50 to-transparent z-20">
-                                <div className="flex justify-between items-center">
-                                   {previewVideos.length > 1 && (
-                                    <span className="text-[10px] bg-black/50 text-white/80 px-1.5 py-0.5 rounded">
-                                      {index + 1}/{previewVideos.length}
-                                    </span>
-                                  )}
-                                   <button 
-                                    className="p-1 bg-white/10 hover:bg-white/20 rounded-md text-white/70 hover:text-white transition-colors ml-auto" // Use ml-auto to push right
-                                    onClick={async () => { /* download logic */ 
-                                      try {
-                                        const response = await fetch(videoUrl);
-                                        const blob = await response.blob();
-                                        const url = window.URL.createObjectURL(blob);
-                                        const a = document.createElement('a');
-                                        a.style.display = 'none';
-                                        a.href = url;
-                                        const filename = videoUrl.split('/').pop() || `generated-video-${Date.now()}-${index}.mp4`;
-                                        a.download = filename;
-                                        document.body.appendChild(a);
-                                        a.click();
-                                        window.URL.revokeObjectURL(url);
-                                        document.body.removeChild(a);
-                                      } catch (error) {
-                                        console.error('Error downloading video:', error);
-                                        notifications.error('Failed to download video');
-                                      }
-                                    }}
-                                    title="Download Video"
-                                  >
-                                    <Download size={12} />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })} 
-                       </div>
-                    ) : (
-                       <div className="flex flex-col items-center text-center p-4">
-                        <Video size={64} className="mx-auto mb-4 text-white/20" /> 
-                         <p className="text-white/60">Video preview appears here</p>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            {/* Container 2: History Scrollable Area */} 
-             <div className="bg-[rgba(30,30,30,0.7)] border border-white/10 rounded-xl p-2 mt-2 overflow-hidden flex flex-col"
-                   style={{ height: '120px', minHeight: '120px' }}>
-               <div className="text-xs text-white/60 mb-1 px-1">Recent Generations</div>
-               <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-                 <div className="flex space-x-2 h-full pb-1">
-                   {history.length > 0 ? (
-                     history.map((item) => (
-                      <div 
-                        key={item.id}
-                        className={`relative flex-shrink-0 h-full aspect-video border rounded-lg overflow-hidden cursor-pointer group ${previewVideos.includes(item.video) ? 'border-blue-500 border-2' : 'border-white/10 hover:border-white/30'}`}
-                        onClick={() => {
-                          // Set this video as the current preview(s)
-                           setSelectedVideo(item.video); // Keep for potential single-view logic
-                           setPreviewVideos([item.video]); // Show only this one in preview
-                          // Reset and play only this video
-                           setIsPlaying({ [`video-0`]: true }); 
-                         }}
-                        title={`Preview: ${item.prompt}`}
-                      >
-                         <video 
-                          src={item.video}
-                          className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                          muted
-                          preload="metadata" // Load only metadata for thumbnail
-                         />
-                         <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Play size={24} className="text-white/80" />
-                        </div>
-                         {/* Optional: Show model/duration */} 
-                         <span className="absolute bottom-1 left-1 bg-black/70 text-white/80 text-[9px] px-1 py-0.5 rounded">
-                          {item.metadata?.model ? item.metadata.model.split('/').pop().substring(0,15) : 'Video'}
-                           {item.metadata?.duration ? ` ${item.metadata.duration}s` : ''}
-                         </span>
-                      </div>
-                     ))
-                   ) : (
-                     <div className="flex items-center justify-center w-full h-full text-white/50 text-sm">
-                      <p>History will appear here</p>
-                    </div>
-                   )}
-                 </div>
               </div>
             </div>
           </div>
@@ -2437,4 +2492,4 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
   );
 };
 
-export default VideoGenerationInterface;
+export default VideoGenerationInterface2;
