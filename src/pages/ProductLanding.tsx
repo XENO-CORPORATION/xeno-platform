@@ -64,7 +64,22 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
   const [releases, setReleases] = useState<Release[]>([]);
   const [copied, setCopied] = useState(false);
   const [accent, setAccent] = useState(initAccent);
+  const [themeOpen, setThemeOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('theme') === 'open';
+  });
   useEffect(() => { try { localStorage.setItem('xeno-accent', accent); } catch { /* ignore */ } }, [accent]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName ?? '';
+      if (e.shiftKey && (e.key === 'T' || e.key === 't') && !/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) {
+        e.preventDefault();
+        setThemeOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const os = detectOS();
 
   useEffect(() => {
@@ -379,19 +394,27 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
       <Footer />
 
-      {/* Accent theme switcher — pick the interface color */}
-      <div className="fixed bottom-5 right-5 z-[60] flex items-center gap-2 rounded-full border border-white/[0.12] bg-black/70 px-3 py-2 backdrop-blur-md">
-        <span className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-[#69635b]">Theme</span>
-        {ACCENTS.map((a) => (
+      {/* Accent switcher — Shift+T (or click the dot) fans the colors in from the corner */}
+      <div className="fixed bottom-5 right-5 z-[60] flex items-center gap-2.5">
+        {ACCENTS.map((a, i) => (
           <button
             key={a.id}
             type="button"
             onClick={() => setAccent(a.id)}
             aria-label={`${a.id} accent`}
-            className={`h-5 w-5 rounded-full border transition-transform ${accent === a.id ? 'scale-110 border-white/70' : 'border-white/20 hover:scale-105'}`}
-            style={{ background: `rgb(${a.rgb})` }}
+            className={`h-6 w-6 rounded-full border transition-all duration-300 ease-out ${accent === a.id ? 'border-white/80 ring-2 ring-white/30 ring-offset-2 ring-offset-[#060606]' : 'border-white/25 hover:brightness-125'} ${themeOpen ? 'translate-x-0 scale-100 opacity-100' : 'pointer-events-none translate-x-[56px] scale-50 opacity-0'}`}
+            style={{ background: `rgb(${a.rgb})`, transitionDelay: `${(themeOpen ? i : ACCENTS.length - 1 - i) * 70}ms` }}
           />
         ))}
+        <button
+          type="button"
+          onClick={() => setThemeOpen((v) => !v)}
+          aria-label="Theme colors (Shift+T)"
+          title="Theme — Shift+T"
+          className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/20 bg-black/60 backdrop-blur-md transition-all duration-300 hover:border-white/40 ${themeOpen ? 'rotate-90' : ''}`}
+        >
+          <span className="h-3 w-3 rounded-full" style={{ background: 'rgb(var(--acc))' }} />
+        </button>
       </div>
     </div>
   );
