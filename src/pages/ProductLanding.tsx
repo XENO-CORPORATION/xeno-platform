@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, ArrowUpRight, ArrowRight, Download, Bell, Check, Copy, Terminal, Github, Minus,
   MessageSquare, Sparkles, ShieldCheck, MonitorSmartphone, Users, Bot, Lock, Zap, Globe, Boxes, ChevronDown,
+  GitBranch, Cpu, Layers, Blocks,
 } from 'lucide-react';
 import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
@@ -26,6 +27,7 @@ const OS_NAME: Record<OS, string> = { windows: 'Windows', mac: 'macOS', linux: '
 /* lucide icons referenced by name from content modules */
 const ICONS: Record<string, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
   MessageSquare, Sparkles, ShieldCheck, MonitorSmartphone, Users, Bot, Lock, Zap, Globe, Boxes,
+  Terminal, GitBranch, Cpu, Layers, Blocks,
 };
 
 function StatusPill({ status }: { status: Product['status'] }) {
