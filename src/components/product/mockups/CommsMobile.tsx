@@ -5,10 +5,10 @@ import { Sparkles, ChevronLeft, Phone, Video, Plus, Smile, Mic, CheckCheck } fro
  * Hand-built real UI in the landing-v3 language, no AI-generated imagery.
  * A phone frame centered on a dark panel so it sits cleanly in the gallery grid. */
 
-const V = '#9f6fff';
+const V = 'rgb(var(--acc))';
 
 const CommsMobile: React.FC = () => (
-  <div className="flex w-full items-center justify-center rounded-[16px] border border-white/[0.07] bg-[radial-gradient(ellipse_70%_60%_at_50%_20%,rgba(159,111,255,0.10),transparent_70%),#0a0a0b] py-8">
+  <div className="flex w-full items-center justify-center rounded-[16px] border border-white/[0.07] py-8" style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 20%, rgb(var(--acc) / 0.10), transparent 70%), #0a0a0b' }}>
     {/* phone */}
     <div className="w-[248px] overflow-hidden rounded-[30px] border border-white/[0.10] bg-[#0d0d0f] p-1.5 shadow-[0_40px_90px_-30px_rgba(0,0,0,0.9)]">
       <div className="overflow-hidden rounded-[24px] border border-white/[0.06] bg-[#0d0d0f]">
@@ -36,9 +36,9 @@ const CommsMobile: React.FC = () => (
             <span className="mt-0.5 flex items-center justify-end gap-1 text-[8px] text-[#69635b]">9:41 <CheckCheck className="h-2.5 w-2.5 text-[#aaa39a]" /></span>
           </div>
           <div className="flex items-end gap-1.5 self-start">
-            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-[6px] border border-[#9f6fff]/40 bg-[#9f6fff]/[0.12] text-[#c4a6ff]"><Sparkles className="h-2.5 w-2.5" /></span>
-            <div className="max-w-[80%] rounded-[12px] rounded-bl-[3px] border border-[#9f6fff]/25 bg-[#9f6fff]/[0.07] px-2.5 py-1.5 text-[11px] leading-snug text-[#aaa39a]">
-              <span className="font-medium text-[#c4a6ff]">Anima</span> summarized the 4 review threads ✓
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-[6px] border acc-bd40 acc-b12 acc-fg-hi"><Sparkles className="h-2.5 w-2.5" /></span>
+            <div className="max-w-[80%] rounded-[12px] rounded-bl-[3px] border acc-bd25 acc-b07 px-2.5 py-1.5 text-[11px] leading-snug text-[#aaa39a]">
+              <span className="font-medium acc-fg-hi">Anima</span> summarized the 4 review threads ✓
             </div>
           </div>
         </div>

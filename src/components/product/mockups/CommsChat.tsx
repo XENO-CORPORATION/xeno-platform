@@ -11,7 +11,7 @@ import { Reveal } from '../../landing-v3/primitives';
  * violet only for the AI agent / unread / send accents. Pure JSX/Tailwind so it
  * stays crisp and weightless. Mirrors apps/desktop/src/renderer in xeno-comms. */
 
-const V = '#9f6fff';
+const V = 'rgb(var(--acc))';
 
 function Avatar({ init, grad, size = 'h-7 w-7', online }: { init: string; grad: string; size?: string; online?: boolean }) {
   return (
@@ -22,7 +22,7 @@ function Avatar({ init, grad, size = 'h-7 w-7', online }: { init: string; grad: 
   );
 }
 function AgentAvatar({ size = 'h-7 w-7' }: { size?: string }) {
-  return <span className={`grid ${size} shrink-0 place-items-center rounded-[8px] border border-[#9f6fff]/40 bg-[#9f6fff]/[0.12] text-[#c4a6ff]`}><Sparkles className="h-3.5 w-3.5" /></span>;
+  return <span className={`grid ${size} shrink-0 place-items-center rounded-[8px] border acc-bd40 acc-b12 acc-fg-hi`}><Sparkles className="h-3.5 w-3.5" /></span>;
 }
 
 const GR = {
@@ -73,20 +73,20 @@ const CommsChat: React.FC = () => (
         </div>
         <div className="flex-1 space-y-0.5 overflow-hidden px-1.5">
           {rail.map((c) => (
-            <div key={c.name} className={`flex items-center gap-2.5 rounded-[8px] px-2 py-[7px] ${c.active ? 'bg-[#9f6fff]/[0.10]' : ''}`}>
+            <div key={c.name} className={`flex items-center gap-2.5 rounded-[8px] px-2 py-[7px] ${c.active ? 'acc-b10' : ''}`}>
               {c.kind === 'agent' ? <AgentAvatar />
                 : c.kind === 'channel'
-                  ? <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-[7px] ${c.active ? 'bg-[#9f6fff]/[0.16] text-[#c4a6ff]' : 'bg-white/[0.05] text-[#807970]'}`}><Hash className="h-3.5 w-3.5" /></span>
+                  ? <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-[7px] ${c.active ? 'acc-b16 acc-fg-hi' : 'bg-white/[0.05] text-[#807970]'}`}><Hash className="h-3.5 w-3.5" /></span>
                   : <Avatar init={c.init!} grad={c.grad!} online={c.online} />}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className={`truncate text-[12px] font-medium ${c.active ? 'text-[#f3efe8]' : 'text-[#d8d2ca]'}`}>{c.kind === 'channel' ? `# ${c.name}` : c.name}</span>
-                  {c.kind === 'agent' && <span className="rounded-[3px] bg-[#9f6fff]/20 px-1 text-[8px] font-bold uppercase text-[#c4a6ff]">AI</span>}
+                  {c.kind === 'agent' && <span className="rounded-[3px] acc-b20 px-1 text-[8px] font-bold uppercase acc-fg-hi">AI</span>}
                   {c.time && <span className="ml-auto shrink-0 text-[9px] text-[#5d5850]">{c.time}</span>}
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[10.5px] text-[#69635b]">{c.preview}</span>
-                  {c.unread ? <span className="ml-auto grid h-4 min-w-[16px] shrink-0 place-items-center rounded-full bg-[#9f6fff] px-1 text-[9px] font-bold text-white">{c.unread}</span> : null}
+                  {c.unread ? <span className="ml-auto grid h-4 min-w-[16px] shrink-0 place-items-center rounded-full acc-b px-1 text-[9px] font-bold text-white">{c.unread}</span> : null}
                 </div>
               </div>
             </div>
@@ -120,8 +120,8 @@ const CommsChat: React.FC = () => (
             <div className="flex items-start gap-2.5">
               <AgentAvatar size="h-6 w-6" />
               <div className="min-w-0">
-                <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">AI Analyst</span><span className="rounded-[3px] bg-[#9f6fff]/20 px-1 text-[8px] font-bold uppercase text-[#c4a6ff]">AI</span><span className="text-[9.5px] text-[#5d5850]">9:42 AM</span></div>
-                <div className="mt-1 max-w-[400px] rounded-[10px] rounded-tl-[3px] border border-[#9f6fff]/30 bg-[#9f6fff]/[0.06] px-3 py-2.5">
+                <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">AI Analyst</span><span className="rounded-[3px] acc-b20 px-1 text-[8px] font-bold uppercase acc-fg-hi">AI</span><span className="text-[9.5px] text-[#5d5850]">9:42 AM</span></div>
+                <div className="mt-1 max-w-[400px] rounded-[10px] rounded-tl-[3px] border acc-bd30 acc-b06 px-3 py-2.5">
                   <p className="text-[12px] leading-snug text-[#d8d2ca]">The launch is on track. Quick summary:</p>
                   <ul className="mt-1.5 space-y-1 text-[11.5px] text-[#aaa39a]">
                     <li className="flex gap-1.5"><span style={{ color: V }}>•</span> Market opportunity: $12.4B (28% YoY)</li>
@@ -155,7 +155,7 @@ const CommsChat: React.FC = () => (
               <Avatar init="AL" grad={GR.amanda} online size="h-6 w-6" />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">Amanda Lee</span><span className="text-[9.5px] text-[#5d5850]">9:44 AM</span><CheckCheck className="h-3 w-3 text-[#69635b]" /></div>
-                <p className="mt-1 text-[12px] leading-snug text-[#aaa39a]">Perfect. Let’s sync with <span className="rounded-[3px] bg-[#9f6fff]/15 px-1 font-medium text-[#c4a6ff]">@Dev&nbsp;Team</span> on the timeline.</p>
+                <p className="mt-1 text-[12px] leading-snug text-[#aaa39a]">Perfect. Let’s sync with <span className="rounded-[3px] acc-b15 px-1 font-medium acc-fg-hi">@Dev&nbsp;Team</span> on the timeline.</p>
               </div>
             </div>
           </Reveal>

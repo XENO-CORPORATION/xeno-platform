@@ -1114,3 +1114,28 @@ dialog select,
 .animate-slide-out-left {
   animation: slideOutLeft 0.25s ease-in forwards;
 }
+
+/* ── Product-page accent themes (toggleable) ─────────────────────────────
+ * One switch (data-accent on the ProductLanding root) recolors the whole page.
+ * :root default = violet so the rest of the site is unaffected. */
+:root { --acc: 159 111 255; --acc-hi: 196 166 255; }
+[data-accent="violet"] { --acc: 159 111 255; --acc-hi: 196 166 255; }
+[data-accent="amber"]  { --acc: 245 176 70;  --acc-hi: 250 206 130; }
+[data-accent="blue"]   { --acc: 56 168 255;  --acc-hi: 150 205 255; }
+[data-accent="green"]  { --acc: 45 212 149;  --acc-hi: 122 236 180; }
+
+.acc-fg    { color: rgb(var(--acc)); }
+.acc-fg-hi { color: rgb(var(--acc-hi)); }
+.acc-b     { background-color: rgb(var(--acc)); }
+.acc-b06   { background-color: rgb(var(--acc) / 0.06); }
+.acc-b07   { background-color: rgb(var(--acc) / 0.07); }
+.acc-b10   { background-color: rgb(var(--acc) / 0.10); }
+.acc-b12   { background-color: rgb(var(--acc) / 0.12); }
+.acc-b15   { background-color: rgb(var(--acc) / 0.15); }
+.acc-b16   { background-color: rgb(var(--acc) / 0.16); }
+.acc-b20   { background-color: rgb(var(--acc) / 0.20); }
+.acc-bd    { border-color: rgb(var(--acc)); }
+.acc-bd20  { border-color: rgb(var(--acc) / 0.20); }
+.acc-bd25  { border-color: rgb(var(--acc) / 0.25); }
+.acc-bd30  { border-color: rgb(var(--acc) / 0.30); }
+.acc-bd40  { border-color: rgb(var(--acc) / 0.40); }

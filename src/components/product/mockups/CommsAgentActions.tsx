@@ -5,14 +5,14 @@ import { Sparkles, CheckCheck, Smile, AtSign, Plus, SendHorizontal, UserPlus, Pe
  * actionable next steps (assign / draft / schedule). Hand-built real UI in the
  * landing-v3 language (no AI-generated imagery). Landscape, pairs with CommsMobile. */
 
-const V = '#9f6fff';
+const V = 'rgb(var(--acc))';
 const Avatar = ({ init, grad, online }: { init: string; grad: string; online?: boolean }) => (
   <span className="relative shrink-0">
     <span className="grid h-6 w-6 place-items-center rounded-full text-[9px] font-semibold text-white/90" style={{ background: grad }}>{init}</span>
     {online && <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border-2 border-[#0d0d0f] bg-[#3fbf7f]" />}
   </span>
 );
-const Agent = () => <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] border border-[#9f6fff]/40 bg-[#9f6fff]/[0.12] text-[#c4a6ff]"><Sparkles className="h-3 w-3" /></span>;
+const Agent = () => <span className="grid h-6 w-6 shrink-0 place-items-center rounded-[7px] border acc-bd40 acc-b12 acc-fg-hi"><Sparkles className="h-3 w-3" /></span>;
 
 const actions = [
   { icon: UserPlus, label: 'Assign', hint: 'Choose owner' },
@@ -43,8 +43,8 @@ const CommsAgentActions: React.FC = () => (
       <div className="flex items-start gap-2.5">
         <Agent />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">XENO AI</span><span className="rounded-[3px] bg-[#9f6fff]/20 px-1 text-[8px] font-bold uppercase text-[#c4a6ff]">AI</span><span className="text-[9.5px] text-[#5d5850]">9:16 AM</span></div>
-          <div className="mt-1 grid gap-3 rounded-[10px] rounded-tl-[3px] border border-[#9f6fff]/30 bg-[#9f6fff]/[0.06] p-3 md:grid-cols-2">
+          <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">XENO AI</span><span className="rounded-[3px] acc-b20 px-1 text-[8px] font-bold uppercase acc-fg-hi">AI</span><span className="text-[9.5px] text-[#5d5850]">9:16 AM</span></div>
+          <div className="mt-1 grid gap-3 rounded-[10px] rounded-tl-[3px] border acc-bd30 acc-b06 p-3 md:grid-cols-2">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#827b71]">Summary</div>
               <ul className="mt-1.5 space-y-1 text-[11.5px] text-[#aaa39a]">
@@ -58,7 +58,7 @@ const CommsAgentActions: React.FC = () => (
               <div className="mt-1.5 space-y-1.5">
                 {actions.map((a) => (
                   <div key={a.label} className="flex items-center justify-between rounded-[7px] border border-white/[0.07] bg-white/[0.02] px-2.5 py-1.5">
-                    <span className="flex items-center gap-2 text-[11.5px] text-[#d8d2ca]"><a.icon className="h-3.5 w-3.5 text-[#c4a6ff]" />{a.label}</span>
+                    <span className="flex items-center gap-2 text-[11.5px] text-[#d8d2ca]"><a.icon className="h-3.5 w-3.5 acc-fg-hi" />{a.label}</span>
                     <span className="flex items-center gap-1 text-[10px] text-[#69635b]">{a.hint}<ChevronRight className="h-3 w-3" /></span>
                   </div>
                 ))}
@@ -72,7 +72,7 @@ const CommsAgentActions: React.FC = () => (
         <Avatar init="JO" grad="linear-gradient(135deg,#5b7fb0,#33486b)" online />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5"><span className="text-[11px] font-semibold text-[#cdc7be]">Jordan</span><span className="text-[9.5px] text-[#5d5850]">9:18 AM</span><CheckCheck className="h-3 w-3 text-[#69635b]" /></div>
-          <p className="mt-1 text-[12px] leading-snug text-[#aaa39a]">Looks good — assign it to <span className="rounded-[3px] bg-[#9f6fff]/15 px-1 font-medium text-[#c4a6ff]">@Maya</span> and schedule the kickoff.</p>
+          <p className="mt-1 text-[12px] leading-snug text-[#aaa39a]">Looks good — assign it to <span className="rounded-[3px] acc-b15 px-1 font-medium acc-fg-hi">@Maya</span> and schedule the kickoff.</p>
         </div>
       </div>
     </div>

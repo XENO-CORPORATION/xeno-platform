@@ -122,7 +122,7 @@ export function Eyebrow({ children, className = '' }: { children: React.ReactNod
       )}
       style={{ color: T.label }}
     >
-      <span className="h-1.5 w-1.5 rounded-[2px]" style={{ backgroundColor: T.accent }} />
+      <span className="h-1.5 w-1.5 rounded-[2px]" style={{ backgroundColor: 'rgb(var(--acc))' }} />
       {children}
     </span>
   );

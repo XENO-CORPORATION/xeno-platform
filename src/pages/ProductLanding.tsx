@@ -46,10 +46,25 @@ function MediaView({ media }: { media: Media }) {
   return <img src={media.src} alt={media.alt} loading="lazy" className="w-full rounded-[12px] border border-white/[0.08]" />;
 }
 
+const ACCENTS = [
+  { id: 'violet', rgb: '159 111 255' },
+  { id: 'amber', rgb: '245 176 70' },
+  { id: 'blue', rgb: '56 168 255' },
+  { id: 'green', rgb: '45 212 149' },
+] as const;
+function initAccent(): string {
+  if (typeof window === 'undefined') return 'violet';
+  const p = new URLSearchParams(window.location.search).get('accent');
+  if (p && ACCENTS.some((a) => a.id === p)) return p;
+  try { return localStorage.getItem('xeno-accent') || 'violet'; } catch { return 'violet'; }
+}
+
 const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = ({ product, content }) => {
   const navigate = useNavigate();
   const [releases, setReleases] = useState<Release[]>([]);
   const [copied, setCopied] = useState(false);
+  const [accent, setAccent] = useState(initAccent);
+  useEffect(() => { try { localStorage.setItem('xeno-accent', accent); } catch { /* ignore */ } }, [accent]);
   const os = detectOS();
 
   useEffect(() => {
@@ -107,13 +122,13 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
   const SERIF = { fontFamily: "'Cormorant Garamond', 'Playfair Display', Georgia, serif", fontWeight: 400, letterSpacing: '0.01em' } as const;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
+    <div data-accent={accent} className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
       <Header onGetStarted={() => navigate('/auth')} visible={true} />
 
       <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────── */}
         <section className="px-[max(16px,1.1vw)] relative flex min-h-[80svh] items-center overflow-hidden pt-[clamp(76px,9vh,108px)] pb-[clamp(52px,7vh,88px)]">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-[64vh] bg-[radial-gradient(ellipse_60%_80%_at_60%_-4%,rgba(167,96,255,0.10),transparent_72%)]" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-[64vh]" style={{ background: 'radial-gradient(ellipse 60% 80% at 60% -4%, rgb(var(--acc) / 0.10), transparent 72%)' }} />
           <div className="relative mx-auto grid w-full max-w-[1340px] items-center gap-[clamp(32px,5vw,72px)] lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
             <div>
               <Reveal>
@@ -133,7 +148,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
               <Reveal delay={140}>
                 <div className="mt-6 flex items-center gap-2">
                   <span className="h-px w-[16%] min-w-[52px] bg-gradient-to-r from-white/40 via-white/20 to-transparent" />
-                  <span className="h-1.5 w-1.5 rounded-[2px]" style={{ backgroundColor: T.accent }} />
+                  <span className="h-1.5 w-1.5 rounded-[2px]" style={{ backgroundColor: 'rgb(var(--acc))' }} />
                 </div>
               </Reveal>
               <Reveal delay={160}>
@@ -341,7 +356,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
         <section className="px-[max(16px,1.1vw)] border-t border-white/[0.06] py-[clamp(72px,11vh,150px)]">
           <div className="mx-auto max-w-[900px]">
             <div className="relative overflow-hidden rounded-[20px] border border-white/[0.08] px-[clamp(28px,5vw,72px)] py-[clamp(40px,7vh,80px)] text-center">
-              <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 70% 120% at 50% -10%, rgba(167,96,255,0.14), transparent 70%), linear-gradient(180deg,#0c0a12,#070707 80%)' }} />
+              <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 70% 120% at 50% -10%, rgb(var(--acc) / 0.14), transparent 70%), linear-gradient(180deg,#0c0a12,#070707 80%)' }} />
               <div className="relative z-10">
                 <h2 className="text-[clamp(1.8rem,3vw,2.8rem)] leading-[1.08] text-[#f3efe8]" style={SERIF}>Get {product.name}.</h2>
                 <p className="mx-auto mt-4 max-w-[440px] text-[14.5px] leading-[1.6]" style={{ color: T.body }}>{content.hero.sub}</p>
@@ -363,6 +378,21 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
       </main>
 
       <Footer />
+
+      {/* Accent theme switcher — pick the interface color */}
+      <div className="fixed bottom-5 right-5 z-[60] flex items-center gap-2 rounded-full border border-white/[0.12] bg-black/70 px-3 py-2 backdrop-blur-md">
+        <span className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-[#69635b]">Theme</span>
+        {ACCENTS.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => setAccent(a.id)}
+            aria-label={`${a.id} accent`}
+            className={`h-5 w-5 rounded-full border transition-transform ${accent === a.id ? 'scale-110 border-white/70' : 'border-white/20 hover:scale-105'}`}
+            style={{ background: `rgb(${a.rgb})` }}
+          />
+        ))}
+      </div>
     </div>
   );
 };
