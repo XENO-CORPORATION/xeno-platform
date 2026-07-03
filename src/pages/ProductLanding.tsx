@@ -112,7 +112,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
       <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────── */}
-        <section className="px-[max(16px,1.1vw)] relative flex min-h-[88svh] items-center overflow-hidden pt-[clamp(88px,11vh,128px)] pb-[clamp(56px,8vh,96px)]">
+        <section className="px-[max(16px,1.1vw)] relative flex min-h-[80svh] items-center overflow-hidden pt-[clamp(76px,9vh,108px)] pb-[clamp(52px,7vh,88px)]">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[64vh] bg-[radial-gradient(ellipse_60%_80%_at_60%_-4%,rgba(167,96,255,0.10),transparent_72%)]" />
           <div className="relative mx-auto grid w-full max-w-[1340px] items-center gap-[clamp(32px,5vw,72px)] lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
             <div>
