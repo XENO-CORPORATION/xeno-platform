@@ -8,7 +8,7 @@ import { Sparkles, ChevronLeft, Phone, Video, Plus, Smile, Mic, CheckCheck } fro
 const V = 'rgb(var(--acc))';
 
 const CommsMobile: React.FC = () => (
-  <div className="flex w-full items-center justify-center rounded-[16px] border border-white/[0.07] py-8" style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 20%, rgb(var(--acc) / 0.10), transparent 70%), #0a0a0b' }}>
+  <div className="flex w-full items-center justify-center rounded-[16px] border border-white/[0.07] py-6" style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 20%, rgb(var(--acc) / 0.10), transparent 70%), #0a0a0b' }}>
     {/* phone */}
     <div className="w-[248px] overflow-hidden rounded-[30px] border border-white/[0.10] bg-[#0d0d0f] p-1.5 shadow-[0_40px_90px_-30px_rgba(0,0,0,0.9)]">
       <div className="overflow-hidden rounded-[24px] border border-white/[0.06] bg-[#0d0d0f]">
@@ -30,6 +30,7 @@ const CommsMobile: React.FC = () => (
         </div>
         {/* messages */}
         <div className="flex flex-col gap-2 px-3 py-3">
+          <div className="mx-auto rounded-full bg-white/[0.04] px-2.5 py-0.5 text-[8px] font-medium uppercase tracking-wide text-[#69635b]">Today</div>
           <div className="max-w-[82%] self-start rounded-[12px] rounded-bl-[3px] bg-white/[0.05] px-2.5 py-1.5 text-[11px] leading-snug text-[#aaa39a]">Can you review the new hero before standup?</div>
           <div className="max-w-[82%] self-end rounded-[12px] rounded-br-[3px] border border-white/[0.10] bg-white/[0.03] px-2.5 py-1.5 text-[11px] leading-snug text-[#cdc7be]">
             On it — adding the motion pass now.
@@ -40,6 +41,17 @@ const CommsMobile: React.FC = () => (
             <div className="max-w-[80%] rounded-[12px] rounded-bl-[3px] border acc-bd25 acc-b07 px-2.5 py-1.5 text-[11px] leading-snug text-[#aaa39a]">
               <span className="font-medium acc-fg-hi">Anima</span> summarized the 4 review threads ✓
             </div>
+          </div>
+          <div className="max-w-[82%] self-start rounded-[12px] rounded-bl-[3px] bg-white/[0.05] px-2.5 py-1.5 text-[11px] leading-snug text-[#aaa39a]">Nice — ping me when the build’s live 🙌</div>
+          <div className="max-w-[82%] self-end rounded-[12px] rounded-br-[3px] border border-white/[0.10] bg-white/[0.03] px-2.5 py-1.5 text-[11px] leading-snug text-[#cdc7be]">
+            It’s up now — take a look 👀
+            <span className="mt-0.5 flex items-center justify-end gap-1 text-[8px] text-[#69635b]">9:44 <CheckCheck className="h-2.5 w-2.5 acc-fg-hi" /></span>
+          </div>
+          <div className="flex items-end gap-1.5 self-start">
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[7px] font-semibold text-white/90" style={{ background: 'linear-gradient(135deg,#b8688f,#6d3f63)' }}>AV</span>
+            <span className="flex items-center gap-1 rounded-full bg-white/[0.05] px-2.5 py-2">
+              <span className="h-1 w-1 rounded-full bg-[#69635b]" /><span className="h-1 w-1 rounded-full bg-[#69635b]" /><span className="h-1 w-1 rounded-full bg-[#69635b]" />
+            </span>
           </div>
         </div>
         {/* composer */}
