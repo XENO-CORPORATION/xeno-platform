@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, ArrowUpRight, ArrowRight, Download, Bell, Check, Copy, Terminal, Github, Minus,
@@ -68,6 +68,8 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
     if (typeof window === 'undefined') return false;
     return new URLSearchParams(window.location.search).get('theme') === 'open';
   });
+  const openedOnce = useRef(false);
+  useEffect(() => { if (themeOpen) openedOnce.current = true; }, [themeOpen]);
   useEffect(() => { try { localStorage.setItem('xeno-accent', accent); } catch { /* ignore */ } }, [accent]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -394,19 +396,26 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
       <Footer />
 
-      {/* Accent switcher — fully hidden until Shift+T; colors rise from the bottom,
-       * right-aligned, one-by-one toward the left (scale + fade, smooth motion). */}
+      {/* Accent switcher — hidden until Shift+T. Reveal: colors rise from the bottom,
+       * right→left staggered (scale + fade). Dismiss: all slide out to the right together. */}
       <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex items-end gap-2.5">
-        {ACCENTS.map((a, i) => (
-          <button
-            key={a.id}
-            type="button"
-            onClick={() => setAccent(a.id)}
-            aria-label={`${a.id} accent`}
-            className={`h-6 w-6 rounded-full border transition-all duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${accent === a.id ? 'border-white/80 ring-2 ring-white/30 ring-offset-2 ring-offset-[#060606]' : 'border-white/25 hover:brightness-125'} ${themeOpen ? 'pointer-events-auto translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-7 scale-50 opacity-0'}`}
-            style={{ background: `rgb(${a.rgb})`, transitionDelay: `${(themeOpen ? ACCENTS.length - 1 - i : i) * 85}ms` }}
-          />
-        ))}
+        {ACCENTS.map((a, i) => {
+          const anim = themeOpen
+            ? `accRise 440ms cubic-bezier(0.22,1,0.36,1) ${(ACCENTS.length - 1 - i) * 85}ms both`
+            : openedOnce.current
+              ? 'accSlideOut 300ms cubic-bezier(0.4,0,1,1) both'
+              : undefined;
+          return (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => setAccent(a.id)}
+              aria-label={`${a.id} accent`}
+              className={`h-6 w-6 rounded-full border opacity-0 ${accent === a.id ? 'border-white/80 ring-2 ring-white/30 ring-offset-2 ring-offset-[#060606]' : 'border-white/25 hover:brightness-125'} ${themeOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
+              style={{ background: `rgb(${a.rgb})`, animation: anim }}
+            />
+          );
+        })}
       </div>
     </div>
   );

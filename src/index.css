@@ -1139,3 +1139,13 @@ dialog select,
 .acc-bd25  { border-color: rgb(var(--acc) / 0.25); }
 .acc-bd30  { border-color: rgb(var(--acc) / 0.30); }
 .acc-bd40  { border-color: rgb(var(--acc) / 0.40); }
+
+/* Accent switcher motion — reveal rises from the bottom (staggered), dismiss slides all out to the right. */
+@keyframes accRise {
+  from { transform: translateY(30px) scale(0.5); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes accSlideOut {
+  from { transform: translateX(0) scale(1); opacity: 1; }
+  to   { transform: translateX(72px) scale(0.85); opacity: 0; }
+}
