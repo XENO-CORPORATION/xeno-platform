@@ -1,5 +1,7 @@
 import React from 'react';
 import CommsChat from './CommsChat';
+import CommsAgentActions from './CommsAgentActions';
+import CommsMobile from './CommsMobile';
 
 /* Built-in product mockups — referenced from a content module's Media as
  * { type: 'mockup', src: '<key>' }. Lets a landing page ship a crisp, faithful
@@ -7,6 +9,8 @@ import CommsChat from './CommsChat';
  * here and reference it from src/content/products/<slug>.ts. */
 const MOCKUPS: Record<string, React.ComponentType> = {
   'comms-chat': CommsChat,
+  'comms-agent-actions': CommsAgentActions,
+  'comms-mobile': CommsMobile,
 };
 
 export function Mockup({ name }: { name: string }): React.ReactElement | null {
