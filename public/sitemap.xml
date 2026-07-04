@@ -149,27 +149,27 @@
 
   <!-- Agent CLI -->
   <url>
-    <loc>https://xenostudio.ai/products/agent-cli/</loc>
+    <loc>https://xenostudio.ai/product/agent-cli</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://xenostudio.ai/products/agent-cli/docs/</loc>
+    <loc>https://xenostudio.ai/product/agent-cli/docs</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://xenostudio.ai/products/agent-cli/docs/shortcuts/</loc>
+    <loc>https://xenostudio.ai/product/agent-cli/docs/shortcuts</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://xenostudio.ai/products/agent-cli/download/</loc>
+    <loc>https://xenostudio.ai/product/agent-cli/download</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://xenostudio.ai/products/agent-cli/release-notes/</loc>
+    <loc>https://xenostudio.ai/product/agent-cli/releases</loc>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
