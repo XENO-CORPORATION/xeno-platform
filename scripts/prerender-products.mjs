@@ -129,7 +129,7 @@ async function main() {
     urls.push(`/product/${p.slug}`);
     pages++;
 
-    if (p.delivery === 'desktop') {
+    if (p.delivery === 'desktop' || p.delivery === 'cli') {
       for (const [seg, label] of [['download', 'Download'], ['releases', 'Releases']]) {
         writePage(`product/${p.slug}/${seg}`, renderPage(template, p, headFor(p, {
           title: `${label} ${p.name}`,
