@@ -40,7 +40,7 @@ const AgentCliTerminal: React.FC = () => (
       <div className="space-y-[3px]">
         {/* banner */}
         <div className="mb-2 inline-block rounded-[6px] border border-white/[0.09] px-3 py-1.5">
-          <div><span className="font-bold" style={{ color: V }}>XENO AGENT</span> <span style={{ color: C.dim }}>v0.4.42</span></div>
+          <div><span className="font-bold" style={{ color: V }}>XENO AGENT</span> <span style={{ color: C.dim }}>v0.4.43</span></div>
           <div style={{ color: C.dim }}>claude-sonnet-4-6 · ~/acme-api · 3 skills · memory on</div>
         </div>
 

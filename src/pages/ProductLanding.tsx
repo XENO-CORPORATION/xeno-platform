@@ -335,7 +335,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
                 </div>
               ))}
             </div>
-            <p className="mx-auto mt-4 max-w-[760px] text-center text-[11.5px] text-[#5d5850]">Comparison reflects {product.name}’s current public test — we list where {content.comparison.competitor} still leads too.</p>
+            <p className="mx-auto mt-4 max-w-[760px] text-center text-[11.5px] text-[#5d5850]">Comparison reflects {product.name}’s current public test — we list where {content.comparison.competitor} still lead too.</p>
           </section>
         )}
 

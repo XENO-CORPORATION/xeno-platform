@@ -74,13 +74,13 @@ const agentCli: ProductContent = {
     { step: '3', title: 'Run xeno', desc: 'Chat, or xeno run "…" to let it plan, edit and execute — every step audited.' },
   ],
   comparison: {
-    competitor: 'Claude Code',
+    competitor: 'most AI coding CLIs',
     rows: [
       { feature: 'Terminal agent (read / edit / run)', xeno: true, them: true },
       { feature: 'Built-in planner/executor/reviewer delegation', xeno: true, them: 'Subagents' },
       { feature: 'JSONL audit ledger of every action', xeno: true, them: false },
       { feature: 'Local / offline models', xeno: 'Ollama + xeno-rt', them: false },
-      { feature: 'Multi-provider (Claude · GPT · Gemini · Kimi)', xeno: true, them: 'Anthropic' },
+      { feature: 'Multi-provider (Claude · GPT · Gemini · Kimi)', xeno: true, them: 'One provider' },
       { feature: 'MCP support', xeno: true, them: true },
       { feature: 'Maturity & ecosystem', xeno: 'Beta', them: true },
     ],
@@ -89,7 +89,7 @@ const agentCli: ProductContent = {
     { label: 'Install', value: 'npm -g / curl' },
     { label: 'Runtime', value: 'Node ≥ 20' },
     { label: 'Platforms', value: 'macOS · Linux · Windows' },
-    { label: 'Version', value: '0.4.42 · beta' },
+    { label: 'Version', value: '0.4.43 · beta' },
   ],
   faq: [
     { q: 'How do I install it?', a: 'npm install -g @xeno-corporation/xeno-agent-cli, or the curl / PowerShell one-liner. Then run `xeno`.' },

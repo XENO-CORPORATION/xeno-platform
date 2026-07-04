@@ -88,7 +88,7 @@ const comms: ProductContent = {
     { step: '3', title: 'Add an agent', desc: 'Invite an AI agent into the conversation to summarize, draft, and act.' },
   ],
   comparison: {
-    competitor: 'Slack',
+    competitor: 'most team chat apps',
     rows: [
       { feature: 'Real-time messaging, presence, receipts', xeno: true, them: true },
       { feature: 'AI agents as first-class members', xeno: true, them: 'Add-ons' },
