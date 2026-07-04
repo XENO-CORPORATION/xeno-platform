@@ -65,8 +65,8 @@ const products = [
     desc: 'Terminal AI agent for autonomous operations',
     sections: ['getting-started','installation','configuration','commands','tools','sessions','scripting','api'],
     shortcuts: [
-      { category: 'CLI Commands', items: [['xeno','Start interactive session'],['xeno run','Execute single command'],['xeno chat','Start chat mode'],['xeno config','Configuration'],['xeno models','List models'],['xeno status','Show status']] },
-      { category: 'Session', items: [['Ctrl+C','Cancel current operation'],['Ctrl+D','Exit session'],['Up/Down','Navigate history'],['Tab','Autocomplete']] },
+      { category: 'CLI Commands', items: [['xeno','Start interactive session'],['xeno run','Execute one-shot task'],['xeno chat','Start chat mode'],['xeno models --json','List live Xeno API models'],['xeno auth doctor','Check authentication'],['xeno agents --json','Inspect background agents'],['xeno hooks validate','Validate hook configuration']] },
+      { category: 'Session', items: [['Ctrl+C','Cancel current operation'],['Ctrl+D','Exit session'],['Up/Down','Navigate history'],['Tab','Autocomplete'],['Left / Down','Select background agent footer']] },
     ],
   },
   {
