@@ -14,6 +14,7 @@ import {
   fetchReleases, latestRelease, downloadLink, type Release, type Product,
 } from '../lib/productCatalog';
 import type { ProductContent, Media } from '../content/products/_types';
+import { getProductDocs } from '../content/docs';
 
 type OS = 'windows' | 'mac' | 'linux';
 function detectOS(): OS {
@@ -131,12 +132,20 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
     </>
   );
 
-  const Secondary = (product.delivery === 'desktop' || product.delivery === 'cli') ? (
-    <Link to={`/product/${product.slug}/${product.delivery === 'cli' ? 'releases' : 'download'}`}
-      className="inline-flex items-center gap-1.5 rounded-[6px] border border-white/[0.10] px-5 py-3 text-[13px] font-medium text-[#d8d2ca] transition-colors hover:border-white/25 hover:bg-white/[0.03]">
-      {product.delivery === 'cli' ? 'Release notes' : 'All platforms & versions'}
-    </Link>
-  ) : null;
+  const hasDocs = !!getProductDocs(product.slug);
+  const secondaryLink = 'inline-flex items-center gap-1.5 rounded-[6px] border border-white/[0.10] px-5 py-3 text-[13px] font-medium text-[#d8d2ca] transition-colors hover:border-white/25 hover:bg-white/[0.03]';
+  const Secondary = (
+    <>
+      {(product.delivery === 'desktop' || product.delivery === 'cli') && (
+        <Link to={`/product/${product.slug}/${product.delivery === 'cli' ? 'releases' : 'download'}`} className={secondaryLink}>
+          {product.delivery === 'cli' ? 'Release notes' : 'All platforms & versions'}
+        </Link>
+      )}
+      {hasDocs && (
+        <Link to={`/docs/${product.slug}`} className={secondaryLink}>Documentation</Link>
+      )}
+    </>
+  );
 
   const SERIF = { fontFamily: "'Cormorant Garamond', 'Playfair Display', Georgia, serif", fontWeight: 400, letterSpacing: '0.01em' } as const;
 

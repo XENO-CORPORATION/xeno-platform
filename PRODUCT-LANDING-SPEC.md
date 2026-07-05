@@ -1,34 +1,44 @@
 # XENO Product Landing Pages — SPEC & BUILD REFERENCE
 
-> **Status:** ✅ **v2.0 — Built** (2026-07-03). The template, schema, mockup
-> system, accent themes and design standards below are **shipped and live**.
-> **Reference implementation: XENO Comms** (`/product/comms`) — landing-complete.
+> **Status:** ✅ **v2.1 — Built** (2026-07-05). The template, schema, mockup
+> system, accent themes, design standards, **and the unified docs system (§7.5)**
+> are **shipped and live**.
+> **Reference implementations: XENO Comms** (`/product/comms`) — landing;
+> **XENO Agent CLI** (`/product/agent-cli` + `/docs/agent-cli`, 23 pages) —
+> landing **+ docs** (the worked example for the docs layer).
 > **Owner:** xeno-platform (xenostudio.ai).
 > **Builds on:** `PRODUCT-PAGES-SPEC.md` (URLs, `releases.json`, redirects, the
 > `xeno-release` publisher, prerender) and `RELEASE-TO-WEBSITE.md` (how a release
 > reaches the site). That layer is the *infrastructure*; this is the
 > *presentation* layer on top of it.
 
-**To build the next product's landing page (Hub, Image, Motion…), follow §9.**
-Everything else here is the contract behind that checklist. Copy **comms** — it is
-the worked example every field below is drawn from.
+**To build the next product's full surface (Hub, Image, Motion…), follow §9** —
+which now covers landing **and docs**. Everything else here is the contract behind
+that checklist. Copy **comms** for the landing and **agent-cli** for the docs — they
+are the worked examples every field below is drawn from.
 
 ---
 
-## 0. The three layers of a product
+## 0. The four layers of a product
 
-Every product is represented on the platform by exactly three things. Keeping them
-separate is what makes this scale:
+Every product is represented on the platform by exactly four things, all joined by
+the **slug** (L7). Keeping them separate is what makes this scale:
 
 | Layer | What | Lives in | Changes when |
 |---|---|---|---|
 | **Identity** | slug, name, tagline, category, status, delivery, repo | `src/lib/productCatalog.ts` (one entry) | product added / re-classified |
 | **Release data** | versions, dates, notes, installers | R2 `apps/<slug>/releases.json` (+ `version.json`) | **every release** (auto, via `xeno-release`) |
 | **Landing content** | hero, features, use-cases, comparison, FAQ + its mockups | `src/content/products/<slug>.ts`, `src/components/product/mockups/`, `public/product-assets/<slug>/` | marketing/design changes (rare) |
+| **Documentation** | guides + reference pages at `/docs/<slug>` | `src/content/docs/<slug>.ts` (registered in `index.ts`) — see **§7.5** | docs authored / updated |
 
-**Key consequence:** release data is read **live** by the page, so a new version /
-download appears **without any platform deploy**. Only *content/design* edits need
-a platform rebuild + deploy (§8).
+**The URLs a product owns:** `/product/<slug>` (landing) · `/product/<slug>/download`
+· `/product/<slug>/releases` · `/docs/<slug>` (docs). They are **cross-linked**: the
+landing shows a *Documentation* link when docs exist (§7.5), `/product/<slug>/docs`
+redirects to `/docs/<slug>`, and doc pages link back to the product + releases.
+
+**Key consequence:** release data is read **live** (new version/download appears with
+**no platform deploy**). *Landing content* **and** *documentation* are compiled +
+prerendered, so they need a platform rebuild + deploy (§8).
 
 ---
 
@@ -224,6 +234,42 @@ the standard the P1+ pages should aim for from the start.
 
 ---
 
+## 7.5 Product documentation (the docs layer)
+
+Same **typed-module + registry + dispatcher** shape as landing content, so it scales
+the same way. A unified docs system serves every product: hub at `/docs`, product docs
+at `/docs/<slug>` → `/docs/<slug>/<page>`. **Reference: `agent-cli` (23 pages).**
+
+**Author = one file + one import:**
+1. Create `src/content/docs/<slug>.ts`, default-exporting a `ProductDocs`
+   (`{ slug, productName, tagline?, sections: [{ title, pages: [{ slug, title, description?, body }] }], seo? }`).
+   `body` is a **markdown string**.
+2. Register it in `src/content/docs/index.ts` `MODULES`. **That's it** — routing,
+   sidebar nav, on-page TOC (scroll-spy), ⌘K search, prev/next, the landing's
+   *Documentation* link, and SEO prerender all pick it up automatically.
+
+**What you get for free** (do not rebuild these): `DocMarkdown` renders GFM + math +
+syntax-highlighted code with copy buttons and heading anchors; `DocsLayout` is the
+3-pane shell (sidebar + content + TOC + search + mobile drawer); every page is
+prerendered to static HTML with `TechArticle` JSON-LD and added to `sitemap.xml`.
+
+**Authoring rules:** source from the product's **real repo** (README/CLAUDE/`docs/` +
+command sources) — never invent features. Keep headings plain text (the TOC slugifies
+them). Cross-link pages with `/docs/<slug>/<page>`. Curate to a comprehensive set
+(agent-cli = ~20), not padding — cut internal dev logs and empty topics.
+
+**⚠️ Gotcha — markdown inside `.ts` template literals:** every backtick in a body
+(code fences, inline code) MUST be escaped as `` \` `` (single backslash + backtick).
+Writing `` \\\` `` (double) breaks the template literal. If it slips in, byte-replace
+`\x5c\x5c\x60` → `\x5c\x60` with Python. Keep `<placeholders>` inside code spans
+(`rehype-raw` treats bare `<x>` as HTML). Run `npm run build` — it compiles the module
+and will fail loudly on a stray backtick.
+
+Other products currently show a **"coming soon"** card on the `/docs` hub until their
+module is authored (`DocsHome.tsx` `COMING_SOON`).
+
+---
+
 ## 8. CI/CD — how a page stays in sync
 
 Two independent flows (this separation is the whole point):
@@ -266,13 +312,18 @@ design input; platform owns the content module + mockups + template + prerender 
 4. **Content module**: author `src/content/products/<slug>.ts` from the real repo —
    hero (mockup media + note), trust, highlights, ≥3 features, gallery, use-cases,
    how-it-works, comparison (honest), specs, faq, seo. Register in `index.ts`.
-5. **Build clean** (`npm run build`) — fix TS/lint; confirm prerender emits the page
-   with correct `<head>` from `seo`.
-6. **Deploy** (§8.2) and **verify visually**: headless-screenshot the hero + scroll
-   the page (below), check the download/launch CTA, and toggle Shift+T through all
-   accents. Fix imbalances (equal-height gallery, hero spacing, peeking highlights).
-7. **Landing-complete** = it reads like a real product page, not a template, and the
-   §6 bar is met.
+5. **Docs** (`src/content/docs/<slug>.ts` + register in `index.ts`, §7.5): author a
+   comprehensive doc set from the product's real repo. Sidebar / TOC / search / SEO /
+   the landing's *Documentation* link all come free. Skip only for products with no
+   docs yet (they show a "coming soon" card on the hub).
+6. **Build clean** (`npm run build`) — fix TS/lint; confirm prerender emits the landing
+   with correct `<head>` from `seo`, and the doc pages under `dist/docs/<slug>/`.
+7. **Deploy** (§8.2) and **verify visually**: headless-screenshot the hero + scroll
+   the page (below), check the download/launch CTA, toggle Shift+T through all accents,
+   and open `/docs/<slug>` (sidebar + a page render + prev/next). Fix imbalances
+   (equal-height gallery, hero spacing, peeking highlights).
+8. **Product-grade** = the landing reads like a real product page (the §6 bar) **and**
+   the docs are live and cross-linked from the landing.
 
 **Screenshot-verify** (no Chrome extension needed):
 ```bash
@@ -307,10 +358,15 @@ edge --headless --window-size=1600,1000 --virtual-time-budget=10000 \
 | Mockups + registry | `src/components/product/mockups/{CommsChat,CommsAgentActions,CommsMobile,index}.tsx` |
 | Accent vars / classes / keyframes | `src/index.css` (`--acc`, `.acc-*`, `[data-accent]`, `@keyframes accRise/accSlideOut`) |
 | Design-system primitives | `src/components/landing-v3/primitives.tsx` (`Reveal`, `Eyebrow`, `SectionHeading`, `T`) |
-| Prerender / SEO | `scripts/prerender-products.mjs` |
+| Prerender / SEO (landing **+ docs**) | `scripts/prerender-products.mjs` |
+| **Docs system** (model + registry) | `src/content/docs/{_types,index}.ts` |
+| **Reference docs module** | `src/content/docs/agent-cli.ts` |
+| Docs renderer + 3-pane layout | `src/components/docs/{DocMarkdown,DocsLayout,DocsSidebar,TableOfContents,DocsSearch,toc}` |
+| Docs pages (hub + product) | `src/pages/{DocsHome,ProductDocs}.tsx` |
 | Release → site | `RELEASE-TO-WEBSITE.md`, `PRODUCT-PAGES-SPEC.md` |
 
 ---
 
-*v2.0 — the template + system are built; **comms is the contract**. Build the next
-page by copying it and following §9.*
+*v2.1 — the template, accent system, **and unified docs system** are built.
+**comms** is the landing contract; **agent-cli** is the docs contract. Build the next
+product's full surface (landing + docs) by following §9.*
