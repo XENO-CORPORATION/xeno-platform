@@ -237,7 +237,7 @@ const navItems: NavEntry[] = [
       },
     ],
   },
-  { label: 'Docs', href: '/learn' },
+  { label: 'Docs', href: '/docs' },
   { label: 'Pricing', href: '#pricing' },
   { label: 'Blog', href: '/blog' },
 ];

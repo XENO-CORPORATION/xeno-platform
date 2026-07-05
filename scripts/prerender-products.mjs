@@ -60,6 +60,23 @@ async function loadContent() {
   }
 }
 
+// Docs content (src/content/docs) — compiled the same way so every doc page
+// gets a static, indexable HTML shell with the right <head>.
+async function loadDocs() {
+  try {
+    const out = await build({
+      entryPoints: ['src/content/docs/index.ts'],
+      bundle: true, format: 'esm', write: false, platform: 'node', logLevel: 'silent',
+    });
+    const tmp = join(tmpdir(), `docs-${process.pid}.mjs`);
+    writeFileSync(tmp, out.outputFiles[0].text);
+    return await import(pathToFileURL(tmp).href);
+  } catch (e) {
+    console.warn('prerender: docs modules unavailable —', e.message);
+    return { allDocRoutes: () => [], allDocProducts: () => [] };
+  }
+}
+
 function jsonld(p) {
   return JSON.stringify({
     '@context': 'https://schema.org',
@@ -92,6 +109,37 @@ function headFor(p, { title, desc, canonical }) {
   ].join('\n    ');
 }
 
+function docJsonld({ title, desc, canonical, productName }) {
+  return JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: title,
+    name: title,
+    description: desc,
+    about: productName,
+    isPartOf: { '@type': 'WebSite', name: 'XENO Studio', url: SITE },
+    url: canonical,
+  });
+}
+
+function docHeadFor({ title, desc, canonical, productName }) {
+  return [
+    `<title>${esc(title)}</title>`,
+    `<meta name="description" content="${esc(desc)}">`,
+    `<link rel="canonical" href="${canonical}">`,
+    `<meta property="og:type" content="article">`,
+    `<meta property="og:site_name" content="XENO Studio">`,
+    `<meta property="og:title" content="${esc(title)}">`,
+    `<meta property="og:description" content="${esc(desc)}">`,
+    `<meta property="og:url" content="${canonical}">`,
+    `<meta property="og:image" content="${OG_IMAGE}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:title" content="${esc(title)}">`,
+    `<meta name="twitter:description" content="${esc(desc)}">`,
+    `<script type="application/ld+json">${docJsonld({ title, desc, canonical, productName })}</script>`,
+  ].join('\n    ');
+}
+
 function renderPage(template, p, head) {
   // Drop the SPA's default <title>, inject the route head before </head>.
   return template
@@ -113,6 +161,7 @@ async function main() {
   const template = readFileSync(join(DIST, 'index.html'), 'utf8');
   const { PRODUCTS } = await loadCatalog();
   const { getProductContent } = await loadContent();
+  const { allDocRoutes, allDocProducts } = await loadDocs();
 
   const urls = ['/products'];
   let pages = 0;
@@ -140,6 +189,42 @@ async function main() {
         pages++;
       }
     }
+  }
+
+  // ── Docs ──────────────────────────────────────────────────────────────
+  // Unified docs hub.
+  writePage('docs', renderPage(template, null, docHeadFor({
+    title: 'XENO Studio docs',
+    desc: 'Guides and reference for every XENO app, agent, and API — from your first render to a production agent workflow.',
+    canonical: `${SITE}/docs`,
+    productName: 'XENO Studio',
+  })));
+  urls.push('/docs');
+  pages++;
+
+  // Per-product docs index (canonical /docs/<slug>).
+  for (const pd of allDocProducts()) {
+    writePage(`docs/${pd.slug}`, renderPage(template, null, docHeadFor({
+      title: pd.seo?.title || `${pd.productName} documentation`,
+      desc: pd.seo?.description || pd.tagline || `${pd.productName} documentation.`,
+      canonical: `${SITE}/docs/${pd.slug}`,
+      productName: pd.productName,
+    })));
+    urls.push(`/docs/${pd.slug}`);
+    pages++;
+  }
+
+  // Every doc page.
+  for (const r of allDocRoutes()) {
+    const canonical = `${SITE}/docs/${r.productSlug}/${r.pageSlug}`;
+    writePage(`docs/${r.productSlug}/${r.pageSlug}`, renderPage(template, null, docHeadFor({
+      title: `${r.title} — ${r.productName} docs`,
+      desc: r.description || `${r.title} — ${r.productName} documentation.`,
+      canonical,
+      productName: r.productName,
+    })));
+    urls.push(canonical.replace(SITE, ''));
+    pages++;
   }
 
   // /products index page (generic head — it's a grid, not one app).

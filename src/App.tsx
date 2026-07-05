@@ -22,7 +22,8 @@ import Terms from './pages/Terms';
 import Features from './pages/Features';
 import Pricing from './pages/Pricing';
 import Roadmap from './pages/Roadmap';
-import Docs from './pages/Docs';
+import DocsHome from './pages/DocsHome';
+import ProductDocs, { ProductDocsRedirect } from './pages/ProductDocs';
 import Templates from './pages/Templates';
 import ApiReference from './pages/ApiReference';
 import About from './pages/About';
@@ -127,6 +128,8 @@ function App() {
             <Route path="/product/:slug/download" element={<ProductDownload />} />
             <Route path="/product/:slug/releases" element={<ProductReleases />} />
             <Route path="/product/:slug/releases/:version" element={<ProductReleaseDetail />} />
+            {/* Canonical docs live under /docs — redirect the per-product path in. */}
+            <Route path="/product/:slug/docs" element={<ProductDocsRedirect />} />
             {/* Legacy /download retired → the Hub download page (client-side, so
                 in-app links like the header Download button land there too). */}
             <Route path="/download" element={<Navigate to="/product/hub/download" replace />} />
@@ -159,7 +162,9 @@ function App() {
             <Route path="/features" element={<Features />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/roadmap" element={<Roadmap />} />
-            <Route path="/docs" element={<Docs />} />
+            <Route path="/docs" element={<DocsHome />} />
+            <Route path="/docs/:slug" element={<ProductDocs />} />
+            <Route path="/docs/:slug/:page" element={<ProductDocs />} />
             <Route path="/templates" element={<Templates />} />
             <Route path="/api-reference" element={<ApiReference />} />
             <Route path="/about" element={<About />} />
