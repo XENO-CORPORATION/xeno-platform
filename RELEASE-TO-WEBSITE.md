@@ -1,5 +1,12 @@
 # How to publish a release to the website (xenostudio.ai)
 
+> ⭐ **Superseded — read [`release-guide/`](release-guide/README.md) instead.** The
+> full, self-contained release playbook (R2, `releases.json`/`version.json`, the
+> `xeno-release.mjs` + `publish-cli-releases.mjs` publishers, build + on-box deploy,
+> landing/docs, the end-to-end runbook, troubleshooting) now lives in the portable
+> `release-guide/` folder. This page is kept as a quick summary; when in doubt, the
+> guide is authoritative.
+
 > **Give this to the agent in any XENO product repo.** Run it **every time you ship
 > a release** — an npm publish, a desktop installer, a new build — so the product's
 > page on **xenostudio.ai** reflects it. If you skip this, the website silently
