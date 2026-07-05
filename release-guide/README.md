@@ -101,6 +101,18 @@ xenostudio.ai. Do not improvise release commands; use the verbatim commands ther
 
 That one pointer is all the wiring needed: the guide is self-contained, so an agent that follows the tag lands here and reads the rest in order.
 
+### The `xeno-product-release` skill (invocable)
+
+This folder also ships **`release-guide/skill/xeno-product-release.md`** — a XENO Agent CLI skill that makes the playbook *invocable*. Say "**release &lt;product&gt;**" (or "cut a patch", "publish the feed", "deploy the docs") and the agent routes to the correct path (installer / CLI / content) and follows this guide, with dry-run + confirmation gates. Install it into the repo's project skills:
+
+```bash
+mkdir -p .xeno/skills
+cp release-guide/skill/xeno-product-release.md .xeno/skills/xeno-product-release.md
+xeno skills list   # confirm: project:xeno-product-release [enabled]
+```
+
+It is a thin wrapper (progressive disclosure) that defers to the files above for verbatim commands — keep this guide the single source of truth. It is distinct from the built-in generic `release` skill (local publishability). Spec: `../PRODUCT-RELEASE-SKILL-SPEC.md`.
+
 ---
 
 ## Quick reference (cheat sheet)
