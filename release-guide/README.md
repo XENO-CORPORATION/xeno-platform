@@ -112,21 +112,23 @@ the folder name as the skill name → `xeno-product-release`):
 - `release-guide/skill/SKILL.md` — the **open Agent Skills** format (Claude Code + Codex).
 - `release-guide/skill/xeno-product-release.md` — the **XENO Agent CLI** format.
 
-Install into whichever tools you use (each discovers skills by directory):
+Install **globally** (recommended — available in every project on your machine; swap
+`~/…` for a repo-relative path if you want it project-scoped and versioned instead).
+Each tool discovers skills by directory:
 
 ```bash
-# Claude Code   → .claude/skills/<name>/SKILL.md
-mkdir -p .claude/skills/xeno-product-release && cp release-guide/skill/SKILL.md .claude/skills/xeno-product-release/SKILL.md
+# Claude Code   → global: ~/.claude/skills/<name>/   (project: .claude/skills/<name>/)
+mkdir -p ~/.claude/skills/xeno-product-release && cp release-guide/skill/SKILL.md ~/.claude/skills/xeno-product-release/SKILL.md
 
-# OpenAI Codex  → install BOTH: official docs use .agents/skills; some Codex versions use .codex/skills
-mkdir -p .agents/skills/xeno-product-release .codex/skills/xeno-product-release
-cp release-guide/skill/SKILL.md .agents/skills/xeno-product-release/SKILL.md
-cp release-guide/skill/SKILL.md .codex/skills/xeno-product-release/SKILL.md
+# OpenAI Codex  → global: install BOTH (official docs use ~/.agents/skills; some versions use ~/.codex/skills)
+mkdir -p ~/.agents/skills/xeno-product-release ~/.codex/skills/xeno-product-release
+cp release-guide/skill/SKILL.md ~/.agents/skills/xeno-product-release/SKILL.md
+cp release-guide/skill/SKILL.md ~/.codex/skills/xeno-product-release/SKILL.md
 # in Codex, run /skills to confirm it's discovered
 
-# XENO Agent CLI → .xeno/skills/<name>.md
-mkdir -p .xeno/skills && cp release-guide/skill/xeno-product-release.md .xeno/skills/xeno-product-release.md
-xeno skills list   # confirm: project:xeno-product-release [enabled]
+# XENO Agent CLI → global: run `xeno skills` to find your "User dir" (e.g. ~/.xeno-code/skills), then:
+mkdir -p ~/.xeno-code/skills && cp release-guide/skill/xeno-product-release.md ~/.xeno-code/skills/xeno-product-release.md
+xeno skills list   # confirm: user:xeno-product-release [enabled]
 ```
 
 All are thin wrappers (progressive disclosure) that defer to the files above for

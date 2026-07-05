@@ -22,14 +22,14 @@ the verbatim commands there. Key entry points:
 `release-guide/` is copied verbatim into product repos (xeno-hub, xeno-pixel, …) so
 their agents follow the same process — keep this folder the canonical copy.
 
-**Invocable skill (all three agent CLIs):** `xeno-product-release` is installed for
-**Claude Code** (`.claude/skills/xeno-product-release/SKILL.md`), **Codex**
-(`.agents/skills/xeno-product-release/SKILL.md` + `.codex/skills/…/SKILL.md` — docs
-conflict on the path, so both are installed), and the **XENO Agent CLI**
-(`.xeno/skills/xeno-product-release.md`). Just say "**release &lt;product&gt;**" / "cut a
-patch" / "publish the feed" / "deploy the docs" and it routes to the right path and
-follows `release-guide/` with dry-run + confirm gates. Canonical sources +
-per-tool install: `release-guide/skill/`. Spec: `PRODUCT-RELEASE-SKILL-SPEC.md`.
+**Invocable skill:** `xeno-product-release` wraps this playbook — say "**release
+&lt;product&gt;**" / "cut a patch" / "publish the feed" / "deploy the docs" and it routes
+to the right path with dry-run + confirm gates. It is installed as a **global/user
+skill** (available in every project): Claude Code `~/.claude/skills/`, XENO Agent CLI
+`~/.xeno-code/skills/` (your `xeno skills` "User dir"), Codex `~/.agents/skills/` +
+`~/.codex/skills/`. Canonical sources to (re)install from: `release-guide/skill/`
+(`SKILL.md` = open Agent Skills for Claude Code + Codex; `xeno-product-release.md` =
+XENO Agent CLI). Install steps: `release-guide/README.md`. Spec: `PRODUCT-RELEASE-SKILL-SPEC.md`.
 
 ## Related references
 
