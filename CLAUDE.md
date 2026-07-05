@@ -22,10 +22,13 @@ the verbatim commands there. Key entry points:
 `release-guide/` is copied verbatim into product repos (xeno-hub, xeno-pixel, …) so
 their agents follow the same process — keep this folder the canonical copy.
 
-**Invocable skill:** `release-guide/skill/xeno-product-release.md` is a XENO Agent CLI
-skill (installed at `.xeno/skills/`) — just say "**release &lt;product&gt;**" / "cut a
+**Invocable skill (all three agent CLIs):** `xeno-product-release` is installed for
+**Claude Code** (`.claude/skills/xeno-product-release/SKILL.md`), **Codex**
+(`.agents/skills/xeno-product-release/SKILL.md`), and the **XENO Agent CLI**
+(`.xeno/skills/xeno-product-release.md`). Just say "**release &lt;product&gt;**" / "cut a
 patch" / "publish the feed" / "deploy the docs" and it routes to the right path and
-follows `release-guide/` with dry-run + confirm gates. Spec: `PRODUCT-RELEASE-SKILL-SPEC.md`.
+follows `release-guide/` with dry-run + confirm gates. Canonical sources +
+per-tool install: `release-guide/skill/`. Spec: `PRODUCT-RELEASE-SKILL-SPEC.md`.
 
 ## Related references
 

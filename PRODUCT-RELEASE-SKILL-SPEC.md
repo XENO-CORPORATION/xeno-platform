@@ -5,13 +5,18 @@ Owner: xeno-platform (xenostudio.ai) — release infrastructure
 Created: 2026-07-05
 Last updated: 2026-07-05
 
-> **Implemented.** The skill ships at `release-guide/skill/xeno-product-release.md`
-> (canonical, portable) and is installed at `.xeno/skills/xeno-product-release.md`.
-> Validated end-to-end: the XENO Agent CLI discovers it
-> (`project:xeno-product-release [enabled]`, ~1044 tokens), its frontmatter parses,
-> it references only real scripts, and its primary command (`xeno-release.mjs
-> publish … --dry-run`) was dry-run-verified (no upload). Open question §22.1
-> resolved to v1: publishers run from the `xeno-platform` repo (skill Safety §0).
+> **Implemented — for all three agent CLIs.** Canonical sources in
+> `release-guide/skill/`: `xeno-product-release.md` (XENO Agent CLI format) and
+> `SKILL.md` (the open Agent Skills format shared by Claude Code + Codex). Installed:
+> `.xeno/skills/xeno-product-release.md` (XENO Agent CLI),
+> `.claude/skills/xeno-product-release/SKILL.md` (Claude Code),
+> `.agents/skills/xeno-product-release/SKILL.md` (Codex). Validated: the XENO Agent CLI
+> discovers it (`project:xeno-product-release [enabled]`, ~1044 tokens); all frontmatter
+> parses (open-standard `name`=folder=`xeno-product-release` + `description`); only real
+> scripts referenced; primary command (`xeno-release.mjs publish … --dry-run`)
+> dry-run-verified (no upload). Open question §22.1 resolved to v1: publishers run from
+> the `xeno-platform` repo (skill Safety §0). NOTE: the open standard requires only
+> `name`+`description`; the XENO Agent CLI variant adds `id`/`enabled`/`visibility` (§11).
 
 > Companion to `release-guide/` (the playbook) and `PRODUCT-LANDING-SPEC.md` /
 > `PRODUCT-PAGES-SPEC.md` (the surfaces). This spec defines a **XENO Agent CLI
