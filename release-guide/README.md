@@ -118,8 +118,11 @@ Install into whichever tools you use (each discovers skills by directory):
 # Claude Code   → .claude/skills/<name>/SKILL.md
 mkdir -p .claude/skills/xeno-product-release && cp release-guide/skill/SKILL.md .claude/skills/xeno-product-release/SKILL.md
 
-# OpenAI Codex  → .agents/skills/<name>/SKILL.md  (project or repo root)
-mkdir -p .agents/skills/xeno-product-release && cp release-guide/skill/SKILL.md .agents/skills/xeno-product-release/SKILL.md
+# OpenAI Codex  → install BOTH: official docs use .agents/skills; some Codex versions use .codex/skills
+mkdir -p .agents/skills/xeno-product-release .codex/skills/xeno-product-release
+cp release-guide/skill/SKILL.md .agents/skills/xeno-product-release/SKILL.md
+cp release-guide/skill/SKILL.md .codex/skills/xeno-product-release/SKILL.md
+# in Codex, run /skills to confirm it's discovered
 
 # XENO Agent CLI → .xeno/skills/<name>.md
 mkdir -p .xeno/skills && cp release-guide/skill/xeno-product-release.md .xeno/skills/xeno-product-release.md

@@ -24,7 +24,8 @@ their agents follow the same process — keep this folder the canonical copy.
 
 **Invocable skill (all three agent CLIs):** `xeno-product-release` is installed for
 **Claude Code** (`.claude/skills/xeno-product-release/SKILL.md`), **Codex**
-(`.agents/skills/xeno-product-release/SKILL.md`), and the **XENO Agent CLI**
+(`.agents/skills/xeno-product-release/SKILL.md` + `.codex/skills/…/SKILL.md` — docs
+conflict on the path, so both are installed), and the **XENO Agent CLI**
 (`.xeno/skills/xeno-product-release.md`). Just say "**release &lt;product&gt;**" / "cut a
 patch" / "publish the feed" / "deploy the docs" and it routes to the right path and
 follows `release-guide/` with dry-run + confirm gates. Canonical sources +
