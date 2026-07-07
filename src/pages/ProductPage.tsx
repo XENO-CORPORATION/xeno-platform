@@ -67,13 +67,8 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
         <section className="page-gutter relative overflow-hidden pt-[clamp(92px,12vh,140px)] pb-[clamp(28px,4vh,52px)]">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[380px] bg-[radial-gradient(ellipse_55%_75%_at_50%_-10%,rgba(167,96,255,0.10),transparent_70%)]" />
           <div className="relative mx-auto max-w-[820px]">
-            <Reveal>
-              <Link to="/" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">
-                <ArrowLeft className="h-3.5 w-3.5" /> All products
-              </Link>
-            </Reveal>
             <Reveal delay={60}>
-              <div className="mt-6 flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#756f66]">{product.category}</span>
                 <StatusPill status={product.status} />
               </div>
