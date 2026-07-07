@@ -1,12 +1,21 @@
 import type { ProductContent } from './_types';
 import comms from './comms';
 import agentCli from './agent-cli';
+import pixel from './pixel';
+import post from './post';
+import canvas from './canvas';
+import motion from './motion';
+import hub from './hub';
+import extension from './extension';
+import workflow from './workflow';
+import acp from './acp';
+import sdk from './sdk';
 
 /* Registry of rich landing-page content modules. A product listed here renders
  * the full ProductLanding; any product NOT here falls back to the lean
  * ProductPage (PRODUCT-LANDING-SPEC L3). Add a product = author its module and
  * import it here. */
-const MODULES: ProductContent[] = [comms, agentCli];
+const MODULES: ProductContent[] = [comms, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk];
 
 const BY_SLUG = new Map(MODULES.map((m) => [m.slug, m]));
 

@@ -91,7 +91,8 @@ export const PRODUCTS: Product[] = [
 
   // ── Develop ───────────────────────────────────────────────
   { slug: 'agent-cli', name: 'XENO Agent CLI', tagline: 'Code, automate and control your workspace from the terminal.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xeno-corporation/xeno-agent-cli', repo: 'xeno-agent-cli' },
-  { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xeno/agent-sdk', repo: 'xeno-agent-sdk' },
+  { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xeno-corporation/xeno-agent-sdk', repo: 'xeno-agent-sdk' },
+  { slug: 'acp', name: 'XENO ACP', tagline: 'Drive any ACP coding agent through one API.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-acp' },
   { slug: 'rt', name: 'XENO RT', tagline: 'Run frontier models locally — private and fast.', category: 'Develop', status: 'beta', delivery: 'desktop', repo: 'xeno-rt' },
   { slug: 'shell', name: 'XENO Shell', tagline: 'The XENO desktop environment for every app.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-shell' },
   { slug: 'swarm', name: 'XENO Swarm', tagline: 'Always-on Minds that coordinate as a swarm.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-swarm' },
