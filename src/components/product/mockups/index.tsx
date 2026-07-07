@@ -4,17 +4,29 @@ import CommsAgentActions from './CommsAgentActions';
 import CommsMobile from './CommsMobile';
 import AgentCliTerminal from './AgentCliTerminal';
 import PixelEditor from './PixelEditor';
+import PhotoDevelop from './PhotoDevelop';
 import CanvasEditor from './CanvasEditor';
 import PostComposer from './PostComposer';
+import DocsEditor from './DocsEditor';
 import MotionEditor from './MotionEditor';
 import MotionColor from './MotionColor';
 import MotionAgent from './MotionAgent';
 import XenoHubLauncher from './XenoHubLauncher';
 import XenoHubStore from './XenoHubStore';
 import BrowserAgentPanel from './BrowserAgentPanel';
+import BrowserFileIO from './BrowserFileIO';
+import BrowserSpaces from './BrowserSpaces';
 import WorkflowGraph from './WorkflowGraph';
 import AcpGateway from './AcpGateway';
 import SdkEmbed from './SdkEmbed';
+import NotesEditor from './NotesEditor';
+import UseInspector from './UseInspector';
+import UseTape from './UseTape';
+import EngineEditor from './EngineEditor';
+import RtRuntime from './RtRuntime';
+import ArchitectEditor from './ArchitectEditor';
+import SoundStudio from './SoundStudio';
+import Xeno3DEditor from './Xeno3DEditor';
 
 /* Built-in product mockups — referenced from a content module's Media as
  * { type: 'mockup', src: '<key>' }. Lets a landing page ship a crisp, faithful
@@ -26,17 +38,29 @@ const MOCKUPS: Record<string, React.ComponentType> = {
   'comms-mobile': CommsMobile,
   'agent-cli-terminal': AgentCliTerminal,
   'pixel-hero': PixelEditor,
+  'photo-hero': PhotoDevelop,
   'canvas-hero': CanvasEditor,
   'post-hero': PostComposer,
+  'docs-hero': DocsEditor,
   'motion-hero': MotionEditor,
   'motion-color': MotionColor,
   'motion-agent': MotionAgent,
   'hub-hero': XenoHubLauncher,
   'hub-store': XenoHubStore,
   'extension-hero': BrowserAgentPanel,
+  'browser-hero': BrowserFileIO,
+  'browser-spaces': BrowserSpaces,
   'workflow-hero': WorkflowGraph,
   'acp-hero': AcpGateway,
   'sdk-hero': SdkEmbed,
+  'notes-hero': NotesEditor,
+  'use-hero': UseInspector,
+  'use-tape': UseTape,
+  'engine-hero': EngineEditor,
+  'rt-hero': RtRuntime,
+  'architect-hero': ArchitectEditor,
+  'sound-hero': SoundStudio,
+  '3d-hero': Xeno3DEditor,
 };
 
 export function Mockup({ name }: { name: string }): React.ReactElement | null {

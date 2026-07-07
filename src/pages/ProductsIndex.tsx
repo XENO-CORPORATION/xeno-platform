@@ -5,6 +5,7 @@ import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
 import { Reveal } from '../components/landing-v3/primitives';
 import { PRODUCTS, type Product } from '../lib/productCatalog';
+import { getProductContent } from '../content/products';
 
 /* /products — the canonical product index (PRODUCT-PAGES-SPEC.md §3.1). A grid of
    every product grouped by category; replaces the legacy static products grid. */
@@ -31,6 +32,9 @@ function groupByCategory(products: Product[]): [string, Product[]][] {
 const Card: React.FC<{ p: Product }> = ({ p }) => {
   const Icon = DELIVERY_ICON[p.delivery];
   const st = STATUS[p.status];
+  // A product is navigable if it's shipping/beta OR it has a rich landing (even if coming-soon).
+  const hasLanding = !!getProductContent(p.slug);
+  const navigable = p.status !== 'coming-soon' || hasLanding;
   const inner = (
     <div className="group flex h-full flex-col rounded-[14px] border border-white/[0.07] bg-[#0d0d0d] p-5 transition-colors hover:border-white/[0.14] hover:bg-[#101010]">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -40,13 +44,13 @@ const Card: React.FC<{ p: Product }> = ({ p }) => {
       <p className="flex-1 text-[12.5px] leading-[1.55] text-[#948d83]">{p.tagline}</p>
       <div className="mt-3.5 flex items-center justify-between">
         <span className={`rounded-[4px] border px-1.5 py-0.5 text-[10.5px] font-medium ${st.cls}`}>{st.label}</span>
-        {p.status !== 'coming-soon' && <ArrowUpRight className="h-3.5 w-3.5 text-[#5d5850] transition-colors group-hover:text-white" />}
+        {navigable && <ArrowUpRight className="h-3.5 w-3.5 text-[#5d5850] transition-colors group-hover:text-white" />}
       </div>
     </div>
   );
-  return p.status === 'coming-soon'
-    ? <div className="cursor-default opacity-70">{inner}</div>
-    : <Link to={`/product/${p.slug}`} className="block">{inner}</Link>;
+  return navigable
+    ? <Link to={`/product/${p.slug}`} className="block">{inner}</Link>
+    : <div className="cursor-default opacity-70">{inner}</div>;
 };
 
 const ProductsIndex: React.FC = () => {
