@@ -166,9 +166,10 @@ async function main() {
   const urls = ['/products'];
   let pages = 0;
   for (const p of PRODUCTS) {
-    if (p.status === 'coming-soon') continue; // index only shipping/beta products
-
     const content = getProductContent(p.slug);
+    // Prerender shipping/beta products, and any coming-soon product that already
+    // has a rich landing (so its SEO <head> is correct pre-launch).
+    if (p.status === 'coming-soon' && !content) continue;
     const baseTitle = `${p.name} — ${p.tagline}`;
     const title = content?.seo?.title || baseTitle;
     const desc = content?.seo?.description || p.tagline;
