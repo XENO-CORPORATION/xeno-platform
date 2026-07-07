@@ -157,9 +157,9 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
       <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────── */}
-        <section className="px-[max(16px,1.1vw)] relative flex min-h-[80svh] items-center overflow-hidden pt-[clamp(76px,9vh,108px)] pb-[clamp(52px,7vh,88px)]">
+        <section className="px-[max(12px,0.6vw)] relative flex min-h-[80svh] items-center overflow-hidden pt-[clamp(76px,9vh,108px)] pb-[clamp(52px,7vh,88px)]">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[64vh]" style={{ background: 'radial-gradient(ellipse 60% 80% at 60% -4%, rgb(var(--acc) / 0.10), transparent 72%)' }} />
-          <div className="relative mx-auto grid w-full max-w-[1340px] items-center gap-[clamp(32px,5vw,72px)] lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+          <div className="relative mx-auto grid w-full max-w-[1560px] items-center gap-[clamp(28px,4vw,64px)] lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)]">
             <div>
               <Reveal>
                 <Link to="/products" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">
