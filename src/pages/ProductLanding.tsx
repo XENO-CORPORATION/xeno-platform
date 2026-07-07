@@ -161,12 +161,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[64vh]" style={{ background: 'radial-gradient(ellipse 60% 80% at 60% -4%, rgb(var(--acc) / 0.10), transparent 72%)' }} />
           <div className="relative mx-auto grid w-full max-w-[1560px] items-center gap-[clamp(28px,4vw,64px)] lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)]">
             <div>
-              <Reveal>
-                <Link to="/products" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">
-                  <ArrowLeft className="h-3.5 w-3.5" /> All products
-                </Link>
-              </Reveal>
-              <Reveal delay={60} className="mt-7">
+              <Reveal delay={60}>
                 <div className="flex flex-wrap items-center gap-3">
                   <Eyebrow>{product.category}</Eyebrow>
                   <StatusPill status={product.status} />
