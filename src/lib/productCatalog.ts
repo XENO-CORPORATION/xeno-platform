@@ -95,7 +95,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'acp', name: 'XENO ACP', tagline: 'Drive any ACP coding agent through one API.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-acp' },
   { slug: 'rt', name: 'XENO RT', tagline: 'Run frontier models locally — private and fast.', category: 'Develop', status: 'beta', delivery: 'desktop', repo: 'xeno-rt' },
   { slug: 'shell', name: 'XENO Shell', tagline: 'The XENO desktop environment for every app.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-shell' },
-  { slug: 'swarm', name: 'XENO Swarm', tagline: 'Always-on Minds that coordinate as a swarm.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-swarm' },
+  { slug: 'anima', name: 'XENO Anima', tagline: 'Your personal, always-on agent — it remembers you and gets better.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-anima' },
 ];
 
 const BY_SLUG = new Map(PRODUCTS.map((p) => [p.slug, p]));

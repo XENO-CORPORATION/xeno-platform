@@ -20,12 +20,13 @@ import sound from './sound';
 import browser from './browser';
 import threeD from './3d';
 import photo from './photo';
+import anima from './anima';
 
 /* Registry of rich landing-page content modules. A product listed here renders
  * the full ProductLanding; any product NOT here falls back to the lean
  * ProductPage (PRODUCT-LANDING-SPEC L3). Add a product = author its module and
  * import it here. */
-const MODULES: ProductContent[] = [comms, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk, docs, notes, use, engine, rt, architect, sound, browser, threeD, photo];
+const MODULES: ProductContent[] = [comms, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk, docs, notes, use, engine, rt, architect, sound, browser, threeD, photo, anima];
 
 const BY_SLUG = new Map(MODULES.map((m) => [m.slug, m]));
 

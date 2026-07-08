@@ -1,10 +1,24 @@
 import type { ProductDocs, DocPage, DocRoute } from './_types';
 import agentCli from './agent-cli';
+import hub from './hub';
+import sdk from './sdk';
+import pixel from './pixel';
+import motion from './motion';
+import comms from './comms';
+import canvas from './canvas';
+import rt from './rt';
+import post from './post';
+import acp from './acp';
+import sound from './sound';
+import workflow from './workflow';
+import architect from './architect';
+import threeD from './3d';
+import engine from './engine';
 
 /* Registry of product documentation. A product listed here gets a full docs
  * section at /docs/<slug>; products NOT here show "coming soon" on the hub.
  * Add a product = author src/content/docs/<slug>.ts and import it here. */
-const MODULES: ProductDocs[] = [agentCli];
+const MODULES: ProductDocs[] = [agentCli, hub, sdk, pixel, motion, comms, canvas, rt, post, acp, sound, workflow, architect, threeD, engine];
 
 const BY_SLUG = new Map(MODULES.map((m) => [m.slug, m]));
 

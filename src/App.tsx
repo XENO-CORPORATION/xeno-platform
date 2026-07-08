@@ -130,6 +130,8 @@ function App() {
             <Route path="/product/:slug/releases/:version" element={<ProductReleaseDetail />} />
             {/* Canonical docs live under /docs — redirect the per-product path in. */}
             <Route path="/product/:slug/docs" element={<ProductDocsRedirect />} />
+            {/* XENO Swarm was renamed to XENO Anima — keep old links working. */}
+            <Route path="/product/swarm" element={<Navigate to="/product/anima" replace />} />
             {/* Legacy /download retired → the Hub download page (client-side, so
                 in-app links like the header Download button land there too). */}
             <Route path="/download" element={<Navigate to="/product/hub/download" replace />} />

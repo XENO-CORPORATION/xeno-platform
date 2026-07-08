@@ -27,6 +27,8 @@ import RtRuntime from './RtRuntime';
 import ArchitectEditor from './ArchitectEditor';
 import SoundStudio from './SoundStudio';
 import Xeno3DEditor from './Xeno3DEditor';
+import AnimaMind from './AnimaMind';
+import AnimaSwarm from './AnimaSwarm';
 
 /* Built-in product mockups — referenced from a content module's Media as
  * { type: 'mockup', src: '<key>' }. Lets a landing page ship a crisp, faithful
@@ -61,6 +63,8 @@ const MOCKUPS: Record<string, React.ComponentType> = {
   'architect-hero': ArchitectEditor,
   'sound-hero': SoundStudio,
   '3d-hero': Xeno3DEditor,
+  'anima-hero': AnimaMind,
+  'anima-swarm': AnimaSwarm,
 };
 
 export function Mockup({ name }: { name: string }): React.ReactElement | null {

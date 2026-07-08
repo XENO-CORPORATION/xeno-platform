@@ -178,7 +178,7 @@ const navItems: NavEntry[] = [
           { label: 'XENO SDK', href: '#', subtitle: 'Agent SDK', desc: 'Embed XENO agents into any app.', tint: radial('rgba(170,150,255,0.26)', '#15122a') },
           { label: 'XENO RT', href: '#', subtitle: 'Local runtime', desc: 'Run models locally — private & fast.', tint: radial('rgba(140,180,255,0.24)', '#0e162a') },
           { label: 'XENO Shell', href: '#', subtitle: 'Desktop OS', desc: 'The XENO desktop environment for every app.', tint: radial('rgba(200,200,210,0.20)', '#15161a') },
-          { label: 'XENO Swarm', href: '#', subtitle: 'Agent swarms', desc: 'Always-on Minds that coordinate as a swarm.', tint: radial('rgba(180,140,255,0.28)', '#15102a') },
+          { label: 'XENO Anima', href: '#', subtitle: 'Personal agent', desc: 'Your personal always-on agent — a Mind that earns a Soul, and coordinates as a swarm.', tint: radial('rgba(180,140,255,0.28)', '#15102a') },
           { label: 'XENO ACP', href: '#', subtitle: 'Agent protocol', desc: 'Drive any ACP coding agent through one API.', tint: radial('rgba(150,170,255,0.24)', '#0e1428') },
         ],
       },
