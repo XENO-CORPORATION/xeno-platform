@@ -33,6 +33,7 @@ import Partners from './pages/Partners';
 import Security from './pages/Security';
 import Refunds from './pages/Refunds';
 import Cookies from './pages/Cookies';
+import Impressum from './pages/Impressum';
 import OverviewPage from './pages/Overview';
 import OSAuthInterface, { OSStateProvider } from './components/os/OSAuthInterface';
 import OSHomeInterface from './components/os/OSHomeInterface';
@@ -53,6 +54,9 @@ import ContactContent from './pages/ContactContent';
 
 // Import MultiChatContainer for standalone xeno-chat.com domain
 import MultiChatContainer from './components/playground/Chat/MultiChatContainer';
+
+// Fresh, streaming-first chat module (src/features/chat) — mounted at /chat.
+import { ChatApp } from './features/chat';
 
 // Lazy load StudioVideoCanvas for standalone canvas page
 const StudioVideoCanvas = React.lazy(() =>
@@ -176,6 +180,7 @@ function App() {
             <Route path="/security" element={<Security />} />
             <Route path="/refunds" element={<Refunds />} />
             <Route path="/cookies" element={<Cookies />} />
+            <Route path="/impressum" element={<Impressum />} />
 
             {/* Standalone Video Studio Canvas - Full page interface */}
             <Route path="/studio/video/canvas/:projectId?" element={
@@ -183,6 +188,13 @@ function App() {
                 <React.Suspense fallback={<div className="w-full h-screen flex items-center justify-center bg-black text-white">Loading Canvas...</div>}>
                   <StudioVideoCanvas />
                 </React.Suspense>
+              </ProtectedRoute>
+            } />
+
+            {/* Fresh streaming chat module — full-viewport, self-contained. */}
+            <Route path="/chat" element={
+              <ProtectedRoute>
+                <ChatApp />
               </ProtectedRoute>
             } />
 

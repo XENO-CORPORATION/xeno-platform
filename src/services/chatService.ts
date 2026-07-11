@@ -308,6 +308,23 @@ export const chatService = {
     }
   },
 
+  // Delete a single message (used by the chat module's edit/regenerate truncation so
+  // pre-edit/regenerate assistant turns don't resurrect on reload). Returns true on success.
+  async deleteMessage(messageId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/messages/${messageId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+
+      await handleResponse<{ success: boolean }>(response);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      return false;
+    }
+  },
+
   // ============================================
   // PERSONA API
   // ============================================

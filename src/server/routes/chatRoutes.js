@@ -543,6 +543,34 @@ router.put('/messages/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/chat/messages/:id - Delete a single message.
+// Used by the chat module's edit/regenerate truncation to drop the trailing
+// (pre-edit / pre-regenerate) turns durably, so they don't resurrect on reload.
+// Ownership-scoped by user_id, mirroring PUT /messages/:id.
+router.delete('/messages/:id', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { id: messageId } = req.params;
+    const result = await req.db.query(
+      `DELETE FROM chat_messages WHERE id = $1 AND user_id = $2 RETURNING id`,
+      [messageId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Message not found' });
+    }
+
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (error) {
+    console.error('Failed to delete message:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // ============================================
 // PERSONA OPERATIONS
 // ============================================

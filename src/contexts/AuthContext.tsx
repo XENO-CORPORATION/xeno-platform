@@ -121,6 +121,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initAuth();
   }, []);
 
+  // Refresh the cached user (and its credit balance shown in the taskbar) when a
+  // metered action reports new usage — e.g. the streaming chat settling a credit
+  // hold dispatches `xeno:credits-updated`. Uses the same /api/auth/me path the
+  // account UI uses, so any component reading user.credits re-renders.
+  useEffect(() => {
+    const onCreditsUpdated = async () => {
+      const response = await authService.refreshUser();
+      if (response.success && response.user) setUser(response.user);
+    };
+    window.addEventListener('xeno:credits-updated', onCreditsUpdated);
+    return () => window.removeEventListener('xeno:credits-updated', onCreditsUpdated);
+  }, []);
+
   // Once authenticated by ANY path (password, register, social/MFA, or restored
   // session), return the user to a pending OIDC authorize page if one is queued.
   useEffect(() => {

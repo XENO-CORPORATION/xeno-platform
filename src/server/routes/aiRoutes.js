@@ -1,94 +1,41 @@
 import express from 'express';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import path from 'path';
 import { generateSignedUrl } from '../middleware/cdnOptimization.js';
+import { resolveRoute, normalizePath, catalogPaths } from '../utils/modelPaths.js';
+import { meterPremiumChat, meterPremiumChatStream } from '../utils/inferenceMeter.js';
+import { estimateChatCostMicro, estimateMessageTokens } from '../utils/creditCosts.js';
+import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured } from '../utils/xenoChat.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const LOCAL_MODEL_CATALOG_PATH = path.resolve(__dirname, '../data/localModelCatalog.json');
 
-// AI provider configurations
-const PROVIDERS = {
-  openai: {
-    baseUrl: 'https://api.openai.com/v1',
-    getKey: () => process.env.OPENAI_API_KEY,
-  },
-  anthropic: {
-    baseUrl: 'https://api.anthropic.com/v1',
-    getKey: () => process.env.ANTHROPIC_API_KEY,
-  },
-  google: {
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    getKey: () => process.env.VITE_GEMINI_API_KEY,
-  },
-  openrouter: {
-    baseUrl: 'https://openrouter.ai/api/v1',
-    getKey: () => process.env.OPENROUTER_API_KEY,
-  },
-};
-
-// Model to provider mapping
-const MODEL_PROVIDERS = {
-  // OpenAI models
-  'gpt-4o': 'openai',
-  'gpt-4o-mini': 'openai',
-  'gpt-4-turbo': 'openai',
-  'gpt-3.5-turbo': 'openai',
-
-  // Anthropic models
-  'claude-3-5-sonnet': 'anthropic',
-  'claude-3-5-haiku': 'anthropic',
-  'claude-3-opus': 'anthropic',
-  'claude-3-sonnet': 'anthropic',
-  'claude-3-haiku': 'anthropic',
-
-  // Google models
-  'gemini-pro': 'google',
-  'gemini-2.0-flash': 'google',
-  'gemini-1.5-pro': 'google',
-  'gemini-1.5-flash': 'google',
-
-  // OpenRouter models (for Llama, DeepSeek, Mistral, etc.)
-  'llama-3.3-70b': 'openrouter',
-  'llama-3.1-70b': 'openrouter',
-  'llama-3.1-8b': 'openrouter',
-  'deepseek-chat': 'openrouter',
-  'deepseek-v3': 'openrouter',
-  'deepseek-r1': 'openrouter',
-  'mistral-large': 'openrouter',
-  'qwen-72b': 'openrouter',
-};
-
-// OpenRouter model ID mapping
-const OPENROUTER_MODEL_IDS = {
-  'llama-3.3-70b': 'meta-llama/llama-3.3-70b-instruct',
-  'llama-3.1-70b': 'meta-llama/llama-3.1-70b-instruct',
-  'llama-3.1-8b': 'meta-llama/llama-3.1-8b-instruct',
-  'deepseek-chat': 'deepseek/deepseek-chat',
-  'deepseek-v3': 'deepseek/deepseek-chat',
-  'deepseek-r1': 'deepseek/deepseek-r1',
-  'mistral-large': 'mistralai/mistral-large-latest',
-  'qwen-72b': 'qwen/qwen-2.5-72b-instruct',
-};
-
-// Anthropic model ID mapping
-const ANTHROPIC_MODEL_IDS = {
-  'claude-3-5-sonnet': 'claude-3-5-sonnet-20241022',
-  'claude-3-5-haiku': 'claude-3-5-haiku-20241022',
-  'claude-3-opus': 'claude-3-opus-20240229',
-  'claude-3-sonnet': 'claude-3-sonnet-20240229',
-  'claude-3-haiku': 'claude-3-haiku-20240307',
-};
-
-// Google model ID mapping
-const GOOGLE_MODEL_IDS = {
-  'gemini-2.0-flash': 'gemini-2.0-flash-exp',
-  'gemini-1.5-pro': 'gemini-1.5-pro',
-  'gemini-1.5-flash': 'gemini-1.5-flash',
-  'gemini-pro': 'gemini-pro',
-};
+// ── All inference routes through the XENO API (api.xenostudio.ai) ─────────────
+// The platform holds ZERO provider keys and contains NO provider logic. Chat is
+// proxied to the private API (xeno-api-proxy), the single key-holder, via its
+// OpenAI-compatible POST /v1/chat/completions (XENO_API_KEY, server-to-server).
+// Premium is metered LOCALLY as an interim measure until the XENO API's
+// platform-credit integration is live. BYOK is owned by the XENO API, not here.
+async function callXenoApi(model, messages, temperature, max_tokens, extra = {}) {
+  const data = await xenoChatCompletion({ model, messages, temperature, max_tokens, extra });
+  const message = data.choices?.[0]?.message || {};
+  return {
+    success: true,
+    content: message.content || '',
+    // Preserve tool calls + the raw OpenAI choices so agent clients (the
+    // browser extension) can drive a tool-use loop through the metered proxy.
+    tool_calls: Array.isArray(message.tool_calls) ? message.tool_calls : undefined,
+    choices: data.choices,
+    model: data.model || model,
+    provider: 'xeno',
+    usage: data.usage,
+  };
+}
 
 function readLocalModelCatalog() {
   const raw = readFileSync(LOCAL_MODEL_CATALOG_PATH, 'utf-8');
@@ -120,272 +67,426 @@ function serializeLocalModelCatalogModel(model) {
     installable: Boolean(model.installable && installSpec?.downloadUrl),
     installSpec,
     unavailableReason: model.unavailableReason ?? null,
+    // These run on the user's own machine via Hub + xeno-rt → the in-house path.
+    path: 'inhouse',
+    paths: ['inhouse'],
+  };
+}
+
+/** In-house path: proxy to a self-hosted xeno-rt OpenAI-compatible server. */
+async function callInhouse(baseUrl, model, messages, temperature, max_tokens, extra = {}) {
+  const url = `${String(baseUrl).replace(/\/$/, '')}/v1/chat/completions`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(process.env.XENO_RT_API_KEY ? { Authorization: `Bearer ${process.env.XENO_RT_API_KEY}` } : {}),
+    },
+    body: JSON.stringify({ model, messages, temperature, max_tokens, ...extra }),
+  });
+  if (!response.ok) {
+    throw new Error(`xeno-rt error: ${response.status} - ${await response.text()}`);
+  }
+  const data = await response.json();
+  const message = data.choices?.[0]?.message || {};
+  return {
+    success: true,
+    content: message.content || '',
+    tool_calls: Array.isArray(message.tool_calls) ? message.tool_calls : undefined,
+    choices: data.choices,
+    model,
+    provider: 'xeno-rt',
+    usage: data.usage,
   };
 }
 
 /**
- * POST /api/ai/chat
- * Universal AI chat endpoint that routes to appropriate provider
+ * POST /api/ai/chat — three-path metered chat.
+ *   path='premium' (default): XENO server keys → METERED on credits (hold→settle)
+ *   path='byok'   : the user's own key        → never metered
+ *   path='inhouse': xeno-rt open/local        → never metered
+ * Auth is enforced at the mount (index.js: databaseMiddleware, authMiddleware).
  */
 router.post('/chat', async (req, res) => {
-  const { model, messages, stream = false, temperature = 0.7, max_tokens = 4096 } = req.body;
+  const { model, messages, temperature = 0.7, max_tokens = 4096, path: reqPath, requestId, tools, tool_choice } = req.body;
 
-  if (!model || !messages) {
+  if (!model || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Model and messages are required' });
   }
 
-  console.log(`[AI Chat] Request for model: ${model}, messages: ${messages.length}`);
+  // Optional OpenAI tool-use passthrough (additive; older clients omit it).
+  // Forwarded verbatim to the upstream OpenAI-compatible API so agent clients
+  // get tool_calls back through the metered proxy.
+  const toolExtra = Array.isArray(tools) && tools.length
+    ? { tools, tool_choice: tool_choice || 'auto' }
+    : {};
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
-  // Determine provider
-  const provider = MODEL_PROVIDERS[model] || 'openrouter';
-  const providerConfig = PROVIDERS[provider];
-
-  if (!providerConfig) {
-    return res.status(400).json({ error: `Unknown provider for model: ${model}` });
-  }
-
-  const apiKey = providerConfig.getKey();
-  if (!apiKey) {
-    console.error(`[AI Chat] Missing API key for provider: ${provider}`);
-    return res.status(500).json({ error: `API key not configured for ${provider}` });
-  }
+  const inferencePath = normalizePath(reqPath);
+  const route = resolveRoute(model);
 
   try {
-    let response;
-
-    switch (provider) {
-      case 'openai':
-        response = await handleOpenAIChat(apiKey, model, messages, temperature, max_tokens);
-        break;
-      case 'anthropic':
-        response = await handleAnthropicChat(apiKey, model, messages, temperature, max_tokens);
-        break;
-      case 'google':
-        response = await handleGoogleChat(apiKey, model, messages, temperature, max_tokens);
-        break;
-      case 'openrouter':
-        response = await handleOpenRouterChat(apiKey, model, messages, temperature, max_tokens);
-        break;
-      default:
-        return res.status(400).json({ error: `Unsupported provider: ${provider}` });
+    // ── BYOK (owned by the XENO API, not the platform) ───────────────────────
+    // Users bring their own key on their XENO account; the XENO API then routes
+    // their requests on their key (unmetered). The platform stores no provider
+    // keys. Until the XENO API exposes this, byok is unavailable.
+    if (inferencePath === 'byok') {
+      return res.status(400).json({
+        error: 'byok_unavailable',
+        message: 'Bring-your-own-key is managed on your XENO account and is coming soon. Use a premium model for now.',
+      });
     }
 
-    res.json(response);
-  } catch (error) {
-    console.error(`[AI Chat] Error:`, error.message);
-    res.status(500).json({
-      error: 'AI generation failed',
-      provider: provider,
-      model: model
+    // ── IN-HOUSE (xeno-rt) ──────────────────────────────────────────────────
+    if (inferencePath === 'inhouse') {
+      const baseUrl = process.env.XENO_RT_BASE_URL;
+      if (!baseUrl) {
+        return res.status(400).json({
+          error: 'inhouse_unavailable',
+          message: 'In-house models run locally via XENO Hub today. Server-side xeno-rt is not yet available — use a premium model or your own key.',
+        });
+      }
+      const response = await callInhouse(baseUrl, route.premium.providerModel, messages, temperature, max_tokens, toolExtra);
+      return res.json({ ...response, path: 'inhouse', metered: false });
+    }
+
+    // ── PREMIUM (metered, routed through the private API) ────────────────────
+    if (!xenoApiConfigured()) {
+      return res.status(503).json({ error: 'Premium inference unavailable', message: 'The inference service is not configured.' });
+    }
+    // Idempotency seed: a client-supplied requestId makes a retry a no-op; otherwise
+    // a fresh UUID so two distinct concurrent requests never collide (Date.now() would).
+    const reqIdSeed = requestId || req.headers['x-request-id'] || randomUUID();
+    const estInputTokens = estimateMessageTokens(messages);
+
+    const metered = await meterPremiumChat(req.db, userId, {
+      model, provider: 'xeno', requestId: reqIdSeed,
+      estInputTokens, maxTokens: max_tokens,
+      run: () => callXenoApi(model, messages, temperature, max_tokens, toolExtra),
     });
+
+    return res.json({
+      ...metered.result,
+      path: 'premium',
+      metered: true,
+      credits_charged: metered.creditsCharged,
+      cost_micro: metered.costMicro,
+    });
+  } catch (error) {
+    if (error.http === 402) {
+      const bal = await getBalanceV2(req.db, userId).catch(() => null);
+      return res.status(402).json({
+        error: 'Insufficient credits',
+        message: 'Top up credits to use premium models, or switch to your own key (BYOK) or an in-house model.',
+        balance: bal ? bal.availableMicro / MICRO_PER_CREDIT : undefined,
+      });
+    }
+    if (error.http === 403) return res.status(403).json({ error: 'Account frozen' });
+    if (error.http === 503) return res.status(503).json({ error: 'Premium inference unavailable', message: 'The inference service is not configured.' });
+    console.error(`[AI Chat] Error (path=${inferencePath}, model=${model}):`, error.message);
+    return res.status(500).json({ error: 'AI generation failed', model });
   }
 });
 
 /**
- * Handle OpenAI chat completion
+ * POST /api/ai/chat/stream — token-streaming premium chat (SSE).
+ *
+ * Same auth + db middleware + rate limit + premium metering as POST /api/ai/chat,
+ * but relays upstream OpenAI SSE chunks to the client as normalized events:
+ *   {"type":"delta","text":...}                       ← choices[].delta.content
+ *   {"type":"reasoning","text":...}                    ← delta.reasoning / reasoning_content
+ *   {"type":"usage","input","output","total","creditsSettled"}  ← final usage chunk
+ *   {"type":"done"}  then the OpenAI-compatible  data: [DONE]  sentinel
+ *   {"type":"error","error":<code>,"message":...}      ← inference_error mid-stream
+ *
+ * Metering: hold worst-case BEFORE the stream (402 pre-stream if it fails), settle
+ * the hold clamped to real usage on the upstream usage chunk, and — on client
+ * disconnect or a mid-stream upstream error — settle best-effort from tokens seen
+ * so far OR void the hold. The hold is never left open and never double-settled
+ * (meterPremiumChatStream's single-shot controller). byok/inhouse are 501 for now.
  */
-async function handleOpenAIChat(apiKey, model, messages, temperature, max_tokens) {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: model,
-      messages: messages,
-      temperature: temperature,
-      max_tokens: max_tokens,
-    }),
-  });
+router.post('/chat/stream', async (req, res) => {
+  const {
+    model, messages, reasoning, conversationId, systemPrompt,
+    path: reqPath, requestId, temperature = 0.7, max_tokens = 4096,
+  } = req.body || {};
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} - ${error}`);
+  // ── Pre-stream validation → normal HTTP errors (we have not switched to SSE yet).
+  if (!model || !Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'invalid_request', message: 'Model and a non-empty messages array are required.' });
+  }
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'unauthorized', message: 'Authentication required.' });
+
+  const inferencePath = normalizePath(reqPath);
+  if (inferencePath !== 'premium') {
+    // P0 is the premium path only; byok/inhouse streaming is not implemented yet.
+    return res.status(501).json({
+      error: 'invalid_request',
+      message: 'Streaming currently supports the premium path only. Use POST /api/ai/chat for byok/inhouse.',
+    });
+  }
+  if (!xenoApiConfigured()) {
+    return res.status(503).json({ error: 'inference_error', message: 'The inference service is not configured.' });
   }
 
-  const data = await response.json();
+  // conversationId is accepted for client bookkeeping/telemetry; the gateway is stateless.
+  void conversationId;
+  const finalMessages = systemPrompt
+    ? [{ role: 'system', content: systemPrompt }, ...messages]
+    : messages;
 
-  return {
-    success: true,
-    content: data.choices[0]?.message?.content || '',
-    model: model,
-    provider: 'openai',
-    usage: data.usage,
-  };
-}
+  const reqIdSeed = requestId || req.headers['x-request-id'] || randomUUID();
+  const estInputTokens = estimateMessageTokens(finalMessages);
 
-/**
- * Handle Anthropic chat completion
- */
-async function handleAnthropicChat(apiKey, model, messages, temperature, max_tokens) {
-  // Convert OpenAI message format to Anthropic format
-  const anthropicMessages = messages.filter(m => m.role !== 'system').map(m => ({
-    role: m.role === 'user' ? 'user' : 'assistant',
-    content: m.content,
-  }));
-
-  // Extract system prompt
-  const systemMessage = messages.find(m => m.role === 'system');
-  const systemPrompt = systemMessage?.content || '';
-
-  const anthropicModel = ANTHROPIC_MODEL_IDS[model] || model;
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: anthropicModel,
-      max_tokens: max_tokens,
-      system: systemPrompt,
-      messages: anthropicMessages,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Anthropic API error: ${response.status} - ${error}`);
-  }
-
-  const data = await response.json();
-
-  return {
-    success: true,
-    content: data.content[0]?.text || '',
-    model: anthropicModel,
-    provider: 'anthropic',
-    usage: {
-      prompt_tokens: data.usage?.input_tokens,
-      completion_tokens: data.usage?.output_tokens,
-      total_tokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0),
-    },
-  };
-}
-
-/**
- * Handle Google Gemini chat completion
- */
-async function handleGoogleChat(apiKey, model, messages, temperature, max_tokens) {
-  // Convert to Gemini format
-  const contents = messages.filter(m => m.role !== 'system').map(m => ({
-    role: m.role === 'user' ? 'user' : 'model',
-    parts: [{ text: m.content }],
-  }));
-
-  // Get system instruction
-  const systemMessage = messages.find(m => m.role === 'system');
-
-  const geminiModel = GOOGLE_MODEL_IDS[model] || model;
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: contents,
-        systemInstruction: systemMessage ? { parts: [{ text: systemMessage.content }] } : undefined,
-        generationConfig: {
-          temperature: temperature,
-          maxOutputTokens: max_tokens,
-        },
-      }),
+  // ── Phase 1 — hold worst-case BEFORE opening the stream, so an over-budget wallet
+  // gets a clean 402 (not a half-open SSE). 403 = frozen; anything else = 500.
+  let meter;
+  try {
+    meter = await meterPremiumChatStream(req.db, userId, {
+      model, provider: 'xeno', requestId: reqIdSeed,
+      estInputTokens, maxTokens: max_tokens,
+    });
+  } catch (error) {
+    if (error.http === 402) {
+      const bal = await getBalanceV2(req.db, userId).catch(() => null);
+      return res.status(402).json({
+        error: 'insufficient_credits',
+        message: 'Top up credits to use premium models, or switch to your own key (BYOK) or an in-house model.',
+        balance: bal ? bal.availableMicro / MICRO_PER_CREDIT : undefined,
+      });
     }
-  );
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Google API error: ${response.status} - ${error}`);
+    if (error.http === 403) return res.status(403).json({ error: 'inference_error', message: 'Account frozen' });
+    return res.status(500).json({ error: 'inference_error', message: 'Metering failed' });
   }
 
-  const data = await response.json();
+  // ── Switch to SSE. From here EVERY failure is an in-stream error event, and the
+  // hold MUST be resolved (settle/void) on every exit path.
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
 
-  return {
-    success: true,
-    content: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
-    model: geminiModel,
-    provider: 'google',
-    usage: {
-      prompt_tokens: data.usageMetadata?.promptTokenCount,
-      completion_tokens: data.usageMetadata?.candidatesTokenCount,
-      total_tokens: data.usageMetadata?.totalTokenCount,
-    },
+  // Back-pressure–aware SSE writer. If res.write() returns false the socket buffer
+  // is full; pause until it drains rather than buffering the entire completion in
+  // the socket (a slow client + fast upstream = unbounded memory). The drain wait is
+  // RACED against the client leaving/erroring so a vanished client never hangs the
+  // relay loop. `send` is async and awaited in the relay so a full client buffer
+  // pauses upstreamReader.read().
+  const send = async (obj) => {
+    if (res.writableEnded) return;
+    const ok = res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    if (ok !== false) return;
+    await new Promise((resolve) => {
+      const done = () => {
+        res.removeListener('drain', done);
+        res.removeListener('error', done);
+        req.removeListener('close', done);
+        resolve();
+      };
+      res.once('drain', done);
+      res.once('error', done);
+      req.once('close', done);
+    });
   };
-}
+  const endStream = () => {
+    if (res.writableEnded) return;
+    res.write('data: [DONE]\n\n');
+    res.end();
+  };
 
-/**
- * Handle OpenRouter chat completion (for Llama, DeepSeek, Mistral, etc.)
- */
-async function handleOpenRouterChat(apiKey, model, messages, temperature, max_tokens) {
-  const openRouterModel = OPENROUTER_MODEL_IDS[model] || model;
+  let outputChars = 0;   // for a best-effort output-token estimate if usage never arrives
+  let usageObj = null;   // upstream usage chunk (include_usage)
+  let clientGone = false;
+  let upstream = null;
+  let upstreamReader = null;
+  const upstreamAbort = new AbortController(); // cancels the underlying fetch on disconnect
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://xeno-studio.com',
-      'X-Title': 'Xeno Search Engine',
-    },
-    body: JSON.stringify({
-      model: openRouterModel,
-      messages: messages,
-      temperature: temperature,
-      max_tokens: max_tokens,
-    }),
+  // Resolve the credit hold best-effort: charge from tokens seen so far, or void the
+  // reserve if nothing usable streamed. Single-shot via meter.settled (never double-
+  // settles). Shared by the disconnect handlers, the in-band error path (B1) and the
+  // mid-stream catch so every abnormal exit resolves the hold identically.
+  const settleBestEffort = async () => {
+    if (meter.settled) return;
+    if (outputChars > 0) {
+      await meter.settle({
+        inputTokens: usageObj?.prompt_tokens ?? estInputTokens,
+        outputTokens: usageObj?.completion_tokens ?? Math.ceil(outputChars / 4),
+      });
+    } else {
+      await meter.voidHold();
+    }
+  };
+
+  // Client disconnect OR response-socket error: abort upstream and resolve the hold.
+  // Both funnel here so the reserve is never left open (res 'error' mirrors req 'close').
+  const resolveOnDisconnect = () => {
+    if (res.writableEnded) return; // normal completion already closed the response
+    clientGone = true;
+    try { upstreamAbort.abort(); } catch { /* noop */ }
+    try { upstreamReader?.cancel?.(); } catch { /* noop */ }
+    settleBestEffort().catch(() => {});
+  };
+  req.on('close', resolveOnDisconnect);
+  res.on('error', resolveOnDisconnect);
+
+  // ── Open the upstream stream. A failure to even start → void + error event.
+  try {
+    upstream = await xenoChatCompletionStream({
+      model,
+      messages: finalMessages,
+      temperature,
+      max_tokens,
+      signal: upstreamAbort.signal,
+      // OpenRouter-style reasoning hint (the live catalog is OpenRouter-fronted);
+      // the gateway streams thinking back as delta.reasoning when supported.
+      extra: reasoning ? { reasoning: { effort: 'medium' } } : {},
+    });
+  } catch {
+    await meter.voidHold();
+    if (!clientGone) {
+      await send({ type: 'error', error: 'inference_error', message: 'Upstream inference failed to start.' });
+      endStream();
+    }
+    return;
+  }
+
+  // ── Relay loop: parse upstream SSE lines, translate to normalized events.
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    // getReader() is INSIDE the try so a null/again-locked body funnels through the
+    // catch below (which resolves the hold) instead of throwing past the metering.
+    upstreamReader = upstream.body?.getReader();
+    if (!upstreamReader) throw new Error('Upstream stream has no readable body');
+
+    for (;;) {
+      const { done, value } = await upstreamReader.read();
+      if (done || clientGone) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let nl;
+      while ((nl = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (!line || !line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (payload === '[DONE]') continue; // upstream sentinel; we emit our own
+        let chunk;
+        try { chunk = JSON.parse(payload); } catch { continue; }
+
+        // In-band provider error: OpenAI/OpenRouter signal a failed/aborted generation
+        // with a valid-JSON `data: {"error":{…}}` line (no usage/choices) and then close
+        // the stream normally. Without catching it here we would fall through the normal
+        // exit and SETTLE + report success for a truncated/failed completion. Resolve the
+        // hold from tokens seen (or void), emit a GENERIC error (never forward the
+        // provider's message — no upstream detail leak) and end. Checked FIRST, before
+        // usage/delta, so an error line is never mistaken for content.
+        if (chunk.error) {
+          await settleBestEffort();
+          if (!clientGone) {
+            await send({ type: 'error', error: 'inference_error', message: 'The inference stream failed.' });
+            endStream();
+          }
+          return;
+        }
+
+        if (chunk.usage) usageObj = chunk.usage; // include_usage: final chunk
+
+        const delta = chunk.choices?.[0]?.delta || {};
+        if (typeof delta.content === 'string' && delta.content.length) {
+          outputChars += delta.content.length;
+          await send({ type: 'delta', text: delta.content });
+        }
+        const reasoningText = delta.reasoning ?? delta.reasoning_content;
+        if (typeof reasoningText === 'string' && reasoningText.length) {
+          await send({ type: 'reasoning', text: reasoningText });
+        }
+      }
+    }
+  } catch {
+    // Upstream errored mid-stream (or setup threw): settle best-effort, or void.
+    await settleBestEffort().catch(() => {});
+    if (!clientGone) {
+      await send({ type: 'error', error: 'inference_error', message: 'The inference stream failed.' });
+      endStream();
+    }
+    return;
+  }
+
+  // Client vanished mid-stream — the disconnect handler owns metering; nothing to emit.
+  if (clientGone) return;
+
+  // ── Normal completion — settle from real usage. If the upstream never sent a usage
+  // chunk, charge the RESERVED worst case (hasOutputUsage:false, clamped) to match
+  // meterPremiumChat rather than a chars/4 estimate that under-bills. The char estimate
+  // stays best-effort only for the disconnect/error paths above.
+  const hasOutputUsage = usageObj != null
+    && (usageObj.completion_tokens != null || usageObj.total_tokens != null);
+  const inputTokens = usageObj?.prompt_tokens ?? estInputTokens;
+  const outputTokens = usageObj?.completion_tokens
+    ?? (usageObj?.total_tokens != null
+      ? Math.max(0, usageObj.total_tokens - (usageObj.prompt_tokens || 0))
+      : Math.ceil(outputChars / 4));
+  const settleRes = await meter.settle({ inputTokens, outputTokens, hasOutputUsage });
+
+  await send({
+    type: 'usage',
+    input: inputTokens,
+    output: outputTokens,
+    total: inputTokens + outputTokens,
+    creditsSettled: settleRes.creditsCharged ?? 0,
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
-  }
-
-  const data = await response.json();
-
-  return {
-    success: true,
-    content: data.choices[0]?.message?.content || '',
-    model: openRouterModel,
-    provider: 'openrouter',
-    usage: data.usage,
-  };
-}
+  await send({ type: 'done' });
+  endStream();
+});
 
 /**
- * GET /api/ai/models
- * List available AI models
+ * POST /api/ai/chat/estimate — pre-generation cost preview (the "cost shown before
+ * it runs" trust rule). Returns the WORST-CASE premium credit cost; byok/inhouse = 0.
+ */
+router.post('/chat/estimate', async (req, res) => {
+  const { model, messages = [], max_tokens = 4096, path: reqPath } = req.body;
+  if (!model) return res.status(400).json({ error: 'Model is required' });
+
+  const inferencePath = normalizePath(reqPath);
+  if (inferencePath !== 'premium') {
+    return res.json({ path: inferencePath, metered: false, credits_estimate: 0 });
+  }
+  const estInputTokens = estimateMessageTokens(messages);
+  const micro = estimateChatCostMicro(model, { inputTokens: estInputTokens, maxOutputTokens: max_tokens });
+  return res.json({
+    path: 'premium',
+    metered: true,
+    worst_case: true,
+    cost_micro: micro,
+    credits_estimate: micro / MICRO_PER_CREDIT,
+  });
+});
+
+/**
+ * GET /api/ai/models — static fallback list (the live catalog is GET /api/models).
+ * Kept for back-compat; tagged with inference paths for the 3-path UI.
  */
 router.get('/models', (req, res) => {
-  const models = [
-    // OpenAI
+  const raw = [
     { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', description: 'Most capable OpenAI model', icon: '🟢' },
     { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI', description: 'Fast and affordable', icon: '🟢' },
-
-    // Anthropic
     { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', description: 'Best for analysis and coding', icon: '🟠' },
     { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic', description: 'Most powerful Claude', icon: '🟠' },
-
-    // Google
     { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google', description: 'Long context, multimodal', icon: '🔵' },
     { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'Google', description: 'Fast and efficient', icon: '🔵' },
-
-    // Open Source via OpenRouter
     { id: 'llama-3.1-70b', name: 'Llama 3.1 70B', provider: 'Meta', description: 'Open source, powerful', icon: '🟣' },
     { id: 'deepseek-v3', name: 'DeepSeek V3', provider: 'DeepSeek', description: 'Advanced reasoning', icon: '🔴' },
     { id: 'deepseek-r1', name: 'DeepSeek R1', provider: 'DeepSeek', description: 'Reasoning model', icon: '🔴' },
     { id: 'mistral-large', name: 'Mistral Large', provider: 'Mistral', description: 'European excellence', icon: '⚪' },
   ];
-
-  res.json({
-    success: true,
-    models: models,
-  });
+  const models = raw.map((m) => ({ ...m, ...catalogPaths(m.id) }));
+  res.json({ success: true, models });
 });
 
 /**
