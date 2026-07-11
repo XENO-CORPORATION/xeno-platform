@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { Copy, Check, Pencil, RefreshCw, Square, X } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Copy, Check, Pencil, RefreshCw, Square, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { UIMessage } from '../types';
 import Markdown from './Markdown';
 import ThinkingPanel from './ThinkingPanel';
+import ArtifactCard from './ArtifactCard';
+import { splitSegments } from '../artifacts/parse';
 
 interface MessageBubbleProps {
   message: UIMessage;
@@ -10,7 +12,48 @@ interface MessageBubbleProps {
   onCopy: (text: string) => void;
   onEdit: (id: string, newText: string) => void;
   onRegenerate: () => void;
+  onSetVariant: (id: string, index: number) => void;
   onStop: () => void;
+}
+
+/** ChatGPT-style "‹ n/m ›" branch switcher, shown when a turn has sibling variants. */
+function VariantSwitcher({
+  message,
+  onSetVariant,
+  disabled,
+}: {
+  message: UIMessage;
+  onSetVariant: (id: string, index: number) => void;
+  disabled?: boolean;
+}) {
+  const total = message.variants?.length ?? 0;
+  if (total < 2) return null;
+  const active = message.activeVariant ?? 0;
+  return (
+    <div className="flex items-center gap-0.5 text-white/45" aria-label="Message versions">
+      <button
+        onClick={() => onSetVariant(message.id, active - 1)}
+        disabled={disabled || active <= 0}
+        title="Previous version"
+        aria-label="Previous version"
+        className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-white/10 hover:text-white/85 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent"
+      >
+        <ChevronLeft size={14} />
+      </button>
+      <span className="select-none text-[11px] font-medium tabular-nums">
+        {active + 1}/{total}
+      </span>
+      <button
+        onClick={() => onSetVariant(message.id, active + 1)}
+        disabled={disabled || active >= total - 1}
+        title="Next version"
+        aria-label="Next version"
+        className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-white/10 hover:text-white/85 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent"
+      >
+        <ChevronRight size={14} />
+      </button>
+    </div>
+  );
 }
 
 function ActionButton({
@@ -40,11 +83,20 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onCopy,
   onEdit,
   onRegenerate,
+  onSetVariant,
   onStop,
 }) => {
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
+
+  // Split the assistant reply into ordered prose + artifact-card segments, so a
+  // substantial fenced artifact renders as a compact card (opening the side panel)
+  // instead of being dumped inline. Cheap + memoized on the live content.
+  const segments = useMemo(
+    () => (message.role === 'assistant' ? splitSegments(message.content, message.id) : null),
+    [message.role, message.content, message.id],
+  );
 
   const copy = () => {
     onCopy(message.content);
@@ -93,13 +145,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-[#1e1a24] px-4 py-2.5 text-[15px] leading-relaxed text-[#efeae2]">
               {message.content}
             </div>
-            <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-              <ActionButton label={copied ? 'Copied' : 'Copy'} onClick={copy}>
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-              </ActionButton>
-              <ActionButton label="Edit" onClick={() => { setDraft(message.content); setEditing(true); }}>
-                <Pencil size={14} />
-              </ActionButton>
+            <div className="flex items-center gap-0.5">
+              <VariantSwitcher message={message} onSetVariant={onSetVariant} />
+              <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <ActionButton label={copied ? 'Copied' : 'Copy'} onClick={copy}>
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                </ActionButton>
+                <ActionButton label="Edit" onClick={() => { setDraft(message.content); setEditing(true); }}>
+                  <Pencil size={14} />
+                </ActionButton>
+              </div>
             </div>
           </>
         )}
@@ -121,30 +176,46 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         </div>
       ) : (
         <div className="min-w-0">
-          <Markdown>{message.content}</Markdown>
+          {(segments ?? [{ kind: 'markdown', text: message.content } as const]).map((seg, i) =>
+            seg.kind === 'artifact' ? (
+              <ArtifactCard
+                key={`art-${i}-${seg.artifactId}`}
+                artifactId={seg.artifactId}
+                title={seg.title}
+                artifactKind={seg.artifactKind}
+                complete={seg.complete}
+              />
+            ) : (
+              <Markdown key={`md-${i}`}>{seg.text}</Markdown>
+            ),
+          )}
           {message.streaming && (
             <span className="ml-0.5 inline-block h-4 w-[7px] translate-y-0.5 animate-pulse rounded-sm bg-[#a760ff]" />
           )}
         </div>
       )}
 
-      <div className="flex items-center gap-0.5 pt-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        {message.streaming ? (
-          <ActionButton label="Stop" onClick={onStop}>
-            <Square size={13} className="fill-current" />
-          </ActionButton>
-        ) : (
-          <>
-            <ActionButton label={copied ? 'Copied' : 'Copy'} onClick={copy}>
-              {copied ? <Check size={14} /> : <Copy size={14} />}
+      <div className="flex items-center gap-0.5 pt-0.5">
+        {/* The version switcher stays visible (not hover-gated) so branches are discoverable. */}
+        <VariantSwitcher message={message} onSetVariant={onSetVariant} disabled={message.streaming} />
+        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          {message.streaming ? (
+            <ActionButton label="Stop" onClick={onStop}>
+              <Square size={13} className="fill-current" />
             </ActionButton>
-            {canRegenerate && (
-              <ActionButton label="Regenerate" onClick={onRegenerate}>
-                <RefreshCw size={14} />
+          ) : (
+            <>
+              <ActionButton label={copied ? 'Copied' : 'Copy'} onClick={copy}>
+                {copied ? <Check size={14} /> : <Copy size={14} />}
               </ActionButton>
-            )}
-          </>
-        )}
+              {canRegenerate && (
+                <ActionButton label="Regenerate" onClick={onRegenerate}>
+                  <RefreshCw size={14} />
+                </ActionButton>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

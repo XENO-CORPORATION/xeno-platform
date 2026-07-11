@@ -1,8 +1,11 @@
 import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import type { Components } from 'react-markdown';
 import CodeBlock from './CodeBlock';
+import 'katex/dist/katex.min.css';
 
 // react-markdown v10 no longer passes an `inline` flag to the code renderer, so we
 // distinguish inline code from fenced blocks by the presence of a language class
@@ -61,7 +64,11 @@ const components: Components = {
 const Markdown = memo(function Markdown({ children }: { children: string }) {
   return (
     <div className="text-[15px] text-[#e7e2da]">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={components}
+      >
         {children}
       </ReactMarkdown>
     </div>

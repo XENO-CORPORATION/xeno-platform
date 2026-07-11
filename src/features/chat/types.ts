@@ -22,6 +22,39 @@ export interface UIMessage {
   serverId?: string;
   /** Token usage + credits settled for this assistant turn (from the SSE `usage` event). */
   usage?: StreamUsage;
+  /**
+   * ChatGPT-style branching. When an assistant reply is REGENERATED or a user message
+   * is EDITED, the prior turn is kept as a sibling here instead of being discarded.
+   * The flat message array (`messagesByConv[convId]`) always represents the ACTIVE
+   * path; `variants[activeVariant]` mirrors this message's live state, and switching
+   * a variant rebuilds the active path from the selected sibling.
+   */
+  variants?: MessageVariant[];
+  /** Index into `variants` for the currently-active sibling. */
+  activeVariant?: number;
+}
+
+/**
+ * One sibling of a branched turn. Assistant variants are alternate replies (the
+ * assistant is the tail, so no continuation). User variants are whole branches: the
+ * edited user content PLUS the messages that followed it in that branch.
+ */
+export interface MessageVariant {
+  /** Stable id for this variant instance. */
+  id: string;
+  content: string;
+  reasoning?: string;
+  model?: string;
+  createdAt: number;
+  error?: boolean;
+  /** Server-side row id for this variant's message, when persisted. */
+  serverId?: string;
+  usage?: StreamUsage;
+  /**
+   * USER-branch variants only: the turns that follow this user message in the branch.
+   * Undefined/empty for assistant-reply variants.
+   */
+  continuation?: UIMessage[];
 }
 
 /** The typed events the SSE stream produces — the ONLY shapes the client accepts. */

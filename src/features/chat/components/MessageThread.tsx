@@ -44,6 +44,7 @@ const MessageThread: React.FC = () => {
   const regenerate = useChatStore((s) => s.regenerate);
   const stopStreaming = useChatStore((s) => s.stopStreaming);
   const editUserMessage = useChatStore((s) => s.editUserMessage);
+  const setActiveVariant = useChatStore((s) => s.setActiveVariant);
 
   const messages = (activeId && messagesByConv[activeId]) || [];
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -93,6 +94,7 @@ const MessageThread: React.FC = () => {
             onCopy={copy}
             onEdit={editUserMessage}
             onRegenerate={regenerate}
+            onSetVariant={setActiveVariant}
             onStop={stopStreaming}
           />
         ))}

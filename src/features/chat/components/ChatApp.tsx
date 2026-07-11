@@ -1,22 +1,45 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Menu, PanelLeftOpen, X } from 'lucide-react';
 import { useChatStore } from '../store';
+import { deriveArtifacts } from '../artifacts/parse';
 import ConversationRail from './ConversationRail';
 import MessageThread from './MessageThread';
 import Composer from './Composer';
+import ArtifactPanel from './ArtifactPanel';
+import type { UIMessage } from '../types';
+
+const MIN_PANEL = 360;
+const DEFAULT_PANEL = 540;
+// Stable empty reference — returning a fresh [] from a Zustand v5 selector trips
+// useSyncExternalStore's "getSnapshot should be cached" infinite-render guard.
+const EMPTY: UIMessage[] = [];
 
 /**
  * ChatApp — the self-contained, full-viewport chat surface.
  *
- * Layout: [ ConversationRail | MessageThread + Composer ]. Responsive — the rail
- * collapses on desktop and becomes an overlay drawer on mobile. No app-shell
- * dependencies, so this component can also be dropped straight into the standalone
- * xeno-chat.com shell.
+ * Layout: [ ConversationRail | (MessageThread + Composer) | ArtifactPanel ]. The
+ * artifact panel opens on the right when an artifact card is clicked (or auto-opens on
+ * the first artifact of a conversation); the thread column narrows to make room and the
+ * panel is resizable via the drag handle on its left edge. On mobile it becomes a
+ * full-screen overlay. No app-shell dependencies, so this drops into xeno-chat.com too.
  */
 const ChatApp: React.FC = () => {
   const init = useChatStore((s) => s.init);
+  const activeId = useChatStore((s) => s.activeId);
+  const messages =
+    useChatStore((s) => (s.activeId ? s.messagesByConv[s.activeId] : undefined)) ?? EMPTY;
+  const panelOpen = useChatStore((s) => s.artifactPanelOpen);
+  const openArtifact = useChatStore((s) => s.openArtifact);
+  const closeArtifactPanel = useChatStore((s) => s.closeArtifactPanel);
+
   const [railOpen, setRailOpen] = useState(true); // desktop rail visibility
   const [drawerOpen, setDrawerOpen] = useState(false); // mobile drawer
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL);
+  const dragging = useRef(false);
+  // Teardown for an in-flight resize drag (remove window listeners + reset body styles).
+  // Held in a ref so an unmount / panel-close mid-drag can run it — otherwise the drag's
+  // window listeners leak and the body stays stuck at userSelect:none / col-resize.
+  const dragCleanup = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     void init();
@@ -31,6 +54,52 @@ const ChatApp: React.FC = () => {
     },
     [],
   );
+
+  // Auto-open the panel the first time a conversation produces an artifact (once per
+  // conversation — a manual close is respected and won't be reopened).
+  const artifacts = useMemo(() => deriveArtifacts(messages), [messages]);
+  const autoOpened = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!activeId || artifacts.length === 0) return;
+    if (autoOpened.current.has(activeId)) return;
+    autoOpened.current.add(activeId);
+    openArtifact(artifacts[artifacts.length - 1].id);
+  }, [activeId, artifacts, openArtifact]);
+
+  // Resizable panel (drag the handle on its left edge).
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    // If a previous drag somehow didn't tear down, do it now before starting a new one.
+    dragCleanup.current?.();
+    dragging.current = true;
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const max = Math.min(window.innerWidth * 0.72, 1100);
+      const next = window.innerWidth - ev.clientX;
+      setPanelWidth(Math.max(MIN_PANEL, Math.min(next, max)));
+    };
+    const cleanup = () => {
+      dragging.current = false;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      dragCleanup.current = null;
+    };
+    const onUp = () => cleanup();
+    dragCleanup.current = cleanup;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
+
+  // Unmount safety net: if the chat surface unmounts (or the panel closes) mid-drag, the
+  // mouseup that would normally clean up never fires. Run the pending teardown so the
+  // window listeners don't leak and the <body> doesn't stay stuck in the drag styles.
+  useEffect(() => () => dragCleanup.current?.(), []);
+
+  const showPanel = panelOpen;
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-[#060606] text-white antialiased">
@@ -86,6 +155,29 @@ const ChatApp: React.FC = () => {
         <MessageThread />
         <Composer />
       </div>
+
+      {/* Desktop artifact panel — resizable, closeable */}
+      {showPanel && (
+        <>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={onDragStart}
+            className="hidden w-1 shrink-0 cursor-col-resize bg-white/8 transition-colors hover:bg-[#a760ff]/50 lg:block"
+          />
+          <aside
+            className="hidden shrink-0 border-l border-white/8 lg:block"
+            style={{ width: panelWidth }}
+          >
+            <ArtifactPanel onClose={closeArtifactPanel} />
+          </aside>
+
+          {/* Mobile: full-screen overlay */}
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <ArtifactPanel onClose={closeArtifactPanel} />
+          </div>
+        </>
+      )}
     </div>
   );
 };
