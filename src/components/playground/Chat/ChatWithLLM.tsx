@@ -4,6 +4,7 @@ import CodeBlockWithHeader from './CodeBlockWithHeader';
 import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService } from '@/services/chatService';
+import { chatComplete } from '@/services/aiService';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchResponse, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
@@ -23,10 +24,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Checkbox } from '@/components/ui/checkbox'; // Using Checkbox for simplicity
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
-// Default model to use initially (will be updated when API models are fetched)
+// Attach the web-session bearer token (same 'xenoos_auth_token' key the rest of the
+// app uses) to auth-gated, same-origin backend routes (/api/chat/generate,
+// /api/piston/*, /api/fetch-metadata, /api/v2/engine/*) so they don't 401.
+// Spread-conditional: a logged-out caller sends no Authorization header (and
+// correctly gets 401) rather than a literal "Bearer null".
+function withAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('xenoos_auth_token') : null;
+  return token ? { ...extra, Authorization: `Bearer ${token}` } : { ...extra };
+}
+
+// Transient default until the live catalog loads (overridden by the fetch below).
+// Uses a REAL endpoint model id — no fabricated fallback.
 const DEFAULT_MODEL: Model = {
-  id: "anthropic/claude-sonnet-4.6",
-  name: "Claude Sonnet 4.6",
+  id: "gpt-5.6-terra",
+  name: "GPT-5.6 Terra",
   maxTokens: 200000,
   inputModalities: ['text', 'image', 'file'],
   outputModalities: ['text']
@@ -1737,7 +1749,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       // Call API to get metadata - pass the actual URL to the API endpoint
       const response = await fetch('/api/fetch-metadata', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ url: actualUrl })
       });
 
@@ -1872,14 +1884,13 @@ interface QueueState {
         const models = await getGroupedModels();
         setGroupedModels(models);
 
-        // Set default selected model to first Anthropic model if available
-        const anthropicGroup = models.find(g => g.companyName === 'Anthropic');
-        if (anthropicGroup && anthropicGroup.models.length > 0) {
-          setSelectedModel(anthropicGroup.models[0]);
-        } else if (models.length > 0 && models[0].models.length > 0) {
-          // Fallback to first available model
-          setSelectedModel(models[0].models[0]);
-        }
+        // Default to gpt-5.6-terra, else gpt-5.5, else the first available.
+        const flat = models.flatMap(g => g.models);
+        const preferred = flat.find(m => m.id === 'gpt-5.6-terra')
+          || flat.find(m => /gpt-5\.6-terra/.test(m.id))
+          || flat.find(m => m.id === 'gpt-5.5')
+          || flat[0];
+        if (preferred) setSelectedModel(preferred);
 
         console.log(`✅ Loaded ${models.length} company groups with models`);
       } catch (error) {
@@ -2525,7 +2536,7 @@ interface QueueState {
     setPistonRuntimesLoading(true);
     const fetchPistonRuntimes = async () => {
       try {
-        const response = await fetch('/api/piston/runtimes');
+        const response = await fetch('/api/piston/runtimes', { headers: withAuthHeaders() });
         if (!response.ok) {
           // Silently handle Piston service not being available in development
           setPistonRuntimes([]);
@@ -2909,7 +2920,7 @@ interface QueueState {
 
         const response = await fetch('/api/chat/generate', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(payload),
             signal: controller.signal, // Pass the signal to fetch
         });
@@ -4548,11 +4559,8 @@ Please provide a well-structured response using this search context and any mult
     setIsLoading(true);
 
     try {
-      const openrouterKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
-      if (!openrouterKey) throw new Error('OpenRouter API key not configured');
-
       // Always use Gemini Flash for compacting - fast, cheap, 1M context
-      const compactingModel = 'google/gemini-2.5-flash';
+      const compactingModel = 'gpt-5.4-mini';
       console.log(`📦 Using Gemini Flash for compacting`);
 
       // Build conversation text for summarization
@@ -4560,40 +4568,29 @@ Please provide a well-structured response using this search context and any mult
         .map(m => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`)
         .join('\n\n');
 
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openrouterKey}`,
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'Xeno Chat',
-        },
-        body: JSON.stringify({
-          model: compactingModel,
-          messages: [
-            {
-              role: 'system',
-              content: `You are a conversation summarizer. Create a concise summary of the following conversation.
+      const result = await chatComplete({
+        model: compactingModel,
+        path: 'premium',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a conversation summarizer. Create a concise summary of the following conversation.
 Focus on:
 1. Main topics discussed
 2. Key questions asked and answers given
 3. Important decisions or conclusions reached
 
 Keep the summary under 500 words. Preserve essential context needed to continue the conversation.`
-            },
-            {
-              role: 'user',
-              content: `Summarize this conversation:\n\n${conversationText}`
-            }
-          ],
-          max_tokens: 1000,
-        }),
+          },
+          {
+            role: 'user',
+            content: `Summarize this conversation:\n\n${conversationText}`
+          }
+        ],
+        maxTokens: 1000,
       });
 
-      if (!response.ok) throw new Error('Failed to summarize conversation');
-
-      const data = await response.json();
-      const summary = data.choices?.[0]?.message?.content || 'Previous conversation summary.';
+      const summary = result.content || 'Previous conversation summary.';
 
       // Create compacted messages: summary message only
       const compactedMessages: ChatMessage[] = [
@@ -6311,7 +6308,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     try {
       const response = await fetch('/api/piston/execute', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           language: runtimeToUse.language,
           version: runtimeToUse.version,
@@ -6820,7 +6817,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       
       const visionResponse = await fetch('/api/chat/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           messages: [{
             role: 'user',
@@ -6945,7 +6942,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         
         const synthesisResponse = await fetch('/api/chat/generate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             messages: [{
               role: 'user',
@@ -7009,7 +7006,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(body)
       });
 
@@ -7487,7 +7484,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               {!isMultiInterface && (
               <button
                   onClick={toggleHistory}
-                  className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 ${isHistoryOpen ? 'border-gray-500' : ''}`}
+                  className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 ${isHistoryOpen ? 'border-gray-500' : ''}`}
                   aria-label="Toggle History"
               >
                   <Lightbulb size={16} />
@@ -7500,7 +7497,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   onClick={toggleSystemPrompt}
                   onMouseEnter={() => setIsSystemPromptButtonHovered(true)}
                   onMouseLeave={() => setIsSystemPromptButtonHovered(false)}
-                  className={`chat-system-prompt-btn flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'} ${selectedPersona ? 'border-gray-500' : ''}`}
+                  className={`chat-system-prompt-btn flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'} ${selectedPersona ? 'border-gray-500' : ''}`}
                 >
                   <FilePenLine size={16} className="flex-shrink-0" />
                   <span className="truncate hidden md:inline">
@@ -7522,11 +7519,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 >
                   {PERSONAS.map((persona) => (
                     <button key={persona.id} onClick={() => handlePersonaSelect(persona.id)}
-                      className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === persona.id ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'}`}
+                      className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === persona.id ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'}`}
                     >{persona.label}</button>
                   ))}
                   <button onClick={() => { setIsSystemPromptOpen(false); setIsCustomPromptOpen(true); }}
-                    className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === 'custom' ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'}`}
+                    className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === 'custom' ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'}`}
                   >Custom</button>
                   {selectedPersona && (
                     <button onClick={handleClearSystemPrompt}
@@ -7541,10 +7538,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className="w-full h-32 p-3 text-sm text-gray-200 placeholder-gray-500 outline-none bg-[#0e0e10] border-b border-[#2a2a2d] scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent resize-none" />
                   <div className="flex gap-2 p-2">
                     <button onClick={() => { setIsCustomPromptOpen(false); setIsSystemPromptOpen(true); }}
-                      className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white transition-colors">Back</button>
+                      className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white transition-colors">Back</button>
                     <button onClick={() => { setSavedSystemPrompt(systemPrompt); setIsCustomPromptOpen(false); setSelectedPersona('custom'); setIsSystemPromptSaved(true); setTimeout(() => setIsSystemPromptSaved(false), 1500); }}
                       disabled={!systemPrompt.trim()}
-                      className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${systemPrompt.trim() ? 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white' : 'border-white/[0.04] text-gray-600 cursor-not-allowed'}`}>Save</button>
+                      className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${systemPrompt.trim() ? 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white' : 'border-white/[0.04] text-gray-600 cursor-not-allowed'}`}>Save</button>
                   </div>
                 </div>
               </div>
@@ -7584,7 +7581,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               <button
                 ref={conversationSelectorButtonRef}
                 onClick={() => setIsConversationSelectorOpen(!isConversationSelectorOpen)}
-                className={`flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 max-w-[14rem] ${isConversationSelectorOpen ? 'border-gray-500' : ''}`}
+                className={`flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 max-w-[14rem] ${isConversationSelectorOpen ? 'border-gray-500' : ''}`}
               >
                 <MessageSquarePlus size={16} className="text-gray-500 flex-shrink-0" />
                 <span className="truncate max-w-[10rem]">
@@ -7698,7 +7695,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <button
                     onClick={handleRefreshConversation}
                     disabled={isRefreshing}
-                    className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     aria-label="Refresh conversation"
                 >
                     <RefreshCcw size={16} className={isRefreshing ? 'animate-spin' : ''} />
@@ -7706,7 +7703,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               )}
               <button
                   onClick={handleNewChat}
-                  className="flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9"
+                  className="flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9"
                   aria-label="Start New Chat"
               >
                   <SquarePen size={16} />
@@ -7719,7 +7716,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       }}
                   onMouseEnter={() => setIsModelSelectorButtonHovered(true)}
                   onMouseLeave={() => setIsModelSelectorButtonHovered(false)}
-                  className={`chat-model-selector flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'}`}
+                  className={`chat-model-selector flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'}`}
                 >
                   {isModelsLoading ? (
                     <Loader2 size={16} className="text-gray-500 flex-shrink-0 animate-spin" />
@@ -7751,6 +7748,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   {/* Scrollable Content */}
                   <div className="flex-1 overflow-y-auto">
                     <div>
+                          {groupedModels.length === 0 && (
+                            <div className="px-4 py-8 text-center text-sm text-white/40">
+                              {isModelsLoading ? 'Loading models…' : 'No models available on the endpoint.'}
+                            </div>
+                          )}
                           {groupedModels.map((group) => {
                               const isExpanded = expandedCompanies.has(group.companyName);
                               return (
@@ -7778,10 +7780,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         <div
                                           key={model.id}
                                           onClick={() => handleModelSelect(model)}
-                                          className={`px-3 py-2 flex items-center justify-between cursor-pointer transition-colors ${
+                                          className={`px-3 py-2 flex items-center justify-between cursor-pointer transition-colors border-l-2 ${
                                             selectedModel.id === model.id
-                                              ? 'bg-white/10 text-white'
-                                              : 'text-gray-400 hover:bg-white/[0.05] hover:text-white'
+                                              ? 'bg-[#a760ff]/10 text-white border-[#a760ff]'
+                                              : 'text-gray-400 hover:bg-white/[0.05] hover:text-white border-transparent'
                                           }`}
                                         >
                                           <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -7814,7 +7816,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   setIsMessageSearchOpen(!isMessageSearchOpen);
                   if (isMessageSearchOpen) setMessageSearchQuery('');
                 }}
-                className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9 ${
+                className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 ${
                   isMessageSearchOpen ? 'border-gray-500' : 'border-[#1e1e21]'
                 }`}
                 aria-label="Search messages"
@@ -7826,7 +7828,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               <button
                   ref={settingsButtonRef}
                   onClick={() => setIsSettingsModalOpen(!isSettingsModalOpen)}
-                  className="flex items-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/[0.04] hover:bg-black/20 transition-colors h-9"
+                  className="flex items-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9"
                   aria-label="Settings"
               >
                   <Settings size={16} />
@@ -7854,7 +7856,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         chatAlignment === 'left'
                           ? 'bg-[#0e0e10] border-gray-500 text-white'
-                          : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
                       }`}
                     >
                       Left
@@ -7864,7 +7866,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         chatAlignment === 'center'
                           ? 'bg-[#0e0e10] border-gray-500 text-white'
-                          : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
                       }`}
                     >
                       Center
@@ -7874,7 +7876,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         chatAlignment === 'right'
                           ? 'bg-[#0e0e10] border-gray-500 text-white'
-                          : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
                       }`}
                     >
                       Right
@@ -7889,7 +7891,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className={`w-full px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                       isWideChatEnabled
                         ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
                     }`}
                   >
                     Wide
@@ -7907,7 +7909,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
                       chatFontSize === 'small'
                         ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
                     }`}
                   >
                     <span className="text-[10px]">A</span>
@@ -7920,7 +7922,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
                       chatFontSize === 'medium'
                         ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
                     }`}
                   >
                     <span className="text-xs">A</span>
@@ -7933,7 +7935,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
                       chatFontSize === 'large'
                         ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
+                        : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
                     }`}
                   >
                     <span className="text-sm">A</span>
@@ -7959,7 +7961,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                         maxInterfacesReached
                           ? 'border-white/[0.04] text-gray-600 cursor-not-allowed'
-                          : 'border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white'
+                          : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
                       }`}
                     >
                       <Plus size={14} />
@@ -7992,7 +7994,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         handleExportConversation();
                         setIsSettingsModalOpen(false);
                       }}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-white/[0.04] hover:bg-black/20 hover:text-white transition-colors"
+                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white transition-colors"
                     >
                       <Download size={14} />
                       <span>Export as Markdown</span>
@@ -8379,7 +8381,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           <div className="w-full pl-[1.125rem] mb-4">
                                               <div
                                                   onClick={() => setShowThinkingId(message.id)}
-                                                  className="flex items-center justify-between w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-4 py-2.5 cursor-pointer hover:border-white/[0.04] hover:bg-black/20 transition-colors"
+                                                  className="flex items-center justify-between w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-4 py-2.5 cursor-pointer hover:border-white/20 hover:bg-black/20 transition-colors"
                                               >
                                                   <div className="flex items-center gap-2">
                                                       <Lightbulb size={16} className="text-gray-500" />
@@ -8871,7 +8873,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <button
                           ref={attachButtonRef}
                           onClick={toggleAttachMenu}
-                          className="flex items-center justify-center border border-white/[0.08] rounded-lg p-2 text-gray-300 hover:border-white/[0.04] hover:bg-black/20 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-white/[0.08] disabled:hover:bg-transparent disabled:hover:text-gray-300 transition-colors"
+                          className="flex items-center justify-center border border-white/[0.08] rounded-lg p-2 text-gray-300 hover:border-white/20 hover:bg-black/20 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-white/[0.08] disabled:hover:bg-transparent disabled:hover:text-gray-300 transition-colors"
                           aria-label="Attach file"
                           disabled={!modelSupportsVision(selectedModel)}
                       >
@@ -9036,29 +9038,31 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                      })()}
 
                   {isLoading ? (
-                    // Show Queue button if there's text in input during generation, otherwise show Stop
+                    // While generating: Queue (if typing) else Stop — both 40x40 to match Send/Voice.
                     (inputValue.trim() || attachedFiles.length > 0) ? (
                       <button
                         onClick={addToQueue}
-                        className="bg-gray-400 text-zinc-900 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors h-10 flex items-center justify-center"
+                        title="Add this message to the queue"
+                        className="w-10 h-10 rounded-lg bg-[#2a2a2d] text-white hover:bg-[#3a3a3d] flex items-center justify-center transition-colors"
                       >
-                        <span className="text-sm font-semibold">Queue</span>
+                        <Plus size={18} />
                       </button>
                     ) : (
                       <button
                         onClick={handleStopGeneration}
-                        className="bg-gray-400 text-zinc-900 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors h-10 flex items-center justify-center"
+                        title="Stop generating"
+                        className="w-10 h-10 rounded-lg bg-[#2a2a2d] text-white hover:bg-[#3a3a3d] flex items-center justify-center transition-colors"
                       >
-                        <StopCircle size={16} />
+                        <StopCircle size={18} />
                       </button>
                     )
                   ) : (inputValue.trim() || attachedFiles.length > 0) ? (
                     <button
                       onClick={handleGenerate}
-                      className="w-10 h-10 rounded-lg bg-white hover:bg-white/90 flex items-center justify-center transition-all shadow-md"
+                      className="w-10 h-10 rounded-lg bg-[#a760ff] hover:bg-[#b578ff] flex items-center justify-center transition-all shadow-md disabled:opacity-40"
                       disabled={isContextLimitReached}
                     >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </button>
                   ) : (
                     <button
