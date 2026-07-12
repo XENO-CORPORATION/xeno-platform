@@ -318,9 +318,8 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        - VITE_OPENAI_API_KEY=${VITE_OPENAI_API_KEY}
-        - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
-        - VITE_OPENROUTER_API_KEY=${VITE_OPENROUTER_API_KEY}
+        # NON-SECRET build args only — provider API keys are never baked into the
+        # frontend image; all inference routes through the authed, metered backend.
         - VITE_API_URL=/api
         - VITE_WS_URL=wss://xenostudio.ai/ws
         - VITE_ENABLE_SITE_GATE=${VITE_ENABLE_SITE_GATE}

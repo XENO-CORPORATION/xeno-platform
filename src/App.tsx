@@ -55,8 +55,6 @@ import ContactContent from './pages/ContactContent';
 // Import MultiChatContainer for standalone xeno-chat.com domain
 import MultiChatContainer from './components/playground/Chat/MultiChatContainer';
 
-// Fresh, streaming-first chat module (src/features/chat) — mounted at /chat.
-import { ChatApp } from './features/chat';
 
 // Lazy load StudioVideoCanvas for standalone canvas page
 const StudioVideoCanvas = React.lazy(() =>
@@ -191,12 +189,8 @@ function App() {
               </ProtectedRoute>
             } />
 
-            {/* Fresh streaming chat module — full-viewport, self-contained. */}
-            <Route path="/chat" element={
-              <ProtectedRoute>
-                <ChatApp />
-              </ProtectedRoute>
-            } />
+            {/* /chat -> the overview chat (ChatWithLLM UI WITH the left taskbar). */}
+            <Route path="/chat" element={<Navigate to="/overview/chat/llm" replace />} />
 
             {/* Protected Routes - Only accessible after authentication */}
             <Route path="/overview/*" element={

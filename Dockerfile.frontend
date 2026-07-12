@@ -1,19 +1,15 @@
 # Frontend Dockerfile - Optimized for faster builds
 FROM node:20-alpine AS builder
 
-# Build arguments for Vite environment variables
-ARG VITE_OPENAI_API_KEY
-ARG VITE_GEMINI_API_KEY
-ARG VITE_OPENROUTER_API_KEY
+# Build arguments for Vite environment variables (NON-SECRET ONLY).
+# Provider API keys are NEVER baked into the frontend image — all inference and
+# media generation route through the authed, metered backend (api.xenostudio.ai).
 ARG VITE_API_URL
 ARG VITE_WS_URL
 ARG VITE_ENABLE_SITE_GATE
 ARG VITE_SITE_PASSWORD
 
 # Set environment variables for build
-ENV VITE_OPENAI_API_KEY=$VITE_OPENAI_API_KEY
-ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
-ENV VITE_OPENROUTER_API_KEY=$VITE_OPENROUTER_API_KEY
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_WS_URL=$VITE_WS_URL
 ENV VITE_ENABLE_SITE_GATE=$VITE_ENABLE_SITE_GATE

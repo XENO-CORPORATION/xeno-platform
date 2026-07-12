@@ -608,12 +608,13 @@ const HeroSection: React.FC = () => {
   };
 
   return (
-    <section className="relative isolate flex h-[100svh] min-h-[760px] flex-col overflow-hidden bg-[#060606] px-[0.6vw] pb-[0.6vw] pt-[56px] text-white">
-      <div className="flex h-full w-full flex-col gap-[0.6vw]">
+    <section className="relative isolate flex min-h-[100svh] flex-col overflow-hidden bg-[#060606] px-3 pb-3 pt-[64px] text-white md:h-[100svh] md:min-h-[760px] md:px-[0.6vw] md:pb-[0.6vw] md:pt-[56px]">
+      <div className="flex h-full w-full flex-col gap-3 md:gap-[0.6vw]">
         {/* ─────────────────────────────────────────────────────────
          * Single row: sidebar | content card | (dashboard + features stacked)
+         * On mobile this stacks vertically (marketing copy first, dashboard below).
          * ───────────────────────────────────────────────────────── */}
-        <div className="flex min-h-0 flex-1 gap-[0.6vw]">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row md:gap-[0.6vw]">
           {/* ─── Sidebar (floating container) ─────────────────── */}
           <aside className="hidden h-full w-[clamp(44px,3.2vw,60px)] shrink-0 flex-col items-center justify-between rounded-[10px] border border-white/[0.07] bg-[#151515] py-[0.8vh] md:flex">
             <div className="flex flex-col items-center gap-2">
@@ -639,7 +640,7 @@ const HeroSection: React.FC = () => {
 
           {/* ─── Left content card — marketing copy, hidden once signed in ─── */}
           {!isAuthenticated && (
-          <section className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-[10px] border border-white/[0.07] bg-[#09090b] px-[2vw] pt-[clamp(28px,3.6vh,56px)] md:w-[clamp(360px,26vw,460px)] md:shrink-0">
+          <section className="relative flex min-h-[440px] w-full flex-col justify-between overflow-hidden rounded-[10px] border border-white/[0.07] bg-[#09090b] px-6 pb-10 pt-[clamp(28px,3.6vh,56px)] md:h-full md:min-h-0 md:w-[clamp(360px,26vw,460px)] md:shrink-0 md:px-[2vw] md:pb-0">
             {/* Background image — smaller, anchored toward the bottom */}
             <img
               src="/landing-v3/xeno-hero-content-bg.png"
@@ -684,19 +685,19 @@ const HeroSection: React.FC = () => {
           )}
 
           {/* ─── Right column: dashboard + bottom feature strip ─ */}
-          <div className="flex h-full flex-1 flex-col gap-[0.6vw]">
+          <div className="flex flex-1 flex-col gap-3 md:h-full md:gap-[0.6vw]">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-white/[0.07] bg-[#151515]">
             {/* project bar */}
-            <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] px-5">
-              <div className="flex items-center gap-3">
-                <Box className="h-4 w-4 text-[#948d83]" />
-                <div className="flex h-7 items-center gap-2 rounded-[6px] border border-white/[0.08] bg-white/[0.02] px-3">
-                  <span className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-[#756f66]">PROJECT</span>
-                  <span className="text-[12px] text-[#d8d2ca]">XENO Command Center</span>
-                  <ChevronDown className="h-3 w-3 text-[#756f66]" />
+            <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] px-3 sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <Box className="h-4 w-4 shrink-0 text-[#948d83]" />
+                <div className="flex h-7 min-w-0 items-center gap-2 rounded-[6px] border border-white/[0.08] bg-white/[0.02] px-3">
+                  <span className="hidden text-[9.5px] font-semibold uppercase tracking-[0.18em] text-[#756f66] sm:inline">PROJECT</span>
+                  <span className="truncate text-[12px] text-[#d8d2ca]">XENO Command Center</span>
+                  <ChevronDown className="h-3 w-3 shrink-0 text-[#756f66]" />
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-[#807970]">
+              <div className="flex shrink-0 items-center gap-3 text-[#807970]">
                 <div className="flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-[2px] bg-white/40" />
                   <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em]">AI Mode</span>
@@ -721,9 +722,9 @@ const HeroSection: React.FC = () => {
             </div>
 
             {/* Dashboard panel grid — data-driven & customizable */}
-            <div onClick={onPanelClick} className="grid min-h-0 flex-1 grid-cols-12 auto-rows-fr gap-[0.6vw] p-[0.6vw]">
+            <div onClick={onPanelClick} className="grid min-h-0 flex-1 grid-cols-12 gap-3 p-3 md:auto-rows-fr md:gap-[0.6vw] md:p-[0.6vw]">
               {panels.map((app) => (
-                <Panel key={app.id} label={app.label} icon={app.icon} trailing={app.trailing} className="col-span-12 sm:col-span-6 lg:col-span-3">
+                <Panel key={app.id} label={app.label} icon={app.icon} trailing={app.trailing} className="col-span-12 min-h-[236px] sm:col-span-6 md:min-h-0 lg:col-span-3">
                   {MOCKS[app.id]?.()}
                 </Panel>
               ))}
@@ -737,7 +738,7 @@ const HeroSection: React.FC = () => {
               {dashboardFeatures.map((f, i) => (
                 <div
                   key={f.title}
-                  className={`flex items-center gap-[0.6vw] px-[1.2vw] py-[1.2vh] ${i > 0 ? 'lg:border-l lg:border-white/[0.06]' : ''}`}
+                  className={`flex items-center gap-3.5 px-4 py-3.5 md:gap-[0.6vw] md:px-[1.2vw] md:py-[1.2vh] ${i > 0 ? 'lg:border-l lg:border-white/[0.06]' : ''}`}
                 >
                   <div className="grid h-[clamp(36px,3vw,48px)] w-[clamp(36px,3vw,48px)] shrink-0 place-items-center rounded-[8px] border border-white/15 text-[#b6afa5]">
                     <f.icon className="h-[42%] w-[42%]" />

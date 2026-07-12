@@ -28,7 +28,7 @@ import axios from 'axios';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import FormData from 'form-data';
 import pg from 'pg';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { WebSocketServer as WebSocket } from 'ws';
 import chokidar from 'chokidar';
@@ -50,6 +50,14 @@ import tokenizerRoutes from './routes/tokenizerRoutes.js';
 import userDataRoutes from './routes/userDataRoutes.js';
 import browserRoutes from './routes/browserRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
+import { workspaceRoutes, workspaceInviteRoutes } from './routes/workspaceRoutes.js';
+import { resolveBillingAccountId } from './services/walletService.js';
+import { xenoModelCatalog, PROVIDER_LABELS, prettyModelName, xenoChatCompletion, normalizeXenoModelId, XENO_API_BASE, XENO_API_KEY, xenoApiConfigured } from './utils/xenoChat.js';
+import { meterPremiumChat } from './utils/inferenceMeter.js';
+import { estimateMessageTokens, getCreditCost } from './utils/creditCosts.js';
+import { deductCredits, refundCredits, logUsage as logCreditUsage } from './utils/creditTransactions.js';
+import { resolveEntitlements, gateMeta } from './utils/entitlementGate.js';
+import { watermarkBuffer } from './utils/watermark.js';
 import youtubeRoutes, { youtubePublicRoutes } from './routes/youtubeRoutes.js';
 import collaborationRoutes from './routes/collaborationRoutes.js';
 import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
@@ -57,6 +65,7 @@ import downloadRoutes from './routes/downloadRoutes.js';
 import productDownloadRoutes from './routes/productDownloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
+import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
@@ -229,6 +238,11 @@ app.use(cookieParser());
 // The browserRoutes handles its own body parsing
 app.use('/api/browser', express.raw({ type: '*/*', limit: '10mb' }), browserRoutes);
 console.log('🌐 Browser routes integrated: /api/browser/* (mounted early for raw body handling)');
+
+// Stripe billing webhook — MUST be mounted BEFORE express.json so the raw request
+// body survives for signature verification (billingService.constructEvent).
+app.use('/api/billing/webhook', express.raw({ type: 'application/json' }), (req, res, next) => { req.db = pool; next(); }, stripeWebhook);
+console.log('💳 Billing webhook integrated: /api/billing/webhook (raw body, pre-json)');
 
 // ULTRA HIGH LIMITS for base64 image data processing
 app.use(express.json({ 
@@ -537,6 +551,14 @@ console.log('🎯 Xeno AI proxy routes integrated: /api/xeno/*');
 // optionalAuthMiddleware (public, entitlement-aware), while commerce/developer/
 // admin routes require authMiddleware. Mounting with only databaseMiddleware.
 app.use('/api/marketplace', databaseMiddleware, marketplaceRoutes);
+app.use('/api/billing', databaseMiddleware, billingRoutes);
+console.log('💳 Billing routes integrated: /api/billing/* (checkout, portal, config)');
+
+// Workspaces / teams (multi-tenant): workspace entity tables + ReBAC membership
+// (workspace:<id>#<role>@user:<id>). Standard authMiddleware — not OIDC-gated.
+app.use('/api/workspaces', databaseMiddleware, authMiddleware, workspaceRoutes);
+app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceInviteRoutes);
+console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 
 // ── Account & Ledger v2 (additive, flag-gated) ───────────────────────────────
 // Mounted ONLY when LEDGER_V2_ENABLED=true, so the default (flag off) is a
@@ -698,6 +720,13 @@ let modelsCache = null;
 let modelsCacheTimestamp = 0;
 const MODELS_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
+// Reasoning-capable model detection — matches BOTH bare XENO-API ids ('gemini-3-flash',
+// 'deepseek-v3.2', 'o3') and legacy 'company/model' (OpenRouter-style) ids, so the
+// reasoning param is set correctly regardless of id shape.
+function isReasoningCapableModel(id = '') {
+  return /deepseek|qwen|grok-|gemini-2\.5|gemini-3|(^|\/)o[134](\b|-)|claude-(sonnet|opus|haiku)-4|claude-3\.7-sonnet/i.test(String(id));
+}
+
 // Companies to include and their prefixes
 const COMPANY_PREFIXES = {
   'OpenAI': 'openai/',
@@ -720,117 +749,61 @@ app.get('/api/models', databaseMiddleware, authMiddleware, async (req, res) => {
       return res.json(modelsCache);
     }
 
-    console.log('🔄 Fetching fresh models from OpenRouter...');
+    console.log('🔄 Fetching fresh models from the XENO API...');
 
-    // Fetch models from OpenRouter
-    const response = await fetch('https://openrouter.ai/api/v1/models', {
-      headers: {
-        'Authorization': `Bearer ${openRouterApiKey}`,
-        'HTTP-Referer': siteUrl || 'https://xeno-studio.com',
-        'X-Title': siteTitle || 'Xeno Studio'
-      }
-    });
+    // The XENO API (api.xenostudio.ai) is the single key-holder + catalog source.
+    // It returns bare ids ('gemini-3-flash', 'gpt-5.4', ...) grouped here by owned_by.
+    const allModels = await xenoModelCatalog();
 
-    if (!response.ok) {
-      throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
+    console.log(`📊 Received ${allModels.length} total models from the XENO API`);
+
+    // Chat picker shows ONLY the TEXT chat models actually available on the
+    // endpoint (drop image/video/audio), and collapses pure reasoning-effort
+    // variants (-high/-low/-medium/-none/-xhigh/-max) — the same model at a
+    // different effort (handled by the reasoning toggle), not distinct models.
+    const EFFORT_SUFFIX = /-(high|low|medium|none|xhigh|max)$/;
+    const textModels = allModels.filter(m =>
+      String(m.type || 'text').toLowerCase() === 'text' && !EFFORT_SUFFIX.test(String(m.id))
+    );
+    console.log(`📊 ${textModels.length} text chat models after filtering (of ${allModels.length})`);
+
+    // Group by provider (owned_by) → { CompanyName: Model[] }, newest first.
+    const byProvider = {};
+    for (const m of textModels) {
+      const prov = String(m.owned_by || 'xeno').toLowerCase();
+      (byProvider[prov] = byProvider[prov] || []).push(m);
     }
 
-    const data = await response.json();
-    const allModels = data.data || [];
-
-    console.log(`📊 Received ${allModels.length} total models from OpenRouter`);
-
-    // Group models by company and get latest 4 from each
     const groupedModels = {};
+    for (const [prov, models] of Object.entries(byProvider)) {
+      const companyName = PROVIDER_LABELS[prov] || (prov.charAt(0).toUpperCase() + prov.slice(1));
+      models.sort((a, b) => (b.created || 0) - (a.created || 0));
+      const latestModels = models.slice(0, 40).map(model => {
+        const id = String(model.id).toLowerCase();
 
-    for (const [companyName, prefix] of Object.entries(COMPANY_PREFIXES)) {
-      // Filter models for this company - only LLMs (text output), exclude image generation models
-      const companyModels = allModels.filter(model => {
-        // Must start with company prefix
-        if (!model.id.startsWith(prefix)) return false;
-
-        // Exclude variant models
-        if (model.id.includes(':free') ||
-            model.id.includes(':extended') ||
-            model.id.includes(':thinking') ||
-            model.id.includes(':nitro') ||
-            model.id.includes(':floor') ||
-            model.id.includes(':online')) return false;
-
-        // Must be a language model - output must include text, exclude image-only generators
-        const outputModalities = model.architecture?.output_modalities || [];
-        const inputModalities = model.architecture?.input_modalities || [];
-
-        // Exclude if output includes 'image' (image generation models)
-        if (outputModalities.includes('image')) return false;
-
-        // Must output text
-        if (!outputModalities.includes('text')) return false;
-
-        // Exclude guard/safety models
-        if (model.id.includes('guard') || model.id.includes('safety')) return false;
-
-        return true;
-      });
-
-      // Sort by created date (newest first)
-      companyModels.sort((a, b) => (b.created || 0) - (a.created || 0));
-
-      // Take the latest 4 models
-      const latestModels = companyModels.slice(0, 4).map(model => {
-        const id = model.id.toLowerCase();
-        const inputMods = model.architecture?.input_modalities || ['text'];
-        const outputMods = model.architecture?.output_modalities || ['text'];
-
-        // Detect reasoning capability dynamically
         let supportsReasoning = 'disabled';
-        // Always-on reasoning models
-        if (id.includes('deepseek') && (id.includes('r1') || id.includes('v3'))) {
-          supportsReasoning = 'alwaysOn';
-        } else if (id.includes('openai/o1') || id.includes('openai/o3') || id.includes('openai/o4')) {
-          supportsReasoning = 'alwaysOn';
-        } else if (id.includes('qwen') && id.includes('thinking')) {
-          supportsReasoning = 'alwaysOn';
-        } else if (id.includes(':thinking')) {
-          supportsReasoning = 'alwaysOn';
+        if (/deepseek|gemini-3|gemini-2\.5|grok-3|grok-4|claude-(sonnet|opus|haiku)-4|(^|\/)o[134]\b|thinking|-r1\b/.test(id)) {
+          supportsReasoning = 'toggleable';
         }
-        // Toggleable reasoning models
-        else if (id.includes('gemini-2.5') || id.includes('gemini-3')) {
-          supportsReasoning = 'toggleable';
-        } else if (id.includes('grok-3') || id.includes('grok-4')) {
-          supportsReasoning = 'toggleable';
-        } else if (id.includes('claude-sonnet-4') || id.includes('claude-opus-4') || id.includes('claude-haiku-4')) {
-          supportsReasoning = 'toggleable';
-        } else if (id.includes('claude-3.7-sonnet')) {
-          supportsReasoning = 'toggleable';
-        } else if (id.includes('deepseek/')) {
-          supportsReasoning = 'toggleable'; // Other deepseek models
-        } else if (id.includes('qwen/')) {
-          supportsReasoning = 'toggleable'; // Other qwen models
-        }
-
-        // Detect vision/file upload capability from input modalities
-        const supportsVision = inputMods.includes('image');
-        const supportsFileUpload = inputMods.includes('file') || inputMods.includes('image');
+        const supportsVision = /gemini|gpt-5|gpt-4o|claude|pixtral|vision|llama-4|grok-4/.test(id);
 
         return {
           id: model.id,
-          name: model.name.replace(/^[^:]+:\s*/, ''), // Remove company prefix from display name
-          maxTokens: model.context_length || 128000,
+          name: model.name || prettyModelName(model.id),
+          maxTokens: model.context_length || model.max_tokens || 128000,
           created: model.created,
-          description: model.description,
+          description: model.description || '',
           pricing: model.pricing,
-          inputModalities: inputMods,
-          outputModalities: outputMods,
+          inputModalities: supportsVision ? ['text', 'image'] : ['text'],
+          outputModalities: ['text'],
           supportsReasoning,
           supportsVision,
-          supportsFileUpload,
+          supportsFileUpload: supportsVision,
+          paths: ['premium', 'byok'],
+          defaultPath: 'premium',
         };
       });
-
-      if (latestModels.length > 0) {
-        groupedModels[companyName] = latestModels;
-      }
+      if (latestModels.length > 0) groupedModels[companyName] = latestModels;
     }
 
     // Build response
@@ -1203,6 +1176,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
     }
     if (req.body.task === 'image') {
         console.log('Handling conversational image generation task with Responses API');
+        let imgUserId, imgCost = 0, imgCharged = false, imgEnt = null;
         try {
             const { messages, previousResponseId, previousImageGenerationCallId, imageContexts } = req.body;
 
@@ -1237,6 +1211,16 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                  console.error('Could not extract a valid prompt from messages:', messages);
                  return res.status(400).json({ error: 'Image prompt could not be extracted from messages.' });
             }
+
+            // Entitlement gate + metering: charge before generating, refund on any failure below.
+            imgUserId = req.user?.id;
+            imgEnt = await resolveEntitlements(req.db, imgUserId);
+            imgCost = getCreditCost('image', 'gpt-high');
+            const imgDebit = await deductCredits(req.db, imgUserId, imgCost);
+            if (!imgDebit.success) {
+                return res.status(402).json({ error: 'Insufficient credits', required: imgCost, current: imgDebit.currentCredits ?? 0 });
+            }
+            imgCharged = true;
 
             console.log(`Extracted image prompt (truncated): "${imagePrompt.substring(0, 50)}${imagePrompt.length > 50 ? '... [image prompt truncated for logging]' : ''}"`);
 
@@ -1396,6 +1380,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
             if (imageGenerationCalls.length === 0) {
                 console.error('No image generation calls found in response:', response);
+                if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
                 return res.status(500).json({ error: 'Image generation failed: No image data returned.' });
             }
 
@@ -1404,6 +1389,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
             if (!imageBase64) {
                 console.error('Image generation failed, no result data in response:', imageCall);
+                if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
                 return res.status(500).json({ error: 'Image generation failed to return image data.' });
             }
 
@@ -1434,15 +1420,28 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             }
 
             console.log('Conversational image generation successful, returning processed base64 data (first 50 chars):', processedImageData.substring(0, 50) + '...');
-            
+
+            // Free tier: watermark the output (base64 → sharp). Log the metered usage.
+            let outImageData = processedImageData;
+            if (imgEnt?.watermark) {
+                try {
+                    outImageData = (await watermarkBuffer(Buffer.from(processedImageData, 'base64'))).toString('base64');
+                } catch (wmErr) {
+                    console.warn('[watermark] image task failed, returning original:', wmErr.message);
+                }
+            }
+            await logCreditUsage(req.db, imgUserId, 'image:gpt-image-1', imgCost, { route: '/api/chat/generate:image' }).catch(() => {});
+
             return res.json({
-                imageData: processedImageData,
+                imageData: outImageData,
                 modelIdUsed: "gpt-image-1",
                 responseId: response.id, // Return response ID for follow-up requests
-                imageGenerationCallId: imageCall.id // Return image generation call ID for context
+                imageGenerationCallId: imageCall.id, // Return image generation call ID for context
+                entitlement: gateMeta(imgEnt)
             });
 
         } catch (error) {
+            if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
             console.error('Error in conversational image generation task:', error);
             return res.status(500).json({ error: 'Failed to generate image. Please try again.' });
         }
@@ -1458,8 +1457,8 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             if (!messages || !Array.isArray(messages) || messages.length === 0 || !selectedModelId) {
                 return res.status(400).json({ error: 'Invalid request: messages array and selectedModelId are required for prompt refinement.' });
             }
-            if (!openRouterApiKey) {
-                return res.status(500).json({ error: 'Server configuration error: OpenRouter API key not configured.' });
+            if (!xenoApiConfigured()) {
+                return res.status(503).json({ error: 'Premium inference unavailable', message: 'The inference service is not configured.' });
             }
 
             // 1. Construct a new system prompt or append to the existing one to guide the LLM.
@@ -1515,34 +1514,21 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             });
             console.log("[Prompt Refinement] Final apiMessages for refinement (images truncated):", JSON.stringify(messagesForLoggingRefinement).substring(0,500));
 
-            const headers = {
-                "Authorization": `Bearer ${openRouterApiKey}`,
-                "Content-Type": "application/json",
-                ...(siteUrl && { "HTTP-Referer": siteUrl }),
-                ...(siteTitle && { "X-Title": siteTitle }),
-            };
-            const bodyPayload = {
-                "model": selectedModelId, // Use the chat model selected by the user for refinement
-                "messages": apiMessages,
-                // "temperature": 0.7, // Optional: adjust temperature for creativity
-                // "max_tokens": 150,  // Limit output length for a prompt
-            };
-
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
-                headers: headers,
-                body: JSON.stringify(bodyPayload)
-            });
-
-            const responseBody = await response.text();
-            if (!response.ok) {
-                // ... (error handling as in main chat logic) ...
-                let errorData = {}; try { errorData = JSON.parse(responseBody); } catch(e) { /* ignore */ }
-                console.error('Error calling OpenRouter for prompt refinement:', response.status, errorData);
-                return res.status(response.status || 500).json({ error: `Failed to refine prompt: ${errorData.error?.message || responseBody}` });
+            // Route prompt refinement through the XENO API, metered on the user's credits.
+            let data = {};
+            try {
+                const metered = await meterPremiumChat(req.db, req.user?.id, {
+                    model: selectedModelId, provider: 'xeno', requestId: randomUUID(),
+                    estInputTokens: estimateMessageTokens(apiMessages), maxTokens: 1024,
+                    run: () => xenoChatCompletion({ model: selectedModelId, messages: apiMessages }),
+                });
+                data = metered.result;
+            } catch (err) {
+                if (err.http === 402) return res.status(402).json({ error: 'Insufficient credits', message: 'Top up credits to use premium models.' });
+                if (err.http === 403) return res.status(403).json({ error: 'Account frozen' });
+                console.error('Error calling XENO API for prompt refinement:', err.message);
+                return res.status(err.status || 500).json({ error: `Failed to refine prompt: ${err.message}` });
             }
-
-            let data = {}; try { data = JSON.parse(responseBody); } catch(e) { /* ... */ }
             const refinedPromptText = (data.choices?.[0]?.message?.content || '').trim();
 
             if (!refinedPromptText) {
@@ -2269,11 +2255,11 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             console.error('Invalid request payload:', req.body);
             return res.status(400).json({ error: 'Invalid request: messages array, selectedModelId, and effectiveReasoningState are required.' });
         }
-        if (!openRouterApiKey) {
-             return res.status(500).json({ error: 'Server configuration error: OpenRouter API key not configured.' });
+        if (!XENO_API_KEY) {
+             return res.status(503).json({ error: 'Premium inference unavailable', message: 'The inference service is not configured.' });
         }
-        
-        // --- Start OpenRouter API Call Logic --- 
+
+        // --- Start OpenRouter API Call Logic ---
 
         // 1. Format messages for OpenRouter (similar to OpenAI standard)
         let apiMessages = [];
@@ -2287,19 +2273,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             console.log(`Effective Reasoning State is TRUE for ${selectedModelId}. Checking for marker instructions.`);
             // Add appropriate instructions based on model type
             // Models that use native API reasoning field - NO marker instructions needed
-            const usesNativeReasoningField =
-                selectedModelId.includes('qwen/') ||
-                selectedModelId.includes('deepseek/') ||
-                selectedModelId.includes('x-ai/grok-') ||
-                selectedModelId.includes('google/gemini-2.5') ||
-                selectedModelId.includes('google/gemini-3') ||
-                selectedModelId.includes('claude-sonnet-4') ||
-                selectedModelId.includes('claude-opus-4') ||
-                selectedModelId.includes('claude-haiku-4') ||
-                selectedModelId.includes('claude-3.7-sonnet') ||
-                selectedModelId.includes('openai/o1') ||
-                selectedModelId.includes('openai/o3') ||
-                selectedModelId.includes('openai/o4');
+            const usesNativeReasoningField = isReasoningCapableModel(selectedModelId);
 
             // Legacy models that need marker instructions in prompt
             const isPotentiallyGeminiStyle = false; // Now handled by native reasoning
@@ -2621,18 +2595,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             ];
 
             // Check if model needs reasoning parameter
-            const modelNeedsReasoning = reasoningModels.includes(selectedModelId) ||
-                selectedModelId.includes('deepseek/') ||
-                selectedModelId.includes('qwen/') ||
-                selectedModelId.includes('x-ai/grok-') ||
-                selectedModelId.includes('google/gemini-2.5') ||
-                selectedModelId.includes('google/gemini-3') ||
-                selectedModelId.includes('claude-sonnet-4') ||
-                selectedModelId.includes('claude-opus-4') ||
-                selectedModelId.includes('claude-haiku-4') ||
-                selectedModelId.includes('openai/o1') ||
-                selectedModelId.includes('openai/o3') ||
-                selectedModelId.includes('openai/o4');
+            const modelNeedsReasoning = reasoningModels.includes(selectedModelId) || isReasoningCapableModel(selectedModelId);
 
             if (modelNeedsReasoning) {
                 // OpenRouter expects reasoning to be an object, not a boolean
@@ -2642,44 +2605,50 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 console.log(`   -> Added reasoning: {effort: "high"} parameter for model ${selectedModelId}`);
             }
         }
-        const body = JSON.stringify(bodyPayload);
+        bodyPayload.model = normalizeXenoModelId(bodyPayload.model);
 
-        // 4. Make the fetch call
-        console.log(`Calling OpenRouter API with model: ${selectedModelId}`);
-        console.log(`Authorization Header Check: Bearer [REDACTED]`);
-        console.log('OpenRouter Request Body:', body); // Log body for debugging
-        
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: headers,
-            body: body
-        });
-
-        // 5. Handle Response
-        const responseBody = await response.text(); // Read body once
-        
-        if (!response.ok) {
-             let errorData = {};
-             try {
-                 errorData = JSON.parse(responseBody); // Try to parse error JSON
-             } catch(e) {
-                 console.error("Failed to parse OpenRouter error response:", responseBody);
-                 errorData = { error: { message: `API request failed with status ${response.status}. Response: ${responseBody}` }};
-            }
-             console.error('Error calling OpenRouter API:', response.status, errorData);
-             const errorMessage = errorData.error?.message || `OpenRouter API Error: Status ${response.status}`;
-             const errorDetails = errorData.error ? JSON.stringify(errorData.error) : '';
-             const errorResponsePayload = { error: `${errorMessage} ${errorDetails}`.trim() };
-             console.log("[BACKEND ERROR] Sending error to frontend:", errorResponsePayload);
-             return res.status(response.status || 500).json(errorResponsePayload);
-        }
+        // 4. Make the call — routed through the XENO API and METERED on the user's
+        //    credits (hold worst-case → run → settle actual / void on failure).
+        console.log(`Calling XENO API with model: ${bodyPayload.model}`);
 
         let data = {};
         try {
-            data = JSON.parse(responseBody); // Parse success JSON
-        } catch(e) {
-             console.error("Failed to parse OpenRouter success response:", responseBody);
-             throw new Error("Failed to parse successful API response");
+            // Pooled workspace billing (Phase 4, flag-gated): when enabled and the
+            // request carries an x-xeno-workspace context whose workspace is in
+            // 'pooled' mode and the caller is a member, bill the workspace wallet
+            // instead of the personal one. Default (flag off) → bill the user.
+            let billingSubjectId = req.user?.id;
+            if (process.env.WORKSPACE_BILLING_ENABLED === 'true' && req.headers['x-xeno-workspace']) {
+                try { billingSubjectId = (await resolveBillingAccountId(req.db, req.user.id, String(req.headers['x-xeno-workspace']))).id; }
+                catch (e) { console.warn('[billing] workspace resolve failed, using personal:', e.message); }
+            }
+            const metered = await meterPremiumChat(req.db, billingSubjectId, {
+                model: bodyPayload.model, provider: 'xeno', requestId: randomUUID(),
+                estInputTokens: estimateMessageTokens(bodyPayload.messages || []),
+                maxTokens: bodyPayload.max_tokens || 4096,
+                run: async () => {
+                    const response = await fetch(`${XENO_API_BASE}/chat/completions`, {
+                        method: "POST",
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${XENO_API_KEY}` },
+                        body: JSON.stringify(bodyPayload),
+                    });
+                    const responseBody = await response.text();
+                    if (!response.ok) {
+                        let errorData = {};
+                        try { errorData = JSON.parse(responseBody); } catch (e) { errorData = { error: { message: `API request failed with status ${response.status}.` } }; }
+                        const e = new Error(errorData.error?.message || `XENO API Error: Status ${response.status}`);
+                        e.status = response.status;
+                        throw e;
+                    }
+                    return JSON.parse(responseBody);
+                },
+            });
+            data = metered.result;
+        } catch (err) {
+            if (err.http === 402) return res.status(402).json({ error: 'Insufficient credits', message: 'Top up credits to use premium models.' });
+            if (err.http === 403) return res.status(403).json({ error: 'Account frozen' });
+            console.error('Error calling XENO API:', err.message);
+            return res.status(err.status || 500).json({ error: `${err.message}`.trim() });
         }
         // Log with potentially sensitive data (like image content) truncated or summarized
         const dataForLogging = JSON.parse(JSON.stringify(data)); // Deep copy
@@ -2722,19 +2691,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             // Reasoning was requested for this call.
             // Check for special fields first (Qwen/Deepseek R1/Gemini Pro/Grok/Claude 3.7)
             // Models that may return reasoning in a separate field
-            const modelProvidesSeparateReasoning =
-                selectedModelId.includes('qwen/') ||
-                selectedModelId.includes('deepseek/') ||
-                selectedModelId.includes('google/gemini-2.5') ||
-                selectedModelId.includes('google/gemini-3') ||
-                selectedModelId.includes('x-ai/grok-') ||
-                selectedModelId.includes('anthropic/claude-3.7-sonnet') ||
-                selectedModelId.includes('claude-sonnet-4') ||
-                selectedModelId.includes('claude-opus-4') ||
-                selectedModelId.includes('claude-haiku-4') ||
-                selectedModelId.includes('openai/o1') ||
-                selectedModelId.includes('openai/o3') ||
-                selectedModelId.includes('openai/o4');
+            const modelProvidesSeparateReasoning = isReasoningCapableModel(selectedModelId);
                 
             if (modelProvidesSeparateReasoning) {
                 const reasoningContent = data.choices?.[0]?.message?.reasoning;
@@ -3693,8 +3650,9 @@ app.get('/api/piston/runtimes', databaseMiddleware, authMiddleware, async (req, 
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`XenoRun API error (${response.status}): ${errorText}`);
-      return res.status(response.status).json({ error: `Failed to fetch runtimes. Status: ${response.status}` });
+      console.warn(`XenoRun runtimes unavailable (${response.status}): ${errorText}`);
+      // Degrade gracefully: no runtimes → the UI disables code execution, no client-facing error.
+      return res.json([]);
     }
 
     const xenorunRuntimes = await response.json();
@@ -3710,8 +3668,10 @@ app.get('/api/piston/runtimes', databaseMiddleware, authMiddleware, async (req, 
     res.json(runtimes);
 
   } catch (error) {
-    console.error('Error fetching XenoRun runtimes:', error);
-    res.status(500).json({ error: 'Failed to fetch runtimes' });
+    // XenoRun not deployed / unreachable → degrade gracefully so the chat loads without a
+    // console 500; an empty runtimes list disables code execution in the UI. (Was: 500.)
+    console.warn('XenoRun runtimes unavailable:', error.message);
+    res.json([]);
   }
 });
 
@@ -3774,8 +3734,9 @@ app.post('/api/piston/execute', databaseMiddleware, authMiddleware, async (req, 
     res.json(pistonResponse);
 
   } catch (error) {
-    console.error('Error executing via XenoRun:', error);
-    res.status(500).json({ error: 'Failed to execute code' });
+    // XenoRun not deployed / unreachable → clear, retryable status instead of a generic 500.
+    console.warn('XenoRun execute unavailable:', error.message);
+    res.status(503).json({ error: 'Code execution is temporarily unavailable.' });
   }
 });
 
