@@ -329,7 +329,7 @@ const ChatWithVoice: React.FC = () => {
       console.log(`Provider ${selectedProvider} selected. Clearing Google AI Client if it exists.`);
       googleAiClientRef.current = null; // Clear Google client if another provider is chosen
     } else if (!googleApiKey && selectedProvider === 'google') {
-      console.warn("Google provider selected, but Google API Key is not set (check .env file: VITE_GEMINI_API_TOKEN). AI client not initialized.");
+      console.warn("Google provider selected, but no Google API Key is set. Add your own key (stored in localStorage as 'googleApiKey') to enable Google realtime voice. AI client not initialized.");
       googleAiClientRef.current = null; // Ensure client is null if no key for Google
     }
 
@@ -371,40 +371,21 @@ const ChatWithVoice: React.FC = () => {
   }, [availableVoices, availableProviders, availableOpenAiVoices]); // Added availableProviders and availableOpenAiVoices to dependency array
 
   useEffect(() => {
-    // 1. Try to get API key from Vite environment variables
-    const envApiKey = import.meta.env.VITE_GEMINI_API_TOKEN as string | undefined;
-    let apiKeyToUse: string | null = null;
+    // SECURITY: the platform ships ZERO provider keys. There is no bundled/VITE
+    // Google key. Google realtime voice has no secure backend relay in this pass,
+    // so the only way it can run is if a user supplies THEIR OWN Google key at
+    // runtime via localStorage ('googleApiKey') — a bring-your-own-key path.
+    // Otherwise the feature is gated behind "add your key".
+    const storedApiKey = localStorage.getItem('googleApiKey');
 
-    console.log("VITE_TEST_VAR:", import.meta.env.VITE_TEST_VAR); // Temporary test log
-
-    if (envApiKey) {
-      console.log("Found Google API Key from VITE environment variable.");
-      apiKeyToUse = envApiKey;
-    } else {
-      // 2. If not found in env, try localStorage
-      const storedApiKey = localStorage.getItem('googleApiKey');
-      if (storedApiKey) {
-        console.log("Found stored Google API Key in localStorage.");
-        apiKeyToUse = storedApiKey;
-      }
-    }
-
-    if (apiKeyToUse) {
-      setGoogleApiKey(apiKeyToUse);
+    if (storedApiKey) {
+      console.log("Found user-supplied Google API Key in localStorage (bring-your-own-key).");
+      setGoogleApiKey(storedApiKey);
       if (!googleAiClientRef.current) {
-        console.log("Initializing Google AI Client with API key from env/localStorage.");
-        googleAiClientRef.current = new GoogleGenAI({ apiKey: apiKeyToUse });
-      } else {
-        // If client exists but key might have changed (e.g. env var updated)
-        // and is different from current key in state (though state isn't set yet here)
-        // This scenario is less likely on initial mount for client re-init, 
-        // handleSaveSettings is more direct for changes after mount.
-        // However, if initial key from env/storage is different than a pre-existing (but unlikely) client's key:
-        // We might need a more complex check here if googleAiClientRef could be pre-populated by other means
-        // For now, assume if client exists, it was with a valid key or will be updated by settings.
+        googleAiClientRef.current = new GoogleGenAI({ apiKey: storedApiKey });
       }
     } else {
-      console.log("No Google API Key found in environment variables or localStorage.");
+      console.log("No user-supplied Google API Key. Add your own key to enable Google realtime voice.");
     }
   }, []); // Empty dependency array ensures this runs once on mount
 
@@ -1106,7 +1087,7 @@ const ChatWithVoice: React.FC = () => {
           return;
         }
       } else if (!googleApiKey) {
-        setLastError("Google API Key is not set. Please configure it in settings (via .env VITE_GEMINI_API_TOKEN).");
+        setLastError("Google realtime voice needs your own Google API key. Add your key (stored as 'googleApiKey') to enable it — the platform ships no bundled key, and a secure backend relay is not available yet.");
         setMicrophoneStatus('idle');
         return;
       } else if (!googleAiClientRef.current) {

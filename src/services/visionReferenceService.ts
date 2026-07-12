@@ -1,34 +1,15 @@
 /**
  * Vision Reference Service
- * Extracts style and character descriptions from images using Gemini Vision
- * Used as fallback for models that don't support native style/character reference
+ * Extracts style and character descriptions from images using Gemini Vision.
+ *
+ * The browser holds NO provider keys. Vision / image-understanding has no secure
+ * backend route in this migration pass, so extraction fails gracefully — the
+ * enhancePromptWith* wrappers below already fall back to the original prompt.
  */
-
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-import { API_TOKENS } from '../config/apiConfig';
 
 // Cache for vision analysis results to avoid re-analyzing the same image
 const analysisCache = new Map<string, { result: string; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
-
-// Track SDK initialization state
-let sdkInitialized = false;
-let genAI: GoogleGenerativeAI | null = null;
-
-/**
- * Initialize the Gemini SDK for vision tasks
- */
-function ensureSDKInitialized(): void {
-  if (sdkInitialized && genAI) return;
-
-  let key = API_TOKENS.GEMINI_API_TOKEN;
-  if (!key) {
-    key = 'AIzaSyD8eHthLzcGmeJuhoCWSvBv-5jG1F56BYw';
-  }
-
-  genAI = new GoogleGenerativeAI(key);
-  sdkInitialized = true;
-}
 
 /**
  * Generate a cache key from image URL/data
@@ -66,65 +47,17 @@ function setInCache(key: string, result: string): void {
 }
 
 /**
- * Clean base64 image data (remove data URL prefix if present)
+ * Analyze image with Gemini using a specific prompt.
+ *
+ * Vision / image-understanding has no secure backend route in this migration pass,
+ * and the browser must ship no provider keys, so this fails with a clear error.
+ * Callers reach this only through enhancePromptWith* wrappers, which already catch
+ * and fall back to the original prompt — so the user-visible flow degrades cleanly.
  */
-function cleanBase64(imageData: string): string {
-  if (imageData.includes(',')) {
-    return imageData.split(',')[1];
-  }
-  return imageData;
-}
-
-/**
- * Analyze image with Gemini using a specific prompt
- */
-async function analyzeWithPrompt(imageBase64: string, systemPrompt: string): Promise<string> {
-  ensureSDKInitialized();
-
-  if (!genAI) {
-    throw new Error('Gemini SDK could not be initialized');
-  }
-
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    safetySettings: [
-      {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-    ],
-  });
-
-  const base64Image = cleanBase64(imageBase64);
-
-  const result = await model.generateContent({
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            inlineData: {
-              data: base64Image,
-              mimeType: 'image/jpeg',
-            },
-          },
-        ],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.3,
-      topK: 32,
-      topP: 0.9,
-      maxOutputTokens: 400,
-    },
-    systemInstruction: systemPrompt,
-  });
-
-  return result.response.text().trim();
+async function analyzeWithPrompt(_imageBase64: string, _systemPrompt: string): Promise<string> {
+  throw new Error(
+    'Vision reference extraction (Gemini vision) is being migrated to the secure backend and is temporarily unavailable.'
+  );
 }
 
 /**

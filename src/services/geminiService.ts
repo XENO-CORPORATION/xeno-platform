@@ -1,49 +1,25 @@
 /**
- * Service for interacting with Google's Gemini API
+ * Service for Gemini-backed text features.
+ *
+ * The browser holds NO provider keys. Text generation routes through the authed,
+ * metered backend via chatComplete() (which proxies to api.xenostudio.ai — the only
+ * place provider keys live). Vision / image-understanding has no secure backend route
+ * in this migration pass, so those calls fail gracefully with a clear error instead
+ * of shipping a key or calling Google directly from the browser.
  */
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-import { API_TOKENS } from '../config/apiConfig';
+import { chatComplete } from './aiService';
 
-// Track SDK initialization state
-let sdkInitialized = false;
-let genAI: GoogleGenerativeAI | null = null;
+/** Gemini text model, routed through the metered backend. */
+const GEMINI_TEXT_MODEL = 'gpt-5.4-mini';
 
 /**
- * Initialize the Gemini SDK
+ * Back-compat shim. Provider keys and SDK setup now live entirely in the backend,
+ * so there is nothing to initialize in the browser. Retained (with its original
+ * signature) so existing callers keep compiling; the optional apiKey argument is
+ * ignored — the browser ships no provider keys.
  */
-export function initializeGeminiSDK(apiKey?: string): boolean {
-  try {
-    // Use provided API key or fall back to config
-    let key = apiKey || API_TOKENS.GEMINI_API_TOKEN;
-    
-    if (!key) {
-      // Fallback API key
-      key = 'AIzaSyD8eHthLzcGmeJuhoCWSvBv-5jG1F56BYw';
-    }
-    
-    genAI = new GoogleGenerativeAI(key);
-    sdkInitialized = true;
-    
-    // Update API_TOKENS if a new key was provided
-    if (apiKey) {
-      API_TOKENS.GEMINI_API_TOKEN = apiKey;
-    } else if (!API_TOKENS.GEMINI_API_TOKEN) {
-      // Store the fallback key in API_TOKENS for future use
-      API_TOKENS.GEMINI_API_TOKEN = key;
-    }
-    
-    return true;
-  } catch (error) {
-    console.error('[Gemini] Failed to initialize SDK:', error);
-    return false;
-  }
-}
-
-// Initialize SDK when this module is imported
-try {
-  initializeGeminiSDK();
-} catch (error) {
-  console.error('[Gemini] Failed to load SDK on initial import:', error);
+export function initializeGeminiSDK(_apiKey?: string): boolean {
+  return true;
 }
 
 export interface GeneratedPromptResult {
@@ -51,87 +27,16 @@ export interface GeneratedPromptResult {
   negativePrompt: string;
 }
 
-
-
 /**
- * Analyzes an image and generates a detailed description using Gemini's vision capabilities
- * @param imageBase64 Base64-encoded image data (can include data URL prefix)
- * @returns Promise with the generated description
+ * Analyzes an image and generates a detailed description using Gemini's vision
+ * capabilities. Vision/image-understanding has no secure backend route in this
+ * migration pass, so this fails with a clear error rather than shipping a key.
+ * @param _imageBase64 Base64-encoded image data (can include data URL prefix)
  */
-export async function analyzeImageWithGemini(imageBase64: string): Promise<string> {
-  // Make sure SDK is initialized
-  if (!sdkInitialized || !genAI) {
-    if (!initializeGeminiSDK()) {
-      throw new Error('Gemini SDK not initialized');
-    }
-  }
-  
-  // Double-check that genAI is available after initialization
-  if (!genAI) {
-    throw new Error('Gemini SDK could not be initialized');
-  }
-  
-  try {
-    // Clean up base64 string if it has a data URL prefix
-    let base64Image = imageBase64;
-    if (base64Image.includes(',')) {
-      base64Image = base64Image.split(',')[1];
-    }
-    
-    // Use the Gemini 2.0 Flash model for vision tasks
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.0-flash",
-      safetySettings: [
-        {
-          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
-        }
-      ]
-    });
-    
-    // Create content parts with the image
-    const parts = [
-      {
-        inlineData: {
-          data: base64Image,
-          mimeType: "image/jpeg" // Adjust as needed based on input
-        }
-      }
-    ];
-    
-    // Add system instruction to guide the response format and content
-    const systemInstruction = 
-      "Your sole job is to provide a detailed image description of the user's uploaded photo. " +
-      "Nothing more. Include complete details about subjects, colors, style, composition, lighting, and mood. " +
-      "Be specific and avoid placeholder text or generic descriptions.";
-    
-    // Generate content with the image
-    const result = await model.generateContent({
-      contents: [
-        {
-          role: "user",
-          parts: parts
-        }
-      ],
-      generationConfig: {
-        temperature: 0.2,
-        topK: 32,
-        topP: 0.95,
-        maxOutputTokens: 800,
-      },
-      systemInstruction: systemInstruction,
-    });
-    
-    // Return the generated text
-    return result.response.text();
-  } catch (error) {
-    console.error('[Gemini] Error analyzing image:', error);
-    throw error;
-  }
+export async function analyzeImageWithGemini(_imageBase64: string): Promise<string> {
+  throw new Error(
+    'Image analysis (Gemini vision) is being migrated to the secure backend and is temporarily unavailable.'
+  );
 }
 
 /**
@@ -155,25 +60,16 @@ function getModelSpecificInstructions(modelId: string): string {
 }
 
 /**
- * Test if Gemini API connection is working
+ * Test if Gemini text inference is working (through the metered backend).
  */
 export async function testGeminiConnection(): Promise<boolean> {
   try {
-    if (!sdkInitialized || !genAI) {
-      if (!initializeGeminiSDK()) {
-        return false;
-      }
-    }
-    
-    // At this point, genAI should be initialized, but add a check anyway
-    if (!genAI) {
-      console.error('[Gemini] SDK still not initialized after initialization attempt');
-      return false;
-    }
-    
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    const result = await model.generateContent("Hello world");
-    return result !== null;
+    const result = await chatComplete({
+      model: GEMINI_TEXT_MODEL,
+      messages: [{ role: 'user', content: 'Hello world' }],
+      path: 'premium',
+    });
+    return !!result.content;
   } catch (error) {
     console.error('[Gemini] Connection test failed:', error);
     return false;
@@ -181,73 +77,51 @@ export async function testGeminiConnection(): Promise<boolean> {
 }
 
 /**
- * Generates a creative image prompt using Google's Gemini API, tailored for specific models
+ * Generates a creative image prompt using Gemini (via the metered backend),
+ * tailored for specific models.
  */
 export async function generateImagePrompt(modelId: string, theme?: string): Promise<GeneratedPromptResult> {
-  // Make sure SDK is initialized
-  if (!sdkInitialized || !genAI) {
-    if (!initializeGeminiSDK()) {
-      throw new Error('Gemini SDK not initialized');
-    }
-  }
-  
-  // Double-check that genAI is available after initialization
-  if (!genAI) {
-    throw new Error('Gemini SDK could not be initialized');
-  }
-  
   const modelSpecificInstructions = getModelSpecificInstructions(modelId);
-  
+
   const promptIdea = `${modelSpecificInstructions} ${theme ? `The theme should be about: ${theme}.` : ''}`;
-  
+
   // Create a comprehensive prompt for Gemini that asks for both positive and negative prompts
   const promptForGemini = `
   As an AI image prompt engineer, I need you to create two parts:
-  
+
   1. A POSITIVE PROMPT for an AI image generation model. ${promptIdea} Include details about style, lighting, composition, and mood. Make it visually interesting and unique.
-  
+
   2. A NEGATIVE PROMPT that specifies what should NOT appear in the image. Consider common issues with AI generation such as distorted anatomy, extra limbs, poor composition, blurriness, or any undesirable elements related to the theme.
-  
+
   Format your response like this:
   POSITIVE: [your positive prompt here]
   NEGATIVE: [your negative prompt here]
   `;
-  
+
   try {
-    // Use the SDK instead of direct API calls
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
-      safetySettings: [
-        {
-          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
-        }
-      ]
+    const result = await chatComplete({
+      model: GEMINI_TEXT_MODEL,
+      messages: [{ role: 'user', content: promptForGemini }],
+      path: 'premium',
     });
-    
-    const result = await model.generateContent(promptForGemini);
-    const generatedText = result.response.text();
-    
+    const generatedText = result.content;
+
     // Parse the response to extract positive and negative prompts
     let positivePrompt = '';
     let negativePrompt = '';
-    
+
     // Use regex without 's' flag for better compatibility
     const positiveMatch = generatedText.match(/POSITIVE:\s*([\s\S]*?)(?=NEGATIVE:|$)/i);
     const negativeMatch = generatedText.match(/NEGATIVE:\s*([\s\S]*?)(?=$)/i);
-    
+
     if (positiveMatch && positiveMatch[1]) {
       positivePrompt = positiveMatch[1].trim();
     }
-    
+
     if (negativeMatch && negativeMatch[1]) {
       negativePrompt = negativeMatch[1].trim();
     }
-    
+
     // If we couldn't extract the prompts with the format, try to intelligently split the text
     if (!positivePrompt && !negativePrompt) {
       const lines = generatedText.split('\n').filter(line => line.trim());
@@ -260,14 +134,14 @@ export async function generateImagePrompt(modelId: string, theme?: string): Prom
         positivePrompt = generatedText.trim();
       }
     }
-    
+
     // Cleanup: remove quotes if present
     positivePrompt = positivePrompt.replace(/^["']|["']$/g, '').trim();
     negativePrompt = negativePrompt.replace(/^["']|["']$/g, '').trim();
-    
-    return { 
-      positivePrompt, 
-      negativePrompt 
+
+    return {
+      positivePrompt,
+      negativePrompt
     };
   } catch (error) {
     console.error('[Gemini] Error generating prompt:', error);

@@ -3,6 +3,7 @@ import { Shield, Trash2, Bell, Moon, Eye, EyeOff, Loader2, AlertTriangle, Settin
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/authService';
+import UpgradePrompt from '../common/UpgradePrompt';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -137,6 +138,9 @@ const SettingsPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Free-tier upgrade nudge (renders only for Free users) */}
+        <UpgradePrompt context="general" className="mb-6" />
 
         {/* Main Content */}
         <div className="grid grid-cols-3 gap-6">

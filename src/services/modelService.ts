@@ -60,7 +60,12 @@ export const fetchModels = async (): Promise<ModelsResponse> => {
   const cached = getCachedModels();
   if (cached) return cached;
 
-  const response = await fetch('/api/models');
+  // /api/models is auth-gated — send the platform bearer token (same key the
+  // rest of the app uses). Without it the endpoint 401s and the picker is empty.
+  const token = localStorage.getItem('xenoos_auth_token');
+  const response = await fetch('/api/models', {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`);
   }
@@ -111,69 +116,8 @@ export const clearModelsCache = (): void => {
   localStorage.removeItem('xeno_free_models_cache');
 };
 
-// Fallback models when API is unavailable — mirrors api.xenostudio.ai/api/models
-export const FALLBACK_MODELS: GroupedModels[] = [
-  {
-    companyName: 'Anthropic',
-    models: [
-      { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6', maxTokens: 200000 },
-      { id: 'anthropic/claude-opus-4.6', name: 'Claude Opus 4.6', maxTokens: 200000 },
-      { id: 'anthropic/claude-opus-4.5', name: 'Claude Opus 4.5', maxTokens: 200000 },
-      { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', maxTokens: 200000 },
-    ]
-  },
-  {
-    companyName: 'OpenAI',
-    models: [
-      { id: 'openai/gpt-5.4-pro', name: 'GPT-5.4 Pro', maxTokens: 1050000 },
-      { id: 'openai/gpt-5.4', name: 'GPT-5.4', maxTokens: 1050000 },
-      { id: 'openai/gpt-5.4-mini', name: 'GPT-5.4 Mini', maxTokens: 400000 },
-      { id: 'openai/gpt-5.4-nano', name: 'GPT-5.4 Nano', maxTokens: 400000 },
-    ]
-  },
-  {
-    companyName: 'Google',
-    models: [
-      { id: 'google/gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview', maxTokens: 1048576 },
-      { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', maxTokens: 1048576 },
-      { id: 'google/gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite Preview', maxTokens: 1048576 },
-    ]
-  },
-  {
-    companyName: 'DeepSeek',
-    models: [
-      { id: 'deepseek/deepseek-v3.2-speciale', name: 'DeepSeek V3.2 Speciale', maxTokens: 128000 },
-      { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', maxTokens: 128000 },
-      { id: 'deepseek/deepseek-v3.1-terminus', name: 'DeepSeek V3.1 Terminus', maxTokens: 128000 },
-    ]
-  },
-  {
-    companyName: 'Meta',
-    models: [
-      { id: 'meta-llama/llama-4-maverick', name: 'Llama 4 Maverick', maxTokens: 128000 },
-      { id: 'meta-llama/llama-4-scout', name: 'Llama 4 Scout', maxTokens: 512000 },
-    ]
-  },
-  {
-    companyName: 'xAI',
-    models: [
-      { id: 'x-ai/grok-4.20-multi-agent-beta', name: 'Grok 4.20 Multi-Agent Beta', maxTokens: 131072 },
-      { id: 'x-ai/grok-4.20-beta', name: 'Grok 4.20 Beta', maxTokens: 131072 },
-      { id: 'x-ai/grok-4.1-fast', name: 'Grok 4.1 Fast', maxTokens: 131072 },
-    ]
-  },
-  {
-    companyName: 'Mistral',
-    models: [
-      { id: 'mistralai/mistral-small-4', name: 'Mistral Small 4', maxTokens: 131072 },
-      { id: 'mistralai/devstral-2-2512', name: 'Devstral 2', maxTokens: 131072 },
-    ]
-  },
-  {
-    companyName: 'Alibaba',
-    models: [
-      { id: 'qwen/qwen3.5-122b-a10b', name: 'Qwen3.5 122B', maxTokens: 40960 },
-      { id: 'qwen/qwen3.5-27b', name: 'Qwen3.5 27B', maxTokens: 40960 },
-    ]
-  },
-];
+// No hardcoded fallback: the chat shows ONLY the live models actually available
+// on api.xenostudio.ai (/api/models → /v1/models, filtered to type=text). An
+// empty fallback means a transient loading/empty picker rather than fabricated
+// model ids that don't exist on the endpoint.
+export const FALLBACK_MODELS: GroupedModels[] = [];

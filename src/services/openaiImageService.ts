@@ -1,15 +1,22 @@
-import { OpenAI } from 'openai';
+import { postXenoRequest } from './xenoProxyRequest';
 
-// Environment variables
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+// All OpenAI image generation/editing now routes through the authed, metered
+// backend proxy (/api/xeno/images/*). No provider keys ship in the browser.
+// The OpenAI image family maps to the backend's "gpt-high" image model.
+const XENO_IMAGE_MODEL = 'gpt-high';
 
-// Initialize OpenAI client
-const openai = OPENAI_API_KEY
-  ? new OpenAI({
-      apiKey: OPENAI_API_KEY,
-      dangerouslyAllowBrowser: true // Allow browser usage for frontend
-    })
-  : null;
+// Convert an OpenAI size string to the width/height the backend expects.
+function sizeToDimensions(size?: string): { width: number; height: number } {
+  switch (size) {
+    case '1536x1024':
+      return { width: 1536, height: 1024 };
+    case '1024x1536':
+      return { width: 1024, height: 1536 };
+    case '1024x1024':
+    default:
+      return { width: 1024, height: 1024 };
+  }
+}
 
 // Type definitions for GPT Image 1
 export interface ImageGenerationSettings {
@@ -106,68 +113,43 @@ export interface ImageVariationSettings {
 
 // GPT Image 1 Service Class - Text-to-Image Generation Only
 export class OpenAIImageService {
-  private client: OpenAI | null;
-
-  constructor() {
-    if (!OPENAI_API_KEY) {
-      console.warn('OpenAI API key not found. GPT Image 1 generation will not work.');
-    }
-    this.client = openai;
-  }
-
-  // Generate Images from Text Prompt using GPT Image 1 or DALL-E
+  // Generate Images from Text Prompt via the metered backend image proxy.
   async generateImage(settings: ImageGenerationSettings): Promise<ImageGenerationResult> {
-    if (!OPENAI_API_KEY) {
-      return {
-        success: false,
-        error: 'OpenAI API key not configured'
-      };
-    }
-
     try {
       console.log('Generating image with model:', settings.model, settings);
-      
-      // Use Responses API for GPT Image models
+
+      // GPT Image models keep the dedicated path for parity with prior behavior.
       if (settings.model === 'gpt-image-1' || settings.model?.startsWith('gpt-4')) {
         return await this.generateWithResponsesAPI(settings);
       }
-      
-      // Use traditional Images API for DALL-E models
-      const requestParams: any = {
-        model: settings.model || 'dall-e-3',
+
+      const { width, height } = sizeToDimensions(settings.size);
+
+      const payload: Record<string, any> = {
+        model: XENO_IMAGE_MODEL,
         prompt: settings.prompt,
-        response_format: settings.response_format || 'b64_json'
+        width,
+        height,
       };
 
-      // Add parameters for DALL-E models
       if (settings.n && settings.n > 0) {
-        requestParams.n = settings.n;
-      }
-      
-      if (settings.size) {
-        requestParams.size = settings.size;
+        payload.n = settings.n;
       }
 
-      if (settings.quality && settings.model === 'dall-e-3') {
-        requestParams.quality = settings.quality;
-      }
-
-      if (settings.style && settings.model === 'dall-e-3') {
-        requestParams.style = settings.style;
-      }
-      
-      const result = await this.client.images.generate(requestParams);
+      const result = await postXenoRequest('/images/generate', payload);
 
       return {
         success: true,
-        images: result.data?.map(img => ({
-          url: img.url,
-          b64_json: img.b64_json,
-          revised_prompt: img.revised_prompt
-        })) || []
+        images:
+          result?.data?.map((img: any) => ({
+            url: img.url || img.image_url,
+            b64_json: img.b64_json || img.base64,
+            revised_prompt: img.revised_prompt
+          })) || [],
+        usage: result?.usage
       };
     } catch (error: any) {
-      console.error('OpenAI image generation error:', error);
+      console.error('Xeno image generation error:', error);
       return {
         success: false,
         error: error.message || 'Failed to generate image'
@@ -175,47 +157,32 @@ export class OpenAIImageService {
     }
   }
 
-  // Private method to handle GPT Image models using direct generation
+  // Private method to handle GPT Image models via the backend image proxy.
   private async generateWithResponsesAPI(settings: ImageGenerationSettings): Promise<ImageGenerationResult> {
     try {
       console.log('Using GPT Image model for generation:', settings);
-      
-      // For GPT Image models, use them directly with the images API
-      // The model 'gpt-image-1' is supported directly in the images.generate API
-      const requestParams: any = {
-        model: 'gpt-image-1',
+
+      const { width, height } = sizeToDimensions(settings.size);
+
+      const payload: Record<string, any> = {
+        model: XENO_IMAGE_MODEL,
         prompt: settings.prompt,
-        size: settings.size || '1024x1024',
-        n: settings.n || 1,
+        width,
+        height,
+        n: settings.n && settings.n > 0 ? settings.n : 1,
       };
 
-      // Add GPT Image specific parameters
-      if (settings.quality) {
-        requestParams.quality = settings.quality;
-      }
-
-      if (settings.output_format) {
-        requestParams.output_format = settings.output_format;
-      }
-
-      if (settings.output_compression !== undefined) {
-        requestParams.output_compression = settings.output_compression;
-      }
-
-      if (settings.background) {
-        requestParams.background = settings.background;
-      }
-
-      // GPT Image uses b64_json by default, don't include response_format
-      const result = await this.client.images.generate(requestParams);
+      const result = await postXenoRequest('/images/generate', payload);
 
       return {
         success: true,
-        images: result.data?.map(img => ({
-          url: img.url,
-          b64_json: img.b64_json,
-          revised_prompt: img.revised_prompt
-        })) || []
+        images:
+          result?.data?.map((img: any) => ({
+            url: img.url || img.image_url,
+            b64_json: img.b64_json || img.base64,
+            revised_prompt: img.revised_prompt
+          })) || [],
+        usage: result?.usage
       };
     } catch (error: any) {
       console.error('GPT Image generation error:', error);
@@ -231,73 +198,18 @@ export class OpenAIImageService {
 
   // Conversational Image Generation using GPT-4o Mini + GPT Image 1
   async generateConversationalImage(
-    userInput: string, 
-    conversationHistory: ConversationMessage[] = [], 
-    previousResponseId?: string
+    _userInput: string,
+    _conversationHistory: ConversationMessage[] = [],
+    _previousResponseId?: string
   ): Promise<ConversationResult> {
-    if (!OPENAI_API_KEY) {
-      return {
-        success: false,
-        error: 'OpenAI API key not configured'
-      };
-    }
-
-    try {
-      console.log('Generating conversational image with OpenAI Responses API');
-      
-      // Prepare the request
-      const requestPayload: any = {
-        model: 'gpt-4o-mini', // Use appropriate model for responses API
-        tools: [{ type: 'image_generation' }]
-      };
-
-      if (previousResponseId) {
-        // Simple follow-up using previous response ID
-        requestPayload.previous_response_id = previousResponseId;
-        requestPayload.input = [{ type: 'input_text', text: userInput }];
-      } else {
-        // New conversation or using full context
-        const messages = conversationHistory.map(msg => ({
-          role: msg.role,
-          content: msg.content
-        }));
-
-        // Add current user input
-        requestPayload.input = [{ type: 'input_text', text: userInput }];
-      }
-
-      const response = await this.client.chat.completions.create({
-        ...requestPayload,
-        messages: conversationHistory.length > 0 ? conversationHistory.map(msg => ({
-          role: msg.role,
-          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-        })) : [{ role: 'user', content: userInput }]
-      });
-
-      // Extract image generation results
-      const images: Array<{ id: string; result: string }> = [];
-      const textResponses: string[] = [];
-
-      // Note: This is a simplified implementation
-      // The actual Responses API might have different response structure
-      if (response.choices && response.choices.length > 0) {
-        const choice = response.choices[0];
-        textResponses.push(choice.message?.content || '');
-      }
-
-      return {
-        success: true,
-        response_id: response.id,
-        images,
-        text_response: textResponses.join(' ')
-      };
-    } catch (error: any) {
-      console.error('OpenAI conversational image generation error:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to generate conversational image'
-      };
-    }
+    // The multi-turn Responses API (image_generation tool + previous_response_id
+    // chaining) has no equivalent on the metered backend yet. Fail gracefully
+    // instead of shipping a provider key to the browser.
+    console.warn('Conversational image generation is being migrated to the secure backend.');
+    return {
+      success: false,
+      error: 'Conversational image generation is being migrated to the secure backend.'
+    };
   }
 
   // 5. Stream Image Generation with Partial Updates
@@ -306,11 +218,6 @@ export class OpenAIImageService {
     callback: StreamImageCallback,
     partialImageCount: number = 2
   ): Promise<void> {
-    if (!OPENAI_API_KEY) {
-      callback.onError?.('OpenAI API key not configured');
-      return;
-    }
-
     try {
       console.log('Starting streaming image generation with GPT Image');
       
@@ -348,13 +255,6 @@ export class OpenAIImageService {
     editPrompt: string,
     conversationHistory: ConversationMessage[]
   ): Promise<ConversationResult> {
-    if (!OPENAI_API_KEY) {
-      return {
-        success: false,
-        error: 'OpenAI API key not configured'
-      };
-    }
-
     try {
       console.log('Editing image in conversation context');
       
@@ -383,15 +283,8 @@ export class OpenAIImageService {
 
   // 7. Get Supported Models
   async getSupportedModels(): Promise<string[]> {
-    try {
-      const models = await this.client.models.list();
-      return models.data
-        .filter(model => model.id.includes('gpt-image'))
-        .map(model => model.id);
-    } catch (error) {
-      console.error('Failed to fetch supported models:', error);
-      return ['gpt-image-1']; // Default fallback
-    }
+    // Model discovery lives behind the backend proxy; expose the supported set directly.
+    return ['gpt-image-1'];
   }
 
   // 8. Validate Image Input
@@ -577,52 +470,30 @@ export class OpenAIImageService {
 
   // GPT Image 1 Edit Image (Note: GPT Image 1 supports image editing with multiple images and masks)
   async editImage(settings: ImageEditSettings): Promise<ImageGenerationResult> {
-    if (!OPENAI_API_KEY) {
-      return {
-        success: false,
-        error: 'OpenAI API key not configured'
-      };
-    }
-
     try {
-      console.log('Editing image with GPT Image 1:', settings);
-      
-      // Prepare the image array (GPT Image 1 can accept multiple images)
-      const images = [settings.image];
-      
-      const requestParams: any = {
-        model: settings.model || 'gpt-image-1',
-        image: images,
+      console.log('Editing image via backend proxy:', settings.prompt);
+
+      // Send the source image as a data URL; the backend proxy handles the edit.
+      const base64 = await this.imageToBase64(settings.image);
+      const imageDataUrl = `data:${settings.image.type || 'image/png'};base64,${base64}`;
+
+      const result = await postXenoRequest('/images/edit', {
+        model: XENO_IMAGE_MODEL,
+        image: imageDataUrl,
         prompt: settings.prompt,
-        response_format: settings.response_format || 'b64_json'
-      };
-
-      // Add optional parameters
-      if (settings.n && settings.n > 0) {
-        requestParams.n = settings.n;
-      }
-      
-      if (settings.size) {
-        requestParams.size = settings.size;
-      }
-
-      // Add mask if provided
-      if (settings.mask) {
-        requestParams.mask = settings.mask;
-      }
-      
-      const result = await this.client.images.edit(requestParams);
+      });
 
       return {
         success: true,
-        images: result.data?.map((img: any) => ({
-          url: img.url,
-          b64_json: img.b64_json,
-          revised_prompt: img.revised_prompt
-        })) || []
+        images:
+          result?.data?.map((img: any) => ({
+            url: img.url || img.image_url,
+            b64_json: img.b64_json || img.base64,
+            revised_prompt: img.revised_prompt
+          })) || []
       };
     } catch (error: any) {
-      console.error('OpenAI image edit error:', error);
+      console.error('Xeno image edit error:', error);
       return {
         success: false,
         error: error.message || 'Failed to edit image'
@@ -633,48 +504,30 @@ export class OpenAIImageService {
   // Note: GPT Image 1 doesn't support variations in the traditional sense
   // Instead, you can generate multiple images with the same prompt
   async createVariations(settings: ImageVariationSettings): Promise<ImageGenerationResult> {
-    if (!OPENAI_API_KEY) {
-      return {
-        success: false,
-        error: 'OpenAI API key not configured'
-      };
-    }
-
     try {
-      console.log('Creating variations using GPT Image 1 (via multi-image generation)');
-      
-      // Convert the uploaded image to base64 for use in prompt
-      const imageBase64 = await this.imageToBase64(settings.image);
-      
-      // Use the reference image to generate similar variations
-      const requestParams: any = {
-        model: settings.model || 'gpt-image-1',
-        image: [settings.image],
-        prompt: "Create variations of this image while maintaining the same style and content",
-        response_format: settings.response_format || 'b64_json'
-      };
+      console.log('Creating variations via backend proxy (image edit)');
 
-      // Add optional parameters
-      if (settings.n && settings.n > 0) {
-        requestParams.n = settings.n;
-      }
-      
-      if (settings.size) {
-        requestParams.size = settings.size;
-      }
-      
-      const result = await this.client.images.edit(requestParams);
+      // Convert the uploaded image to a data URL for the backend proxy.
+      const imageBase64 = await this.imageToBase64(settings.image);
+      const imageDataUrl = `data:${settings.image.type || 'image/png'};base64,${imageBase64}`;
+
+      const result = await postXenoRequest('/images/edit', {
+        model: XENO_IMAGE_MODEL,
+        image: imageDataUrl,
+        prompt: 'Create variations of this image while maintaining the same style and content',
+      });
 
       return {
         success: true,
-        images: result.data?.map((img: any) => ({
-          url: img.url,
-          b64_json: img.b64_json,
-          revised_prompt: img.revised_prompt
-        })) || []
+        images:
+          result?.data?.map((img: any) => ({
+            url: img.url || img.image_url,
+            b64_json: img.b64_json || img.base64,
+            revised_prompt: img.revised_prompt
+          })) || []
       };
     } catch (error: any) {
-      console.error('OpenAI image variations error:', error);
+      console.error('Xeno image variations error:', error);
       return {
         success: false,
         error: error.message || 'Failed to create variations'

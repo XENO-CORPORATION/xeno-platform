@@ -783,26 +783,12 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
   useEffect(() => {
     setIsCheckingToken(true);
     const checkToken = async () => {
-      // Try to use the token from .env file if available
-      // Note: For Vite, environment variables need to be prefixed with VITE_
-      // The variable should be in the .env file as VITE_GEMINI_API_TOKEN
-      const envToken = import.meta.env.VITE_GEMINI_API_TOKEN || '';
-      
-      if (envToken) {
-        console.log('Found Gemini API token in environment variables');
-        window.GEMINI_API_TOKEN = envToken;
-        API_TOKENS.GEMINI_API_TOKEN = envToken;
-      }
-      
-      // For direct testing, you can uncomment and use this (replace with your actual token)
-      const directToken = 'AIzaSyDMAai9Vwh1JrHFHAt3ZRhZ390x-3nKEjI';
-      if (!API_TOKENS.GEMINI_API_TOKEN) {
-        console.log('Using direct token for testing');
-        window.GEMINI_API_TOKEN = directToken;
-        API_TOKENS.GEMINI_API_TOKEN = directToken;
-      }
-      
-      const tokens = checkApiTokens(); 
+      // Gemini vision (image -> prompt) is being migrated to the secure,
+      // metered backend. No provider key is read or injected on the client:
+      // the hardcoded key, the VITE_GEMINI_API_TOKEN read, and the
+      // window/API_TOKENS key assignments were removed. The SDK-init block
+      // below is now a no-op until a backend endpoint exists.
+      const tokens = checkApiTokens();
       const hasReplicateToken = tokens.replicate;
       setApiTokenAvailable(hasReplicateToken);
       setIsCheckingToken(false);

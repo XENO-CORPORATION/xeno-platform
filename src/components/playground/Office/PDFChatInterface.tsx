@@ -13,6 +13,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
+import { chatComplete } from '../../../services/aiService';
 
 // Set up PDF.js worker - use a stable CDN version
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
@@ -22,7 +23,7 @@ const mockModels = [
   // Google - Latest 3 (best for PDF generation - huge context & output)
   { id: "google/gemini-3-pro-preview", name: "Gemini 3 Pro", maxTokens: 1048576, maxOutputTokens: 65536, supportsVision: true },
   { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", maxTokens: 1048576, maxOutputTokens: 65536, supportsVision: true },
-  { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", maxTokens: 1048576, maxOutputTokens: 65536, supportsVision: true },
+  { id: "gpt-5.4-mini", name: "GPT-5.4 Mini", maxTokens: 400000, maxOutputTokens: 65536, supportsVision: true },
   // OpenAI - Latest 3
   { id: "openai/gpt-5.1", name: "GPT-5.1", maxTokens: 128000, maxOutputTokens: 16384, supportsVision: true },
   { id: "openai/gpt-5", name: "GPT-5", maxTokens: 128000, maxOutputTokens: 16384, supportsVision: true },
@@ -558,9 +559,6 @@ const PDFChatInterface: React.FC = () => {
 
   // Auto-fix LaTeX errors by asking AI to correct them
   const autoFixLatex = useCallback(async (latex: string, errorMsg: string) => {
-    const openrouterKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
-    if (!openrouterKey) return null;
-
     try {
       const fixPrompt = `Fix this LaTeX compilation error. Return ONLY the complete fixed code in \`\`\`latex ... \`\`\`.
 
@@ -586,26 +584,15 @@ EXACT FIXES TO APPLY:
 
 Apply the fix and return the COMPLETE document from \\documentclass to \\end{document}.`;
 
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openrouterKey}`,
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'Xeno PDF Generator - Auto Fix',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.0-flash-001',
-          messages: [{ role: 'user', content: fixPrompt }],
-          temperature: 0.3,
-          max_tokens: 16000,
-        }),
+      const result = await chatComplete({
+        model: 'gpt-5.4-mini',
+        messages: [{ role: 'user', content: fixPrompt }],
+        path: 'premium',
+        temperature: 0.3,
+        maxTokens: 16000,
       });
 
-      if (!response.ok) return null;
-
-      const data = await response.json();
-      const fixedContent = data.choices?.[0]?.message?.content;
+      const fixedContent = result.content;
       if (!fixedContent) return null;
 
       // Extract LaTeX from response
@@ -1054,9 +1041,6 @@ Apply the fix and return the COMPLETE document from \\documentclass to \\end{doc
     setIsLoading(true);
     
     try {
-      const openrouterKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
-      if (!openrouterKey) throw new Error('OpenRouter API key not configured');
-      
       const effectiveSystemPrompt = savedSystemPrompt || SYSTEM_PROMPT;
       
       // Build user message content with images if any
@@ -1090,33 +1074,19 @@ Every list item needs \\item. Escape & as \\&.`;
         ];
       }
       
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openrouterKey}`,
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'Xeno PDF Generator',
-        },
-        body: JSON.stringify({
-          model: selectedModel.id,
-          messages: [
-            { role: 'system', content: effectiveSystemPrompt },
-            ...messages.map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text })),
-            { role: 'user', content: userContent }
-          ],
-          temperature: 0.3,
-          max_tokens: selectedModel.maxOutputTokens,
-        }),
+      const result = await chatComplete({
+        model: selectedModel.id,
+        messages: [
+          { role: 'system', content: effectiveSystemPrompt },
+          ...messages.map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text })),
+          { role: 'user', content: userContent }
+        ] as any,
+        path: 'premium',
+        temperature: 0.3,
+        maxTokens: selectedModel.maxOutputTokens,
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `API error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      const assistantContent = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
+
+      const assistantContent = result.content || 'Sorry, I could not generate a response.';
       
       const assistantMessage: ChatMessage = {
         id: `ai-${Date.now()}`,
@@ -1190,11 +1160,8 @@ Every list item needs \\item. Escape & as \\&.`;
     setIsLoading(true);
 
     try {
-      const openrouterKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
-      if (!openrouterKey) throw new Error('OpenRouter API key not configured');
-
       // Always use Gemini Flash for compacting - fast, cheap, 1M context
-      const compactingModel = 'google/gemini-2.5-flash';
+      const compactingModel = 'gpt-5.4-mini';
       console.log(`📦 Using Gemini Flash for compacting`);
 
       // Build conversation text for summarization
@@ -1203,40 +1170,29 @@ Every list item needs \\item. Escape & as \\&.`;
         .join('\n\n');
 
       // Use the selected model for summarization
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openrouterKey}`,
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'Xeno PDF Generator',
-        },
-        body: JSON.stringify({
-          model: compactingModel,
-          messages: [
-            {
-              role: 'system',
-              content: `You are a conversation summarizer. Create a concise summary of the following conversation about PDF document creation. 
+      const result = await chatComplete({
+        model: compactingModel,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a conversation summarizer. Create a concise summary of the following conversation about PDF document creation.
 Focus on:
 1. What document the user wanted to create
 2. Key requirements and changes requested
 3. Important decisions made
 
 Keep the summary under 500 words. Do NOT include any LaTeX code in the summary - that will be preserved separately.`
-            },
-            {
-              role: 'user',
-              content: `Summarize this conversation:\n\n${conversationText}`
-            }
-          ],
-          max_tokens: 1000,
-        }),
+          },
+          {
+            role: 'user',
+            content: `Summarize this conversation:\n\n${conversationText}`
+          }
+        ],
+        path: 'premium',
+        maxTokens: 1000,
       });
 
-      if (!response.ok) throw new Error('Failed to summarize conversation');
-
-      const data = await response.json();
-      const summary = data.choices?.[0]?.message?.content || 'Previous conversation about document creation.';
+      const summary = result.content || 'Previous conversation about document creation.';
 
       // Create compacted messages: summary + latest LaTeX if exists
       const compactedMessages: ChatMessage[] = [

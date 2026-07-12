@@ -17,6 +17,7 @@ import PaginatedTipTapEditor, { PaginatedTipTapEditorRef } from './PaginatedTipT
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
+import { chatComplete } from '@/services/aiService';
 import TurndownService from 'turndown';
 import { saveAs } from 'file-saver';
 
@@ -1316,9 +1317,6 @@ const WordChatInterface: React.FC = () => {
     let conversationId = activeConversationId;
 
     try {
-      const openrouterKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
-      if (!openrouterKey) throw new Error('OpenRouter API key not configured');
-
       // Create new conversation in database if this is the first message
       if (!conversationId && isDbInitialized) {
         try {
@@ -1383,33 +1381,19 @@ USER REQUEST: ${userMessage.text}`;
         ];
       }
 
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openrouterKey}`,
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'Xeno Word Processor',
-        },
-        body: JSON.stringify({
-          model: selectedModel.id,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            ...messages.slice(-10).map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text })),
-            { role: 'user', content: userContent }
-          ],
-          temperature: 0.3,
-          max_tokens: 16384, // Default max output tokens
-        }),
+      const result = await chatComplete({
+        model: selectedModel.id,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          ...messages.slice(-10).map(m => ({ role: m.sender === 'user' ? 'user' as const : 'assistant' as const, content: m.text })),
+          { role: 'user', content: userContent }
+        ] as any,
+        path: 'premium',
+        temperature: 0.3,
+        maxTokens: 16384, // Default max output tokens
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const assistantContent = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
+      const assistantContent = result.content || 'Sorry, I could not generate a response.';
 
       const assistantMessage: ChatMessage = {
         id: `ai-${Date.now()}`,
@@ -1518,11 +1502,8 @@ USER REQUEST: ${userMessage.text}`;
     setIsLoading(true);
 
     try {
-      const openrouterKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
-      if (!openrouterKey) throw new Error('OpenRouter API key not configured');
-
       // Always use Gemini Flash for compacting - fast, cheap, 1M context
-      const compactingModel = 'google/gemini-2.5-flash';
+      const compactingModel = 'gpt-5.4-mini';
       console.log(`📦 Using Gemini Flash for compacting`);
 
       // Build conversation text for summarization
@@ -1530,40 +1511,29 @@ USER REQUEST: ${userMessage.text}`;
         .map(m => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`)
         .join('\n\n');
 
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openrouterKey}`,
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'Xeno Word Editor',
-        },
-        body: JSON.stringify({
-          model: compactingModel,
-          messages: [
-            {
-              role: 'system',
-              content: `You are a conversation summarizer. Create a concise summary of the following conversation about document creation/editing.
+      const result = await chatComplete({
+        model: compactingModel,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a conversation summarizer. Create a concise summary of the following conversation about document creation/editing.
 Focus on:
 1. What document the user wanted to create or edit
 2. Key requirements and changes requested
 3. Important decisions made
 
 Keep the summary under 500 words. Do NOT include any HTML/markdown content in the summary - that will be preserved separately.`
-            },
-            {
-              role: 'user',
-              content: `Summarize this conversation:\n\n${conversationText}`
-            }
-          ],
-          max_tokens: 1000,
-        }),
+          },
+          {
+            role: 'user',
+            content: `Summarize this conversation:\n\n${conversationText}`
+          }
+        ],
+        path: 'premium',
+        maxTokens: 1000,
       });
 
-      if (!response.ok) throw new Error('Failed to summarize conversation');
-
-      const data = await response.json();
-      const summary = data.choices?.[0]?.message?.content || 'Previous conversation about document creation.';
+      const summary = result.content || 'Previous conversation about document creation.';
 
       // Create compacted messages: summary + note about preserved document
       const compactedMessages: ChatMessage[] = [

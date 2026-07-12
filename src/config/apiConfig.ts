@@ -1,30 +1,27 @@
-// API Configuration file
-// In a production environment, these would be set via environment variables
+// API Configuration file — NON-SECRET base-URL config only.
+//
+// SECURITY: provider API keys NEVER live in the browser. There is no client-side
+// key store here, and keys are never accepted via URL params or held on `window`.
+// All AI inference routes through the authed, metered backend
+// (see src/services/aiService.ts → chatComplete), and all media generation routes
+// through src/services/xenoProxyRequest.ts, which proxy to api.xenostudio.ai. The
+// backend holds the provider keys. Do NOT reintroduce a client key store here.
 
-// Define a global interface to add our custom properties to Window
+// Type-only declarations kept for backward compatibility with components that still
+// reference these window properties during the migration. They carry NO values —
+// nothing in the shipped bundle assigns real keys to them.
 declare global {
   interface Window {
     XENO_API_KEY?: string;
     GEMINI_API_TOKEN?: string;
     GEMINI_API_KEY?: string | undefined;
-    GoogleGenerativeAI?: any; // For direct SDK usage in components
+    GoogleGenerativeAI?: any;
   }
 }
 
 /**
- * API Tokens for various services
- * Get token from environment variables or window object
- */
-export const API_TOKENS = {
-  // Xeno API key for AI generation models
-  // Try to use the token from window or use an empty string if not found
-  XENO_API_KEY: window.XENO_API_KEY || '',
-  // Gemini API token for AI features
-  GEMINI_API_TOKEN: window.GEMINI_API_TOKEN || window.GEMINI_API_KEY || '',
-};
-
-/**
- * API instructions for obtaining tokens for different services
+ * API instructions for obtaining tokens for different services.
+ * Display text / links only — contains NO secrets.
  */
 export const API_INSTRUCTIONS = {
   xeno: {
@@ -51,32 +48,14 @@ export const API_INSTRUCTIONS = {
   }
 };
 
-// Check for token in URL params (for development convenience)
-const urlParams = new URLSearchParams(window.location.search);
-const tokenParam = urlParams.get('xeno_token');
-if (tokenParam) {
-  API_TOKENS.XENO_API_KEY = tokenParam;
-  // Store in window for page refreshes
-  window.XENO_API_KEY = tokenParam;
-}
-
-// Check for Gemini token in URL params
-const geminiTokenParam = urlParams.get('gemini_token');
-if (geminiTokenParam) {
-  API_TOKENS.GEMINI_API_TOKEN = geminiTokenParam;
-  // Store in window for page refreshes
-  window.GEMINI_API_TOKEN = geminiTokenParam;
-  window.GEMINI_API_KEY = geminiTokenParam; // For compatibility
-}
-
-// Get the base URL for the API proxy - use backend proxy to avoid CORS issues
+// Get the base URL for the API proxy (non-secret).
 const getApiBaseUrl = () => {
-  // Use Xeno API directly
+  // Xeno API base URL.
   return 'https://api.xenostudio.ai/v1';
 };
 
 /**
- * API Endpoints for various services
+ * API Endpoints for various services (non-secret base URLs).
  */
 export const API_ENDPOINTS = {
   // Xeno API endpoint
@@ -88,7 +67,24 @@ export const API_ENDPOINTS = {
 };
 
 /**
- * Instructions for obtaining API tokens - LEGACY format for backward compatibility
+ * Inert compatibility shims for components not yet fully migrated off the old
+ * client key store. These carry NO secrets and NEVER hold a provider key:
+ *  - API_TOKENS is an empty object; any `.GEMINI_API_TOKEN` / `.XENO_API_KEY` read
+ *    returns undefined, so every "if (API_TOKENS.x)" key-guard is false and those
+ *    code paths degrade to the authed backend instead of a browser-held key.
+ *  - checkApiTokens() always reports no client tokens.
+ * Do NOT reintroduce real key storage here — inference goes through the backend.
+ */
+export const API_TOKENS: Record<string, string | undefined> = {};
+
+// Record<string,boolean> so any consumer key (xeno/gemini/replicate/…) reads false.
+export function checkApiTokens(): Record<string, boolean> {
+  return { xeno: false, gemini: false, replicate: false };
+}
+
+/**
+ * Instructions for obtaining API tokens - LEGACY format for backward compatibility.
+ * Display text / links only — contains NO secrets.
  */
 export const API_INSTRUCTIONS_LEGACY = {
   xeno: {
@@ -98,7 +94,7 @@ export const API_INSTRUCTIONS_LEGACY = {
       'Visit Xeno Studio at https://xenostudio.ai/',
       'Go to your account settings',
       'Create an API key',
-      'Enter it below or add ?xeno_token=YOUR_TOKEN to the URL'
+      'Enter it below'
     ],
     url: 'https://xenostudio.ai/account/api-keys'
   },
@@ -113,14 +109,3 @@ export const API_INSTRUCTIONS_LEGACY = {
     url: 'https://aistudio.google.com/app/apikey'
   }
 };
-
-/**
- * Function to check if required API tokens are available
- */
-export function checkApiTokens(): Record<string, boolean> {
-  return {
-    xeno: Boolean(API_TOKENS.XENO_API_KEY),
-    gemini: Boolean(API_TOKENS.GEMINI_API_TOKEN || window.GEMINI_API_KEY),
-    // Add other API checks as needed
-  };
-}
