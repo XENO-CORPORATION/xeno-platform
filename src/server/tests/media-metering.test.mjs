@@ -66,6 +66,13 @@ async function main() {
   ok(r2.actualCount === 3, 'under-delivery: actualCount = 3');
   ok(await heldMicro(u2) === 0, 'under-delivery: no dangling hold (settled hold released)');
 
+  // ── 2b. Non-array / missing provider payload → nothing usable → charge 0 ────
+  const u2b = await newUser();
+  await grant(u2b, 100);
+  const r2b = await meter(u2b, { requestId: 'rq-nonarray', unitCostMicro: C(10), count: 3, run: async () => ({ data: null, model: 'm' }) });
+  ok(await balance(u2b) === C(100), 'non-array payload: charged 0, no overcharge for zero delivered (MEDIA-METER-3)');
+  ok(r2b.actualCount === 0, 'non-array payload: actualCount = 0');
+
   // ── 3. Reserve BEFORE provider: insufficient credits → 402, provider never runs ─
   const u3 = await newUser();
   await grant(u3, 30);
@@ -78,14 +85,29 @@ async function main() {
   ok(ran === false, 'reserve-first: provider NEVER called on insufficient credits (no wasted spend)');
   ok(await balance(u3) === C(30), 'reserve-first: balance unchanged after 402');
 
-  // ── 4. Idempotency: same requestId charged ONCE (retry / double-click) ──────
+  // ── 4. Idempotency: a REUSED requestId is rejected (409), provider NOT re-run ─
   const u4 = await newUser();
   await grant(u4, 1000);
   const idemOpts = { requestId: 'rq-idem', unitCostMicro: C(10), count: 5, run: fakeRun(5) };
   await meter(u4, { ...idemOpts });
   ok(await balance(u4) === C(950), 'idempotency: first call charged 50');
-  await meter(u4, { ...idemOpts }); // same requestId → reuse hold, no second charge
-  ok(await balance(u4) === C(950), 'idempotency: replay with same requestId charged ZERO more (still 950)');
+
+  // Replay with the SAME requestId must NOT silently re-run the provider for free.
+  let dup409 = false, providerReran = false;
+  try {
+    await meter(u4, { ...idemOpts, run: async () => { providerReran = true; return fakeRun(5)(); } });
+  } catch (e) { dup409 = e.http === 409; }
+  ok(dup409, 'idempotency: reused requestId REJECTED with 409 (not silently re-run)');
+  ok(providerReran === false, 'idempotency: provider NOT re-invoked on reuse — no free generation (MEDIA-METER-1)');
+  ok(await balance(u4) === C(950), 'idempotency: balance unchanged after duplicate rejection (still 950)');
+
+  // A reused key after a VOIDED (failed) attempt is ALSO rejected — closes the void-path free gen (F3).
+  const u4b = await newUser();
+  await grant(u4b, 1000);
+  try { await meter(u4b, { requestId: 'rq-void', unitCostMicro: C(10), count: 1, run: async () => { throw new Error('provider 500'); } }); } catch { /* expected */ }
+  let dupAfterVoid = false;
+  try { await meter(u4b, { requestId: 'rq-void', unitCostMicro: C(10), count: 1, run: fakeRun(1) }); } catch (e) { dupAfterVoid = e.http === 409; }
+  ok(dupAfterVoid, 'idempotency: reused key after a VOID is rejected — no free success-after-failure (F3)');
 
   // Distinct requestId DOES charge again (proves the hold key is per-request).
   await meter(u4, { ...idemOpts, requestId: 'rq-idem-2' });

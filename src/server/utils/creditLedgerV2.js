@@ -46,9 +46,12 @@ async function ensureAccount(client, userId) {
 
 /** Sum of active holds (micro) for a user. */
 async function activeHoldsMicro(client, userId) {
+  // Only NON-EXPIRED holds reserve balance. A hold that outlives its expires_at (e.g. a
+  // settle that failed all retries and was "left to expire") must stop locking credits —
+  // there is no sweeper voiding rows, so the available-balance math self-heals at expiry.
   const r = await client.query(
     `SELECT COALESCE(SUM(amount_micro - settled_micro), 0)::bigint AS held
-       FROM credit_holds WHERE user_id = $1 AND state = 'held'`,
+       FROM credit_holds WHERE user_id = $1 AND state = 'held' AND expires_at > now()`,
     [userId],
   );
   return BigInt(r.rows[0].held);

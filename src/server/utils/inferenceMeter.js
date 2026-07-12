@@ -168,8 +168,25 @@ export async function meterMediaGeneration(db, userId, opts) {
   // Reserve the WHOLE batch worst-case (unit × count) BEFORE spending on the provider.
   const totalMicro = Math.max(1, unitMicro * reqCount);
 
-  // Phase 1 — reserve. INSUFFICIENT_CREDITS → 402 / ACCOUNT_FROZEN → 403 before we
-  // spend a cent on the provider. Idempotent on holdId so retries don't stack holds.
+  // Idempotency guard — the requestId (→ holdId) is a SINGLE-USE key. If a hold with this
+  // id already exists in ANY state (held / settled / voided), this request was already
+  // handled: re-running the provider would generate AGAIN while settleHoldV2 no-ops on the
+  // terminal hold → free, unbounded generation on a reused requestId (and via the void path,
+  // a free success after a first failure). So a reused key is rejected (409); a genuinely
+  // new generation needs a new requestId. (holdV2's own idempotency only prevents a second
+  // RESERVE — it would still let run() execute again — which is exactly the hole.)
+  const prior = await db.query(
+    'SELECT 1 FROM credit_holds WHERE user_id = $1 AND hold_id = $2 LIMIT 1',
+    [userId, holdId],
+  );
+  if (prior.rows.length > 0) {
+    const e = new Error('Duplicate request'); e.code = 'DUPLICATE_REQUEST'; e.http = 409; throw e;
+  }
+
+  // Phase 1 — reserve. INSUFFICIENT_CREDITS → 402 / ACCOUNT_FROZEN → 403 before we spend a
+  // cent on the provider. A concurrent same-key double-click that races past the guard above
+  // collides on the UNIQUE(user_id, hold_id) constraint here → one wins, the other errors
+  // (500), so the provider is never double-run for a single key.
   try {
     await holdV2(db, userId, {
       holdId,
@@ -192,19 +209,24 @@ export async function meterMediaGeneration(db, userId, opts) {
     throw e;
   }
 
-  // Phase 2 — settle for the number of outputs ACTUALLY returned (clamped to the
-  // reserved count). Under-delivery releases the remainder. If the provider payload
-  // is not an array we cannot count it → charge the full reserved count (never undercharge).
-  const produced = Array.isArray(result?.data) ? result.data.length : reqCount;
+  // Phase 2 — settle for the number of outputs ACTUALLY returned (clamped to the reserved
+  // count). Under-delivery releases the remainder. A non-array / missing payload means
+  // nothing usable was delivered (every media route reads result.data as an array) → count 0
+  // and charge nothing, rather than billing the full reserved count for zero outputs.
+  const produced = Array.isArray(result?.data) ? result.data.length : 0;
   const actualCount = Math.min(Math.max(0, produced), reqCount);
   const actualMicro = unitMicro * actualCount;
 
   let costMicro = actualMicro;
   try {
-    const settled = await settleHoldV2(db, userId, holdId, actualMicro);
+    // Retry the settle across a transient ledger/DB blip so a single failure does not strand
+    // the hold. settleHoldV2 is idempotent (no-ops once the hold is not 'held'), so the retry
+    // can never double-charge.
+    const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro));
     costMicro = settled?.settledMicro ?? costMicro;
   } catch {
-    // leave the hold to expire (900s) rather than fail the user's completed generation
+    // all retries failed — leave the hold to expire rather than fail a completed generation
+    // (getBalanceV2/holdV2 ignore expired holds, so a stranded hold self-heals at expiry).
   }
 
   return {

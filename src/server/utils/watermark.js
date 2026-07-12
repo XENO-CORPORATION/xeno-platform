@@ -56,29 +56,20 @@ export async function watermarkBuffer(buffer) {
 }
 
 /**
- * Watermark each image in an OpenAI-style `data` array. Returns items as
- * { b64_json } (self-contained). Best-effort: on a per-image failure it does NOT
- * fail the user's generation — but it also NEVER falls back to the raw provider
- * { url } (that would leak a clean, un-watermarked asset). Instead it returns the
- * original bytes as self-contained base64, so the provider URL is never exposed
- * even when the mark itself could not be applied.
+ * Watermark each image in an OpenAI-style `data` array → self-contained { b64_json }.
+ *
+ * FAIL-CLOSED: if an item cannot be watermarked, this THROWS. Callers apply it inside the
+ * metering run() closure, so a throw voids the credit hold — the Free user is not charged
+ * and receives NO asset, rather than being handed a clean, un-watermarked image (returning
+ * the original bytes on failure would still leak a clean commercial asset; returning an
+ * empty image would charge for nothing). The image marker (sharp) is reliable, so this
+ * path is effectively never hit in practice.
  */
 export async function watermarkResultData(data) {
   if (!Array.isArray(data)) return data;
   return Promise.all(data.map(async (item) => {
-    try {
-      const wm = await watermarkBuffer(await itemToBuffer(item));
-      return { b64_json: wm.toString('base64') };
-    } catch (e) {
-      console.warn('[watermark] image failed, returning self-contained original:', e.message);
-      try {
-        const raw = await itemToBuffer(item);
-        return { b64_json: raw.toString('base64') };
-      } catch (e2) {
-        console.error('[watermark] could not recover image bytes, dropping:', e2.message);
-        return { b64_json: '' };
-      }
-    }
+    const wm = await watermarkBuffer(await itemToBuffer(item));
+    return { b64_json: wm.toString('base64') };
   }));
 }
 
@@ -132,21 +123,24 @@ export async function watermarkVideoItem(item) {
     const { w, h } = await probeVideoDims(inPath);
     const overlay = await sharp(watermarkSvg(w, h)).png().toBuffer();
     await writeFile(pngPath, overlay);
-    // Explicitly map the overlaid video + the ORIGINAL audio (0:a? = optional, so a
-    // silent generated clip does not error). Without explicit maps, -filter_complex
-    // suppresses automatic audio selection and the watermarked clip would lose its sound.
+    // scale2ref rescales the mark PNG to the ACTUAL decoded frame, so a wrong/failed probe
+    // can't misplace or off-frame the watermark. Then overlay full-frame and map the overlaid
+    // video + the ORIGINAL audio (0:a? = optional, so a silent clip does not error; without
+    // explicit maps, -filter_complex suppresses audio selection and the clip loses its sound).
     await execFileP('ffmpeg', [
       '-y', '-i', inPath, '-i', pngPath,
-      '-filter_complex', '[0:v][1:v]overlay=0:0[v]',
+      '-filter_complex', '[1:v][0:v]scale2ref[wm][vid];[vid][wm]overlay=0:0[v]',
       '-map', '[v]', '-map', '0:a?',
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
       '-c:a', 'copy', '-movflags', '+faststart',
       outPath,
     ], { maxBuffer: 1 << 26, timeout: 5 * 60 * 1000 });
     const out = await readFile(outPath);
-    // Strip any provider url/b64/thumbnail; hand back a self-contained data URL.
-    const { url, b64_json, base64, thumbnail_url, ...restMeta } = item || {};
-    return { ...restMeta, url: `data:video/mp4;base64,${out.toString('base64')}` };
+    // ALLOWLIST the response: hand back ONLY the self-contained watermarked data URL plus
+    // known-benign metadata (duration). Any other provider field — including unknown raw-URL
+    // fields (video_url/download_url/signed_url/thumbnail_url) — is dropped so nothing lets a
+    // Free client fetch the clean original.
+    return { url: `data:video/mp4;base64,${out.toString('base64')}`, duration: item?.duration };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }

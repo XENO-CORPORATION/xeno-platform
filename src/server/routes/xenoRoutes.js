@@ -901,6 +901,9 @@ router.post('/images/generate', async (req, res) => {
       if (err?.http === 403) {
         return res.status(403).json({ error: 'Account frozen', code: 'ACCOUNT_FROZEN' });
       }
+      if (err?.http === 409) {
+        return res.status(409).json({ error: 'Duplicate request — use a new requestId for a new generation', code: 'DUPLICATE_REQUEST' });
+      }
       // Provider error — the hold was already voided (no charge).
       console.error('[XenoRoutes] Image generate API error:', err);
       const status = getApiErrorStatus(err);
@@ -993,6 +996,9 @@ router.post('/images/edit', async (req, res) => {
       }
       if (err?.http === 403) {
         return res.status(403).json({ error: 'Account frozen', code: 'ACCOUNT_FROZEN' });
+      }
+      if (err?.http === 409) {
+        return res.status(409).json({ error: 'Duplicate request — use a new requestId for a new generation', code: 'DUPLICATE_REQUEST' });
       }
       console.error('[XenoRoutes] Image edit API error:', err);
       const status = getApiErrorStatus(err);
@@ -1087,6 +1093,9 @@ router.post('/videos/generate', async (req, res) => {
       if (err?.http === 403) {
         return res.status(403).json({ error: 'Account frozen', code: 'ACCOUNT_FROZEN' });
       }
+      if (err?.http === 409) {
+        return res.status(409).json({ error: 'Duplicate request — use a new requestId for a new generation', code: 'DUPLICATE_REQUEST' });
+      }
       console.error('[XenoRoutes] Video generate API error:', err);
       const status = getApiErrorStatus(err);
       return res.status(status).json({
@@ -1165,6 +1174,9 @@ router.post('/audio/generate', async (req, res) => {
       }
       if (err?.http === 403) {
         return res.status(403).json({ error: 'Account frozen', code: 'ACCOUNT_FROZEN' });
+      }
+      if (err?.http === 409) {
+        return res.status(409).json({ error: 'Duplicate request — use a new requestId for a new generation', code: 'DUPLICATE_REQUEST' });
       }
       console.error('[XenoRoutes] Audio generate API error:', err);
       const status = getApiErrorStatus(err);
