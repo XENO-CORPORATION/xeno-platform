@@ -1,6 +1,8 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import MarketingPage, { Section, Prose, CheckList } from '../components/marketing/MarketingPage';
+import { startCheckout, isAuthed } from '../services/billingService';
 
 type Plan = {
   name: string;
@@ -11,6 +13,7 @@ type Plan = {
   href: string;
   cta: string;
   featured?: boolean;
+  itemId?: string; // maps to the billing catalog → one-click Stripe Checkout
 };
 
 const plans: Plan[] = [
@@ -43,6 +46,7 @@ const plans: Plan[] = [
     href: '/auth',
     cta: 'Go Pro',
     featured: true,
+    itemId: 'pro_monthly',
   },
   {
     name: 'Team',
@@ -59,6 +63,7 @@ const plans: Plan[] = [
     ],
     href: '/auth',
     cta: 'Start a team',
+    itemId: 'team_monthly',
   },
   {
     name: 'Enterprise',
@@ -75,6 +80,52 @@ const plans: Plan[] = [
     cta: 'Contact sales',
   },
 ];
+
+const ctaClass = (featured?: boolean) =>
+  `mt-6 block rounded-[9px] px-4 py-2.5 text-center text-[13.5px] font-semibold transition-colors ${
+    featured
+      ? 'bg-white text-black hover:bg-white/90'
+      : 'border border-white/[0.12] text-[#ece7df] hover:border-white/[0.22]'
+  }`;
+
+/** A plan's call-to-action: one-click Stripe Checkout for billing plans (Pro/Team),
+ *  a plain link for Free / Enterprise. Sends signed-out users to /auth first. */
+const PlanCTA: React.FC<{ plan: Plan }> = ({ plan }) => {
+  const navigate = useNavigate();
+  const [busy, setBusy] = React.useState(false);
+
+  if (plan.itemId) {
+    const onClick = async () => {
+      if (!isAuthed()) {
+        navigate(`/auth?return=${encodeURIComponent('/pricing')}`);
+        return;
+      }
+      setBusy(true);
+      const r = await startCheckout(plan.itemId!);
+      if (!r.ok) {
+        setBusy(false);
+        toast.error(r.error || 'Could not start checkout');
+      }
+      // On success the browser is redirected to Stripe Checkout.
+    };
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={busy}
+        className={`${ctaClass(plan.featured)} w-full disabled:opacity-60`}
+      >
+        {busy ? 'Redirecting…' : plan.cta}
+      </button>
+    );
+  }
+
+  return (
+    <Link to={plan.href} className={ctaClass(plan.featured)}>
+      {plan.cta}
+    </Link>
+  );
+};
 
 const Pricing: React.FC = () => (
   <MarketingPage
@@ -106,16 +157,7 @@ const Pricing: React.FC = () => (
             <div className="mt-5 flex-1">
               <CheckList items={plan.features} />
             </div>
-            <Link
-              to={plan.href}
-              className={`mt-6 rounded-[9px] px-4 py-2.5 text-center text-[13.5px] font-semibold transition-colors ${
-                plan.featured
-                  ? 'bg-white text-black hover:bg-white/90'
-                  : 'border border-white/[0.12] text-[#ece7df] hover:border-white/[0.22]'
-              }`}
-            >
-              {plan.cta}
-            </Link>
+            <PlanCTA plan={plan} />
           </div>
         ))}
       </div>
