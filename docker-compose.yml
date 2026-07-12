@@ -132,6 +132,9 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - JWT_ACCESS_EXPIRES=${JWT_ACCESS_EXPIRES}
       - JWT_REFRESH_EXPIRES=${JWT_REFRESH_EXPIRES}
+      # Setup/migration gate + admin seed (unset by default -> /init & /migrate fail closed in prod)
+      - SETUP_TOKEN=${SETUP_TOKEN}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - AUTH_FRONTEND_URL=${AUTH_FRONTEND_URL}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN}
       - XENO_FLOW_URL=http://host.docker.internal:8090

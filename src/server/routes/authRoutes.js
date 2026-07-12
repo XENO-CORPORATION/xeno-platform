@@ -265,9 +265,40 @@ function generateToken(user) {
   );
 }
 
+// SECURITY: /init and /migrate mutate the schema and (re)seed the default admin account.
+// In production they must be gated behind a shared setup secret so they are not
+// world-callable; in dev they stay open for convenience. Returns false (and sends 403)
+// when the caller is not authorized.
+function requireSetupToken(req, res) {
+  if (process.env.NODE_ENV !== 'production') return true;
+  const expected = process.env.SETUP_TOKEN;
+  const provided = req.headers['x-setup-token'] || req.body?.setupToken;
+  if (!expected || provided !== expected) {
+    res.status(403).json({ success: false, error: 'Forbidden' });
+    return false;
+  }
+  return true;
+}
+
+// SECURITY: never seed the admin account with a hardcoded default password in production.
+// Requires ADMIN_PASSWORD to be set; returns null (and sends 400) if it is missing in prod.
+function resolveAdminPassword(req, res) {
+  const pw = process.env.ADMIN_PASSWORD;
+  if (pw) return pw;
+  if (process.env.NODE_ENV === 'production') {
+    res.status(400).json({
+      success: false,
+      error: 'ADMIN_PASSWORD must be set before initializing the admin account.',
+    });
+    return null;
+  }
+  return 'xenostudio123'; // dev-only convenience default
+}
+
 // POST /api/auth/init - Initialize database tables
 router.post('/init', async (req, res) => {
   try {
+    if (!requireSetupToken(req, res)) return;
     const adminUserId = '9bcd1624-e26b-46ec-81f5-17d9b575c992';
     const adminEmail = 'admin@xenostudio.local';
     const legacyAdminEmail = 'admin@xenostudio.ai';
@@ -327,7 +358,9 @@ router.post('/init', async (req, res) => {
     );
     
     // Create/update default admin user with stable ID and credentials
-    const adminPassword = await hashPassword(process.env.ADMIN_PASSWORD || 'xenostudio123');
+    const adminPasswordPlain = resolveAdminPassword(req, res);
+    if (adminPasswordPlain === null) return;
+    const adminPassword = await hashPassword(adminPasswordPlain);
     await req.db.query(`
       INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -339,9 +372,9 @@ router.post('/init', async (req, res) => {
         is_active = EXCLUDED.is_active
     `, [adminUserId, 'admin', adminEmail, adminPassword, 'XenoStudio Admin', true, true]);
 
-    // SECURITY WARNING: Change the default admin password via ADMIN_PASSWORD env var
+    // In non-production, ADMIN_PASSWORD may be unset (dev default used above).
     if (!process.env.ADMIN_PASSWORD) {
-      console.warn('⚠️  SECURITY WARNING: Using default admin password. Set ADMIN_PASSWORD env var in production!');
+      console.warn('⚠️  Using the dev default admin password. Set ADMIN_PASSWORD before any production init.');
     }
 
     res.json({
@@ -569,7 +602,7 @@ router.get('/validate', async (req, res) => {
     }
 
     // Verify JWT token
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     
     // Get user from database
     const result = await req.db.query(`
@@ -656,6 +689,9 @@ router.post('/logout', async (req, res) => {
 // POST /api/auth/migrate - Migrate existing user table and create necessary tables
 router.post('/migrate', async (req, res) => {
   try {
+    if (!requireSetupToken(req, res)) return;
+    const adminPasswordPlain = resolveAdminPassword(req, res);
+    if (adminPasswordPlain === null) return;
     console.log('🔧 Starting database migration for authentication system...');
     const adminUserId = '9bcd1624-e26b-46ec-81f5-17d9b575c992';
     const adminEmail = 'admin@xenostudio.local';
@@ -700,7 +736,7 @@ router.post('/migrate', async (req, res) => {
     
     if (adminCheck.rows.length === 0) {
       // Create new admin user
-      const adminPasswordHash = await hashPassword(process.env.ADMIN_PASSWORD || 'xenostudio123');
+      const adminPasswordHash = await hashPassword(adminPasswordPlain);
       
       await req.db.query(`
         INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active)
@@ -715,7 +751,7 @@ router.post('/migrate', async (req, res) => {
       console.log('✅ Admin user created');
     } else {
       // Update existing admin user with hashed password
-      const adminPasswordHash = await hashPassword(process.env.ADMIN_PASSWORD || 'xenostudio123');
+      const adminPasswordHash = await hashPassword(adminPasswordPlain);
       await req.db.query(`
         UPDATE users 
         SET password_hash = $1, email_verified = true, is_active = true, username = 'admin', display_name = 'XenoStudio Admin'
@@ -726,13 +762,7 @@ router.post('/migrate', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Database migration completed successfully',
-      details: {
-        adminCredentials: {
-          email: 'admin@xenostudio.local',
-          password: 'xenostudio123'
-        }
-      }
+      message: 'Database migration completed successfully'
     });
 
   } catch (error) {
@@ -757,7 +787,7 @@ router.get('/me', async (req, res) => {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     
     const result = await req.db.query(`
       SELECT id, username, email, display_name, avatar_url, 
@@ -821,7 +851,7 @@ router.put('/profile', async (req, res) => {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const { display_name, username, avatar_url } = req.body;
 
     // Build dynamic update query
@@ -930,7 +960,7 @@ router.put('/password', async (req, res) => {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const { current_password, new_password } = req.body;
 
     if (!current_password || !new_password) {
@@ -1012,7 +1042,7 @@ router.get('/usage', async (req, res) => {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
 
     // Get user credits info
     const userResult = await req.db.query(
@@ -1090,7 +1120,7 @@ router.post('/use-credits', async (req, res) => {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const { feature, amount } = req.body;
 
     if (!feature || !amount || amount <= 0) {
@@ -1169,7 +1199,7 @@ router.delete('/account', async (req, res) => {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const { password } = req.body;
 
     if (!password) {
@@ -1243,7 +1273,7 @@ router.post('/claim-bonus', async (req, res) => {
     }
 
     // Verify JWT token
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     
     // Get user from database with credits and bonus status
     const userResult = await req.db.query(
@@ -1737,7 +1767,7 @@ router.get('/linked-accounts', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
 
     const result = await req.db.query(
       `SELECT provider, provider_email, provider_username, provider_avatar_url, created_at
@@ -1773,7 +1803,7 @@ router.delete('/linked-accounts/:provider', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const { provider } = req.params;
 
     if (!['google', 'github', 'twitter'].includes(provider)) {

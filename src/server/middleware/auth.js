@@ -6,9 +6,13 @@
 import jwt from 'jsonwebtoken';
 import { getKeyByKid } from '../utils/oidcProvider.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
-  console.error('CRITICAL SECURITY WARNING: JWT_SECRET not set in auth middleware! Using insecure default.');
+const JWT_DEFAULT_SECRET = 'xenostudio-super-secret-jwt-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || JWT_DEFAULT_SECRET;
+// SECURITY: never run on a missing/committed-default signing secret in production — with
+// it, anyone can forge an HS256 token for ANY user. Fail fast instead of just warning.
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || JWT_SECRET === JWT_DEFAULT_SECRET)) {
+  console.error('FATAL: JWT_SECRET is unset or equals the committed default in production. Refusing to boot. Set a strong JWT_SECRET.');
+  process.exit(1);
 }
 
 /**
@@ -99,8 +103,8 @@ export const optionalAuthMiddleware = async (req, res, next) => {
     const token = req.headers.authorization?.replace('Bearer ', '');
     
     if (token) {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      
+      const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+
       const result = await req.db.query(`
         SELECT id, username, email, display_name, avatar_url, 
                created_at, email_verified, is_active

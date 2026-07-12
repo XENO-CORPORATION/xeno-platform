@@ -108,7 +108,7 @@ async function requireBearer(req, res) {
   }
   let decoded;
   try {
-    decoded = jwt.verify(token, JWT_SECRET);
+    decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
   } catch {
     res.status(401).json({ error: 'invalid_token' });
     return null;

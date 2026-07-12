@@ -101,7 +101,7 @@ const MessageTypes = {
 // Verify JWT token
 async function verifyToken(token) {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     return decoded;
   } catch (error) {
     return null;

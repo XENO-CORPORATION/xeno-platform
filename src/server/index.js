@@ -135,9 +135,13 @@ const upload = multer({
 // Create Express app with increased limits for image processing
 const app = express();
 const PORT = process.env.BACKEND_PORT || 8090;
-const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
-  console.error('CRITICAL SECURITY WARNING: JWT_SECRET not set! Using insecure default. Set JWT_SECRET environment variable immediately.');
+const JWT_DEFAULT_SECRET = 'xenostudio-super-secret-jwt-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || JWT_DEFAULT_SECRET;
+// SECURITY: never run on a missing/committed-default signing secret in production — with
+// it, anyone can forge an HS256 token for ANY user. Fail fast instead of just warning.
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || JWT_SECRET === JWT_DEFAULT_SECRET)) {
+  console.error('FATAL: JWT_SECRET is unset or equals the committed default in production. Refusing to boot. Set a strong JWT_SECRET.');
+  process.exit(1);
 }
 
 // =============================================================================
@@ -853,231 +857,10 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
-// Authentication Routes
-app.post('/api/auth/init', async (req, res) => {
-  try {
-    // Check database connection and return auth system status
-    const dbTest = await pool.query('SELECT 1');
-    res.json({
-      success: true,
-      message: 'Auth system initialized',
-      database: 'connected',
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Auth init error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Auth system initialization failed'
-    });
-  }
-});
-
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { username, email, password, display_name } = req.body;
-
-    if (!username || !email || !password || !display_name) {
-      return res.status(400).json({
-        success: false,
-        error: 'All fields are required'
-      });
-    }
-
-    // Input validation
-    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ success: false, error: 'Invalid email format' });
-    }
-    if (typeof username !== 'string' || username.length < 3 || username.length > 30 || !/^[a-zA-Z0-9_]+$/.test(username)) {
-      return res.status(400).json({ success: false, error: 'Username must be 3-30 alphanumeric characters or underscores' });
-    }
-    if (typeof password !== 'string' || password.length < 8) {
-      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
-    }
-    if (typeof display_name !== 'string' || display_name.length < 1 || display_name.length > 100) {
-      return res.status(400).json({ success: false, error: 'Display name must be 1-100 characters' });
-    }
-
-    // SECURITY: Use bcrypt instead of SHA-256 for password hashing
-    const bcrypt = await import('bcryptjs');
-    const passwordHash = await bcrypt.default.hash(password, 12);
-
-    // Check if user already exists
-    const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1 OR username = $2',
-      [email.toLowerCase(), username.toLowerCase()]
-    );
-
-    if (existingUser.rows && existingUser.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'User already exists with this email or username'
-      });
-    }
-
-    // Create new user
-    const userId = uuidv4();
-    await pool.query(
-      'INSERT INTO users (id, username, email, password_hash, display_name, email_verified, is_active, credits) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [userId, username.toLowerCase(), email.toLowerCase(), passwordHash, display_name, true, true, 2000]
-    );
-
-    // Create session token
-    const sessionToken = randomBytes(32).toString('hex');
-
-    // Store session
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-    await pool.query(
-      'INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES ($1, $2, $3)',
-      [userId, sessionToken, expiresAt.toISOString()]
-    );
-
-    res.json({
-      success: true,
-      user: {
-        id: userId,
-        username,
-        email,
-        display_name,
-        email_verified: true,
-        is_active: true,
-        credits: 2000,
-        bonus_credits_claimed: false,
-        created_at: new Date().toISOString()
-      },
-      token: sessionToken
-    });
-
-  } catch (error) {
-    console.error('Registration error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Registration failed'
-    });
-  }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email and password are required'
-      });
-    }
-
-    // Input validation
-    if (typeof email !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ success: false, error: 'Invalid input' });
-    }
-
-    // Find user
-    const userResult = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    );
-    const user = userResult.rows[0];
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid email or password'
-      });
-    }
-
-    // SECURITY: Use bcrypt for password comparison (supports both legacy SHA-256 and bcrypt hashes)
-    const bcrypt = await import('bcryptjs');
-    let passwordValid = false;
-
-    if (user.password_hash.startsWith('$2')) {
-      // Bcrypt hash
-      passwordValid = await bcrypt.default.compare(password, user.password_hash);
-    } else {
-      // Legacy SHA-256 hash — compare and upgrade to bcrypt
-      const legacyHash = createHash('sha256').update(password).digest('hex');
-      passwordValid = (user.password_hash === legacyHash);
-      if (passwordValid) {
-        // Upgrade to bcrypt hash
-        const newHash = await bcrypt.default.hash(password, 12);
-        await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, user.id]);
-        console.log(`[Auth] Upgraded password hash to bcrypt for user ${user.id}`);
-      }
-    }
-
-    if (!passwordValid) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid email or password'
-      });
-    }
-
-    // Create session token
-    const sessionToken = randomBytes(32).toString('hex');
-
-    // Store session
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-    await pool.query(
-      'INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES ($1, $2, $3)',
-      [user.id, sessionToken, expiresAt.toISOString()]
-    );
-
-    res.json({
-      success: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        display_name: user.display_name,
-        email_verified: user.email_verified,
-        is_active: user.is_active,
-        credits: user.credits,
-        bonus_credits_claimed: user.bonus_credits_claimed,
-        created_at: user.created_at
-      },
-      token: sessionToken
-    });
-
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Login failed'
-    });
-  }
-});
-
-app.get('/api/auth/validate', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, error: 'No token provided' });
-    }
-
-    const token = authHeader.substring(7);
-
-    // Validate session
-    const sessionResult = await pool.query(
-      'SELECT u.* FROM users u JOIN user_sessions s ON u.id = s.user_id WHERE s.session_token = $1 AND s.expires_at > $2',
-      [token, new Date().toISOString()]
-    );
-    const session = sessionResult.rows[0];
-
-    if (!session) {
-      return res.status(401).json({ success: false, error: 'Invalid or expired token' });
-    }
-
-    // SECURITY: Only return safe user fields, never password_hash or internal data
-    const { password_hash, ...safeUser } = session;
-    res.json({ success: true, user: safeUser });
-
-  } catch (error) {
-    console.error('Token validation error:', error);
-    res.status(500).json({ success: false, error: 'Validation failed' });
-  }
-});
-
+// NOTE: /api/auth/* is served by authRoutes.js (mounted on '/api/auth' above). The former
+// inline init/register/login/validate handlers here were dead (shadowed by that mount) and
+// used a divergent token model (opaque sessions + direct credit grants); removed to
+// eliminate the latent auth-flip risk if the mount order ever changed.
 
 // File upload endpoint with validation
 const ALLOWED_UPLOAD_MIMES = new Set([
@@ -4228,7 +4011,8 @@ async function resolveWebSocketUserByToken(token) {
 
   // Fallback path: accept valid JWT bearer token directly.
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    // SECURITY: pin the algorithm so a forged token can't dictate its own verification.
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const userId = decoded?.userId || decoded?.id;
     if (!userId) return null;
 
