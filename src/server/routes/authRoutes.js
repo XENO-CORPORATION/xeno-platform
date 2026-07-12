@@ -11,6 +11,11 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 import Redis from 'ioredis';
+import { addGrant, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { deductCredits } from '../utils/creditTransactions.js';
+
+// Free-tier starter credits granted on signup so new users can try premium generation.
+const FREE_SIGNUP_CREDITS = Number(process.env.FREE_SIGNUP_CREDITS || 50);
 
 const router = express.Router();
 
@@ -399,6 +404,18 @@ router.post('/register', async (req, res) => {
     `, [userId, username.toLowerCase(), email.toLowerCase(), passwordHash, display_name, 0, false]);
 
     const user = result.rows[0];
+
+    // Grant Free-tier starter credits (kind:'free' → drawn down before paid credits)
+    // so a new user can actually try premium generation. Non-fatal on failure.
+    if (FREE_SIGNUP_CREDITS > 0) {
+      try {
+        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: 'signup' });
+        user.credits = FREE_SIGNUP_CREDITS;
+      } catch (grantErr) {
+        console.warn('[register] signup credit grant failed:', grantErr.message);
+      }
+    }
+
     const token = generateToken(user);
 
     // Store session (simplified for now - we can add session tracking later)
@@ -1083,36 +1100,18 @@ router.post('/use-credits', async (req, res) => {
       });
     }
 
-    // Get current credits
-    const userResult = await req.db.query(
-      'SELECT id, credits FROM users WHERE id = $1',
-      [decoded.userId]
-    );
-
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
-
-    const user = userResult.rows[0];
-    const currentCredits = user.credits || 0;
-
-    if (currentCredits < amount) {
+    // Deduct via the canonical v2 ledger (mirrors users.credits). Was: a direct
+    // `UPDATE users SET credits = credits - n`, which drifted the mirror below the ledger.
+    const debit = await deductCredits(req.db, decoded.userId, amount, { surface: 'feature', operation: String(feature) });
+    if (!debit.success) {
       return res.status(400).json({
         success: false,
-        error: 'Insufficient credits',
-        current_credits: currentCredits,
-        required: amount
+        error: debit.error || 'Insufficient credits',
+        current_credits: debit.currentCredits ?? 0,
+        required: amount,
       });
     }
-
-    // Deduct credits
-    const updateResult = await req.db.query(
-      'UPDATE users SET credits = credits - $1, updated_at = NOW() WHERE id = $2 RETURNING credits',
-      [amount, decoded.userId]
-    );
+    const updateResult = { rows: [{ credits: debit.newBalance }] };
 
     // Log usage (create table if needed)
     try {
@@ -1268,13 +1267,32 @@ router.post('/claim-bonus', async (req, res) => {
       });
     }
 
-    // Award welcome credits (1000) and mark as claimed
-    const updateResult = await req.db.query(
-      'UPDATE users SET credits = 1000, bonus_credits_claimed = true WHERE id = $1 RETURNING credits',
+    // Award welcome credits into the CANONICAL v2 ledger (credit_accounts) via
+    // addGrant, which also mirrors users.credits (mirrorLegacy). Previously this
+    // only SET users.credits, leaving the v2 ledger the chat meter / api-proxy /
+    // Hub actually read at zero → false 402 "Insufficient credits" despite a shown
+    // balance. Claim atomically first (WHERE bonus_credits_claimed = false) so
+    // concurrent calls can't double-grant; roll the claim back if the grant throws.
+    const WELCOME_BONUS_CREDITS = 1000;
+    const claim = await req.db.query(
+      'UPDATE users SET bonus_credits_claimed = true WHERE id = $1 AND bonus_credits_claimed = false RETURNING id',
       [user.id]
     );
-
-    const newCredits = updateResult.rows[0].credits;
+    if (claim.rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Welcome credits have already been claimed' });
+    }
+    try {
+      await addGrant(req.db, user.id, {
+        amountMicro: WELCOME_BONUS_CREDITS * MICRO_PER_CREDIT,
+        kind: 'free',
+        sourceRef: `welcome-bonus:${user.id}`,
+      });
+    } catch (grantErr) {
+      await req.db.query('UPDATE users SET bonus_credits_claimed = false WHERE id = $1', [user.id]).catch(() => {});
+      throw grantErr;
+    }
+    const after = await req.db.query('SELECT credits FROM users WHERE id = $1', [user.id]);
+    const newCredits = after.rows[0]?.credits ?? WELCOME_BONUS_CREDITS;
 
     res.json({
       success: true,

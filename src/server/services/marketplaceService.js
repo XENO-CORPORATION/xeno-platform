@@ -15,6 +15,7 @@
  * logUsage() writes the ledger row. No new ledger system is invented.
  */
 
+import crypto from 'crypto';
 import { deductCredits, refundCredits, logUsage } from '../utils/creditTransactions.js';
 import { generateSignedUrl } from '../middleware/cdnOptimization.js';
 
@@ -312,32 +313,23 @@ export async function acquireListing(db, { user, listing, pricing, txnType }) {
   const creatorNet = cost - platformFee;
   const expiresAt = computeExpiry(pricing.model, pricing.period);
 
+  // Ledger-authoritative debit BEFORE the purchase txn (keeps users.credits a pure
+  // mirror; was an inline `UPDATE users SET credits`). Idempotent on debitTxnId; if the
+  // purchase records below fail, the catch refunds it.
+  let newBalance = null;
+  let debitTxnId = null;
+  if (cost > 0) {
+    debitTxnId = `mkt:${crypto.randomUUID()}`;
+    const debit = await deductCredits(db, user.id, cost, { surface: 'marketplace', operation: txnType, transactionId: debitTxnId });
+    if (!debit.success) {
+      return { ok: false, status: debit.currentCredits != null ? 402 : 500, error: debit.error || 'Insufficient credits', currentCredits: debit.currentCredits };
+    }
+    newBalance = debit.newBalance;
+  }
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-
-    // Atomic credit debit with row lock (only when there is a cost).
-    let newBalance = null;
-    if (cost > 0) {
-      const { rows: lockRows } = await client.query(
-        'SELECT credits FROM users WHERE id = $1 FOR UPDATE',
-        [user.id],
-      );
-      if (lockRows.length === 0) {
-        await client.query('ROLLBACK');
-        return { ok: false, status: 404, error: 'User not found' };
-      }
-      const current = lockRows[0].credits;
-      if (current < cost) {
-        await client.query('ROLLBACK');
-        return { ok: false, status: 402, error: 'Insufficient credits', currentCredits: current };
-      }
-      const { rows: upd } = await client.query(
-        'UPDATE users SET credits = credits - $1 WHERE id = $2 RETURNING credits',
-        [cost, user.id],
-      );
-      newBalance = upd[0].credits;
-    }
 
     // Transaction record.
     const { rows: txnRows } = await client.query(
@@ -398,6 +390,8 @@ export async function acquireListing(db, { user, listing, pricing, txnType }) {
     return { ok: true, entitlement, transaction, newBalance };
   } catch (error) {
     await client.query('ROLLBACK');
+    // The ledger debit committed before this txn; the purchase records failed → refund.
+    if (debitTxnId) await refundCredits(db, user.id, cost, { sourceRef: `refund:${debitTxnId}` }).catch(() => {});
     throw error;
   } finally {
     client.release();

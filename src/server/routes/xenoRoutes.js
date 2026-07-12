@@ -13,6 +13,8 @@ import { Router } from 'express';
 import Xeno from 'xeno-ai';
 import { getCreditCost } from '../utils/creditCosts.js';
 import { deductCredits, refundCredits, logUsage } from '../utils/creditTransactions.js';
+import { resolveEntitlements, capDimensions, gateMeta } from '../utils/entitlementGate.js';
+import { watermarkResultData } from '../utils/watermark.js';
 
 const router = Router();
 const XENO_API_KEY = process.env.XENO_API_KEY || '';
@@ -845,6 +847,10 @@ router.post('/images/generate', async (req, res) => {
       return res.status(400).json({ error: 'Missing prompt' });
     }
 
+    // Entitlement gate: Free = standard resolution + watermark; Pro/Team = 4K + clean.
+    const ent = await resolveEntitlements(req.db, userId);
+    const dims = capDimensions(ent, width, height);
+
     const cost = getCreditCost('image', model);
     const debit = await deductCredits(req.db, userId, cost);
 
@@ -856,12 +862,17 @@ router.post('/images/generate', async (req, res) => {
       const result = await xenoClient.image.generate({
         model,
         prompt: prompt.trim(),
-        width: width || 1024,
-        height: height || 1024,
+        width: dims.width,
+        height: dims.height,
         seed,
         n: n || 1,
         ...rest,
       });
+
+      let data = result?.data || [];
+      if (ent.watermark) {
+        data = await watermarkResultData(data);
+      }
 
       await logUsage(req.db, userId, `image:${model}`, cost, {
         route: '/api/xeno/images/generate',
@@ -870,10 +881,12 @@ router.post('/images/generate', async (req, res) => {
       });
 
       return res.json({
-        data: result?.data || [],
+        data,
         model: result?.model || model,
         credits_used: cost,
         remaining_credits: debit.newBalance,
+        entitlement: gateMeta(ent),
+        resolution_capped: dims.capped,
       });
     } catch (apiError) {
       await refundCredits(req.db, userId, cost);
@@ -929,6 +942,13 @@ router.post('/images/edit', async (req, res) => {
         ...rest,
       });
 
+      // Entitlement gate: Free = watermarked output; Pro/Team = clean.
+      const ent = await resolveEntitlements(req.db, userId);
+      let data = result?.data || [];
+      if (ent.watermark) {
+        data = await watermarkResultData(data);
+      }
+
       await logUsage(req.db, userId, `edit:${model}`, cost, {
         route: '/api/xeno/images/edit',
         model,
@@ -936,10 +956,11 @@ router.post('/images/edit', async (req, res) => {
       });
 
       return res.json({
-        data: result?.data || [],
+        data,
         model: result?.model || model,
         credits_used: cost,
         remaining_credits: debit.newBalance,
+        entitlement: gateMeta(ent),
       });
     } catch (apiError) {
       await refundCredits(req.db, userId, cost);
