@@ -6,6 +6,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
+import { tagResourceWorkspace } from '../utils/workspaceContext.js';
 import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -77,6 +78,8 @@ router.post('/projects/create', requireAuth, async (req, res) => {
       projectId, userId, title, description, width, height, fps, duration,
       quality, aspect_ratio, generation_steps, output_format, JSON.stringify(project_metadata)
     ]);
+
+    await tagResourceWorkspace(req.db, req, { objectType: 'video_project', objectId: projectId, table: 'video_projects' });
 
     res.json({
       success: true,

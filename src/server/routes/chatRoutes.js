@@ -1,4 +1,5 @@
 import express from 'express';
+import { workspaceFromReq, isWorkspaceMember, linkResourceToWorkspace } from '../utils/workspaceContext.js';
 
 const router = express.Router();
 
@@ -218,12 +219,20 @@ router.post('/conversations', async (req, res) => {
 
     const { title = 'New Chat', model_id, system_prompt, persona_id, interface_id = 'playground' } = req.body;
 
+    // Workspace tenancy (Phase 5): stamp workspace_id + write the ReBAC parent tuple
+    // when the request carries an x-xeno-workspace the caller belongs to.
+    const wsCtx = workspaceFromReq(req);
+    const wsId = (wsCtx && await isWorkspaceMember(req.db, wsCtx, userId)) ? wsCtx : null;
+
     const result = await req.db.query(
-      `INSERT INTO chat_conversations (user_id, title, model_id, system_prompt, persona_id, interface_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO chat_conversations (user_id, title, model_id, system_prompt, persona_id, interface_id, workspace_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [userId, title, model_id, system_prompt, persona_id, interface_id]
+      [userId, title, model_id, system_prompt, persona_id, interface_id, wsId]
     );
+    if (wsId) {
+      await linkResourceToWorkspace(req.db, { workspaceId: wsId, userId, objectType: 'conversation', objectId: result.rows[0].id });
+    }
 
     res.json({
       success: true,

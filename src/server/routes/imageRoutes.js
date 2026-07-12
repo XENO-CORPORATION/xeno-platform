@@ -13,6 +13,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import fetch from 'node-fetch';
+import { tagResourceWorkspace } from '../utils/workspaceContext.js';
 
 const router = express.Router();
 
@@ -267,6 +268,7 @@ router.post('/projects/create', async (req, res) => {
     ]);
 
     console.log(`✅ Created image project: ${projectId} for user: ${userId}`);
+    await tagResourceWorkspace(req.db, req, { objectType: 'image_project', objectId: projectId, table: 'image_projects' });
 
     res.json({
       success: true,

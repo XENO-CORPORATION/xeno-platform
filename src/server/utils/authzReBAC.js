@@ -57,8 +57,18 @@ async function heldRelations(db, object, subject) {
   return { held: r.rows.map((x) => x.relation), subjectType: s.type };
 }
 
-/** check(object, relation, subject) → { allowed, via }. */
-export async function check(db, { object, relation, subject }) {
+/**
+ * check(object, relation, subject) → { allowed, via }.
+ *
+ * Resolution order: direct tuple → `member` (holds any relation) → role hierarchy
+ * (humans only) → USERSET REWRITE via parent inheritance. The last is the Zanzibar
+ * "tupleset → computed userset": a resource linked to a parent object with a
+ * `parent` tuple (`conversation:C#parent@workspace:W`) inherits the subject's SAME
+ * relation on that parent — so a workspace member/editor/owner automatically has the
+ * matching relation on the workspace's conversations, projects, runs, etc. `_depth`
+ * bounds the recursion (cycle/anti-DoS guard).
+ */
+export async function check(db, { object, relation, subject }, _depth = 0) {
   if (!object || !relation || !subject) return { allowed: false };
   const { held, subjectType } = await heldRelations(db, object, subject);
   if (held.includes(relation)) return { allowed: true, via: 'direct' };
@@ -69,6 +79,20 @@ export async function check(db, { object, relation, subject }) {
   if (want && subjectType !== 'agent') {
     const best = Math.max(0, ...held.map((r) => ROLE_RANK[r] || 0));
     if (best >= want) return { allowed: true, via: 'role-hierarchy' };
+  }
+  // Userset rewrite: inherit the relation from any parent object (bounded recursion).
+  if (_depth < 8) {
+    const o = parseRef(object);
+    const parents = await db.query(
+      `SELECT subject_type, subject_id FROM relationship_tuples
+       WHERE object_type=$1 AND object_id=$2 AND relation='parent'`,
+      [o.type, o.id],
+    );
+    for (const p of parents.rows) {
+      const parentRef = `${p.subject_type}:${p.subject_id}`;
+      const r = await check(db, { object: parentRef, relation, subject }, _depth + 1);
+      if (r.allowed) return { allowed: true, via: `parent(${parentRef})→${r.via}` };
+    }
   }
   return { allowed: false };
 }
