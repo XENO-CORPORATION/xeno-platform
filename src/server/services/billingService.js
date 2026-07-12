@@ -19,14 +19,22 @@
  *    prices/plans are managed in the Stripe dashboard, not in code.
  */
 import Stripe from 'stripe';
-import { addGrant, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { addGrantTx, clawbackTx, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 
 const SECRET = process.env.STRIPE_SECRET_KEY || '';
 const PUBLISHABLE = process.env.STRIPE_PUBLISHABLE_KEY || '';
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 
-/** Stripe client — null until a secret key is configured (feature flag). */
-const stripe = SECRET ? new Stripe(SECRET) : null;
+/**
+ * Stripe client — null until a secret key is configured (feature flag).
+ * apiVersion is PINNED so outbound-call response shapes are deterministic and match
+ * the SDK-bundled version this code's field reads target (rather than drifting with
+ * the account's dashboard default). Webhook payload shape is governed by the webhook
+ * ENDPOINT's version, which can be newer — so the handlers ALSO read version-fragile
+ * fields defensively (see subIdFromInvoice/periodEndFrom* below). maxNetworkRetries
+ * makes the outbound refund/charge lookups resilient to transient errors.
+ */
+const stripe = SECRET ? new Stripe(SECRET, { apiVersion: '2025-02-24.acacia', maxNetworkRetries: 2 }) : null;
 
 export function isEnabled() {
   return Boolean(stripe);
@@ -81,6 +89,20 @@ const planForPriceId = (priceId) => CATALOG.map(resolveItem).find((i) => i.price
 // Stripe subscription statuses that still grant the plan (past_due = grace period).
 const ACTIVE_STATUSES = new Set(['active', 'trialing', 'past_due']);
 
+// Webhook payloads are shaped by the ENDPOINT's Stripe API version, which can be
+// NEWER than the pinned SDK. Read version-fragile fields from BOTH the legacy
+// top-level location and the newer nested location so renewals / period tracking
+// never silently break when the account moves to a newer API version.
+const subIdFromInvoice = (inv) => inv.subscription || inv.parent?.subscription_details?.subscription || null;
+const periodEndFromInvoice = (inv) => {
+  const secs = inv.period_end || inv.lines?.data?.[0]?.period?.end || null;
+  return secs ? new Date(secs * 1000) : null;
+};
+const periodEndFromSub = (sub) => {
+  const secs = sub.current_period_end || sub.items?.data?.[0]?.current_period_end || null;
+  return secs ? new Date(secs * 1000) : null;
+};
+
 /** Upsert the user's subscription/plan row (idempotent). */
 async function setPlan(pool, userId, { plan, status, subId = null, periodEnd = null }) {
   await ensureSchema(pool);
@@ -132,6 +154,17 @@ function ensureSchema(pool) {
         type       text,
         user_id    text,
         created_at timestamptz NOT NULL DEFAULT now()
+      );
+      -- Maps a settled charge (payment_intent) → the credits it granted, so a later
+      -- refund/dispute can claw back the right amount. refunded_micro tracks the
+      -- cumulative clawback so partial + repeated refunds never over/under-reverse.
+      CREATE TABLE IF NOT EXISTS billing_charges (
+        payment_intent text PRIMARY KEY,
+        user_id        text NOT NULL,
+        credits_micro  bigint NOT NULL,
+        refunded_micro bigint NOT NULL DEFAULT 0,
+        event_id       text,
+        created_at     timestamptz NOT NULL DEFAULT now()
       );
       CREATE TABLE IF NOT EXISTS xeno_account_plans (
         user_id                text PRIMARY KEY,
@@ -268,10 +301,9 @@ export function constructEvent(rawBody, signature) {
   return stripe.webhooks.constructEvent(rawBody, signature, WEBHOOK_SECRET);
 }
 
-/** Insert the event id; returns true only the FIRST time (idempotency guard). */
-async function claimEvent(pool, event, userId) {
-  await ensureSchema(pool);
-  const r = await pool.query(
+/** Claim the event id on an EXISTING tx client; true only the FIRST time (idempotency). */
+async function claimEventTx(client, event, userId) {
+  const r = await client.query(
     `INSERT INTO billing_events (event_id, type, user_id) VALUES ($1, $2, $3)
      ON CONFLICT (event_id) DO NOTHING RETURNING event_id`,
     [event.id, event.type, userId ? String(userId) : null],
@@ -279,12 +311,81 @@ async function claimEvent(pool, event, userId) {
   return r.rows.length > 0;
 }
 
-async function grantCredits(pool, userId, credits, sourceRef) {
-  await addGrant(pool, String(userId), {
-    amountMicro: Math.round(credits) * MICRO_PER_CREDIT,
-    kind: 'paid',
-    sourceRef,
-  });
+/**
+ * ATOMIC money-in: claim the event AND grant the credits AND record the charge
+ * mapping in ONE transaction. If any step fails the whole thing rolls back — so a
+ * crash / DB blip never leaves an event "claimed" without the credits (Stripe's
+ * retry then re-runs cleanly). Idempotent: a redelivered event no-ops on the
+ * billing_events PK, and the grant is independently guarded by uq_credit_txn_ref.
+ */
+async function grantCreditsForEvent(pool, event, userId, credits, session) {
+  await ensureSchema(pool);
+  const amountMicro = Math.round(credits) * MICRO_PER_CREDIT;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (await claimEventTx(client, event, userId)) {
+      await addGrantTx(client, String(userId), { amountMicro, kind: 'paid', sourceRef: `stripe:${event.id}` });
+      const pi = session?.payment_intent ? String(session.payment_intent) : null;
+      if (pi) {
+        await client.query(
+          `INSERT INTO billing_charges (payment_intent, user_id, credits_micro, event_id)
+           VALUES ($1,$2,$3,$4) ON CONFLICT (payment_intent) DO NOTHING`,
+          [pi, String(userId), String(amountMicro), event.id],
+        );
+      }
+      console.log(`💳 [billing] granted ${credits} credits to user ${userId} (top-up ${event.id})`);
+    }
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+}
+
+/**
+ * Claw back credits for a Stripe refund/dispute in ONE transaction, idempotent on
+ * the Stripe event id. Uses billing_charges (payment_intent → granted credits) to
+ * cap the reversal and track cumulative refunded_micro, so partial + repeated
+ * refunds never over- or under-claw. Optionally freezes the account (dispute).
+ */
+async function clawbackForCharge(pool, event, { paymentIntent, targetRefundMicro, freeze = false }) {
+  await ensureSchema(pool);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (!(await claimEventTx(client, event, null))) { await client.query('COMMIT'); return { handled: true, duplicate: true }; }
+    const row = (await client.query(
+      'SELECT user_id, credits_micro, refunded_micro FROM billing_charges WHERE payment_intent=$1 FOR UPDATE',
+      [paymentIntent],
+    )).rows[0];
+    if (!row) { await client.query('COMMIT'); return { handled: true, reason: 'no charge mapping' }; }
+    const target = Math.min(Number(targetRefundMicro), Number(row.credits_micro));
+    const delta = target - Number(row.refunded_micro);
+    if (delta > 0) {
+      const r = await clawbackTx(client, String(row.user_id), delta, {
+        refType: 'stripe.refund', refId: event.id, description: `refund ${event.type}`,
+        metadata: { paymentIntent, eventType: event.type },
+      });
+      await client.query('UPDATE billing_charges SET refunded_micro=$1 WHERE payment_intent=$2', [String(target), paymentIntent]);
+      if (r.shortfallMicro > 0) console.warn(`⚠️ [billing] refund shortfall ${r.shortfallMicro}µcr (already spent) user ${row.user_id} (${event.id})`);
+    }
+    if (freeze) {
+      await client.query('UPDATE credit_accounts SET is_frozen=true, updated_at=now() WHERE user_id=$1', [String(row.user_id)]);
+      // Release any in-flight reservations so a pending settle can't spend clawed-back credits.
+      await client.query("UPDATE credit_holds SET state='voided', updated_at=now() WHERE user_id=$1 AND state='held'", [String(row.user_id)]);
+    }
+    await client.query('COMMIT');
+    console.log(`💳 [billing] clawed back ${Math.max(0, delta)}µcr from user ${row.user_id} (${event.type} ${event.id}${freeze ? ', frozen' : ''})`);
+    return { handled: true };
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+}
+
+/** Resolve a dispute's payment_intent (present directly in recent API; else via the charge). */
+async function resolveDisputePI(dispute) {
+  if (dispute.payment_intent) return String(dispute.payment_intent);
+  if (dispute.charge) {
+    try { const ch = await stripe.charges.retrieve(String(dispute.charge)); return ch.payment_intent ? String(ch.payment_intent) : null; }
+    catch { return null; }
+  }
+  return null;
 }
 
 /**
@@ -295,7 +396,10 @@ export async function handleEvent(pool, event) {
   const obj = event.data.object;
   switch (event.type) {
     // Fires when a Checkout completes — for BOTH subscriptions and one-time packs.
-    case 'checkout.session.completed': {
+    // async_payment_succeeded covers delayed-settlement methods (the session can
+    // complete UNPAID and settle later); it's always a payment-mode grant.
+    case 'checkout.session.completed':
+    case 'checkout.session.async_payment_succeeded': {
       const session = obj;
       const uid = session.metadata?.xenoUserId || session.client_reference_id;
       // Persist the customer↔user mapping (needed for renewal/lifecycle events).
@@ -322,11 +426,13 @@ export async function handleEvent(pool, event) {
           console.log(`💳 [billing] user ${uid} → plan '${plan}' (checkout ${event.id})`);
         }
       } else if (session.mode === 'payment') {
-        // One-time top-up pack → GRANT credits (from metadata; idempotent).
+        // One-time top-up pack → GRANT credits (atomic claim+grant, idempotent).
+        // Grant on any SETTLED session: 'paid' (card / async-settled) or
+        // 'no_payment_required' ($0, e.g. a 100%-off promo code). Defer ONLY a
+        // genuinely 'unpaid' async-pending session to async_payment_succeeded.
         const credits = Number(session.metadata?.credits || 0);
-        if (credits > 0 && await claimEvent(pool, event, uid)) {
-          await grantCredits(pool, uid, credits, `stripe:${event.id}`);
-          console.log(`💳 [billing] granted ${credits} credits to user ${uid} (top-up pack ${event.id})`);
+        if (credits > 0 && session.payment_status !== 'unpaid') {
+          await grantCreditsForEvent(pool, event, uid, credits, session);
         }
       }
       return { handled: true };
@@ -339,11 +445,12 @@ export async function handleEvent(pool, event) {
       const invoice = obj;
       const uid = await userIdForCustomer(pool, invoice.customer);
       if (!uid) return { handled: false, reason: 'no user for customer' };
-      if (invoice.subscription) {
-        const periodEnd = invoice.period_end ? new Date(invoice.period_end * 1000) : null;
+      const subId = subIdFromInvoice(invoice);
+      if (subId) {
+        const periodEnd = periodEndFromInvoice(invoice);
         const cur = await getPlan(pool, uid);
         const plan = cur.plan === 'free' ? 'pro' : cur.plan; // safety if checkout event was missed
-        await setPlan(pool, uid, { plan, status: 'active', subId: invoice.subscription, periodEnd });
+        await setPlan(pool, uid, { plan, status: 'active', subId, periodEnd });
       }
       return { handled: true };
     }
@@ -356,7 +463,7 @@ export async function handleEvent(pool, event) {
       if (wsId) {
         // Workspace per-seat sub → sync plan/status + seat quantity (add/remove-seat proration).
         const seats = sub.items?.data?.[0]?.quantity ?? Number(sub.metadata?.seats || 1);
-        const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+        const periodEnd = periodEndFromSub(sub);
         await setWorkspacePlan(pool, wsId, { plan: 'team', status: sub.status, subId: sub.id, seats, periodEnd });
         console.log(`💳 [billing] workspace ${wsId} → team status '${sub.status}', ${seats} seats (${event.type})`);
         return { handled: true };
@@ -365,7 +472,7 @@ export async function handleEvent(pool, event) {
       if (!uid) return { handled: false, reason: 'no user for customer' };
       const priceId = sub.items?.data?.[0]?.price?.id;
       const plan = planForPriceId(priceId) || 'pro';
-      const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+      const periodEnd = periodEndFromSub(sub);
       await setPlan(pool, uid, { plan, status: sub.status, subId: sub.id, periodEnd });
       console.log(`💳 [billing] user ${uid} → plan '${plan}' status '${sub.status}' (sub ${event.type})`);
       return { handled: true };
@@ -395,6 +502,44 @@ export async function handleEvent(pool, event) {
       const cur = await getPlan(pool, uid);
       await setPlan(pool, uid, { plan: cur.plan, status: 'past_due', subId: invoice.subscription || null });
       return { handled: true };
+    }
+
+    // Refund → claw back the proportional credits (idempotent on the event id).
+    case 'charge.refunded': {
+      await ensureSchema(pool);
+      const charge = obj;
+      const pi = charge.payment_intent ? String(charge.payment_intent) : null;
+      if (!pi) return { handled: false, reason: 'no payment_intent on charge' };
+      const amount = Number(charge.amount || 0);
+      const refunded = Number(charge.amount_refunded || 0);
+      if (amount <= 0 || refunded <= 0) return { handled: true };
+      const mapped = (await pool.query('SELECT credits_micro FROM billing_charges WHERE payment_intent=$1', [pi])).rows[0];
+      if (!mapped) return { handled: true, reason: 'no charge mapping' };
+      const targetRefundMicro = Math.round(Number(mapped.credits_micro) * (refunded / amount));
+      return await clawbackForCharge(pool, event, { paymentIntent: pi, targetRefundMicro });
+    }
+
+    // Dispute opened → freeze the account (stop further spend during the dispute).
+    case 'charge.dispute.created': {
+      await ensureSchema(pool);
+      const pi = await resolveDisputePI(obj);
+      if (pi) {
+        // Resolve the owner first, then freeze via a parameterized uuid predicate
+        // (a text subquery would be `uuid = text`, which Postgres rejects at plan time).
+        const owner = (await pool.query('SELECT user_id FROM billing_charges WHERE payment_intent=$1', [pi])).rows[0];
+        if (owner) await pool.query('UPDATE credit_accounts SET is_frozen=true, updated_at=now() WHERE user_id=$1', [String(owner.user_id)]);
+      }
+      return { handled: true };
+    }
+
+    // Chargeback funds pulled → claw back the FULL grant + keep the account frozen.
+    case 'charge.dispute.funds_withdrawn': {
+      await ensureSchema(pool);
+      const pi = await resolveDisputePI(obj);
+      if (!pi) return { handled: false, reason: 'no payment_intent on dispute' };
+      const mapped = (await pool.query('SELECT credits_micro FROM billing_charges WHERE payment_intent=$1', [pi])).rows[0];
+      if (!mapped) return { handled: true, reason: 'no charge mapping' };
+      return await clawbackForCharge(pool, event, { paymentIntent: pi, targetRefundMicro: Number(mapped.credits_micro), freeze: true });
     }
 
     default:
