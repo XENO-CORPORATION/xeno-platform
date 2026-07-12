@@ -4,10 +4,47 @@
  */
 
 import jwt from 'jsonwebtoken';
+import { getKeyByKid } from '../utils/oidcProvider.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   console.error('CRITICAL SECURITY WARNING: JWT_SECRET not set in auth middleware! Using insecure default.');
+}
+
+/**
+ * Unified token resolution for EVERY authed surface (the single source of truth
+ * shared by authMiddleware and the v2 oidcAuth). Accepts BOTH:
+ *   - the legacy HS256 platform token (payload.userId), and
+ *   - OIDC access tokens (RS256/ES256, payload.sub) verified against the signing
+ *     key for their `kid`.
+ * so an OIDC-signed-in user works on ALL routes, not only /api/v2/*. `algorithms`
+ * is pinned per branch (defends against alg-confusion; the old global verify
+ * accepted any algorithm). Header-only by design — the app authenticates via
+ * `Authorization: Bearer` and sets NO auth cookie.
+ * @returns {{ user: object } | { status: number, error: string }}
+ */
+export async function resolveAuthedUser(req) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return { status: 401, error: 'Authentication token required' };
+
+  let userId = null;
+  const header = jwt.decode(token, { complete: true })?.header;
+  if (header && header.alg !== 'HS256' && header.kid) {
+    const key = await getKeyByKid(req.db, header.kid);
+    if (!key) return { status: 401, error: 'Invalid authentication token' };
+    userId = jwt.verify(token, key.publicKey, { algorithms: [key.alg] }).sub;
+  } else {
+    userId = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }).userId;
+  }
+  if (!userId) return { status: 401, error: 'Invalid authentication token' };
+
+  const result = await req.db.query(
+    `SELECT id, username, email, display_name, avatar_url, created_at, email_verified, is_active
+       FROM users WHERE id = $1 AND is_active = true`,
+    [userId],
+  );
+  if (result.rows.length === 0) return { status: 401, error: 'Invalid or expired token' };
+  return { user: result.rows[0] };
 }
 
 /**
@@ -23,37 +60,12 @@ export const authMiddleware = async (req, res, next) => {
       return next();
     }
 
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    console.log('[Auth] Token present:', !!token, 'Path:', req.path);
-
-    if (!token) {
-      console.log('[Auth] No token provided for path:', req.path);
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication token required'
-      });
+    // Unified resolution: legacy HS256 OR OIDC RS256/ES256 (see resolveAuthedUser).
+    const resolved = await resolveAuthedUser(req);
+    if (resolved.error) {
+      return res.status(resolved.status).json({ success: false, error: resolved.error });
     }
-
-    // Verify JWT token
-    const decoded = jwt.verify(token, JWT_SECRET);
-    
-    // Get user from database to ensure they still exist and are active
-    const result = await req.db.query(`
-      SELECT id, username, email, display_name, avatar_url, 
-             created_at, email_verified, is_active
-      FROM users 
-      WHERE id = $1 AND is_active = true
-    `, [decoded.userId]);
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid or expired token'
-      });
-    }
-
-    // Add user to request object
-    req.user = result.rows[0];
+    req.user = resolved.user;
     next();
 
   } catch (error) {
