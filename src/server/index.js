@@ -1090,11 +1090,23 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                         
                         if (editResponse.data && editResponse.data[0] && editResponse.data[0].b64_json) {
                             console.log('🎨 Image combination via editing successful');
+                            // Free tier: watermark this alternate return path too — it was
+                            // charged at the top (imgCost) but previously skipped the watermark
+                            // the main path applies (~line 1210), leaking a clean image to Free.
+                            let comboImageData = editResponse.data[0].b64_json;
+                            if (imgEnt?.watermark) {
+                                try {
+                                    comboImageData = (await watermarkBuffer(Buffer.from(comboImageData, 'base64'))).toString('base64');
+                                } catch (wmErr) {
+                                    console.warn('[watermark] combination image failed, returning original:', wmErr.message);
+                                }
+                            }
                             return res.json({
-                                imageData: editResponse.data[0].b64_json,
+                                imageData: comboImageData,
                                 modelIdUsed: "gpt-image-1-edit",
                                 responseId: `combination_${Date.now()}`,
-                                imageGenerationCallId: `combination_${Date.now()}`
+                                imageGenerationCallId: `combination_${Date.now()}`,
+                                entitlement: gateMeta(imgEnt)
                             });
                         } else {
                             throw new Error('Image editing for combination failed to return data');

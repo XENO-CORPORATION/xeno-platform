@@ -128,6 +128,95 @@ export async function meterPremiumChat(db, userId, opts) {
 }
 
 /**
+ * Meter a FLAT-cost media generation (image / edit / video / audio).
+ *
+ * Same two-phase discipline as meterPremiumChat, but the unit cost is KNOWN up
+ * front (a per-action credit price, not token usage). The ONE difference from chat:
+ * reserve `unitCost × count` (a batch of N images costs N× the unit price) and
+ * SETTLE the number actually produced — if the provider under-delivers, the rest
+ * of the hold is released.
+ *
+ * This closes the media charging holes in one place:
+ *   - cost×n      — the batch is reserved and settled by produced count (not flat ×1);
+ *   - idempotency — a deterministic holdId from requestId means a double-click / retry
+ *                   reuses the same hold rather than charging twice;
+ *   - clean fail  — voidHoldV2 writes NO journal debit (vs deduct-then-refund, which
+ *                   mints a promo grant, inflates lifetime_earned, and is best-effort).
+ *
+ * @param db pg pool (req.db)
+ * @param userId uuid (req.user.id)
+ * @param opts {
+ *   surface, operation, model, provider,
+ *   requestId,                        // idempotency seed (body.requestId | x-request-id | uuid)
+ *   unitCostMicro,                    // per-output cost in µcr = getCreditCost(...) * MICRO_PER_CREDIT
+ *   count = 1,                        // outputs requested (image batch n)
+ *   run: async () => providerResult   // MUST resolve to { data: [...] } (or throw)
+ * }
+ * @returns { result, costMicro, creditsCharged, actualCount, holdId }
+ * @throws  err with err.http (402/403/500) on metering failure; provider errors bubble
+ *          up AFTER the hold is voided (so the route reports them without a charge).
+ */
+export async function meterMediaGeneration(db, userId, opts) {
+  const {
+    surface, operation, model, provider,
+    requestId, unitCostMicro, count = 1, run,
+  } = opts;
+
+  const reqCount = Math.max(1, Math.floor(Number(count) || 1));
+  const unitMicro = Math.max(0, Math.round(Number(unitCostMicro) || 0));
+  const holdId = deterministicTxnId(userId, requestId, surface, operation, model).slice(0, 64);
+  // Reserve the WHOLE batch worst-case (unit × count) BEFORE spending on the provider.
+  const totalMicro = Math.max(1, unitMicro * reqCount);
+
+  // Phase 1 — reserve. INSUFFICIENT_CREDITS → 402 / ACCOUNT_FROZEN → 403 before we
+  // spend a cent on the provider. Idempotent on holdId so retries don't stack holds.
+  try {
+    await holdV2(db, userId, {
+      holdId,
+      amountMicro: totalMicro,
+      surface,
+      operation,
+      expiresInSeconds: 900,
+    });
+  } catch (e) {
+    throw meteringError(e.code);
+  }
+
+  // Run the provider (this closure also applies any watermark, so a watermark
+  // failure is treated as a generation failure). Any throw → void the hold and bubble.
+  let result;
+  try {
+    result = await run();
+  } catch (e) {
+    await voidHoldV2(db, userId, holdId).catch(() => {});
+    throw e;
+  }
+
+  // Phase 2 — settle for the number of outputs ACTUALLY returned (clamped to the
+  // reserved count). Under-delivery releases the remainder. If the provider payload
+  // is not an array we cannot count it → charge the full reserved count (never undercharge).
+  const produced = Array.isArray(result?.data) ? result.data.length : reqCount;
+  const actualCount = Math.min(Math.max(0, produced), reqCount);
+  const actualMicro = unitMicro * actualCount;
+
+  let costMicro = actualMicro;
+  try {
+    const settled = await settleHoldV2(db, userId, holdId, actualMicro);
+    costMicro = settled?.settledMicro ?? costMicro;
+  } catch {
+    // leave the hold to expire (900s) rather than fail the user's completed generation
+  }
+
+  return {
+    result,
+    costMicro,
+    creditsCharged: costMicro / MICRO_PER_CREDIT,
+    actualCount,
+    holdId,
+  };
+}
+
+/**
  * Meter a premium STREAMING chat completion.
  *
  * Streaming inverts control: the provider call is not a single awaited response we
