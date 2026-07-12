@@ -31,7 +31,12 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 // correctly gets 401) rather than a literal "Bearer null".
 function withAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('xenoos_auth_token') : null;
-  return token ? { ...extra, Authorization: `Bearer ${token}` } : { ...extra };
+  const workspace = typeof localStorage !== 'undefined' ? localStorage.getItem('xeno_active_workspace_id') : null;
+  const h: Record<string, string> = { ...extra };
+  if (token) h.Authorization = `Bearer ${token}`;
+  // Phase 5: active workspace context → pooled billing + resource tenancy on the backend.
+  if (workspace) h['x-xeno-workspace'] = workspace;
+  return h;
 }
 
 // Transient default until the live catalog loads (overridden by the fetch below).

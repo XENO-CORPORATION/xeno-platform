@@ -128,10 +128,18 @@ export interface Notification {
 // ─── API helpers ───
 
 const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
+  // The backend's authMiddleware authenticates via `Authorization: Bearer <jwt>`
+  // (header-only — it does NOT read the session cookie), so attach the same
+  // localStorage token the rest of the app uses. Without this, every
+  // accountService call (account/billing/workspaces/projects) 401s.
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('xenoos_auth_token') : null;
+  const workspace = typeof localStorage !== 'undefined' ? localStorage.getItem('xeno_active_workspace_id') : null;
   const res = await fetch(`/api${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(workspace ? { 'x-xeno-workspace': workspace } : {}),
       ...options.headers,
     },
     credentials: 'include',

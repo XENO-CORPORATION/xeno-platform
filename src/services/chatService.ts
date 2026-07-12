@@ -87,9 +87,12 @@ export interface ApiResponse<T> {
 
 const getAuthHeaders = (): HeadersInit => {
   const token = localStorage.getItem('xenoos_auth_token');
+  const workspace = localStorage.getItem('xeno_active_workspace_id');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    // Phase 5: active workspace → conversations get tagged with workspace_id + a parent tuple.
+    ...(workspace ? { 'x-xeno-workspace': workspace } : {}),
   };
 };
 
