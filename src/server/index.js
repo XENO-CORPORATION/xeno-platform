@@ -89,6 +89,7 @@ import { requestLoggerMiddleware, logger } from './middleware/requestLogger.js';
 import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } from './middleware/cdnOptimization.js';
 import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter } from './middleware/rateLimiter.js';
 import { runAllMigrations } from './services/migrationRunner.js';
+import { migrateAccountV2 } from './database/migrate-account-v2.js';
 import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
 
@@ -4951,17 +4952,35 @@ process.on('uncaughtException', (error) => {
 // Initialize cleanup service for old conversions
 initCleanupService();
 
-// Run database migrations on startup (legacy)
-runMigrations(pool).catch(err => {
-  console.error('Migration warning:', err.message);
-});
+// Readiness gate: /api/ready reports not-ready (503) until every startup migration
+// has succeeded, so a load balancer never routes traffic to a half-migrated schema.
+app.locals.migrationsReady = false;
 
-// Run versioned migrations (Round 8 infrastructure tables + marketplace),
-// then seed the first-party `official` marketplace catalog (idempotent).
-runAllMigrations(pool)
-  .then(() => seedMarketplace(pool))
+/**
+ * Run ALL startup migrations, in order, AWAITED and fail-closed. The account/ledger
+ * v2 surface (money-idempotency index, hash-chain columns + append-only trigger,
+ * holds/grants/spend_caps, OIDC tables) is additive + idempotent but was previously
+ * only applied by a hand-run CLI — it's now folded in here so a fresh box is never
+ * silently missing the objects the ledger/auth code assumes. seedMarketplace is
+ * best-effort (not schema-critical), so its failure does not block readiness.
+ */
+async function runStartupMigrations() {
+  await runMigrations(pool);       // legacy schema files (youtube/office-canvas)
+  await runAllMigrations(pool);    // versioned *.sql runner (rethrows on first failure)
+  await migrateAccountV2(pool);    // account/ledger v2 (additive, idempotent)
+  await seedMarketplace(pool).catch(err => console.error('[Seed] marketplace warning (non-fatal):', err.message));
+}
+
+runStartupMigrations()
+  .then(() => {
+    app.locals.migrationsReady = true;
+    console.log('✅ Database migrations complete — readiness gate open');
+  })
   .catch(err => {
-    console.error('[Migrations] Versioned migration/seed warning:', err.message);
+    // FAIL CLOSED: a broken/half-applied schema must not serve traffic. Exit non-zero
+    // so the orchestrator restarts (and /api/ready stays 503 in the meantime).
+    console.error('FATAL: startup migrations failed — refusing to serve traffic:', err);
+    process.exit(1);
   });
 
 // Initialize background job queues

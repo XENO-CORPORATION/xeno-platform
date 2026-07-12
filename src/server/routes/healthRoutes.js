@@ -47,6 +47,12 @@ router.get('/ready', async (req, res) => {
   const checks = {};
   let allHealthy = true;
 
+  // Migration gate: not ready until every startup migration has succeeded, so the
+  // LB never routes traffic to a box running on a half-migrated schema.
+  const migrationsReady = req.app?.locals?.migrationsReady === true;
+  if (!migrationsReady) allHealthy = false;
+  checks.migrations = { status: migrationsReady ? 'ok' : 'pending' };
+
   // Database check
   try {
     const dbStart = Date.now();
