@@ -113,7 +113,7 @@ services:
       - EXTENSION_SAFARI_BETA_URL=${EXTENSION_SAFARI_BETA_URL}
       - EXTENSION_SAFARI_PREVIEW_URL=${EXTENSION_SAFARI_PREVIEW_URL}
       - BROWSERLESS_URL=http://browserless:3000
-      - BROWSERLESS_TOKEN=xeno_browser_token_2024
+      - BROWSERLESS_TOKEN=${BROWSERLESS_TOKEN:-xeno_browser_token_2024}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GOOGLE_SEARCH_CX=${GOOGLE_SEARCH_CX}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
@@ -390,7 +390,7 @@ services:
     image: kasmweb/chrome:1.16.0
     container_name: xenostudio-xeno-browser
     environment:
-      - VNC_PW=xenobrowser123
+      - VNC_PW=${VNC_PW:-xenobrowser123}
       - VNC_RESOLUTION=1920x1080
       - VNC_COL_DEPTH=24
     shm_size: "1gb"
@@ -410,7 +410,7 @@ services:
     image: ghcr.io/browserless/chromium:latest
     container_name: xenostudio-browserless
     environment:
-      - TOKEN=xeno_browser_token_2024
+      - TOKEN=${BROWSERLESS_TOKEN:-xeno_browser_token_2024}
       - CONCURRENT=5
       - QUEUED=10
       - TIMEOUT=120000
@@ -423,7 +423,7 @@ services:
       - xenostudio-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/config?token=xeno_browser_token_2024"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/config?token=${BROWSERLESS_TOKEN:-xeno_browser_token_2024}"]
       interval: 30s
       timeout: 10s
       retries: 3
