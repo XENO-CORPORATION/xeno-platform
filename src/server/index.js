@@ -53,7 +53,7 @@ import aiRoutes from './routes/aiRoutes.js';
 import { workspaceRoutes, workspaceInviteRoutes } from './routes/workspaceRoutes.js';
 import { resolveBillingAccountId } from './services/walletService.js';
 import { xenoModelCatalog, PROVIDER_LABELS, prettyModelName, xenoChatCompletion, normalizeXenoModelId, XENO_API_BASE, XENO_API_KEY, xenoApiConfigured } from './utils/xenoChat.js';
-import { meterPremiumChat } from './utils/inferenceMeter.js';
+import { meterPremiumChat, meterMediaGeneration } from './utils/inferenceMeter.js';
 import { estimateMessageTokens, getCreditCost } from './utils/creditCosts.js';
 import { deductCredits, refundCredits, logUsage as logCreditUsage } from './utils/creditTransactions.js';
 import { resolveEntitlements, gateMeta } from './utils/entitlementGate.js';
@@ -87,9 +87,10 @@ import docsRoutes from './routes/docsRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
 import { requestLoggerMiddleware, logger } from './middleware/requestLogger.js';
 import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } from './middleware/cdnOptimization.js';
-import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter } from './middleware/rateLimiter.js';
+import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter, clientIp } from './middleware/rateLimiter.js';
 import { runAllMigrations } from './services/migrationRunner.js';
 import { migrateAccountV2 } from './database/migrate-account-v2.js';
+import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
 
@@ -159,6 +160,13 @@ app.use(helmet({
 // Remove X-Powered-By header (defense in depth — Helmet also does this)
 app.disable('x-powered-by');
 
+// Trust the reverse-proxy chain (Cloudflare tunnel -> nginx -> app) so req.ip is the
+// REAL client IP, not the loopback proxy hop. Without this every IP-keyed rate limiter
+// (auth, global, generation) collapses to ONE shared global bucket. `1` = trust the first
+// hop (nginx on the same host); the CF edge sets CF-Connecting-IP which nginx forwards as
+// X-Forwarded-For. (Blocker #7 INFRA-7.1.)
+app.set('trust proxy', 1);
+
 // HTTP Parameter Pollution protection
 app.use(hpp());
 
@@ -175,6 +183,8 @@ const globalLimiter = rateLimit({
   max: 200,
   standardHeaders: true, // Return rate limit info in headers
   legacyHeaders: false,
+  validate: { ip: false }, // custom key (CF-Connecting-IP) — skip the built-in req.ip validator
+  keyGenerator: clientIp, // real client IP behind Cloudflare, not the collapsed upstream hop
   message: { success: false, error: 'Too many requests, please try again later.' },
   skip: (req) => {
     // Skip rate limiting for health checks
@@ -189,6 +199,8 @@ const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
+  keyGenerator: clientIp, // per-client (else one collapsed bucket = platform-wide login lockout)
   message: { success: false, error: 'Too many authentication attempts, please try again later.' },
 });
 app.use('/api/auth/login', authLimiter);
@@ -200,10 +212,49 @@ const generationLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
+  keyGenerator: clientIp,
   message: { success: false, error: 'Generation rate limit exceeded. Please wait before trying again.' },
 });
 app.use('/api/chat/generate', generationLimiter);
 app.use('/api/xeno/', generationLimiter);
+
+// ── Retire legacy un-metered provider endpoints (Blocker #4b / LEAK-8) ─────────
+// These raw OpenAI / FAL passthrough routes predate the metered /api/xeno/* and
+// /api/chat/generate paths. They charge NO credits, apply NO entitlement gate, and
+// return raw provider output (incl. clean URLs) — a live free-inference cost leak
+// while OPENAI_API_KEY is set (FAL ones are inert only because VITE_FAL_KEY is unset).
+// None are called by the frontend/services (verified by whole-repo grep). Disabled by
+// default; set ENABLE_LEGACY_PROVIDER_ENDPOINTS=true only after re-wiring a given route
+// through meterMediaGeneration + watermark.
+const RETIRED_PROVIDER_PATHS = new Set([
+  '/api/generate-image',
+  '/api/openai/images/generations',
+  '/api/openai/images/edits',
+  '/api/openai/images/variations',
+  '/api/openai/responses/create',
+  '/api/ideogram-reframe',
+  '/api/fal',
+]);
+app.use((req, res, next) => {
+  if (process.env.ENABLE_LEGACY_PROVIDER_ENDPOINTS === 'true') return next();
+  // Express routing is NON-strict (trailing slash optional) and CASE-INSENSITIVE, so an
+  // exact case-sensitive Set.has(req.path) is bypassable with `/api/GENERATE-IMAGE` or
+  // `/api/generate-image/` — which would still dispatch to the live un-metered handler.
+  // Normalize the way Express matches (lowercase + strip trailing slashes) before testing.
+  const p = req.path.replace(/\/+$/, '').toLowerCase() || '/';
+  const retired = RETIRED_PROVIDER_PATHS.has(p)
+    || p === '/api/fal'
+    || p.startsWith('/api/fal/')
+    || p.startsWith('/api/fal-direct');
+  if (retired) {
+    return res.status(410).json({
+      error: 'This endpoint has been retired. Use the metered /api/xeno/images/* or /api/chat/generate endpoints.',
+      code: 'ENDPOINT_RETIRED',
+    });
+  }
+  next();
+});
 
 // CRITICAL FIX: Increase server limits for large image data
 // This prevents 431 "Request Header Fields Too Large" errors when processing images
@@ -627,7 +678,7 @@ console.log('👤 User data routes integrated: /api/user-data/*');
 // to handle raw POST bodies from proxied pages. See line ~105.
 
 // AI Routes (for chat completion with multiple providers) - requires auth
-app.use('/api/ai', databaseMiddleware, authMiddleware, aiRoutes);
+app.use('/api/ai', databaseMiddleware, authMiddleware, llmLimiter, aiRoutes);
 
 // YouTube Routes (channel management and analytics)
 // Public routes first (OAuth callback - no auth needed, Google redirects here)
@@ -1393,8 +1444,12 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             console.log('🎨 File extension:', fileExtension);
             console.log('🎨 Data URI prefix:', imageData.substring(0, 30));
 
-            // Create a temporary file for the image with correct extension
-            const tempImagePath = path.join(uploadsDir, `temp-edit-${Date.now()}.${fileExtension}`);
+            // Create a temporary file for the image with correct extension.
+            // Name it with a per-request random token (NOT Date.now(), which collides for
+            // two concurrent edits in the same ms → one request would read the other's source
+            // image and return an edit of it, a cross-user content bleed).
+            const editTempToken = randomUUID();
+            const tempImagePath = path.join(uploadsDir, `temp-edit-${editTempToken}.${fileExtension}`);
             fs.writeFileSync(tempImagePath, imageBuffer);
             
             // Verify the file was created correctly
@@ -1427,7 +1482,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     maskExtension = 'webp';
                 }
                 
-                tempMaskPath = path.join(uploadsDir, `temp-mask-${Date.now()}.${maskExtension}`);
+                tempMaskPath = path.join(uploadsDir, `temp-mask-${editTempToken}.${maskExtension}`);
                 fs.writeFileSync(tempMaskPath, maskBuffer);
                 maskFileStream = fs.createReadStream(tempMaskPath);
             }
@@ -1468,53 +1523,72 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 if (size) requestParams.size = size;
             }
 
-            // Make the API call with correct parameters
-            const response = await openai.images.edit(requestParams);
+            // Entitlement gate + metering (Blocker #4b / LEAK-8f): this OpenAI edit path was
+            // previously ungated, uncharged, and un-watermarked. Now: resolve the plan, reserve
+            // the edit cost via the hold→settle meter, run the provider inside run(), watermark
+            // Free output before settle (a watermark failure voids the hold → no charge, no leak),
+            // and settle. Temp files are cleaned in both the success and failure paths.
+            const editUserId = req.user?.id;
+            if (!editUserId) {
+                try { fs.unlinkSync(tempImagePath); } catch {}
+                try { if (tempMaskPath && fs.existsSync(tempMaskPath)) fs.unlinkSync(tempMaskPath); } catch {}
+                return res.status(401).json({ error: 'Not authenticated' });
+            }
+            const editEnt = await resolveEntitlements(req.db, editUserId);
+            // Idempotency key. Prefer a client-supplied id (updated clients send a per-action
+            // requestId, reused verbatim on retry). If ABSENT, do NOT mint a fresh random id —
+            // that gives every retry / double-click a new hold and double-charges. Instead
+            // derive a DETERMINISTIC key from the edit's content + a coarse 5-min bucket, so a
+            // retry of the same edit reuses the hold (meterMediaGeneration → 409, charged once);
+            // a deliberate re-run after the bucket rolls gets a fresh key. (Blocker #4b review.)
+            const editIdemBucket = Math.floor(Date.now() / 300000);
+            const editContentKey = createHash('sha256')
+                .update([editUserId, model, prompt, mask || '', imageData, editIdemBucket].join('\n'))
+                .digest('hex').slice(0, 48);
+            const editReqId = req.body.requestId || req.headers['x-request-id'] || `edit:${editContentKey}`;
+            const editUnitCost = getCreditCost('edit', model);
+            const cleanupEditTemps = () => {
+                try { fs.unlinkSync(tempImagePath); } catch {}
+                try { if (tempMaskPath && fs.existsSync(tempMaskPath)) fs.unlinkSync(tempMaskPath); } catch {}
+            };
 
-            // Clean up temporary files
-            fs.unlinkSync(tempImagePath);
-            if (tempMaskPath && fs.existsSync(tempMaskPath)) {
-                fs.unlinkSync(tempMaskPath);
+            let meteredEdit;
+            try {
+                meteredEdit = await meterMediaGeneration(req.db, editUserId, {
+                    surface: 'image_edit', operation: 'chat.edit_image', model, provider: 'openai',
+                    requestId: editReqId, unitCostMicro: editUnitCost * MICRO_PER_CREDIT, count: 1,
+                    run: async () => {
+                        const response = await openai.images.edit(requestParams);
+                        cleanupEditTemps();
+                        if (!response.data || response.data.length === 0) {
+                            throw new Error('Image editing failed: no image data returned');
+                        }
+                        let edited = model === 'gpt-image-1'
+                            ? (response.data[0].b64_json || response.data[0])
+                            : response.data[0].b64_json;
+                        // Free tier: watermark the edited image (self-contained base64).
+                        if (editEnt.watermark && typeof edited === 'string' && edited) {
+                            edited = (await watermarkBuffer(Buffer.from(edited, 'base64'))).toString('base64');
+                        }
+                        return { data: [{ b64_json: edited }] };
+                    },
+                });
+            } catch (err) {
+                cleanupEditTemps();
+                if (err?.http === 402) return res.status(402).json({ error: 'Insufficient credits', message: 'Top up credits to edit images.' });
+                if (err?.http === 403) return res.status(403).json({ error: 'Account frozen' });
+                if (err?.http === 409) return res.status(409).json({ error: 'Duplicate request — use a new requestId', code: 'DUPLICATE_REQUEST' });
+                console.error('Error in image edit task:', err);
+                return res.status(err?.status || 500).json({ error: 'Failed to edit image. Please try again.', credits_refunded: true });
             }
 
-            if (!response.data || response.data.length === 0) {
-                console.error('No image data returned from OpenAI Image Edits API');
-                return res.status(500).json({ error: 'Image editing failed: No image data returned.' });
-            }
-
-            // Handle different response formats for different models
-            let editedImageData;
-            if (model === 'gpt-image-1') {
-                // gpt-image-1 returns base64 directly in the data field
-                editedImageData = response.data[0].b64_json || response.data[0];
-            } else {
-                // dall-e-2 returns b64_json field
-                editedImageData = response.data[0].b64_json;
-            }
-            
-            console.log('🎨 Image editing successful, returning base64 data (first 50 chars):', editedImageData.substring(0, 50) + '...');
-            console.log('🎨 DEBUG: Response data length:', editedImageData.length);
-            console.log('🎨 DEBUG: First 100 chars of response:', editedImageData.substring(0, 100));
-            
-            // Compare with original image data
-            const originalImageData = imageData.split(',')[1]; // Remove data:image/png;base64, prefix
-            const originalFirst100 = originalImageData.substring(0, 100);
-            const editedFirst100 = editedImageData.substring(0, 100);
-            const imagesAreDifferent = originalFirst100 !== editedFirst100;
-            
-            console.log('🎨 DEBUG: Original image first 100 chars:', originalFirst100);
-            console.log('🎨 DEBUG: Edited image first 100 chars:', editedFirst100);
-            console.log('🎨 DEBUG: Images are different:', imagesAreDifferent);
-            
-            if (!imagesAreDifferent) {
-                console.log('🚨 WARNING: OpenAI returned the same image data! The edit may not have worked.');
-            }
-            
             return res.json({
-                imageData: editedImageData,
+                imageData: meteredEdit.result.data[0].b64_json,
                 modelIdUsed: model,
                 editType: 'image_edit',
-                prompt: prompt
+                prompt: prompt,
+                credits_used: meteredEdit.creditsCharged,
+                entitlement: gateMeta(editEnt),
             });
 
         } catch (error) {
@@ -4987,6 +5061,14 @@ runStartupMigrations()
   .then(() => {
     app.locals.migrationsReady = true;
     console.log('✅ Database migrations complete — readiness gate open');
+    // Phantom-hold sweeper: void expired credit_holds every 15 min so stranded holds do
+    // not linger in state='held' (the available-balance math already ignores expired holds,
+    // but this keeps the table bounded and the state truthful). (Blocker #7 INFRA-7.3.)
+    const sweepHolds = () => sweepExpiredHolds(pool)
+      .then((n) => { if (n) console.log(`[HoldSweeper] voided ${n} expired hold(s)`); })
+      .catch((e) => console.error('[HoldSweeper] error:', e.message));
+    setInterval(sweepHolds, 15 * 60 * 1000).unref();
+    sweepHolds();
   })
   .catch(err => {
     // FAIL CLOSED: a broken/half-applied schema must not serve traffic. Exit non-zero

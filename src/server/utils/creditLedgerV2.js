@@ -122,6 +122,11 @@ export async function addGrantTx(client, userId, { amountMicro, kind = 'paid', p
   const amt = BigInt(Math.max(1, Math.round(amountMicro)));
   const prio = priority ?? (kind === 'free' ? 10 : kind === 'promo' ? 50 : 100);
   const acct = await ensureAccount(client, userId); // SELECT … FOR UPDATE locks the account (race-free hash chain)
+  // DEF-4: if ensureAccount just backfilled a legacy seed balance (balance>0 but no lots),
+  // lot that seed FIRST so Σ(lots) == balance holds continuously. Without this, the seed is
+  // spendable-from-balance but has no lot, so it drifts permanently below balance (and a
+  // later spend can't draw it down). No-op once the account already has lots.
+  await syncGrants(client, acct, userId);
   await client.query(
     'INSERT INTO credit_grants (user_id, account_id, amount_micro, remaining_micro, kind, priority, source_ref, expires_at) VALUES ($1,$2,$3,$3,$4,$5,$6,$7)',
     [userId, acct.id, amt.toString(), kind, prio, sourceRef, expiresAt],
@@ -185,6 +190,54 @@ export async function clawback(pool, userId, micro, opts = {}) {
     const r = await clawbackTx(client, userId, micro, opts);
     await client.query('COMMIT');
     return r;
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+}
+
+/**
+ * Reverse a just-failed debit — money back IN to the user (a generation was charged
+ * up front, then the provider/watermark failed). Unlike addGrant this is a REVERSING
+ * entry, not a new deposit (DEF-5): it restores balance, DECREMENTS lifetime_spent
+ * (a refund un-does a spend; it is NOT lifetime_earned), re-credits a NEUTRAL paid-
+ * priority lot so drawdown order is unchanged (vs the old kind:'promo', which jumped
+ * the queue and inflated lifetime_earned), and appends a type='refund' journal row
+ * keyed to the original debit's txn via refType 'xeno.refund' — distinct from the
+ * debit's 'xeno.usage' so it never collides with the original, while uq_credit_txn_ref
+ * still makes a REPLAYED refund (same refId) a no-op. Full-fidelity restoration of the
+ * exact drawn lots needs a drawdown-detail schema (money-schema go/no-go); this interim
+ * form fixes the counter/priority/idempotency defects. On the caller's transaction.
+ */
+export async function reverseUsageTx(client, userId, micro, { refId = null, description = 'refund' } = {}) {
+  const amt = BigInt(Math.max(1, Math.round(micro)));
+  const acct = await ensureAccount(client, userId);
+  await syncGrants(client, acct, userId); // keep Σ(lots)==balance before re-crediting
+  await client.query(
+    "INSERT INTO credit_grants (user_id, account_id, amount_micro, remaining_micro, kind, priority, source_ref) VALUES ($1,$2,$3,$3,'paid',100,$4)",
+    [userId, acct.id, amt.toString(), refId ? `refund:${refId}` : 'refund'],
+  );
+  const newBalance = BigInt(acct.balance) + amt;
+  await client.query(
+    'UPDATE credit_accounts SET balance=$1, lifetime_spent=GREATEST(0, lifetime_spent-$2), updated_at=now() WHERE id=$3',
+    [newBalance.toString(), amt.toString(), acct.id],
+  );
+  await insertLedgerEntry(client, {
+    userId, accountId: acct.id, type: 'refund', amount: amt.toString(), balanceAfter: newBalance.toString(),
+    refType: 'xeno.refund', refId,
+    description,
+    metadata: JSON.stringify({ reversal: true, refId }),
+  });
+  await mirrorLegacy(client, userId, newBalance);
+  return { reversedMicro: Number(amt), newBalanceMicro: newBalance };
+}
+
+/** Reverse a failed debit, opening its own transaction. */
+export async function reverseUsage(pool, userId, micro, opts = {}) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await reverseUsageTx(client, userId, micro, opts);
+    await client.query('COMMIT');
+    const held = await activeHoldsMicro(pool, userId).catch(() => 0n);
+    return { success: true, reversedMicro: r.reversedMicro, balance: balanceView(r.newBalanceMicro, held) };
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
 }
 
@@ -500,6 +553,29 @@ export async function voidHoldV2(pool, userId, holdId) {
   } finally {
     client.release();
   }
+}
+
+/**
+ * Void holds whose expiry has passed but were never settled/voided (phantom holds).
+ * getBalanceV2/holdV2 already IGNORE expired holds (activeHoldsMicro filters
+ * expires_at > now), so the available-balance math self-heals — but without this job
+ * the rows accumulate forever in state='held'. This bounds the table and makes the
+ * state truthful. Idempotent; FOR UPDATE SKIP LOCKED so it never contends with a live
+ * settle. Returns the number of holds voided. (Blocker #7 INFRA-7.3.)
+ */
+export async function sweepExpiredHolds(pool, { batchLimit = 1000 } = {}) {
+  const res = await pool.query(
+    `UPDATE credit_holds SET state='voided', updated_at=now()
+       WHERE id IN (
+         SELECT id FROM credit_holds
+           WHERE state='held' AND expires_at <= now()
+           ORDER BY expires_at ASC
+           LIMIT $1
+           FOR UPDATE SKIP LOCKED
+       )`,
+    [batchLimit],
+  );
+  return res.rowCount;
 }
 
 async function insertUsageLog(client, userId, event, costMicro) {

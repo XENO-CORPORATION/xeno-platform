@@ -21,7 +21,7 @@
  * the legacy no-idempotency behaviour — no double-charge regression, no dedupe gain).
  */
 import crypto from 'crypto';
-import { recordUsageV2, addGrant, getBalanceV2, MICRO_PER_CREDIT } from './creditLedgerV2.js';
+import { recordUsageV2, reverseUsage, getBalanceV2, MICRO_PER_CREDIT } from './creditLedgerV2.js';
 
 const wholeFromMicro = (micro) => Math.floor(Number(micro || 0) / MICRO_PER_CREDIT);
 
@@ -67,15 +67,15 @@ export async function deductCredits(db, userId, amount, meta = {}) {
 export async function refundCredits(db, userId, amount, meta = {}) {
   const credits = Number(amount) || 0;
   if (credits <= 0) return { success: true, newBalance: await currentWholeCredits(db, userId) };
-  // Restore balance on the ledger (mirrors users.credits). A refund reverses a
-  // just-failed debit; kind:'promo' keeps it ahead of paid credits in drawdown.
+  // Restore balance as a REVERSING entry (DEF-5) — not a new promo grant. reverseUsage
+  // decrements lifetime_spent (not lifetime_earned), re-credits a neutral paid-priority lot
+  // (no drawdown-queue jump), and is idempotent per original txn ref.
   try {
-    const g = await addGrant(db, userId, {
-      amountMicro: Math.round(credits * MICRO_PER_CREDIT),
-      kind: 'promo',
-      sourceRef: meta.sourceRef || `refund:${meta.transactionId || crypto.randomUUID()}`,
+    const r = await reverseUsage(db, userId, Math.round(credits * MICRO_PER_CREDIT), {
+      refId: meta.transactionId || meta.requestId || meta.sourceRef || null,
+      description: meta.operation ? `refund:${meta.operation}` : 'refund',
     });
-    return { success: true, newBalance: wholeFromMicro(g.balance?.postedMicro ?? g.balance?.availableMicro ?? 0) };
+    return { success: true, newBalance: wholeFromMicro(r.balance?.postedMicro ?? r.balance?.availableMicro ?? 0) };
   } catch (e) {
     // Never let a refund failure crash the caller's error path.
     console.warn('[credits] refund failed:', e.message);

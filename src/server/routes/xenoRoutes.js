@@ -17,6 +17,7 @@ import { resolveEntitlements, capDimensions, gateMeta } from '../utils/entitleme
 import { watermarkResultData, watermarkVideoData } from '../utils/watermark.js';
 import { meterMediaGeneration } from '../utils/inferenceMeter.js';
 import { MICRO_PER_CREDIT, getBalanceV2 } from '../utils/creditLedgerV2.js';
+import { imageGenLimiter, videoGenLimiter } from '../middleware/rateLimiter.js';
 
 // Cap image batch size: cost×n is charged, but an unbounded n is still a provider-
 // abuse / oversell vector, so clamp requested outputs to a sane maximum.
@@ -842,7 +843,7 @@ router.post('/remote/runs/:runId/stop', async (req, res) => {
 });
 
 // ---------- POST /api/xeno/images/generate ----------
-router.post('/images/generate', async (req, res) => {
+router.post('/images/generate', imageGenLimiter, async (req, res) => {
   if (!ensureXenoConfigured(res)) {
     return;
   }
@@ -939,7 +940,7 @@ router.post('/images/generate', async (req, res) => {
 });
 
 // ---------- POST /api/xeno/images/edit ----------
-router.post('/images/edit', async (req, res) => {
+router.post('/images/edit', imageGenLimiter, async (req, res) => {
   if (!ensureXenoConfigured(res)) {
     return;
   }
@@ -1030,7 +1031,7 @@ router.post('/images/edit', async (req, res) => {
 });
 
 // ---------- POST /api/xeno/videos/generate ----------
-router.post('/videos/generate', async (req, res) => {
+router.post('/videos/generate', videoGenLimiter, async (req, res) => {
   if (!ensureXenoConfigured(res)) {
     return;
   }
@@ -1126,7 +1127,7 @@ router.post('/videos/generate', async (req, res) => {
 });
 
 // ---------- POST /api/xeno/audio/generate ----------
-router.post('/audio/generate', async (req, res) => {
+router.post('/audio/generate', imageGenLimiter, async (req, res) => {
   if (!ensureXenoConfigured(res)) {
     return;
   }
