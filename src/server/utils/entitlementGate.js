@@ -44,23 +44,39 @@ const VIDEO_PLAN = {
   standard: { maxHeight: 1080, maxDurationSec: 8 },
   '4k':     { maxHeight: 2160, maxDurationSec: 60 },
 };
-const RES_HEIGHT = { '480p': 480, '540p': 540, '720p': 720, '1080p': 1080, fhd: 1080, '1440p': 1440, '2k': 1440, qhd: 1440, '2160p': 2160, '4k': 2160, uhd: 2160 };
+const RES_HEIGHT = { '480p': 480, '540p': 540, '720p': 720, hd: 720, '1080p': 1080, fhd: 1080, '1440p': 1440, '2k': 1440, qhd: 1440, '2160p': 2160, '4k': 2160, uhd: 2160, '2880p': 2880, '5k': 2880, '4320p': 4320, '8k': 4320 };
 const HEIGHT_TOKEN = [[2160, '4k'], [1440, '1440p'], [1080, '1080p'], [720, '720p'], [540, '540p'], [480, '480p']];
+
+/** Height (px) implied by a resolution value: a known token, `WxH`, or a bare number. */
+function resolutionHeight(resolution) {
+  if (typeof resolution === 'number' && Number.isFinite(resolution)) return resolution;
+  if (typeof resolution !== 'string' || !resolution) return null;
+  const s = resolution.trim().toLowerCase();
+  if (RES_HEIGHT[s] != null) return RES_HEIGHT[s];
+  const wxh = s.match(/^(\d+)\s*[x×]\s*(\d+)p?$/); // e.g. 3840x2160 → height 2160
+  if (wxh) return Number(wxh[2]);
+  const bare = s.match(/^(\d+)p?$/);               // e.g. "2160" / "2160p"
+  if (bare) return Number(bare[1]);
+  return null;
+}
 
 /** Clamp a requested video resolution + duration to the plan ceiling. */
 export function capVideoSpec(ent, { resolution, duration } = {}) {
   const cap = VIDEO_PLAN[ent?.maxResolution] || VIDEO_PLAN.standard;
   let outRes = resolution, resCapped = false;
-  if (typeof resolution === 'string' && resolution) {
-    const h = RES_HEIGHT[resolution.toLowerCase()];
-    if (h && h > cap.maxHeight) {
-      const tok = HEIGHT_TOKEN.find(([hh]) => hh <= cap.maxHeight);
-      if (tok) { outRes = tok[1]; resCapped = true; }
-    }
+  const h = resolutionHeight(resolution);
+  if (h != null && h > cap.maxHeight) {
+    const tok = HEIGHT_TOKEN.find(([hh]) => hh <= cap.maxHeight);
+    if (tok) { outRes = tok[1]; resCapped = true; }
   }
+  // Duration: parseFloat so a unit-suffixed string ('60s') still clamps (Number('60s')=NaN
+  // would fail OPEN). Preserve a trailing-'s' string form so the provider gets the same shape.
   let outDuration = duration, durCapped = false;
-  const d = Number(duration);
-  if (Number.isFinite(d) && d > cap.maxDurationSec) { outDuration = cap.maxDurationSec; durCapped = true; }
+  const dNum = parseFloat(String(duration));
+  if (Number.isFinite(dNum) && dNum > cap.maxDurationSec) {
+    durCapped = true;
+    outDuration = (typeof duration === 'string' && /s\s*$/i.test(duration)) ? `${cap.maxDurationSec}s` : cap.maxDurationSec;
+  }
   return { resolution: outRes, duration: outDuration, capped: resCapped || durCapped, maxHeight: cap.maxHeight, maxDurationSec: cap.maxDurationSec };
 }
 

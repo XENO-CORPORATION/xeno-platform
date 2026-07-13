@@ -1280,7 +1280,7 @@ const ImageStudio: React.FC = () => {
               body: JSON.stringify({
                 // Stable idempotency key for this edit action (isGenerating blocks re-entry)
                 // — stops the server minting a per-request id and double-charging on retry.
-                requestId: crypto.randomUUID(),
+                requestId: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `edit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
                 task: 'edit_image',
                 imageData: messageWithEditedImage.imageData,
                 prompt: basePrompt,

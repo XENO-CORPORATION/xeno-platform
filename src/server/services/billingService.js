@@ -67,13 +67,44 @@ function resolveItem(raw) {
   return { ...raw, priceId, available: Boolean(priceId) };
 }
 
-/** Public catalog (never leaks price env NAMES, only ids/labels/availability). */
+/** Public catalog (never leaks price env NAMES, only ids/labels/availability). The `price`
+ *  here is the STATIC fallback; the live path (getPublicCatalog) overlays the real Stripe
+ *  amount so advertised == charged. */
 export function getCatalog() {
   return CATALOG.map(resolveItem).map(({ priceEnv, ...pub }) => ({ ...pub, currency: CURRENCY }));
 }
 
-export function getConfig() {
-  return { enabled: isEnabled(), publishableKey: PUBLISHABLE, currency: CURRENCY, catalog: getCatalog() };
+// Live-price cache: priceId → { amount, currency, at }. TTL-bounded so the public /config
+// endpoint does not call Stripe on every render. Overlaying the real Stripe unit_amount is
+// what actually GUARANTEES advertised == charged — the static CATALOG `price` is only a
+// fallback (used when Stripe is off, the price is unconfigured, or the lookup errors).
+const _priceCache = new Map();
+const PRICE_TTL_MS = 5 * 60 * 1000;
+async function livePriceFor(priceId) {
+  if (!stripe || !priceId) return null;
+  const hit = _priceCache.get(priceId);
+  if (hit && (Date.now() - hit.at) < PRICE_TTL_MS) return hit;
+  try {
+    const p = await stripe.prices.retrieve(priceId);
+    const rec = { amount: p.unit_amount != null ? p.unit_amount / 100 : null, currency: (p.currency || CURRENCY).toLowerCase(), at: Date.now() };
+    _priceCache.set(priceId, rec);
+    return rec;
+  } catch { return null; }
+}
+
+/** Public catalog with LIVE Stripe prices overlaid onto the static fallback. */
+export async function getPublicCatalog() {
+  return Promise.all(CATALOG.map(resolveItem).map(async ({ priceEnv, ...pub }) => {
+    if (stripe && pub.priceId) {
+      const live = await livePriceFor(pub.priceId);
+      if (live && live.amount != null) return { ...pub, price: live.amount, currency: live.currency };
+    }
+    return { ...pub, currency: CURRENCY };
+  }));
+}
+
+export async function getConfig() {
+  return { enabled: isEnabled(), publishableKey: PUBLISHABLE, currency: CURRENCY, catalog: await getPublicCatalog() };
 }
 
 // ── Plans & entitlements ─────────────────────────────────────────────────────
@@ -217,10 +248,13 @@ async function userIdForCustomer(pool, customerId) {
 // ── Checkout ─────────────────────────────────────────────────────────────────
 // EU VAT: auto-calculate + collect tax at checkout. Requires Stripe Tax to be enabled
 // in the dashboard (with tax registrations); gated so an un-provisioned account can still
-// take payments. Default ON — the entity is EU and must charge VAT — set
-// STRIPE_AUTOMATIC_TAX=false to disable until Stripe Tax is configured. billing address +
-// tax-id collection are required for correct B2C/B2B (reverse-charge) VAT.
-const TAX_ENABLED = process.env.STRIPE_AUTOMATIC_TAX !== 'false';
+// take payments. Set
+// STRIPE_AUTOMATIC_TAX to enable. billing address + tax-id collection are required for
+// correct B2C/B2B (reverse-charge) VAT.
+// OPT-IN (default OFF): Stripe REJECTS automatic_tax.enabled=true unless Stripe Tax is fully
+// provisioned (origin address + registrations), so defaulting ON would break 100% of checkout
+// the moment live keys are added. Turn on AFTER configuring Stripe Tax. (Go-live checklist item.)
+const TAX_ENABLED = process.env.STRIPE_AUTOMATIC_TAX === 'true';
 function taxCheckoutFields() {
   if (!TAX_ENABLED) return {};
   return {

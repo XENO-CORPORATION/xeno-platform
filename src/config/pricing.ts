@@ -91,10 +91,10 @@ export const PRICING_TIERS: PricingTier[] = [
     line: 'For teams creating together, billed per seat.',
     features: [
       'Everything in Pro, for every seat',
-      'Shared workspace & pooled credits',
+      'Shared workspace for your team',
       'Real-time multiplayer in Canvas',
-      'Admin roles & usage controls',
-      'Centralized billing',
+      'Admin roles & member management',
+      'Centralized, per-seat billing',
       'Shared asset & component libraries',
     ],
     cta: 'Start a team',

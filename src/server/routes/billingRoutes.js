@@ -30,8 +30,8 @@ function originOf(req) {
 }
 
 /** Public: lets the pricing UI render plans + know whether checkout is live. */
-router.get('/config', (req, res) => {
-  res.json({ success: true, ...billing.getConfig() });
+router.get('/config', async (req, res) => {
+  res.json({ success: true, ...(await billing.getConfig()) });
 });
 
 /** Current user's credit balance + billing-enabled flag + plan + entitlements. */
