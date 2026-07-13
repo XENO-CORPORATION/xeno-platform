@@ -41,17 +41,25 @@ export function isEnabled() {
 }
 
 // ── Catalog ─────────────────────────────────────────────────────────────────
-// Each item resolves its Stripe Price id from an env var. An item with no
-// configured price is returned as `available: false` (the UI can hide/disable
-// it), so partial configuration never 500s.
+// SINGLE SOURCE OF TRUTH for prices. The frontend fetches this (via /api/billing/
+// config) and renders from it — no hardcoded price literals — so the ADVERTISED price
+// always equals the CHARGED price. `price` is the display amount in `CURRENCY`; the
+// authoritative charge is the Stripe Price resolved from `priceEnv` (which MUST be
+// created at the same amount/currency in the Stripe dashboard). An item with no
+// configured price is returned `available: false` so partial config never 500s.
+// Currency is EUR (EU entity + Impressum + Stripe VAT); LOCKED tiers: Free €0 /
+// Pro €24 / Team €40-per-seat / Enterprise custom. Credit packs €10/€50/€100.
+const CURRENCY = (process.env.BILLING_CURRENCY || 'eur').toLowerCase();
 const CATALOG = [
-  { id: 'credits_small',  kind: 'credits',      label: 'Starter',  credits: 1000,  usd: 10,  priceEnv: 'STRIPE_PRICE_CREDITS_SMALL' },
-  { id: 'credits_medium', kind: 'credits',      label: 'Plus',     credits: 5500,  usd: 50,  priceEnv: 'STRIPE_PRICE_CREDITS_MEDIUM', badge: 'Best value' },
-  { id: 'credits_large',  kind: 'credits',      label: 'Pro pack', credits: 12000, usd: 100, priceEnv: 'STRIPE_PRICE_CREDITS_LARGE' },
-  { id: 'pro_monthly',    kind: 'subscription', label: 'Pro (Founding)', plan: 'pro',  credits: 0, usd: 24, interval: 'month', priceEnv: 'STRIPE_PRICE_PRO_MONTHLY' },
-  { id: 'team_monthly',   kind: 'subscription', label: 'Team',     plan: 'team', credits: 0, usd: 60,  interval: 'month', priceEnv: 'STRIPE_PRICE_TEAM_MONTHLY' },
-  // Per-seat Team (LOCKED strategy: ~€40/seat/mo). Stripe quantity = active seats.
-  { id: 'team_seat',      kind: 'subscription', label: 'Team (per seat)', plan: 'team', credits: 0, usd: 40, interval: 'month', perSeat: true, priceEnv: 'STRIPE_PRICE_TEAM_SEAT_MONTHLY' },
+  { id: 'credits_small',  kind: 'credits',      label: 'Starter',  credits: 1000,  price: 10,  priceEnv: 'STRIPE_PRICE_CREDITS_SMALL' },
+  { id: 'credits_medium', kind: 'credits',      label: 'Plus',     credits: 5500,  price: 50,  priceEnv: 'STRIPE_PRICE_CREDITS_MEDIUM', badge: 'Best value' },
+  { id: 'credits_large',  kind: 'credits',      label: 'Pro pack', credits: 12000, price: 100, priceEnv: 'STRIPE_PRICE_CREDITS_LARGE' },
+  { id: 'pro_monthly',    kind: 'subscription', label: 'Pro',      plan: 'pro',  credits: 0, price: 24, interval: 'month', priceEnv: 'STRIPE_PRICE_PRO_MONTHLY' },
+  // Team is PER-SEAT (LOCKED strategy: €40/seat/mo). Stripe quantity = active seats.
+  { id: 'team_seat',      kind: 'subscription', label: 'Team', plan: 'team', credits: 0, price: 40, interval: 'month', perSeat: true, priceEnv: 'STRIPE_PRICE_TEAM_SEAT_MONTHLY' },
+  // Legacy flat-rate Team — kept readable for any pre-existing subscription, NOT offered
+  // publicly (unconfigured priceEnv → available:false; the UI points Team → team_seat).
+  { id: 'team_monthly',   kind: 'subscription', label: 'Team (legacy flat)', plan: 'team', credits: 0, price: 60, interval: 'month', priceEnv: 'STRIPE_PRICE_TEAM_MONTHLY' },
 ];
 
 function resolveItem(raw) {
@@ -61,11 +69,11 @@ function resolveItem(raw) {
 
 /** Public catalog (never leaks price env NAMES, only ids/labels/availability). */
 export function getCatalog() {
-  return CATALOG.map(resolveItem).map(({ priceEnv, ...pub }) => pub);
+  return CATALOG.map(resolveItem).map(({ priceEnv, ...pub }) => ({ ...pub, currency: CURRENCY }));
 }
 
 export function getConfig() {
-  return { enabled: isEnabled(), publishableKey: PUBLISHABLE, catalog: getCatalog() };
+  return { enabled: isEnabled(), publishableKey: PUBLISHABLE, currency: CURRENCY, catalog: getCatalog() };
 }
 
 // ── Plans & entitlements ─────────────────────────────────────────────────────
@@ -207,6 +215,22 @@ async function userIdForCustomer(pool, customerId) {
 }
 
 // ── Checkout ─────────────────────────────────────────────────────────────────
+// EU VAT: auto-calculate + collect tax at checkout. Requires Stripe Tax to be enabled
+// in the dashboard (with tax registrations); gated so an un-provisioned account can still
+// take payments. Default ON — the entity is EU and must charge VAT — set
+// STRIPE_AUTOMATIC_TAX=false to disable until Stripe Tax is configured. billing address +
+// tax-id collection are required for correct B2C/B2B (reverse-charge) VAT.
+const TAX_ENABLED = process.env.STRIPE_AUTOMATIC_TAX !== 'false';
+function taxCheckoutFields() {
+  if (!TAX_ENABLED) return {};
+  return {
+    automatic_tax: { enabled: true },
+    billing_address_collection: 'required',
+    tax_id_collection: { enabled: true },
+    customer_update: { address: 'auto', name: 'auto' },
+  };
+}
+
 export async function createCheckout(pool, user, itemId, { origin }) {
   const item = CATALOG.map(resolveItem).find((i) => i.id === itemId);
   if (!item) { const e = new Error('unknown item'); e.status = 400; throw e; }
@@ -225,6 +249,7 @@ export async function createCheckout(pool, user, itemId, { origin }) {
     success_url: successUrl,
     cancel_url: cancelUrl,
     allow_promotion_codes: true,
+    ...taxCheckoutFields(),
     // Metadata rides on the session (and, for one-time, is what the webhook reads
     // to know how many credits to grant).
     metadata: { xenoUserId: String(user.id), itemId: item.id, credits: String(item.credits), kind: item.kind },
@@ -251,6 +276,7 @@ export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, sea
     success_url: `${base}/overview/billing?billing=success&item=team_seat`,
     cancel_url: `${base}/overview/billing?billing=cancel`,
     allow_promotion_codes: true,
+    ...taxCheckoutFields(),
     subscription_data: { metadata: { xenoWorkspaceId: String(workspaceId), seats: String(qty) } },
     metadata: { xenoUserId: String(user.id), itemId: 'team_seat', kind: 'subscription', xenoWorkspaceId: String(workspaceId), seats: String(qty) },
   });

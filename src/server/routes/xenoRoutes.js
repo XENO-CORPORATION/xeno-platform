@@ -13,7 +13,7 @@ import { Router } from 'express';
 import Xeno from 'xeno-ai';
 import { getCreditCost } from '../utils/creditCosts.js';
 import { logUsage } from '../utils/creditTransactions.js';
-import { resolveEntitlements, capDimensions, gateMeta } from '../utils/entitlementGate.js';
+import { resolveEntitlements, capDimensions, capVideoSpec, gateMeta } from '../utils/entitlementGate.js';
 import { watermarkResultData, watermarkVideoData } from '../utils/watermark.js';
 import { meterMediaGeneration } from '../utils/inferenceMeter.js';
 import { MICRO_PER_CREDIT, getBalanceV2 } from '../utils/creditLedgerV2.js';
@@ -1054,6 +1054,8 @@ router.post('/videos/generate', videoGenLimiter, async (req, res) => {
     const ent = await resolveEntitlements(req.db, userId);
     const unitCost = getCreditCost('video', model);
     const reqId = requestId || req.headers['x-request-id'] || randomUUID();
+    // Plan ceiling (GAP-5A): Free is clamped to 1080p + short clips; Pro/Team up to 4K + long.
+    const vcap = capVideoSpec(ent, { resolution, duration });
 
     let metered;
     try {
@@ -1070,9 +1072,9 @@ router.post('/videos/generate', videoGenLimiter, async (req, res) => {
             model,
             prompt: prompt.trim(),
             image,
-            duration,
+            duration: vcap.duration,
             aspect_ratio,
-            resolution,
+            resolution: vcap.resolution,
             fps,
             seed,
             wait: true,
@@ -1119,6 +1121,8 @@ router.post('/videos/generate', videoGenLimiter, async (req, res) => {
       credits_used: metered.creditsCharged,
       remaining_credits: await availableCredits(req.db, userId),
       entitlement: gateMeta(ent),
+      resolution_capped: vcap.capped,
+      max_resolution: gateMeta(ent).maxResolution,
     });
   } catch (error) {
     console.error('[XenoRoutes] Video generate error:', error);
