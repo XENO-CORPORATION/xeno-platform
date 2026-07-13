@@ -2,84 +2,8 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import MarketingPage, { Section, Prose, CheckList } from '../components/marketing/MarketingPage';
-import { startCheckout, isAuthed } from '../services/billingService';
-
-type Plan = {
-  name: string;
-  price: string;
-  cadence?: string;
-  line: string;
-  features: string[];
-  href: string;
-  cta: string;
-  featured?: boolean;
-  itemId?: string; // maps to the billing catalog → one-click Stripe Checkout
-};
-
-const plans: Plan[] = [
-  {
-    name: 'Free',
-    price: '$0',
-    line: 'Everything you need to start creating.',
-    features: [
-      'Monthly starter credit grant',
-      'Access to image, video & audio generation',
-      'XENO Hub + the creative apps',
-      'Community support',
-    ],
-    href: '/auth',
-    cta: 'Start free',
-  },
-  {
-    name: 'Pro',
-    price: '$20',
-    cadence: '/mo',
-    line: 'For creators who ship every day.',
-    features: [
-      'Generous monthly credit allotment',
-      'All apps: Pixel, Motion, Sound, Canvas',
-      'Priority generation queue',
-      'Full Marketplace access',
-      'Higher resolution & longer outputs',
-      'Email support',
-    ],
-    href: '/auth',
-    cta: 'Go Pro',
-    featured: true,
-    itemId: 'pro_monthly',
-  },
-  {
-    name: 'Team',
-    price: '$60',
-    cadence: '/user/mo',
-    line: 'For teams creating together.',
-    features: [
-      'Shared workspace & credit pool',
-      'Real-time multiplayer in Canvas',
-      'Admin roles & usage controls',
-      'Centralized billing',
-      'Shared asset & component libraries',
-      'Priority support',
-    ],
-    href: '/auth',
-    cta: 'Start a team',
-    itemId: 'team_monthly',
-  },
-  {
-    name: 'Enterprise',
-    price: 'Custom',
-    line: 'For organizations at scale.',
-    features: [
-      'SSO & SCIM provisioning',
-      'Dedicated capacity & private models',
-      'SLA & uptime guarantees',
-      'Security review & DPA',
-      'Dedicated success manager',
-    ],
-    href: '/contact',
-    cta: 'Contact sales',
-  },
-];
+import { startCheckout, isAuthed, getLivePriceMap } from '../services/billingService';
+import { PRICING_TIERS, formatPrice, type PricingTier } from '../config/pricing';
 
 const ctaClass = (featured?: boolean) =>
   `mt-6 block rounded-[9px] px-4 py-2.5 text-center text-[13.5px] font-semibold transition-colors ${
@@ -90,7 +14,7 @@ const ctaClass = (featured?: boolean) =>
 
 /** A plan's call-to-action: one-click Stripe Checkout for billing plans (Pro/Team),
  *  a plain link for Free / Enterprise. Sends signed-out users to /auth first. */
-const PlanCTA: React.FC<{ plan: Plan }> = ({ plan }) => {
+const PlanCTA: React.FC<{ plan: PricingTier }> = ({ plan }) => {
   const navigate = useNavigate();
   const [busy, setBusy] = React.useState(false);
 
@@ -127,16 +51,32 @@ const PlanCTA: React.FC<{ plan: Plan }> = ({ plan }) => {
   );
 };
 
-const Pricing: React.FC = () => (
+const Pricing: React.FC = () => {
+  // Prefer the LIVE catalog price (which mirrors the Stripe Price actually charged) so the
+  // advertised price always equals the charged price; fall back to the static tier price.
+  const [live, setLive] = React.useState<Record<string, { price: number; currency: string }>>({});
+  React.useEffect(() => {
+    let on = true;
+    getLivePriceMap().then((m) => { if (on) setLive(m); }).catch(() => {});
+    return () => { on = false; };
+  }, []);
+
+  const priceLabel = (plan: PricingTier): string => {
+    if (plan.price === 'custom') return 'Custom';
+    const l = plan.itemId ? live[plan.itemId] : undefined;
+    return formatPrice(l ? l.price : plan.price, l ? l.currency : plan.currency);
+  };
+
+  return (
   <MarketingPage
     eyebrow="PRICING"
-    title="Simple, credit-based pricing"
-    subtitle="Pick a plan, get credits, and spend them on any AI action across every XENO app. No per-tool subscriptions, no surprises — one balance powers the whole ecosystem."
-    updated="June 2026"
+    title="One subscription. The whole suite."
+    subtitle="Every XENO app — Pixel, Motion, Sound, Canvas and more — on one plan, powered by one shared credit balance. No per-tool subscriptions, no surprises."
+    updated="July 2026"
   >
     <Section>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {plans.map((plan) => (
+        {PRICING_TIERS.map((plan) => (
           <div
             key={plan.name}
             className={`flex flex-col rounded-[14px] border bg-[#0d0d0d] p-6 ${
@@ -150,7 +90,7 @@ const Pricing: React.FC = () => (
             )}
             <h3 className="text-[15px] font-semibold text-[#ece7df]">{plan.name}</h3>
             <div className="mt-2 flex items-end gap-1">
-              <span className="text-[28px] font-semibold leading-none tracking-[-0.02em] text-[#ece7df]">{plan.price}</span>
+              <span className="text-[28px] font-semibold leading-none tracking-[-0.02em] text-[#ece7df]">{priceLabel(plan)}</span>
               {plan.cadence && <span className="pb-1 text-[12.5px] text-[#69635b]">{plan.cadence}</span>}
             </div>
             <p className="mt-2 text-[12.5px] leading-[1.5] text-[#948d83]">{plan.line}</p>
@@ -200,7 +140,7 @@ const Pricing: React.FC = () => (
           },
           {
             h: 'Can I change plans?',
-            p: <>Yes. Upgrade, downgrade, or switch between monthly and annual at any time from your account settings — changes take effect on your next cycle and your remaining credits stay intact.</>,
+            p: <>Yes. Upgrade or downgrade at any time from your account settings — changes take effect on your next cycle and your remaining credits stay intact.</>,
           },
           {
             h: 'Do you offer refunds?',
@@ -214,6 +154,7 @@ const Pricing: React.FC = () => (
       />
     </Section>
   </MarketingPage>
-);
+  );
+};
 
 export default Pricing;

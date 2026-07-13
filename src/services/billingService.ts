@@ -17,8 +17,10 @@ export interface BillingItem {
   kind: 'credits' | 'subscription';
   label: string;
   credits: number;
-  usd: number;
+  price: number;        // display amount in `currency` (mirrors the Stripe Price)
+  currency: string;     // ISO code, lowercase ('eur')
   interval?: string;
+  perSeat?: boolean;
   badge?: string;
   available: boolean;
 }
@@ -26,6 +28,7 @@ export interface BillingItem {
 export interface BillingConfig {
   enabled: boolean;
   publishableKey: string;
+  currency: string;
   catalog: BillingItem[];
 }
 
@@ -34,10 +37,18 @@ export async function getBillingConfig(): Promise<BillingConfig> {
   try {
     const res = await fetch(`${API_BASE}/billing/config`);
     const data = await res.json();
-    return { enabled: !!data.enabled, publishableKey: data.publishableKey || '', catalog: data.catalog || [] };
+    return { enabled: !!data.enabled, publishableKey: data.publishableKey || '', currency: (data.currency || 'eur'), catalog: data.catalog || [] };
   } catch {
-    return { enabled: false, publishableKey: '', catalog: [] };
+    return { enabled: false, publishableKey: '', currency: 'eur', catalog: [] };
   }
+}
+
+/** Map catalog itemId → live price (for overlaying onto the static pricing tiers). */
+export async function getLivePriceMap(): Promise<Record<string, { price: number; currency: string }>> {
+  const cfg = await getBillingConfig();
+  const map: Record<string, { price: number; currency: string }> = {};
+  for (const i of cfg.catalog) map[i.id] = { price: i.price, currency: i.currency || cfg.currency };
+  return map;
 }
 
 /** Start Stripe Checkout for a catalog item; on success redirects to Stripe. */

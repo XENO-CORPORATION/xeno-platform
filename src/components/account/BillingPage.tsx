@@ -9,11 +9,12 @@ import {
   type Entitlements,
   type BillingItem,
 } from '../../services/billingService';
+import { formatPrice } from '../../config/pricing';
 
 const ACCENT = '#a760ff';
 
 const PLAN_META: Record<string, { label: string; color: string; sub: string }> = {
-  free: { label: 'Free', color: 'rgba(255,255,255,0.65)', sub: 'The whole toolkit — watermarked & daily-capped' },
+  free: { label: 'Free', color: 'rgba(255,255,255,0.65)', sub: 'The whole toolkit — watermarked, standard-res' },
   pro:  { label: 'Pro',  color: ACCENT,                   sub: 'Everything unlocked' },
   team: { label: 'Team', color: '#4ea1ff',               sub: 'Everything + collaboration' },
 };
@@ -22,9 +23,8 @@ function features(e: Entitlements): { label: string; on: boolean }[] {
   return [
     { label: 'Watermark-free exports', on: !e.watermark },
     { label: 'Commercial license', on: e.commercial },
-    { label: e.maxResolution === '4k' ? 'Up to 4K resolution' : 'Standard resolution', on: e.maxResolution === '4k' },
-    { label: 'Priority generation queue', on: e.priority },
-    { label: e.inHouseDailyLimit === null ? 'Unlimited in-house AI' : `${e.inHouseDailyLimit} in-house generations/day`, on: e.inHouseDailyLimit === null },
+    { label: e.maxResolution === '4k' ? 'Up to 4K & longer generations' : 'Standard resolution', on: e.maxResolution === '4k' },
+    { label: 'Priority support', on: e.priority },
     { label: 'Private projects', on: e.privateProjects },
   ];
 }
@@ -155,7 +155,7 @@ const BillingPage: React.FC = () => {
         </div>
 
         {isFree && (
-          <p className="text-white/35 text-xs mt-4">Pro unlocks everything above — plus priority and unlimited in-house AI — for €24/mo.</p>
+          <p className="text-white/35 text-xs mt-4">Pro unlocks everything above — watermark-free, commercial rights, 4K &amp; priority support — for €24/mo.</p>
         )}
       </div>
 
@@ -189,7 +189,7 @@ const BillingPage: React.FC = () => {
                   <button key={p.id} onClick={() => buyPack(p.id)} disabled={buyingPack === p.id}
                     className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-left transition-colors hover:border-white/25 disabled:opacity-60">
                     <div className="text-base font-semibold">{p.credits.toLocaleString()} credits</div>
-                    <div className="text-white/45 text-sm mt-0.5">€{p.usd}{p.badge ? ` · ${p.badge}` : ''}</div>
+                    <div className="text-white/45 text-sm mt-0.5">{formatPrice(p.price, p.currency)}{p.badge ? ` · ${p.badge}` : ''}</div>
                     <div className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: ACCENT }}>
                       {buyingPack === p.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       {buyingPack === p.id ? 'Redirecting…' : 'Buy →'}

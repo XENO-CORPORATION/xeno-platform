@@ -1421,6 +1421,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          // Stable idempotency key for this edit action (isEditing blocks double-clicks) —
+          // stops the server minting a per-request id and double-charging on retry.
+          requestId: crypto.randomUUID(),
           task: 'edit_image',
           imageData: imageDataUrl,
           prompt: finalPrompt,
