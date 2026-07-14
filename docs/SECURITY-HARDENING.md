@@ -26,29 +26,25 @@ sends it as `Authorization: Bearer $GITHUB_TOKEN` to list releases of the **priv
 token currently works (lists stable/beta/preview). So it cannot simply be deleted — it needs a
 replacement before revocation, or the extension-download feature breaks.
 
-**DONE (2026-07-14):** the git-config leak is closed — `emilian-personal` remote removed and
-`origin` set to the tokenless `https://github.com/XENO-CORPORATION/xeno-platform.git`;
-`.git/config` no longer contains `ghp_`. The deploy pipeline never used the box git remote, so
-this was zero-risk.
+**DONE (2026-07-14) — the token is now used NOWHERE; revoke is a zero-risk one-click:**
+1. **Git-config leak closed:** `emilian-personal` remote removed, `origin` set to tokenless
+   `https://github.com/XENO-CORPORATION/xeno-platform.git`; `.git/config` has no `ghp_`.
+2. **GitHub dependency eliminated (the ideal end-state, shipped early):** `extensionReleaseService.js`
+   now reads a PUBLIC R2 feed (`updates.xenostudio.ai/apps/extension/releases.json`, published by
+   `scripts/publish-extension-releases.mjs` using local `gh` auth) instead of the GitHub API. The
+   release assets are mirrored to R2 — so anonymous downloads now WORK (they didn't before, private
+   URL). Verified live: backend serves stable/beta/preview from R2.
+3. **`GITHUB_TOKEN` removed from the box `.env`** and backend recreated — verified the container has
+   no `GITHUB_TOKEN` and the extension feature still works. The PAT now backs nothing.
 
-**REMAINING (operator — `gh` cannot mint PATs, so this needs the GitHub UI):** zero-downtime cutover —
-1. **Mint a fine-grained PAT**: GitHub → Settings → Developer settings → Fine-grained tokens →
-   *Generate new token*. Resource owner **XENO-CORPORATION**, repository access **Only
-   `xeno-extension`**, permissions **Contents: Read-only** (+ Metadata: Read, mandatory).
-   Expiry: your policy (90d/1y).
-2. **Swap it into the box `.env`** (`GITHUB_TOKEN=<new>`) and recreate the backend:
-   `sudo docker compose up -d --no-deps --force-recreate backend`.
-3. **Verify parity** (in-container, no token exposure):
-   `sudo docker exec xenostudio-backend node -e "import('./services/extensionReleaseService.js').then(m=>m.getExtensionReleaseData()).then(d=>console.log(Object.keys(d.channels||d)))"`
-   → expect `[ 'stable', 'beta', 'preview' ]`.
-4. **Revoke the old classic PAT** (prefix `ghp_ycvK…`) in GitHub → Settings → Developer settings →
-   Personal access tokens (classic) → Delete. Only after step 3 is green.
+**REMAINING (operator — 1 click):**
+- **Revoke the old classic PAT** (prefix `ghp_ycvK…`) → GitHub → Settings → Developer settings →
+  Personal access tokens (classic) → Delete. Nothing depends on it, so this is zero-risk.
+- **Delete the box backup** that still holds the old token once revoked:
+  `ssh xeno-platform-001 'sudo rm -f /mnt/projects/xeno-platform/.env.bak-20260714-pat'` (created
+  as an integrity safety net during the `.env` edit; harmless once the token is revoked).
 
-**Ideal end-state (eliminates the token entirely, code change — Phase 2):** serve extension
-releases from R2 (`updates.xenostudio.ai`, like every other release feed) instead of the GitHub
-API, so the backend needs no GitHub credential at all.
-
-**Risk:** Low with the zero-downtime order above; the old token stays valid only until step 4.
+**Risk:** None — the token is unused; revoking it cannot break anything.
 
 ---
 
