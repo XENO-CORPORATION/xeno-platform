@@ -35,3 +35,8 @@ art/
 # Local dev logs & scratch
 .dev-logs/
 tmp-*
+
+# DR: Postgres backup dumps live under backups/ on the server checkout — never commit them
+backups/
+*.dump
+*.dump.partial

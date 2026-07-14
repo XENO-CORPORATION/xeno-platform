@@ -1,0 +1,5 @@
+# Shell + SQL run on the Linux box. Keep LF in the working tree so scp'ing them
+# straight to the box (bypassing the deploy's on-box CRLF normalization) never ships
+# CRLF that breaks bash ($'\r' "command not found") or psql. See docs/DEPLOY.md.
+*.sh   text eol=lf
+*.sql  text eol=lf
