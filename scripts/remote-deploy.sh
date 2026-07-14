@@ -131,7 +131,7 @@ fi
 
 # --- 5. Swap ---------------------------------------------------------------
 log "swapping in new $SERVICE container ..."
-dc up -d --force-recreate "$SERVICE"
+dc up -d --no-deps --force-recreate "$SERVICE"
 
 # --- 6. Healthcheck gate ---------------------------------------------------
 # backend waits through migrations, so give it longer.
@@ -146,7 +146,7 @@ fi
 log "healthcheck FAILED — auto-rolling back $SERVICE"
 if docker image inspect "$IMAGE:rollback" >/dev/null 2>&1; then
   docker tag "$IMAGE:rollback" "$IMAGE:latest"
-  dc up -d --force-recreate "$SERVICE"
+  dc up -d --no-deps --force-recreate "$SERVICE"
   if poll_health "$TRIES"; then
     log "ROLLED BACK to :rollback and healthy again. Deploy of $SHA FAILED."
   else

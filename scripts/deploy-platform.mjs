@@ -137,7 +137,7 @@ if (opts.rollback) {
   const cmds = services.map((s) =>
     `docker image inspect xeno-platform-${s}:rollback >/dev/null 2>&1 && ` +
     `docker tag xeno-platform-${s}:rollback xeno-platform-${s}:latest && ` +
-    `docker compose up -d --force-recreate ${s} && echo "rolled back ${s}" || echo "no rollback image for ${s}"`,
+    `docker compose up -d --no-deps --force-recreate ${s} && echo "rolled back ${s}" || echo "no rollback image for ${s}"`,
   );
   const remote = `cd ${opts.root} && ${cmds.join(' && ')}`;
   step('Emergency rollback (retag :rollback -> :latest, recreate)');

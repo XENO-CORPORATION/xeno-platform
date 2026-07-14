@@ -67,10 +67,14 @@ Paths shipped per service:
   in `src/server/index.js`; the versioned runner in `services/migrationRunner.js`), so the previous
   image tolerates a schema that a newer migration already advanced. If a deploy's migration is *not*
   additive-safe, do not rely on image rollback — plan a data migration.
+- **Swaps use `--no-deps`.** `up -d --no-deps --force-recreate <svc>` recreates ONLY the targeted
+  service — a frontend deploy never touches the money backend, and vice-versa. (Without `--no-deps`,
+  compose reconciles dependencies whose `:latest` image has drifted from their running container, which
+  would recreate the backend during a frontend deploy — see the build-only note below.)
 - **`--build-only` advances `:latest`.** It builds and tags `:latest` + `:<sha>` but does not recreate
   the container, so `:latest` will be one build ahead of what is running. The next real deploy rebuilds
   anyway; this is harmless when the built SHA equals the running code. Don't run a bare
-  `docker compose up -d` after a build-only unless you intend to swap in that image.
+  `docker compose up -d` (without `--no-deps`) after a build-only unless you intend to swap in that image.
 - **Untracked box state is safe.** `git archive` excludes gitignored files, so the box `.env`,
   `backups/`, volumes, and `.deploy/` are never overwritten.
 
