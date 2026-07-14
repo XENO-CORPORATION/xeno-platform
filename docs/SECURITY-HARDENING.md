@@ -92,6 +92,14 @@ Postgres/Redis/Meili/Browserless/VNC are all running on the **weak, committed** 
 DB password. Loopback-only port binding (`127.0.0.1:*`) is the only thing limiting blast
 radius; a single SSRF/RCE or a second co-located service changes that.
 
+**STATUS (2026-07-14):** the 4 *contained* creds are **ROTATED** to strong 24-byte values in the
+box `.env` (never printed): `REDIS_PASSWORD` + `MEILI_MASTER_KEY` verified live (redis+backend
+`/api/ready` 200; meili authenticates with the new key), `BROWSERLESS_TOKEN` + `VNC_PW` set (their
+services aren't running on this box, so they apply if/when those start). No weak-default strings
+remain in `.env` for these. **`POSTGRES_PASSWORD` is the one still pending** — it's the crown-jewel,
+cross-box (backend + the api-proxy money gateway via the `:15433` tunnel), and only loopback/tunnel
+reachable (low exploit risk) — so it's a deliberate coordinated cut, below.
+
 **Steps — CAREFUL, STAGED (changing a live DB password can lock out the backend):**
 
 Postgres (`POSTGRES_PASSWORD` only takes effect on first-init, so the running role still has
