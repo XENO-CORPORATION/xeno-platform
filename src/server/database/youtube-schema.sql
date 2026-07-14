@@ -8,7 +8,7 @@
 
 CREATE TABLE IF NOT EXISTS youtube_channels (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,  -- FK to users(id) restored by migrations/00000000000000-baseline.sql: on a virgin boot this file (step 1) runs BEFORE users is created (step 2), so the constraint is attached there once users exists.
 
     -- YouTube Channel Info
     channel_id VARCHAR(50) NOT NULL,           -- YouTube channel ID (UC...)
@@ -188,7 +188,7 @@ $$ LANGUAGE plpgsql;
 
 CREATE TABLE IF NOT EXISTS youtube_channel_groups (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,  -- FK to users(id) restored by migrations/00000000000000-baseline.sql: on a virgin boot this file (step 1) runs BEFORE users is created (step 2), so the constraint is attached there once users exists.
 
     -- Group Info
     name VARCHAR(100) NOT NULL,
