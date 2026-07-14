@@ -92,24 +92,54 @@ Postgres/Redis/Meili/Browserless/VNC are all running on the **weak, committed** 
 DB password. Loopback-only port binding (`127.0.0.1:*`) is the only thing limiting blast
 radius; a single SSRF/RCE or a second co-located service changes that.
 
-**STATUS (2026-07-14):** the 4 *contained* creds are **ROTATED** to strong 24-byte values in the
-box `.env` (never printed): `REDIS_PASSWORD` + `MEILI_MASTER_KEY` verified live (redis+backend
-`/api/ready` 200; meili authenticates with the new key), `BROWSERLESS_TOKEN` + `VNC_PW` set (their
-services aren't running on this box, so they apply if/when those start). No weak-default strings
-remain in `.env` for these. **`POSTGRES_PASSWORD` is the one still pending** — it's the crown-jewel,
-cross-box (backend + the api-proxy money gateway via the `:15433` tunnel), and only loopback/tunnel
-reachable (low exploit risk) — so it's a deliberate coordinated cut, below.
+**STATUS (2026-07-14): ALL FIVE infra creds ROTATED + verified. `POSTGRES_PASSWORD` DONE.**
+The 4 *contained* creds rotated to strong 24-byte values in the box `.env` (never printed):
+`REDIS_PASSWORD` + `MEILI_MASTER_KEY` verified live (redis+backend `/api/ready` 200; meili
+authenticates with the new key); `BROWSERLESS_TOKEN` + `VNC_PW` set (their services aren't running
+on this box, so they apply if/when those start). **`POSTGRES_PASSWORD` rotated to a strong 24-byte
+value and proven effective** — the old default `xenostudio_secure_2024` is now **rejected** on
+every password-enforced path (see the verification below). No weak-default strings remain in the
+box `.env` (platform or api-proxy). The done-record + the two non-obvious lessons this rotation
+taught are below.
 
-**Steps — CAREFUL, STAGED (changing a live DB password can lock out the backend):**
+### 3a. Postgres rotation — DONE (2026-07-14), how it was actually done + verified
 
-Postgres (`POSTGRES_PASSWORD` only takes effect on first-init, so the running role still has
-the old password — you must ALTER it, not just change the env):
-1. Pick a strong password `NEW`.
-2. `ALTER USER` on the live role:
-   `ssh box 'sudo docker exec xenostudio-postgres psql -U postgres -c "ALTER USER postgres PASSWORD '\''NEW'\''"'`
-3. Update the box `.env`: set `DB_PASSWORD=NEW` **and** `POSTGRES_PASSWORD=NEW` (keep them equal).
-4. Recreate the backend so it reconnects: `sudo docker compose up -d --force-recreate backend`
-   and confirm `curl 127.0.0.1:8080/api/ready` → 200. (Postgres itself needs no restart.)
+What ran:
+1. `ALTER USER postgres PASSWORD '<NEW>'` on the live role (`sudo docker exec xenostudio-postgres
+   psql -U postgres -c …`; `<NEW>` = `openssl rand -hex 24`, never printed).
+2. Platform box `.env`: `POSTGRES_PASSWORD=<NEW>` **and** `DB_PASSWORD=<NEW>` (kept equal). Compose
+   derives the backend's `DB_PASSWORD` **and** `DATABASE_URL` from `${POSTGRES_PASSWORD}`
+   (`docker-compose.yml:81,83`), so `POSTGRES_PASSWORD` is the single source of truth; the `.env`
+   `DB_PASSWORD` line is vestigial (nothing does `${DB_PASSWORD}`) but was aligned so no dead
+   default string lingers.
+3. Backend recreated (`docker compose up -d --no-deps --force-recreate backend`) → `/api/ready` 200.
+4. **api-proxy** (`xeno-private-api-001`) `.env`: `PLATFORM_DATABASE_URL` password → `<NEW>`;
+   `pm2 restart xeno-api-proxy` → `platformPool` reads the ledger (`select count(*) from
+   credit_accounts` → OK), no `28P01` after restart.
+
+**⚠️ LESSON 1 — verify over the SCRAM path, NOT loopback.** `pg_hba.conf` in this image is
+`host 127.0.0.1/32 trust` + `host ::1/128 trust` + `host all all all scram-sha-256`. So any
+`docker exec … psql host=127.0.0.1` (or `-h localhost`) hits **trust** — it accepts **any**
+password (even garbage), which makes an "old password still works?" check a **false positive**.
+The real consumers arrive with a **docker-subnet** `client_addr` (backend over the compose net;
+api-proxy tunnel via the docker gateway) → the `scram-sha-256` line → password **is** enforced. To
+prove a rotation took, connect to the container's **docker IP** (e.g. `172.20.0.x`), not loopback:
+`sudo docker exec xenostudio-postgres env PGPASSWORD=<old> psql -h <container-docker-ip> -U postgres
+-d xenostudio -c 'select 1'` must **fail** with `28P01`.
+
+**⚠️ LESSON 2 — the api-proxy reaches the ledger via `PLATFORM_DATABASE_URL`, NOT `DATABASE_URL`.**
+On `xeno-private-api-001`, `server.js:268` builds `platformPool` from **`PLATFORM_DATABASE_URL`**
+(`…@127.0.0.1:15433/xenostudio`, the SSH tunnel to the platform ledger — the money path).
+`DATABASE_URL` there is a **different, local** DB (`…@localhost:5432/xeno_platform`) with its **own**
+password (untouched by this rotation; its local Postgres enforces passwords too — it is **not**
+trust). The first rotation edited `DATABASE_URL` (a no-op — it never held the old default) and left
+`PLATFORM_DATABASE_URL` on the old password → `platformPool` threw `28P01` for ~13 min
+(18:45→18:58) until fixed. **Always rotate `PLATFORM_DATABASE_URL` for the ledger; confirm with a
+real `credit_accounts` query, not just `select 1`.** Follow-up candidate: the api box's local
+`xeno_platform` DB is a separate password-enforced credential of unknown strength — assess/rotate
+it independently.
+
+### 3b. Reference — the per-service rotation recipes (for the next cred)
 
 Redis (`--requirepass` is set from `REDIS_PASSWORD` at container start):
 1. Set `REDIS_PASSWORD=NEW` and update `REDIS_URL=redis://:NEW@redis:6379` in `.env`.
@@ -131,8 +161,16 @@ VNC_PW:            ${VNC_PW:?VNC_PW required}
 > to start. Deploy the compose change like any other (commit + rebuild is not needed for
 > compose; `sudo docker compose up -d` picks it up).
 
-**Risk:** Medium — a botched DB-password change breaks backend connectivity. Do it in a
-maintenance window; keep the old password until `/api/ready` is green on the new one.
+**Risk (historical):** Medium — a botched DB-password change breaks backend connectivity. The
+2026-07-14 rotation hit exactly that (Lesson 2) for ~13 min on the api-proxy money path before it
+was corrected and verified. For the **next** cred rotation, keep the old password recoverable until
+`/api/ready` (backend) AND a real `credit_accounts` query (api-proxy `platformPool`) are both green
+on the new one.
+
+**Remaining (optional hardening, non-urgent):** flip the compose defaults to `${VAR:?…}` fail-fast
+(below). Now lower-value since the weak defaults no longer authenticate anyway (the roles hold the
+new passwords), but it still turns a missing-secret misconfig into a loud failure instead of a
+silent fallback.
 
 ---
 
@@ -169,10 +207,11 @@ grant surfaces as a runtime failure. Stage it.
 
 ## Priority order
 
-1. **§1 revoke the box PAT** (fast, zero stack risk, standing write-access leak).
-2. **§2 rotate + strip client-exposed provider keys** (fast; verify-then-rotate).
-3. **§3 rotate infra credentials + fail-fast compose** (staged, maintenance window).
+1. **§1 revoke the box PAT** — code-side DONE (token backs nothing); operator: 1-click revoke + rm the `-pat` backup.
+2. **§2 rotate + strip client-exposed provider keys** (fast; verify-then-rotate) — operator, still open.
+3. **§3 rotate infra credentials** — ✅ **DONE + verified** (all five, incl. `POSTGRES_PASSWORD`). Optional: fail-fast compose flip.
 4. **§4 docker-socket-proxy**, **§5 non-superuser DB role** (Phase 3/4, behind testing).
+5. **New (from §3a Lesson 2):** assess/rotate the api box's local `xeno_platform` DB credential (separate, password-enforced).
 
 See `docs/PLATFORM-MODERNIZATION.md` for how these fit the overall roadmap (Phase 4 —
 Security & least privilege).
