@@ -13,32 +13,42 @@ doesn't lose connectivity. Each item below is severity-ranked with *why it matte
 
 ---
 
-## 1. Live GitHub PAT embedded in the box git remote — **HIGH, do first**
+## 1. Live GitHub PAT — git-config leak CLOSED; `.env` copy awaits replacement
 
-**What:** The box repo's git remote URLs (`/mnt/projects/xeno-platform/.git/config`) embed a
-live `ghp_…` personal access token in plaintext:
-`https://ghp_…@github.com/XENO-CORPORATION/xeno-platform.git` (and a second remote to
-`emiliancristea/xeno-platform`). Anyone who can read that file (or a leaked backup/`docker
-cp` of it) gets push access to both repos.
+**What:** A live `ghp_…` classic PAT was embedded in the box git remotes AND is the backend's
+`.env` `GITHUB_TOKEN`. Footprint found (2026-07-14): `/mnt/projects/xeno-platform/.git/config`
+(two remotes: `origin`→XENO-CORPORATION/xeno-platform, `emilian-personal`→emiliancristea/…) and
+`.env` (`GITHUB_TOKEN` = the **same** value). `.git.backup/config` was clean.
 
-**Why it matters:** It is a standing credential leak with write access to source. The deploy
-pipeline does **not** use the box git remote (it ships `git archive HEAD` from the
-workstation — see `docs/DEPLOY.md`), so this token is not even needed on the box.
+**Blast radius (important):** the PAT is **not** unused — `services/extensionReleaseService.js`
+sends it as `Authorization: Bearer $GITHUB_TOKEN` to list releases of the **private**
+`XENO-CORPORATION/xeno-extension` repo (powers `/api/download/extension/releases`). Verified the
+token currently works (lists stable/beta/preview). So it cannot simply be deleted — it needs a
+replacement before revocation, or the extension-download feature breaks.
 
-**Steps (operator — needs GitHub):**
-1. **Revoke** the token: GitHub → Settings → Developer settings → Personal access tokens →
-   revoke the `ghp_…` token currently on the box.
-2. The box git repo is already broken (`No commits yet`, a stray `.git.backup/`) and unused
-   by deploys. Either **remove the embedded-token remotes**:
-   ```bash
-   ssh xeno-platform-001 'cd /mnt/projects/xeno-platform && sudo git remote remove origin; sudo git remote remove emilian-personal'
-   ```
-   or, if you want the box repo usable, set a **tokenless** remote and authenticate via a
-   short-lived credential or a deploy key instead of an inline PAT.
-3. If any automation genuinely needs GitHub from the box, mint a **fine-grained** token
-   scoped to a single repo + `contents:read`, stored in the box `.env` (not in a git URL).
+**DONE (2026-07-14):** the git-config leak is closed — `emilian-personal` remote removed and
+`origin` set to the tokenless `https://github.com/XENO-CORPORATION/xeno-platform.git`;
+`.git/config` no longer contains `ghp_`. The deploy pipeline never used the box git remote, so
+this was zero-risk.
 
-**Risk:** None to the running stack — nothing serving depends on the box git remote.
+**REMAINING (operator — `gh` cannot mint PATs, so this needs the GitHub UI):** zero-downtime cutover —
+1. **Mint a fine-grained PAT**: GitHub → Settings → Developer settings → Fine-grained tokens →
+   *Generate new token*. Resource owner **XENO-CORPORATION**, repository access **Only
+   `xeno-extension`**, permissions **Contents: Read-only** (+ Metadata: Read, mandatory).
+   Expiry: your policy (90d/1y).
+2. **Swap it into the box `.env`** (`GITHUB_TOKEN=<new>`) and recreate the backend:
+   `sudo docker compose up -d --no-deps --force-recreate backend`.
+3. **Verify parity** (in-container, no token exposure):
+   `sudo docker exec xenostudio-backend node -e "import('./services/extensionReleaseService.js').then(m=>m.getExtensionReleaseData()).then(d=>console.log(Object.keys(d.channels||d)))"`
+   → expect `[ 'stable', 'beta', 'preview' ]`.
+4. **Revoke the old classic PAT** (prefix `ghp_ycvK…`) in GitHub → Settings → Developer settings →
+   Personal access tokens (classic) → Delete. Only after step 3 is green.
+
+**Ideal end-state (eliminates the token entirely, code change — Phase 2):** serve extension
+releases from R2 (`updates.xenostudio.ai`, like every other release feed) instead of the GitHub
+API, so the backend needs no GitHub credential at all.
+
+**Risk:** Low with the zero-downtime order above; the old token stays valid only until step 4.
 
 ---
 
