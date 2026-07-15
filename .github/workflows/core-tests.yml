@@ -21,6 +21,7 @@ on:
       - 'src/server/utils/oidcProvider.js'
       - 'src/server/utils/gdprErasure.js'
       - 'src/server/utils/xenoChat.js'
+      - 'src/server/utils/entitlementGate.js'
       - 'src/server/database/migrate-account-v2.js'
       - 'src/server/tests/**'
       - '.github/workflows/core-tests.yml'
@@ -81,9 +82,12 @@ jobs:
           done
           exit $fail
 
-      - name: Run no-DB core suite (tool passthrough)
+      - name: Run no-DB core suites (tool passthrough, entitlement gate)
         working-directory: src/server
-        run: XENO_API_KEY=test node tests/ai-tools-passthrough.test.mjs
+        run: |
+          set -euo pipefail
+          XENO_API_KEY=test node tests/ai-tools-passthrough.test.mjs
+          node tests/entitlement-gate.test.mjs
 
   # Advisory typecheck — NOT blocking yet. `strict:true` was never enforced (vite/esbuild
   # strips types), so the fallout is unknown/likely large; this surfaces the errors in CI

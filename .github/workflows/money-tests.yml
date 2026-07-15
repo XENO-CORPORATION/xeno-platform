@@ -20,6 +20,7 @@ on:
       - 'src/server/utils/inferenceMeter.js'
       - 'src/server/utils/watermark.js'
       - 'src/server/services/billingService.js'
+      - 'src/server/services/walletService.js'
       - 'src/server/routes/billingRoutes.js'
       - 'src/server/database/migrate-account-v2.js'
       - 'src/server/tests/**'
@@ -67,7 +68,7 @@ jobs:
         working-directory: src/server
         run: |
           set -euo pipefail
-          SUITES="ledger-v2 ledger-chain ledger-billing ledger-correctness billing-money-in media-metering"
+          SUITES="ledger-v2 ledger-chain ledger-billing ledger-correctness billing-money-in media-metering wallet-service"
           fail=0
           for t in $SUITES; do
             db="t_${t//-/_}"
