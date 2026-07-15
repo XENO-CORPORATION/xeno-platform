@@ -72,7 +72,8 @@ jobs:
           for t in $SUITES; do
             db="t_${t//-/_}"
             echo "──────── $t ($db) ────────"
-            psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $db; CREATE DATABASE $db;"
+            psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $db"
+            psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db"
             if ! DATABASE_URL="postgresql://postgres:test@localhost:5432/$db" node "tests/${t}.test.mjs"; then
               echo "::error::money suite failed: $t"
               fail=1
