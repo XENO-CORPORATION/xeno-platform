@@ -90,7 +90,9 @@ export function discovery() {
     grant_types_supported: ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
-    id_token_signing_alg_values_supported: ['RS256'],
+    // We sign ES256 (getSigningKey prefers/generates ES256); any legacy RS256 keys
+    // stay in JWKS so older tokens keep verifying. Advertise honestly (XENO AUTH §3.2).
+    id_token_signing_alg_values_supported: ['ES256', 'RS256'],
     scopes_supported: ['openid', 'profile', 'email', 'ledger'],
   };
 }
@@ -103,7 +105,35 @@ export async function getClient(db, clientId) {
 }
 
 function clientAllowsRedirect(client, redirectUri) {
-  return Array.isArray(client.redirect_uris) && client.redirect_uris.includes(redirectUri);
+  const uris = Array.isArray(client.redirect_uris) ? client.redirect_uris : [];
+  if (uris.includes(redirectUri)) return true;
+  // RFC 8252 §7.3 loopback: a native/desktop client (`loopback` flag) may receive
+  // the callback on ANY ephemeral port of 127.0.0.1 / [::1], provided the PATH
+  // matches a registered loopback redirect. Loopback literals ONLY — never an
+  // arbitrary host (XENO AUTH §14 P-a). Non-loopback clients stay exact-match.
+  if (!client.loopback) return false;
+  let req;
+  try { req = new URL(redirectUri); } catch { return false; }
+  if (req.protocol !== 'http:') return false;
+  const host = req.hostname.replace(/^\[|\]$/g, ''); // URL keeps IPv6 brackets
+  if (host !== '127.0.0.1' && host !== '::1') return false;
+  return uris.some((u) => {
+    let reg;
+    try { reg = new URL(u); } catch { return false; }
+    const rh = reg.hostname.replace(/^\[|\]$/g, '');
+    return (rh === '127.0.0.1' || rh === '::1') && reg.pathname === req.pathname;
+  });
+}
+
+/** Intersect a requested scope string with the client's allowed_scopes (XENO AUTH
+ *  §14 P-e). Never grants a scope the client isn't authorized for; keeps `openid`. */
+function downscope(requested, allowedScopes) {
+  const allow = new Set(Array.isArray(allowedScopes) ? allowedScopes : []);
+  const granted = String(requested || '')
+    .split(/\s+/)
+    .filter((s) => s && allow.has(s));
+  if (!granted.includes('openid')) granted.unshift('openid');
+  return granted.join(' ');
 }
 
 // ── Token minting ───────────────────────────────────────────────────────────
@@ -116,7 +146,7 @@ async function userClaims(db, userId) {
   return r.rows[0] || null;
 }
 
-async function mintTokens(db, { user, clientId, scope, sid }) {
+async function mintTokens(db, { user, clientId, scope, sid, nonce }) {
   const key = await getSigningKey(db);
   const now = Math.floor(Date.now() / 1000);
   const base = { iss: issuer(), iat: now, sid };
@@ -127,7 +157,10 @@ async function mintTokens(db, { user, clientId, scope, sid }) {
   );
   const idToken = jwt.sign(
     { ...base, sub: user.id, aud: clientId, email: user.email, email_verified: user.email_verified ?? false,
-      name: user.display_name || user.username, preferred_username: user.username },
+      name: user.display_name || user.username, preferred_username: user.username,
+      // Echo the request nonce so the SDK can defend against id_token replay
+      // (XENO AUTH §3.3 / §14 P-c). Only present on code/device mint.
+      ...(nonce ? { nonce } : {}) },
     key.privatePem,
     { algorithm: key.alg, keyid: key.kid, expiresIn: ID_TTL_SEC },
   );
@@ -192,11 +225,12 @@ export async function createAuthorizationCode(db, { clientId, userId, redirectUr
   if (!client) throw oauthError('invalid_client', 'unknown client');
   if (!clientAllowsRedirect(client, redirectUri)) throw oauthError('invalid_request', 'redirect_uri mismatch');
   if (!codeChallenge) throw oauthError('invalid_request', 'code_challenge required (PKCE S256)');
+  const grantedScope = downscope(scope || 'openid profile email', client.allowed_scopes);
   const code = crypto.randomBytes(32).toString('base64url');
   await db.query(
     `INSERT INTO oauth_authorization_codes (code, client_id, user_id, redirect_uri, scope, code_challenge, nonce, expires_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7, now() + interval '${CODE_TTL_SEC} seconds')`,
-    [code, clientId, userId, redirectUri, scope || 'openid profile email', codeChallenge, nonce || null],
+    [code, clientId, userId, redirectUri, grantedScope, codeChallenge, nonce || null],
   );
   return code;
 }
@@ -214,7 +248,7 @@ export async function exchangeAuthorizationCode(db, { code, clientId, redirectUr
   await db.query('UPDATE oauth_authorization_codes SET consumed = true WHERE code = $1', [code]);
   const user = await userClaims(db, row.user_id);
   if (!user) throw oauthError('invalid_grant', 'user not found');
-  return mintTokens(db, { user, clientId, scope: row.scope, sid: crypto.randomUUID() });
+  return mintTokens(db, { user, clientId, scope: row.scope, sid: crypto.randomUUID(), nonce: row.nonce });
 }
 
 // ── Refresh rotation + reuse detection ──────────────────────────────────────
@@ -250,12 +284,13 @@ export async function refreshTokenGrant(db, { refreshToken, clientId }) {
 export async function startDeviceAuthorization(db, { clientId, scope }) {
   const client = await getClient(db, clientId);
   if (!client) throw oauthError('invalid_client', 'unknown client');
+  const grantedScope = downscope(scope || 'openid profile email ledger', client.allowed_scopes);
   const deviceCode = crypto.randomBytes(32).toString('base64url');
   const userCode = `${rand4()}-${rand4()}`;
   await db.query(
     `INSERT INTO oauth_device_codes (device_code, user_code, client_id, scope, interval_secs, expires_at)
      VALUES ($1,$2,$3,$4,5, now() + interval '${DEVICE_TTL_SEC} seconds')`,
-    [deviceCode, userCode, clientId, scope || 'openid profile email ledger'],
+    [deviceCode, userCode, clientId, grantedScope],
   );
   const iss = issuer();
   return {
