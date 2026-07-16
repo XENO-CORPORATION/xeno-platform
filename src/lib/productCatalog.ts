@@ -80,7 +80,7 @@ export const PRODUCTS: Product[] = [
   // ── Connect ───────────────────────────────────────────────
   { slug: 'comms', name: 'XENO Comms', tagline: 'Human and agent communication for teams.', category: 'Connect', status: 'beta', delivery: 'desktop', repo: 'xeno-comms' },
   { slug: 'post', name: 'XENO Post', tagline: '25+ platform social media command center.', category: 'Connect', status: 'coming-soon', delivery: 'soon', repo: 'xeno-post' },
-  { slug: 'browser', name: 'XENO Browser', tagline: 'The agent-native browser that works the web for you.', category: 'Connect', status: 'coming-soon', delivery: 'soon', repo: 'xeno-browser' },
+  { slug: 'browser', name: 'XENO Browser', tagline: 'The agent-native browser that works the web for you.', category: 'Connect', status: 'beta', delivery: 'desktop', repo: 'xeno-browser' },
   { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'shipping', delivery: 'desktop', r2: 'extension', repo: 'xeno-extension' },
 
   // ── Build ─────────────────────────────────────────────────
