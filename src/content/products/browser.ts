@@ -1,9 +1,9 @@
 import type { ProductContent } from './_types';
 
 /* XENO Browser — sourced from ../xeno-browser (README.md + SPEC.md). A CONNECT,
- * Layer-3 product, catalog status coming-soon / delivery soon → waitlist framing
- * (CTA is "Get notified"). Honest scaffold status: nothing ships yet; the page
- * sells the thesis (agent-native file I/O) and the design, not shipped builds.
+ * Layer-3 product, catalog status beta / delivery desktop → download framing.
+ * Public beta as of 0.2.0 (Windows build live; unsigned preview; macOS & Linux
+ * to follow). The page sells the thesis (agent-native file I/O) and the design.
  * Every claim traces to SPEC §2 (file-I/O wall), §5 (verbs), §6 (.xbrowser),
  * §7 (security), §16 (locked decisions). */
 const browser: ProductContent = {
@@ -13,7 +13,7 @@ const browser: ProductContent = {
     sub: 'XENO Browser is real Chromium for you — and the first browser an AI agent can fully drive from a terminal. It browses, reads, clicks and types like any web agent, and — uniquely — uploads and downloads files by path, with no OS file dialog in the way.',
     media: { type: 'mockup', src: 'browser-hero', alt: 'XENO Browser — an AI agent attaches a file to a web composer by path while a scoped-consent prompt asks to approve the host-path upload' },
     badges: ['Real Chromium', 'Agentic file I/O', '.xbrowser Spaces', 'Private by default'],
-    note: 'Not released yet — XENO Browser is in active development. Join the waitlist for the first build. No CAPTCHA-solving, ever.',
+    note: 'Public beta — download the Windows build now (unsigned preview; macOS & Linux coming soon). No CAPTCHA-solving, ever.',
   },
   trust: [
     'Part of the XENO platform — one sign-in',
@@ -115,14 +115,14 @@ const browser: ProductContent = {
       { feature: 'Terminal / server-drivable agent', xeno: true, them: false },
       { feature: 'Saved Spaces with agent context (.xbrowser)', xeno: true, them: 'Some' },
       { feature: 'Mature extension & add-on ecosystem', xeno: 'Growing', them: true },
-      { feature: 'Availability', xeno: 'Coming soon', them: 'Shipping' },
+      { feature: 'Availability', xeno: 'Beta (Windows)', them: 'Shipping' },
     ],
   },
   specs: [
     { label: 'Engine', value: 'Electron + WebContentsView (Chromium)' },
     { label: 'Platforms', value: 'Windows · macOS · Linux' },
     { label: 'Project format', value: '.xbrowser (saved Spaces)' },
-    { label: 'Status', value: 'In development · v0.0.1' },
+    { label: 'Status', value: 'Public beta · v0.2.0' },
   ],
   faq: [
     { q: 'What makes XENO Browser different from a normal browser?', a: 'It’s a real Chromium browser for you, but the AI agent is native to it — not a plugin. The headline capability is agentic file I/O: the agent uploads and downloads files by path, bypassing the native OS file-picker and Save dialogs that block every other web agent.' },
@@ -130,11 +130,11 @@ const browser: ProductContent = {
     { q: 'Is it safe to let an agent touch my files?', a: 'Yes — the native dialog is treated as a security feature we replace with scoped consent, not remove. File I/O is confined to bounded mount points, “..” path traversal is rejected, and host-path operations ask for confirmation or run on a capability budget. And it never bypasses CAPTCHAs.' },
     { q: 'What is a Space / the .xbrowser format?', a: 'A Space is a saved browsing context — its tabs, pins, profile, and the agent’s task plus allowed mount points (an Arc-Spaces analog). It serializes to a portable .xbrowser file with autosave and crash recovery. Secrets like cookies and tokens live in the profile store, never in a shareable Space file.' },
     { q: 'Does it replace the XENO browser extension?', a: 'No — they complement each other. xeno-extension puts the agent inside your existing Chrome/Edge/Firefox; XENO Browser is the agent inside our own browser, with the full control an extension can’t get. Both implement xeno-use’s use-driver-web contract.' },
-    { q: 'When can I use it?', a: 'It’s in active development and not released yet. Join the waitlist to get the first build — v0.1 lands the file-I/O differentiator working end-to-end from xeno-agent-cli.' },
+    { q: 'When can I use it?', a: 'Now — it’s in public beta. Download the Windows build (v0.2.0, an unsigned preview; macOS & Linux are coming). It ships the file-I/O differentiator working end-to-end from xeno-agent-cli.' },
   ],
   seo: {
     title: 'XENO Browser — the agent-native web browser',
-    description: 'Real Chromium for you, and the first browser an AI agent can fully drive from a terminal — uploading and downloading files by path with no OS dialog. Saved Spaces (.xbrowser), scoped consent, private by default. Coming soon.',
+    description: 'Real Chromium for you, and the first browser an AI agent can fully drive from a terminal — uploading and downloading files by path with no OS dialog. Saved Spaces (.xbrowser), scoped consent, private by default. In public beta — download for Windows.',
   },
 };
 
