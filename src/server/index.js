@@ -66,6 +66,8 @@ import productDownloadRoutes from './routes/productDownloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
+import accountRoutes from './routes/accountRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
@@ -609,6 +611,12 @@ console.log('🎯 Xeno AI proxy routes integrated: /api/xeno/*');
 app.use('/api/marketplace', databaseMiddleware, marketplaceRoutes);
 app.use('/api/billing', databaseMiddleware, billingRoutes);
 console.log('💳 Billing routes integrated: /api/billing/* (checkout, portal, config)');
+
+// Account + dashboard read-aggregation surface (account UI / home dashboard).
+// Pure reads over users + v2 ledger + plan + ReBAC workspaces. Auth per-route.
+app.use('/api/account', databaseMiddleware, accountRoutes);
+app.use('/api/dashboard', databaseMiddleware, dashboardRoutes);
+console.log('👤 Account + dashboard routes integrated: /api/account/* + /api/dashboard/*');
 
 // Workspaces / teams (multi-tenant): workspace entity tables + ReBAC membership
 // (workspace:<id>#<role>@user:<id>). Standard authMiddleware — not OIDC-gated.
