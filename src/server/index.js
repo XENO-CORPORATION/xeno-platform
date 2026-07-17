@@ -964,7 +964,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 }
 
                 const editResponse = await xenoImageClient.image.edit({
-                    model: 'auto', // gateway default (matches the proven /api/xeno/images/edit route)
+                    model: 'flux-kontext', // xeno-ai image-edit model (gateway rejects 'auto')
                     image: primaryImageData, // base64 — xeno-ai sends `image` as a JSON field, not multipart
                     prompt: combinationPrompt,
                     n: 1,
@@ -995,7 +995,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             // image bytes on a plain follow-up, so continuity there is not recoverable server-side).
             console.log('Calling XENO gateway /v1/images/generations for conversational image generation...');
             const genResponse = await xenoImageClient.image.generate({
-                model: 'auto', // gateway default (matches the proven /api/xeno/images/generate route)
+                model: 'flux-pro-1.1', // xeno-ai image-gen model (gateway rejects 'auto')
                 prompt: imagePrompt,
                 width: 1024,
                 height: 1024,
@@ -1123,7 +1123,9 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
     else if (req.body.task === 'edit_image') {
         console.log('Handling image edit task with XENO gateway Image Edits API');
         try {
-            const { imageData, prompt, model = 'auto', mask, background, outputFormat = 'png', quality = 'auto', size = 'auto' } = req.body;
+            let { imageData, prompt, model = 'flux-kontext', mask, background, outputFormat = 'png', quality = 'auto', size = 'auto' } = req.body;
+            // The gateway image models are flux-*; reject stale OpenAI ids the frontend may still send.
+            if (!model || model === 'auto' || model === 'gpt-image-1' || String(model).startsWith('dall-e')) model = 'flux-kontext';
 
             if (!imageData || !prompt) {
                 return res.status(400).json({ error: 'Invalid request: imageData and prompt are required for image editing.' });
