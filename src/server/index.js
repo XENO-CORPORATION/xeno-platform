@@ -20,6 +20,7 @@ import multer from 'multer';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import OpenAI, { toFile } from 'openai';
+import Xeno from 'xeno-ai';
 import util from 'util';
 import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
@@ -103,7 +104,7 @@ import { initBackgroundJobs } from './services/backgroundJobs.js';
 // LOCALLY (deductCredits / meterMediaGeneration) with no double charge. When the key
 // is absent, the image branches 500 with a clear "gateway not configured" error.
 const xenoImageClient = process.env.XENO_API_KEY
-  ? new OpenAI({ apiKey: process.env.XENO_API_KEY, baseURL: 'https://api.xenostudio.ai/v1' })
+  ? new Xeno({ apiKey: process.env.XENO_API_KEY, baseURL: 'https://api.xenostudio.ai/v1' })
   : null;
 
 // PostgreSQL connection
@@ -898,12 +899,19 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             }
 
             // Extract just the base64 payload from a gateway image item ({ b64_json } | { url }).
-            const itemToBase64 = (item) => {
+            const itemToBase64 = async (item) => {
                 if (!item) return null;
                 if (item.b64_json) return item.b64_json;
                 if (item.base64) return item.base64;
-                if (typeof item.url === 'string' && item.url.startsWith('data:')) {
-                    return item.url.split(',')[1] || null;
+                if (typeof item.url === 'string') {
+                    if (item.url.startsWith('data:')) return item.url.split(',')[1] || null;
+                    if (item.url.startsWith('http')) {
+                        try {
+                            const r = await fetch(item.url);
+                            if (!r.ok) return null;
+                            return Buffer.from(await r.arrayBuffer()).toString('base64');
+                        } catch { return null; }
+                    }
                 }
                 return null;
             };
@@ -955,14 +963,14 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     if (base64Match && base64Match[1]) primaryImageData = base64Match[1];
                 }
 
-                const editResponse = await xenoImageClient.images.edit({
+                const editResponse = await xenoImageClient.image.edit({
                     model: 'auto', // gateway default (matches the proven /api/xeno/images/edit route)
-                    image: await toFile(Buffer.from(primaryImageData, 'base64'), 'image.png', { type: 'image/png' }),
+                    image: primaryImageData, // base64 — xeno-ai sends `image` as a JSON field, not multipart
                     prompt: combinationPrompt,
                     n: 1,
-                    size: '1024x1024',
+                    response_format: 'b64_json',
                 });
-                const comboB64 = itemToBase64(editResponse?.data?.[0]);
+                const comboB64 = await itemToBase64(editResponse?.data?.[0]);
                 if (!comboB64) {
                     if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
                     return res.status(500).json({ error: 'Image combination failed to return data.' });
@@ -986,13 +994,15 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             // generation (the gateway has no /v1/responses chaining; the frontend does not resend
             // image bytes on a plain follow-up, so continuity there is not recoverable server-side).
             console.log('Calling XENO gateway /v1/images/generations for conversational image generation...');
-            const genResponse = await xenoImageClient.images.generate({
+            const genResponse = await xenoImageClient.image.generate({
                 model: 'auto', // gateway default (matches the proven /api/xeno/images/generate route)
                 prompt: imagePrompt,
-                size: '1024x1024',
+                width: 1024,
+                height: 1024,
                 n: 1,
+                response_format: 'b64_json',
             });
-            const genB64 = itemToBase64(genResponse?.data?.[0]);
+            const genB64 = await itemToBase64(genResponse?.data?.[0]);
             if (!genB64) {
                 console.error('No image data returned from gateway:', genResponse);
                 if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
@@ -1268,14 +1278,30 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     surface: 'image_edit', operation: 'chat.edit_image', model, provider: 'xeno',
                     requestId: editReqId, unitCostMicro: editUnitCost * MICRO_PER_CREDIT, count: 1,
                     run: async () => {
-                        const response = await xenoImageClient.images.edit(requestParams);
+                        // xeno-ai SDK: `image`/`mask` are base64/URL JSON fields (NOT multipart).
+                        const response = await xenoImageClient.image.edit({
+                            image: imageData,
+                            prompt,
+                            model,
+                            mask: mask || undefined,
+                            response_format: 'b64_json',
+                        });
                         cleanupEditTemps();
-                        if (!response.data || response.data.length === 0) {
+                        const item0 = response?.data?.[0];
+                        if (!item0) {
                             throw new Error('Image editing failed: no image data returned');
                         }
-                        let edited = model === 'gpt-image-1'
-                            ? (response.data[0].b64_json || response.data[0])
-                            : response.data[0].b64_json;
+                        let edited = item0.b64_json || item0.base64 || null;
+                        if (!edited && typeof item0.url === 'string') {
+                            if (item0.url.startsWith('data:')) edited = item0.url.split(',')[1] || null;
+                            else if (item0.url.startsWith('http')) {
+                                const rr = await fetch(item0.url);
+                                if (rr.ok) edited = Buffer.from(await rr.arrayBuffer()).toString('base64');
+                            }
+                        }
+                        if (!edited) {
+                            throw new Error('Image editing failed: no image data returned');
+                        }
                         // Free tier: watermark the edited image (self-contained base64).
                         if (editEnt.watermark && typeof edited === 'string' && edited) {
                             edited = (await watermarkBuffer(Buffer.from(edited, 'base64'))).toString('base64');
