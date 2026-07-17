@@ -92,6 +92,7 @@ import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } 
 import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter, clientIp } from './middleware/rateLimiter.js';
 import { runAllMigrations } from './services/migrationRunner.js';
 import { migrateAccountV2 } from './database/migrate-account-v2.js';
+import { migrateOidcClients } from './database/migrate-oidc-clients.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
@@ -5061,7 +5062,8 @@ app.locals.migrationsReady = false;
 async function runStartupMigrations() {
   await runMigrations(pool);       // legacy schema files (youtube/office-canvas)
   await runAllMigrations(pool);    // versioned *.sql runner (rethrows on first failure)
-  await migrateAccountV2(pool);    // account/ledger v2 (additive, idempotent)
+  await migrateAccountV2(pool);    // account/ledger v2 (additive, idempotent) — creates oauth_clients
+  await migrateOidcClients(pool);  // OIDC first-party clients + loopback column (additive, idempotent)
   await seedMarketplace(pool).catch(err => console.error('[Seed] marketplace warning (non-fatal):', err.message));
 }
 
