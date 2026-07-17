@@ -10,9 +10,9 @@
  *
  *   - versions + publish dates  →  the npm registry (source of truth for what
  *                                   is actually installable)
- *   - human release notes       →  the CLI's own RELEASE_NOTES map
- *                                   (src/commands/release-notes.ts — the exact
- *                                   text the CLI shows at startup)
+ *   - human release notes       →  the package's own RELEASE_NOTES map
+ *                                   (for a CLI this is the exact text shown at
+ *                                   startup; SDKs keep equivalent public notes)
  *
  * The intersection (versions that are BOTH on npm AND have notes) becomes the
  * feed, newest first, with the npm `latest` dist-tag flagged as `latest`.
@@ -23,6 +23,7 @@
  *     --app agent-cli \
  *     --pkg @xeno-corporation/xeno-agent-cli \
  *     --notes ../xeno-agent-cli/apps/xeno-agent-cli/src/commands/release-notes.ts \
+ *     [--install "npm install -g @xeno-corporation/xeno-agent-cli"] \
  *     [--out dist-feed] [--dry-run]
  *
  * Requires rclone with the R2 remote (default r2:xeno-hub-releases) unless --dry-run.
@@ -43,6 +44,7 @@ function fail(m) { console.error(`publish-cli-releases: ${m}`); process.exit(1);
 const APP = arg('app') || fail('missing --app (R2 folder / product slug)');
 const PKG = arg('pkg') || fail('missing --pkg (npm package name)');
 const NOTES_FILE = arg('notes') || fail('missing --notes (path to release-notes.ts)');
+const INSTALL = arg('install') || `npm install -g ${PKG}`;
 const OUT = arg('out') || join(process.env.TEMP || '/tmp', `cli-feed-${APP}`);
 const REMOTE = `${process.env.XENO_R2_REMOTE || 'r2:xeno-hub-releases'}/apps/${APP}`;
 
@@ -97,9 +99,9 @@ async function main() {
     severity: 'normal',
     // notes as a bullet block — ReleaseFeed renders whitespace-pre-line.
     notes: notes[v].map((n) => `• ${n}`).join('\n'),
-    // CLI = npm install, no per-OS installer assets. Record the install command
-    // so the feed stays self-describing; the website renders notes, not assets.
-    install: `npm install -g ${PKG}`,
+    // npm-distributed packages have no per-OS installer assets. Record the
+    // package-appropriate install command so the feed stays self-describing.
+    install: INSTALL,
   }));
 
   const latest = feed.find((r) => r.latest) || feed[0];
@@ -107,7 +109,7 @@ async function main() {
     version: latest.version,
     date: latest.date,
     npm: PKG,
-    install: `npm install -g ${PKG}`,
+    install: INSTALL,
     notes: latest.notes,
   };
 

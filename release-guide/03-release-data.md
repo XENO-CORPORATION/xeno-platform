@@ -354,7 +354,7 @@ node scripts/xeno-release.mjs publish \
 CLI products (agent-cli, sdk) have no installers, so the installer/auto-update machinery of `xeno-release.mjs` doesn't apply. This script builds the **entire feed from real data** — nothing is authored or fabricated:
 
 - **versions + dates** come from the **npm registry** (source of truth for what's actually installable),
-- **notes** come from the CLI's own **`RELEASE_NOTES`** map (the exact text the CLI shows at startup),
+- **notes** come from the package's own **`RELEASE_NOTES`** map (for a CLI, the exact text it shows at startup),
 - the feed is the **intersection** (versions that are BOTH on npm AND carry notes), newest-first, with npm's `latest` dist-tag flagged `latest`.
 
 **Flags:**
@@ -364,6 +364,7 @@ CLI products (agent-cli, sdk) have no installers, so the installer/auto-update m
 | `--app <slug>` | **yes** | R2 folder / product slug. |
 | `--pkg <name>` | **yes** | npm package name, e.g. `@xeno-corporation/xeno-agent-cli`. |
 | `--notes <path>` | **yes** | Path to the CLI's `release-notes.ts` (where `RELEASE_NOTES` lives). |
+| `--install <command>` | no | Install command recorded in the feed. Defaults to `npm install -g <pkg>`; SDK/library packages should pass their package-local command. |
 | `--out <dir>` | no | Output dir for the built JSON. Default `$TEMP/cli-feed-<APP>`. |
 | `--dry-run` | no | Prints the `rclone` commands instead of uploading. |
 
@@ -374,6 +375,7 @@ node scripts/publish-cli-releases.mjs \
   --app agent-cli \
   --pkg @xeno-corporation/xeno-agent-cli \
   --notes ../xeno-agent-cli/apps/xeno-agent-cli/src/commands/release-notes.ts \
+  [--install "npm install -g @xeno-corporation/xeno-agent-cli"] \
   [--out dist-feed] [--dry-run]
 ```
 
@@ -400,7 +402,7 @@ node scripts/publish-cli-releases.mjs \
   - `type` / `channel` / `severity` are **always** `release` / `stable` / `normal`.
   - `latest` matches npm's `latest` dist-tag.
   - `notes` is the `RELEASE_NOTES[version]` string array joined as `• <item>` bullets.
-  - `install` is a CLI-only convenience field (not part of the `Release` TS type; the site renders notes, not assets).
+  - `install` is a package-install convenience field (not part of the `Release` TS type; the site renders notes, not assets). It defaults to `npm install -g <pkg>` and can be overridden with `--install`, for example `npm install @xeno-corporation/xeno-agent-sdk` for the SDK.
 
 5. Builds a CLI-shaped `version.json` (`version`, `date`, `npm`, `install`, `notes` — no OS keys).
 6. Writes both files to `<out>` and pushes each with `rclone copyto <local> r2:xeno-hub-releases/apps/<app>/<file> --header-upload "Cache-Control: no-cache" --no-traverse`.

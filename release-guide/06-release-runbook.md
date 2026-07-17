@@ -137,6 +137,7 @@ node scripts/publish-cli-releases.mjs \
   --app <slug> \
   --pkg @xeno-corporation/xeno-<name> \
   --notes ../xeno-<name>/apps/xeno-<name>/src/commands/release-notes.ts \
+  [--install "npm install <package>"] \
   [--out dist-feed] [--dry-run]
 ```
 
@@ -149,7 +150,7 @@ node scripts/publish-cli-releases.mjs \
   --notes ../xeno-agent-cli/apps/xeno-agent-cli/src/commands/release-notes.ts
 ```
 
-- `--app`, `--pkg`, `--notes` are **required**.
+- `--app`, `--pkg`, `--notes` are **required**. `--install` is optional and defaults to the global CLI command; SDK/library packages should pass their package-local install command.
 - The feed is the **intersection** of versions that are BOTH on npm AND carry release notes, newest-first; the npm `latest` dist-tag is flagged `latest`.
 - Writes `apps/<slug>/releases.json` and an npm-shaped `apps/<slug>/version.json` (carries `version`/`date`/`npm`/`install`/`notes`, no windows/mac/linux keys). Both uploaded with `Cache-Control: no-cache`.
 - `--dry-run` prints the `rclone` commands without uploading.
