@@ -72,6 +72,9 @@ services:
     container_name: xenostudio-backend
     environment:
       - NODE_ENV=production
+      # OIDC provider (Sign in with XENO). Mounts /api/oauth2/* — off by default;
+      # clients live in the oauth_clients DB table (xeno-post, xeno-api-portal).
+      - OIDC_ENABLED=true
       - BACKEND_PORT=8080
       - PORT=8080
       - DB_HOST=postgres
@@ -190,18 +193,6 @@ services:
   #     - PORT=4001
   #   ports:
   #     - "4001:4001"
-  #   networks:
-  #     - xenostudio-network
-  #   restart: unless-stopped
-
-  # CORS Proxy for Topaz Labs API (commented out - no Dockerfile)
-  # cors-proxy:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.cors-proxy
-  #   container_name: xenostudio-cors-proxy
-  #   ports:
-  #     - "4002:4002"
   #   networks:
   #     - xenostudio-network
   #   restart: unless-stopped

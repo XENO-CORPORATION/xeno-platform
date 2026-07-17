@@ -36,3 +36,4 @@ XENO Agent CLI). Install steps: `release-guide/README.md`. Spec: `PRODUCT-RELEAS
 - `PRODUCT-LANDING-SPEC.md` — the product landing-page + docs authoring contract (the 4-layer model, the docs system).
 - `PRODUCT-PAGES-SPEC.md` — URLs, `releases.json` schema, download redirects, prerender.
 - `RELEASE-TO-WEBSITE.md` — legacy release note (superseded by `release-guide/`).
+- `XENO AUTH - SPEC.md` — **xeno-platform OWNS the account ORIGIN** (OIDC provider `/api/oauth2/*`: `src/server/routes/oauth2Routes.js` + `utils/oidcProvider.js`). The §13 provider prerequisites (loopback port-flex, `id_token` nonce, discovery ES256, scope down-scoping, admin register-client, RFC 8693 token-exchange, step-up, revocation denylist) are HARD-BLOCKERS every other product waits on — ship + verify them here BEFORE any product migrates to the unified auth.

@@ -18,53 +18,11 @@ import { tagResourceWorkspace } from '../utils/workspaceContext.js';
 const router = express.Router();
 
 // ============================================
-// REPLICATE API PROXY ROUTES (No auth required - uses server-side token)
+// XENO-ONLY POLICY (2026-07-17): Replicate proxy routes REMOVED.
+// The platform holds ZERO provider keys. Image generation uses the in-house
+// Xeno Flow service below (/xeno-flow/generate); all other inference routes
+// through the XENO API (api.xenostudio.ai). No direct third-party provider calls.
 // ============================================
-// These routes proxy requests to Replicate API to avoid CORS issues
-// They must be defined BEFORE the auth middleware
-
-/**
- * CREATE PREDICTION (PROXY)
- * POST /api/image/replicate/predictions
- */
-router.post('/replicate/predictions', async (req, res) => {
-  try {
-    const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
-
-    if (!REPLICATE_API_TOKEN) {
-      return res.status(500).json({
-        success: false,
-        error: 'Replicate API token is not configured on the server'
-      });
-    }
-
-    const response = await fetch('https://api.replicate.com/v1/predictions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${REPLICATE_API_TOKEN}`
-      },
-      body: JSON.stringify(req.body)
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('❌ Replicate API error:', data);
-      return res.status(response.status).json(data);
-    }
-
-    console.log(`🎨 Created Replicate prediction: ${data.id}`);
-    res.json(data);
-
-  } catch (error) {
-    console.error('❌ Replicate proxy error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to create prediction'
-    });
-  }
-});
 
 // ============================================
 // XENO FLOW SERVICE PROXY ROUTES (No auth required)
@@ -120,89 +78,6 @@ router.post('/xeno-flow/generate', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to connect to Xeno Flow service'
-    });
-  }
-});
-
-/**
- * GET PREDICTION STATUS (PROXY)
- * GET /api/image/replicate/predictions/:predictionId
- */
-router.get('/replicate/predictions/:predictionId', async (req, res) => {
-  try {
-    const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
-    const { predictionId } = req.params;
-
-    if (!REPLICATE_API_TOKEN) {
-      return res.status(500).json({
-        success: false,
-        error: 'Replicate API token is not configured on the server'
-      });
-    }
-
-    const response = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Token ${REPLICATE_API_TOKEN}`
-      }
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('❌ Replicate API error:', data);
-      return res.status(response.status).json(data);
-    }
-
-    res.json(data);
-
-  } catch (error) {
-    console.error('❌ Replicate proxy error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get prediction status'
-    });
-  }
-});
-
-/**
- * CANCEL PREDICTION (PROXY)
- * POST /api/image/replicate/predictions/:predictionId/cancel
- */
-router.post('/replicate/predictions/:predictionId/cancel', async (req, res) => {
-  try {
-    const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
-    const { predictionId } = req.params;
-
-    if (!REPLICATE_API_TOKEN) {
-      return res.status(500).json({
-        success: false,
-        error: 'Replicate API token is not configured on the server'
-      });
-    }
-
-    const response = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}/cancel`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${REPLICATE_API_TOKEN}`
-      }
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('❌ Replicate API error:', data);
-      return res.status(response.status).json(data);
-    }
-
-    console.log(`🛑 Cancelled Replicate prediction: ${predictionId}`);
-    res.json(data);
-
-  } catch (error) {
-    console.error('❌ Replicate proxy error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to cancel prediction'
     });
   }
 });

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, Send, Download, Copy, Share2, Trash2, Sparkles, Play, Pause, Clock, Image, RotateCw, Info, X, AlertCircle, Wand2, Settings, ChevronDown, RefreshCw, Camera, Minus, ZoomIn, ZoomOut, Move, Maximize, Minimize, DownloadCloud, Film, Image as ImageIcon } from 'lucide-react';
 import { checkApiTokens, API_TOKENS } from '../../../config/apiConfig';
 import ApiTokenNotice from '../../common/ApiTokenNotice';
-import { analyzeImageWithGemini, initializeGeminiSDK } from '../../../services/geminiService';
+import { analyzeImageWithGemini } from '../../../services/geminiService';
 import videoGenerationService from '../../../services/videoGenerationService';
 
 // Simple notification helper to avoid dependency issues
@@ -756,23 +756,6 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
     }
   }, [selectedVideo]);
   
-  // Initialize token from URL if present
-  React.useEffect(() => {
-    // Check URL for token parameter
-    const params = new URLSearchParams(window.location.search);
-    const tokenFromUrl = params.get('xeno_token');
-    if (tokenFromUrl) {
-      window.XENO_API_KEY = tokenFromUrl;
-      // Update API_TOKENS object
-      if (API_TOKENS) {
-        API_TOKENS.XENO_API_KEY = tokenFromUrl;
-      }
-      // Remove token from URL to avoid exposing it
-      const url = new URL(window.location.href);
-      url.searchParams.delete('xeno_token');
-      window.history.replaceState({}, document.title, url.toString());
-    }
-  }, []);
 
   // Check for API token availability immediately on initial render
   React.useEffect(() => {
@@ -793,15 +776,8 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
       setApiTokenAvailable(hasReplicateToken);
       setIsCheckingToken(false);
       
-      // Initialize Gemini SDK
-      if (API_TOKENS.GEMINI_API_TOKEN) {
-        const initialized = initializeGeminiSDK(API_TOKENS.GEMINI_API_TOKEN);
-        console.log('Gemini SDK initialized:', initialized);
-        setGeminiInitialized(initialized);
-      } else {
-        console.log('No Gemini API token available');
-        setGeminiInitialized(false);
-      }
+      // Gemini vision is migrated to the metered backend; nothing to init on the client.
+      setGeminiInitialized(false);
     };
     checkToken();
   }, []);
@@ -811,12 +787,6 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
     const tokens = checkApiTokens();
     const hasReplicateToken = tokens.replicate;
     setApiTokenAvailable(hasReplicateToken);
-    
-    // Initialize Gemini SDK if token is available
-    if (API_TOKENS.GEMINI_API_TOKEN) {
-      const initialized = initializeGeminiSDK(API_TOKENS.GEMINI_API_TOKEN);
-      setGeminiInitialized(initialized);
-    }
     
     if (hasReplicateToken) {
       // If token is now available, clear any error and start a new session
@@ -1086,17 +1056,6 @@ const VideoGenerationInterface: React.FC<VideoGenerationInterfaceProps> = ({
           console.log("API token available:", API_TOKENS.GEMINI_API_TOKEN ? "Yes" : "No");
 
           try {
-            // Make sure Gemini SDK is initialized
-            if (!geminiInitialized && API_TOKENS.GEMINI_API_TOKEN) {
-              console.log("Initializing Gemini SDK before image analysis...");
-              const initialized = initializeGeminiSDK(API_TOKENS.GEMINI_API_TOKEN);
-              setGeminiInitialized(initialized);
-              
-              if (!initialized) {
-                throw new Error("Failed to initialize Gemini SDK");
-              }
-            }
-            
             // More verbose logging
             console.log("Calling analyzeImageWithGemini...");
             
