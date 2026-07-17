@@ -84,7 +84,7 @@ function jsonld(p) {
     name: p.name,
     description: p.tagline,
     applicationCategory: CATEGORY_SCHEMA[p.category] ?? 'SoftwareApplication',
-    operatingSystem: OS_BY_DELIVERY[p.delivery] ?? 'Windows',
+    operatingSystem: p.operatingSystem ?? OS_BY_DELIVERY[p.delivery] ?? 'Windows',
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
     url: `${SITE}/product/${p.slug}`,
     ...(p.repo ? { softwareHelp: `https://github.com/XENO-CORPORATION/${p.repo}` } : {}),
