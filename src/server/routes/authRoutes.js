@@ -545,14 +545,25 @@ router.post('/login', async (req, res) => {
       ? ['admin@xenostudio.local', 'admin@xenostudio.ai']
       : [normalizedEmail];
 
-    // Find user by email
+    // XENO handle unification: the identifier may also be the user's handle or
+    // their @<MAIL_PRIMARY_DOMAIN> address (handle = login = identity = mailbox).
+    const mailDomain = (process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai').toLowerCase();
+    let handleCandidate = null;
+    if (!normalizedEmail.includes('@')) {
+      handleCandidate = normalizedEmail; // bare handle
+    } else if (normalizedEmail.endsWith(`@${mailDomain}`)) {
+      handleCandidate = normalizedEmail.slice(0, -(`@${mailDomain}`.length)); // you@xenostudio.ai
+    }
+
+    // Find user by email OR handle
     const result = await req.db.query(`
-      SELECT id, username, email, password_hash, display_name, avatar_url, 
+      SELECT id, username, email, password_hash, display_name, avatar_url,
              created_at, email_verified, is_active, last_login, credits, bonus_credits_claimed
-      FROM users 
+      FROM users
       WHERE email = ANY($1::text[])
+         OR ($2::text IS NOT NULL AND lower(username) = $2::text)
       LIMIT 1
-    `, [emailCandidates]);
+    `, [emailCandidates, handleCandidate]);
 
     if (result.rows.length === 0) {
       return res.status(401).json({

@@ -155,9 +155,20 @@ async function mintTokens(db, { user, clientId, scope, sid, nonce }) {
     key.privatePem,
     { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: 'at+jwt', kid: key.kid } },
   );
+  // XENO handle unification: a conforming, non-reserved handle IS the @<domain> address.
+  const mailDomain = process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai';
+  const lowHandle = String(user.username || '').toLowerCase();
+  let xenoAddress = null;
+  if (/^[a-z0-9](?:[a-z0-9]|[._-](?![._-])){1,30}[a-z0-9]$/.test(lowHandle)) {
+    try {
+      const rsv = await db.query('SELECT 1 FROM reserved_handles WHERE handle = $1', [lowHandle]);
+      if (rsv.rows.length === 0) xenoAddress = `${lowHandle}@${mailDomain}`;
+    } catch { /* registry not migrated yet → omit the claim */ }
+  }
   const idToken = jwt.sign(
     { ...base, sub: user.id, aud: clientId, email: user.email, email_verified: user.email_verified ?? false,
       name: user.display_name || user.username, preferred_username: user.username,
+      ...(xenoAddress ? { xeno_address: xenoAddress } : {}),
       // Echo the request nonce so the SDK can defend against id_token replay
       // (XENO AUTH §3.3 / §14 P-c). Only present on code/device mint.
       ...(nonce ? { nonce } : {}) },
