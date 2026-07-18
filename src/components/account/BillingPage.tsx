@@ -14,18 +14,20 @@ import { formatPrice } from '../../config/pricing';
 const ACCENT = '#a760ff';
 
 const PLAN_META: Record<string, { label: string; color: string; sub: string }> = {
-  free: { label: 'Free', color: 'rgba(255,255,255,0.65)', sub: 'The whole toolkit — watermarked, standard-res' },
-  pro:  { label: 'Pro',  color: ACCENT,                   sub: 'Everything unlocked' },
-  team: { label: 'Team', color: '#4ea1ff',               sub: 'Everything + collaboration' },
+  free: { label: 'Free', color: 'rgba(255,255,255,0.65)', sub: 'The full local tool — clean, no watermark, local export' },
+  pro:  { label: 'Pro',  color: ACCENT,                   sub: 'The connected Platform — cloud, cross-app, agents' },
+  team: { label: 'Team', color: '#4ea1ff',               sub: 'Everything in Pro + collaboration' },
 };
 
 function features(e: Entitlements): { label: string; on: boolean }[] {
   return [
-    { label: 'Watermark-free exports', on: !e.watermark },
-    { label: 'Commercial license', on: e.commercial },
-    { label: e.maxResolution === '4k' ? 'Up to 4K & longer generations' : 'Standard resolution', on: e.maxResolution === '4k' },
-    { label: 'Priority support', on: e.priority },
-    { label: 'Private projects', on: e.privateProjects },
+    { label: 'Commercial-use license', on: e.commercial },
+    { label: 'Cloud sync & multi-device', on: e.cloudSync },
+    { label: 'Cross-app workflows', on: e.crossApp },
+    { label: 'Agents & automation', on: e.agents },
+    { label: 'Priority managed inference', on: e.priority },
+    { label: 'Private cloud projects', on: e.privateProjects },
+    { label: 'Real-time collaboration', on: e.collaboration },
   ];
 }
 
@@ -155,7 +157,7 @@ const BillingPage: React.FC = () => {
         </div>
 
         {isFree && (
-          <p className="text-white/35 text-xs mt-4">Pro unlocks everything above — watermark-free, commercial rights, 4K &amp; priority support — for €24/mo.</p>
+          <p className="text-white/35 text-xs mt-4">Pro unlocks the connected Platform — cloud sync, cross-app workflows, agents, commercial rights &amp; priority — for €24/mo.</p>
         )}
       </div>
 

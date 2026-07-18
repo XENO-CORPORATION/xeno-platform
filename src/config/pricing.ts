@@ -1,17 +1,35 @@
 // Canonical PUBLIC pricing — the single front-end source of truth for tiers + features.
 //
+// v2 model (LOCKED). The free/paid line is ENFORCEABILITY, not cosmetics:
+//   • Free   — the standalone TOOL. Each app runs locally: local editing, local files,
+//              clean full-resolution export, BYOK, and in-house xeno-rt open-model
+//              inference with a fair-use daily cap. An island: no cloud, no cross-app,
+//              no agents, no collaboration. €0, no card.
+//   • Pro    — €24/mo. The connected PLATFORM, for individuals. Everything in Free PLUS
+//              cloud sync + multi-device, cross-app workflows, agents/automation, private
+//              cloud projects, managed-premium inference priority, and the commercial license.
+//   • Team   — €40/seat/mo (min 2 seats). Everything in Pro PLUS real-time collaboration,
+//              a shared/pooled credit wallet, one consolidated invoice, spend budgets,
+//              admin/governance, and workspace tenancy. Per-seat is ALWAYS >= individual Pro.
+//   • Enterprise — custom. On-prem/self-host, SSO, audit, SLA, dedicated support.
+//
+// CREDITS ARE ORTHOGONAL. Subscriptions gate FEATURES. Credits are a separate, OPTIONAL
+// à-la-carte top-up that fuels ONLY managed-premium (frontier / 3rd-party) inference and
+// the marketplace — BYOK and in-house xeno-rt open models never cost credits, and paid
+// credits never expire. Credits are NOT the product and must never dominate the page.
+//
 // Prices here are the LOCKED values and mirror the server billing catalog
-// (src/server/services/billingService.js), which in turn mirrors the Stripe Price
-// objects. Components should PREFER the live price from GET /api/billing/config
-// (getBillingConfig → catalog, matched by `itemId`) and fall back to `price` here — so
-// the ADVERTISED price always equals the CHARGED price, even if Stripe is re-priced.
+// (src/server/services/billingService.js), which in turn mirrors the Stripe Price objects.
+// Components should PREFER the live price from GET /api/billing/config (getLivePriceMap,
+// matched by `itemId`) and fall back to `price`/`credits` here — so the ADVERTISED price
+// always equals the CHARGED price, even if Stripe is re-priced.
 //
-// Currency is EUR (EU entity + Impressum + Stripe VAT). Tiers: Free €0 / Pro €24 /
-// Team €40-per-seat / Enterprise custom. Credit top-up packs (€10/€50/€100) come from
-// the live catalog only (they have no static tier here).
+// Currency is EUR (EU entity + Impressum + Stripe VAT). Live plan keys: pro_monthly (€24),
+// team_seat (€40/seat). Credit packs: credits_small/medium/large (€10/€50/€100).
 //
-// NOTE: features must be TRUE (enforced or real). We do NOT advertise a "priority
-// generation queue" (not implemented). "Priority support" is the human-support tier.
+// NOTE: features must be TRUE (enforced or real). No vaporware, no "remove watermark"
+// (watermarking is retired), and no false "replaces X / exclusive models" claims — XENO
+// aggregates API-accessible + open models (honest boundary).
 
 export type TierId = 'free' | 'pro' | 'team' | 'enterprise';
 
@@ -26,9 +44,21 @@ export interface PricingTier {
   cadence?: string;      // '/mo', '/seat/mo'
   line: string;          // one-line positioning
   features: string[];    // must be true/enforced — no vaporware claims
+  /** Small print under the card (founding price, seat minimum, annual note). */
+  note?: string;
   cta: string;
   href: string;          // fallback link (Checkout is used when itemId is set + authed)
   featured?: boolean;
+}
+
+/** An optional à-la-carte credit top-up pack (fuels managed-premium + marketplace only). */
+export interface CreditPack {
+  id: string;            // catalog item id (credits_small/medium/large) — used for Checkout
+  label: string;
+  credits: number;
+  price: number;
+  currency: string;
+  badge?: string;
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = { eur: '€', usd: '$', gbp: '£' };
@@ -44,22 +74,29 @@ export function formatPrice(amount: number | 'custom', code?: string): string {
   return `${currencySymbol(code)}${amount}`;
 }
 
+/** Format a credit count like "1,000 credits". */
+export function formatCredits(n: number): string {
+  return `${n.toLocaleString('en-US')} credits`;
+}
+
 export const PRICING_TIERS: PricingTier[] = [
   {
     id: 'free',
     name: 'Free',
     price: 0,
     currency: 'eur',
-    line: 'Everything you need to start creating across the whole suite.',
+    line: 'The standalone tool. Every XENO app, running on your machine.',
     features: [
-      'All apps: Pixel, Motion, Sound, Canvas & more',
-      'Image, video & audio generation',
-      'Monthly starter credit grant',
-      'Watermarked, standard-resolution outputs',
+      'Every app: Pixel, Motion, Sound, Canvas & more',
+      'Local editing & local files — works offline',
+      'Clean, full-resolution exports',
+      'Bring your own API key (BYOK)',
+      'In-house xeno-rt open models — fair-use daily cap',
       'Community support',
     ],
-    cta: 'Start free',
-    href: '/auth',
+    note: 'No card. A real tool, not a trial — but standalone: no cloud, agents or collaboration.',
+    cta: 'Download free',
+    href: '/download',
   },
   {
     id: 'pro',
@@ -68,15 +105,17 @@ export const PRICING_TIERS: PricingTier[] = [
     price: 24,
     currency: 'eur',
     cadence: '/mo',
-    line: 'For creators who ship every day — the whole suite, one balance.',
+    line: 'The connected platform, for individuals. The tools, wired together.',
     features: [
-      'Everything in Free, watermark-free',
-      'Commercial usage rights',
-      '4K & longer-form generations',
-      'Full Marketplace access',
-      'Higher monthly credit allotment',
-      'Priority support',
+      'Everything in Free, on every device',
+      'Cloud sync & multi-device continuity',
+      'Cross-app workflows between every app',
+      'Agents & automation',
+      'Private cloud projects',
+      'Managed-premium inference priority',
+      'Commercial-use license',
     ],
+    note: 'Founding price €24/mo — locked for you as long as you stay. List price rises to €30. Annual billing = 2 months free.',
     cta: 'Go Pro',
     href: '/auth',
     featured: true,
@@ -88,15 +127,17 @@ export const PRICING_TIERS: PricingTier[] = [
     price: 40,
     currency: 'eur',
     cadence: '/seat/mo',
-    line: 'For teams creating together, billed per seat.',
+    line: 'Everything in Pro, built for working together.',
     features: [
       'Everything in Pro, for every seat',
-      'Shared workspace for your team',
-      'Real-time multiplayer in Canvas',
-      'Admin roles & member management',
-      'Centralized, per-seat billing',
-      'Shared asset & component libraries',
+      'Real-time collaboration',
+      'Shared, pooled credit wallet',
+      'One consolidated invoice',
+      'Spend budgets & controls',
+      'Admin roles & governance',
+      'Workspace tenancy',
     ],
+    note: 'Priced per seat, minimum 2 seats.',
     cta: 'Start a team',
     href: '/auth',
   },
@@ -105,15 +146,24 @@ export const PRICING_TIERS: PricingTier[] = [
     name: 'Enterprise',
     price: 'custom',
     currency: 'eur',
-    line: 'For organizations at scale.',
+    line: 'For organizations that need control at scale.',
     features: [
+      'On-prem / self-host deployment',
       'SSO & SCIM provisioning',
-      'Dedicated capacity & private models',
+      'Audit logs & DPA',
       'SLA & uptime guarantees',
-      'Security review & DPA',
-      'Dedicated success manager',
+      'Dedicated support & success manager',
     ],
-    cta: 'Contact sales',
+    cta: 'Contact us',
     href: '/contact',
   },
+];
+
+// Optional à-la-carte credit packs. These come from the LIVE catalog (getLivePriceMap
+// overlays exact price by id); the values below are static fallbacks that mirror the
+// server catalog (credits_small/medium/large). Paid credits never expire.
+export const CREDIT_PACKS: CreditPack[] = [
+  { id: 'credits_small',  label: 'Starter',  credits: 1000,  price: 10,  currency: 'eur' },
+  { id: 'credits_medium', label: 'Plus',     credits: 5500,  price: 50,  currency: 'eur', badge: 'Best value' },
+  { id: 'credits_large',  label: 'Pro pack', credits: 12000, price: 100, currency: 'eur' },
 ];

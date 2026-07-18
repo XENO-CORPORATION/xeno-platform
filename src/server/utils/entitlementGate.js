@@ -1,16 +1,21 @@
 /**
- * entitlementGate — applies the Free/Pro entitlements (XENO-MONETIZATION-AND-ACCOUNT.md
- * §4) to generation requests. This is where a subscription becomes REAL: Free outputs
- * are watermarked, standard-resolution, and non-commercial; Pro removes every gate.
- * Enforced SERVER-SIDE (the client cannot bypass it).
+ * entitlementGate — applies the plan entitlements (XENO-MONETIZATION-AND-ACCOUNT.md)
+ * to SERVER-SIDE managed generation requests. v2 model: the free/paid boundary is
+ * ENFORCEABILITY, not cosmetics. `maxResolution` caps managed generation dimensions
+ * (Free = standard, Pro/Team = 4K) — this is the enforceable server-side gate and it
+ * stays. The watermark lever is RETIRED (bypassable): `watermark` is always false, so
+ * the callers' `if (ent.watermark) …` blocks are now no-ops (plumbing kept for
+ * back-compat, never gate on it). Enforced SERVER-SIDE (the client cannot bypass it).
  */
 import { getEntitlements } from '../services/billingService.js';
 
 const RES_CAP_PX = { standard: 1024, '4k': 4096 };
 
+// Fail-closed fallback — mirrors PLAN_ENTITLEMENTS.free (v2). watermark always false.
 const FREE_ENT = {
-  plan: 'free', watermark: true, commercial: false, maxResolution: 'standard',
-  priority: false, inHouseDailyLimit: 50, privateProjects: false, teamSeats: 0,
+  plan: 'free', commercial: false, maxResolution: 'standard', priority: false,
+  inHouseDailyLimit: 50, privateProjects: false, teamSeats: 0,
+  cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false,
 };
 
 /** Resolve a user's entitlements (falls back to Free on any error — fail closed). */

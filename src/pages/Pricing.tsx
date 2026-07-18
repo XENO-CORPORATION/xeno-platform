@@ -3,7 +3,40 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import MarketingPage, { Section, Prose, CheckList } from '../components/marketing/MarketingPage';
 import { startCheckout, isAuthed, getLivePriceMap } from '../services/billingService';
-import { PRICING_TIERS, formatPrice, type PricingTier } from '../config/pricing';
+import {
+  PRICING_TIERS,
+  CREDIT_PACKS,
+  formatPrice,
+  formatCredits,
+  type PricingTier,
+  type CreditPack,
+} from '../config/pricing';
+
+type LivePrice = { price: number; currency: string };
+
+/** Shared Stripe Checkout starter: signed-out users go to /auth first, signed-in users
+ *  are redirected to Stripe. Reuses the existing billing flow — no new billing surface. */
+function useCheckout() {
+  const navigate = useNavigate();
+  const [busyId, setBusyId] = React.useState<string | null>(null);
+  const start = React.useCallback(
+    async (itemId: string) => {
+      if (!isAuthed()) {
+        navigate(`/auth?return=${encodeURIComponent('/pricing')}`);
+        return;
+      }
+      setBusyId(itemId);
+      const r = await startCheckout(itemId);
+      if (!r.ok) {
+        setBusyId(null);
+        toast.error(r.error || 'Could not start checkout');
+      }
+      // On success the browser is redirected to Stripe Checkout.
+    },
+    [navigate],
+  );
+  return { start, busyId };
+}
 
 const ctaClass = (featured?: boolean) =>
   `mt-6 block rounded-[9px] px-4 py-2.5 text-center text-[13.5px] font-semibold transition-colors ${
@@ -13,29 +46,14 @@ const ctaClass = (featured?: boolean) =>
   }`;
 
 /** A plan's call-to-action: one-click Stripe Checkout for billing plans (Pro/Team),
- *  a plain link for Free / Enterprise. Sends signed-out users to /auth first. */
-const PlanCTA: React.FC<{ plan: PricingTier }> = ({ plan }) => {
-  const navigate = useNavigate();
-  const [busy, setBusy] = React.useState(false);
-
+ *  a plain link for Free (download) / Enterprise (contact). */
+const PlanCTA: React.FC<{ plan: PricingTier; checkout: ReturnType<typeof useCheckout> }> = ({ plan, checkout }) => {
   if (plan.itemId) {
-    const onClick = async () => {
-      if (!isAuthed()) {
-        navigate(`/auth?return=${encodeURIComponent('/pricing')}`);
-        return;
-      }
-      setBusy(true);
-      const r = await startCheckout(plan.itemId!);
-      if (!r.ok) {
-        setBusy(false);
-        toast.error(r.error || 'Could not start checkout');
-      }
-      // On success the browser is redirected to Stripe Checkout.
-    };
+    const busy = checkout.busyId === plan.itemId;
     return (
       <button
         type="button"
-        onClick={onClick}
+        onClick={() => checkout.start(plan.itemId!)}
         disabled={busy}
         className={`${ctaClass(plan.featured)} w-full disabled:opacity-60`}
       >
@@ -43,7 +61,6 @@ const PlanCTA: React.FC<{ plan: PricingTier }> = ({ plan }) => {
       </button>
     );
   }
-
   return (
     <Link to={plan.href} className={ctaClass(plan.featured)}>
       {plan.cta}
@@ -51,10 +68,48 @@ const PlanCTA: React.FC<{ plan: PricingTier }> = ({ plan }) => {
   );
 };
 
+/** A single optional credit pack — understated, reuses the same Checkout flow. */
+const CreditPackCard: React.FC<{
+  pack: CreditPack;
+  live?: LivePrice;
+  checkout: ReturnType<typeof useCheckout>;
+}> = ({ pack, live, checkout }) => {
+  const busy = checkout.busyId === pack.id;
+  const price = formatPrice(live ? live.price : pack.price, live ? live.currency : pack.currency);
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] px-5 py-4">
+      <div>
+        <div className="flex items-center gap-2">
+          <span className="text-[13.5px] font-semibold text-[#ece7df]">{pack.label}</span>
+          {pack.badge && (
+            <span className="rounded-full border border-[#a760ff]/40 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[#a760ff]">
+              {pack.badge}
+            </span>
+          )}
+        </div>
+        <div className="mt-0.5 text-[12px] text-[#948d83]">{formatCredits(pack.credits)}</div>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-[16px] font-semibold text-[#ece7df]">{price}</span>
+        <button
+          type="button"
+          onClick={() => checkout.start(pack.id)}
+          disabled={busy}
+          className="rounded-[8px] border border-white/[0.12] px-3 py-1.5 text-[12px] font-semibold text-[#ece7df] transition-colors hover:border-white/[0.22] disabled:opacity-60"
+        >
+          {busy ? '…' : 'Buy'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const Pricing: React.FC = () => {
+  const checkout = useCheckout();
+
   // Prefer the LIVE catalog price (which mirrors the Stripe Price actually charged) so the
-  // advertised price always equals the charged price; fall back to the static tier price.
-  const [live, setLive] = React.useState<Record<string, { price: number; currency: string }>>({});
+  // advertised price always equals the charged price; fall back to the static value.
+  const [live, setLive] = React.useState<Record<string, LivePrice>>({});
   React.useEffect(() => {
     let on = true;
     getLivePriceMap().then((m) => { if (on) setLive(m); }).catch(() => {});
@@ -70,11 +125,17 @@ const Pricing: React.FC = () => {
   return (
   <MarketingPage
     eyebrow="PRICING"
-    title="One subscription. The whole suite."
-    subtitle="Every XENO app — Pixel, Motion, Sound, Canvas and more — on one plan, powered by one shared credit balance. No per-tool subscriptions, no surprises."
+    title="The tools are free. The platform is the upgrade."
+    subtitle="Every XENO app is free and fully usable on its own — local editing, local files, clean full-resolution export. Pro and Team connect those tools into one platform: cloud sync, cross-app workflows, agents, and collaboration."
     updated="July 2026"
   >
     <Section>
+      <div className="mb-6 rounded-[12px] border border-white/[0.09] bg-[#0d0d0d] px-5 py-4 text-[13px] leading-[1.6] text-[#b6afa5]">
+        <span className="font-semibold text-[#ece7df]">Free is a real, standalone tool — not a trial.</span>{' '}
+        Every XENO app runs on your machine with clean, full-resolution export. Paid plans don't take
+        limits off the tool — they connect your tools into one platform: sync, agents and collaboration.
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {PRICING_TIERS.map((plan) => (
           <div
@@ -97,58 +158,82 @@ const Pricing: React.FC = () => {
             <div className="mt-5 flex-1">
               <CheckList items={plan.features} />
             </div>
-            <PlanCTA plan={plan} />
+            <PlanCTA plan={plan} checkout={checkout} />
+            {plan.note && (
+              <p className="mt-3 text-[11px] leading-[1.5] text-[#69635b]">{plan.note}</p>
+            )}
           </div>
         ))}
       </div>
     </Section>
 
-    <Section title="How credits work">
-      <Prose
-        blocks={[
-          {
-            p: (
-              <>
-                Credits are the single currency of XENO. Every AI action — generating an image,
-                rendering a video, upscaling a frame, transcribing audio, running an agent — costs a
-                small, predictable number of credits based on the work it does. Editing, designing,
-                and saving your projects is always free; you only spend credits when you ask the AI
-                to do something.
-              </>
-            ),
-          },
-          {
-            p: (
-              <>
-                Your plan grants credits every month, and they apply across every app from one shared
-                balance. Need more for a big push? Top up anytime. Unused context and project work
-                carry over with you — pick up exactly where you left off, on any machine, through the
-                Hub.
-              </>
-            ),
-          },
-        ]}
-      />
+    <Section title="Tool vs platform — where the line actually is">
+      <p className="mb-5 text-[14px] leading-[1.75] text-[#9b948a]">
+        The difference isn't crippled features or export limits. It's enforceability: the free tool is
+        genuinely complete on its own; paid plans switch on the connected platform around it.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] p-6">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#69635b]">The tool · Free</div>
+          <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">Runs on your machine</h3>
+          <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
+            Every app installs and runs locally — edit local files, export clean at full resolution, and
+            drive inference with your own API key or in-house open models. No account required to create.
+            It's an island: no cloud, no cross-app workflows, no agents, no collaboration.
+          </p>
+        </div>
+        <div className="rounded-[12px] border border-[#a760ff]/25 bg-[#0d0d0d] p-6">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#a760ff]">The platform · Pro &amp; Team</div>
+          <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">Wires the tools together</h3>
+          <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
+            One account turns the tools into a server-backed platform: projects sync across every device,
+            work flows between apps, agents handle the busywork, and the commercial-use license covers your
+            output. Team adds real-time collaboration and shared workspace billing on top.
+          </p>
+        </div>
+      </div>
+    </Section>
+
+    <Section title="Optional: credit packs">
+      <p className="mb-5 text-[14px] leading-[1.75] text-[#9b948a]">
+        Credits are separate from your plan and entirely optional. They're à-la-carte fuel for
+        managed-premium inference (frontier and third-party models) and the marketplace — never required
+        for bring-your-own-key or in-house open models, and never bundled into a subscription. Paid
+        credits don't expire.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {CREDIT_PACKS.map((pack) => (
+          <CreditPackCard key={pack.id} pack={pack} live={live[pack.id]} checkout={checkout} />
+        ))}
+      </div>
     </Section>
 
     <Section title="Frequently asked questions">
       <Prose
         blocks={[
           {
-            h: 'What is a credit?',
-            p: <>A credit is the unit you spend to run an AI action. One credit covers a typical generation or edit; heavier work like long video renders uses proportionally more.</>,
+            h: 'Is the free version a trial?',
+            p: <>No. Every XENO app is a real, standalone tool — local editing, local files, and clean full-resolution export, for as long as you like, with no card. Pro and Team add the connected platform on top; they don't unlock the tool.</>,
           },
           {
-            h: 'Can I change plans?',
-            p: <>Yes. Upgrade or downgrade at any time from your account settings — changes take effect on your next cycle and your remaining credits stay intact.</>,
+            h: 'What actually changes when I upgrade?',
+            p: <>The line is enforceability, not cosmetics. Free is an island — it runs on your machine with no cloud, cross-app workflows, agents or collaboration. Pro switches on the server-backed platform: cloud sync and multi-device, workflows that span apps, agents and automation, private cloud projects, managed-premium inference priority, and the commercial-use license. Team adds real-time collaboration and shared workspace billing.</>,
           },
           {
-            h: 'Do you offer refunds?',
-            p: <>We do, within the terms of our policy. See the <Link to="/refunds" className="text-[#a760ff] hover:underline">refund policy</Link> for full details on eligibility and timing.</>,
+            h: 'Do I need credits to use XENO?',
+            p: <>No. Your subscription unlocks features; credits are a separate, optional top-up. Credits fuel only managed-premium (frontier and third-party) inference and the marketplace — bring-your-own-key and in-house xeno-rt open models never cost credits.</>,
           },
           {
             h: 'Do credits expire?',
-            p: <>Monthly plan credits refresh each cycle and don't stack indefinitely, while purchased top-up credits stay valid for an extended window. Your current balance and expiry are always visible in your account.</>,
+            p: <>Purchased credits never expire. They stay in your balance until you use them — or, on Team, in a shared pooled wallet.</>,
+          },
+          {
+            h: 'Which AI models can I run?',
+            p: <>XENO aggregates the models you can already reach: API-accessible providers you connect with your own key (BYOK), plus open models that run in-house on xeno-rt. Managed-premium routes frontier models for you and meters them in credits. We don't claim exclusive models or to replace any one provider.</>,
+          },
+          {
+            h: 'Can I change plans?',
+            p: <>Yes. Upgrade or downgrade at any time from your <Link to="/overview/billing" className="text-[#a760ff] hover:underline">account billing</Link> — changes take effect on your next cycle and your remaining credits stay intact. See the <Link to="/refunds" className="text-[#a760ff] hover:underline">refund policy</Link> for eligibility and timing.</>,
           },
         ]}
       />

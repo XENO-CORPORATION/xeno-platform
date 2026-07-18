@@ -107,14 +107,21 @@ export async function getConfig() {
   return { enabled: isEnabled(), publishableKey: PUBLISHABLE, currency: CURRENCY, catalog: await getPublicCatalog() };
 }
 
-// ── Plans & entitlements ─────────────────────────────────────────────────────
+// ── Plans & entitlements (v2) ────────────────────────────────────────────────
 // Subscriptions gate FEATURES, not credits (see XENO-MONETIZATION-AND-ACCOUNT.md).
-// One entitlement source of truth, read by every product. inHouseDailyLimit
-// null = unlimited. Tune the specific limits later; the shape is the contract.
+// v2 model: the free/paid boundary is ENFORCEABILITY, not cosmetics. Free = the
+// standalone local Tool (clean output, NO watermark, full-res LOCAL export, BYOK +
+// in-house xeno-rt fair-use). Paid (Pro/Team) = the connected server-backed Platform
+// (cloud sync, cross-app, agents, collaboration, managed-premium priority, teams).
+// Enforcement is 100% SERVER-SIDE. One entitlement source of truth, read by every
+// product. inHouseDailyLimit null = unlimited. `maxResolution` now ONLY gates
+// SERVER-SIDE managed generation (capDimensions in entitlementGate) — it is NOT a
+// local-export gate.
+// deprecated (v2): watermarking retired; always false — never gate on this.
 const PLAN_ENTITLEMENTS = {
-  free: { plan: 'free', watermark: true,  commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0 },
-  pro:  { plan: 'pro',  watermark: false, commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0 },
-  team: { plan: 'team', watermark: false, commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5 },
+  free: { plan: 'free', commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0, cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
+  pro:  { plan: 'pro',  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0, cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
+  team: { plan: 'team', commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
 };
 
 /** Feature entitlements for a plan (defaults to free). */

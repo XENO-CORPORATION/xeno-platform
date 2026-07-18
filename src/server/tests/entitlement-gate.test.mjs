@@ -1,8 +1,10 @@
 /**
- * Unit tests for entitlementGate — the SERVER-SIDE Free/Pro caps that make a
- * subscription REAL (watermark / resolution / duration / commercial), enforced so the
- * client cannot bypass them (XENO-MONETIZATION-AND-ACCOUNT.md §4). Pure functions plus
- * the fail-closed `resolveEntitlements` fallback. No database required.
+ * Unit tests for entitlementGate — the SERVER-SIDE managed-generation caps that make a
+ * subscription REAL (v2: resolution / duration / commercial), enforced so the client
+ * cannot bypass them (XENO-MONETIZATION-AND-ACCOUNT.md). The watermark lever is RETIRED
+ * in v2 (bypassable) — `watermark` is always false on every tier, so gate guards that
+ * read it are no-ops. Pure functions plus the fail-closed `resolveEntitlements`
+ * fallback. No database required.
  *
  * Run: node tests/entitlement-gate.test.mjs
  */
@@ -14,7 +16,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log(`  ✓ ${m}`); } else { fail++; console.log(`  ✗ ${m}`); } };
 const eq = (a, b, m) => ok(a === b, `${m} (got ${JSON.stringify(a)})`);
 
-const FREE = { plan: 'free', watermark: true, commercial: false, maxResolution: 'standard' };
+// v2: watermark is always false (retired) on every tier.
+const FREE = { plan: 'free', watermark: false, commercial: false, maxResolution: 'standard' };
 const PRO  = { plan: 'pro',  watermark: false, commercial: true,  maxResolution: '4k' };
 
 async function main() {
@@ -77,7 +80,9 @@ async function main() {
   {
     const throwingDb = { query: () => { throw new Error('db down'); } };
     const e = await resolveEntitlements(throwingDb, 'u1');
-    ok(e.plan === 'free' && e.watermark === true && e.commercial === false, 'resolveEntitlements falls back to FREE on error (fail closed)');
+    // v2 free fallback: non-commercial, standard res, no Platform features, watermark retired (false).
+    ok(e.plan === 'free' && e.commercial === false && e.maxResolution === 'standard', 'resolveEntitlements falls back to FREE on error (fail closed)');
+    ok(e.watermark === false && e.cloudSync === false && e.crossApp === false && e.agents === false && e.collaboration === false, 'v2 free fallback: watermark retired + no Platform features');
   }
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} entitlement-gate: ${pass} passed, ${fail} failed`);

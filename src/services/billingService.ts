@@ -87,13 +87,18 @@ export async function openBillingPortal(): Promise<{ ok: boolean; error?: string
 
 export interface Entitlements {
   plan: string;
-  watermark: boolean;
-  commercial: boolean;
-  maxResolution: string;
-  priority: boolean;
-  inHouseDailyLimit: number | null; // null = unlimited
-  privateProjects: boolean;
+  commercial: boolean;              // commercial-use license — Pro+
+  maxResolution: string;            // 'standard' | '4k' — gates SERVER-SIDE managed generation only
+  priority: boolean;                // priority on the managed-inference queue — Pro+
+  inHouseDailyLimit: number | null; // null = unlimited (in-house xeno-rt fair-use)
+  privateProjects: boolean;         // cloud-stored private projects — Pro+
   teamSeats: number;
+  cloudSync: boolean;               // cloud sync + multi-device — Pro+
+  crossApp: boolean;                // cross-app workflows — Pro+
+  agents: boolean;                  // agents / automation — Pro+
+  collaboration: boolean;           // real-time collaboration — Team only
+  /** @deprecated (v2): watermarking retired; always false on every tier — never gate on this. */
+  watermark: boolean;
 }
 
 export interface BillingSummary {

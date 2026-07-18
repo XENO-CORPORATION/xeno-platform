@@ -36,6 +36,8 @@ const CLIENTS = [
   { id: 'xeno-agent-cli', name: 'XENO Agent CLI', loopback: true },
   // Web (exact-match redirect; the SPA handles OIDC in-browser)
   { id: 'xeno-web', name: 'XENO Web', loopback: false, redirects: ['https://xenostudio.ai/auth/callback'] },
+  // XENO Mail — web relying party; mail-core (backend) handles the code exchange.
+  { id: 'xeno-mail', name: 'XENO Mail', loopback: false, redirects: ['https://mail-api.xenostudio.ai/api/auth/xeno/callback'] },
   // Mobile (registered ahead of build; app-scheme redirect)
   { id: 'xeno-mobile-ios', name: 'XENO (iOS)', loopback: false, redirects: ['ai.xenostudio.app://auth/callback'] },
   { id: 'xeno-mobile-android', name: 'XENO (Android)', loopback: false, redirects: ['ai.xenostudio.app://auth/callback'] },
