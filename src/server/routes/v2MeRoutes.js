@@ -25,6 +25,22 @@ router.post('/erase', async (req, res) => {
   }
 });
 
+// POST /api/v2/me/activate-workspace — the Door-2 user's EXPLICIT choice to open
+// their XENO workspace account (traction metric: workspace_activated_at NOT NULL).
+router.post('/activate-workspace', async (req, res) => {
+  try {
+    await req.db.query(
+      'UPDATE users SET workspace_activated_at = COALESCE(workspace_activated_at, NOW()) WHERE id = $1',
+      [req.user.id],
+    );
+    console.log(`[v2/me] workspace activated by user choice: ${req.user.id}`);
+    res.json({ ok: true, workspaceActivated: true });
+  } catch (e) {
+    console.error('[v2/me/activate-workspace] error:', e.message);
+    res.status(500).json({ ok: false });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const u = req.user;
@@ -41,11 +57,14 @@ router.get('/', async (req, res) => {
       const reserved = await req.db.query('SELECT 1 FROM reserved_handles WHERE handle = $1', [handle]);
       if (reserved.rows.length === 0) xenoAddress = `${handle}@${domain}`;
     }
+    // Workspace activation state (Door-2 accounts activate by explicit choice).
+    const act = await req.db.query('SELECT workspace_activated_at FROM users WHERE id = $1', [u.id]);
     res.json({
       id: u.id,
       email: u.email,
       username: u.username ?? null,
       xenoAddress,
+      workspaceActivated: !!act.rows[0]?.workspace_activated_at,
       displayName: u.display_name ?? null,
       avatarUrl: u.avatar_url ?? null,
       emailVerified: u.email_verified ?? false,

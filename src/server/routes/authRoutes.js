@@ -199,8 +199,8 @@ async function findOrCreateOAuthUser(db, provider, profile) {
     const oauthPasswordHash = await hashPassword(oauthPlaceholderPassword);
 
     const insertResult = await db.query(
-      `INSERT INTO users (id, username, email, password_hash, display_name, avatar_url, email_verified, is_active, status, role, plan, credits, bonus_credits_claimed, created_at, updated_at, last_login)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), NOW())
+      `INSERT INTO users (id, username, email, password_hash, display_name, avatar_url, email_verified, is_active, status, role, plan, credits, bonus_credits_claimed, workspace_activated_at, created_at, updated_at, last_login)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), NOW(), NOW())
        RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed, status, role, plan`,
       [userId, finalUsername, email?.toLowerCase(), oauthPasswordHash, name || finalUsername, avatar, true, true, 'active', 'user', 'free', 0, false]
     );
@@ -446,8 +446,8 @@ router.post('/register', async (req, res) => {
     const userId = uuidv4();
 
     const result = await req.db.query(`
-      INSERT INTO users (id, username, email, password_hash, display_name, credits, bonus_credits_claimed, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      INSERT INTO users (id, username, email, password_hash, display_name, credits, bonus_credits_claimed, workspace_activated_at, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NOW())
       RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed
     `, [userId, username.toLowerCase(), email.toLowerCase(), passwordHash, display_name, 0, false]);
 

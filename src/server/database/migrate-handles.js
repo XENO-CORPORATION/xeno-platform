@@ -45,6 +45,13 @@ export async function migrateHandles(pool) {
   // one WE host, so password recovery needs an external address (else circular).
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email VARCHAR(255)');
 
+  // 1c. Workspace activation is a USER CHOICE for email-first (Door-2) accounts:
+  // the credential row exists from birth (one account system), but "is a XENO
+  // workspace user" is set only when the user explicitly activates (welcome-email
+  // CTA / in-app popup). Door-1 (xenostudio.ai signup) activates at creation.
+  // Honest traction metric: COUNT(*) WHERE workspace_activated_at IS NOT NULL.
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_activated_at TIMESTAMP');
+
   // 2. Reserved handles registry.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS reserved_handles (
