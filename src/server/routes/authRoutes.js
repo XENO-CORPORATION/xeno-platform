@@ -13,6 +13,7 @@ import fetch from 'node-fetch';
 import Redis from 'ioredis';
 import { addGrant, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
+import { sendEmail } from '../services/emailService.js';
 
 // Free-tier starter credits granted on signup so new users can try premium generation.
 const FREE_SIGNUP_CREDITS = Number(process.env.FREE_SIGNUP_CREDITS || 50);
@@ -255,14 +256,28 @@ async function verifyPassword(password, hashedPassword) {
 // Generate JWT token
 function generateToken(user) {
   return jwt.sign(
-    { 
+    {
       userId: user.id,
       email: user.email,
-      username: user.username 
+      username: user.username
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
+}
+
+// Frontend base URL for account-recovery / verification links in emails.
+const APP_URL = (process.env.APP_BASE_URL || process.env.FRONTEND_URL || 'https://xenostudio.ai').replace(/\/+$/, '');
+
+// Hash a high-entropy account token (password-reset / email-verification) for at-rest
+// storage. sha256 is correct here — the token is 256-bit random, not a low-entropy
+// password — and keeps lookup a single indexed equality instead of a per-row bcrypt scan.
+function hashToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+// A URL-safe 256-bit single-use token; only its hash is ever persisted.
+function newAccountToken() {
+  return crypto.randomBytes(32).toString('hex');
 }
 
 // SECURITY: /init and /migrate mutate the schema and (re)seed the default admin account.
@@ -442,7 +457,10 @@ router.post('/register', async (req, res) => {
     // so a new user can actually try premium generation. Non-fatal on failure.
     if (FREE_SIGNUP_CREDITS > 0) {
       try {
-        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: 'signup' });
+        // Per-user idempotency key. A constant 'signup' ref collided on uq_credit_txn_ref
+        // for EVERY user after the first (the grant threw and was silently swallowed here),
+        // so only the very first account ever registered actually received signup credits.
+        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: `signup:${user.id}` });
         user.credits = FREE_SIGNUP_CREDITS;
       } catch (grantErr) {
         console.warn('[register] signup credit grant failed:', grantErr.message);
@@ -461,6 +479,25 @@ router.post('/register', async (req, res) => {
     } catch (sessionError) {
       console.log('Session storage failed, but user created successfully:', sessionError.message);
       // Continue without session storage for now
+    }
+
+    // Issue an email-verification token + send the verification email. Non-fatal: a
+    // mail-transport hiccup must never fail an otherwise-successful registration, and
+    // verification is soft (never blocks login) so a missed email can't lock a user out.
+    try {
+      const verifyToken = newAccountToken();
+      await req.db.query(
+        `INSERT INTO email_verifications (user_id, email, token_hash, expires_at)
+         VALUES ($1, $2, $3, NOW() + INTERVAL '24 hours')`,
+        [user.id, user.email, hashToken(verifyToken)]
+      );
+      await sendEmail(req.db, 'email_verification', user.email, {
+        displayName: user.display_name || user.email,
+        verifyUrl: `${APP_URL}/verify-email?token=${verifyToken}`,
+        expiresIn: '24 hours',
+      }, user.id);
+    } catch (verifyErr) {
+      console.warn('[register] verification email failed:', verifyErr.message);
     }
 
     res.status(201).json({
@@ -586,6 +623,153 @@ router.post('/login', async (req, res) => {
       error: 'Login failed',
       // SECURITY: error.message not exposed to clients
     });
+  }
+});
+
+// ============================================
+// PASSWORD RESET
+// ============================================
+
+// POST /api/auth/forgot-password — issue a reset link.
+// Always responds 200 with the same generic message, whether or not the account
+// exists, so the endpoint can't be used to enumerate registered emails.
+router.post('/forgot-password', async (req, res) => {
+  const generic = {
+    success: true,
+    message: 'If an account exists for that email, a password reset link is on its way.',
+  };
+  try {
+    const { email } = req.body || {};
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const { rows } = await req.db.query(
+      'SELECT id, email, display_name, password_hash, is_active FROM users WHERE email = $1 LIMIT 1',
+      [normalizedEmail]
+    );
+    const user = rows[0];
+    // Only issue a reset for an active, password-capable account (OAuth-only users have
+    // no password_hash). Every other case returns the identical generic response.
+    if (user && user.is_active && user.password_hash) {
+      const resetToken = newAccountToken();
+      await req.db.query(
+        `INSERT INTO password_resets (user_id, token_hash, expires_at)
+         VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
+        [user.id, hashToken(resetToken)]
+      );
+      await sendEmail(req.db, 'password_reset', user.email, {
+        displayName: user.display_name || user.email,
+        resetUrl: `${APP_URL}/reset-password?token=${resetToken}`,
+        expiresIn: '1 hour',
+      }, user.id);
+    }
+    return res.json(generic);
+  } catch (error) {
+    // Log server-side but still return the generic 200 — surfacing a 500 here would
+    // leak that the address matched a real, erroring account.
+    console.error('Forgot-password error:', error.message);
+    return res.json(generic);
+  }
+});
+
+// POST /api/auth/reset-password — consume a reset token and set a new password.
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    if (!token || !password) {
+      return res.status(400).json({ success: false, error: 'Token and new password are required' });
+    }
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters long' });
+    }
+    // Atomic single-use claim: only an unused, unexpired token flips to used_at and
+    // returns its user, so two concurrent submits can't both reset.
+    const claim = await req.db.query(
+      `UPDATE password_resets SET used_at = NOW()
+       WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+       RETURNING user_id`,
+      [hashToken(token)]
+    );
+    if (claim.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'This reset link is invalid or has expired. Please request a new one.',
+      });
+    }
+    const userId = claim.rows[0].user_id;
+    const passwordHash = await hashPassword(password);
+    await req.db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [passwordHash, userId]);
+    // Security: a reset revokes every existing session (a compromised session must not
+    // survive the recovery) and burns any other outstanding reset tokens for this user.
+    await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]).catch(() => {});
+    await req.db.query('UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [userId]).catch(() => {});
+    return res.json({ success: true, message: 'Your password has been reset. You can now sign in with your new password.' });
+  } catch (error) {
+    console.error('Reset-password error:', error.message);
+    return res.status(500).json({ success: false, error: 'Failed to reset password' });
+  }
+});
+
+// ============================================
+// EMAIL VERIFICATION (soft — never blocks login)
+// ============================================
+
+// POST /api/auth/verify-email — consume an email-verification token.
+router.post('/verify-email', async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (!token) return res.status(400).json({ success: false, error: 'Verification token is required' });
+    const claim = await req.db.query(
+      `UPDATE email_verifications SET verified_at = NOW()
+       WHERE token_hash = $1 AND verified_at IS NULL AND expires_at > NOW()
+       RETURNING user_id`,
+      [hashToken(token)]
+    );
+    if (claim.rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'This verification link is invalid or has expired.' });
+    }
+    await req.db.query('UPDATE users SET email_verified = true WHERE id = $1', [claim.rows[0].user_id]);
+    return res.json({ success: true, message: 'Your email has been verified.' });
+  } catch (error) {
+    console.error('Verify-email error:', error.message);
+    return res.status(500).json({ success: false, error: 'Failed to verify email' });
+  }
+});
+
+// POST /api/auth/resend-verification — re-issue a verification email for the logged-in user.
+router.post('/resend-verification', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ success: false, error: 'No token provided' });
+    let decoded;
+    try { decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }); }
+    catch { return res.status(401).json({ success: false, error: 'Invalid token' }); }
+
+    const { rows } = await req.db.query(
+      'SELECT id, email, display_name, email_verified FROM users WHERE id = $1 AND is_active = true',
+      [decoded.userId]
+    );
+    const user = rows[0];
+    if (!user) return res.status(401).json({ success: false, error: 'Invalid token' });
+    if (user.email_verified) return res.json({ success: true, message: 'Your email is already verified.' });
+
+    const verifyToken = newAccountToken();
+    await req.db.query(
+      `INSERT INTO email_verifications (user_id, email, token_hash, expires_at)
+       VALUES ($1, $2, $3, NOW() + INTERVAL '24 hours')`,
+      [user.id, user.email, hashToken(verifyToken)]
+    );
+    await sendEmail(req.db, 'email_verification', user.email, {
+      displayName: user.display_name || user.email,
+      verifyUrl: `${APP_URL}/verify-email?token=${verifyToken}`,
+      expiresIn: '24 hours',
+    }, user.id);
+    return res.json({ success: true, message: 'Verification email sent.' });
+  } catch (error) {
+    console.error('Resend-verification error:', error.message);
+    return res.status(500).json({ success: false, error: 'Failed to resend verification email' });
   }
 });
 

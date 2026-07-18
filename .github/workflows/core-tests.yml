@@ -68,7 +68,7 @@ jobs:
         working-directory: src/server
         run: |
           set -euo pipefail
-          SUITES="authz-v2 oidc-v2 erasure"
+          SUITES="authz-v2 oidc-v2 erasure account-recovery"
           fail=0
           for t in $SUITES; do
             db="c_${t//-/_}"

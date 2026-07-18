@@ -218,6 +218,12 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+// Account-recovery + verification endpoints send email and mutate credentials —
+// same strict, client-IP-keyed limiter as login/register (never the collapsed proxy hop).
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
+app.use('/api/auth/verify-email', authLimiter);
+app.use('/api/auth/resend-verification', authLimiter);
 
 // Stricter rate limiter for AI generation endpoints: 30 requests per minute
 const generationLimiter = rateLimit({
