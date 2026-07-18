@@ -219,6 +219,7 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/register-with-handle', authLimiter);
 // Account-recovery + verification endpoints send email and mutate credentials —
 // same strict, client-IP-keyed limiter as login/register (never the collapsed proxy hop).
 app.use('/api/auth/forgot-password', authLimiter);

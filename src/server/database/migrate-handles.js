@@ -41,6 +41,10 @@ export async function migrateHandles(pool) {
     'CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_key ON users (lower(username))',
   );
 
+  // 1b. Recovery channel for email-first (Door-2) accounts: their auth email is
+  // one WE host, so password recovery needs an external address (else circular).
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email VARCHAR(255)');
+
   // 2. Reserved handles registry.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS reserved_handles (

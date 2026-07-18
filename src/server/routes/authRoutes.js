@@ -2042,4 +2042,103 @@ router.delete('/linked-accounts/:provider', async (req, res) => {
   }
 });
 
+// ── XENO Mail Door-2: email-first account creation ──────────────────────────
+// Creating a XENO Mail address IS creating the (one) central account: username =
+// handle, email = handle@<MAIL_PRIMARY_DOMAIN> (auto-verified — we host it).
+// The Gmail model: the mail address is the acquisition surface; the workspace
+// account is what the user silently gets. See xeno-mail/docs/IDENTITY-AND-MAILBOX.md.
+
+const XM_HANDLE_RE = /^[a-z0-9](?:[a-z0-9]|[._-](?![._-])){1,30}[a-z0-9]$/;
+
+async function xmCheckHandleFree(db, handle) {
+  if (handle.length < 3 || handle.length > 32 || !XM_HANDLE_RE.test(handle)) return 'invalid';
+  const reserved = await db.query('SELECT 1 FROM reserved_handles WHERE handle = $1', [handle]);
+  if (reserved.rows.length > 0) return 'reserved';
+  const taken = await db.query('SELECT 1 FROM users WHERE lower(username) = $1 LIMIT 1', [handle]);
+  if (taken.rows.length > 0) return 'taken';
+  return null;
+}
+
+// Public availability check for the signup form (no auth — pre-account).
+router.get('/handle-available', async (req, res) => {
+  try {
+    const handle = String(req.query.handle || '').trim().toLowerCase();
+    const domain = (process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai').toLowerCase();
+    const reason = await xmCheckHandleFree(req.db, handle);
+    if (reason) return res.json({ ok: false, reason, handle });
+    res.json({ ok: true, handle, address: `${handle}@${domain}` });
+  } catch (e) {
+    console.error('[handle-available] error:', e.message);
+    res.status(500).json({ ok: false, reason: 'error' });
+  }
+});
+
+// Create the account FROM a handle (email-first signup).
+router.post('/register-with-handle', async (req, res) => {
+  try {
+    const { handle: rawHandle, password, recoveryEmail } = req.body || {};
+    const handle = String(rawHandle || '').trim().toLowerCase();
+    const domain = (process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai').toLowerCase();
+
+    if (!handle || !password) {
+      return res.status(400).json({ success: false, error: 'Handle and password are required' });
+    }
+    if (String(password).length < 8) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters long' });
+    }
+    // Recovery channel: an EXTERNAL email (not one we host — that would be circular).
+    const recovery = recoveryEmail ? String(recoveryEmail).trim().toLowerCase() : null;
+    if (recovery && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recovery) || recovery.endsWith(`@${domain}`))) {
+      return res.status(400).json({ success: false, error: 'Recovery email must be a valid external address' });
+    }
+
+    const reason = await xmCheckHandleFree(req.db, handle);
+    if (reason) {
+      const msg = { invalid: 'Invalid handle', reserved: 'That handle is reserved', taken: 'That address is already taken' }[reason];
+      return res.status(409).json({ success: false, error: msg, reason });
+    }
+
+    const address = `${handle}@${domain}`;
+    const passwordHash = await hashPassword(password);
+    const userId = uuidv4();
+
+    const result = await req.db.query(`
+      INSERT INTO users (id, username, email, password_hash, display_name, email_verified, recovery_email, credits, bonus_credits_claimed, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, NOW(), NOW())
+      RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed
+    `, [userId, handle, address, passwordHash, handle, recovery, 0, false]);
+    const user = result.rows[0];
+
+    // Free-tier starter credits (same as /register; non-fatal).
+    if (FREE_SIGNUP_CREDITS > 0) {
+      try {
+        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: `signup:${user.id}` });
+        user.credits = FREE_SIGNUP_CREDITS;
+      } catch (grantErr) {
+        console.warn('[register-with-handle] signup credit grant failed:', grantErr.message);
+      }
+    }
+
+    const token = generateToken(user);
+    try {
+      const tokenHash = await bcrypt.hash(token, 10);
+      await req.db.query(`
+        INSERT INTO user_sessions (user_id, token_hash, session_token, expires_at, ip_address, user_agent)
+        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)
+      `, [user.id, tokenHash, token, req.ip, req.get('User-Agent')]);
+    } catch (sessionError) {
+      console.log('[register-with-handle] session storage failed, user created:', sessionError.message);
+    }
+
+    console.log(`[register-with-handle] created account ${address} (${user.id})`);
+    res.json({ success: true, token, user: { ...user, xenoAddress: address } });
+  } catch (e) {
+    if (e && e.code === '23505') {
+      return res.status(409).json({ success: false, error: 'That address is already taken', reason: 'taken' });
+    }
+    console.error('[register-with-handle] error:', e.message);
+    res.status(500).json({ success: false, error: 'Registration failed' });
+  }
+});
+
 export default router;
