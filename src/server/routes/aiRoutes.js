@@ -9,6 +9,7 @@ import { meterPremiumChat, meterPremiumChatStream } from '../utils/inferenceMete
 import { estimateChatCostMicro, estimateMessageTokens } from '../utils/creditCosts.js';
 import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured } from '../utils/xenoChat.js';
+import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -147,6 +148,11 @@ router.post('/chat', async (req, res) => {
           message: 'In-house models run locally via XENO Hub today. Server-side xeno-rt is not yet available — use a premium model or your own key.',
         });
       }
+      // Enforce the plan's in-house daily cap (free = 50/day; pro/team = unlimited).
+      // Checked AFTER the availability guard so a 400-ing request never burns quota;
+      // fails OPEN (loudly) if the counter infrastructure errors.
+      const capVerdict = await enforceInHouseDailyLimit(req.db, userId);
+      if (!capVerdict.allowed) return res.status(429).json(limitExceededBody(capVerdict));
       const response = await callInhouse(baseUrl, route.premium.providerModel, messages, temperature, max_tokens, toolExtra);
       return res.json({ ...response, path: 'inhouse', metered: false });
     }

@@ -24,7 +24,9 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniquePrefix = uuidv4();
-    cb(null, `${uniquePrefix}-${file.originalname}`);
+    // Sanitize originalname to prevent path traversal (same pattern as index.js)
+    const safeName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${uniquePrefix}-${safeName}`);
   }
 });
 
@@ -57,7 +59,8 @@ const getUserId = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.default.verify(token, JWT_SECRET);
+    // Pin the algorithm (alg-confusion defense — matches middleware/auth.js)
+    const decoded = jwt.default.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const userCheck = await req.db.query('SELECT id FROM users WHERE id = $1 AND is_active = true', [decoded.userId]);
 
     if (userCheck.rows.length === 0) {

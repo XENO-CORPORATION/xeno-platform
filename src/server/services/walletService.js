@@ -11,20 +11,37 @@
  */
 import crypto from 'crypto';
 import {
-  getBalanceV2, addGrant, recordUsageV2, setSpendCap, MICRO_PER_CREDIT,
+  getBalanceV2, addGrant, recordUsageV2, reverseUsage, setSpendCap, MICRO_PER_CREDIT,
 } from '../utils/creditLedgerV2.js';
 import { check } from '../utils/authzReBAC.js';
 
 export const wholeFromMicro = (m) => Math.floor(Number(m || 0) / MICRO_PER_CREDIT);
 
-/** Create the workspace's wallet row (owner_kind='workspace') if absent. Idempotent. */
+/**
+ * Create the workspace's wallet row (owner_kind='workspace') if absent. Idempotent.
+ * SAFETY: a conflict on an EXISTING row must never silently re-type it — the old
+ * `ON CONFLICT DO UPDATE SET owner_kind='workspace'` would convert a PERSONAL
+ * wallet into a workspace wallet if a workspace id ever collided with (or was
+ * passed as) a user id, hijacking a user's money. Now: insert if absent; if a row
+ * already exists it must ALREADY be a workspace wallet, else error loudly.
+ */
 export async function ensureWorkspaceWallet(db, workspaceId) {
-  await db.query(
+  const ins = await db.query(
     `INSERT INTO credit_accounts (user_id, owner_kind, balance, lifetime_earned, lifetime_spent)
      VALUES ($1, 'workspace', 0, 0, 0)
-     ON CONFLICT (user_id) DO UPDATE SET owner_kind = 'workspace'`,
+     ON CONFLICT (user_id) DO NOTHING
+     RETURNING id`,
     [workspaceId],
   );
+  if (ins.rows.length > 0) return; // freshly created
+  const existing = await db.query('SELECT owner_kind FROM credit_accounts WHERE user_id = $1', [workspaceId]);
+  const kind = existing.rows[0]?.owner_kind;
+  if (kind !== 'workspace') {
+    console.error(`[wallet] ensureWorkspaceWallet REFUSED: wallet for ${workspaceId} exists with owner_kind='${kind}' — refusing to re-type a personal wallet as a workspace wallet`);
+    const e = new Error(`wallet for ${workspaceId} already exists with owner_kind='${kind}' (refusing to convert)`);
+    e.code = 'WALLET_KIND_CONFLICT';
+    throw e;
+  }
 }
 
 /** Balance view (whole credits + micro) for any subject id (user OR workspace). */
@@ -36,8 +53,33 @@ export async function walletBalance(db, subjectId) {
     availableMicro: Number(b.availableMicro ?? micro),
     postedMicro: micro,
     pendingMicro: Number(b.pendingMicro ?? 0),
+    // getBalanceV2 now plumbs the account's real freeze state through balanceView.
     is_frozen: !!b.is_frozen,
   };
+}
+
+/**
+ * Durable record of a FAILED saga compensation — money is in a known-bad state
+ * (user debited, workspace not credited, reversal also failed) and an operator
+ * must reconcile. Never throws (this is the last-resort recorder); if even the
+ * insert fails it logs the full context so nothing is silently lost.
+ */
+async function recordCompensationFailure(db, { userId, workspaceId, amountMicro, txnRef, reason, error }) {
+  const context = { workspaceId, reason, error: String(error?.message || error) };
+  try {
+    await db.query(
+      `INSERT INTO ledger_compensation_failures (user_id, amount_micro, txn_ref, reason, context)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [userId, String(amountMicro), txnRef, reason, JSON.stringify(context)],
+    );
+  } catch (insertErr) {
+    console.error('[wallet] FAILED to persist ledger_compensation_failures row:', insertErr.message);
+  }
+  console.error(
+    `[wallet] SAGA COMPENSATION FAILURE: user=${userId} workspace=${workspaceId} amount=${amountMicro}µcr `
+    + `txnRef=${txnRef} reason=${reason} error=${String(error?.message || error)} — user was debited without the `
+    + 'workspace being credited; manual reconciliation required (see ledger_compensation_failures)',
+  );
 }
 
 /**
@@ -66,12 +108,29 @@ export async function transferToWorkspace(db, fromUserId, workspaceId, credits) 
     throw e;
   }
 
-  // 2) Credit the workspace wallet. On failure, refund the user (saga rollback).
+  // 2) Credit the workspace wallet. On failure, COMPENSATE with a proper
+  // REVERSING entry keyed to the original debit's transactionId — reverseUsage
+  // restores balance + decrements lifetime_spent + re-credits a neutral
+  // paid-priority lot (the old addGrant(kind:'promo') compensation minted NEW
+  // money: it inflated lifetime_earned and jumped the drawdown queue), and is
+  // idempotent per txnId (uq_credit_txn_ref) so a crash-retry can't double-refund.
+  // If the compensation ITSELF fails, write a durable failure record — never a
+  // silent catch — so the debited-but-not-credited state is visible and fixable.
   try {
     await ensureWorkspaceWallet(db, workspaceId);
     await addGrant(db, workspaceId, { amountMicro: costMicro, kind: 'paid', sourceRef: txnId });
   } catch (e) {
-    await addGrant(db, fromUserId, { amountMicro: costMicro, kind: 'promo', sourceRef: `refund:${txnId}` }).catch(() => {});
+    try {
+      await reverseUsage(db, fromUserId, costMicro, {
+        refId: txnId,
+        description: `ws-transfer-rollback:${workspaceId}`,
+      });
+    } catch (compErr) {
+      await recordCompensationFailure(db, {
+        userId: fromUserId, workspaceId, amountMicro: costMicro, txnRef: txnId,
+        reason: 'ws-transfer grant failed and reversal failed', error: compErr,
+      });
+    }
     throw e;
   }
 

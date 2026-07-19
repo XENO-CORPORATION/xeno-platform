@@ -14,6 +14,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
+import { assertPublicHttpUrl } from '../utils/urlGuard.js';
 
 const router = Router();
 
@@ -53,14 +54,19 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'URL is required' });
     }
 
-    // Validate URL
+    // Validate URL: http/https + public host only (SSRF guard — deliveries are
+    // server-side POSTs, so internal/private targets must be rejected)
     try {
       const parsed = new URL(url);
       if (!['http:', 'https:'].includes(parsed.protocol)) {
         return res.status(400).json({ success: false, error: 'URL must use HTTP or HTTPS' });
       }
-    } catch {
-      return res.status(400).json({ success: false, error: 'Invalid URL format' });
+      await assertPublicHttpUrl(url);
+    } catch (e) {
+      return res.status(400).json({
+        success: false,
+        error: e.code === 'ERR_URL_FORBIDDEN' ? 'Webhook URL must point to a public host' : 'Invalid URL format',
+      });
     }
 
     if (!Array.isArray(events) || events.length === 0) {
@@ -109,7 +115,20 @@ router.put('/:id', async (req, res) => {
     let idx = 1;
 
     if (url !== undefined) {
-      try { new URL(url); } catch { return res.status(400).json({ success: false, error: 'Invalid URL' }); }
+      // Same validation as create: http/https + public host only (the update path
+      // previously only checked parseability — an SSRF bypass).
+      try {
+        const parsed = new URL(url);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          return res.status(400).json({ success: false, error: 'URL must use HTTP or HTTPS' });
+        }
+        await assertPublicHttpUrl(url);
+      } catch (e) {
+        return res.status(400).json({
+          success: false,
+          error: e.code === 'ERR_URL_FORBIDDEN' ? 'Webhook URL must point to a public host' : 'Invalid URL',
+        });
+      }
       updates.push(`url = $${idx++}`);
       values.push(url);
     }

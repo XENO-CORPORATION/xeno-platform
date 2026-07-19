@@ -122,11 +122,23 @@ const PLAN_ENTITLEMENTS = {
   free: { plan: 'free', commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0, cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
   pro:  { plan: 'pro',  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0, cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
   team: { plan: 'team', commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+  // Staff / internal-service accounts (prod has real users with plan='internal').
+  // NOT sellable — never in the CATALOG. All platform features enabled so internal
+  // tooling and service accounts are never gated as free-tier. teamSeats 0: an
+  // internal account is not itself a team container.
+  internal: { plan: 'internal', commercial: true, maxResolution: '4k', priority: true, inHouseDailyLimit: null, privateProjects: true, teamSeats: 0, cloudSync: true, crossApp: true, agents: true, collaboration: true, watermark: false },
 };
 
-/** Feature entitlements for a plan (defaults to free). */
+// Legacy/stray plan names seen in prod that must NOT silently fall back to free.
+// ultra → pro is a PROPOSED mapping (legacy 'ultra' subscribers get pro
+// entitlements) — pending user ratification; adjust here if a different target
+// tier is decided.
+const PLAN_ALIASES = { ultra: 'pro' };
+
+/** Feature entitlements for a plan (aliases resolved; defaults to free). */
 export function entitlementsFor(plan) {
-  return PLAN_ENTITLEMENTS[plan] || PLAN_ENTITLEMENTS.free;
+  const resolved = PLAN_ALIASES[plan] || plan;
+  return PLAN_ENTITLEMENTS[resolved] || PLAN_ENTITLEMENTS.free;
 }
 
 const planForItemId = (itemId) => CATALOG.find((i) => i.id === itemId)?.plan || null;

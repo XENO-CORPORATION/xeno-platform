@@ -20,7 +20,6 @@ import {
   deleteConversion
 } from '../models/conversionModels.js';
 import { addConversionJob, getJobStatus } from '../services/conversionWorker.js';
-import { optionalAuthMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -51,7 +50,9 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniquePrefix = uuidv4();
-    cb(null, `${uniquePrefix}-${file.originalname}`);
+    // Sanitize originalname to prevent path traversal (same pattern as index.js)
+    const safeName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${uniquePrefix}-${safeName}`);
   }
 });
 
@@ -63,40 +64,46 @@ const upload = multer({
 });
 
 /**
- * Middleware to get user ID from JWT token or fallback to x-user-id header
- * Uses optional auth to support both JWT and legacy header-based auth
+ * SECURITY: identity comes ONLY from the authenticated user set by authMiddleware
+ * (applied at the /api/conversion mount in index.js). The legacy x-user-id header
+ * and dev 'default-user' fallbacks were an IDOR (any caller could impersonate any
+ * user) and have been removed.
  */
 const getUserId = (req, res, next) => {
-  // Priority 1: JWT token (req.user is set by optionalAuthMiddleware)
   if (req.user && req.user.id) {
     req.userId = req.user.id;
     return next();
   }
-  
-  // Priority 2: x-user-id header (for backward compatibility during migration)
-  const headerUserId = req.headers['x-user-id'];
-  if (headerUserId) {
-    req.userId = headerUserId;
-    return next();
-  }
-  
-  // Priority 3: Default for development/testing
-  if (process.env.NODE_ENV === 'development') {
-    req.userId = 'default-user';
-    return next();
-  }
-  
-  // In production without auth, return error
   return res.status(401).json({
     success: false,
-    error: 'Authentication required. Please provide a valid JWT token or x-user-id header.'
+    error: 'Authentication required.'
   });
 };
 
 /**
+ * Allowlist of output formats the conversion worker actually supports
+ * (see services/conversionWorker.js: convertImage / convertMediaFile /
+ * convertDocument + the /formats endpoint below). Anything else is rejected
+ * before it can reach the worker (arbitrary-extension file-write guard).
+ */
+const ALLOWED_OUTPUT_FORMATS = new Set([
+  // image (sharp)
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'tiff', 'tif', 'bmp',
+  // video (ffmpeg)
+  'mp4', 'avi', 'mov', 'mkv', 'webm',
+  // audio (ffmpeg)
+  'mp3', 'wav', 'aac', 'flac', 'ogg', 'm4a', 'opus',
+  // document
+  'pdf', 'docx', 'txt', 'html', 'md',
+]);
+
+const isAllowedOutputFormat = (fmt) =>
+  typeof fmt === 'string' && ALLOWED_OUTPUT_FORMATS.has(fmt.toLowerCase());
+
+/**
  * POST /api/conversion/upload - Upload files for conversion
  */
-router.post('/upload', optionalAuthMiddleware, getUserId, upload.array('files'), async (req, res) => {
+router.post('/upload', getUserId, upload.array('files'), async (req, res) => {
   try {
     const files = req.files;
     const userId = req.userId;
@@ -173,7 +180,7 @@ router.post('/upload', optionalAuthMiddleware, getUserId, upload.array('files'),
 /**
  * POST /api/conversion/convert - Start file conversion
  */
-router.post('/convert', optionalAuthMiddleware, getUserId, async (req, res) => {
+router.post('/convert', getUserId, async (req, res) => {
   try {
     const { fileId, outputFormat, settings = {} } = req.body;
     const userId = req.userId;
@@ -182,6 +189,13 @@ router.post('/convert', optionalAuthMiddleware, getUserId, async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'fileId and outputFormat are required'
+      });
+    }
+
+    if (!isAllowedOutputFormat(outputFormat)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Unsupported output format'
       });
     }
 
@@ -242,7 +256,7 @@ router.post('/convert', optionalAuthMiddleware, getUserId, async (req, res) => {
  * POST /api/conversion/batch - Start batch file conversion
  * Converts multiple files at once with the same settings
  */
-router.post('/batch', optionalAuthMiddleware, getUserId, async (req, res) => {
+router.post('/batch', getUserId, async (req, res) => {
   try {
     const { fileIds, outputFormat, settings = {} } = req.body;
     const userId = req.userId;
@@ -258,6 +272,13 @@ router.post('/batch', optionalAuthMiddleware, getUserId, async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'outputFormat is required'
+      });
+    }
+
+    if (!isAllowedOutputFormat(outputFormat)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Unsupported output format'
       });
     }
 
@@ -340,7 +361,7 @@ router.post('/batch', optionalAuthMiddleware, getUserId, async (req, res) => {
 /**
  * GET /api/conversion/status/:id - Get conversion status
  */
-router.get('/status/:id', optionalAuthMiddleware, getUserId, async (req, res) => {
+router.get('/status/:id', getUserId, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.userId;
@@ -393,7 +414,7 @@ router.get('/status/:id', optionalAuthMiddleware, getUserId, async (req, res) =>
 /**
  * GET /api/conversion/download/:id - Download converted file
  */
-router.get('/download/:id', optionalAuthMiddleware, getUserId, async (req, res) => {
+router.get('/download/:id', getUserId, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.userId;
@@ -444,7 +465,7 @@ router.get('/download/:id', optionalAuthMiddleware, getUserId, async (req, res) 
 /**
  * GET /api/conversion/history - Get user's conversion history
  */
-router.get('/history', optionalAuthMiddleware, getUserId, async (req, res) => {
+router.get('/history', getUserId, async (req, res) => {
   try {
     const userId = req.userId;
     const limit = parseInt(req.query.limit) || 50;
@@ -490,7 +511,7 @@ router.get('/history', optionalAuthMiddleware, getUserId, async (req, res) => {
 /**
  * GET /api/conversion/storage - Get user's storage usage
  */
-router.get('/storage', optionalAuthMiddleware, getUserId, async (req, res) => {
+router.get('/storage', getUserId, async (req, res) => {
   try {
     const userId = req.userId;
     const usage = await getStorageUsage(userId);
@@ -519,7 +540,7 @@ router.get('/storage', optionalAuthMiddleware, getUserId, async (req, res) => {
 /**
  * DELETE /api/conversion/:id - Delete a conversion
  */
-router.delete('/:id', optionalAuthMiddleware, getUserId, async (req, res) => {
+router.delete('/:id', getUserId, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.userId;

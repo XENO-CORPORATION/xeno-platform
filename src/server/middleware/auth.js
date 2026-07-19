@@ -32,15 +32,30 @@ export async function resolveAuthedUser(req) {
   if (!token) return { status: 401, error: 'Authentication token required' };
 
   let userId = null;
+  let sid = null;
   const header = jwt.decode(token, { complete: true })?.header;
   if (header && header.alg !== 'HS256' && header.kid) {
     const key = await getKeyByKid(req.db, header.kid);
     if (!key) return { status: 401, error: 'Invalid authentication token' };
     userId = jwt.verify(token, key.publicKey, { algorithms: [key.alg] }).sub;
   } else {
-    userId = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }).userId;
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    userId = decoded.userId;
+    sid = decoded.sid || null;
   }
   if (!userId) return { status: 401, error: 'Invalid authentication token' };
+
+  // Session-backed tokens: a JWT carrying a `sid` claim is only valid while its
+  // user_sessions row (id = sid) exists and is unexpired — logout/password-reset/
+  // account-deletion delete the row and the token dies instantly. Tokens WITHOUT
+  // a sid (issued pre-deploy) keep the old stateless behavior and age out in <=7d.
+  if (sid) {
+    const sess = await req.db.query(
+      'SELECT 1 FROM user_sessions WHERE id = $1 AND user_id = $2 AND expires_at > NOW()',
+      [sid, userId],
+    );
+    if (sess.rows.length === 0) return { status: 401, error: 'Session expired or revoked' };
+  }
 
   const result = await req.db.query(
     `SELECT id, username, email, display_name, avatar_url, created_at, email_verified, is_active
@@ -101,22 +116,16 @@ export const authMiddleware = async (req, res, next) => {
 export const optionalAuthMiddleware = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    
+
     if (token) {
-      const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-
-      const result = await req.db.query(`
-        SELECT id, username, email, display_name, avatar_url, 
-               created_at, email_verified, is_active
-        FROM users 
-        WHERE id = $1 AND is_active = true
-      `, [decoded.userId]);
-
-      if (result.rows.length > 0) {
-        req.user = result.rows[0];
+      // Unified resolution (incl. the sid session-revocation check) so a
+      // logged-out token can't keep attaching a user on optional-auth surfaces.
+      const resolved = await resolveAuthedUser(req);
+      if (resolved.user) {
+        req.user = resolved.user;
       }
     }
-    
+
     next();
 
   } catch (error) {
@@ -124,5 +133,26 @@ export const optionalAuthMiddleware = async (req, res, next) => {
     next();
   }
 };
+
+/**
+ * Admin guard — authMiddleware's user SELECT omits `role`, and `is_admin` does not
+ * exist as a column, so guards must query the DB (same pattern as marketplaceRoutes).
+ * Mount AFTER authMiddleware (needs req.user + req.db).
+ */
+export async function requireAdmin(req, res, next) {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const { rows } = await req.db.query('SELECT role FROM users WHERE id = $1', [req.user.id]);
+    if (rows[0]?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin access required' });
+    }
+    next();
+  } catch (error) {
+    console.error('Admin guard error:', error.message);
+    return res.status(500).json({ success: false, error: 'Authorization check failed' });
+  }
+}
 
 export default authMiddleware;

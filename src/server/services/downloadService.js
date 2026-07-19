@@ -14,38 +14,57 @@ const __dirname = path.dirname(__filename);
 
 // Downloads directory
 const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
-const COOKIES_FILE = path.join(__dirname, '..', 'downloads', 'cookies.txt');
+const COOKIES_DIR = path.join(__dirname, '..', 'downloads', 'cookies');
 
 // Ensure downloads directory exists
 if (!fs.existsSync(DOWNLOADS_DIR)) {
   fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+}
+if (!fs.existsSync(COOKIES_DIR)) {
+  fs.mkdirSync(COOKIES_DIR, { recursive: true });
 }
 
 // Active downloads tracking
 const activeDownloads = new Map();
 
 /**
- * Save cookies for YouTube authentication
+ * SECURITY: cookie jars are PER-USER (previously one global cookies.txt was
+ * shared by every user's yt-dlp invocations — any user's session cookies were
+ * used for, and overwritable by, everyone). Filenames are derived from a
+ * sanitized user id only.
+ */
+const cookiesFileFor = (userId) => {
+  const safe = String(userId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  return path.join(COOKIES_DIR, `cookies-${safe}.txt`);
+};
+
+/**
+ * Save cookies for YouTube authentication (per user)
+ * @param {string} userId - owning user id
  * @param {string} cookiesContent - Netscape format cookies
  */
-export const saveCookies = (cookiesContent) => {
-  fs.writeFileSync(COOKIES_FILE, cookiesContent, 'utf8');
+export const saveCookies = (userId, cookiesContent) => {
+  if (!userId) throw new Error('userId is required to save cookies');
+  fs.writeFileSync(cookiesFileFor(userId), cookiesContent, 'utf8');
   return true;
 };
 
 /**
- * Check if cookies file exists
+ * Check if a cookies file exists for this user
  */
-export const hasCookies = () => {
-  return fs.existsSync(COOKIES_FILE);
+export const hasCookies = (userId) => {
+  if (!userId) return false;
+  return fs.existsSync(cookiesFileFor(userId));
 };
 
 /**
- * Delete cookies file
+ * Delete this user's cookies file
  */
-export const deleteCookies = () => {
-  if (fs.existsSync(COOKIES_FILE)) {
-    fs.unlinkSync(COOKIES_FILE);
+export const deleteCookies = (userId) => {
+  if (!userId) return true;
+  const file = cookiesFileFor(userId);
+  if (fs.existsSync(file)) {
+    fs.unlinkSync(file);
   }
   return true;
 };
@@ -62,7 +81,7 @@ const detectPlatform = (url) => {
 /**
  * Fetch media information without downloading
  */
-export const fetchMediaInfo = async (url) => {
+export const fetchMediaInfo = async (url, userId = null) => {
   return new Promise((resolve, reject) => {
     const platform = detectPlatform(url);
 
@@ -76,9 +95,9 @@ export const fetchMediaInfo = async (url) => {
 
     // Add platform-specific options
     if (platform === 'youtube') {
-      // Use cookies if available (required for bot detection bypass)
-      if (hasCookies()) {
-        args.push('--cookies', COOKIES_FILE);
+      // Use this user's cookies if available (required for bot detection bypass)
+      if (hasCookies(userId)) {
+        args.push('--cookies', cookiesFileFor(userId));
       }
       // Try multiple clients to bypass bot detection
       args.push('--extractor-args', 'youtube:player_client=web');
@@ -89,8 +108,8 @@ export const fetchMediaInfo = async (url) => {
       args.push('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1');
     }
 
-    // Add URL last
-    args.push(url);
+    // Add URL last, after `--` so a crafted URL can never be parsed as a yt-dlp option
+    args.push('--', url);
 
     const ytdlp = spawn('yt-dlp', args);
 
@@ -160,11 +179,13 @@ export const startDownload = async (url, options = {}) => {
     quality = 'best',
     format = 'mp4',
     audioOnly = false,
+    userId = null,
   } = options;
 
-  // Create download entry
+  // Create download entry (userId scopes every later status/stream/delete access)
   const downloadInfo = {
     id: downloadId,
+    userId,
     url,
     platform,
     status: 'starting',
@@ -193,8 +214,8 @@ export const startDownload = async (url, options = {}) => {
 
   // Platform-specific options (same as fetchMediaInfo)
   if (platform === 'youtube') {
-    if (hasCookies()) {
-      args.push('--cookies', COOKIES_FILE);
+    if (hasCookies(userId)) {
+      args.push('--cookies', cookiesFileFor(userId));
     }
     args.push('--extractor-args', 'youtube:player_client=web');
     args.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
@@ -228,8 +249,8 @@ export const startDownload = async (url, options = {}) => {
     }
   }
 
-  // Add URL last
-  args.push(url);
+  // Add URL last, after `--` so a crafted URL can never be parsed as a yt-dlp option
+  args.push('--', url);
 
   // Start download process
   const ytdlp = spawn('yt-dlp', args);
@@ -326,27 +347,34 @@ const parseProgress = (downloadId, output) => {
 };
 
 /**
- * Get download status
+ * Get download status — scoped to the requesting user. Returns null (treated as
+ * 404 by the routes) when the record belongs to someone else.
  */
-export const getDownloadStatus = (downloadId) => {
-  return activeDownloads.get(downloadId) || null;
+export const getDownloadStatus = (downloadId, userId) => {
+  const download = activeDownloads.get(downloadId);
+  if (!download) return null;
+  if (userId !== undefined && download.userId !== userId) return null;
+  return download;
 };
 
 /**
- * Get all active downloads
+ * Get active downloads for a user (never the whole cross-user map)
  */
-export const getAllDownloads = () => {
-  return Array.from(activeDownloads.values());
+export const getAllDownloads = (userId) => {
+  const all = Array.from(activeDownloads.values());
+  if (userId === undefined) return all; // internal use (cleanup)
+  return all.filter(d => d.userId === userId);
 };
 
 /**
- * Get download file path for serving
+ * Get download file path for serving — scoped to the requesting user
  */
-export const getDownloadFile = (downloadId) => {
+export const getDownloadFile = (downloadId, userId) => {
   const download = activeDownloads.get(downloadId);
   if (!download || download.status !== 'completed') {
     return null;
   }
+  if (userId !== undefined && download.userId !== userId) return null;
   return {
     filepath: download.filepath,
     filename: download.filename,
@@ -355,14 +383,18 @@ export const getDownloadFile = (downloadId) => {
 };
 
 /**
- * Delete a download
+ * Delete a download — scoped to the requesting user. Returns false when the
+ * record exists but belongs to someone else (routes 404).
  */
-export const deleteDownload = (downloadId) => {
+export const deleteDownload = (downloadId, userId) => {
   const download = activeDownloads.get(downloadId);
-  if (download && download.filepath && fs.existsSync(download.filepath)) {
+  if (!download) return false;
+  if (userId !== undefined && download.userId !== userId) return false;
+  if (download.filepath && fs.existsSync(download.filepath)) {
     fs.unlinkSync(download.filepath);
   }
   activeDownloads.delete(downloadId);
+  return true;
 };
 
 /**

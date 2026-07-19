@@ -86,7 +86,7 @@ export const llmLimiter = rateLimit({
     retryAfter: 60,
   },
   keyGenerator: (req) => {
-    const userId = req.user?.id || req.headers['x-user-id'];
+    const userId = req.user?.id; // never the spoofable x-user-id header
     return userId ? `llm:user:${userId}` : `llm:ip:${normalizeIp(req)}`;
   },
 });
@@ -104,7 +104,7 @@ export const imageGenLimiter = rateLimit({
     retryAfter: 60,
   },
   keyGenerator: (req) => {
-    const userId = req.user?.id || req.headers['x-user-id'];
+    const userId = req.user?.id; // never the spoofable x-user-id header
     return userId ? `imggen:user:${userId}` : `imggen:ip:${normalizeIp(req)}`;
   },
 });
@@ -122,7 +122,7 @@ export const videoGenLimiter = rateLimit({
     retryAfter: 300,
   },
   keyGenerator: (req) => {
-    const userId = req.user?.id || req.headers['x-user-id'];
+    const userId = req.user?.id; // never the spoofable x-user-id header
     return userId ? `vidgen:user:${userId}` : `vidgen:ip:${normalizeIp(req)}`;
   },
 });
@@ -168,10 +168,17 @@ export const uploadLimiter = rateLimit({
   max: 50,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   message: {
     success: false,
     error: 'Too many uploads. Please wait before uploading more files.',
     retryAfter: 600,
+  },
+  // Per-user when authed, else per-client IP (CF-Connecting-IP) — never the
+  // collapsed proxy hop (which would be ONE shared global bucket).
+  keyGenerator: (req) => {
+    const userId = req.user?.id;
+    return userId ? `upload:user:${userId}` : `upload:ip:${normalizeIp(req)}`;
   },
 });
 

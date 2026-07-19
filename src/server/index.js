@@ -313,7 +313,9 @@ app.use(cookieParser());
 // IMPORTANT: Mount browser proxy routes BEFORE JSON body parser
 // This allows browser proxy to handle raw POST bodies from proxied pages
 // The browserRoutes handles its own body parsing
-app.use('/api/browser', express.raw({ type: '*/*', limit: '10mb' }), browserRoutes);
+// SECURITY: databaseMiddleware + authMiddleware are REQUIRED — these routes drive
+// docker exec / Browserless / server-side fetch and must never be anonymous.
+app.use('/api/browser', databaseMiddleware, authMiddleware, express.raw({ type: '*/*', limit: '10mb' }), browserRoutes);
 console.log('🌐 Browser routes integrated: /api/browser/* (mounted early for raw body handling)');
 
 // Stripe billing webhook — MUST be mounted BEFORE express.json so the raw request
@@ -417,8 +419,10 @@ app.use('/api/filesystem', (req, res, next) => {
   next();
 }, fileSystemRoutes);
 
-// Conversion routes
-app.use('/api/conversion', conversionRoutes);
+// Conversion routes — SECURITY: require auth at the mount (identity comes only from
+// req.user, never from headers). uploadLimiter caps the file-upload endpoint.
+app.use('/api/conversion/upload', uploadLimiter);
+app.use('/api/conversion', databaseMiddleware, authMiddleware, conversionRoutes);
 
 // Video Studio routes (with auth and database middleware)
 app.use('/api/video', databaseMiddleware, authMiddleware, videoRoutes);
@@ -433,6 +437,8 @@ console.log('🎯 Xeno AI proxy routes integrated: /api/xeno/*');
 // Auth is applied PER-ROUTE inside the router: catalog/listing reads use
 // optionalAuthMiddleware (public, entitlement-aware), while commerce/developer/
 // admin routes require authMiddleware. Mounting with only databaseMiddleware.
+// Rate-limit the metered pay-per-use invoke surface (keyed per user, IP fallback).
+app.use('/api/marketplace/invoke', llmLimiter);
 app.use('/api/marketplace', databaseMiddleware, marketplaceRoutes);
 app.use('/api/billing', databaseMiddleware, billingRoutes);
 console.log('💳 Billing routes integrated: /api/billing/* (checkout, portal, config)');
@@ -532,6 +538,8 @@ console.log('🖼️ Office Canvas routes integrated: /api/office-canvas/*');
 
 // Download API routes (YouTube, Twitter, Instagram, TikTok downloads)
 // Extension releases are public (handled by publicPaths in auth middleware)
+// Rate-limit download starts (spawns yt-dlp — expensive).
+app.use('/api/download/start', llmLimiter);
 app.use('/api/download', databaseMiddleware, authMiddleware, downloadRoutes);
 // Public, stable product download deep-links (PRODUCT-PAGES-SPEC.md §4).
 // No auth / no DB — resolves the current installer from R2 and 302s to it.
@@ -847,6 +855,12 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
     if (req.body.task === 'image') {
         console.log('Handling conversational image generation task with Responses API');
         let imgUserId, imgCost = 0, imgCharged = false, imgEnt = null;
+        // Deterministic per-request id: the debit uses `imggen:<id>` as its ledger
+        // transactionId and every refund path uses `imggen-refund:<id>` — so retries
+        // dedupe and a double-refund is impossible. Assigned a real implementation
+        // right after the debit succeeds; a no-op before that.
+        const imgRequestId = randomUUID();
+        let refundImgCharge = async () => {};
         try {
             const { messages, previousResponseId, previousImageGenerationCallId, imageContexts } = req.body;
 
@@ -886,11 +900,30 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             imgUserId = req.user?.id;
             imgEnt = await resolveEntitlements(req.db, imgUserId);
             imgCost = getCreditCost('image', 'gpt-high');
-            const imgDebit = await deductCredits(req.db, imgUserId, imgCost);
+            const imgDebit = await deductCredits(req.db, imgUserId, imgCost, {
+                transactionId: `imggen:${imgRequestId}`,
+                surface: 'chat',
+                operation: 'image-generation',
+                model: 'gpt-image-1',
+            });
             if (!imgDebit.success) {
                 return res.status(402).json({ error: 'Insufficient credits', required: imgCost, current: imgDebit.currentCredits ?? 0 });
             }
             imgCharged = true;
+            refundImgCharge = async () => {
+                const refundRef = `imggen-refund:${imgRequestId}`;
+                try {
+                    const r = await refundCredits(req.db, imgUserId, imgCost, {
+                        transactionId: refundRef,
+                        operation: 'image-generation',
+                    });
+                    if (!r?.success) {
+                        console.error(`[imggen] refund FAILED user=${imgUserId} ref=${refundRef}:`, r?.error || 'unknown');
+                    }
+                } catch (refundErr) {
+                    console.error(`[imggen] refund ERROR user=${imgUserId} ref=${refundRef}:`, refundErr.message);
+                }
+            };
 
             console.log(`Extracted image prompt (truncated): "${imagePrompt.substring(0, 50)}${imagePrompt.length > 50 ? '... [image prompt truncated for logging]' : ''}"`);
 
@@ -904,7 +937,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             // through /v1/images/edits for continuity.
             if (!xenoImageClient) {
                 console.error('XENO_API_KEY is missing — image gateway is not configured.');
-                if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
+                if (imgCharged) await refundImgCharge();
                 return res.status(500).json({ error: 'Server configuration error: image gateway is not configured.' });
             }
 
@@ -936,7 +969,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                         outImageData = (await watermarkBuffer(Buffer.from(rawB64, 'base64'))).toString('base64');
                     } catch (wmErr) {
                         console.error('[watermark] image task failed (fail-closed, refunding):', wmErr.message);
-                        if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
+                        if (imgCharged) await refundImgCharge();
                         return res.status(500).json({ error: 'Image generation failed. Please try again.' });
                     }
                 }
@@ -982,7 +1015,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 });
                 const comboB64 = await itemToBase64(editResponse?.data?.[0]);
                 if (!comboB64) {
-                    if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
+                    if (imgCharged) await refundImgCharge();
                     return res.status(500).json({ error: 'Image combination failed to return data.' });
                 }
                 return await finishImage(comboB64, 'gpt-image-1-edit', `combination_${Date.now()}`, `combination_${Date.now()}`);
@@ -992,7 +1025,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             // already switches to it). Refund + 400 here (the pre-gateway code 400'd WITHOUT a
             // refund — a latent charge-and-give-nothing bug, fixed).
             if (previousImageGenerationCallId && String(previousImageGenerationCallId).startsWith('edited_img_')) {
-                if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
+                if (imgCharged) await refundImgCharge();
                 return res.status(400).json({
                     error: 'Edited image context requires image data. Please use edit_image task instead.',
                     requiresImageData: true,
@@ -1015,13 +1048,13 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             const genB64 = await itemToBase64(genResponse?.data?.[0]);
             if (!genB64) {
                 console.error('No image data returned from gateway:', genResponse);
-                if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
+                if (imgCharged) await refundImgCharge();
                 return res.status(500).json({ error: 'Image generation failed: No image data returned.' });
             }
             return await finishImage(genB64, 'gpt-image-1', `xeno_resp_${randomUUID()}`, `xeno_imgcall_${randomUUID()}`);
 
         } catch (error) {
-            if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
+            if (imgCharged) await refundImgCharge();
             console.error('Error in conversational image generation task:', error);
             return res.status(500).json({ error: 'Failed to generate image. Please try again.' });
         }

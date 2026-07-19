@@ -100,6 +100,14 @@ router.put('/canvases/:canvasId', async (req, res) => {
     }
 
     const accessRow = access.rows[0];
+
+    // SECURITY: role enforcement — a 'viewer' collaborator can read but never
+    // write. Only the owner or an 'editor' may update the canvas.
+    const effectiveRole = accessRow.is_owner ? 'owner' : accessRow.role;
+    if (effectiveRole !== 'owner' && effectiveRole !== 'editor') {
+      return res.status(403).json({ success: false, error: 'Viewers cannot modify this canvas' });
+    }
+
     const safeExpectedVersion =
       typeof expectedVersion === 'number'
         ? expectedVersion

@@ -253,13 +253,16 @@ async function verifyPassword(password, hashedPassword) {
   return await bcrypt.compare(password, hashedPassword);
 }
 
-// Generate JWT token
-function generateToken(user) {
+// Generate JWT token. When `sid` is provided the token is SESSION-BACKED: it is
+// only valid while its user_sessions row (id = sid) exists, so logout/password
+// reset/account deletion can revoke it instantly (see resolveAuthedUser).
+function generateToken(user, sid) {
   return jwt.sign(
     {
       userId: user.id,
       email: user.email,
-      username: user.username
+      username: user.username,
+      ...(sid ? { sid } : {})
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
@@ -278,6 +281,37 @@ function hashToken(token) {
 // A URL-safe 256-bit single-use token; only its hash is ever persisted.
 function newAccountToken() {
   return crypto.randomBytes(32).toString('hex');
+}
+
+// Issue a session-backed JWT: mint sid, sign the token with it, and record the
+// session row (id = sid, token_hash = sha256(jwt) — NEVER the plaintext JWT).
+// If the session write fails we fall back LOUDLY to a stateless (no-sid) token so
+// login still succeeds — a sid token without its row would be dead on arrival.
+async function issueSessionToken(db, user, req) {
+  const sid = uuidv4();
+  const token = generateToken(user, sid);
+  try {
+    await db.query(
+      `INSERT INTO user_sessions (id, user_id, token_hash, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)`,
+      [sid, user.id, hashToken(token), req.ip, req.get('User-Agent')]
+    );
+    return token;
+  } catch (sessionError) {
+    console.error('[auth] SESSION WRITE FAILED — issuing stateless fallback token (revocation unavailable for it):', sessionError.message);
+    return generateToken(user); // legacy stateless token; ages out in <= JWT_EXPIRES_IN
+  }
+}
+
+// Is a decoded sid-token's session gone/expired? Legacy tokens (no sid) are never
+// "revoked" here — they keep the old stateless behavior until they age out.
+async function sessionRevoked(db, decoded) {
+  if (!decoded?.sid) return false;
+  const r = await db.query(
+    'SELECT 1 FROM user_sessions WHERE id = $1 AND user_id = $2 AND expires_at > NOW()',
+    [decoded.sid, decoded.userId]
+  );
+  return r.rows.length === 0;
 }
 
 // SECURITY: /init and /migrate mutate the schema and (re)seed the default admin account.
@@ -349,22 +383,10 @@ router.post('/init', async (req, res) => {
       console.log('Note: Some columns may already exist in users table');
     }
 
-    // Create sessions table for additional security
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS user_sessions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        token_hash VARCHAR(255) NOT NULL,
-        session_token VARCHAR(512),
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW(),
-        ip_address INET,
-        user_agent TEXT
-      )
-    `);
-
-    // Ensure existing deployments have session_token column used by login/register routes
-    await req.db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(512)`);
+    // user_sessions schema is owned by database/migrations/ (baseline +
+    // 20260719010000-unify-user-sessions.sql) — runAllMigrations applies it at boot,
+    // fail-closed, before this route is reachable. No inline DDL here (the previous
+    // inline CREATE drifted from the migration schema and made one writer always fail).
 
     // Check if default admin user exists
     const adminCheck = await req.db.query(
@@ -467,19 +489,8 @@ router.post('/register', async (req, res) => {
       }
     }
 
-    const token = generateToken(user);
-
-    // Store session (simplified for now - we can add session tracking later)
-    try {
-      const tokenHash = await bcrypt.hash(token, 10);
-      await req.db.query(`
-        INSERT INTO user_sessions (user_id, token_hash, session_token, expires_at, ip_address, user_agent)
-        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)
-      `, [user.id, tokenHash, token, req.ip, req.get('User-Agent')]);
-    } catch (sessionError) {
-      console.log('Session storage failed, but user created successfully:', sessionError.message);
-      // Continue without session storage for now
-    }
+    // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
+    const token = await issueSessionToken(req.db, user, req);
 
     // Issue an email-verification token + send the verification email. Non-fatal: a
     // mail-transport hiccup must never fail an otherwise-successful registration, and
@@ -594,20 +605,8 @@ router.post('/login', async (req, res) => {
     // Update last login
     await req.db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
 
-    // Generate token
-    const token = generateToken(user);
-
-    // Store session (simplified for now)
-    try {
-      const tokenHash = await bcrypt.hash(token, 10);
-      await req.db.query(`
-        INSERT INTO user_sessions (user_id, token_hash, session_token, expires_at, ip_address, user_agent)
-        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)
-      `, [user.id, tokenHash, token, req.ip, req.get('User-Agent')]);
-    } catch (sessionError) {
-      console.log('Session storage failed, but login successful:', sessionError.message);
-      // Continue without session storage for now
-    }
+    // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
+    const token = await issueSessionToken(req.db, user, req);
 
     res.json({
       success: true,
@@ -714,7 +713,9 @@ router.post('/reset-password', async (req, res) => {
     await req.db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [passwordHash, userId]);
     // Security: a reset revokes every existing session (a compromised session must not
     // survive the recovery) and burns any other outstanding reset tokens for this user.
-    await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]).catch(() => {});
+    await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]).catch((e) => {
+      console.error('[auth] reset-password session revocation failed:', e.message);
+    });
     await req.db.query('UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [userId]).catch(() => {});
     return res.json({ success: true, message: 'Your password has been reset. You can now sign in with your new password.' });
   } catch (error) {
@@ -757,6 +758,9 @@ router.post('/resend-verification', async (req, res) => {
     let decoded;
     try { decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }); }
     catch { return res.status(401).json({ success: false, error: 'Invalid token' }); }
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
 
     const { rows } = await req.db.query(
       'SELECT id, email, display_name, email_verified FROM users WHERE id = $1 AND is_active = true',
@@ -798,6 +802,9 @@ router.get('/validate', async (req, res) => {
 
     // Verify JWT token
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     
     // Get user from database
     const result = await req.db.query(`
@@ -860,11 +867,22 @@ router.get('/validate', async (req, res) => {
 router.post('/logout', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    
+
     if (token) {
-      // Remove session from database
-      const tokenHash = await bcrypt.hash(token, 10);
-      await req.db.query('DELETE FROM user_sessions WHERE token_hash = $1', [tokenHash]);
+      // The old code did `bcrypt.hash(token)` and looked that up — bcrypt hashes are
+      // salted, so the lookup NEVER matched and logout was a guaranteed no-op.
+      // Now: a sid-token deletes its own session row (instant revocation, enforced by
+      // resolveAuthedUser); anything else falls back to the sha256(token) lookup.
+      let decoded = null;
+      try { decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }); } catch { /* fall through */ }
+      if (decoded?.sid) {
+        await req.db.query(
+          'DELETE FROM user_sessions WHERE id = $1 AND user_id = $2',
+          [decoded.sid, decoded.userId]
+        );
+      } else {
+        await req.db.query('DELETE FROM user_sessions WHERE token_hash = $1', [hashToken(token)]);
+      }
     }
 
     res.json({
@@ -892,37 +910,20 @@ router.post('/migrate', async (req, res) => {
     const adminEmail = 'admin@xenostudio.local';
     const legacyAdminEmail = 'admin@xenostudio.ai';
 
-    // Step 1: Drop and recreate user_sessions table to ensure correct schema
-    try {
-      await req.db.query(`DROP TABLE IF EXISTS user_sessions`);
-      await req.db.query(`
-        CREATE TABLE user_sessions (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_id UUID NOT NULL,
-          token_hash VARCHAR(255) NOT NULL,
-          session_token VARCHAR(512),
-          expires_at TIMESTAMP NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW(),
-          ip_address INET,
-          user_agent TEXT
-        )
-      `);
-      console.log('✅ user_sessions table recreated with correct schema');
-    } catch (error) {
-      console.error('Error recreating user_sessions table:', error);
-      throw error;
-    }
+    // Step 1: user_sessions schema is owned by database/migrations/ — this route
+    // previously did `DROP TABLE IF EXISTS user_sessions` and recreated it, which
+    // destroyed every live session on a world-reachable(-behind-setup-token) endpoint.
+    // The route is now strictly ADDITIVE: no DROPs, ever.
 
-    // Step 2: Add missing columns to existing users table
+    // Step 2: Add missing columns to existing users table (additive-only)
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255)`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP`);
-    await req.db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(512)`);
     console.log('✅ User table columns added/verified');
-    
+
     // Step 3: Check if admin user exists and update/create it
     const adminCheck = await req.db.query(
       'SELECT id FROM users WHERE id = $1 OR email IN ($2, $3)',
@@ -983,6 +984,9 @@ router.get('/me', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     
     const result = await req.db.query(`
       SELECT id, username, email, display_name, avatar_url, 
@@ -1047,6 +1051,9 @@ router.put('/profile', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     const { display_name, username, avatar_url } = req.body;
 
     // Build dynamic update query
@@ -1156,6 +1163,9 @@ router.put('/password', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     const { current_password, new_password } = req.body;
 
     if (!current_password || !new_password) {
@@ -1203,9 +1213,15 @@ router.put('/password', async (req, res) => {
       [newPasswordHash, decoded.userId]
     );
 
+    // Security: a password change revokes EVERY session (incl. this one) — any
+    // stolen sid-token dies here. The client must sign in again with the new password.
+    await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [decoded.userId]).catch((e) => {
+      console.error('[auth] password-change session revocation failed:', e.message);
+    });
+
     res.json({
       success: true,
-      message: 'Password changed successfully'
+      message: 'Password changed successfully. Please sign in again.'
     });
 
   } catch (error) {
@@ -1238,6 +1254,9 @@ router.get('/usage', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
 
     // Get user credits info
     const userResult = await req.db.query(
@@ -1316,6 +1335,9 @@ router.post('/use-credits', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     const { feature, amount } = req.body;
 
     if (!feature || !amount || amount <= 0) {
@@ -1395,6 +1417,9 @@ router.delete('/account', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     const { password } = req.body;
 
     if (!password) {
@@ -1469,6 +1494,9 @@ router.post('/claim-bonus', async (req, res) => {
 
     // Verify JWT token
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     
     // Get user from database with credits and bonus status
     const userResult = await req.db.query(
@@ -1643,24 +1671,9 @@ router.get('/google/callback', async (req, res) => {
       username: googleUser.email?.split('@')[0]
     });
 
-    // Generate JWT
-    const jwtToken = jwt.sign(
-      { userId: user.id, email: user.email, username: user.username },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
-
-    // Store session
-    try {
-      const tokenHash = crypto.createHash('sha256').update(jwtToken).digest('hex');
-      await req.db.query(
-        `INSERT INTO user_sessions (user_id, access_token_hash, expires_at, ip_address, device_type, browser, created_at)
-         VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4, $5, NOW())`,
-        [user.id, tokenHash, req.ip, 'web', req.get('User-Agent')?.substring(0, 100)]
-      );
-    } catch (e) {
-      console.log('Session storage note:', e.message);
-    }
+    // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
+    // password login so revocation works identically for OAuth sign-ins).
+    const jwtToken = await issueSessionToken(req.db, user, req);
 
     // Redirect with token
     const returnUrl = stateData.returnUrl || '/overview';
@@ -1787,24 +1800,9 @@ router.get('/github/callback', async (req, res) => {
       username: githubUser.login
     });
 
-    // Generate JWT
-    const jwtToken = jwt.sign(
-      { userId: user.id, email: user.email, username: user.username },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
-
-    // Store session
-    try {
-      const tokenHash = crypto.createHash('sha256').update(jwtToken).digest('hex');
-      await req.db.query(
-        `INSERT INTO user_sessions (user_id, access_token_hash, expires_at, ip_address, device_type, browser, created_at)
-         VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4, $5, NOW())`,
-        [user.id, tokenHash, req.ip, 'web', req.get('User-Agent')?.substring(0, 100)]
-      );
-    } catch (e) {
-      console.log('Session storage note:', e.message);
-    }
+    // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
+    // password login so revocation works identically for OAuth sign-ins).
+    const jwtToken = await issueSessionToken(req.db, user, req);
 
     const returnUrl = stateData.returnUrl || '/overview';
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
@@ -1922,24 +1920,9 @@ router.get('/twitter/callback', async (req, res) => {
       username: twitterUser.username
     });
 
-    // Generate JWT
-    const jwtToken = jwt.sign(
-      { userId: user.id, email: user.email, username: user.username },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
-
-    // Store session
-    try {
-      const tokenHash = crypto.createHash('sha256').update(jwtToken).digest('hex');
-      await req.db.query(
-        `INSERT INTO user_sessions (user_id, access_token_hash, expires_at, ip_address, device_type, browser, created_at)
-         VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4, $5, NOW())`,
-        [user.id, tokenHash, req.ip, 'web', req.get('User-Agent')?.substring(0, 100)]
-      );
-    } catch (e) {
-      console.log('Session storage note:', e.message);
-    }
+    // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
+    // password login so revocation works identically for OAuth sign-ins).
+    const jwtToken = await issueSessionToken(req.db, user, req);
 
     const returnUrl = stateData.returnUrl || '/overview';
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
@@ -1963,6 +1946,9 @@ router.get('/linked-accounts', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
 
     const result = await req.db.query(
       `SELECT provider, provider_email, provider_username, provider_avatar_url, created_at
@@ -1999,6 +1985,9 @@ router.delete('/linked-accounts/:provider', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     const { provider } = req.params;
 
     if (!['google', 'github', 'twitter'].includes(provider)) {
@@ -2119,16 +2108,8 @@ router.post('/register-with-handle', async (req, res) => {
       }
     }
 
-    const token = generateToken(user);
-    try {
-      const tokenHash = await bcrypt.hash(token, 10);
-      await req.db.query(`
-        INSERT INTO user_sessions (user_id, token_hash, session_token, expires_at, ip_address, user_agent)
-        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)
-      `, [user.id, tokenHash, token, req.ip, req.get('User-Agent')]);
-    } catch (sessionError) {
-      console.log('[register-with-handle] session storage failed, user created:', sessionError.message);
-    }
+    // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
+    const token = await issueSessionToken(req.db, user, req);
 
     console.log(`[register-with-handle] created account ${address} (${user.id})`);
     res.json({ success: true, token, user: { ...user, xenoAddress: address } });

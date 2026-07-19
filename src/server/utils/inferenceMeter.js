@@ -36,6 +36,22 @@ async function withRetry(fn, { attempts = 3, baseMs = 50 } = {}) {
   throw lastErr;
 }
 
+/**
+ * Meter-failure observability. A swallowed settle/void failure silently forfeits
+ * revenue (the hold expires uncharged) or strands a reservation — so every
+ * best-effort metering failure is (a) counted on a monotonic in-process counter
+ * and (b) logged with the grep-able `[meter-failure]` tag + full money context.
+ * Semantics stay NON-FATAL: the user's completion is never failed by metering.
+ */
+export const meterFailureCounters = { settle: 0, void: 0 };
+function reportMeterFailure(kind, err, ctx) {
+  meterFailureCounters[kind] = (meterFailureCounters[kind] || 0) + 1;
+  console.error(
+    `[meter-failure] ${kind} failed (count=${meterFailureCounters[kind]}):`,
+    { ...ctx, error: String(err?.message || err) },
+  );
+}
+
 /** Map a ledger error code to an HTTP-shaped error the route can return directly. */
 function meteringError(code) {
   if (code === 'INSUFFICIENT_CREDITS') {
@@ -91,7 +107,9 @@ export async function meterPremiumChat(db, userId, opts) {
   try {
     result = await run();
   } catch (e) {
-    await voidHoldV2(db, userId, holdId).catch(() => {});
+    await voidHoldV2(db, userId, holdId).catch((ve) => reportMeterFailure('void', ve, {
+      userId, holdId, surface: 'ai_chat', operation: 'chat.completion', heldMicro: estimateMicro,
+    }));
     throw e;
   }
 
@@ -114,8 +132,13 @@ export async function meterPremiumChat(db, userId, opts) {
   try {
     const settled = await settleHoldV2(db, userId, holdId, actualMicro);
     costMicro = settled?.settledMicro ?? costMicro;
-  } catch {
-    // leave hold to expire; do not fail the response
+  } catch (e) {
+    // leave hold to expire; do not fail the response — but NEVER silently: an
+    // unsettled hold is forfeited revenue.
+    reportMeterFailure('settle', e, {
+      userId, holdId, surface: 'ai_chat', operation: 'chat.completion',
+      heldMicro: estimateMicro, actualMicro, model,
+    });
   }
 
   return {
@@ -205,7 +228,9 @@ export async function meterMediaGeneration(db, userId, opts) {
   try {
     result = await run();
   } catch (e) {
-    await voidHoldV2(db, userId, holdId).catch(() => {});
+    await voidHoldV2(db, userId, holdId).catch((ve) => reportMeterFailure('void', ve, {
+      userId, holdId, surface, operation, heldMicro: totalMicro,
+    }));
     throw e;
   }
 
@@ -224,9 +249,13 @@ export async function meterMediaGeneration(db, userId, opts) {
     // can never double-charge.
     const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro));
     costMicro = settled?.settledMicro ?? costMicro;
-  } catch {
+  } catch (e) {
     // all retries failed — leave the hold to expire rather than fail a completed generation
     // (getBalanceV2/holdV2 ignore expired holds, so a stranded hold self-heals at expiry).
+    // Loud, never silent: an unsettled settle = forfeited revenue.
+    reportMeterFailure('settle', e, {
+      userId, holdId, surface, operation, heldMicro: totalMicro, actualMicro, actualCount, model,
+    });
   }
 
   return {
@@ -309,9 +338,14 @@ export async function meterPremiumChatStream(db, userId, opts) {
     try {
       const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro));
       costMicro = settled?.settledMicro ?? costMicro;
-    } catch {
+    } catch (e) {
       // All retries failed — leave the hold to expire (short 120s stream expiry)
       // rather than failing the user's stream. `done` is already set, so this is final.
+      // Loud, never silent: an unsettled stream settle = forfeited revenue.
+      reportMeterFailure('settle', e, {
+        userId, holdId, surface: 'ai_chat', operation: 'chat.completion.stream',
+        heldMicro: estimateMicro, actualMicro, model,
+      });
     }
     return {
       costMicro,
@@ -327,7 +361,9 @@ export async function meterPremiumChatStream(db, userId, opts) {
   async function voidHold() {
     if (done) return;
     done = true;
-    await withRetry(() => voidHoldV2(db, userId, holdId)).catch(() => {});
+    await withRetry(() => voidHoldV2(db, userId, holdId)).catch((e) => reportMeterFailure('void', e, {
+      userId, holdId, surface: 'ai_chat', operation: 'chat.completion.stream', heldMicro: estimateMicro,
+    }));
   }
 
   return {

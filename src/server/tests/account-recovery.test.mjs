@@ -12,8 +12,12 @@ import express from 'express';
 import pg from 'pg';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import authRoutes from '../routes/authRoutes.js';
+
+// Same default the server uses when JWT_SECRET is unset (non-production test env).
+const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 let pass = 0, fail = 0;
@@ -27,6 +31,7 @@ CREATE TABLE IF NOT EXISTS users (
   email_verified boolean DEFAULT false, is_active boolean DEFAULT true,
   credits bigint DEFAULT 0, bonus_credits_claimed boolean DEFAULT false,
   status text DEFAULT 'active', role text DEFAULT 'user', plan text DEFAULT 'free',
+  recovery_email text, workspace_activated_at timestamptz,
   last_login timestamptz, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS user_sessions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -62,6 +67,10 @@ async function main() {
     const res = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
     return { status: res.status, json: await res.json().catch(() => ({})) };
   };
+  const get = async (path, headers = {}) => {
+    const res = await fetch(base + path, { headers });
+    return { status: res.status, json: await res.json().catch(() => ({})) };
+  };
   const uid = async (email) => (await pool.query('SELECT id FROM users WHERE email=$1', [email])).rows[0]?.id;
   const grantCount = async (userId, ref) => (await pool.query('SELECT count(*)::int n FROM credit_grants WHERE user_id=$1 AND source_ref=$2', [userId, ref])).rows[0].n;
 
@@ -79,6 +88,30 @@ async function main() {
   // ---- B2c: register issues an email-verification token ----
   ok((await pool.query('SELECT count(*)::int n FROM email_verifications WHERE user_id=$1', [id1])).rows[0].n === 1, 'register issued an email_verifications token');
   ok((await pool.query('SELECT email_verified FROM users WHERE id=$1', [id1])).rows[0].email_verified === false, 'new user starts unverified (soft-gate)');
+
+  // ---- Session-backed tokens: sid claim + hashed session row, logout revokes ----
+  const login1 = await post('/login', { email: 'u2@t.example', password: 'password1' });
+  ok(login1.status === 200 && login1.json.token, 'login u2 → 200 with token');
+  const loginDecoded = jwt.decode(login1.json.token);
+  ok(typeof loginDecoded?.sid === 'string' && loginDecoded.sid.length > 0, 'login token carries a sid claim');
+  const sessRow = (await pool.query('SELECT token_hash, session_token FROM user_sessions WHERE id=$1 AND user_id=$2', [loginDecoded.sid, id2])).rows[0];
+  ok(!!sessRow, 'login created a user_sessions row with id = sid');
+  ok(sessRow.token_hash === sha256(login1.json.token), 'session row stores sha256(jwt) as token_hash');
+  ok(sessRow.session_token == null, 'plaintext JWT is NOT stored (session_token is NULL)');
+  const v1 = await get('/validate', { Authorization: `Bearer ${login1.json.token}` });
+  ok(v1.status === 200 && v1.json.success, 'validate (live session) → 200');
+  const lo = await post('/logout', {}, { Authorization: `Bearer ${login1.json.token}` });
+  ok(lo.status === 200 && lo.json.success, 'logout → 200');
+  ok((await pool.query('SELECT count(*)::int n FROM user_sessions WHERE id=$1', [loginDecoded.sid])).rows[0].n === 0, 'logout deleted the session row');
+  const v2 = await get('/validate', { Authorization: `Bearer ${login1.json.token}` });
+  ok(v2.status === 401, 'logged-out token → 401 (revocation actually works now)');
+  const me2 = await get('/me', { Authorization: `Bearer ${login1.json.token}` });
+  ok(me2.status === 401, 'logged-out token → 401 on /me too');
+
+  // ---- Legacy (no-sid) tokens issued pre-deploy keep working until they age out ----
+  const legacyToken = jwt.sign({ userId: id2, email: 'u2@t.example', username: 'u2' }, JWT_SECRET, { expiresIn: '1h' });
+  const vLegacy = await get('/validate', { Authorization: `Bearer ${legacyToken}` });
+  ok(vLegacy.status === 200 && vLegacy.json.success, 'legacy no-sid token still accepted (backward compat)');
 
   // ---- B2b: forgot-password never leaks account existence ----
   const f1 = await post('/forgot-password', { email: 'u1@t.example' });
@@ -98,6 +131,9 @@ async function main() {
   const newHash = (await pool.query('SELECT password_hash FROM users WHERE id=$1', [id1])).rows[0].password_hash;
   ok(await bcrypt.compare('brandnew123', newHash), 'password actually updated to the new value');
   ok((await pool.query('SELECT count(*)::int n FROM user_sessions WHERE user_id=$1', [id1])).rows[0].n === 0, 'reset revoked all existing sessions');
+  // The register-time token (a sid token) must be DEAD after the reset revoked its session.
+  const vOld = await get('/validate', { Authorization: `Bearer ${r1.json.token}` });
+  ok(vOld.status === 401, 'pre-reset sid token → 401 after password reset (stolen tokens die)');
   const rp2 = await post('/reset-password', { token: 'RESET_ME', password: 'againagain1' });
   ok(rp2.status === 400 && !rp2.json.success, 'reset-password (reused token) → 400 single-use');
   await pool.query(`INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES ($1,$2, now()-interval '1 hour')`, [id1, sha256('EXPIRED')]);
@@ -120,7 +156,10 @@ async function main() {
   const noauth = await post('/resend-verification', {});
   ok(noauth.status === 401, 'resend-verification (no token) → 401');
   const beforeV = (await pool.query('SELECT count(*)::int n FROM email_verifications WHERE user_id=$1', [id1])).rows[0].n;
-  const resend = await post('/resend-verification', {}, { Authorization: `Bearer ${r1.json.token}` });
+  // r1's original token died with the password reset above — sign in again for a live one.
+  const relogin1 = await post('/login', { email: 'u1@t.example', password: 'brandnew123' });
+  ok(relogin1.status === 200 && relogin1.json.token, 'u1 re-login with the NEW password → 200');
+  const resend = await post('/resend-verification', {}, { Authorization: `Bearer ${relogin1.json.token}` });
   ok(resend.status === 200 && resend.json.success, 'resend-verification (authed, unverified) → 200');
   ok((await pool.query('SELECT count(*)::int n FROM email_verifications WHERE user_id=$1', [id1])).rows[0].n === beforeV + 1, 'resend-verification issued a fresh token');
 

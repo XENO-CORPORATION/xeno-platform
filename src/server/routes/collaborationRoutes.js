@@ -155,11 +155,21 @@ router.get('/sessions/:sessionId', authMiddleware, async (req, res) => {
     const { sessionId } = req.params;
     const userId = req.user.id;
 
+    // SECURITY: scope to owner/participants — previously ANY authenticated user
+    // could fetch any session by id, and the row includes share_token (which
+    // grants join access).
     const sessionResult = await pool.query(
       `SELECT s.*,
               CASE WHEN s.owner_id = $2 THEN true ELSE false END as is_owner
        FROM os_collaborative_sessions s
-       WHERE s.id = $1 AND s.is_active = true`,
+       WHERE s.id = $1 AND s.is_active = true
+         AND (
+           s.owner_id = $2
+           OR EXISTS (
+             SELECT 1 FROM os_session_participants p
+             WHERE p.session_id = s.id AND p.user_id = $2
+           )
+         )`,
       [sessionId, userId]
     );
 
@@ -549,6 +559,24 @@ router.patch('/sessions/:sessionId/cursor', authMiddleware, async (req, res) => 
 router.get('/sessions/:sessionId/participants', authMiddleware, async (req, res) => {
   try {
     const { sessionId } = req.params;
+    const userId = req.user.id;
+
+    // SECURITY: only the owner or a participant may list participants
+    const membership = await pool.query(
+      `SELECT 1 FROM os_collaborative_sessions s
+       WHERE s.id = $1 AND s.is_active = true
+         AND (
+           s.owner_id = $2
+           OR EXISTS (
+             SELECT 1 FROM os_session_participants p
+             WHERE p.session_id = s.id AND p.user_id = $2
+           )
+         )`,
+      [sessionId, userId]
+    );
+    if (membership.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
 
     const participants = await pool.query(
       `SELECT id, user_id, display_name, avatar_url, cursor_x, cursor_y,
