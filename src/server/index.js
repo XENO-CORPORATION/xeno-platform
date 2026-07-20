@@ -68,6 +68,7 @@ import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
 import accountRoutes from './routes/accountRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
+import serviceLedgerRoutes from './routes/serviceLedgerRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
@@ -461,9 +462,17 @@ console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspac
 // idempotent, micro-credit spend surface the @xeno/account-client SDK calls.
 // See 'XENO ACCOUNT - ARCHITECTURE.md' + database/migrate-account-v2.js.
 if (process.env.LEDGER_V2_ENABLED === 'true') {
+  // SERVICE-authenticated ledger surface for trusted backend services (e.g.
+  // xeno-agents-api) acting ON BEHALF OF a user via a shared LEDGER_SERVICE_TOKEN.
+  // Mounted with databaseMiddleware (req.db = pool) but WITHOUT oidcAuth/authMiddleware
+  // — the router does its own constant-time bearer-token check and fails CLOSED when
+  // LEDGER_SERVICE_TOKEN is unset. Registered BEFORE the user surface: Express matches
+  // the full path, so the more-specific /api/v2/ledger/service never falls through to
+  // (nor is shadowed by) the /api/v2/ledger user router below.
+  app.use('/api/v2/ledger/service', databaseMiddleware, serviceLedgerRoutes);
   // oidcAuth accepts BOTH the new RS256 OIDC token and the legacy HS256 token.
   app.use('/api/v2/ledger', databaseMiddleware, oidcAuth, v2LedgerRoutes);
-  console.log('💳 Ledger v2 routes integrated: /api/v2/ledger/* (LEDGER_V2_ENABLED)');
+  console.log('💳 Ledger v2 routes integrated: /api/v2/ledger/* + /service/* (LEDGER_V2_ENABLED)');
 }
 
 // ── OIDC provider v2 (additive, flag-gated) ──────────────────────────────────
