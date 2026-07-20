@@ -4,6 +4,7 @@
  */
 
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { getKeyByKid } from '../utils/oidcProvider.js';
 
 const JWT_DEFAULT_SECRET = 'xenostudio-super-secret-jwt-key-change-in-production';
@@ -15,21 +16,93 @@ if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || JWT_SEC
   process.exit(1);
 }
 
+// A JWT is exactly three base64url segments separated by dots (header.payload.
+// signature). Platform API keys (`xeno-<hex>`) contain no dots, so this is a
+// reliable, allocation-free discriminator between the two credential shapes.
+const JWT_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
+// Same at-rest scheme the gateway (xeno-api-proxy `getPlatformApiKeyRecord`) and
+// the portal/gateway key-mint use: sha256(rawKey) hex, looked up alongside the
+// 16-char key_prefix. Keys are high-entropy (`xeno-`+48 hex), so a single indexed
+// sha256 equality is correct here (not a low-entropy password). The lookup is by
+// HASH, never by comparing the plaintext secret, so there is no timing oracle on
+// the raw key; and the key is never logged.
+function hashApiKey(rawKey) {
+  return crypto.createHash('sha256').update(String(rawKey)).digest('hex');
+}
+
+/**
+ * Resolve a platform API KEY (`xeno-...`) to its owning user, mirroring the
+ * gateway's canonical `validateApiKeyFromDB`: hash → (key_prefix, key_hash)
+ * lookup on active, unexpired keys → load the SAME user shape the JWT path
+ * returns. Best-effort `last_used_at`/`usage_count` bump. Returns null on any
+ * miss (unknown / inactive / expired key, or inactive user) so the caller emits
+ * the identical 401 as the JWT path.
+ * @returns {Promise<object | null>} the user row, or null.
+ */
+async function resolveApiKeyUser(req, rawKey) {
+  const keyPrefix = rawKey.slice(0, 16);
+  const keyHash = hashApiKey(rawKey);
+  const { rows } = await req.db.query(
+    `SELECT ak.id AS key_id, ak.expires_at,
+            u.id, u.username, u.email, u.display_name, u.avatar_url,
+            u.created_at, u.email_verified, u.is_active
+       FROM api_keys ak
+       JOIN users u ON u.id = ak.user_id
+      WHERE ak.key_prefix = $1 AND ak.key_hash = $2 AND ak.is_active = true
+        AND u.is_active = true
+      LIMIT 1`,
+    [keyPrefix, keyHash],
+  );
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
+
+  // Best-effort usage bump — never block auth on this write, never let it throw.
+  req.db
+    .query(
+      'UPDATE api_keys SET last_used_at = NOW(), usage_count = usage_count + 1 WHERE id = $1',
+      [row.key_id],
+    )
+    .catch(() => {});
+
+  return {
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    display_name: row.display_name,
+    avatar_url: row.avatar_url,
+    created_at: row.created_at,
+    email_verified: row.email_verified,
+    is_active: row.is_active,
+  };
+}
+
 /**
  * Unified token resolution for EVERY authed surface (the single source of truth
- * shared by authMiddleware and the v2 oidcAuth). Accepts BOTH:
- *   - the legacy HS256 platform token (payload.userId), and
+ * shared by authMiddleware and the v2 oidcAuth). Accepts:
+ *   - the legacy HS256 platform token (payload.userId),
  *   - OIDC access tokens (RS256/ES256, payload.sub) verified against the signing
- *     key for their `kid`.
- * so an OIDC-signed-in user works on ALL routes, not only /api/v2/*. `algorithms`
- * is pinned per branch (defends against alg-confusion; the old global verify
- * accepted any algorithm). Header-only by design — the app authenticates via
- * `Authorization: Bearer` and sets NO auth cookie.
+ *     key for their `kid`, and
+ *   - platform API KEYS (`xeno-...`) resolved via the api_keys table (this is
+ *     what `xeno remote` / the CLI sends).
+ * so an OIDC-signed-in user OR an API-key caller works on ALL routes, not only
+ * /api/v2/*. `algorithms` is pinned per branch (defends against alg-confusion;
+ * the old global verify accepted any algorithm). Header-only by design — the app
+ * authenticates via `Authorization: Bearer` and sets NO auth cookie.
  * @returns {{ user: object } | { status: number, error: string }}
  */
 export async function resolveAuthedUser(req) {
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (!token) return { status: 401, error: 'Authentication token required' };
+
+  // ADDITIVE branch: a token that is NOT JWT-shaped can only be an API key.
+  // JWT-shaped tokens fall through to the byte-for-byte-unchanged JWT logic below.
+  if (!JWT_SHAPE.test(token)) {
+    const user = await resolveApiKeyUser(req, token);
+    if (user) return { user };
+    return { status: 401, error: 'Invalid authentication token' };
+  }
 
   let userId = null;
   let sid = null;
