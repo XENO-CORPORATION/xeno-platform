@@ -168,7 +168,34 @@ export interface RunEvent {
   sequence: number;
   type: string;
   timestamp: string;
+  /** The SDK runtime-event body. The wire nests all event data here. */
   payload: Record<string, unknown>;
+  // ---- Convenience: common `payload` fields hoisted to the top level by the client
+  // (see hoistRunEvent) so consumers can read `ev.text` / `ev.toolName` / `ev.usage`
+  // directly without unwrapping `payload`. `payload` is always preserved. ----
+  /** `model.text.delta` → the streamed text chunk. */
+  text?: string;
+  /** `tool.started` / `tool.completed` → the tool's name. */
+  toolName?: string;
+  /** `tool.started` → a truncated preview of the tool input. */
+  inputPreview?: Record<string, unknown>;
+  /** `tool.completed` → a truncated preview of the tool result. */
+  resultPreview?: unknown;
+  /** `turn.completed` → per-turn token totals. */
+  tokenUsage?: { input: number; output: number; total: number };
+  /** `run.usage` → run token totals. */
+  usage?: { input: number; output: number; total: number };
+  /** `run.usage` → credits actually settled for the run. */
+  creditsSettled?: number;
+  /** `turn.completed` → a short preview of the assistant output. */
+  outputPreview?: string;
+  /** `*.failed` → error/reason text. */
+  error?: string;
+  reason?: string;
+  /** `run.status` → the run's status/statusReason. */
+  status?: string;
+  statusReason?: string;
+  [key: string]: unknown;
 }
 
 /**
@@ -691,7 +718,7 @@ export function createAgentsClient(config: AgentsClientConfig) {
         `runs/${encodeURIComponent(runId)}/events`,
         { query: { tail: options.tail, since: options.since }, signal: options.signal },
       );
-      return res.events;
+      return (res.events || []).map((e) => (isRunEventLike(e) ? hoistRunEvent(e) : e));
     },
 
     /** POST /runs/:id/stop — graceful stop (SPEC §4.7). */
@@ -723,7 +750,7 @@ function parseEventLine(line: string): RunEvent | null {
   if (!data || data === "[DONE]") return null;
   try {
     const parsed = JSON.parse(data);
-    return isRunEventLike(parsed) ? (parsed as RunEvent) : null;
+    return isRunEventLike(parsed) ? hoistRunEvent(parsed as RunEvent) : null;
   } catch {
     return null;
   }
@@ -751,7 +778,7 @@ function parseSseFrame(frame: string): RunEvent | "DONE" | null {
   if (data === "[DONE]") return "DONE";
   try {
     const parsed = JSON.parse(data);
-    return isRunEventLike(parsed) ? (parsed as RunEvent) : null;
+    return isRunEventLike(parsed) ? hoistRunEvent(parsed as RunEvent) : null;
   } catch {
     return null;
   }
@@ -773,6 +800,28 @@ function isRunEventLike(v: unknown): v is RunEvent {
     typeof (v as Record<string, unknown>).type === "string" &&
     typeof (v as Record<string, unknown>).sequence === "number"
   );
+}
+
+// Common SDK event fields live under `payload` on the wire. Hoist them to the top
+// of the RunEvent so consumers can read `ev.text` / `ev.toolName` / `ev.usage`
+// directly. Additive + non-destructive: `payload` is preserved and an existing
+// top-level field is never overwritten.
+const HOISTED_PAYLOAD_FIELDS = [
+  "text", "toolName", "inputPreview", "resultPreview",
+  "tokenUsage", "usage", "creditsSettled", "outputPreview",
+  "error", "reason", "status", "statusReason",
+] as const;
+function hoistRunEvent(ev: RunEvent): RunEvent {
+  const p = ev.payload as Record<string, unknown> | undefined;
+  if (p && typeof p === "object") {
+    const top = ev as Record<string, unknown>;
+    for (const k of HOISTED_PAYLOAD_FIELDS) {
+      if (p[k] !== undefined && top[k] === undefined) top[k] = p[k];
+    }
+    // `model.text.delta` sometimes carries the chunk as `delta`; normalize to `text`.
+    if (top.text === undefined && typeof p.delta === "string") top.text = p.delta;
+  }
+  return ev;
 }
 
 /** Abortable delay. Rejects nothing — resolves early if the signal aborts. */
