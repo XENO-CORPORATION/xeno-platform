@@ -12,7 +12,7 @@ const browser: ProductContent = {
     headline: 'The browser where your agent has hands, not just eyes.',
     sub: 'XENO Browser is real Chromium for you — and the first browser an AI agent can fully drive from a terminal. It browses, reads, clicks and types like any web agent, and — uniquely — uploads and downloads files by path, with no OS file dialog in the way.',
     media: { type: 'mockup', src: 'browser-hero', alt: 'XENO Browser — an AI agent attaches a file to a web composer by path while a scoped-consent prompt asks to approve the host-path upload' },
-    badges: ['Real Chromium', 'Agentic file I/O', '.xbrowser Spaces', 'Private by default'],
+    badges: ['Real Chromium', 'Agentic file I/O', 'Multi-account profiles', '.xbrowser Spaces', 'Private by default'],
     note: 'Public beta — download the Windows build now (unsigned preview; macOS & Linux coming soon). No CAPTCHA-solving, ever.',
   },
   trust: [
@@ -67,6 +67,19 @@ const browser: ProductContent = {
       ],
     },
     {
+      eyebrow: 'Multi-account · anti-detect',
+      icon: 'Fingerprint',
+      accent: 'radial-gradient(ellipse at 72% 26%, rgba(170,140,255,0.16), transparent 60%), linear-gradient(165deg,#15111f,#070707 74%)',
+      title: 'Run many accounts, each its own identity',
+      desc: 'A built-in Profile Manager (Ctrl+Shift+P) gives every account an isolated browser identity — its own cookies, proxy and fingerprint. Organize into groups, keep a reusable proxy library with one-click connectivity + IP/geo checks, load per-profile extensions, and audit every action. Fingerprints are coherent by design for legitimate multi-account work — never sold as “undetectable”, and never a CAPTCHA bypass.',
+      bullets: [
+        'Isolated profiles: separate cookies/storage per account, no cross-leak',
+        'Fingerprint modes: Standard/Hardened (honest) or Spoof (a coherent per-profile device)',
+        'Saved proxy library with live connectivity + egress IP/geo checks',
+        'Groups, per-profile extensions, and an action log — all in one workspace',
+      ],
+    },
+    {
       eyebrow: 'Safety',
       icon: 'ShieldCheck',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(120,200,150,0.14), transparent 60%), linear-gradient(165deg,#0e1a14,#070707 74%)',
@@ -113,6 +126,7 @@ const browser: ProductContent = {
       { feature: 'AI agent built into the browser', xeno: 'Native', them: 'Extensions' },
       { feature: 'Agent uploads/downloads files by path (no OS dialog)', xeno: true, them: false },
       { feature: 'Terminal / server-drivable agent', xeno: true, them: false },
+      { feature: 'Built-in multi-account profiles (proxy + fingerprint per account)', xeno: 'Native', them: false },
       { feature: 'Saved Spaces with agent context (.xbrowser)', xeno: true, them: 'Some' },
       { feature: 'Mature extension & add-on ecosystem', xeno: 'Growing', them: true },
       { feature: 'Availability', xeno: 'Beta (Windows)', them: 'Shipping' },
@@ -130,6 +144,7 @@ const browser: ProductContent = {
     { q: 'Is it safe to let an agent touch my files?', a: 'Yes — the native dialog is treated as a security feature we replace with scoped consent, not remove. File I/O is confined to bounded mount points, “..” path traversal is rejected, and host-path operations ask for confirmation or run on a capability budget. And it never bypasses CAPTCHAs.' },
     { q: 'What is a Space / the .xbrowser format?', a: 'A Space is a saved browsing context — its tabs, pins, profile, and the agent’s task plus allowed mount points (an Arc-Spaces analog). It serializes to a portable .xbrowser file with autosave and crash recovery. Secrets like cookies and tokens live in the profile store, never in a shareable Space file.' },
     { q: 'Does it replace the XENO browser extension?', a: 'No — they complement each other. xeno-extension puts the agent inside your existing Chrome/Edge/Firefox; XENO Browser is the agent inside our own browser, with the full control an extension can’t get. Both implement xeno-use’s use-driver-web contract.' },
+    { q: 'Can I run multiple accounts with different fingerprints?', a: 'Yes. The built-in Profile Manager gives each account an isolated identity — its own cookies/storage, proxy, and fingerprint — plus groups, a reusable proxy library with connectivity/IP-geo checks, per-profile extensions, and an action log. Fingerprints are coherent by design for legitimate multi-account isolation; we don’t market “undetectable”, and there’s no CAPTCHA bypass. Simultaneous windows-per-profile is on the roadmap.' },
     { q: 'When can I use it?', a: 'Now — it’s in public beta. Download the Windows build (v0.2.0, an unsigned preview; macOS & Linux are coming). It ships the file-I/O differentiator working end-to-end from xeno-agent-cli.' },
   ],
   seo: {
