@@ -213,7 +213,7 @@ This is a guardrail, not a preference: a leaked credential is rotated, never reu
 **Fix — write the R2 feed.** For a CLI/npm product, run the CLI publisher (it reads npm + the CLI's notes and writes both JSON files to R2):
 
 ```bash
-node scripts/publish-cli-releases.mjs --app <slug> --pkg <npm-package> --notes <path-to>/release-notes.ts
+node scripts/publish-cli-releases.mjs --app <slug> --pkg <npm-package> --notes <path-to>/release-notes.ts [--install "npm install <npm-package>"]
 ```
 
 Then confirm the feed exists and the page reflects it (no deploy needed — the JSON carries `Cache-Control: no-cache` and is read live):
