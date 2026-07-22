@@ -24,7 +24,6 @@ import Xeno from 'xeno-ai';
 import util from 'util';
 import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
-import axios from 'axios';
 import FormData from 'form-data';
 import pg from 'pg';
 import { createHash, randomBytes, randomUUID } from 'crypto';
@@ -97,6 +96,39 @@ import { migrateOidcClients } from './database/migrate-oidc-clients.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
+
+// ── Internal-service JSON POST helper (replaces the axios dependency) ──────────
+// Uses the module's existing `fetch` + an AbortController timeout. Returns
+// { ok, status, data } for ANY completed HTTP response (does NOT throw on non-2xx,
+// unlike axios). Throws a tagged { isNoResponse:true } error ONLY when no response
+// arrives (network failure or timeout) — this mirrors axios's error.request branch
+// so callers keep their exact status-code behavior. Zero third-party HTTP client.
+async function postJsonToService(url, body, { timeoutMs = 60000, headers = {} } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let resp;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      const e = new Error(`No response from ${url}: ${err?.message || err}`);
+      e.isNoResponse = true;
+      e.cause = err;
+      throw e;
+    }
+    let data = null;
+    const text = await resp.text();
+    if (text) { try { data = JSON.parse(text); } catch { data = text; } }
+    return { ok: resp.ok, status: resp.status, data };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // ── XENO gateway image client (no direct third-party AI) ──────────────────────
 // The platform makes ZERO direct third-party AI calls. Chat image generation + edit
@@ -2122,31 +2154,31 @@ app.post('/api/xeno-search', databaseMiddleware, authMiddleware, async (req, res
 
     console.log(`[Node.js Backend] Calling Python service at ${pythonServiceUrl} with payload:`, pythonServicePayload);
 
-    const response = await axios.post(pythonServiceUrl, pythonServicePayload, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 60000, // 60 seconds timeout
+    const response = await postJsonToService(pythonServiceUrl, pythonServicePayload, {
+      timeoutMs: 60000, // 60 seconds timeout
     });
+
+    if (!response.ok) {
+      // The service responded with a non-2xx status (axios error.response equivalent)
+      console.error('[Node.js Backend] Python Service Error Data:', response.data);
+      console.error('[Node.js Backend] Python Service Error Status:', response.status);
+      return res.status(response.status || 500).json({
+        error: 'Search service error',
+      });
+    }
 
     console.log('[Node.js Backend] Successfully received response from Python service.');
     res.json(response.data);
 
   } catch (error) {
     console.error('[Node.js Backend] Error calling Python service:', error.message);
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      console.error('[Node.js Backend] Python Service Error Data:', error.response.data);
-      console.error('[Node.js Backend] Python Service Error Status:', error.response.status);
-      res.status(error.response.status || 500).json({
-        error: 'Search service error',
-      });
-    } else if (error.request) {
-      // The request was made but no response was received
+    if (error.isNoResponse) {
+      // No response was received — network failure or timeout (axios error.request equivalent)
       console.error('[Node.js Backend] No response received from Python service.');
       res.status(503).json({ error: 'Search service unavailable' });
     } else {
-      // Something happened in setting up the request that triggered an Error
-      console.error('[Node.js Backend] Internal error setting up request to Python service:', error.message);
+      // Unexpected error setting up / processing the request
+      console.error('[Node.js Backend] Internal error contacting Python service:', error.message);
       res.status(500).json({ error: 'Internal server error while contacting Xeno Search service.' });
     }
   }
@@ -2171,25 +2203,26 @@ app.post('/api/v2/engine/dynamic-search', databaseMiddleware, authMiddleware, as
   console.log(`[Dynamic Search] Query='${query}', MaxPages=${max_pages}`);
 
   try {
-    const response = await axios.post(pythonServiceUrl, {
+    const response = await postJsonToService(pythonServiceUrl, {
       query,
       max_pages: parseInt(max_pages, 10) || 10,
       index_results: Boolean(index_results)
     }, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 120000, // 2 minutes timeout for dynamic crawling
+      timeoutMs: 120000, // 2 minutes timeout for dynamic crawling
     });
 
-    console.log(`[Dynamic Search] Found ${response.data.total_results || 0} results`);
+    if (!response.ok) {
+      return res.status(response.status || 500).json({
+        error: 'Dynamic search service error',
+      });
+    }
+
+    console.log(`[Dynamic Search] Found ${response.data?.total_results || 0} results`);
     res.json(response.data);
 
   } catch (error) {
     console.error('[Dynamic Search] Error:', error.message);
-    if (error.response) {
-      res.status(error.response.status || 500).json({
-        error: 'Dynamic search service error',
-      });
-    } else if (error.request) {
+    if (error.isNoResponse) {
       res.status(503).json({ error: 'Dynamic Search service unreachable.' });
     } else {
       res.status(500).json({ error: 'Internal server error.' });
