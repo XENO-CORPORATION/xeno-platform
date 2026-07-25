@@ -7,7 +7,7 @@ module.exports = {
   ],
   theme: {
   	extend: {
-  		colors: {
+		colors: {
   			'primary-bg': '#121212',
   			'secondary-bg': '#1E1E1E',
   			'text-primary': '#FFFFFF',
@@ -51,9 +51,12 @@ module.exports = {
   				'3': 'hsl(var(--chart-3))',
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
-  			}
-  		},
-  		animation: {
+			}
+		},
+		fontFamily: {
+			display: ['"Clash Display"', 'Inter', 'sans-serif']
+		},
+		animation: {
   			shimmer: 'shimmer 2s infinite',
   			shimmerSlow: 'shimmerSlow 3s linear infinite',
   			'pulse-slow': 'pulse-slow 3s infinite',
@@ -68,8 +71,14 @@ module.exports = {
   			'star-stroke': 'star-stroke 0.7s ease-out forwards',
   			'star-line': 'star-line 0.7s ease-out forwards',
   			'clock-spin': 'clock-spin 0.6s ease-out forwards',
-  			'clock-tick': 'clock-tick 0.5s ease-out forwards',
-  			'gear-spin': 'gear-spin 0.5s ease-out forwards'
+			'clock-tick': 'clock-tick 0.5s ease-out forwards',
+			'gear-spin': 'gear-spin 0.5s ease-out forwards',
+			'agent-action-enter': 'agent-action-enter 160ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
+			'agent-action-exit': 'agent-action-exit 160ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
+			'mode-controls-enter': 'mode-controls-enter 180ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
+			'model-tray-item-enter': 'model-tray-item-enter 180ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
+			'model-tray-item-exit': 'model-tray-item-exit 180ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
+			'send-button-enter': 'send-button-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both'
   		},
   		keyframes: {
   			shimmer: {
@@ -201,7 +210,7 @@ module.exports = {
   					transform: 'rotate(360deg)'
   				}
   			},
-  			'clock-tick': {
+			'clock-tick': {
   				'0%': {
   					transform: 'rotate(0deg)'
   				},
@@ -217,11 +226,71 @@ module.exports = {
   				'80%': {
   					transform: 'rotate(288deg)'
   				},
-  				'100%': {
-  					transform: 'rotate(360deg)'
-  				}
-  			},
-  			'gear-spin': {
+				'100%': {
+					transform: 'rotate(360deg)'
+				}
+			},
+			'agent-action-enter': {
+				from: {
+					opacity: '0',
+					transform: 'translateX(-8px)'
+				},
+				to: {
+					opacity: '1',
+					transform: 'translateX(0)'
+				}
+			},
+			'agent-action-exit': {
+				from: {
+					opacity: '1',
+					transform: 'translateX(0)'
+				},
+				to: {
+					opacity: '0',
+					transform: 'translateX(-8px)'
+				}
+			},
+			'mode-controls-enter': {
+				from: {
+					opacity: '0',
+					transform: 'translateX(-6px)'
+				},
+				to: {
+					opacity: '1',
+					transform: 'translateX(0)'
+				}
+			},
+			'model-tray-item-enter': {
+				from: {
+					opacity: '0',
+					transform: 'translateX(8px)'
+				},
+				to: {
+					opacity: '1',
+					transform: 'translateX(0)'
+				}
+			},
+			'model-tray-item-exit': {
+				from: {
+					opacity: '1',
+					transform: 'translateX(0)'
+				},
+				to: {
+					opacity: '0',
+					transform: 'translateX(8px)'
+				}
+			},
+			'send-button-enter': {
+				from: {
+					opacity: '0',
+					transform: 'translateX(6px) scale(0.76)'
+				},
+				to: {
+					opacity: '1',
+					transform: 'scale(1)'
+				}
+			},
+			'gear-spin': {
   				'0%': {
   					transform: 'rotate(0deg)'
   				},

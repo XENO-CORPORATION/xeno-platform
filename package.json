@@ -6,6 +6,8 @@
   "scripts": {
     "start": "vite --host 0.0.0.0 --port 5183",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "test:chat-empty-state": "node scripts/test-chat-empty-state.mjs",
+    "test:chat-starting-experience": "node scripts/test-chat-model-selector.mjs && node scripts/test-chat-update-carousel.mjs && node scripts/test-chat-theme-selector.mjs && node scripts/test-chat-composer-shadow.mjs",
     "server": "powershell -Command \"cd src/server; npm run dev\"",
     "client": "vite",
     "dev": "concurrently \"npm run server\" \"npm run start\"",

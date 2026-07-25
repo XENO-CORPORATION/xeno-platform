@@ -1,3 +1,4 @@
+@import url('https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 @tailwind base;
 @tailwind components;
@@ -1099,6 +1100,36 @@ dialog select,
   animation: slideInLeft 0.3s ease-out forwards;
 }
 
+/* Chat: PanelLeftOpen + XENO wordmark after history sidebar closes (L → R). */
+@keyframes chatHistoryChromeEnter {
+  from {
+    transform: translateX(-18px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-chat-history-chrome-enter {
+  animation: chatHistoryChromeEnter 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-chat-history-chrome-enter-delay {
+  animation: chatHistoryChromeEnter 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 55ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-chat-history-chrome-enter,
+  .animate-chat-history-chrome-enter-delay {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Slide out to left animation */
 @keyframes slideOutLeft {
   from {
@@ -1148,4 +1179,126 @@ dialog select,
 @keyframes accSlideOut {
   from { transform: translateX(0) scale(1); opacity: 1; }
   to   { transform: translateX(72px) scale(0.85); opacity: 0; }
+}
+
+/* Desktop reveals the left-side voice chevron only while using the microphone.
+ * On touch screens it stays available because there is no hover state. */
+.voice-control [data-voice-mode-trigger] {
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateX(4px) scale(0.92);
+  transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+/* Three quiet strokes make the collapsed composer tools discoverable. The main
+ * stroke is permanent; the two shorter exterior strokes fade in sequence. */
+@keyframes composerToolRailPrimary {
+  0%, 100% {
+    opacity: 0.72;
+    transform: translate(-50%, -50%);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes composerToolRailEchoMedium {
+  0%, 100% {
+    opacity: 0;
+    transform: translateY(-50%);
+  }
+
+  50% {
+    opacity: 0.82;
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes modelRailScrollHint {
+  0%, 100% {
+    opacity: 0;
+    transform: translateX(2px);
+  }
+
+  24%, 62% {
+    opacity: 0.72;
+    transform: translateX(0);
+  }
+}
+
+[data-tool-rail-indicator] {
+  animation: none;
+  background-color: var(--chat-tool-rail-stroke, rgba(255, 255, 255, 0.72));
+  opacity: 0.88;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+[data-tool-rail-echo] {
+  animation: none;
+  opacity: 0;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+[data-tool-rail-echo="medium"] {
+  background-color: var(--chat-tool-rail-stroke-soft, rgba(255, 255, 255, 0.32));
+}
+
+/* Scroll arrows give a brief orientation cue, then yield the rail back to the
+ * content. Hovering or focusing an edge makes the relevant arrow available. */
+[data-inline-model-scroll-hint] {
+  opacity: 0;
+  transform: translateX(2px);
+  animation: modelRailScrollHint 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  will-change: transform, opacity;
+}
+
+[data-inline-model-scroll="left"] [data-inline-model-scroll-hint] {
+  transform: translateX(-2px);
+}
+
+[data-inline-model-scroll]:hover [data-inline-model-scroll-hint],
+[data-inline-model-scroll]:focus-visible [data-inline-model-scroll-hint] {
+  animation: none;
+  opacity: 0.86;
+  transform: translateX(0);
+}
+
+/* The hint responds anywhere inside the outer composer shell, including the
+ * inner chat input. */
+[data-chat-composer-shell]:hover [data-tool-rail-indicator] {
+  animation: composerToolRailPrimary 3.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+[data-chat-composer-shell]:hover [data-tool-rail-echo="medium"] {
+  animation: composerToolRailEchoMedium 3.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-tool-rail-indicator],
+  [data-tool-rail-echo] {
+    animation: none;
+  }
+
+  [data-tool-rail-echo] {
+    opacity: 0;
+  }
+}
+
+.voice-control:has([data-voice-primary]:hover) [data-voice-mode-trigger],
+.voice-control:has([data-voice-mode-trigger]:hover) [data-voice-mode-trigger],
+.voice-control:focus-within [data-voice-mode-trigger],
+.voice-control[data-voice-menu-open="true"] [data-voice-mode-trigger] {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .voice-control [data-voice-mode-trigger] {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
 }

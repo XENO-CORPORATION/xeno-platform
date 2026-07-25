@@ -186,15 +186,28 @@ const OverviewContent: React.FC = () => {
   const [isTaskbarHidden, setIsTaskbarHidden] = useState(false);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const toggleTaskbar = () => setIsTaskbarHidden((prev) => !prev);
+    const onKeyDown = (e: KeyboardEvent) => {
       if (e.shiftKey && e.key === 'H') {
         e.preventDefault();
-        setIsTaskbarHidden(prev => !prev);
+        toggleTaskbar();
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('toggle_overview_taskbar', toggleTaskbar as EventListener);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('toggle_overview_taskbar', toggleTaskbar as EventListener);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('overview_taskbar_visibility', {
+        detail: { hidden: isTaskbarHidden },
+      }),
+    );
+  }, [isTaskbarHidden]);
 
   return (
     <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'row', overflow: 'hidden', margin: 0, padding: 0 }}>

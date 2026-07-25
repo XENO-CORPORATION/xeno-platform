@@ -1,15 +1,21 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
+import ChatEmptyState, { type ChatEmptyStateTool } from './ChatEmptyState';
+import ChatModelSelector from './ChatModelSelector';
+import { MOCK_CHAT_UPDATES } from './mockChatUpdates';
+import { MOCK_CHAT_HISTORY } from './mockChatHistory';
+import { MOCK_CHAT_MODELS } from './mockChatModels';
+import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
 import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
-import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
+import { getGroupedModels, GroupedModels, Model } from '@/services/modelService';
 import { chatService } from '@/services/chatService';
 import { chatComplete } from '@/services/aiService';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchResponse, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { Send, ArrowLeftRight, Compass, Waves, Clock, X, ChevronDown, ChevronRight, Plus, Play, Download, Brain, Paperclip, FolderUp, Link, FileClock, FileImage, FileText, FilePenLine, MessageSquarePlus, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Lightbulb, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, StopCircle, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil } from 'lucide-react';
+import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Compass, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Lightbulb, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, StopCircle, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -41,6 +47,9 @@ function withAuthHeaders(extra: Record<string, string> = {}): Record<string, str
 
 // Transient default until the live catalog loads (overridden by the fetch below).
 // Uses a REAL endpoint model id — no fabricated fallback.
+/** Matches history sidebar `duration-300` close before floating chrome enters. */
+const HISTORY_SIDEBAR_CLOSE_MS = 300;
+
 const DEFAULT_MODEL: Model = {
   id: "gpt-5.6-terra",
   name: "GPT-5.6 Terra",
@@ -259,7 +268,9 @@ interface ChatMessage {
     thinkingContent?: string; // New field for thinking content
     imageData?: string; // Added field for storing generated image data (base64)
     isGeneratingImage?: boolean; // Flag for image generation in progress
-    userImageAttachment?: { file?: File; name: string; type: string; base64Data?: string; }; // Updated for serialization
+    userImageAttachment?: { file?: File; name: string; type: string; base64Data?: string; }; // Updated for serialization (first image; kept for older history)
+    /** All image attachments for a user turn — rendered above the text bubble by aspect ratio. */
+    userImageAttachments?: { file?: File; name: string; type: string; base64Data?: string; }[];
     userFileAttachment?: { file?: File; name: string; type: string; content?: string; encoding?: 'text' | 'base64' }; // Updated for serialization
     isCancelled?: boolean; // New field to indicate if the AI response was cancelled
     isXenoSearchCancelled?: boolean; // New field to indicate if cancelled due to Xeno Search failure
@@ -275,8 +286,109 @@ interface Conversation {
     timestamp: number; // Unix timestamp (ms) for sorting
     messages: ChatMessage[];
     systemPrompt?: string; // --- Store the system prompt used for this convo --- 
+    isPinned?: boolean; // Local pin — floats the chat into the Pinned section
+    pinOrder?: number; // Manual order inside Pinned (drag-and-drop)
+    isUnread?: boolean;
+    isArchived?: boolean;
+    projectId?: string | null;
 }
 // --- END NEW ---
+
+const formatConversationListDate = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const options: Intl.DateTimeFormatOptions =
+    date.getFullYear() === now.getFullYear()
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' };
+  return date.toLocaleDateString('en-US', options);
+};
+
+/** Relative time for project cards — Claude-style ("just now", "2h ago"). */
+const formatProjectRelativeTime = (timestamp: number): string => {
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 45) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return formatConversationListDate(timestamp);
+};
+
+/** Human-readable file size for project files — e.g. "4.2 KB", "1.0 MB". */
+const formatProjectFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+/** File extension label for the Files rail (e.g. "md", "pdf") — max 4 chars. */
+const getProjectFileExtension = (name: string): string => {
+  const i = name.lastIndexOf('.');
+  if (i <= 0 || i === name.length - 1) return 'file';
+  return name.slice(i + 1).toLowerCase().slice(0, 4);
+};
+
+/** Absolute date for project cards — e.g. "Nov 27, 2024". */
+const formatProjectCardDate = (timestamp: number): string =>
+  new Date(timestamp).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+/** Long history titles: right-edge fade always; on hover, slide to reveal the full title. */
+const HistoryConversationTitle: React.FC<{
+  title: string;
+  isSliding: boolean;
+}> = ({ title, isSliding }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [distance, setDistance] = useState(0);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const container = containerRef.current;
+      const text = textRef.current;
+      if (!container || !text) return;
+      setDistance(Math.max(0, text.scrollWidth - container.clientWidth));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [title, isSliding]);
+
+  const shouldSlide = isSliding && distance > 0;
+  // Claude-style one-shot reveal: constant px/s (not a fixed duration).
+  // Open Claude-inspired refs use ~80px/s; we run faster (~180) so the
+  // tail is readable within a short hover. Floor/ceiling keep short and
+  // very long titles from feeling sticky or crawling.
+  const durationSec = Math.min(1.6, Math.max(0.25, distance / 180));
+
+  return (
+    <div
+      ref={containerRef}
+      className="min-w-0 flex-1 overflow-hidden"
+      style={{
+        maskImage: 'linear-gradient(to right, #000 0%, #000 calc(100% - 1.35rem), transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to right, #000 0%, #000 calc(100% - 1.35rem), transparent 100%)',
+      }}
+    >
+      <span
+        ref={textRef}
+        className="inline-block whitespace-nowrap will-change-transform"
+        style={{
+          transform: shouldSlide ? `translateX(-${distance}px)` : 'translateX(0)',
+          transition: shouldSlide
+            ? `transform ${durationSec}s linear`
+            : 'transform 180ms ease-out',
+        }}
+      >
+        {title}
+      </span>
+    </div>
+  );
+};
 
 // --- NEW: Standalone cleanText utility function ---
 const cleanText = (text: string | null): string | null => {
@@ -1295,6 +1407,287 @@ interface ChatWithLLMProps {
   isStandalone?: boolean; // True when rendered without OverviewTaskbar (e.g., xeno-chat.com)
 }
 
+type VoiceInputMode = 'tap' | 'hold';
+
+const VOICE_INPUT_MODE_STORAGE_KEY = 'xeno-chat-voice-input-mode';
+const CHAT_THEME_STORAGE_KEY = 'xeno-chat-theme';
+const PROJECTS_PAGE_OPEN_STORAGE_KEY = 'xeno-chat-projects-page-open';
+const ACTIVE_PROJECT_ID_STORAGE_KEY = 'xeno-chat-active-project-id';
+// v1 prototype limit: project files are stored in localStorage, so keep them small.
+const PROJECT_FILE_MAX_BYTES = 1024 * 1024; // 1 MB per file
+/** How many project files show in the rail before expanding via the "8/20" control. */
+const PROJECT_FILES_PREVIEW_LIMIT = 8;
+/** Demo files for empty projects — 20 total so the header count can read 8/20. */
+const MOCK_PROJECT_FILES = [
+  {
+    id: 'mock-file-1',
+    name: 'project-brief.md',
+    type: 'text/markdown',
+    size: 4200,
+    addedAt: Date.UTC(2026, 6, 20),
+    encoding: 'text' as const,
+    content:
+      'Prefer concise answers. Document pigments and binders carefully. Ask before recommending any irreversible treatment.',
+  },
+  {
+    id: 'mock-file-2',
+    name: 'palette.tokens.json',
+    type: 'application/json',
+    size: 1800,
+    addedAt: Date.UTC(2026, 6, 18),
+    encoding: 'text' as const,
+    content: '{ "canvas": "#121212", "ink": "#e7e7e2", "muted": "#8a8a86" }',
+  },
+  {
+    id: 'mock-file-3',
+    name: 'restoration-notes.txt',
+    type: 'text/plain',
+    size: 9600,
+    addedAt: Date.UTC(2026, 6, 14),
+    encoding: 'text' as const,
+    content:
+      'Surface cleaning test on lower-right corner looked stable. No bloom after 48h. Next: varnish solubility check.',
+  },
+  {
+    id: 'mock-file-4',
+    name: 'client-feedback.md',
+    type: 'text/markdown',
+    size: 3100,
+    addedAt: Date.UTC(2026, 6, 12),
+    encoding: 'text' as const,
+    content: 'Client wants a calmer tone in written updates. Avoid jargon unless they ask for technical detail.',
+  },
+  {
+    id: 'mock-file-5',
+    name: 'reference-scan.png',
+    type: 'image/png',
+    size: 240000,
+    addedAt: Date.UTC(2026, 6, 10),
+    encoding: 'base64' as const,
+    content: 'Image attachment — open for preview.',
+  },
+  {
+    id: 'mock-file-6',
+    name: 'condition-report.pdf',
+    type: 'application/pdf',
+    size: 512000,
+    addedAt: Date.UTC(2026, 6, 8),
+    encoding: 'base64' as const,
+    content: 'PDF condition report — open for details.',
+  },
+  {
+    id: 'mock-file-7',
+    name: 'materials-list.csv',
+    type: 'text/csv',
+    size: 2200,
+    addedAt: Date.UTC(2026, 6, 5),
+    encoding: 'text' as const,
+    content: 'item,qty\nCotton swabs,120\nIsopropanol,2L\nJapanese tissue,1 pack',
+  },
+  {
+    id: 'mock-file-8',
+    name: 'timeline.md',
+    type: 'text/markdown',
+    size: 1500,
+    addedAt: Date.UTC(2026, 6, 2),
+    encoding: 'text' as const,
+    content: 'Week 1 documentation · Week 2 cleaning tests · Week 3 client review.',
+  },
+  ...Array.from({ length: 12 }, (_, index) => {
+    const n = index + 9;
+    return {
+      id: `mock-file-${n}`,
+      name: `context-note-${n}.md`,
+      type: 'text/markdown',
+      size: 900 + n * 80,
+      addedAt: Date.UTC(2026, 5, Math.max(1, 28 - index)),
+      encoding: 'text' as const,
+      content: `Sample context file ${n} — open for details.`,
+    };
+  }),
+];
+/** Demo instructions when a project has none saved yet. */
+const MOCK_PROJECT_INSTRUCTIONS =
+  'Prefer concise answers. Use conservation vocabulary carefully. When unsure about materials, ask before recommending treatments. Keep tone calm and professional for client-facing drafts.';
+/** Demo scheduled tasks — UI preview only until scheduling is wired. */
+const MOCK_PROJECT_SCHEDULED = [
+  { id: 'mock-sched-1', title: 'Weekly condition check-in', cadence: 'Every Monday · 09:00', mark: 'Mon' },
+  { id: 'mock-sched-2', title: 'Draft client progress note', cadence: 'Every Friday · 16:00', mark: 'Fri' },
+  { id: 'mock-sched-3', title: 'Refresh materials inventory', cadence: '1st of month · 10:00', mark: '1st' },
+];
+/** Short title for the large workspace header font (≈ one line next to ⋯ / star). */
+const PROJECT_NAME_MAX_CHARS = 36;
+const CHAT_THEME_BRIGHTNESS_STORAGE_KEY = 'xeno-chat-theme-brightness';
+const CHAT_CHROME_EDGE_INSET_PX = 12;
+const CHAT_CHROME_TOP_INSET_PX = 8;
+
+type ChatTheme = 'system' | 'custom' | 'dark' | 'dim' | 'light';
+type ResolvedChatTheme = Exclude<ChatTheme, 'system' | 'custom'>;
+
+const VISUAL_CHAT_THEME_OPTIONS = [
+  { id: 'dark', label: 'Dark', position: 0 },
+  { id: 'dim', label: 'Dim', position: 50 },
+  { id: 'light', label: 'Light', position: 100 },
+] as const;
+
+const THEME_WAVEFORM_BAR_COUNT = 21;
+const THEME_BRIGHTNESS_STEP = 5;
+
+const ManualThemeIcon = ({ size = 16, ...props }: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    aria-hidden="true"
+    focusable="false"
+    {...props}
+  >
+    <path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="8.5" />
+  </svg>
+);
+
+type ChatThemePreviewTokens = {
+  canvas: string;
+  surface: string;
+  elevated: string;
+  control: string;
+  controlStrong: string;
+  text: string;
+  muted: string;
+  border: string;
+  hover: string;
+  overlay: string;
+};
+
+type ChatThemeRuntimeTokens = ChatThemePreviewTokens & {
+  surfaceText: string;
+  surfaceMuted: string;
+};
+
+const createChatThemePalette = (
+  canvas: string,
+  surface: string,
+  elevated: string,
+  control: string,
+  controlStrong: string,
+  text: string,
+  muted: string,
+  border: string,
+  hover: string,
+  overlay: string,
+): ChatThemePreviewTokens => ({
+  canvas,
+  surface,
+  elevated,
+  control,
+  controlStrong,
+  text,
+  muted,
+  border,
+  hover,
+  overlay,
+});
+
+// Every selectable five-percent step owns a complete semantic palette. The
+// surfaces therefore change independently instead of receiving one shared
+// brightness curve. The first and last entries remain the ElevenLabs endpoints.
+const CHAT_THEME_SURFACE_PALETTES: readonly ChatThemePreviewTokens[] = [
+  createChatThemePalette('#0a0a0a', '#171717', '#262626', '#262626', '#404040', '#fafafa', '#a3a3a3', '#242424', '#404040', '#171717'),
+  createChatThemePalette('#0c0c0d', '#19191a', '#282829', '#29292a', '#424244', '#fafafa', '#a4a4a4', '#272728', '#424244', '#19191a'),
+  createChatThemePalette('#0e0e0f', '#1b1b1c', '#2a2a2b', '#2c2c2d', '#444446', '#fafafa', '#a6a6a6', '#2a2a2b', '#444446', '#1b1b1c'),
+  createChatThemePalette('#101011', '#1d1d1e', '#2c2c2d', '#2f2f30', '#464648', '#fafafa', '#a8a8a8', '#2d2d2e', '#464648', '#1d1d1e'),
+  createChatThemePalette('#121213', '#1f1f20', '#2e2e2f', '#323233', '#48484a', '#fafafa', '#aaaaaa', '#303031', '#48484a', '#1f1f20'),
+  createChatThemePalette('#141415', '#212122', '#303031', '#353536', '#4a4a4c', '#fafafa', '#acacac', '#333334', '#4a4a4c', '#212122'),
+  createChatThemePalette('#161617', '#232324', '#323233', '#383839', '#4c4c4e', '#fafafa', '#aeaeae', '#363637', '#4c4c4e', '#232324'),
+  createChatThemePalette('#181819', '#252526', '#343435', '#3b3b3c', '#4e4e50', '#fafafa', '#b0b0b0', '#39393a', '#4e4e50', '#252526'),
+  createChatThemePalette('#1a1a1b', '#272728', '#363637', '#3e3e3f', '#505052', '#f8f8f8', '#b2b2b2', '#3c3c3d', '#505052', '#272728'),
+  createChatThemePalette('#1c1c1d', '#29292a', '#383839', '#414142', '#525254', '#f7f7f7', '#b4b4b4', '#3f3f40', '#525254', '#29292a'),
+  createChatThemePalette('#181a1e', '#24272c', '#30343a', '#383c43', '#4b5059', '#f4f5f7', '#aeb2b8', '#3c4047', '#4b5059', '#24272c'),
+  createChatThemePalette('#1b1d22', '#272a30', '#34383f', '#3c4149', '#505660', '#f4f5f7', '#b2b6bd', '#41464e', '#505660', '#272a30'),
+  createChatThemePalette('#1e2126', '#2b2e35', '#383c44', '#41464f', '#565d67', '#f5f6f8', '#b6bbc2', '#464b53', '#565d67', '#2b2e35'),
+  createChatThemePalette('#21242a', '#2f333a', '#3c4149', '#464b54', '#5c636e', '#f5f6f8', '#bbc0c7', '#4b5059', '#5c636e', '#2f333a'),
+  createChatThemePalette('#25282e', '#33373f', '#41464f', '#4b515b', '#626a75', '#f6f7f8', '#c0c5cc', '#505660', '#626a75', '#33373f'),
+  createChatThemePalette('#282b31', '#383c44', '#464b55', '#505661', '#69717c', '#f7f8fa', '#c5cad0', '#565d67', '#69717c', '#383c44'),
+  createChatThemePalette('#30343b', '#41464d', '#505661', '#5b626d', '#757d88', '#f8f9fa', '#d0d4d9', '#626a74', '#757d88', '#41464d'),
+  createChatThemePalette('#3b4048', '#4b515b', '#5d6470', '#686f7b', '#858c96', '#fafafa', '#e0e2e6', '#707782', '#858c96', '#4b515b'),
+  createChatThemePalette('#5e646d', '#707781', '#858c96', '#9198a1', '#aab0b7', '#fafafa', '#e4e6e9', '#858c96', '#aab0b7', '#707781'),
+  createChatThemePalette('#d7d9dd', '#e1e3e6', '#eceef0', '#f1f2f3', '#f6f7f8', '#0a0a0a', '#55585d', '#dfe1e4', '#f6f7f8', '#e1e3e6'),
+  createChatThemePalette('#ffffff', '#fafafa', '#ffffff', '#f5f5f5', '#e5e5e5', '#0a0a0a', '#737373', '#e5e5e5', '#f5f5f5', '#fafafa'),
+];
+
+const getRelativeLuminance = (hex: string): number => {
+  const channels = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255);
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+};
+
+const getContrastRatio = (first: string, second: string): number => {
+  const [lighter, darker] = [getRelativeLuminance(first), getRelativeLuminance(second)].sort((a, b) => b - a);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+const getAccessibleTextTokens = (
+  canvas: string,
+  preferredText?: string,
+  preferredMuted?: string,
+): Pick<ChatThemePreviewTokens, 'text' | 'muted'> => {
+  const lightText = '#fafafa';
+  const darkText = '#0a0a0a';
+  const fallbackText = getContrastRatio(lightText, canvas) >= getContrastRatio(darkText, canvas) ? lightText : darkText;
+  const text = preferredText && getContrastRatio(preferredText, canvas) >= 4.5 ? preferredText : fallbackText;
+  const muted = preferredMuted && getContrastRatio(preferredMuted, canvas) >= 4.5
+    ? preferredMuted
+    : text;
+
+  return { text, muted };
+};
+
+const getThemePreviewTokens = (position: number): ChatThemeRuntimeTokens => {
+  const clampedPosition = Math.min(100, Math.max(0, position));
+  const paletteIndex = Math.min(
+    CHAT_THEME_SURFACE_PALETTES.length - 1,
+    Math.round(clampedPosition / THEME_BRIGHTNESS_STEP),
+  );
+  const paletteTokens = CHAT_THEME_SURFACE_PALETTES[paletteIndex];
+
+  return {
+    ...paletteTokens,
+    ...getAccessibleTextTokens(paletteTokens.canvas, paletteTokens.text, paletteTokens.muted),
+    surfaceText: getAccessibleTextTokens(
+      paletteTokens.controlStrong,
+      paletteTokens.text,
+      paletteTokens.muted,
+    ).text,
+    surfaceMuted: getAccessibleTextTokens(
+      paletteTokens.controlStrong,
+      paletteTokens.text,
+      paletteTokens.muted,
+    ).muted,
+  };
+};
+
+const getVisualThemePosition = (theme: ResolvedChatTheme): number =>
+  VISUAL_CHAT_THEME_OPTIONS.find((option) => option.id === theme)?.position ?? 0;
+
+const getClosestVisualTheme = (position: number): ResolvedChatTheme =>
+  VISUAL_CHAT_THEME_OPTIONS.reduce((closest, option) =>
+    Math.abs(option.position - position) < Math.abs(closest.position - position) ? option : closest,
+  ).id;
+
+const normalizeThemeBrightness = (position: number): number =>
+  Math.round(Math.min(100, Math.max(0, position)) / THEME_BRIGHTNESS_STEP) * THEME_BRIGHTNESS_STEP;
+
+const getThemeSliderValueText = (position: number): string => {
+  const exactTheme = VISUAL_CHAT_THEME_OPTIONS.find((option) => option.position === position);
+  return exactTheme ? `${exactTheme.label} theme, ${position}%` : `Custom theme, ${position}%`;
+};
+
 const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   interfaceId = 'default',
   interfaceTitle = 'Chat 1',
@@ -1317,15 +1710,240 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  // Floating PanelLeftOpen + XENO wordmark: wait for history close animation, then enter L→R.
+  const [showClosedHistoryChrome, setShowClosedHistoryChrome] = useState(true);
+  const [closedHistoryChromeEnterKey, setClosedHistoryChromeEnterKey] = useState(0);
+  const historyWasOpenRef = useRef(false);
+  const [deleteConfirmationModal, setDeleteConfirmationModal] = useState<{
+    isOpen: boolean;
+    conversationId: string | null;
+    conversationTitle: string | null;
+  }>({ isOpen: false, conversationId: null, conversationTitle: null });
+  const [historyRowMenu, setHistoryRowMenu] = useState<{
+    conversationId: string;
+    top: number;
+    left: number;
+  } | null>(null);
+  const [historyProjectSubmenuOpen, setHistoryProjectSubmenuOpen] = useState(false);
+  const [historyHoveredRowId, setHistoryHoveredRowId] = useState<string | null>(null);
+  type HistoryNavView = 'chats' | 'projects' | 'archived' | 'artifacts' | 'scheduled' | 'customize';
+  const [historyNavView, setHistoryNavView] = useState<HistoryNavView>('chats');
+  const [isPinnedSectionOpen, setIsPinnedSectionOpen] = useState(true);
+  const [isRecentsSectionOpen, setIsRecentsSectionOpen] = useState(true);
+  // Pointer-based pinned DnD (HTML5 drag is unreliable here — cancels on re-render).
+  const [historyDragId, setHistoryDragId] = useState<string | null>(null);
+  const [pinnedInsertIndex, setPinnedInsertIndex] = useState<number | null>(null);
+  // Ghost title only in React state; x/y updated imperatively (avoids list re-render every move).
+  const [historyDragGhostTitle, setHistoryDragGhostTitle] = useState<string | null>(null);
+  const historyDragGhostElRef = useRef<HTMLDivElement | null>(null);
+  const historyDidDragRef = useRef(false);
+  const historyDragIdRef = useRef<string | null>(null);
+  const historyDragFromSectionRef = useRef<'pinned' | 'recents' | 'archived' | null>(null);
+  const pinnedInsertIndexRef = useRef<number | null>(null);
+  const pinnedRowHeightRef = useRef(32);
+  const conversationHistoryRef = useRef<Conversation[]>([]);
+  const historyPointerSessionRef = useRef<{
+    id: string;
+    fromSection: 'pinned' | 'recents';
+    title: string;
+    startX: number;
+    startY: number;
+    /** Cursor offset inside the row at grab — ghost stays under that point (Claude-style). */
+    grabOffsetX: number;
+    grabOffsetY: number;
+    rowWidth: number;
+    pointerId: number;
+    activated: boolean;
+  } | null>(null);
+  type RecentsFilterType = 'all' | 'chat' | 'task';
+  type RecentsFilterStatus = 'active' | 'archived' | 'all';
+  type RecentsFilterActivity = '1d' | '3d' | '7d' | '30d' | 'all';
+  type RecentsGroupBy = 'none' | 'date' | 'type' | 'project' | 'unread' | 'status';
+  type RecentsFilterSubmenu = 'type' | 'status' | 'activity' | 'group' | null;
+  const [recentsFilterType, setRecentsFilterType] = useState<RecentsFilterType>('all');
+  const [recentsFilterStatus, setRecentsFilterStatus] = useState<RecentsFilterStatus>('active');
+  const [recentsFilterActivity, setRecentsFilterActivity] = useState<RecentsFilterActivity>('all');
+  const [recentsGroupBy, setRecentsGroupBy] = useState<RecentsGroupBy>('none');
+  const [recentsFilterMenu, setRecentsFilterMenu] = useState<{ top: number; left: number } | null>(null);
+  const [recentsFilterSubmenu, setRecentsFilterSubmenu] = useState<RecentsFilterSubmenu>(null);
+  const [recentsFilterSubmenuTop, setRecentsFilterSubmenuTop] = useState(0);
+  const [isRecentsSectionHovered, setIsRecentsSectionHovered] = useState(false);
+  const [isChatsCatalogOpen, setIsChatsCatalogOpen] = useState(false);
+  const [chatsCatalogSearch, setChatsCatalogSearch] = useState('');
+  const [isChatsCatalogSelecting, setIsChatsCatalogSelecting] = useState(false);
+  const [chatsCatalogSelectedIds, setChatsCatalogSelectedIds] = useState<string[]>([]);
+  const [isChatsCatalogFilterOpen, setIsChatsCatalogFilterOpen] = useState(false);
+  type ChatsCatalogFilter = 'all' | 'chat' | 'shared' | 'cowork' | 'archived';
+  const [chatsCatalogFilter, setChatsCatalogFilter] = useState<ChatsCatalogFilter>('all');
+  // Full-page Projects view (Claude-style layout, XENO chat themes).
+  // Persisted so a page refresh keeps the user on the Projects page instead
+  // of dropping them back into the new-chat interface.
+  const [isProjectsPageOpen, setIsProjectsPageOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem(PROJECTS_PAGE_OPEN_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  // Which project's workspace is open (null = showing the projects list).
+  // Persisted so a refresh keeps the user inside the same project.
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return localStorage.getItem(ACTIVE_PROJECT_ID_STORAGE_KEY) || null;
+    } catch {
+      return null;
+    }
+  });
+  const [projectsPageSearch, setProjectsPageSearch] = useState('');
+  type ProjectsSort = 'updated' | 'created' | 'name';
+  const [projectsSort, setProjectsSort] = useState<ProjectsSort>('updated');
+  const [isProjectsSortOpen, setIsProjectsSortOpen] = useState(false);
+  const [chatTheme, setChatTheme] = useState<ChatTheme>(() => {
+    if (typeof window === 'undefined') return 'dark';
+
+    try {
+      const storedTheme = localStorage.getItem(CHAT_THEME_STORAGE_KEY);
+      return storedTheme === 'system' || storedTheme === 'custom' || storedTheme === 'dark' || storedTheme === 'dim' || storedTheme === 'light'
+        ? storedTheme
+        : 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
+  const [chatThemeBrightness, setChatThemeBrightness] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+
+    try {
+      const storedBrightness = localStorage.getItem(CHAT_THEME_BRIGHTNESS_STORAGE_KEY);
+      const parsedBrightness = storedBrightness === null ? Number.NaN : Number(storedBrightness);
+      if (Number.isFinite(parsedBrightness)) return normalizeThemeBrightness(parsedBrightness);
+
+      const storedTheme = localStorage.getItem(CHAT_THEME_STORAGE_KEY);
+      if (storedTheme === 'dim') return 50;
+      if (storedTheme === 'light') return 100;
+      return 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [systemTheme, setSystemTheme] = useState<Extract<ResolvedChatTheme, 'dark' | 'light'>>(() =>
+    typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light'
+  );
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [themePreviewPosition, setThemePreviewPosition] = useState<number | null>(null);
+  const [isTemporaryChat, setIsTemporaryChat] = useState(false);
+  const [isSharePreviewOpen, setIsSharePreviewOpen] = useState(false);
+  const [isChatMoreMenuOpen, setIsChatMoreMenuOpen] = useState(false);
   const [isTaskbarHidden, setIsTaskbarHidden] = useState(false);
   const historySidebarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.shiftKey && e.key === 'H') setIsTaskbarHidden(prev => !prev);
+    try {
+      localStorage.setItem(CHAT_THEME_STORAGE_KEY, chatTheme);
+      localStorage.setItem(CHAT_THEME_BRIGHTNESS_STORAGE_KEY, String(chatThemeBrightness));
+    } catch {
+      // Theme preference is optional when browser storage is unavailable.
+    }
+  }, [chatTheme, chatThemeBrightness]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const updateSystemTheme = (event: MediaQueryListEvent | MediaQueryList) => {
+      setSystemTheme(event.matches ? 'dark' : 'light');
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+
+    updateSystemTheme(mediaQuery);
+    mediaQuery.addEventListener('change', updateSystemTheme);
+    return () => mediaQuery.removeEventListener('change', updateSystemTheme);
+  }, []);
+
+  const resolvedChatTheme: ResolvedChatTheme = chatTheme === 'system'
+    ? systemTheme
+    : chatTheme === 'custom'
+      ? getClosestVisualTheme(chatThemeBrightness)
+      : chatTheme;
+  // Top-bar theme control uses the half-circle mark (matches Temporary / Settings chrome).
+  const ThemeTriggerIcon = ManualThemeIcon;
+  const displayedThemeSliderPosition = themePreviewPosition ?? (
+    chatTheme === 'system' ? getVisualThemePosition(systemTheme) :
+      chatTheme === 'custom' ? chatThemeBrightness : getVisualThemePosition(chatTheme)
+  );
+  const chatThemePreviewStyle = useMemo<React.CSSProperties>(() => {
+    const previewPosition = themePreviewPosition ?? (chatTheme === 'custom' ? chatThemeBrightness : null);
+    if (previewPosition === null) return {};
+
+    const tokens = getThemePreviewTokens(previewPosition);
+    const railIsLight = getRelativeLuminance(tokens.elevated) > 0.45;
+    const canvasIsLight = getRelativeLuminance(tokens.canvas) > 0.45;
+    return {
+      '--chat-canvas': tokens.canvas,
+      '--chat-surface': tokens.surface,
+      '--chat-elevated': tokens.elevated,
+      '--chat-control': tokens.control,
+      '--chat-control-strong': tokens.controlStrong,
+      '--chat-text': tokens.text,
+      '--chat-muted': tokens.muted,
+      '--chat-surface-text': tokens.surfaceText,
+      '--chat-surface-muted': tokens.surfaceMuted,
+      '--chat-border': tokens.border,
+      '--chat-hover': tokens.hover,
+      '--chat-project-preview-fade': tokens.hover,
+      '--chat-overlay': tokens.overlay,
+      '--chat-accent': tokens.text,
+      '--chat-accent-soft': canvasIsLight
+        ? `color-mix(in srgb, ${tokens.text} 14%, transparent)`
+        : `color-mix(in srgb, ${tokens.text} 20%, transparent)`,
+      '--chat-on-accent': tokens.canvas,
+      '--chat-danger': canvasIsLight ? '#dc2626' : '#ef4444',
+      '--chat-danger-hover': canvasIsLight ? '#b91c1c' : '#f87171',
+      '--chat-composer-fill': canvasIsLight
+        ? tokens.elevated
+        : `color-mix(in srgb, ${tokens.canvas} 70%, ${tokens.elevated} 30%)`,
+      '--chat-composer-border': canvasIsLight
+        ? 'rgba(0, 0, 0, 0.14)'
+        : 'rgba(255, 255, 255, 0.12)',
+      '--chat-composer-shadow': canvasIsLight
+        ? '0 10px 24px -8px rgba(0, 0, 0, 0.12)'
+        : '0 12px 28px -10px rgba(0, 0, 0, 0.55)',
+      '--chat-tool-rail-stroke': railIsLight ? 'rgba(24, 24, 27, 0.72)' : 'rgba(245, 245, 245, 0.78)',
+      '--chat-top-bar-btn-active': canvasIsLight
+        ? tokens.control
+        : `color-mix(in srgb, ${tokens.canvas} 55%, black)`,
+      '--chat-tool-rail-stroke-soft': railIsLight ? 'rgba(24, 24, 27, 0.48)' : 'rgba(245, 245, 245, 0.58)',
+    } as React.CSSProperties;
+  }, [chatTheme, chatThemeBrightness, themePreviewPosition]);
+  const handleChatThemeChange = useCallback((nextTheme: ChatTheme, closeMenu = true) => {
+    if (nextTheme !== 'system' && nextTheme !== 'custom') {
+      setChatThemeBrightness(getVisualThemePosition(nextTheme));
+    }
+    setChatTheme(nextTheme);
+    setThemePreviewPosition(null);
+    if (closeMenu) setIsThemeMenuOpen(false);
+  }, []);
+  const commitThemeSliderPosition = useCallback((position: number) => {
+    setChatThemeBrightness(normalizeThemeBrightness(position));
+    setChatTheme('custom');
+    setThemePreviewPosition(null);
+  }, []);
+
+  // Keep history inset in sync with Overview taskbar (Shift+H / XENO wordmark toggle).
+  useEffect(() => {
+    const onVisibility = (event: Event) => {
+      const detail = (event as CustomEvent<{ hidden?: boolean }>).detail;
+      if (typeof detail?.hidden === 'boolean') {
+        setIsTaskbarHidden(detail.hidden);
+      }
+    };
+    window.addEventListener('overview_taskbar_visibility', onVisibility as EventListener);
+    return () => {
+      window.removeEventListener('overview_taskbar_visibility', onVisibility as EventListener);
+    };
   }, []);
 
   // Close history when entering multi-interface mode
@@ -1333,17 +1951,30 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     if (isMultiInterface && isHistoryOpen) setIsHistoryOpen(false);
   }, [isMultiInterface]);
 
-  // Close history sidebar on click outside
+  // Reveal floating history/XENO chrome only after the sidebar finish closing.
   useEffect(() => {
-    if (!isHistoryOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (historySidebarRef.current && !historySidebarRef.current.contains(e.target as Node)) {
-        setIsHistoryOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [isHistoryOpen]);
+    if (isMultiInterface) {
+      setShowClosedHistoryChrome(false);
+      return;
+    }
+    if (isHistoryOpen) {
+      historyWasOpenRef.current = true;
+      setShowClosedHistoryChrome(false);
+      return;
+    }
+    if (!historyWasOpenRef.current) {
+      setShowClosedHistoryChrome(true);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setClosedHistoryChromeEnterKey((key) => key + 1);
+      setShowClosedHistoryChrome(true);
+      historyWasOpenRef.current = false;
+    }, HISTORY_SIDEBAR_CLOSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [isHistoryOpen, isMultiInterface]);
+
+  // History closes only via the panel X control (not click-outside).
 
   // Touch/swipe handling for mobile
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -1380,16 +2011,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
     const isHorizontalSwipe = Math.abs(deltaY) < maxVerticalDeviation && deltaTime < maxSwipeTime;
 
-    // Swipe right to open: must start from left 25% of screen, or from anywhere if history is open (to allow closing by swiping in opposite direction)
+    // Swipe right to open only — closing is reserved for the history X button.
     const isSwipeRight = deltaX > minSwipeDistance && isHorizontalSwipe && touchStartRef.current.x < leftEdgeZone;
-
-    // Swipe left to close: can start from anywhere when history is open
-    const isSwipeLeft = deltaX < -minSwipeDistance && isHorizontalSwipe;
 
     if (isSwipeRight && !isHistoryOpen) {
       setIsHistoryOpen(true);
-    } else if (isSwipeLeft && isHistoryOpen) {
-      setIsHistoryOpen(false);
     }
 
     touchStartRef.current = null;
@@ -1400,10 +2026,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [searchProvider, setSearchProvider] = useState<'google' | 'brave'>('google');
   const [isSearchProviderDropdownOpen, setIsSearchProviderDropdownOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model>(DEFAULT_MODEL);
-  const [groupedModels, setGroupedModels] = useState<GroupedModels[]>(FALLBACK_MODELS);
+  const [groupedModels, setGroupedModels] = useState<GroupedModels[]>(MOCK_CHAT_MODELS);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
-  const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
-  const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(new Set());
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isConversationSelectorOpen, setIsConversationSelectorOpen] = useState(false);
   const [isWideChatEnabled, setIsWideChatEnabled] = useState(false);
@@ -1436,6 +2060,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState('');
   const [savedSystemPrompt, setSavedSystemPrompt] = useState('');
+  const [emptyStateMode, setEmptyStateMode] = useState<ChatMode>('chat');
   const [isSystemPromptSaved, setIsSystemPromptSaved] = useState(false);
   const [isCustomPromptOpen, setIsCustomPromptOpen] = useState(false);
   const [selectedPersona, setSelectedPersona] = useState<string | null>(null);
@@ -1447,6 +2072,17 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     { id: 'copywriter', label: 'Copywriter', prompt: 'You are a skilled copywriter and content creator. Help craft compelling copy, marketing content, blog posts, and creative writing with engaging tone and clear messaging.' },
   ];
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  // Swap top-bar chrome: New chat ↔ open conversation.
+  useEffect(() => {
+    if (messages.length === 0) {
+      setIsSharePreviewOpen(false);
+      setIsChatMoreMenuOpen(false);
+      return;
+    }
+    setIsThemeMenuOpen(false);
+  }, [messages.length]);
+
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState<string>('');
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -1536,11 +2172,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const topBarRef = useRef<HTMLDivElement>(null);
   const leftButtonsRef = useRef<HTMLDivElement>(null);
   const rightButtonsRef = useRef<HTMLDivElement>(null);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
+  const chatMoreMenuRef = useRef<HTMLDivElement>(null);
   const [showTopBarBackground, setShowTopBarBackground] = useState(false);
 
-  const companyDropdownButtonRef = useRef<HTMLButtonElement>(null);
-  const companyListContainerRef = useRef<HTMLDivElement>(null);
-  const modelListContainerRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const settingsModalRef = useRef<HTMLDivElement>(null);
   const conversationSelectorButtonRef = useRef<HTMLButtonElement>(null);
@@ -1552,6 +2187,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const recentFilesPanelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const voiceControlRef = useRef<HTMLDivElement>(null);
   const systemPromptButtonRef = useRef<HTMLButtonElement>(null);
   const systemPromptPanelRef = useRef<HTMLDivElement>(null);
   // const chatAreaRef = useRef<HTMLDivElement>(null); // Moved up
@@ -1581,6 +2217,14 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   // --- NEW: State for Conversation History ---
   const [conversationHistory, setConversationHistory] = useState<Conversation[]>([]);
+  conversationHistoryRef.current = conversationHistory;
+
+  // If the last archived chat is restored, leave the Archived nav view.
+  useEffect(() => {
+    if (historyNavView === 'archived' && !conversationHistory.some((convo) => convo.isArchived)) {
+      setHistoryNavView('chats');
+    }
+  }, [conversationHistory, historyNavView]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isDbAuthenticated, setIsDbAuthenticated] = useState<boolean>(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(true);
@@ -1592,17 +2236,320 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // Ref to prevent double conversation updates
   const isUpdatingConversationRef = useRef(false);
 
-  // --- NEW: State for Delete Confirmation Modal ---
-  const [deleteConfirmationModal, setDeleteConfirmationModal] = useState<{ 
-      isOpen: boolean; 
-      conversationId: string | null; 
-      conversationTitle: string | null; 
-  }>({ isOpen: false, conversationId: null, conversationTitle: null });
-  // --- END NEW ---
-
   // --- NEW: State for History Search --- 
   const [historySearchTerm, setHistorySearchTerm] = useState('');
+  const [isHistorySearchOpen, setIsHistorySearchOpen] = useState(false);
   // --- END NEW ---
+
+  // A file uploaded into a project (v1: content lives in localStorage, small text only).
+  type ProjectFile = {
+    id: string;
+    name: string;
+    type: string; // MIME type
+    size: number; // bytes
+    addedAt: number;
+    encoding: 'text' | 'base64';
+    content: string; // extracted text ('text') or metadata note ('base64')
+  };
+  // TEMPORARY chat-history Projects entry (local only — full project model later)
+  type ChatHistoryProject = {
+    id: string;
+    name: string;
+    description?: string;
+    createdAt: number;
+    updatedAt?: number;
+    isStarred?: boolean;
+    isArchived?: boolean;
+    files?: ProjectFile[];
+    instructions?: string;
+  };
+  const chatProjectsStorageKey = 'chatProjects_playground';
+  const [chatProjects, setChatProjects] = useState<ChatHistoryProject[]>(() => {
+    try {
+      const saved = localStorage.getItem(chatProjectsStorageKey);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved) as ChatHistoryProject[];
+      if (!Array.isArray(parsed)) return [];
+      // Clamp stored names so older long titles don't keep showing truncated headers.
+      return parsed.map((project) => ({
+        ...project,
+        name: (project.name ?? '').slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project',
+      }));
+    } catch {
+      return [];
+    }
+  });
+  const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [openProjectMenuId, setOpenProjectMenuId] = useState<string | null>(null);
+  // Card whose hover overlay (bottom fade + date) is suppressed after a right-click.
+  const [suppressCardOverlayId, setSuppressCardOverlayId] = useState<string | null>(null);
+  // Whether the project workspace description is expanded ("Show more").
+  const [isProjectDescExpanded, setIsProjectDescExpanded] = useState(false);
+  // Right project sidebar (Instructions / Files / Scheduled) — history-style, toggled open/closed.
+  const [isProjectSidebarOpen, setIsProjectSidebarOpen] = useState(true);
+  // Files rail: show a short grid first; expand to reveal the rest.
+  const [isProjectFilesExpanded, setIsProjectFilesExpanded] = useState(false);
+  // Hidden input used to upload files into the open project.
+  const projectFileInputRef = useRef<HTMLInputElement>(null);
+  // When set, the next conversation created gets linked to this project.
+  const pendingChatProjectIdRef = useRef<string | null>(null);
+  // The active conversation id at the moment a project workspace was opened. Used to detect
+  // when a NEW conversation starts from the workspace composer so we can reveal the chat.
+  const projectEntryConversationIdRef = useRef<string | null>(null);
+  // Non-fatal upload notice shown in the project workspace (e.g. "file too large").
+  const [projectFileNotice, setProjectFileNotice] = useState<string | null>(null);
+  // "Set project instructions" modal state.
+  const [instructionsModalProjectId, setInstructionsModalProjectId] = useState<string | null>(null);
+  const [instructionsDraft, setInstructionsDraft] = useState('');
+  const [newChatProjectName, setNewChatProjectName] = useState('');
+  const [newChatProjectDescription, setNewChatProjectDescription] = useState('');
+  /** If set, the next created project receives this conversation. */
+  const [pendingProjectAssignConversationId, setPendingProjectAssignConversationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(chatProjectsStorageKey, JSON.stringify(chatProjects));
+  }, [chatProjects, chatProjectsStorageKey]);
+
+  const closeCreateProjectModal = useCallback(() => {
+    setIsCreateProjectModalOpen(false);
+    setEditingProjectId(null);
+    setNewChatProjectName('');
+    setNewChatProjectDescription('');
+    setPendingProjectAssignConversationId(null);
+  }, []);
+
+  const openCreateProjectModal = useCallback((options?: { assignConversationId?: string }) => {
+    setPendingProjectAssignConversationId(options?.assignConversationId ?? null);
+    setEditingProjectId(null);
+    setNewChatProjectName('');
+    setNewChatProjectDescription('');
+    setIsProjectsSortOpen(false);
+    setIsCreateProjectModalOpen(true);
+  }, []);
+
+  const openEditProjectModal = useCallback((project: ChatHistoryProject) => {
+    setPendingProjectAssignConversationId(null);
+    setEditingProjectId(project.id);
+    setNewChatProjectName(project.name.slice(0, PROJECT_NAME_MAX_CHARS));
+    setNewChatProjectDescription(project.description ?? '');
+    setOpenProjectMenuId(null);
+    setIsProjectsSortOpen(false);
+    setIsCreateProjectModalOpen(true);
+  }, []);
+
+  const handleToggleProjectStar = useCallback((projectId: string) => {
+    setChatProjects((prev) =>
+      prev.map((project) =>
+        project.id === projectId
+          ? { ...project, isStarred: !project.isStarred }
+          : project,
+      ),
+    );
+    setOpenProjectMenuId(null);
+  }, []);
+
+  const handleToggleProjectArchive = useCallback((projectId: string) => {
+    setChatProjects((prev) =>
+      prev.map((project) =>
+        project.id === projectId
+          ? { ...project, isArchived: !project.isArchived }
+          : project,
+      ),
+    );
+    setOpenProjectMenuId(null);
+  }, []);
+
+  const handleDeleteProject = useCallback((projectId: string) => {
+    setChatProjects((prev) => prev.filter((project) => project.id !== projectId));
+    setOpenProjectMenuId(null);
+    setActiveProjectId((current) => {
+      if (current !== projectId) return current;
+      try {
+        localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
+      } catch {
+        /* ignore storage failures */
+      }
+      return null;
+    });
+  }, []);
+
+  // Read one File into a serializable ProjectFile. Text files keep their content
+  // (viewable); anything else is stored as metadata only (no preview in v1).
+  const readProjectFile = useCallback((file: File): Promise<ProjectFile> => {
+    const base: Omit<ProjectFile, 'encoding' | 'content'> = {
+      id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: file.name,
+      type: file.type || 'application/octet-stream',
+      size: file.size,
+      addedAt: Date.now(),
+    };
+    const isText =
+      file.type.startsWith('text/') ||
+      /\.(txt|md|markdown|csv|json|html?|css|js|jsx|ts|tsx|py|xml|yml|yaml|log)$/i.test(file.name);
+    if (!isText) {
+      return Promise.resolve({
+        ...base,
+        encoding: 'base64',
+        content: 'Preview unavailable in this prototype (non-text file).',
+      });
+    }
+    return file.text().then((text) => ({ ...base, encoding: 'text', content: text }));
+  }, []);
+
+  const handleAddProjectFiles = useCallback(
+    async (projectId: string, fileList: FileList | null) => {
+      if (!fileList || fileList.length === 0) return;
+      const files = Array.from(fileList);
+      const tooBig = files.filter((f) => f.size > PROJECT_FILE_MAX_BYTES);
+      const accepted = files.filter((f) => f.size <= PROJECT_FILE_MAX_BYTES);
+
+      if (tooBig.length > 0) {
+        setProjectFileNotice(
+          `Skipped ${tooBig.length} file(s) over 1 MB (${tooBig
+            .map((f) => f.name)
+            .join(', ')}). This prototype stores files in the browser, so keep them small.`,
+        );
+      } else {
+        setProjectFileNotice(null);
+      }
+      if (accepted.length === 0) return;
+
+      const parsed = await Promise.all(accepted.map(readProjectFile));
+      setChatProjects((prev) =>
+        prev.map((project) =>
+          project.id === projectId
+            ? { ...project, files: [...parsed, ...(project.files ?? [])], updatedAt: Date.now() }
+            : project,
+        ),
+      );
+    },
+    [readProjectFile],
+  );
+
+  const handleRemoveProjectFile = useCallback((projectId: string, fileId: string) => {
+    setChatProjects((prev) =>
+      prev.map((project) =>
+        project.id === projectId
+          ? { ...project, files: (project.files ?? []).filter((f) => f.id !== fileId) }
+          : project,
+      ),
+    );
+  }, []);
+
+  const openInstructionsModal = useCallback((project: ChatHistoryProject) => {
+    setInstructionsModalProjectId(project.id);
+    setInstructionsDraft(project.instructions ?? '');
+  }, []);
+
+  const closeInstructionsModal = useCallback(() => {
+    setInstructionsModalProjectId(null);
+    setInstructionsDraft('');
+  }, []);
+
+  const saveInstructions = useCallback(() => {
+    setInstructionsModalProjectId((projectId) => {
+      if (projectId) {
+        const trimmed = instructionsDraft.trim();
+        setChatProjects((prev) =>
+          prev.map((project) =>
+            project.id === projectId
+              ? { ...project, instructions: trimmed || undefined, updatedAt: Date.now() }
+              : project,
+          ),
+        );
+      }
+      return null;
+    });
+    setInstructionsDraft('');
+  }, [instructionsDraft]);
+
+  const createChatProject = useCallback((name?: string, description?: string) => {
+    const projectName =
+      (name ?? newChatProjectName).trim().slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project';
+    const projectDescription = (description ?? newChatProjectDescription).trim();
+    const now = Date.now();
+    const project: ChatHistoryProject = {
+      id: `project-${now}`,
+      name: projectName,
+      description: projectDescription || undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setChatProjects((prev) => [project, ...prev]);
+    closeCreateProjectModal();
+    return project;
+  }, [closeCreateProjectModal, newChatProjectDescription, newChatProjectName]);
+
+  const openProjectsPage = useCallback(() => {
+    setHistoryNavView('projects');
+    setIsProjectsPageOpen(true);
+    setIsChatsCatalogOpen(false);
+    setIsChatsCatalogFilterOpen(false);
+    setProjectsPageSearch('');
+    setIsProjectsSortOpen(false);
+    try {
+      localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'true');
+    } catch {
+      /* ignore storage failures */
+    }
+  }, []);
+
+  const closeProjectsPage = useCallback(() => {
+    setIsProjectsPageOpen(false);
+    setIsProjectsSortOpen(false);
+    setProjectsPageSearch('');
+    try {
+      localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
+    } catch {
+      /* ignore storage failures */
+    }
+  }, []);
+
+  const openProject = useCallback((projectId: string) => {
+    setActiveProjectId(projectId);
+    setOpenProjectMenuId(null);
+    setProjectFileNotice(null);
+    setIsProjectDescExpanded(false);
+    setIsProjectFilesExpanded(false);
+    setIsProjectSidebarOpen(true);
+    // Any conversation the reused composer starts from here should link to this project.
+    pendingChatProjectIdRef.current = projectId;
+    // Remember which conversation was active on entry so we only auto-leave the workspace
+    // once a *different* (new) conversation becomes active.
+    projectEntryConversationIdRef.current = activeConversationId;
+    try {
+      localStorage.setItem(ACTIVE_PROJECT_ID_STORAGE_KEY, projectId);
+    } catch {
+      /* ignore storage failures */
+    }
+  }, [activeConversationId]);
+
+  const closeProject = useCallback(() => {
+    setActiveProjectId(null);
+    pendingChatProjectIdRef.current = null;
+    try {
+      localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
+    } catch {
+      /* ignore storage failures */
+    }
+  }, []);
+
+  // Leave the project workspace as soon as a *new* conversation becomes active from within it
+  // (the reused composer sent a message, or a recent chat was opened), revealing the chat.
+  useEffect(() => {
+    if (!activeProjectId) return;
+    if (activeConversationId && activeConversationId !== projectEntryConversationIdRef.current) {
+      setActiveProjectId(null);
+      setIsProjectsPageOpen(false);
+      try {
+        localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
+        localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
+      } catch {
+        /* ignore storage failures */
+      }
+    }
+  }, [activeConversationId, activeProjectId]);
 
   // --- NEW: State for Context Limit Warning ---
   const [isContextLimitReached, setIsContextLimitReached] = useState(false);
@@ -1625,9 +2572,6 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   // --- NEW: Hover state for System Prompt button ---
   const [isSystemPromptButtonHovered, setIsSystemPromptButtonHovered] = useState(false);
-  // --- NEW: Hover state for Model Selector button ---
-  const [isModelSelectorButtonHovered, setIsModelSelectorButtonHovered] = useState(false);
-  // --- END NEW HOVER STATE ---
 
   // --- NEW: State for image generation ---
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
@@ -1650,8 +2594,21 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   // --- State for voice input ---
   const [isVoiceInputActive, setIsVoiceInputActive] = useState(false);
+  const [isVoiceModeMenuOpen, setIsVoiceModeMenuOpen] = useState(false);
+  const [voiceInputMode, setVoiceInputMode] = useState<VoiceInputMode>(() => {
+    if (typeof window === 'undefined') return 'tap';
+
+    try {
+      return localStorage.getItem(VOICE_INPUT_MODE_STORAGE_KEY) === 'hold' ? 'hold' : 'tap';
+    } catch {
+      return 'tap';
+    }
+  });
   const recognitionRef = useRef<any | null>(null); // Changed SpeechRecognition to any
+  const isVoiceRecognitionRunningRef = useRef(false);
   const finalTranscriptRef = useRef<string>('');
+  const pendingVoiceSubmissionRef = useRef(false);
+  const submitVoiceTranscriptRef = useRef<(transcript: string) => void>(() => undefined);
 
   // --- State for the right context panel ---
   const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
@@ -1668,6 +2625,16 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [xenoSearchResults, setXenoSearchResults] = useState<XenoSearchResultsData | null>(null);
   const [isXenoSearchHovered, setIsXenoSearchHovered] = useState(false);
   const [isXenoDeepMode, setIsXenoDeepMode] = useState(false);
+
+  const handleEmptyStateModeChange = useCallback((mode: ChatMode) => {
+    setEmptyStateMode(mode);
+    setIsXenoSearchEnabled(modeUsesXenoSearch(mode));
+  }, []);
+
+  const handleEmptyStateAgentAction = useCallback(() => {
+    setEmptyStateMode('chat');
+    setIsXenoSearchEnabled(false);
+  }, []);
   // Search progress state for streaming updates
   const [searchProgress, setSearchProgress] = useState<{ message: string; progress: number }>({
     message: 'Searching the web',
@@ -1858,10 +2825,11 @@ interface QueueState {
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
+      const maxHeight = messages.length === 0 ? 120 : 120;
       textarea.style.height = 'auto';
-      textarea.style.height = `${textarea.scrollHeight}px`;
+      textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
     }
-  }, [inputValue]);
+  }, [inputValue, messages.length]);
 
   // Auto-save draft to localStorage (debounced)
   useEffect(() => {
@@ -1900,7 +2868,8 @@ interface QueueState {
         console.log(`✅ Loaded ${models.length} company groups with models`);
       } catch (error) {
         console.error('❌ Failed to load models, using fallback:', error);
-        // Keep using FALLBACK_MODELS which is already set as initial state
+        // Keep the temporary local visual-review models when the auth-gated
+        // catalog is unavailable. Production keeps this list empty.
       } finally {
         setIsModelsLoading(false);
       }
@@ -1923,6 +2892,29 @@ interface QueueState {
       ) {
         setIsAttachMenuOpen(false);
         setIsRecentFilesOpen(false);
+      }
+      if (
+        isVoiceModeMenuOpen &&
+        voiceControlRef.current &&
+        !voiceControlRef.current.contains(event.target as Node)
+      ) {
+        setIsVoiceModeMenuOpen(false);
+      }
+      if (
+        isThemeMenuOpen &&
+        themeMenuRef.current &&
+        !themeMenuRef.current.contains(event.target as Node) &&
+        !(chatMoreMenuRef.current && chatMoreMenuRef.current.contains(event.target as Node))
+      ) {
+        setIsThemeMenuOpen(false);
+      }
+      if (
+        isChatMoreMenuOpen &&
+        chatMoreMenuRef.current &&
+        !chatMoreMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsChatMoreMenuOpen(false);
+        setIsThemeMenuOpen(false);
       }
       // Close system prompt panel (existing logic)
       if (
@@ -1969,20 +2961,6 @@ interface QueueState {
             setDislikePopupInfo(null);
         }
       }
-      // Close company/model dropdowns (Updated Logic)
-      if (
-        isCompanyDropdownOpen && // Only need to check the main dropdown state
-        companyDropdownButtonRef.current && 
-        !companyDropdownButtonRef.current.contains(event.target as Node) &&
-        // Only check the company list container ref
-        (!companyListContainerRef.current || !companyListContainerRef.current.contains(event.target as Node))
-        // (!modelListContainerRef.current || !modelListContainerRef.current.contains(event.target as Node)) // Remove check for model list ref
-      ) {
-          setIsCompanyDropdownOpen(false);
-          // setIsModelListOpen(false); // Remove
-          // setSelectedCompany(null); // Remove
-          setExpandedCompanies(new Set()); // Reset expanded companies
-      }
       // Close settings modal
       if (
         isSettingsModalOpen &&
@@ -2009,8 +2987,7 @@ interface QueueState {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  // Update dependencies - remove isModelListOpen
-  }, [isAttachMenuOpen, isRecentFilesOpen, isSystemPromptOpen, modelTooltipInfo, feedbackPopupInfo, dislikePopupInfo, isCompanyDropdownOpen, isSettingsModalOpen, isConversationSelectorOpen]); 
+  }, [isAttachMenuOpen, isRecentFilesOpen, isVoiceModeMenuOpen, isThemeMenuOpen, isChatMoreMenuOpen, isSystemPromptOpen, modelTooltipInfo, feedbackPopupInfo, dislikePopupInfo, isSettingsModalOpen, isConversationSelectorOpen]);
 
   // --- NEW: useEffect for Hover Previews in Chat Area ---
   useEffect(() => {
@@ -2128,6 +3105,7 @@ interface QueueState {
           // Try to load from database - use shared interface ID so all interfaces share history
           const { conversations } = await chatService.getConversations({
             interface_id: sharedInterfaceId,
+            include_archived: true,
           });
 
           if (conversations && conversations.length > 0) {
@@ -2138,6 +3116,7 @@ interface QueueState {
               timestamp: conv.created_at ? new Date(conv.created_at).getTime() : Date.now(),
               messages: [], // Messages loaded on demand
               systemPrompt: conv.system_prompt,
+              isArchived: Boolean(conv.is_archived),
             }));
             setConversationHistory(localFormat);
             console.log("Chat history loaded from database.");
@@ -2190,6 +3169,23 @@ interface QueueState {
           }
         }
       }
+      // TEMPORARY visual review: seed mock history when empty; always refresh
+      // the document + image attachment demos so layout review stays current.
+      setConversationHistory((prev) => {
+        const mocks = MOCK_CHAT_HISTORY as Conversation[];
+        const attachmentDemoIds = new Set([
+          'mock-history-document-attach',
+          'mock-history-image-attach',
+        ]);
+        const attachmentDemos = mocks.filter((mock) =>
+          attachmentDemoIds.has(mock.id),
+        );
+        const base = prev.length === 0 ? mocks : prev;
+        const withoutStaleDemos = base.filter(
+          (convo) => !attachmentDemoIds.has(convo.id),
+        );
+        return [...attachmentDemos, ...withoutStaleDemos];
+      });
       setIsHistoryLoading(false);
     };
 
@@ -2371,17 +3367,15 @@ interface QueueState {
       }
   }, [messages]);
 
-  // Effect to resize edit textarea when editing starts or text changes
+  // Focus + size edit textarea when edit mode opens.
   useEffect(() => {
     const textarea = editInputRef.current;
     if (textarea && editingMessageId) {
-      // Optional: Focus the textarea
       textarea.focus();
-      // Auto-resize logic
-      textarea.style.height = 'auto'; // Reset height
-      textarea.style.height = `${textarea.scrollHeight}px`; // Set to content height
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.max(textarea.scrollHeight, 44)}px`;
     }
-  }, [editText, editingMessageId]); // Run when edit mode starts or text changes
+  }, [editText, editingMessageId]);
 
   // Effect for Live Thinking Timer
   useEffect(() => {
@@ -2583,8 +3577,13 @@ interface QueueState {
 
     recognition.onend = () => {
       // console.log('Voice recognition ended.');
+      isVoiceRecognitionRunningRef.current = false;
       setIsVoiceInputActive(false);
-      // finalTranscriptRef.current = ''; // Resetting here might be too soon if user clicks send quickly
+
+      if (pendingVoiceSubmissionRef.current) {
+        pendingVoiceSubmissionRef.current = false;
+        window.setTimeout(() => submitVoiceTranscriptRef.current(finalTranscriptRef.current), 0);
+      }
     };
 
     recognition.onerror = (event: any) => { // Changed event type to any
@@ -2593,7 +3592,13 @@ interface QueueState {
       if (event.error === 'no-speech' || event.error === 'audio-capture' || event.error === 'not-allowed') {
         // Optionally, provide user feedback here
       }
+      isVoiceRecognitionRunningRef.current = false;
       setIsVoiceInputActive(false);
+
+      if (pendingVoiceSubmissionRef.current) {
+        pendingVoiceSubmissionRef.current = false;
+        window.setTimeout(() => submitVoiceTranscriptRef.current(finalTranscriptRef.current), 0);
+      }
     };
 
     recognition.onresult = (event: any) => { // Changed SpeechRecognitionEvent to any
@@ -2620,30 +3625,96 @@ interface QueueState {
         recognitionRef.current.onend = null;
         recognitionRef.current.onerror = null;
         recognitionRef.current.onresult = null;
-        if (isVoiceInputActive) { // Check if it was active before trying to stop
+        if (isVoiceRecognitionRunningRef.current) {
             recognitionRef.current.stop();
         }
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount. isVoiceInputActive is intentionally omitted from deps for cleanup logic.
+  }, []); // Run once on mount.
 
-  const handleToggleVoiceInput = () => {
+  useEffect(() => {
+    try {
+      localStorage.setItem(VOICE_INPUT_MODE_STORAGE_KEY, voiceInputMode);
+    } catch {
+      // Storage can be unavailable in privacy-restricted browser sessions.
+    }
+  }, [voiceInputMode]);
+
+  const startVoiceInput = useCallback(() => {
     if (!recognitionRef.current) {
       console.error('Speech recognition not initialized.');
-      // Optionally, alert the user or disable the button if not supported.
       return;
     }
 
-    if (isVoiceInputActive) {
-      recognitionRef.current.stop();
-      // isVoiceInputActive will be set to false by the onend handler
-    } else {
-      // When starting, preserve existing input and append to it
-      finalTranscriptRef.current = inputValue; 
+    if (isVoiceRecognitionRunningRef.current) return;
+
+    // Preserve existing input and append the dictated transcript to it.
+    finalTranscriptRef.current = inputValue;
+
+    try {
+      isVoiceRecognitionRunningRef.current = true;
       recognitionRef.current.start();
       setIsVoiceInputActive(true);
+    } catch (error) {
+      // Browsers throw if start is requested while recognition is still closing.
+      isVoiceRecognitionRunningRef.current = false;
+      setIsVoiceInputActive(false);
+      console.error('Could not start voice input:', error);
     }
+  }, [inputValue]);
+
+  const stopVoiceInput = useCallback(() => {
+    if (!recognitionRef.current || !isVoiceRecognitionRunningRef.current) return;
+
+    try {
+      recognitionRef.current.stop();
+    } catch (error) {
+      isVoiceRecognitionRunningRef.current = false;
+      setIsVoiceInputActive(false);
+      console.error('Could not stop voice input:', error);
+    }
+  }, []);
+
+  const handleToggleVoiceInput = useCallback(() => {
+    if (isVoiceRecognitionRunningRef.current) {
+      stopVoiceInput();
+      return;
+    }
+
+    startVoiceInput();
+  }, [startVoiceInput, stopVoiceInput]);
+
+  const handleVoicePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (voiceInputMode !== 'hold' || event.button !== 0) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    startVoiceInput();
+  };
+
+  const handleVoicePointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (voiceInputMode !== 'hold') return;
+
+    event.preventDefault();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    stopVoiceInput();
+  };
+
+  const handleVoiceKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (voiceInputMode !== 'hold' || event.repeat || (event.key !== 'Enter' && event.key !== ' ')) return;
+
+    event.preventDefault();
+    startVoiceInput();
+  };
+
+  const handleVoiceKeyUp = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (voiceInputMode !== 'hold' || (event.key !== 'Enter' && event.key !== ' ')) return;
+
+    event.preventDefault();
+    stopVoiceInput();
   };
 
   // --- Reusable Function to Fetch AI Response ---
@@ -2864,10 +3935,14 @@ interface QueueState {
     const resolvedApiMessages = await Promise.all(apiMessagesPromises);
         
     // --- Updated Payload Construction --- 
-    // If xenoContext is provided, use it to modify systemPrompt
-    let finalSystemPrompt = savedSystemPrompt;
+    // Research context replaces the saved base prompt; Code mode then adds its
+    // focused instruction without discarding the user's own system prompt.
+    const finalSystemPrompt = buildChatSystemPrompt(
+        emptyStateMode,
+        savedSystemPrompt,
+        xenoContext?.summary,
+    );
     if (xenoContext?.summary) {
-        finalSystemPrompt = xenoContext.summary;
         console.log('[API Prep] Using Xeno Search augmented prompt:', finalSystemPrompt.substring(0, 150) + '...');
     }
 
@@ -3272,7 +4347,8 @@ interface QueueState {
                                 title: title,
                                 timestamp: now,
                                 messages: conversationMessages,
-                                systemPrompt: savedSystemPrompt || undefined
+                                systemPrompt: savedSystemPrompt || undefined,
+                                projectId: pendingChatProjectIdRef.current ?? undefined,
                             };
 
                             setConversationHistory(prevHistory => [newConversation, ...prevHistory]);
@@ -3288,7 +4364,8 @@ interface QueueState {
                             title: title,
                             timestamp: now,
                             messages: conversationMessages,
-                            systemPrompt: savedSystemPrompt || undefined
+                            systemPrompt: savedSystemPrompt || undefined,
+                            projectId: pendingChatProjectIdRef.current ?? undefined,
                         };
                         setConversationHistory(prevHistory => [newConversation, ...prevHistory]);
                         setActiveConversationId(newConvoId);
@@ -3301,13 +4378,16 @@ interface QueueState {
                         title: title,
                         timestamp: now,
                         messages: conversationMessages,
-                        systemPrompt: savedSystemPrompt || undefined
+                        systemPrompt: savedSystemPrompt || undefined,
+                        projectId: pendingChatProjectIdRef.current ?? undefined,
                     };
 
                     setConversationHistory(prevHistory => [newConversation, ...prevHistory]);
                     setActiveConversationId(newConvoId);
                     // console.log("Created new conversation in history:", newConvoId);
                 }
+                // The pending project link (if any) has now been applied to the new conversation.
+                pendingChatProjectIdRef.current = null;
                 // Reset guard
                 setTimeout(() => {
                     isCreatingConversationRef.current = false;
@@ -3604,29 +4684,30 @@ interface QueueState {
     }
   };
 
-  const handleGenerate = async () => {
-    const canSend = inputValue.trim() || attachedFiles.length > 0;
+  const handleGenerate = async (inputOverride?: string) => {
+    const composerText = inputOverride ?? inputValue;
+    const canSend = composerText.trim() || attachedFiles.length > 0;
     if (!canSend || isLoading) return;
     if (isContextLimitReached) return;
 
     // Prepare the new user message
-    const userTextToSend = inputValue.trim();
+    const userTextToSend = (inputOverride ?? inputValue).trim();
     const filesToSend = [...attachedFiles]; // Capture files before clearing
 
     // console.log('handleGenerate called with text:', userTextToSend); // Original log, can be kept or removed
     const messageId = `user-${Date.now()}`;
 
     // --- Prepare newUserMessage with potential image/file attachment ---
-    let userImageAttachmentPayload: ChatMessage['userImageAttachment'] = undefined;
-    const firstImageFile = filesToSend.find(f => f.fileObject && f.type.startsWith('image/'));
-    if (firstImageFile && firstImageFile.fileObject) {
-      userImageAttachmentPayload = {
-        file: firstImageFile.fileObject,
-        name: firstImageFile.name,
-        type: firstImageFile.type,
-      };
-      // console.log('Attaching image to user message:', firstImageFile.name);
-    }
+    const imageAttachmentsPayload = filesToSend
+      .filter((f) => f.fileObject && f.type.startsWith('image/'))
+      .map((f) => ({
+        file: f.fileObject as File,
+        name: f.name,
+        type: f.type,
+      }));
+    const userImageAttachmentsPayload =
+      imageAttachmentsPayload.length > 0 ? imageAttachmentsPayload : undefined;
+    const userImageAttachmentPayload = userImageAttachmentsPayload?.[0];
 
     let userFileAttachmentPayload: ChatMessage['userFileAttachment'] = undefined;
     // Allow file attachment regardless of whether there's also an image
@@ -3646,6 +4727,7 @@ interface QueueState {
         text: userTextToSend || 'Attached file(s)',
         timestamp: Date.now(),
         userImageAttachment: userImageAttachmentPayload,
+        userImageAttachments: userImageAttachmentsPayload,
         userFileAttachment: userFileAttachmentPayload,
     };
     // --- End user message preparation ---
@@ -4382,6 +5464,22 @@ Please provide a well-structured response using this search context and any mult
     }
   };
 
+  useEffect(() => {
+    submitVoiceTranscriptRef.current = (transcript) => {
+      void handleGenerate(transcript);
+    };
+  }, [handleGenerate]);
+
+  const handleVoiceSend = () => {
+    if (isVoiceRecognitionRunningRef.current) {
+      pendingVoiceSubmissionRef.current = true;
+      stopVoiceInput();
+      return;
+    }
+
+    void handleGenerate();
+  };
+
   // --- NEW: Function to Load a Conversation from History ---
   const handleLoadConversation = async (conversationId: string) => {
     const conversationToLoad = conversationHistory.find(convo => convo.id === conversationId);
@@ -4415,19 +5513,22 @@ Please provide a well-structured response using this search context and any mult
               setConversationHistory(prevHistory =>
                 prevHistory.map(convo =>
                   convo.id === conversationId
-                    ? { ...convo, messages: localMessages }
+                    ? { ...convo, messages: localMessages, isUnread: false }
                     : convo
                 )
               );
             } else {
               setMessages(conversationToLoad.messages || []);
+              patchConversation(conversationId, { isUnread: false });
             }
           } catch (error) {
             console.error("Error loading conversation from database:", error);
             setMessages(conversationToLoad.messages || []);
+            patchConversation(conversationId, { isUnread: false });
           }
         } else {
           setMessages(conversationToLoad.messages || []);
+          patchConversation(conversationId, { isUnread: false });
         }
 
         // --- Load System Prompt ---
@@ -4436,7 +5537,7 @@ Please provide a well-structured response using this search context and any mult
         setSavedSystemPrompt(loadedPrompt);
         setIsSystemPromptOpen(false); // Close prompt panel if open
         // --- End Load System Prompt ---
-        setIsHistoryOpen(false); // Close history panel after loading
+        // Keep history open — it closes only via the panel X.
         // Optional: Reset input, system prompt, etc. or load them from conversation if saved
         setInputValue('');
         setShowThinkingId(null);
@@ -4534,10 +5635,434 @@ Please provide a well-structured response using this search context and any mult
   }, [isConversationSelectorOpen]);
   // --- END NEW ---
 
-  const toggleHistory = () => {
-    setIsHistoryOpen(!isHistoryOpen);
+  const closeHistoryRowMenu = useCallback(() => {
+    setHistoryRowMenu(null);
+    setHistoryProjectSubmenuOpen(false);
+  }, []);
+
+  const patchConversation = useCallback((conversationId: string, patch: Partial<Conversation>) => {
+    setConversationHistory((prevHistory) =>
+      prevHistory.map((convo) => (convo.id === conversationId ? { ...convo, ...patch } : convo)),
+    );
+  }, []);
+
+  const handleTogglePinConversation = (conversationId: string) => {
+    setConversationHistory((prevHistory) => {
+      const target = prevHistory.find((convo) => convo.id === conversationId);
+      if (!target) return prevHistory;
+      if (target.isPinned) {
+        return prevHistory.map((convo) =>
+          convo.id === conversationId
+            ? { ...convo, isPinned: false, pinOrder: undefined }
+            : convo,
+        );
+      }
+      const maxOrder = prevHistory.reduce((max, convo) => {
+        if (!convo.isPinned || convo.isArchived) return max;
+        return Math.max(max, convo.pinOrder ?? 0);
+      }, -1);
+      return prevHistory.map((convo) =>
+        convo.id === conversationId
+          ? { ...convo, isPinned: true, pinOrder: maxOrder + 1 }
+          : convo,
+      );
+    });
   };
 
+  /**
+   * Pin / reorder into Pinned at insertAt (index among pinned excluding the dragged id).
+   */
+  const applyPinnedInsert = useCallback((draggedId: string, insertAt: number) => {
+    setConversationHistory((prevHistory) => {
+      const dragged = prevHistory.find((convo) => convo.id === draggedId);
+      if (!dragged || dragged.isArchived) return prevHistory;
+
+      const pinned = prevHistory
+        .filter((convo) => convo.isPinned && !convo.isArchived && convo.id !== draggedId)
+        .sort((a, b) => (a.pinOrder ?? a.timestamp) - (b.pinOrder ?? b.timestamp));
+
+      const clamped = Math.max(0, Math.min(insertAt, pinned.length));
+      const nextPinned = [...pinned];
+      nextPinned.splice(clamped, 0, { ...dragged, isPinned: true });
+
+      const orderMap = new Map(nextPinned.map((convo, index) => [convo.id, index]));
+      const nextHistory = prevHistory.map((convo) =>
+        orderMap.has(convo.id)
+          ? { ...convo, isPinned: true, pinOrder: orderMap.get(convo.id)! }
+          : convo,
+      );
+
+      const sameOrder = prevHistory.every((convo) => {
+        const next = nextHistory.find((item) => item.id === convo.id);
+        return (
+          next != null &&
+          Boolean(next.isPinned) === Boolean(convo.isPinned) &&
+          (next.pinOrder ?? null) === (convo.pinOrder ?? null)
+        );
+      });
+      return sameOrder ? prevHistory : nextHistory;
+    });
+  }, []);
+
+  const clearHistoryDrag = useCallback(() => {
+    historyDragIdRef.current = null;
+    historyDragFromSectionRef.current = null;
+    pinnedInsertIndexRef.current = null;
+    historyPointerSessionRef.current = null;
+    setHistoryDragId(null);
+    setPinnedInsertIndex(null);
+    setHistoryDragGhostTitle(null);
+  }, []);
+
+  const commitHistoryDrag = useCallback(() => {
+    const draggedId = historyDragIdRef.current;
+    const insertAt = pinnedInsertIndexRef.current;
+    // Clear transforms first (Claude: no transition on drop settle), then write order.
+    historyDragIdRef.current = null;
+    historyDragFromSectionRef.current = null;
+    pinnedInsertIndexRef.current = null;
+    historyPointerSessionRef.current = null;
+    setHistoryDragId(null);
+    setPinnedInsertIndex(null);
+    setHistoryDragGhostTitle(null);
+    if (draggedId != null && insertAt != null) {
+      window.requestAnimationFrame(() => {
+        applyPinnedInsert(draggedId, insertAt);
+      });
+    }
+  }, [applyPinnedInsert]);
+
+  const updatePinnedInsertIndex = useCallback((nextIndex: number) => {
+    if (pinnedInsertIndexRef.current === nextIndex) return;
+    pinnedInsertIndexRef.current = nextIndex;
+    setPinnedInsertIndex(nextIndex);
+  }, []);
+
+  const placeHistoryDragGhost = useCallback((clientX: number, clientY: number) => {
+    const el = historyDragGhostElRef.current;
+    const session = historyPointerSessionRef.current;
+    if (!el || !session) return;
+    // Keep ghost locked to the grab point — not offset to the bottom-right of the cursor.
+    el.style.width = `${session.rowWidth}px`;
+    el.style.transform = `translate3d(${clientX - session.grabOffsetX}px, ${clientY - session.grabOffsetY}px, 0)`;
+  }, []);
+
+  /** Pointer DnD for Pinned / Recents→Pinned — no HTML5 drag API. */
+  const beginHistoryPointerDrag = useCallback(
+    (
+      event: React.PointerEvent,
+      convo: Conversation,
+      rowSection: 'pinned' | 'recents',
+    ) => {
+      if (event.button !== 0) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('button, input, textarea, a, [role="menu"]')) return;
+
+      const rowEl = event.currentTarget as HTMLElement;
+      const rowRect = rowEl.getBoundingClientRect();
+      if (rowRect.height > 0) pinnedRowHeightRef.current = rowRect.height;
+
+      historyPointerSessionRef.current = {
+        id: convo.id,
+        fromSection: rowSection,
+        title: convo.title,
+        startX: event.clientX,
+        startY: event.clientY,
+        grabOffsetX: event.clientX - rowRect.left,
+        grabOffsetY: event.clientY - rowRect.top,
+        rowWidth: rowRect.width,
+        pointerId: event.pointerId,
+        activated: false,
+      };
+
+      const onMove = (moveEvent: PointerEvent) => {
+        const session = historyPointerSessionRef.current;
+        if (!session || moveEvent.pointerId !== session.pointerId) return;
+
+        const dx = moveEvent.clientX - session.startX;
+        const dy = moveEvent.clientY - session.startY;
+
+        if (!session.activated) {
+          if (dx * dx + dy * dy < 36) return;
+          session.activated = true;
+          historyDidDragRef.current = true;
+          historyDragIdRef.current = session.id;
+          historyDragFromSectionRef.current = session.fromSection;
+          // Seed insert at the drag's own slot so siblings don't jump on activate.
+          if (rowSection === 'pinned') {
+            const pinnedFull = conversationHistoryRef.current
+              .filter((item) => item.isPinned && !item.isArchived)
+              .sort((a, b) => (a.pinOrder ?? a.timestamp) - (b.pinOrder ?? b.timestamp));
+            const fromIndex = pinnedFull.findIndex((item) => item.id === session.id);
+            pinnedInsertIndexRef.current = fromIndex < 0 ? null : fromIndex;
+            setPinnedInsertIndex(pinnedInsertIndexRef.current);
+          } else {
+            pinnedInsertIndexRef.current = null;
+            setPinnedInsertIndex(null);
+          }
+          setHistoryDragId(session.id);
+          setHistoryHoveredRowId(null);
+          setHistoryDragGhostTitle(session.title);
+          document.body.style.userSelect = 'none';
+          document.body.style.cursor = 'grabbing';
+          window.requestAnimationFrame(() => {
+            placeHistoryDragGhost(moveEvent.clientX, moveEvent.clientY);
+          });
+        } else {
+          placeHistoryDragGhost(moveEvent.clientX, moveEvent.clientY);
+        }
+
+        // Insert index from LAYOUT positions only (strip translateY).
+        // Using getBoundingClientRect while rows are transformed causes
+        // insertIndex ↔ transform feedback → rows bounce up/down.
+        const zone = document.querySelector(
+          '[data-history-pinned-zone]',
+        ) as HTMLElement | null;
+        if (!zone) return;
+
+        const zoneRect = zone.getBoundingClientRect();
+        const inZoneX =
+          moveEvent.clientX >= zoneRect.left - 12 &&
+          moveEvent.clientX <= zoneRect.right + 12;
+        if (!inZoneX) return;
+
+        const rowEls = Array.from(
+          zone.querySelectorAll<HTMLElement>('[data-history-pinned-row]'),
+        ).filter((rowEl) => rowEl.getAttribute('data-history-pinned-row') !== session.id);
+
+        const layoutTop = (rowEl: HTMLElement) => {
+          const rect = rowEl.getBoundingClientRect();
+          const transform = window.getComputedStyle(rowEl).transform;
+          if (!transform || transform === 'none') return rect.top;
+          try {
+            return rect.top - new DOMMatrixReadOnly(transform).m42;
+          } catch {
+            return rect.top;
+          }
+        };
+
+        const y = Math.min(
+          Math.max(moveEvent.clientY, zoneRect.top),
+          zoneRect.bottom,
+        );
+
+        let nextInsert = rowEls.length;
+        for (let i = 0; i < rowEls.length; i += 1) {
+          const top = layoutTop(rowEls[i]);
+          const mid = top + rowEls[i].offsetHeight / 2;
+          if (y < mid) {
+            nextInsert = i;
+            break;
+          }
+        }
+        updatePinnedInsertIndex(nextInsert);
+      };
+
+      const onUp = (upEvent: PointerEvent) => {
+        const session = historyPointerSessionRef.current;
+        if (!session || upEvent.pointerId !== session.pointerId) return;
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+
+        if (session.activated) {
+          commitHistoryDrag();
+        } else {
+          historyPointerSessionRef.current = null;
+        }
+      };
+
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    },
+    [commitHistoryDrag, placeHistoryDragGhost, updatePinnedInsertIndex],
+  );
+
+  const handleToggleUnreadConversation = (conversationId: string) => {
+    setConversationHistory((prevHistory) =>
+      prevHistory.map((convo) =>
+        convo.id === conversationId ? { ...convo, isUnread: !convo.isUnread } : convo,
+      ),
+    );
+  };
+
+  const handleArchiveConversation = async (conversationId: string, archived: boolean) => {
+    if (archived) {
+      patchConversation(conversationId, { isArchived: true, isPinned: false });
+    } else {
+      patchConversation(conversationId, { isArchived: false });
+    }
+    if (isDbAuthenticated) {
+      try {
+        await chatService.updateConversation(conversationId, { is_archived: archived });
+      } catch (error) {
+        console.error('Failed to update archive state:', error);
+      }
+    }
+  };
+
+  const handleAssignConversationToProject = (conversationId: string, projectId: string | null) => {
+    patchConversation(conversationId, { projectId });
+    if (projectId) {
+      const now = Date.now();
+      setChatProjects((prev) =>
+        prev.map((project) =>
+          project.id === projectId ? { ...project, updatedAt: now } : project,
+        ),
+      );
+    }
+  };
+
+  const submitCreateProjectModal = () => {
+    if (editingProjectId) {
+      const name =
+        newChatProjectName.trim().slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project';
+      const description = newChatProjectDescription.trim();
+      const now = Date.now();
+      setChatProjects((prev) =>
+        prev.map((project) =>
+          project.id === editingProjectId
+            ? { ...project, name, description: description || undefined, updatedAt: now }
+            : project,
+        ),
+      );
+      closeCreateProjectModal();
+      return;
+    }
+    const assignId = pendingProjectAssignConversationId;
+    const project = createChatProject();
+    if (assignId) {
+      handleAssignConversationToProject(assignId, project.id);
+    }
+  };
+
+  const handleOpenAsQuickTask = (conversationId: string) => {
+    void handleLoadConversation(conversationId);
+  };
+
+  useEffect(() => {
+    if (!historyRowMenu) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      const el = target instanceof Element ? target : target?.parentElement;
+      if (el?.closest?.('[data-history-row-menu]')) return;
+      closeHistoryRowMenu();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeHistoryRowMenu();
+        return;
+      }
+      const convo = conversationHistory.find((item) => item.id === historyRowMenu.conversationId);
+      if (!convo) return;
+      const key = event.key.toLowerCase();
+      if (key === 'p') {
+        event.preventDefault();
+        handleTogglePinConversation(convo.id);
+        closeHistoryRowMenu();
+      } else if (key === 'r') {
+        event.preventDefault();
+        setEditingConversationId(convo.id);
+        setEditTitleText(convo.title);
+        closeHistoryRowMenu();
+        setIsChatsCatalogOpen(false);
+        setTimeout(() => document.getElementById(`edit-title-${convo.id}-${interfaceId}`)?.focus(), 50);
+      } else if (key === 'a') {
+        event.preventDefault();
+        void handleArchiveConversation(convo.id, !convo.isArchived);
+        closeHistoryRowMenu();
+      } else if (key === 'd') {
+        event.preventDefault();
+        setDeleteConfirmationModal({
+          isOpen: true,
+          conversationId: convo.id,
+          conversationTitle: convo.title,
+        });
+        closeHistoryRowMenu();
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [
+    historyRowMenu,
+    conversationHistory,
+    closeHistoryRowMenu,
+    interfaceId,
+  ]);
+
+  const closeRecentsFilterMenu = useCallback(() => {
+    setRecentsFilterMenu(null);
+    setRecentsFilterSubmenu(null);
+  }, []);
+
+  useEffect(() => {
+    if (!recentsFilterMenu) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      const el = target instanceof Element ? target : target?.parentElement;
+      if (el?.closest?.('[data-recents-filter-menu]')) return;
+      closeRecentsFilterMenu();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeRecentsFilterMenu();
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [recentsFilterMenu, closeRecentsFilterMenu]);
+
+  useEffect(() => {
+    if (!isHistoryOpen || historyNavView !== 'chats') {
+      closeRecentsFilterMenu();
+    }
+  }, [isHistoryOpen, historyNavView, closeRecentsFilterMenu]);
+
+  useEffect(() => {
+    if (!isProjectsPageOpen && !isCreateProjectModalOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (isCreateProjectModalOpen) {
+        closeCreateProjectModal();
+        return;
+      }
+      if (openProjectMenuId) {
+        setOpenProjectMenuId(null);
+        return;
+      }
+      if (isProjectsSortOpen) {
+        setIsProjectsSortOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [
+    closeCreateProjectModal,
+    isCreateProjectModalOpen,
+    isProjectsPageOpen,
+    isProjectsSortOpen,
+    openProjectMenuId,
+  ]);
+
+  useEffect(() => {
+    if (!openProjectMenuId) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest('[data-project-card-menu]')) return;
+      setOpenProjectMenuId(null);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [openProjectMenuId]);
 
   const toggleSearch = () => {
     const newSearchState = !isSearchToggled;
@@ -4627,8 +6152,6 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   const handleModelSelect = async (model: Model) => {
     const previousModel = selectedModel;
     setSelectedModel(model);
-    setIsCompanyDropdownOpen(false); // Close company dropdown
-    setExpandedCompanies(new Set()); // Reset expanded state
     setShowThinkingId(null); // Reset expanded thoughts on model change
 
     // --- Refactored Logic to sync toggle state based on capability ---
@@ -4705,6 +6228,8 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       setMessages([]); // Clear current messages
       setActiveConversationId(null); // Set active ID to null (indicates new chat)
       setInputValue(''); // Clear the input field
+      setEmptyStateMode('chat');
+      setIsXenoSearchEnabled(false);
       // Optional: Clear other states like system prompt, toggles, attachments if desired
       setSystemPrompt('');
       setSavedSystemPrompt('');
@@ -4779,6 +6304,267 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   };
   // --- END NEW Helper --- 
 
+  // Render fn (not a nested component) so typing doesn't remount and steal focus.
+  const renderCreateProjectModal = () => {
+    const canCreate = newChatProjectName.trim().length > 0;
+    const fieldClassName =
+      'w-full rounded-lg px-3 py-2.5 text-[13px] text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none';
+
+    return (
+      <div
+        className={`chat-themed chat-theme-${resolvedChatTheme} fixed top-0 right-0 bottom-0 z-[999] flex items-center justify-center p-4`}
+        data-chat-theme-preference={chatTheme}
+        data-create-project-dialog=""
+        style={{
+          left:
+            (isTaskbarHidden ? 0 : 52) +
+            (!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0),
+          backgroundColor: 'transparent',
+          ...chatThemePreviewStyle,
+        }}
+        onClick={closeCreateProjectModal}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-project-dialog-title"
+          className="w-full max-w-[32rem] overflow-hidden rounded-2xl border"
+          style={{
+            backgroundColor: 'var(--chat-elevated)',
+            borderColor: 'var(--chat-border)',
+            color: 'var(--chat-text)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3">
+            <h2
+              id="create-project-dialog-title"
+              className="text-[1.15rem] font-semibold tracking-tight text-[var(--chat-text)]"
+            >
+              {editingProjectId ? 'Edit project' : 'Create a project'}
+            </h2>
+            <button
+              type="button"
+              onClick={closeCreateProjectModal}
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+              aria-label="Close create project"
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="space-y-4 px-5 pb-5">
+            <div
+              className="rounded-xl px-3.5 py-3"
+              style={{ backgroundColor: 'var(--chat-control)' }}
+            >
+              <p className="text-[13px] font-semibold text-[var(--chat-text)]">
+                How to use projects
+              </p>
+              <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--chat-muted)]">
+                Projects help organize your work and leverage knowledge across multiple conversations.
+                Upload docs, code, and files to create themed collections that XENO can reference
+                again and again. Start by creating a memorable title and description to organize
+                your project. You can always edit it later.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor={`create-project-name-${interfaceId}`}
+                className="block text-[13px] font-medium text-[var(--chat-text)]"
+              >
+                What are you working on?
+              </label>
+              <input
+                id={`create-project-name-${interfaceId}`}
+                type="text"
+                autoFocus
+                value={newChatProjectName}
+                maxLength={PROJECT_NAME_MAX_CHARS}
+                onChange={(event) =>
+                  setNewChatProjectName(event.target.value.slice(0, PROJECT_NAME_MAX_CHARS))
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && canCreate) {
+                    event.preventDefault();
+                    submitCreateProjectModal();
+                  }
+                }}
+                placeholder="Name your project"
+                className={fieldClassName}
+                style={{
+                  backgroundColor: 'var(--chat-canvas)',
+                  boxShadow: 'inset 0 0 0 1px var(--chat-border)',
+                }}
+                onFocus={(event) => {
+                  event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-accent)';
+                }}
+                onBlur={(event) => {
+                  event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-border)';
+                }}
+              />
+              <p className="text-right text-[11px] tabular-nums text-[var(--chat-muted)]">
+                {newChatProjectName.length}/{PROJECT_NAME_MAX_CHARS}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor={`create-project-description-${interfaceId}`}
+                className="block text-[13px] font-medium text-[var(--chat-text)]"
+              >
+                What are you trying to achieve?
+              </label>
+              <textarea
+                id={`create-project-description-${interfaceId}`}
+                value={newChatProjectDescription}
+                onChange={(event) => setNewChatProjectDescription(event.target.value)}
+                placeholder="Describe your project, goals, subject, etc..."
+                rows={4}
+                className={`${fieldClassName} min-h-[6.5rem] resize-y`}
+                style={{
+                  backgroundColor: 'var(--chat-canvas)',
+                  boxShadow: 'inset 0 0 0 1px var(--chat-border)',
+                }}
+                onFocus={(event) => {
+                  event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-accent)';
+                }}
+                onBlur={(event) => {
+                  event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-border)';
+                }}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={closeCreateProjectModal}
+                className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors"
+                style={{
+                  backgroundColor: 'var(--chat-control)',
+                  color: 'var(--chat-text)',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitCreateProjectModal}
+                disabled={!canCreate}
+                className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                style={{
+                  backgroundColor: 'var(--chat-text)',
+                  color: 'var(--chat-canvas)',
+                }}
+              >
+                {editingProjectId ? 'Save changes' : 'Create project'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderInstructionsModal = () => {
+    return (
+      <div
+        className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+        data-chat-theme-preference={chatTheme}
+        style={{
+          // Dim + blur the page so the dialog is the clear focus.
+          backgroundColor: 'rgba(0, 0, 0, 0.45)',
+          ...chatThemePreviewStyle,
+        }}
+        onClick={closeInstructionsModal}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="project-instructions-title"
+          className="flex w-[min(600px,100%)] flex-col overflow-hidden rounded-2xl border"
+          style={{
+            height: 560,
+            backgroundColor: 'var(--chat-elevated)',
+            borderColor: 'var(--chat-border)',
+            color: 'var(--chat-text)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex-shrink-0 px-5 pt-5 pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <h2
+                id="project-instructions-title"
+                className="text-[1.15rem] font-semibold tracking-tight text-[var(--chat-text)]"
+              >
+                Set project instructions
+              </h2>
+              <button
+                type="button"
+                onClick={closeInstructionsModal}
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                aria-label="Close instructions"
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--chat-muted)]">
+              Give XENO context and rules to follow for every chat in this project. These apply on
+              top of your global preferences and the chat's selected style.
+            </p>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col px-5 pb-5">
+            <textarea
+              autoFocus
+              value={instructionsDraft}
+              onChange={(event) => setInstructionsDraft(event.target.value)}
+              placeholder="e.g. Think step by step and show your reasoning for complex problems. Prefer concrete examples."
+              className="min-h-0 w-full flex-1 resize-none overflow-y-auto rounded-xl px-3.5 py-3 text-[13px] leading-relaxed text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none scrollbar-thin scrollbar-thumb-zinc-500/40 scrollbar-track-transparent"
+              style={{
+                backgroundColor: 'var(--chat-canvas)',
+                boxShadow: 'inset 0 0 0 1px var(--chat-border)',
+              }}
+              onFocus={(event) => {
+                event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-accent)';
+              }}
+              onBlur={(event) => {
+                event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-border)';
+              }}
+            />
+            <div className="mt-4 flex flex-shrink-0 justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeInstructionsModal}
+                className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors"
+                style={{
+                  backgroundColor: 'var(--chat-control)',
+                  color: 'var(--chat-text)',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveInstructions}
+                className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-opacity"
+                style={{
+                  backgroundColor: 'var(--chat-text)',
+                  color: 'var(--chat-canvas)',
+                }}
+              >
+                Save instructions
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // --- NEW: Delete Confirmation Modal Component --- 
   const DeleteConfirmationModalComponent: React.FC = () => {
     if (!deleteConfirmationModal.isOpen || !deleteConfirmationModal.conversationId || deleteConfirmationModal.conversationTitle === null) {
@@ -4792,35 +6578,64 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         handleCancelDelete(); // Close modal after action
     };
 
+    // Portaled to document.body — re-apply chat theme tokens like the history sidebar.
     return (
-        <div className="absolute inset-0 z-[999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-[#111113] border border-[#1e1e21] rounded-lg shadow-xl max-w-sm w-full overflow-hidden">
-                {/* Header */}
+        <div
+          className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+          data-chat-theme-preference={chatTheme}
+          data-delete-chat-dialog=""
+          style={{
+            backgroundColor: 'color-mix(in srgb, var(--chat-text) 28%, transparent)',
+            ...chatThemePreviewStyle,
+          }}
+          onClick={handleCancelDelete}
+        >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-chat-dialog-title"
+              className="w-full max-w-sm overflow-hidden rounded-lg border shadow-xl"
+              style={{
+                backgroundColor: 'var(--chat-elevated)',
+                borderColor: 'var(--chat-border)',
+                color: 'var(--chat-text)',
+                boxShadow: '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
+              }}
+              onClick={(event) => event.stopPropagation()}
+            >
                 <div className="p-4">
-                    <h2 className="text-lg font-semibold text-white">Delete chat?</h2>
+                    <h2 id="delete-chat-dialog-title" className="text-lg font-semibold text-zinc-100">
+                      Delete chat?
+                    </h2>
                 </div>
 
-                {/* Divider */}
                 <hr className="border-t border-[#1e1e21]" />
 
-                {/* Content */}
                 <div className="p-4">
-                    <p className="text-sm text-gray-300">
-                        This will delete <strong className="text-white">{deleteConfirmationModal.conversationTitle}</strong>.
+                    <p className="text-sm text-zinc-500">
+                        This will delete{' '}
+                        <strong className="font-semibold text-zinc-100">
+                          {deleteConfirmationModal.conversationTitle}
+                        </strong>
+                        .
                     </p>
                 </div>
 
-                {/* Footer with Buttons */}
-                <div className="flex justify-end gap-3 bg-[#0e0e10]/50 px-4 py-3 border-t border-[#1e1e21]">
-                    <button 
+                <div
+                  className="flex justify-end gap-3 border-t border-[#1e1e21] px-4 py-3"
+                  style={{ backgroundColor: 'var(--chat-surface)' }}
+                >
+                    <button
+                        type="button"
                         onClick={handleCancelDelete}
-                        className="px-4 py-1.5 rounded-md text-sm font-medium text-gray-300 bg-[#1e1e21] hover:bg-[#2a2a2d] transition-colors"
+                        className="rounded-md border border-[#1e1e21] bg-[#1e1e21] px-4 py-1.5 text-sm font-medium text-zinc-100 transition-colors hover:bg-[#2a2a2d]"
                     >
                         Cancel
                     </button>
-                    <button 
+                    <button
+                        type="button"
                         onClick={handleConfirm}
-                        className="px-4 py-1.5 rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
+                        className="rounded-md bg-red-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700"
                     >
                         Delete
                     </button>
@@ -4905,6 +6720,112 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   // Update handler to trigger file input click
   const handleUploadFile = () => { 
     fileInputRef.current?.click(); 
+  };
+
+  const renderEmptyStateToolPanel = (tool: ChatEmptyStateTool, close: () => void) => {
+    const panelHeader = (title: string) => (
+      <div className="mb-3 flex items-center justify-between border-b border-white/[0.07] pb-2.5">
+        <span className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-400">{title}</span>
+        <button
+          type="button"
+          data-tool-panel-close
+          onClick={close}
+          aria-label={`Close ${title}`}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    );
+
+    return (
+      <div className="flex h-full min-h-0 flex-col" aria-label="System Prompt panel">
+        {panelHeader('System Prompt')}
+        {isCustomPromptOpen ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            <textarea
+              autoFocus
+              placeholder="Enter custom system prompt…"
+              value={systemPrompt}
+              onChange={(event) => setSystemPrompt(event.target.value)}
+              className="min-h-28 flex-1 resize-none rounded-lg border border-white/[0.08] bg-black/20 p-2.5 text-xs leading-5 text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-white/25"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCustomPromptOpen(false)}
+                className="h-8 flex-1 rounded-lg border border-white/[0.08] text-xs text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={!systemPrompt.trim()}
+                onClick={() => {
+                  setSavedSystemPrompt(systemPrompt);
+                  setSelectedPersona('custom');
+                  setIsCustomPromptOpen(false);
+                  setIsSystemPromptSaved(true);
+                  setTimeout(() => setIsSystemPromptSaved(false), 1500);
+                  close();
+                }}
+                className="h-8 flex-1 rounded-lg border border-white/[0.08] text-xs text-zinc-300 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {PERSONAS.map((persona) => (
+              <button
+                key={persona.id}
+                type="button"
+                onClick={() => {
+                  handlePersonaSelect(persona.id);
+                  close();
+                }}
+                className={`flex h-9 w-full items-center justify-between rounded-lg px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${
+                  selectedPersona === persona.id
+                    ? 'bg-white/[0.08] text-white'
+                    : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100'
+                }`}
+              >
+                {persona.label}
+                {selectedPersona === persona.id && <Check size={13} />}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedPersona('custom');
+                setIsCustomPromptOpen(true);
+              }}
+              className={`flex h-9 w-full items-center justify-between rounded-lg px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${
+                selectedPersona === 'custom'
+                  ? 'bg-white/[0.08] text-white'
+                  : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100'
+              }`}
+            >
+              Custom
+              {selectedPersona === 'custom' && <Check size={13} />}
+            </button>
+            {selectedPersona && (
+              <button
+                type="button"
+                onClick={() => {
+                  handleClearSystemPrompt();
+                  close();
+                }}
+                className="mt-2 h-8 w-full rounded-lg border border-white/[0.07] text-xs text-zinc-500 transition-colors hover:border-white/[0.15] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
+              >
+                Clear selection
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
   
   // Handle file selection from the hidden input
@@ -5506,6 +7427,35 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     }).catch(err => {
       console.error('Failed to copy text: ', err);
     });
+  };
+
+  /** Retry from a sent user message — regenerate the following AI turn (or resend if none yet). */
+  const handleRetryFromUserMessage = async (userMessageId: string) => {
+    if (isLoading) return;
+
+    const userIndex = messages.findIndex((msg) => msg.id === userMessageId);
+    if (userIndex === -1 || messages[userIndex].sender !== 'user') {
+      console.error('Cannot retry: user message not found.');
+      return;
+    }
+
+    const followingAi = messages
+      .slice(userIndex + 1)
+      .find(
+        (msg) =>
+          msg.sender === 'ai' &&
+          !msg.isThinkingPlaceholder &&
+          !msg.isDotPlaceholder,
+      );
+
+    if (followingAi) {
+      await handleRegenerate(followingAi.id);
+      return;
+    }
+
+    const historyForRetry = messages.slice(0, userIndex + 1);
+    setMessages(historyForRetry);
+    await fetchAiResponse(historyForRetry, systemPrompt, selectedModel, undefined, undefined, undefined);
   };
 
   const handleSaveEdit = async () => { // Make async
@@ -6369,7 +8319,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
     return (
       <div
-        className="absolute inset-0 z-[1000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 image-viewer-overlay"
+        className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 image-viewer-overlay"
         onClick={onClose}
       >
         <div className="group absolute top-4 right-4 z-[1001] w-16 h-16 flex items-center justify-center">
@@ -6400,13 +8350,13 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           </button>
         </div>
         <div
-          className="relative max-w-full max-h-full flex items-center justify-center"
+          className="relative flex h-[90vh] w-[90vw] items-center justify-center"
           onClick={(e) => e.stopPropagation()}
         >
           <img
             src={imageUrl}
-            alt="Fullscreen AI generated image"
-            className="block max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            alt="Fullscreen image"
+            className="h-full w-full rounded-lg object-contain shadow-2xl"
           />
         </div>
       </div>
@@ -6727,26 +8677,58 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
     for (const conversation of serializableHistory) {
       for (const message of conversation.messages) {
-        // Serialize image attachments
-        if (message.userImageAttachment && message.userImageAttachment.file instanceof File) {
+        // Serialize image attachments (array + legacy single field)
+        const serializeImage = async (attachment: {
+          file?: File;
+          name: string;
+          type: string;
+          base64Data?: string;
+        }) => {
+          if (attachment.file instanceof File) {
+            const base64Url = await fileToBase64(attachment.file);
+            return {
+              name: attachment.file.name,
+              type: attachment.file.type,
+              base64Data: base64Url.split(',')[1],
+            };
+          }
+          if (attachment.base64Data) {
+            const { file: _file, ...rest } = attachment;
+            return rest;
+          }
+          return null;
+        };
+
+        if (Array.isArray(message.userImageAttachments) && message.userImageAttachments.length > 0) {
+          const serializedList = [];
+          for (const attachment of message.userImageAttachments) {
             try {
-                const liveFileObject = message.userImageAttachment.file;
-                const base64Url = await fileToBase64(liveFileObject);
-                const base64Data = base64Url.split(',')[1];
-                message.userImageAttachment = { // Replace file with serializable data
-                    name: liveFileObject.name,
-                    type: liveFileObject.type,
-                    base64Data: base64Data, // Store base64 data
-                };
-                delete message.userImageAttachment.file; // Remove the File object
+              const serialized = await serializeImage(attachment);
+              if (serialized) serializedList.push(serialized);
             } catch (error) {
-                console.error("Error serializing image attachment for history:", error);
-                delete message.userImageAttachment; // Remove problematic attachment
+              console.error('Error serializing image attachment for history:', error);
             }
-        } else if (message.userImageAttachment && message.userImageAttachment.file) {
-            // If file is not an instance of File (might already be processed/corrupted), log and remove
-             console.warn("Found non-File object in userImageAttachment.file during serialization, removing:", message.userImageAttachment);
+          }
+          if (serializedList.length > 0) {
+            message.userImageAttachments = serializedList;
+            message.userImageAttachment = serializedList[0];
+          } else {
+            delete message.userImageAttachments;
             delete message.userImageAttachment;
+          }
+        } else if (message.userImageAttachment) {
+          try {
+            const serialized = await serializeImage(message.userImageAttachment);
+            if (serialized) {
+              message.userImageAttachment = serialized;
+              message.userImageAttachments = [serialized];
+            } else {
+              delete message.userImageAttachment;
+            }
+          } catch (error) {
+            console.error('Error serializing image attachment for history:', error);
+            delete message.userImageAttachment;
+          }
         }
 
         // Serialize file attachments
@@ -7041,6 +9023,521 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     }
   };
 
+  // Compact action buttons — conversation needs vertical room for the message exchange.
+  const composerActionButtonSizeClass = 'h-7 w-7 rounded-lg';
+
+  const activeHistoryConvo = activeConversationId
+    ? conversationHistory.find((convo) => convo.id === activeConversationId)
+    : undefined;
+
+  const openChatFilesPanel = () => {
+    for (const message of messages) {
+      if (message.userFileAttachment) {
+        handleShowFileInContextPanel(message.userFileAttachment as any);
+        return;
+      }
+      if (message.userImageAttachment?.file || message.userImageAttachment?.base64Data) {
+        const image = message.userImageAttachment;
+        setContextPanelContent({
+          type: 'file',
+          title: image.name || 'Image',
+          content: image.base64Data
+            ? `[Image: ${image.name || 'attachment'}]\n\nPreview is available in the message bubble.`
+            : `[Image: ${image.name || 'attachment'}]`,
+        });
+        setIsContextPanelOpen(true);
+        return;
+      }
+    }
+    setContextPanelContent({
+      type: 'context',
+      title: 'Files in chat',
+      content: 'No files attached in this conversation yet.',
+    });
+    setIsContextPanelOpen(true);
+  };
+
+  const moreMenuItemClass =
+    'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]';
+
+  const topBarBtnClass = (isActive: boolean, extra = '') =>
+    `chat-top-bar-btn flex h-9 items-center justify-center rounded-lg border text-white/80 transition-[background-color,border-color,color] active:scale-[0.98] ${
+      isActive
+        ? 'border-transparent text-[var(--chat-text)]'
+        : 'border-white/[0.08] hover:border-white/20 hover:bg-black/20'
+    } ${extra}`.trim();
+
+  // The one-and-only primary composer. Rendered in the empty/active chat AND reused verbatim
+  // inside the project workspace (forceCompact) so the two can never visually diverge.
+  const renderPrimaryComposer = (options?: { forceCompact?: boolean }) => (
+          <div className="relative z-10">
+          <ChatEmptyState
+            isActive={options?.forceCompact ? false : messages.length === 0}
+            isCompact={isMultiInterface}
+            hideToolRail={options?.forceCompact}
+            activeMode={emptyStateMode}
+            canAnalyzeDocument={modelSupportsFileUpload(selectedModel)}
+            modelSelector={({ isInlineTray, onOpenChange }) => (
+              <ChatModelSelector
+                groupedModels={groupedModels}
+                isCompact={isMobile || isMultiInterface}
+                isInlineTray={isInlineTray}
+                isMinimal
+                isLoading={isModelsLoading}
+                isReasoningActive={modelHasReasoningCapability(selectedModel.id, selectedModel) !== 'disabled' && isReasonToggled}
+                onOpenChange={onOpenChange}
+                onSelect={handleModelSelect}
+                selectedModel={selectedModel}
+              />
+            )}
+            onAgentActionSelect={handleEmptyStateAgentAction}
+            onModeChange={handleEmptyStateModeChange}
+            onOpenConversationHistory={() => setIsHistoryOpen(true)}
+            onUploadFile={handleUploadFile}
+            renderToolPanel={renderEmptyStateToolPanel}
+            updates={MOCK_CHAT_UPDATES}
+          >
+          {/* Queue Container */}
+          {queue.messages.length > 0 && (
+            <div className="mb-3 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-md">
+              <div className="w-full flex items-center justify-between p-3 text-left text-gray-300 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{queue.messages.length} in queue</span>
+                </div>
+                <button
+                  onClick={toggleQueueExpansion}
+                  className="p-1 hover:bg-[#2a2a2d] transition-colors rounded"
+                >
+                  <ChevronDown 
+                    size={16} 
+                    className={`transition-transform duration-200 ${queue.isExpanded ? 'rotate-180' : ''}`}
+                  />
+                </button>
+              </div>
+              
+              {queue.isExpanded && (
+                <div className="px-3 pb-3 space-y-2">
+                  {queue.messages.map((queuedMessage, index) => (
+                    <div 
+                      key={queuedMessage.id}
+                      className="flex items-center justify-between p-2 bg-[#0e0e10]/80 rounded-md border border-[#1e1e21]/50"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className="w-4 h-4 rounded-full border-2 border-[#1e1e21] flex-shrink-0"></div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-gray-300 truncate">
+                            {queuedMessage.text || `Task ${index + 1}`}
+                          </div>
+                          {queuedMessage.attachedFiles.length > 0 && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {queuedMessage.attachedFiles.length} file(s) attached
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeFromQueue(queuedMessage.id)}
+                        className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-900/30 rounded transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Input Box Area — inner bordered field inside the composer shell (empty + conversation). */}
+          <div
+            data-empty-composer-input="true"
+            className={`chat-input-container relative rounded-2xl border border-white/[0.10] bg-transparent shadow-none ${
+              messages.length === 0 ? 'p-3' : 'p-2'
+            }`}
+          >
+            {isContextLimitReached && (
+              <div className="mb-3 p-2.5 border border-red-600/70 bg-red-900/30 rounded-lg text-red-400 text-xs shadow-md">
+                {contextLimitWarning}
+              </div>
+            )}
+            {attachedFiles.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2 border-b border-[#2a2a2d] pb-3">
+                    {attachedFiles.map((file) => (
+                        <div
+                            key={file.id}
+                            className="flex items-center relative group"
+                        >
+                            {file.fileObject && file.type.startsWith('image/') ? (
+                                <div className="relative">
+                                    <img
+                                        src={URL.createObjectURL(file.fileObject)}
+                                        alt={file.name}
+                                        className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-[#1e1e21] group-hover:border-[#6b7280] transition-all duration-200 ease-out cursor-pointer group-hover:scale-[1.02]"
+                                        onClick={() => {
+                                            if (file.fileObject) {
+                                                setFullScreenImageUrl(URL.createObjectURL(file.fileObject));
+                                                setIsFullScreenImageOpen(true);
+                                                setViewerShowsDownloadButton(false);
+                                            }
+                                        }}
+                                    />
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveAttachedFile(file.id);
+                                        }}
+                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[#0e0e10] border border-[#1e1e21] text-gray-400 hover:text-white hover:border-red-500 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
+                                        aria-label="Remove file"
+                                    >
+                                        <X size={10} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="relative">
+                                    <div
+                                        className={`h-11 rounded-lg flex items-center gap-2 px-3 bg-[#0e0e10] border border-[#1e1e21] group-hover:border-[#6b7280] transition-all duration-200 ease-out text-[13px] text-gray-300 group-hover:text-white ${file.fileObject ? 'cursor-pointer group-hover:scale-[1.01]' : 'cursor-default opacity-70'}`}
+                                        onClick={() => {
+                                            if (file.fileObject) {
+                                                handleShowFileInContextPanel(file);
+                                            }
+                                        }}
+                                    >
+                                        <FileText size={14} className={file.fileObject ? "text-gray-400 group-hover:text-gray-300" : "text-gray-600"} />
+                                        <span className="truncate max-w-[140px]" title={file.name}>{file.name}</span>
+                                        {!file.fileObject && (
+                                            <span className="text-[11px] text-gray-600 ml-0.5">(recent)</span>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveAttachedFile(file.id);
+                                        }}
+                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[#0e0e10] border border-[#1e1e21] text-gray-400 hover:text-white hover:border-red-500 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
+                                        aria-label="Remove file"
+                                    >
+                                        <X size={10} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                  </div>
+                )}
+
+            {/* Textarea Row */}
+            <div className="flex items-end relative">
+              <textarea
+                ref={textareaRef}
+                placeholder={CHAT_MODE_PLACEHOLDERS[emptyStateMode]}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter without Shift sends the message
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const canSend = inputValue.trim() || attachedFiles.length > 0;
+                    if (canSend && !isLoading && !isContextLimitReached) {
+                      handleGenerate();
+                    }
+                  }
+                  // Shift+Enter adds a new line (default behavior)
+                }}
+                rows={messages.length === 0 ? 2 : 2}
+                className={`w-full resize-none border-none bg-transparent px-1 text-[15px] leading-6 text-zinc-100 outline-none placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:shadow-none scrollbar-thin scrollbar-track-transparent scrollbar-thumb-zinc-700 ${messages.length === 0 ? 'min-h-[3.25rem] pb-2 pt-0.5' : 'min-h-[3rem] max-h-[7.5rem] pb-1 pt-0.5'}`}
+                style={{ maxHeight: messages.length === 0 ? '120px' : '120px' }}
+              />
+            </div>
+            
+            {/* Controls Row */}
+            <div className={`chat-input-controls flex items-center justify-between gap-2 ${messages.length === 0 ? 'mt-1.5 md:mt-2' : 'mt-1'}`}>
+              <div className="flex items-center gap-1 md:gap-2 relative">
+                  {/* Attach lives on the hover tool rail (empty + conversation), not in the input row. */}
+                  <div className="relative hidden">
+                      <button
+                          ref={attachButtonRef}
+                          onClick={toggleAttachMenu}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] text-zinc-400 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/20 hover:bg-white/[0.04] hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-white/[0.08] disabled:hover:bg-transparent disabled:hover:text-zinc-400"
+                          aria-label="Attach file"
+                          disabled={!modelSupportsVision(selectedModel)}
+                      >
+                          <Paperclip size={16} />
+                      </button>
+                      {/* Attach Menu */}
+                      <div 
+                          ref={attachMenuRef}
+                          className={`
+                              absolute bottom-full left-0 mb-2 z-30 
+                              w-64 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-xl 
+                              transition-all duration-200 ease-out origin-bottom-left 
+                              ${isAttachMenuOpen 
+                                  ? 'opacity-100 scale-100 visible' 
+                                  : 'opacity-0 scale-95 invisible' 
+                              }
+                          `}
+                       >
+                           <div className="p-2 space-y-1">
+                               <button onClick={handleUploadFile} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-300 hover:bg-[#2a2a2d] rounded-md text-left">
+                                   <FolderUp size={18} />
+                                   <span>Upload a file</span>
+                               </button>
+                               <div className="border-t border-[#1e1e21] mx-1 my-1"></div>
+                               <button onClick={handleShowRecent} className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-300 hover:bg-[#2a2a2d] rounded-md text-left">
+                                   <div className="flex items-center gap-3">
+                                      <FileClock size={18} />
+                                      <span>Recent</span>
+                          </div>
+                                   <ChevronDown size={16} className="transform -rotate-90 text-gray-400" /> 
+                            </button>
+                           </div>
+                         </div>
+                        {/* Recent Files Panel */}
+                         <div 
+                            ref={recentFilesPanelRef}
+                            className={`
+                                hide-scrollbar
+                                absolute bottom-full left-full ml-2 mb-2 z-30 
+                                w-72 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-xl 
+                                max-h-[300px] overflow-y-auto 
+                                transition-all duration-200 ease-out origin-bottom-left 
+                                ${isRecentFilesOpen && isAttachMenuOpen 
+                                    ? 'opacity-100 scale-100 visible' 
+                                    : 'opacity-0 scale-95 invisible' 
+                                }
+                            `}
+                            style={{ left: 'calc(16rem + 0.5rem)' }} // Adjust positioning if needed
+                          >
+                                 <div className="p-2 space-y-1">
+                                     {/* Recent Files Search */}
+                                     {recentFiles.length > 3 && (
+                                       <div className="relative mb-2">
+                                         <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                                         <input
+                                           type="text"
+                                           placeholder="Search files..."
+                                           value={recentFilesSearchQuery}
+                                           onChange={(e) => setRecentFilesSearchQuery(e.target.value)}
+                                           className="w-full bg-[#0a0a0b] border border-[#1e1e21] rounded-md py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
+                                         />
+                                       </div>
+                                     )}
+                                     {recentFiles.length === 0 ? (
+                                       <div className="px-3 py-6 text-center text-gray-500 text-sm">
+                                         <FileClock size={24} className="mx-auto mb-2 text-gray-600" />
+                                         <p>No recent files</p>
+                                         <p className="text-xs mt-1">Files you attach will appear here</p>
+                                       </div>
+                                     ) : (
+                                       recentFiles
+                                         .filter(file =>
+                                           !recentFilesSearchQuery.trim() ||
+                                           file.name.toLowerCase().includes(recentFilesSearchQuery.toLowerCase())
+                                         )
+                                         .map((file: typeof recentFiles[0]) => (
+                                         <div key={file.id} className="group flex items-center justify-between px-2 py-1.5 text-sm text-gray-300 hover:bg-[#2a2a2d] rounded-md cursor-pointer">
+                                           <div 
+                                             className="flex items-center gap-2 overflow-hidden flex-1" 
+                                             onClick={() => handleReattachRecentFile(file)}
+                                           >
+                                             {file.type.startsWith('image/') && file.preview ? (
+                                               <img src={file.preview} alt="Preview" className="w-6 h-6 rounded object-cover flex-shrink-0" />
+                                             ) : file.type === 'application/pdf' || file.name.endsWith('.pdf') ? (
+                                               <FileText size={16} className="text-red-400 flex-shrink-0" />
+                                             ) : file.type.startsWith('text/') || file.name.match(/\.(txt|md|json|csv|xml|html|css|js|ts|jsx|tsx|py|java|c|cpp|cs|php|rb|go|swift|kt|rs|toml|yaml|yml)$/i) ? (
+                                               <FileText size={16} className="text-blue-400 flex-shrink-0" />
+                                             ) : (
+                                               <FileText size={16} className="text-gray-400 flex-shrink-0" />
+                                             )}
+                                             <div className="flex flex-col overflow-hidden">
+                                                <span className="truncate" title={file.name}>{file.name}</span>
+                                               <span className="text-xs text-gray-500">
+                                                 {(file.size / 1024).toFixed(1)} KB · {new Date(file.lastUsed).toLocaleDateString()}
+                                               </span>
+                                             </div>
+                                           </div>
+                                           <button 
+                                             onClick={(e) => {
+                                               e.stopPropagation();
+                                               handleRemoveRecentFile(file.id);
+                                             }}
+                                             className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                           >
+                                                 <X size={14} />
+                                             </button>
+                                         </div>
+                                       ))
+                                     )}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Token Context Window Display with Compress Button - Hidden on mobile (shown in header instead) */}
+                      {!isMobile && (
+                        <div data-token-context-counter className="flex shrink-0 items-center whitespace-nowrap">
+                          {(() => {
+                            const totalUsedTokens = activeConversationTokenCount + currentInputAndSystemTokens;
+                            const maxTokens = selectedModel?.maxTokens || 200000;
+                            // Use conversation-only tokens for compress threshold (not input)
+                            const conversationUsagePercent = conversationTokenCount / maxTokens;
+                            const totalUsagePercent = totalUsedTokens / maxTokens;
+                            const canCompress = conversationUsagePercent > 0.9 && messages.length > 0;
+                            const isNearLimit = totalUsagePercent > 0.9;
+                            const isOverLimit = totalUsagePercent > 1;
+
+                            if (canCompress) {
+                              // Show compress button only when CONVERSATION history is near limit
+                              return (
+                                <button
+                                  onClick={() => compactConversation(selectedModel)}
+                                  disabled={isLoading}
+                                  className="group text-xs text-orange-400 transition-all hover:text-orange-300 disabled:cursor-not-allowed disabled:opacity-50 tabular-nums"
+                                >
+                                  <span className="group-hover:hidden">
+                                    {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
+                                  </span>
+                                  <span className="hidden font-medium group-hover:inline">
+                                    Compress
+                                  </span>
+                                </button>
+                              );
+                            }
+                            return (
+                              <span className={`text-xs tabular-nums ${isOverLimit ? 'text-red-400' : isNearLimit ? 'text-orange-400' : 'text-gray-400'}`}>
+                                {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      )}
+                      {/* Reasoning toggle */}
+                      {modelHasReasoningCapability(selectedModel.id, selectedModel) === 'toggleable' && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsReasonToggled(prev => !prev);
+                          }}
+    className={`flex h-7 w-7 select-none items-center justify-center rounded-lg border border-white/[0.08] transition-[background-color,border-color,color,transform] duration-150 hover:border-white/20 hover:bg-white/[0.04] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${isReasonToggled ? 'bg-white/[0.06] text-zinc-200' : 'text-zinc-600'}`}
+  >
+    <Brain size={14} />
+                        </button>
+                      )}
+              </div>
+                  <div className="flex items-center gap-2 md:gap-3">
+                  {isLoading ? (
+                    // While generating: Queue (if typing) else Stop — both 40x40 to match Send/Voice.
+                    (inputValue.trim() || attachedFiles.length > 0) ? (
+                      <button
+                        onClick={addToQueue}
+                        title="Add this message to the queue"
+                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#2a2a2d] text-white transition-colors hover:bg-[#3a3a3d]"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleStopGeneration}
+                        title="Stop generating"
+                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#2a2a2d] text-white transition-colors hover:bg-[#3a3a3d]"
+                      >
+                        <StopCircle size={18} />
+                      </button>
+                    )
+                  ) : (
+                    <>
+                      <div
+                        ref={voiceControlRef}
+                        className="voice-control relative flex items-center"
+                        data-voice-menu-open={isVoiceModeMenuOpen ? 'true' : 'false'}
+                      >
+                        <button
+                          type="button"
+                          data-voice-mode-trigger
+                          onClick={() => setIsVoiceModeMenuOpen((isOpen) => !isOpen)}
+                          className="absolute right-full mr-1 flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-[#242426] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                          aria-label="Voice input options"
+                          aria-expanded={isVoiceModeMenuOpen}
+                          aria-haspopup="dialog"
+                        >
+                          <ChevronDown size={15} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          data-voice-primary
+                          onClick={voiceInputMode === 'tap' ? handleToggleVoiceInput : undefined}
+                          onPointerDown={handleVoicePointerDown}
+                          onPointerUp={handleVoicePointerUp}
+                          onPointerCancel={handleVoicePointerUp}
+                          onKeyDown={handleVoiceKeyDown}
+                          onKeyUp={handleVoiceKeyUp}
+                          className={`${composerActionButtonSizeClass} flex items-center justify-center transition-all relative ${isVoiceInputActive ? 'bg-[#2a2a2d]/70' : 'bg-[#0e0e10] hover:bg-[#2a2a2d]'}`}
+                          aria-label={isVoiceInputActive ? 'Stop voice input' : voiceInputMode === 'hold' ? 'Hold to record voice input' : 'Start voice input'}
+                        >
+                          {isVoiceInputActive && (
+                            <span className="absolute inset-0 flex items-center justify-center">
+                              <span className="animate-ping h-3.5 w-3.5 rounded-full bg-red-500 opacity-75"></span>
+                            </span>
+                          )}
+                          <Mic size={16} className={`relative ${isVoiceInputActive ? 'text-red-500' : 'text-gray-400'}`} />
+                        </button>
+                        {isVoiceModeMenuOpen && (
+                          <div
+                            data-voice-mode-popover
+                            role="dialog"
+                            aria-label="Voice input options"
+                            className="absolute right-0 top-full z-40 mt-1.5 w-40 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] px-2 py-1.5 shadow-lg shadow-black/20"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <Hand size={13} className="shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
+                                <span className="truncate text-[11px] font-medium text-[var(--chat-text)]">Hold to record</span>
+                              </div>
+                              <button
+                                type="button"
+                                data-voice-hold-switch
+                                role="switch"
+                                aria-checked={voiceInputMode === 'hold'}
+                                onClick={() => {
+                                  stopVoiceInput();
+                                  setVoiceInputMode((mode) => mode === 'hold' ? 'tap' : 'hold');
+                                }}
+                                className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-md border p-[2px] transition-[background-color,border-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-text)]/40 ${
+                                  voiceInputMode === 'hold'
+                                    ? 'border-[var(--chat-text)] bg-[var(--chat-text)]'
+                                    : 'border-[var(--chat-border)] bg-[var(--chat-canvas)]'
+                                }`}
+                              >
+                                <span
+                                  className={`pointer-events-none absolute left-[2px] top-1/2 block h-2.5 w-2.5 rounded-[3px] transition-[transform,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${
+                                    voiceInputMode === 'hold'
+                                      ? 'translate-x-[14px] -translate-y-1/2 bg-[var(--chat-elevated)] shadow-sm'
+                                      : 'translate-x-0 -translate-y-1/2 bg-[var(--chat-text)]'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        data-composer-send-button
+                        onClick={handleVoiceSend}
+                        className={`flex items-center justify-center transition-[background-color,color,transform,opacity] duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#141416] ${inputValue.trim() || attachedFiles.length > 0 ? 'bg-zinc-100 text-[#111113] hover:bg-white motion-safe:animate-send-button-enter' : 'cursor-not-allowed border border-white/10 bg-[#161618] text-zinc-600'} ${composerActionButtonSizeClass}`}
+                        aria-label="Send message"
+                        disabled={!(inputValue.trim() || attachedFiles.length > 0) || isContextLimitReached}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+                </div>
+          </div>
+          </ChatEmptyState>
+          </div>
+  );
+
   return (
     <>
       {/* Add source preview styles */}
@@ -7053,6 +9550,348 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             -ms-overflow-style: none;  /* IE and Edge (legacy) */
             scrollbar-width: none;  /* Firefox */
           }
+
+          /* Chat LLM owns these tokens. They do not affect the rest of XENO. */
+          .chat-theme-dark {
+            --chat-canvas: #0a0a0a;
+            --chat-surface: #171717;
+            --chat-elevated: #262626;
+            --chat-control: #262626;
+            --chat-control-strong: #404040;
+            --chat-text: #fafafa;
+            --chat-muted: #a3a3a3;
+            --chat-surface-text: #fafafa;
+            --chat-surface-muted: #a3a3a3;
+            --chat-border: rgba(255, 255, 255, 0.10);
+            --chat-hover: #404040;
+            /* Solid fill for project-card date fade (must stay opaque in every theme). */
+            --chat-project-preview-fade: #404040;
+            --chat-top-bar-btn-active: color-mix(in srgb, var(--chat-canvas) 55%, black);
+            --chat-overlay: rgba(0, 0, 0, 0.18);
+            --chat-accent: #fafafa;
+            --chat-accent-soft: color-mix(in srgb, #fafafa 20%, transparent);
+            --chat-on-accent: #0a0a0a;
+            --chat-danger: #ef4444;
+            --chat-danger-hover: #f87171;
+            /* Composer: dark fill (not washed lighter). Definition = inner border. */
+            --chat-composer-fill: #141416;
+            --chat-composer-border: rgba(255, 255, 255, 0.12);
+            --chat-composer-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.55);
+            --chat-input-shadow: none;
+            --chat-tool-rail-stroke: rgba(245, 245, 245, 0.78);
+            --chat-tool-rail-stroke-soft: rgba(245, 245, 245, 0.58);
+            color-scheme: dark;
+          }
+          .chat-theme-dim {
+            --chat-canvas: #171718;
+            --chat-surface: #1b1b1d;
+            --chat-elevated: #212124;
+            --chat-control: #2a2a2e;
+            --chat-control-strong: #36363b;
+            --chat-text: #e7e7e2;
+            --chat-muted: #a1a19d;
+            --chat-surface-text: #e7e7e2;
+            --chat-surface-muted: #a1a19d;
+            --chat-border: rgba(255, 255, 255, 0.12);
+            --chat-hover: rgba(255, 255, 255, 0.07);
+            /* Dim hover is translucent — fade needs a solid match for the preview box. */
+            --chat-project-preview-fade: #222225;
+            --chat-top-bar-btn-active: color-mix(in srgb, var(--chat-canvas) 55%, black);
+            --chat-overlay: rgba(0, 0, 0, 0.16);
+            --chat-accent: #e7e7e2;
+            --chat-accent-soft: color-mix(in srgb, #e7e7e2 20%, transparent);
+            --chat-on-accent: #171718;
+            --chat-danger: #ef4444;
+            --chat-danger-hover: #f87171;
+            --chat-composer-fill: #1b1b1d;
+            --chat-composer-border: rgba(255, 255, 255, 0.12);
+            --chat-composer-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.45);
+            --chat-input-shadow: none;
+            --chat-tool-rail-stroke: rgba(232, 232, 226, 0.72);
+            --chat-tool-rail-stroke-soft: rgba(232, 232, 226, 0.52);
+            color-scheme: dark;
+          }
+          .chat-theme-light {
+            --chat-canvas: #ffffff;
+            --chat-surface: #fafafa;
+            --chat-elevated: #ffffff;
+            --chat-control: #f5f5f5;
+            --chat-control-strong: #e5e5e5;
+            --chat-text: #0a0a0a;
+            --chat-muted: #737373;
+            --chat-surface-text: #0a0a0a;
+            --chat-surface-muted: #737373;
+            --chat-border: #d4d4d4;
+            --chat-hover: #f5f5f5;
+            --chat-project-preview-fade: #f5f5f5;
+            --chat-top-bar-btn-active: var(--chat-control);
+            --chat-overlay: rgba(10, 10, 10, 0.04);
+            --chat-accent: #0a0a0a;
+            --chat-accent-soft: color-mix(in srgb, #0a0a0a 14%, transparent);
+            --chat-on-accent: #ffffff;
+            --chat-danger: #dc2626;
+            --chat-danger-hover: #b91c1c;
+            --chat-composer-fill: #ffffff;
+            --chat-composer-border: rgba(0, 0, 0, 0.14);
+            --chat-composer-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.12);
+            --chat-input-shadow: none;
+            --chat-tool-rail-stroke: rgba(24, 24, 27, 0.72);
+            --chat-tool-rail-stroke-soft: rgba(24, 24, 27, 0.48);
+            color-scheme: light;
+          }
+          .chat-themed {
+            color: var(--chat-text);
+            background: var(--chat-canvas);
+          }
+          .chat-themed .chat-top-bar {
+            background-color: var(--chat-canvas) !important;
+            border-color: var(--chat-border) !important;
+            color: var(--chat-text) !important;
+          }
+          .chat-themed .chat-top-bar-btn[data-active="true"] {
+            background-color: var(--chat-top-bar-btn-active) !important;
+            border-color: transparent !important;
+            color: var(--chat-text) !important;
+          }
+          /* History edge: use theme border only. Never mix --chat-text into shadow —
+             on Dark/Dim that text is near-white and paints a "white glow" (esp. when closed). */
+          .chat-themed .chat-history-sidebar,
+          .chat-themed.chat-history-sidebar {
+            background-color: var(--chat-surface) !important;
+            border-color: var(--chat-border) !important;
+            color: var(--chat-text) !important;
+            box-shadow: none !important;
+          }
+          /* Light only: history a step darker than white, warm-neutral (no blue cast). */
+          .chat-theme-light .chat-history-sidebar,
+          .chat-theme-light.chat-history-sidebar {
+            background-color: #f1f0ee !important;
+            border-color: rgba(0, 0, 0, 0.10) !important;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06) !important;
+          }
+          /* Claude pinned DnD: .df-drag-shiftable { transition: transform .12s ease-out }
+             Recents label is ALSO shiftable — transforms must move it or rows overlap it. */
+          .chat-history-sidebar [data-pin-dragging='true'] {
+            pointer-events: none;
+          }
+          @media (prefers-reduced-motion: no-preference) {
+            .chat-history-sidebar .history-drag-shiftable {
+              transition: transform 0.12s ease-out;
+              will-change: transform;
+            }
+            .chat-history-sidebar .history-pin-section-reveal {
+              transition:
+                opacity 0.2s cubic-bezier(0.32, 0.72, 0, 1),
+                transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+            }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .chat-history-sidebar .history-drag-shiftable {
+              transition: none !important;
+            }
+          }
+          /* History popovers (kebab, Recents filter + submenus): tight shadow, not shadow-xl. */
+          .chat-history-popover {
+            box-shadow:
+              0 1px 2px rgba(0, 0, 0, 0.10),
+              0 2px 4px rgba(0, 0, 0, 0.06) !important;
+          }
+          .chat-theme-light .chat-history-popover {
+            box-shadow:
+              0 1px 2px rgba(0, 0, 0, 0.06),
+              0 2px 4px rgba(0, 0, 0, 0.04) !important;
+          }
+          .chat-themed [class*="bg-[#0a0a0b]"] { background-color: var(--chat-canvas) !important; }
+          .chat-themed [class*="bg-[#0e0e10]"],
+          .chat-themed [class*="bg-[#0f0f11]"],
+          .chat-themed [class*="bg-[#111113]"],
+          .chat-themed [class*="bg-[#121214]"] { background-color: var(--chat-surface) !important; }
+          .chat-themed [class*="bg-[#141416]"],
+          .chat-themed [class*="bg-[#161618]"],
+          .chat-themed [class*="bg-[#18181a]"],
+          .chat-themed [class*="bg-[#18171b]"],
+          .chat-themed [class*="bg-[#0c0c0e]"] { background-color: var(--chat-elevated) !important; }
+          .chat-themed [class*="bg-[#1e1e21]"],
+          .chat-themed [class*="bg-[#232021]"],
+          .chat-themed [class*="bg-[#242426]"],
+          .chat-themed [class*="bg-[#252527]"] { background-color: var(--chat-control) !important; }
+          .chat-themed [class*="bg-[#2a2a2d]"],
+          .chat-themed [class*="bg-[#3a3a3d]"] { background-color: var(--chat-control-strong) !important; }
+          .chat-themed [class*="bg-black"] { background-color: var(--chat-overlay) !important; }
+          .chat-themed .chat-input-container { box-shadow: var(--chat-input-shadow) !important; }
+          /* Outer shell: dark fill. Inner input keeps its own border for definition. */
+          .chat-themed [data-chat-composer-shell] {
+            background-color: var(--chat-composer-fill, var(--chat-elevated)) !important;
+            border-color: var(--chat-border) !important;
+            box-shadow: var(--chat-composer-shadow) !important;
+          }
+          .chat-themed .chat-input-container:not([data-empty-composer-input="true"]) {
+            background-color: var(--chat-composer-fill, var(--chat-elevated)) !important;
+            border-color: var(--chat-composer-border, var(--chat-border)) !important;
+            box-shadow: var(--chat-composer-shadow) !important;
+          }
+          /* Conversation composer: shorter shell, same width as the message column. */
+          .chat-themed [data-composer-context="conversation"] {
+            border-radius: 0.9rem !important;
+          }
+          .chat-themed [data-composer-context="conversation"] [data-composer-column] {
+            gap: 0.45rem !important;
+            padding: 0.5rem !important;
+          }
+          .chat-themed [data-composer-context="conversation"] [data-empty-composer-input="true"] {
+            padding: 0.7rem 0.75rem !important;
+            border-radius: 0.9rem !important;
+          }
+          .chat-themed [data-composer-context="conversation"] .chat-mode-tab {
+            height: 1.65rem !important;
+            min-height: 1.65rem !important;
+            padding-left: 0.6rem !important;
+            padding-right: 0.6rem !important;
+            font-size: 11px !important;
+          }
+          .chat-themed [data-composer-context="conversation"] .chat-mode-surface {
+            padding: 0.18rem !important;
+            border-radius: 0.6rem !important;
+          }
+          .chat-themed [data-composer-context="conversation"] .chat-input-controls {
+            margin-top: 0.45rem !important;
+          }
+
+          /* Empty nested input: keep its border/radius; drop only the inner shadow. */
+          .chat-themed [data-chat-composer-shell] .chat-input-container,
+          .chat-themed [data-chat-composer-shell] .chat-input-container[class*="bg-"],
+          .chat-themed [data-chat-composer-shell] .chat-input-container[class*="shadow"] {
+            background: transparent !important;
+            background-color: transparent !important;
+            border-color: var(--chat-composer-border, var(--chat-border)) !important;
+            box-shadow: none !important;
+            filter: none !important;
+            --tw-shadow: 0 0 #0000 !important;
+            --tw-shadow-colored: 0 0 #0000 !important;
+            --tw-ring-shadow: 0 0 #0000 !important;
+          }
+          .chat-themed [data-tool-rail-indicator] {
+            background-color: var(--chat-tool-rail-stroke) !important;
+            opacity: 0.92 !important;
+          }
+          .chat-themed [data-tool-rail-echo="medium"] {
+            background-color: var(--chat-tool-rail-stroke-soft) !important;
+          }
+          /* Keep composer controls distinct at every custom theme brightness. */
+          .chat-themed .chat-mode-surface {
+            background-color: var(--chat-surface) !important;
+            border-color: var(--chat-border) !important;
+            box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chat-surface-text) 10%, transparent) !important;
+          }
+          .chat-themed .chat-mode-tab,
+          .chat-themed .chat-mode-action,
+          .chat-themed .chat-inline-model-action,
+          .chat-themed .chat-model-trigger {
+            background-color: var(--chat-control) !important;
+            border-color: var(--chat-border) !important;
+            color: var(--chat-surface-text) !important;
+          }
+          .chat-themed .chat-mode-tab-selected,
+          .chat-themed .chat-inline-model-action[aria-current="true"] {
+            background-color: var(--chat-control-strong) !important;
+            border-color: var(--chat-border) !important;
+            box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chat-surface-text) 14%, transparent) !important;
+          }
+          .chat-themed .chat-mode-tab:hover,
+          .chat-themed .chat-mode-action:hover,
+          .chat-themed .chat-inline-model-action:hover,
+          .chat-themed .chat-model-trigger:hover {
+            background-color: var(--chat-control-strong) !important;
+            border-color: var(--chat-border) !important;
+          }
+          .chat-themed [data-inline-model-scroll="left"] {
+            background-image: linear-gradient(to right, var(--chat-surface), transparent) !important;
+          }
+          .chat-themed [data-inline-model-scroll="right"] {
+            background-image: linear-gradient(to left, var(--chat-surface), transparent) !important;
+          }
+          .chat-theme-slider {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            opacity: 0;
+            cursor: ew-resize;
+          }
+          .chat-theme-waveform {
+            display: grid;
+            height: 1.125rem;
+            grid-template-columns: repeat(21, minmax(0, 1fr));
+            align-items: end;
+            gap: 0.1875rem;
+            transition: background-color 160ms ease;
+          }
+          .chat-theme-waveform-bar {
+            height: 0.6875rem;
+            border-radius: 2px;
+            border: 1px solid color-mix(in srgb, var(--chat-text) 14%, transparent);
+            opacity: 1;
+            transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+          }
+          .chat-theme-waveform-bar[data-stop="true"] {
+            height: 1.125rem;
+          }
+          .chat-theme-waveform-bar[data-selected="true"] {
+            border-color: var(--chat-text);
+            box-shadow: 0 0 0 1px var(--chat-text);
+            transform: translateY(-2px);
+          }
+          .chat-theme-waveform-control:has(.chat-theme-slider:hover) .chat-theme-waveform-bar[data-selected="false"],
+          .chat-theme-waveform-control:has(.chat-theme-slider:focus-visible) .chat-theme-waveform-bar[data-selected="false"] {
+            transform: translateY(-1px);
+          }
+          .chat-theme-waveform-control:has(.chat-theme-slider:focus-visible) {
+            outline: 1px solid var(--chat-text);
+            outline-offset: 3px;
+          }
+          .chat-themed [class*="text-white"],
+          .chat-themed [class*="text-zinc-100"],
+          .chat-themed [class*="text-zinc-200"],
+          .chat-themed [class*="text-gray-200"],
+          .chat-themed [class*="text-gray-300"] { color: var(--chat-text) !important; }
+          .chat-themed [class*="text-gray-400"],
+          .chat-themed [class*="text-gray-500"],
+          .chat-themed [class*="text-gray-600"],
+          .chat-themed [class*="text-zinc-500"],
+          .chat-themed [class*="text-zinc-600"] { color: var(--chat-muted) !important; }
+          .chat-themed [class*="placeholder:text-gray"]::placeholder,
+          .chat-themed [class*="placeholder:text-zinc"]::placeholder {
+            color: var(--chat-muted) !important;
+            opacity: 0.9 !important;
+          }
+          .chat-themed [data-chat-composer-shell] [class*="text-white"],
+          .chat-themed [data-chat-composer-shell] [class*="text-zinc-100"],
+          .chat-themed [data-chat-composer-shell] [class*="text-zinc-200"],
+          .chat-themed [data-chat-composer-shell] [class*="text-gray-200"],
+          .chat-themed [data-chat-composer-shell] [class*="text-gray-300"] { color: var(--chat-surface-text) !important; }
+          .chat-themed [data-chat-composer-shell] [class*="text-gray-400"],
+          .chat-themed [data-chat-composer-shell] [class*="text-gray-500"],
+          .chat-themed [data-chat-composer-shell] [class*="text-gray-600"],
+          .chat-themed [data-chat-composer-shell] [class*="text-zinc-500"],
+          .chat-themed [data-chat-composer-shell] [class*="text-zinc-600"],
+          .chat-themed [data-chat-composer-shell] [class*="placeholder:text-gray"]::placeholder,
+          .chat-themed [data-chat-composer-shell] [class*="placeholder:text-zinc"]::placeholder {
+            color: var(--chat-surface-muted) !important;
+          }
+          .chat-themed [class*="text-[#f6b98b]"] { color: var(--chat-text) !important; }
+          .chat-themed [class*="border-white"],
+          .chat-themed [class*="border-[#1e1e21]"],
+          .chat-themed [class*="border-[#232021]"],
+          .chat-themed [class*="border-[#2a2a2d]"] { border-color: var(--chat-border) !important; }
+          .chat-themed [class*="hover:bg-black"]:hover,
+          .chat-themed [class*="hover:bg-[#2a2a2d]"]:hover,
+          .chat-themed [class*="hover:bg-[#3a3a3d]"]:hover { background-color: var(--chat-hover) !important; }
+          .chat-themed .prose h1,
+          .chat-themed .prose h2,
+          .chat-themed .prose h3,
+          .chat-themed .prose strong { color: var(--chat-text) !important; }
           
           /* Add new styles for inline source citations */
           .inline-source-citation {
@@ -7156,6 +9995,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             color: #9ca3af; /* gray-400 */
             margin-top: 1rem;
             margin-bottom: 1rem;
+          }
+          /* Pre background lives here — not as prose-pre:bg-* on the wrapper
+             (theme [class*="bg-…"] would otherwise paint the whole answer). */
+          .chat-themed .prose pre {
+            background-color: var(--chat-elevated) !important;
           }
           /* End custom Prose overrides */
 
@@ -7393,7 +10237,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               inset: 0;
             }
             .chat-top-bar {
-              padding: 0.5rem !important;
+              padding-top: 0.5rem !important;
+              padding-bottom: 0.5rem !important;
+              padding-left: 0 !important;
+              padding-right: 0 !important;
             }
             .chat-top-bar-buttons {
               gap: 0.25rem !important;
@@ -7403,13 +10250,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             }
             .chat-button-mobile-only {
               display: flex !important;
-            }
-            .chat-model-selector {
-              width: 2.5rem !important;
-              padding: 0.375rem !important;
-            }
-            .chat-model-selector span {
-              display: none !important;
             }
             .chat-system-prompt-btn {
               width: 2.5rem !important;
@@ -7459,7 +10299,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               max-width: 95% !important;
             }
             .chat-top-bar {
-              padding: 0.375rem !important;
+              padding-top: 0.375rem !important;
+              padding-bottom: 0.375rem !important;
+              padding-left: 0 !important;
+              padding-right: 0 !important;
             }
           }
         `}
@@ -7467,42 +10310,1253 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
       {/* Main container with conditional padding for context panel and history sidebar */}
       <div
         ref={chatContainerRef}
-        className={`relative flex flex-col h-full text-white overflow-hidden main-content-transition ${isMobile ? 'chat-mobile-container' : ''} ${isMobile && isHistoryOpen ? 'chat-sidebar-open' : ''}`}
+        className={`chat-themed chat-theme-${resolvedChatTheme} relative flex h-full flex-col overflow-hidden main-content-transition ${isMobile ? 'chat-mobile-container' : ''} ${isMobile && isHistoryOpen ? 'chat-sidebar-open' : ''}`}
+        data-chat-theme-preference={chatTheme}
         style={{
-          paddingRight: isContextPanelOpen ? `${contextPanelWidth}px` : '0px'
+          paddingRight: isContextPanelOpen ? `${contextPanelWidth}px` : '0px',
+          backgroundColor: 'var(--chat-canvas)',
+          color: 'var(--chat-text)',
+          ...chatThemePreviewStyle,
         }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+        {/* Always above Projects/catalog overlays (z-45) when history is closed.
+            Wait for sidebar close (300ms), then enter left → right. */}
+        {!isMultiInterface && showClosedHistoryChrome && (
+          <div
+            key={`closed-history-chrome-${closedHistoryChromeEnterKey}`}
+            className="absolute z-[60] flex h-9 items-center gap-1.5 text-[var(--chat-text)]"
+            style={{ top: CHAT_CHROME_TOP_INSET_PX, left: CHAT_CHROME_EDGE_INSET_PX }}
+          >
+            <button
+              type="button"
+              onClick={() => setIsHistoryOpen(true)}
+              aria-label="Open conversation history"
+              title="Open history"
+              className="animate-chat-history-chrome-enter flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08] text-white/80 transition-colors hover:border-white/20 hover:bg-black/20 hover:text-white active:scale-[0.98]"
+            >
+              <PanelLeftOpen size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('toggle_overview_taskbar'));
+              }}
+              aria-label={isTaskbarHidden ? 'Show toolbar' : 'Hide toolbar'}
+              title={isTaskbarHidden ? 'Show toolbar' : 'Hide toolbar'}
+              className="animate-chat-history-chrome-enter-delay flex h-9 items-center px-1 font-display text-[1.05rem] font-semibold leading-none tracking-tight text-white/80 transition-colors hover:text-white active:scale-[0.98]"
+            >
+              XENO
+            </button>
+            {isProjectsPageOpen && (
+              <span
+                className="animate-chat-history-chrome-enter-delay -ml-1 truncate font-display text-[1.05rem] font-medium leading-none tracking-tight text-zinc-500"
+                aria-current="page"
+              >
+                Projects
+              </span>
+            )}
+          </div>
+        )}
+        {isChatsCatalogOpen && (() => {
+          const catalogQuery = chatsCatalogSearch.trim().toLowerCase();
+          const catalogFilterLabels: Record<ChatsCatalogFilter, string> = {
+            all: 'All',
+            chat: 'Chat',
+            shared: 'Shared',
+            cowork: 'Cowork',
+            archived: 'Archived',
+          };
+          const catalogConversations = [...conversationHistory]
+            .filter((convo) => {
+              if (chatsCatalogFilter === 'archived') {
+                if (!convo.isArchived) return false;
+              } else if (chatsCatalogFilter === 'shared' || chatsCatalogFilter === 'cowork') {
+                // Not modeled yet — keep the menu real, list empty until we have those types.
+                return false;
+              } else {
+                // All / Chat: active chats only
+                if (convo.isArchived) return false;
+              }
+              if (!catalogQuery) return true;
+              return convo.title.toLowerCase().includes(catalogQuery);
+            })
+            .sort((a, b) => b.timestamp - a.timestamp);
+          const selectedCount = chatsCatalogSelectedIds.length;
+          const catalogLeft =
+            !isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0;
+          const exitCatalogSelection = () => {
+            setIsChatsCatalogSelecting(false);
+            setChatsCatalogSelectedIds([]);
+          };
+          // Match chat control radius (rounded-lg) — not pills, not sharp squares.
+          const catalogControlBtn =
+            'rounded-lg px-3 py-1.5 text-[12.5px] transition-colors';
+
+          return (
+            <div
+              className="absolute inset-0 z-[45] flex flex-col"
+              style={{
+                left: catalogLeft,
+                backgroundColor: 'var(--chat-canvas)',
+                color: 'var(--chat-text)',
+              }}
+              role="dialog"
+              aria-label="Chats and tasks"
+            >
+              {/* Centered column — Claude-style: content sits mid-viewport, not edge-to-edge */}
+              <div className="mx-auto flex h-full w-full max-w-[48rem] flex-col px-4 sm:px-6">
+                <div className="flex flex-shrink-0 items-center justify-between gap-3 pt-6 pb-3 md:pt-8">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsChatsCatalogOpen(false);
+                        exitCatalogSelection();
+                        setIsChatsCatalogFilterOpen(false);
+                      }}
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                      aria-label="Close chats and tasks"
+                      title="Back"
+                    >
+                      <ArrowLeft size={16} aria-hidden="true" />
+                    </button>
+                    <h2 className="truncate text-[1.5rem] font-medium tracking-tight text-[var(--chat-text)] md:text-[1.75rem]">
+                      Chats and tasks
+                    </h2>
+                  </div>
+
+                  {isChatsCatalogSelecting ? (
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      <span className="text-[13px] text-[var(--chat-muted)]">
+                        {selectedCount} selected
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const visibleIds = catalogConversations.map((convo) => convo.id);
+                          const allSelected =
+                            visibleIds.length > 0 &&
+                            visibleIds.every((id) => chatsCatalogSelectedIds.includes(id));
+                          setChatsCatalogSelectedIds(allSelected ? [] : visibleIds);
+                        }}
+                        className={catalogControlBtn}
+                        style={{
+                          backgroundColor: 'var(--chat-control)',
+                          color: 'var(--chat-text)',
+                          boxShadow: 'inset 0 0 0 1px var(--chat-accent)',
+                        }}
+                      >
+                        Select all
+                      </button>
+                      {selectedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const ids = [...chatsCatalogSelectedIds];
+                            void (async () => {
+                              for (const id of ids) {
+                                await handleDeleteConversation(id);
+                              }
+                              exitCatalogSelection();
+                            })();
+                          }}
+                          className={catalogControlBtn}
+                          style={{
+                            backgroundColor: 'var(--chat-danger)',
+                            color: '#ffffff',
+                          }}
+                          onMouseEnter={(event) => {
+                            event.currentTarget.style.backgroundColor = 'var(--chat-danger-hover)';
+                          }}
+                          onMouseLeave={(event) => {
+                            event.currentTarget.style.backgroundColor = 'var(--chat-danger)';
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={exitCatalogSelection}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+                        style={{
+                          backgroundColor: 'var(--chat-control)',
+                          color: 'var(--chat-text)',
+                        }}
+                        aria-label="Exit selection"
+                        title="Close"
+                      >
+                        <X size={14} aria-hidden="true" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsChatsCatalogSelecting(true);
+                          setChatsCatalogSelectedIds([]);
+                          setIsChatsCatalogFilterOpen(false);
+                        }}
+                        className={catalogControlBtn}
+                        style={{
+                          backgroundColor: 'var(--chat-control)',
+                          color: 'var(--chat-text)',
+                        }}
+                      >
+                        Select
+                      </button>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setIsChatsCatalogFilterOpen((open) => !open)}
+                          className={`flex items-center gap-1.5 ${catalogControlBtn}`}
+                          style={{
+                            backgroundColor: 'var(--chat-control)',
+                            color: 'var(--chat-text)',
+                          }}
+                          aria-haspopup="menu"
+                          aria-expanded={isChatsCatalogFilterOpen}
+                        >
+                          <span className="text-[var(--chat-muted)]">Filter by</span>
+                          <span className="font-medium text-[var(--chat-text)]">
+                            {catalogFilterLabels[chatsCatalogFilter]}
+                          </span>
+                          <ChevronDown size={13} className="text-[var(--chat-muted)]" />
+                        </button>
+                        {isChatsCatalogFilterOpen && (
+                          <div
+                            role="menu"
+                            className="chat-history-popover absolute left-0 top-full z-10 mt-1.5 w-[9.5rem] overflow-hidden rounded-xl border p-1"
+                            style={{
+                              backgroundColor: 'var(--chat-elevated)',
+                              borderColor: 'var(--chat-border)',
+                            }}
+                          >
+                            {(
+                              [
+                                ['all', 'All'],
+                                ['chat', 'Chat'],
+                                ['shared', 'Shared'],
+                                ['cowork', 'Cowork'],
+                                ['archived', 'Archived'],
+                              ] as const
+                            ).map(([value, label]) => (
+                              <button
+                                key={value}
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setChatsCatalogFilter(value);
+                                  setIsChatsCatalogFilterOpen(false);
+                                }}
+                                className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                              >
+                                <span>{label}</span>
+                                {chatsCatalogFilter === value && (
+                                  <Check size={13} className="ml-auto text-[var(--chat-accent)]" aria-hidden="true" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleNewChat();
+                          setIsChatsCatalogOpen(false);
+                          exitCatalogSelection();
+                          setIsChatsCatalogFilterOpen(false);
+                        }}
+                        className={`${catalogControlBtn} font-medium`}
+                        style={{
+                          backgroundColor: 'var(--chat-text)',
+                          color: 'var(--chat-canvas)',
+                        }}
+                      >
+                        New
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-shrink-0 pb-3">
+                  <div
+                    className="flex items-center gap-2 rounded-lg px-3 py-2.5"
+                    style={{ backgroundColor: 'var(--chat-control)' }}
+                  >
+                    <Search size={15} className="flex-shrink-0 text-[var(--chat-muted)]" />
+                    <input
+                      type="search"
+                      value={chatsCatalogSearch}
+                      onChange={(event) => setChatsCatalogSearch(event.target.value)}
+                      placeholder="Search chats and tasks..."
+                      className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto pb-8 hide-scrollbar">
+                  {catalogConversations.length === 0 ? (
+                    <p className="py-10 text-center text-[13px] text-[var(--chat-muted)]">
+                      No matching conversations
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-0.5">
+                      {catalogConversations.map((convo) => {
+                        const isSelected = chatsCatalogSelectedIds.includes(convo.id);
+                        const menuOpen = historyRowMenu?.conversationId === convo.id;
+                        return (
+                          <div
+                            key={convo.id}
+                            className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                              menuOpen
+                                ? 'bg-[var(--chat-hover)]'
+                                : 'hover:bg-[var(--chat-hover)]'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isChatsCatalogSelecting) {
+                                  setChatsCatalogSelectedIds((prev) =>
+                                    prev.includes(convo.id)
+                                      ? prev.filter((id) => id !== convo.id)
+                                      : [...prev, convo.id],
+                                  );
+                                  return;
+                                }
+                                void handleLoadConversation(convo.id);
+                                setIsChatsCatalogOpen(false);
+                              }}
+                              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            >
+                              {isChatsCatalogSelecting ? (
+                                <span
+                                  className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-sm border"
+                                  style={
+                                    isSelected
+                                      ? {
+                                          borderColor: 'var(--chat-accent)',
+                                          backgroundColor: 'var(--chat-accent-soft)',
+                                        }
+                                      : {
+                                          borderColor: 'var(--chat-border)',
+                                          backgroundColor: 'transparent',
+                                        }
+                                  }
+                                  aria-hidden="true"
+                                >
+                                  {isSelected && (
+                                    <Check size={11} className="text-[var(--chat-accent)]" />
+                                  )}
+                                </span>
+                              ) : (
+                                <MessageSquare
+                                  size={15}
+                                  className="flex-shrink-0 text-[var(--chat-muted)]"
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span className="min-w-0 flex-1 truncate text-[13.5px] text-[var(--chat-text)]">
+                                {convo.title}
+                              </span>
+                            </button>
+                            {!isChatsCatalogSelecting && (
+                              <div className="relative flex h-7 w-[4.5rem] flex-shrink-0 items-center justify-end">
+                                <span
+                                  className={`pointer-events-none w-full whitespace-nowrap text-right text-[12px] tabular-nums text-[var(--chat-muted)] transition-opacity ${
+                                    menuOpen
+                                      ? 'opacity-0'
+                                      : 'opacity-100 group-hover:opacity-0'
+                                  }`}
+                                >
+                                  {formatConversationListDate(convo.timestamp)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    const rect = event.currentTarget.getBoundingClientRect();
+                                    const menuWidth = 188;
+                                    const left = Math.min(
+                                      Math.max(8, rect.right - menuWidth),
+                                      window.innerWidth - menuWidth - 8,
+                                    );
+                                    setHistoryProjectSubmenuOpen(false);
+                                    setHistoryRowMenu({
+                                      conversationId: convo.id,
+                                      top: rect.bottom + 4,
+                                      left,
+                                    });
+                                  }}
+                                  className={`absolute right-0 flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-opacity hover:bg-[var(--chat-control)] hover:text-[var(--chat-text)] ${
+                                    menuOpen
+                                      ? 'opacity-100'
+                                      : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+                                  }`}
+                                  aria-label="Conversation actions"
+                                  aria-haspopup="menu"
+                                  aria-expanded={menuOpen}
+                                  title="More options"
+                                >
+                                  <MoreVertical size={15} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        {isProjectsPageOpen && (() => {
+          const pageLeft =
+            !isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0;
+          const query = projectsPageSearch.trim().toLowerCase();
+          const sortLabels: Record<ProjectsSort, string> = {
+            updated: 'Last updated',
+            created: 'Date created',
+            name: 'Name',
+          };
+          const visibleProjects = [...chatProjects]
+            .filter((project) =>
+              query ? project.name.toLowerCase().includes(query) : true,
+            )
+            .sort((a, b) => {
+              if (projectsSort === 'name') {
+                return a.name.localeCompare(b.name);
+              }
+              if (projectsSort === 'created') {
+                return b.createdAt - a.createdAt;
+              }
+              const aUpdated = a.updatedAt ?? a.createdAt;
+              const bUpdated = b.updatedAt ?? b.createdAt;
+              return bUpdated - aUpdated;
+            });
+          const pageControlBtn =
+            'rounded-lg px-3 py-1.5 text-[12.5px] transition-colors';
+
+          return (
+            <div
+              className="absolute inset-0 z-[45] flex flex-col main-content-transition"
+              style={{
+                left: pageLeft,
+                backgroundColor: 'var(--chat-canvas)',
+                color: 'var(--chat-text)',
+              }}
+              role="dialog"
+              aria-label="Projects"
+            >
+              <div className="mx-auto flex h-full w-full max-w-[48rem] flex-col px-4 sm:px-6">
+                {/* Keep the same top band as the old title row so search + cards do not jump up. */}
+                <div className="flex min-h-[2.75rem] flex-shrink-0 items-center justify-between gap-3 pt-6 pb-5 md:min-h-[3rem] md:pt-8 md:pb-6">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsProjectsSortOpen((open) => !open)}
+                      className={`group relative flex items-center overflow-hidden rounded-lg py-1.5 pr-3 pl-3 text-[12.5px] hover:pl-8`}
+                      style={{
+                        backgroundColor: 'var(--chat-control)',
+                        color: 'var(--chat-text)',
+                        willChange: 'padding',
+                        transition: 'padding 600ms cubic-bezier(0.22, 1, 0.36, 1)',
+                      }}
+                      aria-haspopup="menu"
+                      aria-expanded={isProjectsSortOpen}
+                      aria-label={`Sort by ${sortLabels[projectsSort]}`}
+                    >
+                      <ChevronDown
+                        size={13}
+                        className="pointer-events-none absolute left-2.5 z-0 translate-x-5 text-[var(--chat-muted)] opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
+                        style={{
+                          willChange: 'opacity, transform',
+                          transition:
+                            'opacity 600ms cubic-bezier(0.22, 1, 0.36, 1), transform 600ms cubic-bezier(0.22, 1, 0.36, 1)',
+                        }}
+                        aria-hidden="true"
+                      />
+                      <span
+                        className="relative z-10 pl-0.5 font-medium text-[var(--chat-text)]"
+                        style={{ backgroundColor: 'var(--chat-control)' }}
+                      >
+                        {sortLabels[projectsSort]}
+                      </span>
+                    </button>
+                    {isProjectsSortOpen && (
+                      <div
+                        role="menu"
+                        className="chat-history-popover absolute left-0 top-full z-10 mt-1.5 min-w-full w-max overflow-hidden rounded-xl border p-1"
+                        style={{
+                          backgroundColor: 'color-mix(in srgb, var(--chat-elevated) 94%, white)',
+                          borderColor: 'color-mix(in srgb, var(--chat-border) 75%, white)',
+                          boxShadow: '0 12px 28px -8px rgba(0, 0, 0, 0.65)',
+                        }}
+                      >
+                        {(
+                          [
+                            ['updated', 'Last updated'],
+                            ['created', 'Date created'],
+                            ['name', 'Name'],
+                          ] as const
+                        ).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setProjectsSort(value);
+                              setIsProjectsSortOpen(false);
+                            }}
+                            className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                          >
+                            <span>{label}</span>
+                            {projectsSort === value && (
+                              <Check
+                                size={13}
+                                className="ml-auto text-[var(--chat-accent)]"
+                                aria-hidden="true"
+                              />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openCreateProjectModal()}
+                    className={`group relative flex flex-shrink-0 items-center overflow-hidden rounded-lg py-1.5 pl-3 pr-3 text-[12.5px] font-medium hover:pr-8`}
+                    style={{
+                      backgroundColor: 'var(--chat-text)',
+                      color: 'var(--chat-canvas)',
+                      willChange: 'padding',
+                      transition: 'padding 600ms cubic-bezier(0.22, 1, 0.36, 1)',
+                    }}
+                  >
+                    <Folder
+                      size={13}
+                      className="pointer-events-none absolute right-2.5 z-0 -translate-x-5 text-[var(--chat-canvas)] opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
+                      style={{
+                        willChange: 'opacity, transform',
+                        transition:
+                          'opacity 600ms cubic-bezier(0.22, 1, 0.36, 1), transform 600ms cubic-bezier(0.22, 1, 0.36, 1)',
+                      }}
+                      aria-hidden="true"
+                    />
+                    <span
+                      className="relative z-10 pr-0.5"
+                      style={{ backgroundColor: 'var(--chat-text)' }}
+                    >
+                      New project
+                    </span>
+                  </button>
+                </div>
+
+                <div className="flex-shrink-0 pb-5 md:pb-6">
+                  <div
+                    className="flex items-center gap-2 rounded-lg px-3 py-2.5"
+                    style={{
+                      backgroundColor: 'var(--chat-control)',
+                      boxShadow: 'inset 0 0 0 1px var(--chat-border)',
+                    }}
+                  >
+                    <Search size={15} className="flex-shrink-0 text-[var(--chat-muted)]" />
+                    <input
+                      type="search"
+                      value={projectsPageSearch}
+                      onChange={(event) => setProjectsPageSearch(event.target.value)}
+                      placeholder="Search projects..."
+                      className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto pb-8 hide-scrollbar">
+                  {chatProjects.length === 0 ? (
+                    <div className="flex h-full min-h-[18rem] flex-col items-center justify-center px-4 text-center">
+                      <svg
+                        width="72"
+                        height="72"
+                        viewBox="0 0 72 72"
+                        fill="none"
+                        aria-hidden="true"
+                        className="mb-5 text-[var(--chat-text)]"
+                      >
+                        <rect x="14" y="14" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.75" />
+                        <rect x="40" y="14" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.75" />
+                        <rect x="14" y="40" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.75" />
+                        <rect x="40" y="40" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.75" fill="currentColor" fillOpacity="0.12" />
+                        <path
+                          d="M48 52c2.8 1.6 6.2 3.4 8.8 4.2 1.4.4 2.4-.6 2-2-.8-2.6-2.2-6.2-3.4-9.2"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M46.5 49.5c1.2 2.4 2.2 4.2 2.2 4.2s2.2-.2 4.4-1.4"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle cx="47.5" cy="47.5" r="2.2" fill="currentColor" />
+                      </svg>
+                      <h3 className="text-[1.05rem] font-semibold tracking-tight text-[var(--chat-text)]">
+                        Looking to start a project?
+                      </h3>
+                      <p className="mt-2 max-w-[22rem] text-[13px] leading-relaxed text-[var(--chat-muted)]">
+                        Upload materials, set custom instructions, and organize conversations in one space.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => openCreateProjectModal()}
+                        className="mt-5 rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors"
+                        style={{
+                          backgroundColor: 'var(--chat-control)',
+                          color: 'var(--chat-text)',
+                        }}
+                      >
+                        New project
+                      </button>
+                    </div>
+                  ) : visibleProjects.length === 0 ? (
+                    <p className="py-10 text-center text-[13px] text-[var(--chat-muted)]">
+                      No matching projects
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {visibleProjects.map((project) => {
+                        const stamp = project.updatedAt ?? project.createdAt;
+                        const description =
+                          project.description?.trim() || 'No description yet';
+                        return (
+                          <div
+                            key={project.id}
+                            className="group relative flex h-[12.5rem] min-w-0 cursor-pointer flex-col rounded-[10px] border p-1.5 text-left transition-[transform,background-color,border-color] duration-150 ease-out active:scale-[0.98]"
+                            style={{
+                              backgroundColor: 'color-mix(in srgb, var(--chat-canvas) 88%, var(--chat-muted))',
+                              borderColor: 'color-mix(in srgb, var(--chat-canvas) 74%, var(--chat-muted))',
+                            }}
+                            onContextMenu={() => setSuppressCardOverlayId(project.id)}
+                            onMouseLeave={() => setSuppressCardOverlayId(null)}
+                            onClick={() => openProject(project.id)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                openProject(project.id);
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between gap-2 py-1 pl-2 pr-0.5">
+                              <button
+                                type="button"
+                                className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                                title={project.name}
+                              >
+                                {project.isStarred && (
+                                  <Star
+                                    size={13}
+                                    className="flex-shrink-0 fill-current text-[var(--chat-accent)]"
+                                    aria-hidden="true"
+                                  />
+                                )}
+                                <span className="truncate text-[13px] font-semibold leading-snug tracking-tight text-[var(--chat-text)]">
+                                  {project.name}
+                                </span>
+                                {project.isArchived && (
+                                  <span className="flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--chat-muted)]" style={{ backgroundColor: 'var(--chat-canvas)' }}>
+                                    Archived
+                                  </span>
+                                )}
+                              </button>
+                              <div className="relative flex-shrink-0" data-project-card-menu>
+                                <button
+                                  type="button"
+                                  className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                                  aria-label={`More options for ${project.name}`}
+                                  aria-haspopup="menu"
+                                  aria-expanded={openProjectMenuId === project.id}
+                                  title="More"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setOpenProjectMenuId((current) =>
+                                      current === project.id ? null : project.id,
+                                    );
+                                  }}
+                                >
+                                  <MoreVertical size={15} aria-hidden="true" />
+                                </button>
+                                {openProjectMenuId === project.id && (
+                                  <div
+                                    role="menu"
+                                    className="absolute right-0 top-full z-20 mt-1.5 w-[8.5rem] overflow-hidden rounded-xl border p-1"
+                                    style={{
+                                      backgroundColor: 'color-mix(in srgb, var(--chat-elevated) 94%, white)',
+                                      borderColor: 'color-mix(in srgb, var(--chat-border) 75%, white)',
+                                      boxShadow: '0 12px 28px -8px rgba(0, 0, 0, 0.65)',
+                                    }}
+                                  >
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => handleToggleProjectStar(project.id)}
+                                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                                    >
+                                      <Star size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
+                                      <span>{project.isStarred ? 'Unstar' : 'Star'}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => openEditProjectModal(project)}
+                                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                                    >
+                                      <Pencil size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
+                                      <span>Edit details</span>
+                                    </button>
+                                    <div className="my-1 border-t" style={{ borderColor: 'var(--chat-border)' }} />
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => handleToggleProjectArchive(project.id)}
+                                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                                    >
+                                      <Archive size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
+                                      <span>{project.isArchived ? 'Unarchive' : 'Archive'}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => handleDeleteProject(project.id)}
+                                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-danger)] transition-colors hover:bg-[var(--chat-hover)]"
+                                    >
+                                      <Trash2 size={14} className="flex-shrink-0" aria-hidden="true" />
+                                      <span>Delete</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div
+                              className="relative min-h-0 flex-1 rounded-lg border text-left transition-[background-color,border-color] duration-150 group-hover:bg-[var(--chat-project-preview-fade)]"
+                              style={{
+                                backgroundColor: 'var(--chat-canvas)',
+                                borderColor: 'color-mix(in srgb, var(--chat-canvas) 82%, var(--chat-muted))',
+                              }}
+                            >
+                              <div
+                                className="absolute inset-0 overflow-y-auto pb-3 pl-3.5 pr-1 pt-2.5 scrollbar-thin scrollbar-thumb-zinc-500/40 scrollbar-track-transparent"
+                                style={{
+                                  maskImage:
+                                    'linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%)',
+                                  WebkitMaskImage:
+                                    'linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%)',
+                                }}
+                              >
+                                <p className="text-[12.5px] leading-relaxed text-[var(--chat-muted)]">
+                                  {description}
+                                </p>
+                              </div>
+                              <div
+                                className={`pointer-events-none absolute inset-x-0 bottom-0 h-20 rounded-b-lg opacity-0 transition-opacity duration-200 ${
+                                  suppressCardOverlayId === project.id ? '' : 'group-hover:opacity-100'
+                                }`}
+                                style={{
+                                  // Theme token: solid per theme so the fade matches the preview fill
+                                  // (dim's --chat-hover is translucent and would not cover the text).
+                                  backgroundImage:
+                                    'linear-gradient(to top, var(--chat-project-preview-fade) 0%, color-mix(in srgb, var(--chat-project-preview-fade) 55%, transparent) 55%, transparent 100%)',
+                                }}
+                              />
+                              <span className={`pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 text-[11.5px] font-medium text-[var(--chat-text)] opacity-0 transition-opacity duration-200 ${
+                                  suppressCardOverlayId === project.id ? '' : 'group-hover:opacity-100'
+                                }`}>
+                                {formatProjectCardDate(stamp)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        {activeProjectId && (() => {
+          const project = chatProjects.find((p) => p.id === activeProjectId);
+          if (!project) return null;
+          const pageLeft =
+            !isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0;
+          const description =
+            project.description?.trim() || 'No description yet.';
+          const hasLongDescription = description.length > 160;
+          const projectChats = conversationHistory
+            .filter((convo) => convo.projectId === project.id)
+            .sort((a, b) => b.timestamp - a.timestamp);
+          const realProjectFiles = project.files ?? [];
+          // Empty projects show mock files so the grid + "See all" can be judged visually.
+          const projectFiles =
+            realProjectFiles.length > 0 ? realProjectFiles : MOCK_PROJECT_FILES;
+          const visibleProjectFiles = isProjectFilesExpanded
+            ? projectFiles
+            : projectFiles.slice(0, PROJECT_FILES_PREVIEW_LIMIT);
+          const hasHiddenProjectFiles = projectFiles.length > PROJECT_FILES_PREVIEW_LIMIT;
+          return (
+            <div
+              className="absolute inset-0 z-[46] main-content-transition overflow-hidden"
+              style={{
+                left: pageLeft,
+                backgroundColor: 'var(--chat-canvas)',
+                color: 'var(--chat-text)',
+              }}
+              role="dialog"
+              aria-label={`Project: ${project.name}`}
+            >
+              <div
+                className="h-full overflow-y-auto hide-scrollbar pb-12 transition-[padding] duration-300 ease-in-out"
+                style={{
+                  paddingRight: !isMobile && isProjectSidebarOpen ? 260 : undefined,
+                }}
+              >
+                <div className="mx-auto w-full max-w-[52rem] px-4 sm:px-6">
+                  <div className="mt-6 mb-5 flex items-center md:mt-8">
+                    <button
+                      type="button"
+                      onClick={closeProject}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                      aria-label="Back to projects"
+                      title="Back to projects"
+                    >
+                      <ChevronLeft size={18} aria-hidden="true" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-start justify-between gap-3">
+                    <h1 className="min-w-0 pr-2 text-[1.5rem] font-semibold tracking-tight text-[var(--chat-text)]">
+                      {project.name}
+                    </h1>
+                    <div className="flex flex-shrink-0 items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => openEditProjectModal(project)}
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                        aria-label="Edit project details"
+                        title="Edit details"
+                      >
+                        <MoreVertical size={16} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleProjectStar(project.id)}
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                        aria-label={project.isStarred ? 'Unstar project' : 'Star project'}
+                        title={project.isStarred ? 'Unstar' : 'Star'}
+                      >
+                        <Star
+                          size={16}
+                          className={project.isStarred ? 'fill-current text-[var(--chat-accent)]' : ''}
+                          aria-hidden="true"
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsProjectSidebarOpen((open) => !open)}
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                        aria-label={isProjectSidebarOpen ? 'Close project panel' : 'Open project panel'}
+                        title={isProjectSidebarOpen ? 'Close panel' : 'Open panel'}
+                      >
+                        {isProjectSidebarOpen ? (
+                          <PanelRightClose size={16} aria-hidden="true" />
+                        ) : (
+                          <PanelRightOpen size={16} aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p
+                    className={`mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--chat-muted)] ${
+                      isProjectDescExpanded ? '' : 'line-clamp-2'
+                    }`}
+                  >
+                    {description}
+                  </p>
+                  {hasLongDescription && (
+                    <button
+                      type="button"
+                      onClick={() => setIsProjectDescExpanded((v) => !v)}
+                      className="mt-1 text-[12px] font-medium text-[var(--chat-muted)] underline-offset-2 transition-colors hover:text-[var(--chat-text)] hover:underline"
+                    >
+                      {isProjectDescExpanded ? 'Show less' : 'Show more'}
+                    </button>
+                  )}
+
+                  <div className="mt-5 min-w-0">
+                    {renderPrimaryComposer({ forceCompact: true })}
+
+                    {projectChats.length === 0 ? (
+                      <div className="mt-10 flex flex-col items-center justify-center px-4 py-8 text-center">
+                        <MessageSquare
+                          size={26}
+                          className="mb-3 text-[var(--chat-muted)]"
+                          aria-hidden="true"
+                        />
+                        <p className="max-w-[24rem] text-[13px] leading-relaxed text-[var(--chat-muted)]">
+                          Give XENO a task and it'll pick up your project context automatically.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <h2 className="mt-7 mb-1 text-[12.5px] font-medium text-[var(--chat-muted)]">
+                          Recents
+                        </h2>
+                        <div>
+                          {projectChats.map((chat) => (
+                            <button
+                              key={chat.id}
+                              type="button"
+                              onClick={() => {
+                                handleLoadConversation(chat.id);
+                                setActiveProjectId(null);
+                                setIsProjectsPageOpen(false);
+                                try {
+                                  localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
+                                  localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
+                                } catch {
+                                  /* ignore storage failures */
+                                }
+                              }}
+                              className="flex w-full items-center gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--chat-hover)]"
+                            >
+                              <MessageSquare
+                                size={15}
+                                className="flex-shrink-0 text-[var(--chat-muted)]"
+                                aria-hidden="true"
+                              />
+                              <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--chat-text)]">
+                                {chat.title}
+                              </span>
+                              <span className="flex-shrink-0 text-[11.5px] text-[var(--chat-muted)]">
+                                {formatProjectCardDate(chat.timestamp)}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* No outer panel — only open/close + the three section cards on the page canvas. */}
+              <aside
+                className="absolute inset-y-0 z-[47] flex w-[260px] flex-col overflow-hidden bg-transparent transition-[right] duration-300 ease-in-out"
+                style={{
+                  right: isProjectSidebarOpen ? 0 : -260,
+                  pointerEvents: isProjectSidebarOpen ? 'auto' : 'none',
+                }}
+                aria-hidden={!isProjectSidebarOpen}
+                aria-label="Project sections"
+              >
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 hide-scrollbar">
+                  {(() => {
+                    const displayInstructions =
+                      project.instructions?.trim() || MOCK_PROJECT_INSTRUCTIONS;
+                    const railShellStyle: React.CSSProperties = {
+                      backgroundColor:
+                        'color-mix(in srgb, var(--chat-canvas) 88%, var(--chat-muted))',
+                      borderColor:
+                        'color-mix(in srgb, var(--chat-canvas) 74%, var(--chat-muted))',
+                    };
+                    const railChipStyle: React.CSSProperties = {
+                      backgroundColor: 'var(--chat-canvas)',
+                      borderColor: 'color-mix(in srgb, var(--chat-muted) 20%, transparent)',
+                    };
+                    return (
+                      <div className="flex flex-col gap-3">
+                        {/* Instructions — same shell language as Files */}
+                        <div
+                          className="flex flex-col rounded-[10px] border p-1.5"
+                          style={railShellStyle}
+                        >
+                          <div className="flex items-center justify-between gap-2 py-1 pl-2 pr-0.5">
+                            <span className="truncate text-[13px] font-semibold leading-snug tracking-tight text-[var(--chat-text)]">
+                              Instructions
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => openInstructionsModal(project)}
+                              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                              aria-label={project.instructions ? 'Edit instructions' : 'Add instructions'}
+                              title={project.instructions ? 'Edit instructions' : 'Add instructions'}
+                            >
+                              <Plus size={16} aria-hidden="true" />
+                            </button>
+                          </div>
+                          <div className="px-1 pb-1.5 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => openInstructionsModal(project)}
+                              className="w-full rounded-lg border px-2.5 py-2 text-left transition-[transform,opacity] duration-150 ease-out hover:opacity-90 active:scale-[0.99]"
+                              style={railChipStyle}
+                            >
+                              <span className="line-clamp-4 whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--chat-muted)]">
+                                <span className="font-medium text-[var(--chat-text)]">Standing rules</span>
+                                <span className="mt-1 block text-[var(--chat-muted)]">
+                                  {displayInstructions}
+                                </span>
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+
+                        <input
+                          ref={projectFileInputRef}
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={(event) => {
+                            handleAddProjectFiles(project.id, event.target.files);
+                            event.target.value = '';
+                          }}
+                        />
+                        {projectFileNotice && (
+                          <p
+                            className="rounded-md px-2 py-1.5 text-[11px] leading-snug text-[var(--chat-danger)]"
+                            style={{ backgroundColor: 'var(--chat-hover)' }}
+                          >
+                            {projectFileNotice}
+                          </p>
+                        )}
+
+                        {/* Files */}
+                        <div
+                          className="flex min-h-[10.5rem] flex-col rounded-[10px] border p-1.5"
+                          style={railShellStyle}
+                        >
+                          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 py-1 pl-2 pr-0.5">
+                            <span className="truncate text-[13px] font-semibold leading-none tracking-tight text-[var(--chat-text)]">
+                              Files
+                            </span>
+                            {hasHiddenProjectFiles ? (
+                              <button
+                                type="button"
+                                onClick={() => setIsProjectFilesExpanded((open) => !open)}
+                                className="flex h-7 items-center justify-center px-1 font-mono text-[11px] leading-none tabular-nums transition-[color] duration-150"
+                                style={{
+                                  color:
+                                    'color-mix(in srgb, var(--chat-muted) 30%, transparent)',
+                                }}
+                                onMouseEnter={(event) => {
+                                  event.currentTarget.style.color = 'var(--chat-text)';
+                                }}
+                                onMouseLeave={(event) => {
+                                  event.currentTarget.style.color =
+                                    'color-mix(in srgb, var(--chat-muted) 30%, transparent)';
+                                }}
+                                aria-label={
+                                  isProjectFilesExpanded
+                                    ? 'Show fewer files'
+                                    : `Show all ${projectFiles.length} files`
+                                }
+                                title={
+                                  isProjectFilesExpanded
+                                    ? 'Show fewer'
+                                    : `Show all ${projectFiles.length}`
+                                }
+                              >
+                                {isProjectFilesExpanded
+                                  ? `${projectFiles.length}/${projectFiles.length}`
+                                  : `${PROJECT_FILES_PREVIEW_LIMIT}/${projectFiles.length}`}
+                              </button>
+                            ) : (
+                              <span aria-hidden="true" />
+                            )}
+                            <div className="flex items-center justify-end">
+                              <button
+                                type="button"
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                                aria-label="Search files"
+                                title="Search files"
+                              >
+                                <Search size={15} aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => projectFileInputRef.current?.click()}
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                                aria-label="Add file"
+                                title="Upload a file"
+                              >
+                                <Plus size={16} aria-hidden="true" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {projectFiles.length === 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => projectFileInputRef.current?.click()}
+                              className="flex min-h-[6.5rem] w-full flex-col items-center justify-center gap-1.5 rounded-md px-2 pb-2 text-center transition-colors hover:bg-[var(--chat-hover)]"
+                            >
+                              <FolderUp size={18} className="text-[var(--chat-muted)]" aria-hidden="true" />
+                              <span className="text-[12px] font-medium text-[var(--chat-text)]">
+                                Add relevant context
+                              </span>
+                              <span className="max-w-[14rem] text-[11px] leading-relaxed text-[var(--chat-muted)]">
+                                Upload documents, code, and other files for XENO to reference.
+                              </span>
+                            </button>
+                          ) : (
+                            <div className="px-1 pb-1.5 pt-0.5">
+                              <div className="grid grid-cols-2 gap-1.5">
+                                {visibleProjectFiles.map((file) => {
+                                  const isMockFile = file.id.startsWith('mock-file-');
+                                  const baseName = file.name.includes('.')
+                                    ? file.name.slice(0, file.name.lastIndexOf('.'))
+                                    : file.name;
+                                  const previewText =
+                                    file.content?.trim() ||
+                                    `${getProjectFileExtension(file.name).toUpperCase()} file`;
+                                  return (
+                                    <div
+                                      key={file.id}
+                                      className="group/file relative min-w-0"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleShowFileInContextPanel({
+                                            name: file.name,
+                                            type: file.type,
+                                            content: file.content,
+                                            encoding: file.encoding,
+                                          })
+                                        }
+                                        className="flex h-[3.35rem] w-full flex-col overflow-hidden rounded-lg border px-2 py-1.5 text-left transition-[transform,opacity] duration-150 ease-out hover:opacity-90 active:scale-[0.98]"
+                                        style={railChipStyle}
+                                        title={file.name}
+                                      >
+                                        <span className="truncate text-[11px] font-medium leading-tight tracking-tight text-[var(--chat-text)]">
+                                          {baseName}
+                                        </span>
+                                        <span className="mt-0.5 line-clamp-2 text-[9.5px] leading-snug text-[var(--chat-muted)]">
+                                          {previewText}
+                                        </span>
+                                      </button>
+                                      {!isMockFile && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveProjectFile(project.id, file.id)}
+                                          className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded text-[var(--chat-muted)] opacity-0 transition-opacity hover:text-[var(--chat-danger)] group-hover/file:opacity-100"
+                                          aria-label={`Remove ${file.name}`}
+                                          title="Remove"
+                                        >
+                                          <X size={11} strokeWidth={1.75} aria-hidden="true" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Scheduled — same shell + black chips */}
+                        <div
+                          className="flex flex-col rounded-[10px] border p-1.5"
+                          style={railShellStyle}
+                        >
+                          <div className="flex items-center justify-between gap-2 py-1 pl-2 pr-0.5">
+                            <span className="truncate text-[13px] font-semibold leading-snug tracking-tight text-[var(--chat-text)]">
+                              Scheduled
+                            </span>
+                            <button
+                              type="button"
+                              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                              aria-label="Add scheduled task"
+                              title="Add scheduled task"
+                            >
+                              <Plus size={16} aria-hidden="true" />
+                            </button>
+                          </div>
+                          <div className="flex flex-col gap-1.5 px-1 pb-1.5 pt-0.5">
+                            {MOCK_PROJECT_SCHEDULED.map((task) => (
+                              <div
+                                key={task.id}
+                                className="rounded-lg border px-2.5 py-2"
+                                style={railChipStyle}
+                              >
+                                <div className="flex items-baseline gap-2">
+                                  <span className="w-7 flex-shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--chat-muted)]">
+                                    {task.mark}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-[11.5px] font-medium leading-tight tracking-tight text-[var(--chat-text)]">
+                                      {task.title}
+                                    </p>
+                                    <p className="mt-0.5 truncate text-[9.5px] text-[var(--chat-muted)]">
+                                      {task.cadence}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </aside>
+            </div>
+          );
+        })()}
         {/* Top Bar - matches PDF/Word interface style */}
         <div
           ref={topBarRef}
-          className={`chat-top-bar absolute top-0 left-0 z-10 flex flex-col px-4 py-2 md:px-4 md:py-2 main-content-transition bg-[#0a0a0b] ${isMultiInterface ? 'px-2 py-1' : ''}`}
-          style={{ right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px', backgroundColor: '#0a0a0b' }}
+          className={`chat-top-bar absolute top-0 left-0 z-30 flex flex-col main-content-transition bg-[#0a0a0b] ${
+            isMultiInterface ? 'px-2 py-1' : 'px-0 py-2'
+          }`}
+          style={{
+            right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px',
+            backgroundColor: 'var(--chat-canvas)',
+          }}
         >
           {/* Buttons row */}
-          <div className={`relative flex flex-shrink-0 items-center justify-between`}>
-          {/* Left side - History, System Prompt, Clear/Save */}
+          <div className="relative flex w-full flex-shrink-0 items-center justify-between">
+          {/* Left side - System Prompt, Clear/Save (history opens from the empty-state tool rail) */}
           <div ref={leftButtonsRef} className={`chat-top-bar-buttons relative flex items-center ${isMultiInterface ? 'gap-1' : 'gap-2 md:gap-2'} transition-all duration-300 ease-in-out`}
-            style={{ marginLeft: !isMultiInterface && isHistoryOpen && !isMobile ? (isTaskbarHidden ? '272px' : '264px') : '0px' }}>
-              {/* History — hidden in multi-interface mode (each panel has its own conversation selector) */}
-              {!isMultiInterface && (
-              <button
-                  onClick={toggleHistory}
-                  className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 ${isHistoryOpen ? 'border-gray-500' : ''}`}
-                  aria-label="Toggle History"
-              >
-                  <Lightbulb size={16} />
-              </button>
+            style={{ marginLeft: !isMultiInterface && isHistoryOpen && !isMobile ? '260px' : '0px' }}>
+              {/* Spacer: floating icon/XENO (z-60) sits here when history chrome is visible. */}
+              {!isMultiInterface && showClosedHistoryChrome && (
+                <div
+                  className={`h-9 flex-shrink-0 ${isProjectsPageOpen ? 'w-[13.5rem]' : 'w-[8.25rem]'}`}
+                  aria-hidden="true"
+                />
               )}
-              {/* System Prompt */}
-              <div className="relative">
+              {/* System Prompt — multi-interface only; main chat opens it from ⋯ */}
+              {isMultiInterface && (
+              <div className={`relative ${messages.length === 0 ? 'hidden' : ''}`}>
                 <button
                   ref={systemPromptButtonRef}
                   onClick={toggleSystemPrompt}
                   onMouseEnter={() => setIsSystemPromptButtonHovered(true)}
                   onMouseLeave={() => setIsSystemPromptButtonHovered(false)}
-                  className={`chat-system-prompt-btn flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'} ${selectedPersona ? 'border-gray-500' : ''}`}
+                  className={`chat-system-prompt-btn flex h-9 w-[8rem] items-center justify-center gap-2 rounded-lg border border-white/[0.08] px-3 py-1.5 text-sm text-white/80 transition-colors hover:border-white/20 hover:bg-black/20 ${selectedPersona ? 'border-gray-500' : ''}`}
                 >
                   <FilePenLine size={16} className="flex-shrink-0" />
                   <span className="truncate hidden md:inline">
@@ -7510,57 +11564,47 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       ? PERSONAS.find(p => p.id === selectedPersona)?.label
                       : selectedPersona === 'custom'
                         ? 'Custom'
-                        : (isMultiInterface ? 'System' : 'System Prompt')}
+                        : 'System'}
                   </span>
                 </button>
                 {(isSystemPromptButtonHovered && !isSystemPromptOpen && !isCustomPromptOpen) && (
-                  <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 pointer-events-none">
+                  <div className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2">
                     <ChevronDown size={16} className="text-gray-500" />
                   </div>
                 )}
                 <div
                   ref={systemPromptPanelRef}
-                  className={`absolute top-full left-0 mt-[10px] z-20 flex flex-col gap-2 transition-all duration-200 ease-out origin-top-left ${isSystemPromptOpen && !isCustomPromptOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible pointer-events-none'}`}
+                  className={`absolute left-0 top-full z-20 mt-[10px] flex origin-top-left flex-col gap-2 transition-all duration-200 ease-out ${isSystemPromptOpen && !isCustomPromptOpen ? 'visible scale-100 opacity-100' : 'pointer-events-none invisible scale-95 opacity-0'}`}
                 >
                   {PERSONAS.map((persona) => (
                     <button key={persona.id} onClick={() => handlePersonaSelect(persona.id)}
-                      className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === persona.id ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'}`}
+                      className={`flex h-9 w-[8rem] items-center justify-center rounded-lg border px-3 py-1.5 text-sm transition-colors ${selectedPersona === persona.id ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'}`}
                     >{persona.label}</button>
                   ))}
                   <button onClick={() => { setIsSystemPromptOpen(false); setIsCustomPromptOpen(true); }}
-                    className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} ${selectedPersona === 'custom' ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'}`}
+                    className={`flex h-9 w-[8rem] items-center justify-center rounded-lg border px-3 py-1.5 text-sm transition-colors ${selectedPersona === 'custom' ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'}`}
                   >Custom</button>
                   {selectedPersona && (
                     <button onClick={handleClearSystemPrompt}
-                      className="flex items-center justify-center border rounded-lg px-3 py-1.5 text-sm transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-[10rem]'} border-[#1e1e21] text-gray-400 hover:border-red-500/50 hover:text-red-400"
+                      className="flex h-9 w-[8rem] items-center justify-center rounded-lg border border-[#1e1e21] px-3 py-1.5 text-sm text-gray-400 transition-colors hover:border-red-500/50 hover:text-red-400"
                     >Clear</button>
                   )}
                 </div>
-                {/* Custom Prompt Input */}
-                <div className={`absolute top-full left-0 mt-[10px] z-20 bg-[#0e0e10] border border-[#2a2a2d] rounded-lg shadow-xl overflow-hidden transition-all duration-200 ease-out origin-top-left ${isCustomPromptOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible pointer-events-none'}`}
+                <div className={`absolute left-0 top-full z-20 mt-[10px] origin-top-left overflow-hidden rounded-lg border border-[#2a2a2d] bg-[#0e0e10] shadow-xl transition-all duration-200 ease-out ${isCustomPromptOpen ? 'visible scale-100 opacity-100' : 'pointer-events-none invisible scale-95 opacity-0'}`}
                   style={{ width: '18rem' }}>
                   <textarea placeholder="Enter custom system prompt..." value={systemPrompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSystemPrompt(e.target.value)}
-                    className="w-full h-32 p-3 text-sm text-gray-200 placeholder-gray-500 outline-none bg-[#0e0e10] border-b border-[#2a2a2d] scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent resize-none" />
+                    className="h-32 w-full resize-none border-b border-[#2a2a2d] bg-[#0e0e10] p-3 text-sm text-gray-200 placeholder-gray-500 outline-none scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent" />
                   <div className="flex gap-2 p-2">
                     <button onClick={() => { setIsCustomPromptOpen(false); setIsSystemPromptOpen(true); }}
-                      className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white transition-colors">Back</button>
+                      className="flex-1 rounded-lg border border-white/[0.08] px-3 py-1.5 text-sm text-gray-400 transition-colors hover:border-white/20 hover:bg-black/20 hover:text-white">Back</button>
                     <button onClick={() => { setSavedSystemPrompt(systemPrompt); setIsCustomPromptOpen(false); setSelectedPersona('custom'); setIsSystemPromptSaved(true); setTimeout(() => setIsSystemPromptSaved(false), 1500); }}
                       disabled={!systemPrompt.trim()}
-                      className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${systemPrompt.trim() ? 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white' : 'border-white/[0.04] text-gray-600 cursor-not-allowed'}`}>Save</button>
+                      className={`flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${systemPrompt.trim() ? 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white' : 'cursor-not-allowed border-white/[0.04] text-gray-600'}`}>Save</button>
                   </div>
                 </div>
               </div>
-              {/* Clear/Save — hidden in multi-interface */}
-              {!isMultiInterface && (
-              <button
-                  onClick={selectedPersona ? handleClearSystemPrompt : undefined}
-                  className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 transition-colors h-9 ${selectedPersona ? 'text-gray-400 hover:border-red-500/50 hover:text-red-400 hover:bg-black/20 cursor-pointer' : 'text-gray-600 cursor-default'}`}
-                  disabled={!selectedPersona}
-              >
-                  {selectedPersona ? <X size={16} /> : <Save size={16} />}
-              </button>
               )}
-                      </div>
+          </div>
 
           {/* Center - Token Count (mobile only, non-multi-interface) - absolutely centered */}
           {isMobile && !isMultiInterface && (
@@ -7693,9 +11737,146 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             </div>
           )}
 
-          {/* Right side - New Chat, Model Selector & Settings */}
-          <div ref={rightButtonsRef} className={`chat-top-bar-buttons flex items-center ${isMultiInterface ? 'gap-1' : 'gap-1 md:gap-2'} main-content-transition`}>
-              {/* Refresh button - visible in multi-interface mode when there's an active conversation */}
+          {/* Right side:
+              New chat → Temporary Preview · Theme · Settings
+              Open conversation → Share · ⋯ (options inside)
+              Multi keeps denser toolbar. */}
+          <div
+            ref={rightButtonsRef}
+            className={`chat-top-bar-buttons flex items-center ${isMultiInterface ? 'gap-1' : 'absolute gap-1.5'} main-content-transition ${
+              !isMultiInterface ? 'z-[60] h-9' : ''
+            }`}
+            style={
+              !isMultiInterface
+                ? { top: 0, right: CHAT_CHROME_EDGE_INSET_PX }
+                : undefined
+            }
+          >
+              {!isMultiInterface && messages.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTemporaryChat((current) => !current);
+                    setIsChatMoreMenuOpen(false);
+                    setIsSharePreviewOpen(false);
+                    setIsThemeMenuOpen(false);
+                  }}
+                  aria-pressed={isTemporaryChat}
+                  aria-label="Temporary chat preview"
+                  title="Temporary chat"
+                  data-active={isTemporaryChat ? 'true' : undefined}
+                  className={topBarBtnClass(isTemporaryChat, 'gap-1.5 px-2.5 text-[13px]')}
+                >
+                  <UserRoundX size={15} strokeWidth={1.75} className="flex-shrink-0" aria-hidden="true" />
+                  <span className="font-medium leading-none">Temporary</span>
+                  <span className="leading-none text-[12px] text-[var(--chat-muted)]">Preview</span>
+                </button>
+              )}
+
+              {(isMultiInterface || messages.length === 0) && (
+              <div ref={themeMenuRef} className="relative flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsThemeMenuOpen((isOpen) => !isOpen);
+                    setIsChatMoreMenuOpen(false);
+                    setIsSharePreviewOpen(false);
+                  }}
+                  aria-expanded={isThemeMenuOpen}
+                  aria-controls="chat-theme-menu"
+                  aria-haspopup="menu"
+                  aria-label="Choose Chat LLM theme"
+                  title="Choose Chat LLM theme"
+                  data-active={isThemeMenuOpen ? 'true' : undefined}
+                  className={topBarBtnClass(isThemeMenuOpen, 'gap-0.5 px-2')}
+                >
+                  <ThemeTriggerIcon size={16} />
+                  <ChevronDown size={12} className={`text-gray-500 transition-transform duration-200 ${isThemeMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+                <div
+                  id="chat-theme-menu"
+                  role="dialog"
+                  aria-label="Chat LLM theme"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  className={`absolute right-0 top-full z-20 mt-2 w-52 origin-top-right rounded-lg border border-[#2a2a2d] bg-[#0e0e10] p-2.5 shadow-xl transition-[opacity,transform] duration-200 ease-out ${
+                    isThemeMenuOpen
+                      ? 'visible scale-100 opacity-100'
+                      : 'invisible pointer-events-none scale-95 opacity-0'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-medium text-white">Appearance</span>
+                    <button
+                      type="button"
+                      aria-pressed={chatTheme === 'system'}
+                      onClick={() => handleChatThemeChange('system', false)}
+                      className={`flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] transition-colors active:scale-[0.98] ${
+                        chatTheme === 'system'
+                          ? 'border-[var(--chat-border)] bg-[var(--chat-hover)] text-[var(--chat-text)]'
+                          : 'border-[var(--chat-border)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
+                      }`}
+                    >
+                      <Monitor size={13} aria-hidden="true" />
+                      System
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-[var(--chat-muted)]">
+                    {chatTheme === 'system' ? 'Following your device' : `Theme ${displayedThemeSliderPosition}%`}
+                  </p>
+                  <div className="mt-3 px-1">
+                    <div className="chat-theme-waveform-control relative">
+                      <div className="chat-theme-waveform" aria-hidden="true">
+                      {Array.from({ length: THEME_WAVEFORM_BAR_COUNT }, (_, index) => {
+                        const position = index * THEME_BRIGHTNESS_STEP;
+                        const isThemeStop = index === 0 || index === Math.floor(THEME_WAVEFORM_BAR_COUNT / 2) || index === THEME_WAVEFORM_BAR_COUNT - 1;
+                        const isSelected = position === displayedThemeSliderPosition;
+
+                        return (
+                          <span
+                            key={index}
+                            className="chat-theme-waveform-bar"
+                            data-stop={isThemeStop}
+                            data-selected={isSelected}
+                            data-percentage={position}
+                            style={{ backgroundColor: getThemePreviewTokens(position).canvas }}
+                          />
+                        );
+                      })}
+                      </div>
+                      <input
+                        className="chat-theme-slider"
+                        type="range"
+                        min="0"
+                        max="100"
+                        step={THEME_BRIGHTNESS_STEP}
+                        value={displayedThemeSliderPosition}
+                        aria-label="Theme brightness"
+                        aria-valuetext={getThemeSliderValueText(displayedThemeSliderPosition)}
+                        onChange={(event) => setThemePreviewPosition(Number(event.currentTarget.value))}
+                        onPointerUp={(event) => commitThemeSliderPosition(Number(event.currentTarget.value))}
+                        onPointerCancel={() => setThemePreviewPosition(null)}
+                        onKeyUp={(event) => {
+                          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                          commitThemeSliderPosition(Number(event.currentTarget.value));
+                        }}
+                      />
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 text-[10px] text-[var(--chat-muted)]">
+                      {VISUAL_CHAT_THEME_OPTIONS.map((option, index) => (
+                        <span
+                          key={option.id}
+                          className={index === 0 ? 'text-left' : index === 1 ? 'text-center' : 'text-right'}
+                        >
+                          {option.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              )}
+
+              {/* Refresh / New chat / Search — multi-interface denser toolbar */}
               {isMultiInterface && activeConversationId && (
                 <button
                     onClick={handleRefreshConversation}
@@ -7706,138 +11887,337 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     <RefreshCcw size={16} className={isRefreshing ? 'animate-spin' : ''} />
                 </button>
               )}
-              <button
-                  onClick={handleNewChat}
-                  className="flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9"
-                  aria-label="Start New Chat"
-              >
-                  <SquarePen size={16} />
-              </button>
+              {isMultiInterface && messages.length > 0 && (
+                <button
+                    onClick={handleNewChat}
+                    className="flex h-9 items-center justify-center rounded-lg border border-white/[0.08] px-3 py-1.5 text-white/80 transition-colors hover:border-white/20 hover:bg-black/20"
+                    aria-label="Start New Chat"
+                >
+                    <SquarePen size={16} />
+                </button>
+              )}
+              {isMultiInterface && messages.length > 0 && (
+                <button
+                  onClick={() => {
+                    setIsMessageSearchOpen(!isMessageSearchOpen);
+                    if (isMessageSearchOpen) setMessageSearchQuery('');
+                  }}
+                  className={`flex h-9 items-center justify-center rounded-lg border px-3 py-1.5 text-white/80 transition-colors hover:border-white/20 hover:bg-black/20 ${
+                    isMessageSearchOpen ? 'border-gray-500' : 'border-[#1e1e21]'
+                  }`}
+                  aria-label="Search messages"
+                >
+                  <Search size={16} />
+                </button>
+              )}
+
+              {/* Main chat: Share + ⋯ */}
+              {!isMultiInterface && messages.length > 0 && (
               <div className="relative flex-shrink-0">
                 <button
-                      ref={companyDropdownButtonRef}
-                      onClick={() => {
-                          setIsCompanyDropdownOpen(!isCompanyDropdownOpen);
-                      }}
-                  onMouseEnter={() => setIsModelSelectorButtonHovered(true)}
-                  onMouseLeave={() => setIsModelSelectorButtonHovered(false)}
-                  className={`chat-model-selector flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 ${isMultiInterface ? 'w-[8rem]' : 'w-auto md:w-[10rem]'}`}
+                  type="button"
+                  onClick={() => {
+                    setIsSharePreviewOpen((current) => !current);
+                    setIsChatMoreMenuOpen(false);
+                  }}
+                  aria-expanded={isSharePreviewOpen}
+                  aria-controls="chat-share-preview"
+                  aria-label="Open share preview"
+                  title="Share conversation preview"
+                  data-active={isSharePreviewOpen ? 'true' : undefined}
+                  className={topBarBtnClass(isSharePreviewOpen, 'w-9')}
                 >
-                  {isModelsLoading ? (
-                    <Loader2 size={16} className="text-gray-500 flex-shrink-0 animate-spin" />
-                  ) : modelHasReasoningCapability(selectedModel.id, selectedModel) !== 'disabled' && isReasonToggled ? (
-                    <BrainCircuit size={16} className="text-white/70 flex-shrink-0" />
-                  ) : (
-                    <Brain size={16} className="text-gray-500 flex-shrink-0" />
-                  )}
-                  <span className="truncate hidden md:inline">{selectedModel.name}</span>
+                  <Share2 size={16} />
                 </button>
-                {(isModelSelectorButtonHovered && !isCompanyDropdownOpen) && (
-                  <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 pointer-events-none">
-                    <ChevronDown size={16} className="text-gray-500" />
-                  </div>
-                )}
-                  <div
-                     ref={companyListContainerRef}
-                     style={{ right: '-48px' }}
-                     className={`
-                        absolute top-full mt-[10px] z-20
-                        transition-all duration-200 ease-out origin-top-right
-                        ${isCompanyDropdownOpen
-                          ? 'opacity-100 scale-100 visible'
-                          : 'opacity-0 scale-95 invisible'
-                        }
-                        w-72 bg-[#111113] border border-[#1e1e21] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)]
-                        max-h-[60vh] overflow-hidden flex flex-col
-                `}>
-                  {/* Scrollable Content */}
-                  <div className="flex-1 overflow-y-auto">
+                <div
+                  id="chat-share-preview"
+                  role="dialog"
+                  aria-label="Share conversation preview"
+                  className={`absolute right-0 top-full z-20 mt-2 w-64 origin-top-right rounded-lg border border-[#2a2a2d] bg-[#0e0e10] p-3 shadow-xl transition-[opacity,transform] duration-200 ease-out ${
+                    isSharePreviewOpen
+                      ? 'visible scale-100 opacity-100'
+                      : 'invisible pointer-events-none scale-95 opacity-0'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                          {groupedModels.length === 0 && (
-                            <div className="px-4 py-8 text-center text-sm text-white/40">
-                              {isModelsLoading ? 'Loading models…' : 'No models available on the endpoint.'}
-                            </div>
-                          )}
-                          {groupedModels.map((group) => {
-                              const isExpanded = expandedCompanies.has(group.companyName);
-                              return (
-                                  <div key={group.companyName}>
-                                      <div
-                                          onClick={() => {
-                                              setExpandedCompanies(prev => {
-                                                  if (prev.has(group.companyName)) {
-                                                      return new Set();
-                                                  } else {
-                                                      return new Set([group.companyName]);
-                                                  }
-                                              });
-                                          }}
-                                          className="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-white/[0.03] transition-colors border-b border-[#1e1e21]/50"
-                                      >
-                                          <span className="text-[12px] font-semibold text-white/50 uppercase tracking-wider">
-                                            {group.companyName}
-                                          </span>
-                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}><path d="M6 9l6 6 6-6" /></svg>
-                                      </div>
-
-                                      {/* Expanded Models List */}
-                                      {isExpanded && group.models.map((model) => (
-                                        <div
-                                          key={model.id}
-                                          onClick={() => handleModelSelect(model)}
-                                          className={`px-3 py-2 flex items-center justify-between cursor-pointer transition-colors border-l-2 ${
-                                            selectedModel.id === model.id
-                                              ? 'bg-[#a760ff]/10 text-white border-[#a760ff]'
-                                              : 'text-gray-400 hover:bg-white/[0.05] hover:text-white border-transparent'
-                                          }`}
-                                        >
-                                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                                            <span className="text-[13px] truncate">
-                                              {model.name}
-                                            </span>
-                                            {modelHasReasoningCapability(model.id, model) !== 'disabled' && (
-                                              <Brain size={13} className="text-white/25 flex-shrink-0" />
-                                            )}
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-[11px] text-white/25">{formatTokens(model.maxTokens)}</span>
-                                            {selectedModel.id === model.id && (
-                                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2"><path d="M20 6L9 17l-5-5" /></svg>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))}
-                                  </div>
-                              );
-                          })}
-                      </div>
+                      <p className="text-sm font-medium text-white">Share conversation</p>
+                      <p className="mt-1 text-xs leading-5 text-gray-500">Preview only. A share link and permissions will be connected when the backend is ready.</p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsSharePreviewOpen(false)}
+                      aria-label="Close share preview"
+                      className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-black/20 hover:text-white"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
-            </div>
-            {/* Message Search Button */}
-            {messages.length > 0 && (
-              <button
-                onClick={() => {
-                  setIsMessageSearchOpen(!isMessageSearchOpen);
-                  if (isMessageSearchOpen) setMessageSearchQuery('');
-                }}
-                className={`flex items-center justify-center border rounded-lg px-3 py-1.5 text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 ${
-                  isMessageSearchOpen ? 'border-gray-500' : 'border-[#1e1e21]'
-                }`}
-                aria-label="Search messages"
-              >
-                <Search size={16} />
-              </button>
-            )}
+                </div>
+              </div>
+              )}
+
+              {/* ⋯ only in an open conversation (Share sibling). Theme / Temporary / Settings stay on New chat. */}
+              {!isMultiInterface && messages.length > 0 && (
+              <div ref={chatMoreMenuRef} className="relative flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsChatMoreMenuOpen((open) => !open);
+                    setIsSharePreviewOpen(false);
+                    setIsThemeMenuOpen(false);
+                  }}
+                  aria-expanded={isChatMoreMenuOpen}
+                  aria-haspopup="menu"
+                  aria-label="More chat options"
+                  title="More"
+                  data-active={isChatMoreMenuOpen ? 'true' : undefined}
+                  className={topBarBtnClass(isChatMoreMenuOpen, 'w-9')}
+                >
+                  <MoreVertical size={16} />
+                </button>
+                <div
+                  role="menu"
+                  className={`absolute right-0 top-full z-30 mt-2 w-[220px] origin-top-right rounded-xl border border-[#2a2a2d] bg-[#141416] p-1 shadow-xl transition-[opacity,transform] duration-150 ease-out ${
+                    isChatMoreMenuOpen
+                      ? 'visible scale-100 opacity-100'
+                      : 'pointer-events-none invisible scale-95 opacity-0'
+                  }`}
+                  style={{ backgroundColor: 'var(--chat-elevated)', borderColor: 'var(--chat-border)' }}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={moreMenuItemClass}
+                    onClick={() => {
+                      openChatFilesPanel();
+                      setIsChatMoreMenuOpen(false);
+                    }}
+                  >
+                    <Folder size={14} className="flex-shrink-0 text-zinc-500" />
+                    <span>View files in chat</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={moreMenuItemClass}
+                    disabled={!activeHistoryConvo}
+                    onClick={() => {
+                      if (!activeHistoryConvo) return;
+                      handleTogglePinConversation(activeHistoryConvo.id);
+                      setIsChatMoreMenuOpen(false);
+                    }}
+                  >
+                    <Pin size={14} className={`flex-shrink-0 ${activeHistoryConvo?.isPinned ? 'fill-current text-zinc-100' : 'text-zinc-500'}`} />
+                    <span>{activeHistoryConvo?.isPinned ? 'Unpin chat' : 'Pin chat'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={moreMenuItemClass}
+                    disabled={!activeHistoryConvo}
+                    onClick={() => {
+                      if (!activeHistoryConvo) return;
+                      void handleArchiveConversation(activeHistoryConvo.id, !activeHistoryConvo.isArchived);
+                      setIsChatMoreMenuOpen(false);
+                    }}
+                  >
+                    <Archive size={14} className="flex-shrink-0 text-zinc-500" />
+                    <span>{activeHistoryConvo?.isArchived ? 'Unarchive' : 'Archive'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-red-400 transition-colors hover:bg-[var(--chat-hover)] disabled:opacity-40"
+                    disabled={!activeHistoryConvo}
+                    onClick={() => {
+                      if (!activeHistoryConvo) return;
+                      setDeleteConfirmationModal({
+                        isOpen: true,
+                        conversationId: activeHistoryConvo.id,
+                        conversationTitle: activeHistoryConvo.title,
+                      });
+                      setIsChatMoreMenuOpen(false);
+                    }}
+                  >
+                    <Trash2 size={14} className="flex-shrink-0" />
+                    <span>Delete</span>
+                  </button>
+
+                  <div className="my-1 border-t border-[#1e1e21]" />
+
+                  <div ref={themeMenuRef} className="relative">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={moreMenuItemClass}
+                      aria-expanded={isThemeMenuOpen}
+                      onClick={() => setIsThemeMenuOpen((open) => !open)}
+                    >
+                      <ThemeTriggerIcon size={14} className="flex-shrink-0 text-zinc-500" />
+                      <span>Theme</span>
+                      <ChevronRight size={14} className={`ml-auto text-zinc-500 transition-transform ${isThemeMenuOpen ? 'rotate-90' : ''}`} />
+                    </button>
+                    {isThemeMenuOpen && (
+                      <div
+                        id="chat-theme-menu"
+                        role="dialog"
+                        aria-label="Chat LLM theme"
+                        onMouseDown={(event) => event.stopPropagation()}
+                        className="mt-1 rounded-lg border border-[#2a2a2d] bg-[#0e0e10] p-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-medium text-white">Appearance</span>
+                          <button
+                            type="button"
+                            aria-pressed={chatTheme === 'system'}
+                            onClick={() => handleChatThemeChange('system', false)}
+                            className={`flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] transition-colors active:scale-[0.98] ${
+                              chatTheme === 'system'
+                                ? 'border-[var(--chat-border)] bg-[var(--chat-hover)] text-[var(--chat-text)]'
+                                : 'border-[var(--chat-border)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
+                            }`}
+                          >
+                            <Monitor size={13} aria-hidden="true" />
+                            System
+                          </button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-[var(--chat-muted)]">
+                          {chatTheme === 'system' ? 'Following your device' : `Theme ${displayedThemeSliderPosition}%`}
+                        </p>
+                        <div className="mt-3 px-1">
+                          <div className="chat-theme-waveform-control relative">
+                            <div className="chat-theme-waveform" aria-hidden="true">
+                              {Array.from({ length: THEME_WAVEFORM_BAR_COUNT }, (_, index) => {
+                                const position = index * THEME_BRIGHTNESS_STEP;
+                                const isThemeStop = index === 0 || index === Math.floor(THEME_WAVEFORM_BAR_COUNT / 2) || index === THEME_WAVEFORM_BAR_COUNT - 1;
+                                const isSelected = position === displayedThemeSliderPosition;
+                                return (
+                                  <span
+                                    key={index}
+                                    className="chat-theme-waveform-bar"
+                                    data-stop={isThemeStop}
+                                    data-selected={isSelected}
+                                    data-percentage={position}
+                                    style={{ backgroundColor: getThemePreviewTokens(position).canvas }}
+                                  />
+                                );
+                              })}
+                            </div>
+                            <input
+                              className="chat-theme-slider"
+                              type="range"
+                              min="0"
+                              max="100"
+                              step={THEME_BRIGHTNESS_STEP}
+                              value={displayedThemeSliderPosition}
+                              aria-label="Theme brightness"
+                              aria-valuetext={getThemeSliderValueText(displayedThemeSliderPosition)}
+                              onChange={(event) => setThemePreviewPosition(Number(event.currentTarget.value))}
+                              onPointerUp={(event) => commitThemeSliderPosition(Number(event.currentTarget.value))}
+                              onPointerCancel={() => setThemePreviewPosition(null)}
+                              onKeyUp={(event) => {
+                                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                                commitThemeSliderPosition(Number(event.currentTarget.value));
+                              }}
+                            />
+                          </div>
+                          <div className="mt-2 grid grid-cols-3 text-[10px] text-[var(--chat-muted)]">
+                            {VISUAL_CHAT_THEME_OPTIONS.map((option, index) => (
+                              <span
+                                key={option.id}
+                                className={index === 0 ? 'text-left' : index === 1 ? 'text-center' : 'text-right'}
+                              >
+                                {option.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={moreMenuItemClass}
+                    aria-pressed={isTemporaryChat}
+                    onClick={() => setIsTemporaryChat((current) => !current)}
+                  >
+                    <UserRoundX size={14} className="flex-shrink-0 text-zinc-500" />
+                    <span>Temporary chat</span>
+                    {isTemporaryChat && <Check size={13} className="ml-auto flex-shrink-0 text-zinc-100" />}
+                  </button>
+
+                  <div className="my-1 border-t border-[#1e1e21]" />
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={moreMenuItemClass}
+                    onClick={() => {
+                      setIsMessageSearchOpen(true);
+                      setIsChatMoreMenuOpen(false);
+                    }}
+                  >
+                    <Search size={14} className="flex-shrink-0 text-zinc-500" />
+                    <span>Search messages</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={moreMenuItemClass}
+                    onClick={() => {
+                      setIsSettingsModalOpen(true);
+                      setIsChatMoreMenuOpen(false);
+                    }}
+                  >
+                    <Settings size={14} className="flex-shrink-0 text-zinc-500" />
+                    <span>Settings</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={moreMenuItemClass}
+                    onClick={() => {
+                      handleNewChat();
+                      setIsChatMoreMenuOpen(false);
+                    }}
+                  >
+                    <SquarePen size={14} className="flex-shrink-0 text-zinc-500" />
+                    <span>New chat</span>
+                  </button>
+                </div>
+              </div>
+              )}
+
             <div className="relative flex-shrink-0">
+              {(isMultiInterface || messages.length === 0) ? (
               <button
                   ref={settingsButtonRef}
-                  onClick={() => setIsSettingsModalOpen(!isSettingsModalOpen)}
-                  className="flex items-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9"
+                  type="button"
+                  onClick={() => {
+                    setIsSettingsModalOpen(!isSettingsModalOpen);
+                    setIsChatMoreMenuOpen(false);
+                    setIsSharePreviewOpen(false);
+                    setIsThemeMenuOpen(false);
+                  }}
+                  data-active={isSettingsModalOpen ? 'true' : undefined}
+                  className={topBarBtnClass(isSettingsModalOpen, 'w-9')}
                   aria-label="Settings"
+                  title="Settings"
               >
                   <Settings size={16} />
               </button>
+              ) : (
+              <button
+                  ref={settingsButtonRef}
+                  type="button"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0"
+              />
+              )}
               <div
                  ref={settingsModalRef}
                  className={`
@@ -8010,6 +12390,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               </div>
             </div>
           </div>
+          {!isMultiInterface && (
+            <div
+              className="ml-auto h-9 flex-shrink-0"
+              style={{ width: messages.length === 0 ? '15.5rem' : '5.25rem' }}
+              aria-hidden="true"
+            />
+          )}
           </div>
         </div>
 
@@ -8049,13 +12436,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           </div>
         )}
 
-        {/* Chat Messages Area */}
+        {/* Chat Messages Area — same max width + centering as the conversation composer. */}
         <div
           ref={chatAreaRef}
           translate="no"
-          className="hide-scrollbar flex-grow w-full overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent px-2 pt-16 pb-16 main-content-transition notranslate"
+          className="hide-scrollbar flex-grow w-full overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent px-2 pt-16 pb-56 md:pb-60 main-content-transition notranslate"
+          style={{
+            // Match composer clearance when history is open so the column stays centered.
+            paddingLeft: !isMultiInterface && isHistoryOpen && !isMobile ? 260 : undefined,
+          }}
         >
-                        <div className={`${isMultiInterface ? 'max-w-full px-2' : (isWideChatEnabled ? 'max-w-[67.5rem]' : 'max-w-[45rem]')} w-full space-y-2 overflow-hidden ${
+                        <div className={`${isMultiInterface ? 'max-w-full px-2' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-[52rem]')} w-full space-y-2 overflow-hidden ${
                           isMultiInterface ? 'mx-auto' : (
                             chatAlignment === 'left' ? 'ml-0 mr-auto' :
                             chatAlignment === 'right' ? 'ml-auto mr-0' :
@@ -8073,9 +12464,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 </div>
               )} */}
             
-            {messages.length === 0 ? (
-                 <p className="text-center text-gray-500 pt-24">No messages yet. Start chatting!</p>
-              ) : (
+            {messages.length > 0 && (
                  messages.map((message, index) => {
                     // Moved these declarations up to be available for all conditions
                     const isUser = message.sender === 'user';
@@ -8092,18 +12481,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       (message.text?.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
                        message.parsedAnswer?.toLowerCase().includes(messageSearchQuery.toLowerCase()));
 
-                    // Date separator logic
-                    const prevMessage = index > 0 ? messages[index - 1] : undefined;
-                    const showDateSeparator = shouldShowDateSeparator(message, prevMessage);
-                    const dateSeparatorElement = showDateSeparator && message.timestamp ? (
-                      <div key={`date-sep-${message.id}`} className="flex items-center justify-center my-4">
-                        <div className="flex items-center gap-3 text-[11px] text-gray-500">
-                          <div className="w-12 h-px bg-[#2a2a2d]" />
-                          <span>{formatDateSeparator(message.timestamp)}</span>
-                          <div className="w-12 h-px bg-[#2a2a2d]" />
-                        </div>
-                      </div>
-                    ) : null;
+                    // Date separators (e.g. "Wednesday, July 15") are hidden for now —
+                    // kept helpers above if we bring them back later.
+                    const dateSeparatorElement = null;
 
                     if (message.isThinkingPlaceholder) {
                         // Animated thinking placeholder with live timer
@@ -8166,96 +12546,157 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         <React.Fragment key={message.id}>
                           {dateSeparatorElement}
                           <div
-                            className={`flex w-full ${isUser ? 'justify-end pr-4' : 'justify-start'} ${firstMessageTopMargin} ${
+                            className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'} ${firstMessageTopMargin} ${
                               messageMatchesSearch ? 'bg-yellow-500/5 border-l-2 border-yellow-500/50 -ml-0.5 pl-0.5' : ''
                             }`}
                           >
                            {isUser ? (
                                editingMessageId === message.id ? (
                                      <div
-                                         className="chat-message-bubble flex flex-col bg-[#0e0e10] border border-[#1e1e21] rounded-2xl rounded-br-none p-3 max-w-[90%] md:max-w-[75%] w-full text-white overflow-hidden"
+                                         className="chat-message-bubble flex w-full max-w-[90%] flex-col gap-2 rounded-xl border border-[#1e1e21] bg-[#0e0e10] p-2 text-white md:max-w-[75%]"
                                      >
-                                         <textarea
+                                         <div className="rounded-lg border border-blue-500/70 bg-[#0a0a0b]/40 px-2.5 py-2 transition-colors focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/25">
+                                           <textarea
                                              ref={editInputRef}
                                              value={editText}
                                              onChange={(e) => setEditText(e.target.value)}
-                                               className="w-full bg-transparent text-sm leading-snug text-white outline-none resize-none focus:ring-0 border-none focus:outline-none focus:shadow-none whitespace-pre-wrap scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent focus:outline-none"
-                                               rows={1}
-                                               style={{ overflowY: 'hidden' }}
+                                             className="min-h-[2.75rem] w-full resize-y bg-transparent text-[15px] leading-6 text-white outline-none scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent"
+                                             rows={1}
                                            />
-                                           <div className="flex items-center justify-end gap-2 mt-1.5 self-end">
-                                               <button onClick={handleCancelEdit} className="text-sm text-gray-400 hover:text-gray-200 px-3 py-1" aria-label="Cancel edit">
-                                                   Cancel
-                                               </button>
-                                               <button onClick={handleSaveEdit} className="text-sm bg-gray-400 text-zinc-900 px-3 py-1 rounded-md font-semibold hover:bg-gray-300 transition-colors" aria-label="Save changes">
-                                                   Save
-                                               </button>
-                                           </div>
+                                         </div>
+                                         <div className="flex items-start gap-1.5 text-xs leading-4 text-zinc-500">
+                                           <Info size={13} className="mt-0.5 flex-shrink-0 text-zinc-500" aria-hidden="true" />
+                                           <p>
+                                             Editing this message will create a new conversation branch. You can switch between branches using the arrow navigation buttons.
+                                           </p>
+                                         </div>
+                                         <div className="flex items-center justify-end gap-1.5">
+                                           <button
+                                             type="button"
+                                             onClick={handleCancelEdit}
+                                             className="rounded-md border border-[#2a2a2d] bg-[#141416] px-3 py-1 text-[13px] text-zinc-200 transition-colors hover:bg-[#1a1a1d]"
+                                             aria-label="Cancel edit"
+                                           >
+                                             Cancel
+                                           </button>
+                                           <button
+                                             type="button"
+                                             onClick={() => void handleSaveEdit()}
+                                             className="rounded-md bg-zinc-100 px-3 py-1 text-[13px] font-medium text-[#111113] transition-colors hover:bg-white"
+                                             aria-label="Save changes"
+                                           >
+                                             Save
+                                           </button>
+                                         </div>
                                        </div>
                                   ) : (
-                                     <div data-message-id={message.id} className="chat-message-bubble group flex flex-col items-end max-w-[90%] md:max-w-[75%] min-w-0">
-                                           <div
-                                              className="bg-[#0e0e10] border border-[#1e1e21] rounded-2xl rounded-br-none p-3 text-white overflow-hidden"
-                                           >
-                                               <p className="text-sm leading-snug whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{message.text}</p>
-                                           </div>
-                                           {message.userImageAttachment && (message.userImageAttachment.file || message.userImageAttachment.base64Data) && (
-                                             <div className="mt-2 ml-auto mr-0 max-w-[150px]">
-                                               <img
-                                                 src={message.userImageAttachment.file
-                                                        ? URL.createObjectURL(message.userImageAttachment.file)
-                                                        : `data:${message.userImageAttachment.type};base64,${message.userImageAttachment.base64Data}`}
-                                                 alt={message.userImageAttachment.name}
-                                                 className="max-w-full h-auto rounded-lg border border-[#1e1e21] cursor-pointer"
-                                                 onClick={() => {
-                                                   if (message.userImageAttachment) {
-                                                      if (message.userImageAttachment.file) {
-                                                        setFullScreenImageUrl(URL.createObjectURL(message.userImageAttachment.file));
-                                                      } else if (message.userImageAttachment.base64Data) {
-                                                        setFullScreenImageUrl(`data:${message.userImageAttachment.type};base64,${message.userImageAttachment.base64Data}`);
-                                                      }
-                                                      setIsFullScreenImageOpen(true);
-                                                      setViewerShowsDownloadButton(true);
-                                                   }
-                                                 }}
-                                                 onLoad={(e) => { if (message.userImageAttachment?.file) { URL.revokeObjectURL((e.target as HTMLImageElement).src); } }}
-                                               />
-                                             </div>
-                                           )}
-                                           {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content) && (
-                                            <div
-                                              className="mt-2 ml-auto mr-0 max-w-[250px] p-2 flex items-center gap-2 bg-[#2a2a2d]/50 border border-[#1e1e21]/50 rounded-lg cursor-pointer hover:bg-[#2a2a2d] transition-colors"
-                                              onClick={() => {
-                                                if (message.userFileAttachment) {
-                                                  if (message.userFileAttachment.file) {
-                                                    const fileToShow: AttachedFile = {
-                                                      id: `user-attached-${message.userFileAttachment.name}-${message.id}`,
-                                                      name: message.userFileAttachment.name,
-                                                      type: message.userFileAttachment.type,
-                                                      fileObject: message.userFileAttachment.file
-                                                    };
-                                                    handleShowFileInContextPanel(fileToShow);
-                                                  } else {
-                                                    // File from history, pass the serialized structure directly
-                                                    handleShowFileInContextPanel(message.userFileAttachment as any);
-                                                  }
-                                                }
-                                              }}
-                                            >
-                                              <FileText size={18} className="text-blue-400 flex-shrink-0" />
-                                              <span className="text-sm text-gray-300 truncate" title={message.userFileAttachment.name}>
-                                                {message.userFileAttachment.name}
-                                              </span>
-                                            </div>
-                                           )}
-                                           <div className="flex items-center justify-end gap-2 mt-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-150">
+                                     <div data-message-id={message.id} className="chat-message-bubble group flex max-w-[90%] min-w-0 flex-col items-end md:max-w-[75%]">
+                                           {(() => {
+                                             const imageAttachments = (
+                                               message.userImageAttachments?.length
+                                                 ? message.userImageAttachments
+                                                 : message.userImageAttachment
+                                                   ? [message.userImageAttachment]
+                                                   : []
+                                             ).filter((img) => img.file || img.base64Data);
+
+                                             const openUserImageFullView = (img: typeof imageAttachments[number]) => {
+                                               const url = img.base64Data
+                                                 ? `data:${img.type};base64,${img.base64Data}`
+                                                 : img.file
+                                                   ? URL.createObjectURL(img.file)
+                                                   : null;
+                                               if (!url) return;
+                                               setFullScreenImageUrl((prev) => {
+                                                 if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+                                                 return url;
+                                               });
+                                               setIsFullScreenImageOpen(true);
+                                               setViewerShowsDownloadButton(true);
+                                             };
+
+                                             return (
+                                               <>
+                                                 {imageAttachments.length > 0 && (
+                                                   <div className="mb-1.5 flex max-w-full flex-row flex-wrap items-end justify-end gap-1.5">
+                                                     {imageAttachments.map((img, imageIndex) => {
+                                                       const src = img.base64Data
+                                                         ? `data:${img.type};base64,${img.base64Data}`
+                                                         : img.file
+                                                           ? URL.createObjectURL(img.file)
+                                                           : '';
+                                                       if (!src) return null;
+                                                       return (
+                                                         <button
+                                                           key={`${message.id}-img-${imageIndex}-${img.name}`}
+                                                           type="button"
+                                                           onClick={() => openUserImageFullView(img)}
+                                                           aria-label={`View ${img.name} full size`}
+                                                           className="block h-[200px] w-[148px] flex-shrink-0 overflow-hidden rounded-xl focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
+                                                         >
+                                                           <img
+                                                             src={src}
+                                                             alt={img.name}
+                                                             className="h-full w-full cursor-pointer object-cover transition-opacity hover:opacity-95"
+                                                           />
+                                                         </button>
+                                                       );
+                                                     })}
+                                                   </div>
+                                                 )}
+
+                                                 {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content) && (
+                                                   <div
+                                                     className="mb-1.5 ml-auto mr-0 flex max-w-[250px] cursor-pointer items-center gap-2 rounded-lg border border-[#1e1e21]/50 bg-[#2a2a2d]/50 p-2 transition-colors hover:bg-[#2a2a2d]"
+                                                     onClick={() => {
+                                                       if (message.userFileAttachment) {
+                                                         if (message.userFileAttachment.file) {
+                                                           const fileToShow: AttachedFile = {
+                                                             id: `user-attached-${message.userFileAttachment.name}-${message.id}`,
+                                                             name: message.userFileAttachment.name,
+                                                             type: message.userFileAttachment.type,
+                                                             fileObject: message.userFileAttachment.file
+                                                           };
+                                                           handleShowFileInContextPanel(fileToShow);
+                                                         } else {
+                                                           handleShowFileInContextPanel(message.userFileAttachment as any);
+                                                         }
+                                                       }
+                                                     }}
+                                                   >
+                                                     <FileText size={18} className="flex-shrink-0 text-blue-400" />
+                                                     <span className="truncate text-sm text-gray-300" title={message.userFileAttachment.name}>
+                                                       {message.userFileAttachment.name}
+                                                     </span>
+                                                   </div>
+                                                 )}
+
+                                                 {message.text ? (
+                                                   <div className="overflow-hidden rounded-2xl rounded-br-none border border-[#1e1e21] bg-[#0e0e10] p-3 text-white">
+                                                     <p className="whitespace-pre-wrap break-words text-[15px] leading-6" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{message.text}</p>
+                                                   </div>
+                                                 ) : null}
+                                               </>
+                                             );
+                                           })()}
+                                           <div className="mt-1 flex items-center justify-end gap-2 opacity-0 invisible transition-opacity duration-150 group-hover:visible group-hover:opacity-100">
                                                {message.timestamp && (
-                                                   <span className="text-[11px] text-gray-600 mr-1">{formatMessageTime(message.timestamp)}</span>
+                                                   <span className="mr-1 text-[11px] text-gray-600">{formatMessageTime(message.timestamp)}</span>
                                                )}
-                                               <button onClick={() => handleEditUserMessage(message.id, message.text)} className="p-1 text-gray-400 hover:text-gray-200 rounded-md" aria-label="Edit message">
+                                               <button
+                                                   type="button"
+                                                   onClick={() => void handleRetryFromUserMessage(message.id)}
+                                                   disabled={isLoading}
+                                                   className="rounded-md p-1 text-gray-400 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
+                                                   aria-label="Retry from this message"
+                                                   title="Retry"
+                                               >
+                                                   <RefreshCcw size={14} />
+                                               </button>
+                                               <button onClick={() => handleEditUserMessage(message.id, message.text)} className="rounded-md p-1 text-gray-400 hover:text-gray-200" aria-label="Edit message">
                                                    <SquarePen size={14} />
                                                </button>
-                                               <button onClick={() => handleCopyUserMessage(message.text, message.id)} className="p-1 text-gray-400 hover:text-gray-200 rounded-md" aria-label="Copy message">
+                                               <button onClick={() => handleCopyUserMessage(message.text, message.id)} className="rounded-md p-1 text-gray-400 hover:text-gray-200" aria-label="Copy message">
                                                     {copiedMessageId === message.id ? (
                                                          <Check size={14} className="text-green-400" />
                                                      ) : (
@@ -8267,7 +12708,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                    )
                                ) : (
                                    // --- AI Message ---
-                                   <div data-message-id={message.id} className={`group flex flex-col items-start w-full space-y-2 pr-4`}>
+                                   <div data-message-id={message.id} className="group flex w-full flex-col items-start space-y-2">
 
                                       {/* Full message edit mode - transforms entire container into input box */}
                                       {editingAiMessageId === message.id ? (
@@ -8294,7 +12735,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             </button>
                                             <button
                                               onClick={handleSaveAiEdit}
-                                              className="text-sm bg-gray-400 text-zinc-900 px-4 py-1.5 rounded-md font-semibold hover:bg-gray-300 transition-colors"
+                                              className="rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-semibold text-[#111113] transition-colors hover:bg-white"
                                             >
                                               Save
                                             </button>
@@ -8563,7 +13004,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           )}
 
                                           {!message.isError && message.parsedAnswer && (
-                                                  <div className="prose prose-sm max-w-none dark:!prose-invert text-white prose-strong:text-white prose-strong:font-bold prose-code:text-[#f6b98b] prose-code:px-2 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-[15px] prose-code:font-normal prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:bg-[#18171b] prose-pre:rounded-lg prose-pre:border prose-pre:border-[#232021] prose-pre:p-4 prose-pre:font-mono prose-pre:text-white prose-pre:text-[15px] prose-pre:overflow-x-auto">
+                                                  /* Do not put prose-pre:bg-* / child bg utilities on this wrapper:
+                                                     theme CSS uses [class*="bg-…"] and would paint the whole answer. */
+                                                  <div className="prose prose-sm max-w-none dark:!prose-invert text-white prose-strong:text-white prose-strong:font-bold prose-code:text-[#f6b98b] prose-code:px-2 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-[15px] prose-code:font-normal prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-lg prose-pre:border prose-pre:border-[#232021] prose-pre:p-4 prose-pre:font-mono prose-pre:text-white prose-pre:text-[15px] prose-pre:overflow-x-auto">
                                                    <ReactMarkdown
   remarkPlugins={[remarkGfm]}
   rehypePlugins={[rehypeRaw]}
@@ -8702,390 +13145,51 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               </div>
               </div>
 
-        {/* Scroll to Bottom Button */}
-        {showScrollToBottom && (
-          <button
-            onClick={scrollToBottom}
-            className="absolute bottom-20 right-4 z-20 p-2 text-gray-400 bg-[#0e0e10]/80 hover:bg-[#2a2a2d] rounded-full shadow-lg hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
-            style={{ right: isContextPanelOpen ? `calc(${contextPanelWidth}px + 1rem)` : '1rem' }} // Adjust position based on panel
-            aria-label="Scroll to bottom"
-          >
-            <ChevronDown size={20} />
-          </button>
-        )}
-
-        {/* Bottom Input Section */}
-        <div className={`${isMultiInterface ? 'max-w-full px-2' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-3xl')} w-full relative px-2 md:px-4 pb-2 md:pb-4 absolute bottom-0 left-0 right-0 z-10 ${
+        {/* Bottom Input Section — when history is open (desktop), shift right so
+            the composer + update cards clear the sidebar (same size, not moved up). */}
+        <div className={`${isMultiInterface ? 'max-w-full px-2' : (messages.length === 0 ? 'max-w-[56rem]' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-[52rem]'))} w-full px-2 md:px-4 absolute left-0 right-0 z-10 main-content-transition ${
+          messages.length === 0
+            ? `top-1/2 max-h-[calc(100dvh-5rem)] -translate-y-1/2 py-4 pb-2 md:pb-4 hide-scrollbar ${isMobile || isMultiInterface ? 'overflow-y-auto' : 'overflow-visible'}`
+            : 'bottom-0 overflow-visible pb-2 md:pb-3'
+        } ${
           isMultiInterface ? 'mx-auto' : (
             chatAlignment === 'left' ? 'ml-0 mr-auto' :
             chatAlignment === 'right' ? 'ml-auto mr-0' :
             'mx-auto'
           )
         }`}
-             style={{ right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px' }} // Adjust right edge (not in multi-interface)
+             style={{
+               left: !isMultiInterface && isHistoryOpen && !isMobile ? '260px' : '0px',
+               right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px',
+             }}
         >
-          {/* Queue Container */}
-          {queue.messages.length > 0 && (
-            <div className="mb-3 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-md">
-              <div className="w-full flex items-center justify-between p-3 text-left text-gray-300 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{queue.messages.length} in queue</span>
-                </div>
-                <button
-                  onClick={toggleQueueExpansion}
-                  className="p-1 hover:bg-[#2a2a2d] transition-colors rounded"
-                >
-                  <ChevronDown 
-                    size={16} 
-                    className={`transition-transform duration-200 ${queue.isExpanded ? 'rotate-180' : ''}`}
-                  />
-                </button>
-              </div>
-              
-              {queue.isExpanded && (
-                <div className="px-3 pb-3 space-y-2">
-                  {queue.messages.map((queuedMessage, index) => (
-                    <div 
-                      key={queuedMessage.id}
-                      className="flex items-center justify-between p-2 bg-[#0e0e10]/80 rounded-md border border-[#1e1e21]/50"
-                    >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <div className="w-4 h-4 rounded-full border-2 border-[#1e1e21] flex-shrink-0"></div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-gray-300 truncate">
-                            {queuedMessage.text || `Task ${index + 1}`}
-                          </div>
-                          {queuedMessage.attachedFiles.length > 0 && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              {queuedMessage.attachedFiles.length} file(s) attached
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => removeFromQueue(queuedMessage.id)}
-                        className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-900/30 rounded transition-colors"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {/* Mask message text that would otherwise sit under the floating composer. */}
+          {messages.length > 0 && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 top-0 -z-10 bg-[var(--chat-canvas,#0a0a0a)]"
+              style={{
+                maskImage: 'linear-gradient(to bottom, transparent 0%, black 28%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 28%)',
+              }}
+            />
+          )}
+          {/* Scroll to bottom — centered above the prompt input container */}
+          {showScrollToBottom && messages.length > 0 && (
+            <div className="pointer-events-none relative z-20 mb-2 flex justify-center">
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                className="pointer-events-auto rounded-full bg-[#0e0e10]/80 p-2 text-gray-400 shadow-lg transition-colors hover:bg-[#2a2a2d] hover:text-white focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
+                aria-label="Scroll to bottom"
+              >
+                <ChevronDown size={20} />
+              </button>
             </div>
           )}
-
-          {/* Input Box Area */}
-          <div className="chat-input-container relative bg-[#0e0e10] border border-[#1e1e21] rounded-xl p-2.5 md:p-3 input-box-top-fade" style={{ boxShadow: '0 -20px 40px 10px #0a0a0b' }}>
-            {isContextLimitReached && (
-              <div className="mb-3 p-2.5 border border-red-600/70 bg-red-900/30 rounded-lg text-red-400 text-xs shadow-md">
-                {contextLimitWarning}
-              </div>
-            )}
-            {attachedFiles.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2 border-b border-[#2a2a2d] pb-3">
-                    {attachedFiles.map((file) => (
-                        <div
-                            key={file.id}
-                            className="flex items-center relative group"
-                        >
-                            {file.fileObject && file.type.startsWith('image/') ? (
-                                <div className="relative">
-                                    <img
-                                        src={URL.createObjectURL(file.fileObject)}
-                                        alt={file.name}
-                                        className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-[#1e1e21] group-hover:border-[#6b7280] transition-all duration-200 ease-out cursor-pointer group-hover:scale-[1.02]"
-                                        onClick={() => {
-                                            if (file.fileObject) {
-                                                setFullScreenImageUrl(URL.createObjectURL(file.fileObject));
-                                                setIsFullScreenImageOpen(true);
-                                                setViewerShowsDownloadButton(false);
-                                            }
-                                        }}
-                                    />
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRemoveAttachedFile(file.id);
-                                        }}
-                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[#0e0e10] border border-[#1e1e21] text-gray-400 hover:text-white hover:border-red-500 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
-                                        aria-label="Remove file"
-                                    >
-                                        <X size={10} />
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="relative">
-                                    <div
-                                        className={`h-11 rounded-lg flex items-center gap-2 px-3 bg-[#0e0e10] border border-[#1e1e21] group-hover:border-[#6b7280] transition-all duration-200 ease-out text-[13px] text-gray-300 group-hover:text-white ${file.fileObject ? 'cursor-pointer group-hover:scale-[1.01]' : 'cursor-default opacity-70'}`}
-                                        onClick={() => {
-                                            if (file.fileObject) {
-                                                handleShowFileInContextPanel(file);
-                                            }
-                                        }}
-                                    >
-                                        <FileText size={14} className={file.fileObject ? "text-gray-400 group-hover:text-gray-300" : "text-gray-600"} />
-                                        <span className="truncate max-w-[140px]" title={file.name}>{file.name}</span>
-                                        {!file.fileObject && (
-                                            <span className="text-[11px] text-gray-600 ml-0.5">(recent)</span>
-                                        )}
-                                    </div>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRemoveAttachedFile(file.id);
-                                        }}
-                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[#0e0e10] border border-[#1e1e21] text-gray-400 hover:text-white hover:border-red-500 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
-                                        aria-label="Remove file"
-                                    >
-                                        <X size={10} />
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                  </div>
-                )}
-
-            {/* Textarea Row */}
-            <div className="flex items-end relative">
-              <textarea
-                ref={textareaRef}
-                placeholder="Type your message here..."
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  // Enter without Shift sends the message
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    const canSend = inputValue.trim() || attachedFiles.length > 0;
-                    if (canSend && !isLoading && !isContextLimitReached) {
-                      handleGenerate();
-                    }
-                  }
-                  // Shift+Enter adds a new line (default behavior)
-                }}
-                className="w-full bg-transparent text-white placeholder-gray-400 pl-2 pr-4 py-1 outline-none resize-none flex-grow focus:ring-0 border-none focus:outline-none focus:shadow-none text-sm scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent"
-                style={{ maxHeight: '120px' }}
-              />
-            </div>
-            
-            {/* Controls Row */}
-            <div className="chat-input-controls flex items-center justify-between mt-1.5 md:mt-2 gap-2">
-              <div className="flex items-center gap-1 md:gap-2 relative">
-                  {/* Attach Button */}
-                  <div className="relative">
-                      <button
-                          ref={attachButtonRef}
-                          onClick={toggleAttachMenu}
-                          className="flex items-center justify-center border border-white/[0.08] rounded-lg p-2 text-gray-300 hover:border-white/20 hover:bg-black/20 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-white/[0.08] disabled:hover:bg-transparent disabled:hover:text-gray-300 transition-colors"
-                          aria-label="Attach file"
-                          disabled={!modelSupportsVision(selectedModel)}
-                      >
-                          <Paperclip size={16} />
-                      </button>
-                      {/* Attach Menu */}
-                      <div 
-                          ref={attachMenuRef}
-                          className={`
-                              absolute bottom-full left-0 mb-2 z-30 
-                              w-64 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-xl 
-                              transition-all duration-200 ease-out origin-bottom-left 
-                              ${isAttachMenuOpen 
-                                  ? 'opacity-100 scale-100 visible' 
-                                  : 'opacity-0 scale-95 invisible' 
-                              }
-                          `}
-                       >
-                           <div className="p-2 space-y-1">
-                               <button onClick={handleUploadFile} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-300 hover:bg-[#2a2a2d] rounded-md text-left">
-                                   <FolderUp size={18} />
-                                   <span>Upload a file</span>
-                               </button>
-                               <div className="border-t border-[#1e1e21] mx-1 my-1"></div>
-                               <button onClick={handleShowRecent} className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-300 hover:bg-[#2a2a2d] rounded-md text-left">
-                                   <div className="flex items-center gap-3">
-                                      <FileClock size={18} />
-                                      <span>Recent</span>
-                          </div>
-                                   <ChevronDown size={16} className="transform -rotate-90 text-gray-400" /> 
-                            </button>
-                           </div>
-                         </div>
-                        {/* Recent Files Panel */}
-                         <div 
-                            ref={recentFilesPanelRef}
-                            className={`
-                                hide-scrollbar
-                                absolute bottom-full left-full ml-2 mb-2 z-30 
-                                w-72 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-xl 
-                                max-h-[300px] overflow-y-auto 
-                                transition-all duration-200 ease-out origin-bottom-left 
-                                ${isRecentFilesOpen && isAttachMenuOpen 
-                                    ? 'opacity-100 scale-100 visible' 
-                                    : 'opacity-0 scale-95 invisible' 
-                                }
-                            `}
-                            style={{ left: 'calc(16rem + 0.5rem)' }} // Adjust positioning if needed
-                          >
-                                 <div className="p-2 space-y-1">
-                                     {/* Recent Files Search */}
-                                     {recentFiles.length > 3 && (
-                                       <div className="relative mb-2">
-                                         <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500" />
-                                         <input
-                                           type="text"
-                                           placeholder="Search files..."
-                                           value={recentFilesSearchQuery}
-                                           onChange={(e) => setRecentFilesSearchQuery(e.target.value)}
-                                           className="w-full bg-[#0a0a0b] border border-[#1e1e21] rounded-md py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
-                                         />
-                                       </div>
-                                     )}
-                                     {recentFiles.length === 0 ? (
-                                       <div className="px-3 py-6 text-center text-gray-500 text-sm">
-                                         <FileClock size={24} className="mx-auto mb-2 text-gray-600" />
-                                         <p>No recent files</p>
-                                         <p className="text-xs mt-1">Files you attach will appear here</p>
-                                       </div>
-                                     ) : (
-                                       recentFiles
-                                         .filter(file =>
-                                           !recentFilesSearchQuery.trim() ||
-                                           file.name.toLowerCase().includes(recentFilesSearchQuery.toLowerCase())
-                                         )
-                                         .map((file: typeof recentFiles[0]) => (
-                                         <div key={file.id} className="group flex items-center justify-between px-2 py-1.5 text-sm text-gray-300 hover:bg-[#2a2a2d] rounded-md cursor-pointer">
-                                           <div 
-                                             className="flex items-center gap-2 overflow-hidden flex-1" 
-                                             onClick={() => handleReattachRecentFile(file)}
-                                           >
-                                             {file.type.startsWith('image/') && file.preview ? (
-                                               <img src={file.preview} alt="Preview" className="w-6 h-6 rounded object-cover flex-shrink-0" />
-                                             ) : file.type === 'application/pdf' || file.name.endsWith('.pdf') ? (
-                                               <FileText size={16} className="text-red-400 flex-shrink-0" />
-                                             ) : file.type.startsWith('text/') || file.name.match(/\.(txt|md|json|csv|xml|html|css|js|ts|jsx|tsx|py|java|c|cpp|cs|php|rb|go|swift|kt|rs|toml|yaml|yml)$/i) ? (
-                                               <FileText size={16} className="text-blue-400 flex-shrink-0" />
-                                             ) : (
-                                               <FileText size={16} className="text-gray-400 flex-shrink-0" />
-                                             )}
-                                             <div className="flex flex-col overflow-hidden">
-                                                <span className="truncate" title={file.name}>{file.name}</span>
-                                               <span className="text-xs text-gray-500">
-                                                 {(file.size / 1024).toFixed(1)} KB · {new Date(file.lastUsed).toLocaleDateString()}
-                                               </span>
-                                             </div>
-                                           </div>
-                                           <button 
-                                             onClick={(e) => {
-                                               e.stopPropagation();
-                                               handleRemoveRecentFile(file.id);
-                                             }}
-                                             className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                                           >
-                                                 <X size={14} />
-                                             </button>
-                                         </div>
-                                       ))
-                                     )}
-                          </div>
-                        </div>
-                      </div>
-                      {/* Reasoning toggle */}
-                      {modelHasReasoningCapability(selectedModel.id, selectedModel) === 'toggleable' && (
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setIsReasonToggled(prev => !prev);
-                          }}
-                          className={`flex items-center justify-center border border-white/[0.08] rounded-lg p-2 cursor-pointer select-none hover:bg-black/20 ${isReasonToggled ? 'text-white/70' : 'text-white/15'}`}
-                        >
-                          <Brain size={16} />
-                        </button>
-                      )}
-              </div>
-                  <div className="flex items-center space-x-3">
-                     {/* Token Context Window Display with Compress Button - Hidden on mobile (shown in header instead) */}
-                     {!isMobile && (() => {
-                       const totalUsedTokens = activeConversationTokenCount + currentInputAndSystemTokens;
-                       const maxTokens = selectedModel?.maxTokens || 200000;
-                       // Use conversation-only tokens for compress threshold (not input)
-                       const conversationUsagePercent = conversationTokenCount / maxTokens;
-                       const totalUsagePercent = totalUsedTokens / maxTokens;
-                       const canCompress = conversationUsagePercent > 0.9 && messages.length > 0;
-                       const isNearLimit = totalUsagePercent > 0.9;
-                       const isOverLimit = totalUsagePercent > 1;
-
-                       if (canCompress) {
-                         // Show compress button only when CONVERSATION history is near limit
-                         return (
-                           <button
-                             onClick={() => compactConversation(selectedModel)}
-                             disabled={isLoading}
-                             className="group text-xs text-orange-400 hover:text-orange-300 transition-all cursor-pointer disabled:opacity-50 tabular-nums"
-                           >
-                             <span className="group-hover:hidden">
-                               {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
-                             </span>
-                             <span className="hidden group-hover:inline font-medium">
-                               Compress
-                             </span>
-                           </button>
-                         );
-                       }
-                       return (
-                         <span className={`text-xs tabular-nums ${isOverLimit ? 'text-red-400' : isNearLimit ? 'text-orange-400' : 'text-gray-400'}`}>
-                           {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
-                         </span>
-                       );
-                     })()}
-
-                  {isLoading ? (
-                    // While generating: Queue (if typing) else Stop — both 40x40 to match Send/Voice.
-                    (inputValue.trim() || attachedFiles.length > 0) ? (
-                      <button
-                        onClick={addToQueue}
-                        title="Add this message to the queue"
-                        className="w-10 h-10 rounded-lg bg-[#2a2a2d] text-white hover:bg-[#3a3a3d] flex items-center justify-center transition-colors"
-                      >
-                        <Plus size={18} />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleStopGeneration}
-                        title="Stop generating"
-                        className="w-10 h-10 rounded-lg bg-[#2a2a2d] text-white hover:bg-[#3a3a3d] flex items-center justify-center transition-colors"
-                      >
-                        <StopCircle size={18} />
-                      </button>
-                    )
-                  ) : (inputValue.trim() || attachedFiles.length > 0) ? (
-                    <button
-                      onClick={handleGenerate}
-                      className="w-10 h-10 rounded-lg bg-[#a760ff] hover:bg-[#b578ff] flex items-center justify-center transition-all shadow-md disabled:opacity-40"
-                      disabled={isContextLimitReached}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleToggleVoiceInput}
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all relative ${isVoiceInputActive ? 'bg-[#2a2a2d]/70' : 'bg-[#0e0e10] hover:bg-[#2a2a2d]'}`}
-                      aria-label={isVoiceInputActive ? 'Stop voice input' : 'Start voice input'}
-                    >
-                      {isVoiceInputActive && (
-                        <span className="absolute inset-0 flex items-center justify-center">
-                          <span className="animate-ping h-3.5 w-3.5 rounded-full bg-red-500 opacity-75"></span>
-                        </span>
-                      )}
-                      <Mic size={18} className={`relative ${isVoiceInputActive ? 'text-red-500' : 'text-gray-400'}`} />
-                    </button>
-                  )}
-                </div>
-                </div>
-          </div>
+          {/* Only mount the primary composer here when NOT inside a project workspace — the
+              workspace renders its own instance and they share refs, so only one may exist. */}
+          {!activeProjectId && renderPrimaryComposer()}
         </div>
 
         {/* Hidden File Input */}
@@ -9116,11 +13220,379 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {feedbackPopupInfo && createPortal(<FeedbackPopup />, document.body)}
         {dislikePopupInfo && createPortal(<DislikeFeedbackPopup />, document.body)}
         {deleteConfirmationModal.isOpen && createPortal(<DeleteConfirmationModalComponent />, document.body)}
+        {isCreateProjectModalOpen && createPortal(renderCreateProjectModal(), document.body)}
+        {instructionsModalProjectId && createPortal(renderInstructionsModal(), document.body)}
+        {historyDragGhostTitle != null &&
+          createPortal(
+            <div
+              ref={historyDragGhostElRef}
+              aria-hidden="true"
+              className={`chat-themed chat-theme-${resolvedChatTheme} pointer-events-none fixed left-0 top-0 z-[1100] flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] will-change-transform`}
+              style={{
+                ...chatThemePreviewStyle,
+                backgroundColor: 'var(--chat-control)',
+                color: 'var(--chat-text)',
+                opacity: 0.92,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.18)',
+                transform: 'translate3d(-9999px, -9999px, 0)',
+              }}
+            >
+              <MessageSquare
+                size={13}
+                className="flex-shrink-0 text-[var(--chat-muted)]"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1 truncate leading-tight">
+                {historyDragGhostTitle}
+              </span>
+            </div>,
+            document.body,
+          )}
+        {historyRowMenu && (() => {
+          const menuConvo = conversationHistory.find((item) => item.id === historyRowMenu.conversationId);
+          if (!menuConvo) return null;
+          const isPinned = Boolean(menuConvo.isPinned);
+          const isArchived = Boolean(menuConvo.isArchived);
+          // Use --chat-hover (not hover:bg-[#1e1e21]): theme CSS matches [class*="bg-[#1e1e21]"]
+          // even on the hover: utility string, so every row would paint a permanent background.
+          const menuItemClass =
+            'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]';
+          const shortcutClass = 'ml-auto text-[11px] text-zinc-500';
+          return createPortal(
+            <div
+              data-history-row-menu=""
+              role="menu"
+              className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[188px] rounded-xl border p-1`}
+              style={{
+                top: historyRowMenu.top,
+                left: historyRowMenu.left,
+                backgroundColor: 'var(--chat-elevated)',
+                borderColor: 'var(--chat-border)',
+                color: 'var(--chat-text)',
+                ...chatThemePreviewStyle,
+              }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className={menuItemClass}
+                onClick={() => {
+                  handleTogglePinConversation(menuConvo.id);
+                  closeHistoryRowMenu();
+                }}
+              >
+                <Pin size={14} className={`flex-shrink-0 ${isPinned ? 'fill-current text-zinc-100' : 'text-zinc-500'}`} />
+                <span>{isPinned ? 'Unpin' : 'Pin'}</span>
+                <span className={shortcutClass}>P</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={menuItemClass}
+                onClick={() => {
+                  setEditingConversationId(menuConvo.id);
+                  setEditTitleText(menuConvo.title);
+                  closeHistoryRowMenu();
+                  setIsChatsCatalogOpen(false);
+                  setTimeout(() => document.getElementById(`edit-title-${menuConvo.id}-${interfaceId}`)?.focus(), 50);
+                }}
+              >
+                <Pencil size={14} className="flex-shrink-0 text-zinc-500" />
+                <span>Rename</span>
+                <span className={shortcutClass}>R</span>
+              </button>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={menuItemClass}
+                  onClick={() => setHistoryProjectSubmenuOpen((open) => !open)}
+                >
+                  <Layers size={14} className="flex-shrink-0 text-zinc-500" />
+                  <span>Add to project</span>
+                  <ChevronRight size={14} className="ml-auto text-zinc-500" />
+                </button>
+                {historyProjectSubmenuOpen && (
+                  <div
+                    className="chat-history-popover absolute left-full top-0 z-[1001] ml-1 w-[180px] rounded-xl border border-[#1e1e21] bg-[#141416] p-1"
+                    style={{
+                      backgroundColor: 'var(--chat-elevated)',
+                      borderColor: 'var(--chat-border)',
+                    }}
+                  >
+                    {chatProjects.length === 0 ? (
+                      <p className="px-2.5 py-1.5 text-[11px] text-zinc-500">No projects yet</p>
+                    ) : (
+                      chatProjects.map((project) => (
+                        <button
+                          key={project.id}
+                          type="button"
+                          role="menuitem"
+                          className={menuItemClass}
+                          onClick={() => {
+                            handleAssignConversationToProject(menuConvo.id, project.id);
+                            closeHistoryRowMenu();
+                          }}
+                        >
+                          <Folder size={13} className="flex-shrink-0 text-zinc-500" />
+                          <span className="min-w-0 truncate">{project.name}</span>
+                          {menuConvo.projectId === project.id && (
+                            <Check size={12} className="ml-auto flex-shrink-0 text-zinc-100" />
+                          )}
+                        </button>
+                      ))
+                    )}
+                    <div className="my-1 border-t border-[#1e1e21]" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass}
+                      onClick={() => {
+                        closeHistoryRowMenu();
+                        openCreateProjectModal({ assignConversationId: menuConvo.id });
+                      }}
+                    >
+                      <Plus size={13} className="flex-shrink-0 text-zinc-500" />
+                      <span>New project</span>
+                    </button>
+                    {menuConvo.projectId && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={menuItemClass}
+                        onClick={() => {
+                          handleAssignConversationToProject(menuConvo.id, null);
+                          closeHistoryRowMenu();
+                        }}
+                      >
+                        <span>Remove from project</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="my-1 border-t border-[#1e1e21]" />
+
+              <button
+                type="button"
+                role="menuitem"
+                className={menuItemClass}
+                onClick={() => {
+                  void handleArchiveConversation(menuConvo.id, !isArchived);
+                  closeHistoryRowMenu();
+                }}
+              >
+                <Archive size={14} className="flex-shrink-0 text-zinc-500" />
+                <span>{isArchived ? 'Unarchive' : 'Archive'}</span>
+                <span className={shortcutClass}>A</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-red-400 transition-colors hover:bg-[var(--chat-hover)]"
+                onClick={() => {
+                  setDeleteConfirmationModal({
+                    isOpen: true,
+                    conversationId: menuConvo.id,
+                    conversationTitle: menuConvo.title,
+                  });
+                  closeHistoryRowMenu();
+                }}
+              >
+                <Trash2 size={14} className="flex-shrink-0" />
+                <span>Delete</span>
+                <span className="ml-auto text-[11px] text-red-400/70">D</span>
+              </button>
+            </div>,
+            document.body,
+          );
+        })()}
+        {recentsFilterMenu && createPortal(
+          (() => {
+            const typeLabel: Record<RecentsFilterType, string> = { all: 'All', chat: 'Chat', task: 'Task' };
+            const statusLabel: Record<RecentsFilterStatus, string> = { active: 'Active', archived: 'Archived', all: 'All' };
+            const activityLabel: Record<RecentsFilterActivity, string> = {
+              '1d': '1d',
+              '3d': '3d',
+              '7d': '7d',
+              '30d': '30d',
+              all: 'All',
+            };
+            const groupLabel: Record<RecentsGroupBy, string> = {
+              none: 'None',
+              date: 'Date',
+              type: 'Type',
+              project: 'Project',
+              unread: 'Unread',
+              status: 'Status',
+            };
+            const menuItemClass =
+              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]';
+            const openSubmenu = (
+              key: Exclude<RecentsFilterSubmenu, null>,
+              event: React.MouseEvent<HTMLButtonElement>,
+            ) => {
+              setRecentsFilterSubmenu(key);
+              setRecentsFilterSubmenuTop(event.currentTarget.getBoundingClientRect().top);
+            };
+            const submenuOptions =
+              recentsFilterSubmenu === 'type'
+                ? (['all', 'chat', 'task'] as RecentsFilterType[]).map((value) => ({
+                    value,
+                    label: typeLabel[value],
+                    selected: recentsFilterType === value,
+                    onSelect: () => setRecentsFilterType(value),
+                  }))
+                : recentsFilterSubmenu === 'status'
+                  ? (['active', 'archived', 'all'] as RecentsFilterStatus[]).map((value) => ({
+                      value,
+                      label: statusLabel[value],
+                      selected: recentsFilterStatus === value,
+                      onSelect: () => setRecentsFilterStatus(value),
+                    }))
+                  : recentsFilterSubmenu === 'activity'
+                    ? (['1d', '3d', '7d', '30d', 'all'] as RecentsFilterActivity[]).map((value) => ({
+                        value,
+                        label: activityLabel[value],
+                        selected: recentsFilterActivity === value,
+                        onSelect: () => setRecentsFilterActivity(value),
+                      }))
+                    : recentsFilterSubmenu === 'group'
+                      ? (['date', 'type', 'project', 'unread', 'status', 'none'] as RecentsGroupBy[]).map((value) => ({
+                          value,
+                          label: groupLabel[value],
+                          selected: recentsGroupBy === value,
+                          onSelect: () => setRecentsGroupBy(value),
+                          separatedBefore: value === 'none',
+                        }))
+                      : [];
+
+            return (
+              <div data-recents-filter-menu="" className="contents">
+                <div
+                  role="menu"
+                  className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[168px] rounded-xl border p-1`}
+                  style={{
+                    top: recentsFilterMenu.top,
+                    left: recentsFilterMenu.left,
+                    backgroundColor: 'var(--chat-elevated)',
+                    borderColor: 'var(--chat-border)',
+                    color: 'var(--chat-text)',
+                    ...chatThemePreviewStyle,
+                  }}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={menuItemClass}
+                    onMouseEnter={(event) => openSubmenu('type', event)}
+                    onClick={(event) => openSubmenu('type', event)}
+                  >
+                    <span>Type</span>
+                    <span className="ml-auto flex items-center gap-1 text-zinc-500">
+                      <span>{typeLabel[recentsFilterType]}</span>
+                      <ChevronRight size={13} />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={menuItemClass}
+                    onMouseEnter={(event) => openSubmenu('status', event)}
+                    onClick={(event) => openSubmenu('status', event)}
+                  >
+                    <span>Status</span>
+                    <span className="ml-auto flex items-center gap-1 text-zinc-500">
+                      <span>{statusLabel[recentsFilterStatus]}</span>
+                      <ChevronRight size={13} />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={menuItemClass}
+                    onMouseEnter={(event) => openSubmenu('activity', event)}
+                    onClick={(event) => openSubmenu('activity', event)}
+                  >
+                    <span>Last activity</span>
+                    <span className="ml-auto flex items-center gap-1 text-zinc-500">
+                      <span>{activityLabel[recentsFilterActivity]}</span>
+                      <ChevronRight size={13} />
+                    </span>
+                  </button>
+                  <div className="my-1 border-t border-[#1e1e21]" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={menuItemClass}
+                    onMouseEnter={(event) => openSubmenu('group', event)}
+                    onClick={(event) => openSubmenu('group', event)}
+                  >
+                    <span>Group by</span>
+                    <span className="ml-auto flex items-center gap-1 text-zinc-500">
+                      <span>{groupLabel[recentsGroupBy]}</span>
+                      <ChevronRight size={13} />
+                    </span>
+                  </button>
+                </div>
+
+                {recentsFilterSubmenu && submenuOptions.length > 0 && (
+                  <div
+                    role="menu"
+                    className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1001] w-[104px] rounded-xl border p-1`}
+                    style={{
+                      top: recentsFilterSubmenuTop,
+                      left: Math.min(recentsFilterMenu.left + 172, window.innerWidth - 112),
+                      backgroundColor: 'var(--chat-elevated)',
+                      borderColor: 'var(--chat-border)',
+                      color: 'var(--chat-text)',
+                      ...chatThemePreviewStyle,
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {submenuOptions.map((option) => (
+                      <React.Fragment key={String(option.value)}>
+                        {'separatedBefore' in option && option.separatedBefore && (
+                          <div className="my-1 border-t border-[#1e1e21]" />
+                        )}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className={menuItemClass}
+                          onClick={() => {
+                            option.onSelect();
+                            closeRecentsFilterMenu();
+                          }}
+                        >
+                          <span>{option.label}</span>
+                          {option.selected && (
+                            <Check size={14} className="ml-auto flex-shrink-0 text-[var(--chat-accent)]" aria-hidden="true" />
+                          )}
+                        </button>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })(),
+          document.body,
+        )}
         {isFullScreenImageOpen && createPortal(
           <FullScreenImageViewer
             imageUrl={fullScreenImageUrl}
             isOpen={isFullScreenImageOpen}
-            onClose={() => setIsFullScreenImageOpen(false)}
+            onClose={() => {
+              setIsFullScreenImageOpen(false);
+              setFullScreenImageUrl((prev) => {
+                if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+                return null;
+              });
+            }}
             showDownloadButton={viewerShowsDownloadButton}
           />,
           document.body
@@ -9130,102 +13602,779 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {/* In multi-interface mode: render inside the interface container */}
         {/* In single interface mode: render via portal to document.body */}
         {(() => {
-          const historySidebarContent = (
-            <>
+          // Single-mode history is portaled to document.body (escape overflow:hidden).
+          // Re-apply chat-themed + theme tokens on the portal root so Light/Dim/Custom match the page.
+          // Desktop clip: animate with translateX inside a viewport that starts at the taskbar edge,
+          // so the panel never paints under the left navigation during open/close.
+          // Taskbar is w-13 (52px). Sit flush against it — no floating 12px frame.
+          const historyLeftInset = isTaskbarHidden ? 0 : 52;
+          const historySurfaceStyle: React.CSSProperties = {
+            backgroundColor: 'var(--chat-surface)',
+            color: 'var(--chat-text)',
+            // Border + shadow come from .chat-history-sidebar CSS (theme-aware).
+            ...chatThemePreviewStyle,
+          };
+          const historyPanelBody = (
+              <div className="flex flex-col h-full overflow-hidden">
+                {/* Brand + search / close — Claude-style header, XENO branded */}
+                <div className="flex items-center justify-between gap-2 border-b border-[var(--chat-border)] px-3 py-2.5">
+                  {isHistorySearchOpen ? (
+                    <>
+                      <div
+                        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5"
+                        style={{ backgroundColor: 'var(--chat-control)' }}
+                      >
+                        <Search size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
+                        <input
+                          type="search"
+                          autoFocus
+                          placeholder="Search..."
+                          value={historySearchTerm}
+                          onChange={(e) => setHistorySearchTerm(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              setIsHistorySearchOpen(false);
+                              setHistorySearchTerm('');
+                            }
+                          }}
+                          className="w-full min-w-0 bg-transparent text-[12.5px] text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none"
+                          aria-label="Search conversations"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsHistorySearchOpen(false);
+                          setHistorySearchTerm('');
+                        }}
+                        aria-label="Close search"
+                        title="Close search"
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                      >
+                        <X size={15} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="truncate font-display text-[1.125rem] font-semibold leading-none tracking-tight text-[var(--chat-text)]">
+                        XENO
+                      </span>
+                      <div className="flex flex-shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsHistorySearchOpen(false);
+                            setHistorySearchTerm('');
+                            setIsHistoryOpen(false);
+                          }}
+                          aria-label="Close conversation history"
+                          title="Close"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                        >
+                          <PanelLeftClose size={16} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsHistorySearchOpen(true)}
+                          aria-label="Search conversations"
+                          title="Search"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                        >
+                          <Search size={16} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {(() => {
+                  const hasArchivedConversations = conversationHistory.some((convo) => convo.isArchived);
+                  const searchTermLower = historySearchTerm.toLowerCase();
+                  const matchesSearch = (convo: Conversation) => {
+                    if (!searchTermLower) return true;
+                    if (convo.title.toLowerCase().includes(searchTermLower)) return true;
+                    return convo.messages.some((message) =>
+                      message.text.toLowerCase().includes(searchTermLower),
+                    );
+                  };
+                  const sortedHistory = [...conversationHistory]
+                    .filter(matchesSearch)
+                    .sort((a, b) => b.timestamp - a.timestamp);
+                  const pinnedConversations = sortedHistory
+                    .filter((convo) => !convo.isArchived && convo.isPinned)
+                    .sort((a, b) => (a.pinOrder ?? a.timestamp) - (b.pinOrder ?? b.timestamp));
+                  const archivedConversations = sortedHistory.filter((convo) => convo.isArchived);
+
+                  const activityCutoffMs: Record<Exclude<RecentsFilterActivity, 'all'>, number> = {
+                    '1d': 1 * 24 * 60 * 60 * 1000,
+                    '3d': 3 * 24 * 60 * 60 * 1000,
+                    '7d': 7 * 24 * 60 * 60 * 1000,
+                    '30d': 30 * 24 * 60 * 60 * 1000,
+                  };
+                  const nowMs = Date.now();
+                  // Recents filters apply only to the Recents list (Pinned stays untouched).
+                  const recentConversations = sortedHistory.filter((convo) => {
+                    if (convo.isPinned) return false;
+                    if (recentsFilterStatus === 'active' && convo.isArchived) return false;
+                    if (recentsFilterStatus === 'archived' && !convo.isArchived) return false;
+                    // Type: everything is chat for now; Task has no matching rows yet.
+                    if (recentsFilterType === 'task') return false;
+                    if (recentsFilterActivity !== 'all') {
+                      if (nowMs - convo.timestamp > activityCutoffMs[recentsFilterActivity]) return false;
+                    }
+                    return true;
+                  });
+
+                  const startOfDay = (timestamp: number) => {
+                    const date = new Date(timestamp);
+                    date.setHours(0, 0, 0, 0);
+                    return date.getTime();
+                  };
+                  const todayStart = startOfDay(nowMs);
+                  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+                  const weekStart = todayStart - 7 * 24 * 60 * 60 * 1000;
+
+                  type RecentsGroup = { key: string; label: string | null; items: Conversation[] };
+                  const recentGroups: RecentsGroup[] = (() => {
+                    if (recentsGroupBy === 'none') {
+                      return [{ key: 'all', label: null, items: recentConversations }];
+                    }
+                    const buckets = new Map<string, RecentsGroup>();
+                    const ensure = (key: string, label: string) => {
+                      if (!buckets.has(key)) buckets.set(key, { key, label, items: [] });
+                      return buckets.get(key)!;
+                    };
+                    for (const convo of recentConversations) {
+                      if (recentsGroupBy === 'date') {
+                        if (convo.timestamp >= todayStart) ensure('today', 'Today').items.push(convo);
+                        else if (convo.timestamp >= yesterdayStart) ensure('yesterday', 'Yesterday').items.push(convo);
+                        else if (convo.timestamp >= weekStart) ensure('week', 'Previous 7 days').items.push(convo);
+                        else ensure('older', 'Older').items.push(convo);
+                      } else if (recentsGroupBy === 'type') {
+                        ensure('chat', 'Chat').items.push(convo);
+                      } else if (recentsGroupBy === 'project') {
+                        if (convo.projectId) {
+                          const project = chatProjects.find((item) => item.id === convo.projectId);
+                          ensure(convo.projectId, project?.name || 'Project').items.push(convo);
+                        } else {
+                          ensure('none', 'No project').items.push(convo);
+                        }
+                      } else if (recentsGroupBy === 'unread') {
+                        if (convo.isUnread) ensure('unread', 'Unread').items.push(convo);
+                        else ensure('read', 'Read').items.push(convo);
+                      } else if (recentsGroupBy === 'status') {
+                        if (convo.isArchived) ensure('archived', 'Archived').items.push(convo);
+                        else ensure('active', 'Active').items.push(convo);
+                      }
+                    }
+                    return Array.from(buckets.values());
+                  })();
+
+                  const historyNavItemClass = (isActive: boolean, indented = false) =>
+                    `flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors ${
+                      indented ? 'pl-8' : ''
+                    } ${
+                      isActive
+                        ? 'bg-[var(--chat-control)] text-zinc-100'
+                        : 'text-zinc-100 hover:bg-[var(--chat-hover)]'
+                    }`;
+
+                  const pinnedDragFromIndex = historyDragId
+                    ? pinnedConversations.findIndex((convo) => convo.id === historyDragId)
+                    : -1;
+                  const pinnedRowShiftPx = pinnedRowHeightRef.current;
+                  // From Recents into Pinned: gap has no placeholder in Pinned, so Recents must shift too
+                  // (Claude: Recents label itself has class df-drag-shiftable).
+                  const recentsShiftY =
+                    historyDragId != null &&
+                    pinnedInsertIndex != null &&
+                    pinnedDragFromIndex < 0
+                      ? pinnedRowShiftPx
+                      : 0;
+
+                  const renderHistoryRow = (convo: Conversation, rowSection: 'pinned' | 'recents' | 'archived' = 'recents') => {
+                    const isActive = activeConversationId === convo.id;
+                    const isEditingTitle = editingConversationId === convo.id;
+                    const menuOpen = historyRowMenu?.conversationId === convo.id;
+                    const isRowHovered = historyHoveredRowId === convo.id || menuOpen;
+                    const isPinnedRow = rowSection === 'pinned';
+                    const canDrag = !isEditingTitle && (isPinnedRow || rowSection === 'recents');
+                    const isDragging = historyDragId === convo.id;
+                    const isListDragging = Boolean(historyDragId);
+                    // Claude: keep source in layout (visibility:hidden), shift siblings with transform.
+                    // insertAt = index in the list without the dragged id; finalIndex = insertAt.
+                    let pinnedShiftY = 0;
+                    if (
+                      isPinnedRow &&
+                      historyDragId &&
+                      pinnedInsertIndex != null &&
+                      convo.id !== historyDragId
+                    ) {
+                      const fullIndex = pinnedConversations.findIndex((item) => item.id === convo.id);
+                      if (fullIndex >= 0) {
+                        if (pinnedDragFromIndex < 0) {
+                          if (fullIndex >= pinnedInsertIndex) pinnedShiftY = pinnedRowShiftPx;
+                        } else if (pinnedInsertIndex > pinnedDragFromIndex) {
+                          if (fullIndex > pinnedDragFromIndex && fullIndex <= pinnedInsertIndex) {
+                            pinnedShiftY = -pinnedRowShiftPx;
+                          }
+                        } else if (pinnedInsertIndex < pinnedDragFromIndex) {
+                          if (fullIndex >= pinnedInsertIndex && fullIndex < pinnedDragFromIndex) {
+                            pinnedShiftY = pinnedRowShiftPx;
+                          }
+                        }
+                      }
+                    }
+                    return (
+                      <div
+                        key={convo.id}
+                        data-history-pinned-row={isPinnedRow ? convo.id : undefined}
+                        data-history-drag-shiftable={isPinnedRow ? 'true' : undefined}
+                        data-pin-dragging={isDragging ? 'true' : undefined}
+                        onPointerDown={
+                          canDrag
+                            ? (event) => beginHistoryPointerDrag(event, convo, rowSection)
+                            : undefined
+                        }
+                        className={`group relative px-2.5 py-1.5 text-[13px] rounded-lg touch-none select-none ${
+                          isDragging
+                            ? // pinned: keep box (no Recents overlap). recents: collapse source.
+                              isPinnedRow
+                              ? 'pointer-events-none invisible'
+                              : 'hidden'
+                            : isRowHovered && !isListDragging
+                              ? 'pr-9'
+                              : 'pr-2.5'
+                        } ${
+                          isListDragging && isPinnedRow && !isDragging
+                            ? 'history-drag-shiftable'
+                            : ''
+                        } ${
+                          isListDragging
+                            ? 'cursor-grabbing text-zinc-500'
+                            : isActive
+                              ? 'cursor-pointer bg-[var(--chat-control)] text-zinc-100'
+                              : `cursor-pointer text-zinc-500 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} hover:bg-[var(--chat-hover)] hover:text-zinc-200`
+                        } ${
+                          !isListDragging
+                            ? 'transition-[color,padding,background-color] duration-150 ease-out'
+                            : ''
+                        }`}
+                        style={
+                          isListDragging && isPinnedRow && !isDragging
+                            ? { transform: `translate3d(0, ${pinnedShiftY}px, 0)` }
+                            : undefined
+                        }
+                        onMouseEnter={() => {
+                          if (!isListDragging) setHistoryHoveredRowId(convo.id);
+                        }}
+                        onMouseLeave={() => {
+                          if (!menuOpen) setHistoryHoveredRowId((current) => (current === convo.id ? null : current));
+                        }}
+                        onClick={() => {
+                          if (historyDidDragRef.current) {
+                            historyDidDragRef.current = false;
+                            return;
+                          }
+                          if (!isEditingTitle && !menuOpen) {
+                            void handleLoadConversation(convo.id);
+                          }
+                        }}
+                        title={convo.title}
+                      >
+                        {isEditingTitle ? (
+                          <div className="flex min-w-0 items-center gap-0.5 rounded border border-[#1e1e21] bg-[#0e0e10] pr-0.5">
+                            <input
+                              id={`edit-title-${convo.id}-${interfaceId}`}
+                              type="text"
+                              value={editTitleText}
+                              onChange={(e) => setEditTitleText(e.target.value)}
+                              onBlur={handleSaveConversationTitle}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveConversationTitle();
+                                } else if (e.key === 'Escape') {
+                                  setEditingConversationId(null);
+                                  setEditTitleText('');
+                                }
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0.5 text-[13px] text-zinc-100 focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSaveConversationTitle();
+                              }}
+                              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]"
+                              aria-label="Confirm rename"
+                              title="Save"
+                            >
+                              <Check size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            {convo.isUnread && (
+                              <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-zinc-100" aria-label="Unread" />
+                            )}
+                            <MessageSquare size={13} className="flex-shrink-0 text-zinc-500" aria-hidden="true" />
+                            <HistoryConversationTitle title={convo.title} isSliding={isRowHovered} />
+                          </span>
+                        )}
+                        <div
+                          className={`absolute top-1/2 right-1 flex -translate-y-1/2 items-center transition-opacity duration-150 ${
+                            isEditingTitle
+                              ? 'pointer-events-none opacity-0'
+                              : menuOpen
+                                ? 'opacity-100'
+                                : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const menuWidth = 188;
+                              const left = Math.min(
+                                Math.max(8, rect.right - menuWidth),
+                                window.innerWidth - menuWidth - 8,
+                              );
+                              setHistoryProjectSubmenuOpen(false);
+                              setHistoryRowMenu({
+                                conversationId: convo.id,
+                                top: rect.bottom + 4,
+                                left,
+                              });
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-[var(--chat-hover)] hover:text-zinc-200"
+                            aria-label="Conversation actions"
+                            aria-haspopup="menu"
+                            aria-expanded={menuOpen}
+                            title="More options"
+                          >
+                            <MoreVertical size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  };
+
+                  const emptyPanel = (title: string, body: string) => (
+                    <div className="px-3 py-10 text-center">
+                      <p className="text-[13px] font-medium text-zinc-100">{title}</p>
+                      <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-500">{body}</p>
+                    </div>
+                  );
+
+                  return (
+                    <>
+                      {/* Top nav — separate from Pinned / Recents */}
+                      <div className="flex-shrink-0 space-y-0.5 border-b border-[#1e1e21] px-1.5 py-2">
+                        <button
+                          type="button"
+                          className={historyNavItemClass(false)}
+                          onClick={() => {
+                            handleNewChat();
+                            setHistoryNavView('chats');
+                            closeProjectsPage();
+                          }}
+                        >
+                          <Plus size={16} className="flex-shrink-0 text-zinc-100" />
+                          <span>New</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={historyNavItemClass(historyNavView === 'chats' && !isProjectsPageOpen)}
+                          onClick={() => {
+                            setHistoryNavView('chats');
+                            closeProjectsPage();
+                          }}
+                        >
+                          <MessagesSquare size={16} className="flex-shrink-0" />
+                          <span>Chats and tasks</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={historyNavItemClass(historyNavView === 'projects' || isProjectsPageOpen)}
+                          onClick={openProjectsPage}
+                        >
+                          <Folder size={16} className="flex-shrink-0" />
+                          <span>Projects</span>
+                        </button>
+                        {hasArchivedConversations && (
+                          <button
+                            type="button"
+                            className={historyNavItemClass(historyNavView === 'archived', true)}
+                            onClick={() => {
+                              closeProjectsPage();
+                              setHistoryNavView('archived');
+                            }}
+                          >
+                            <Archive size={15} className="flex-shrink-0" />
+                            <span>Archived conversations</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className={historyNavItemClass(historyNavView === 'artifacts')}
+                          onClick={() => {
+                            closeProjectsPage();
+                            setHistoryNavView('artifacts');
+                          }}
+                        >
+                          <Shapes size={16} className="flex-shrink-0" />
+                          <span>Artifacts</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={historyNavItemClass(historyNavView === 'scheduled')}
+                          onClick={() => {
+                            closeProjectsPage();
+                            setHistoryNavView('scheduled');
+                          }}
+                        >
+                          <Clock size={16} className="flex-shrink-0" />
+                          <span>Scheduled</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={historyNavItemClass(historyNavView === 'customize')}
+                          onClick={() => {
+                            closeProjectsPage();
+                            setHistoryNavView('customize');
+                          }}
+                        >
+                          <Briefcase size={16} className="flex-shrink-0" />
+                          <span>Customize</span>
+                        </button>
+                      </div>
+
+                      {/* Content under the top nav */}
+                      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2 hide-scrollbar">
+                        {historyNavView === 'chats' && (
+                          conversationHistory.filter((c) => !c.isArchived).length === 0 && !searchTermLower ? (
+                            <div className="px-2 py-8 text-center">
+                              <p className="text-[12px] text-zinc-600">No conversations yet</p>
+                            </div>
+                          ) : sortedHistory.length === 0 ? (
+                            <div className="px-2 py-8 text-center">
+                              <p className="text-[12px] text-zinc-600">No matching conversations</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {(pinnedConversations.length > 0 ||
+                                (historyDragId != null &&
+                                  historyDragFromSectionRef.current === 'recents')) && (
+                                <div
+                                  data-history-pinned-zone=""
+                                  className={`space-y-0.5 rounded-none ${
+                                    historyDragId != null &&
+                                    historyDragFromSectionRef.current === 'recents' &&
+                                    pinnedConversations.every((c) => c.id !== historyDragId)
+                                      ? 'history-pin-section-reveal'
+                                      : ''
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsPinnedSectionOpen((open) => !open)}
+                                    aria-expanded={isPinnedSectionOpen}
+                                    className="flex w-full items-center gap-1 px-2.5 pb-1 text-left text-[11px] font-semibold tracking-wide text-zinc-100 transition-colors hover:text-white"
+                                  >
+                                    <span>Pinned</span>
+                                    <ChevronRight
+                                      size={12}
+                                      className={`flex-shrink-0 text-zinc-500 transition-transform duration-200 ease-out ${
+                                        isPinnedSectionOpen ? 'rotate-90' : 'rotate-0'
+                                      }`}
+                                      aria-hidden="true"
+                                    />
+                                  </button>
+                                  {isPinnedSectionOpen &&
+                                    pinnedConversations.map((convo) => renderHistoryRow(convo, 'pinned'))}
+                                </div>
+                              )}
+                              {sortedHistory.some((convo) => !convo.isPinned) && (
+                                <div
+                                  data-history-drag-shiftable="true"
+                                  className={`space-y-0.5 ${recentsShiftY ? 'history-drag-shiftable' : ''}`}
+                                  style={
+                                    recentsShiftY
+                                      ? { transform: `translate3d(0, ${recentsShiftY}px, 0)` }
+                                      : undefined
+                                  }
+                                  onMouseEnter={() => setIsRecentsSectionHovered(true)}
+                                  onMouseLeave={() => setIsRecentsSectionHovered(false)}
+                                >
+                                  <div className="flex items-center justify-between gap-1 px-1 pb-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsRecentsSectionOpen((open) => !open)}
+                                      aria-expanded={isRecentsSectionOpen}
+                                      className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-left text-[11px] font-semibold tracking-wide text-zinc-100 transition-colors hover:text-white"
+                                    >
+                                      <span>Recents</span>
+                                      <ChevronRight
+                                        size={12}
+                                        className={`flex-shrink-0 text-zinc-500 transition-transform duration-200 ease-out ${
+                                          isRecentsSectionOpen ? 'rotate-90' : 'rotate-0'
+                                        }`}
+                                        aria-hidden="true"
+                                      />
+                                    </button>
+                                    <div className="flex flex-shrink-0 items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          closeProjectsPage();
+                                          setIsChatsCatalogOpen(true);
+                                          setChatsCatalogSearch('');
+                                          setIsChatsCatalogSelecting(false);
+                                          setChatsCatalogSelectedIds([]);
+                                          setIsChatsCatalogFilterOpen(false);
+                                          setChatsCatalogFilter('all');
+                                        }}
+                                        aria-label="Open all chats and tasks"
+                                        title="Open all chats"
+                                        className={`flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 transition-[opacity,colors,background-color] duration-150 hover:bg-[var(--chat-hover)] hover:text-zinc-200 ${
+                                          isRecentsSectionHovered || isChatsCatalogOpen
+                                            ? 'opacity-100'
+                                            : 'pointer-events-none opacity-0'
+                                        }`}
+                                      >
+                                        <ArrowUpRight size={13} aria-hidden="true" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          const rect = event.currentTarget.getBoundingClientRect();
+                                          const menuWidth = 168;
+                                          const left = Math.min(
+                                            Math.max(8, rect.right - menuWidth),
+                                            window.innerWidth - menuWidth - 8,
+                                          );
+                                          setRecentsFilterSubmenu(null);
+                                          setRecentsFilterMenu((current) =>
+                                            current ? null : { top: rect.bottom + 4, left },
+                                          );
+                                        }}
+                                        aria-label="Filter recents"
+                                        aria-haspopup="menu"
+                                        aria-expanded={Boolean(recentsFilterMenu)}
+                                        title="Filter"
+                                        className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+                                          recentsFilterMenu
+                                            ? 'bg-[var(--chat-control)] text-zinc-100'
+                                            : 'text-zinc-500 hover:bg-[var(--chat-hover)] hover:text-zinc-200'
+                                        }`}
+                                      >
+                                        {/* Two-track sliders — Claude uses 2 lines, not Lucide's 3-track SlidersVertical */}
+                                        <svg
+                                          width="13"
+                                          height="13"
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2"
+                                          strokeLinecap="round"
+                                          aria-hidden="true"
+                                        >
+                                          <path d="M8 5v14" />
+                                          <path d="M16 5v14" />
+                                          <path d="M5.5 10h5" />
+                                          <path d="M13.5 15h5" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                  {isRecentsSectionOpen &&
+                                    (recentConversations.length === 0 ? (
+                                      <p className="px-2.5 py-3 text-[12px] text-zinc-600">No matching conversations</p>
+                                    ) : (
+                                      recentGroups.map((group) => (
+                                        <div key={group.key} className="space-y-0.5">
+                                          {group.label && (
+                                            <p className="px-2.5 pt-1.5 pb-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                                              {group.label}
+                                            </p>
+                                          )}
+                                          {group.items.map((convo) => renderHistoryRow(convo, 'recents'))}
+                                        </div>
+                                      ))
+                                    ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        )}
+
+                        {historyNavView === 'projects' && (
+                          <div className="space-y-2">
+                            <button
+                              type="button"
+                              onClick={() => openCreateProjectModal()}
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]"
+                            >
+                              <Plus size={15} />
+                              <span>New project</span>
+                            </button>
+                            {chatProjects.length === 0 ? (
+                              emptyPanel('No projects yet', 'Create a project to group related conversations.')
+                            ) : (
+                              <div className="space-y-0.5">
+                                {chatProjects.map((project) => {
+                                  const count = conversationHistory.filter((c) => c.projectId === project.id).length;
+                                  const isActiveProject = activeProjectId === project.id;
+                                  return (
+                                    <button
+                                      key={project.id}
+                                      type="button"
+                                      title={project.name}
+                                      onClick={() => {
+                                        // Keep the projects flow open so ← back returns to the list,
+                                        // then switch (or open) the selected project workspace.
+                                        setIsProjectsPageOpen(true);
+                                        try {
+                                          localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'true');
+                                        } catch {
+                                          /* ignore storage failures */
+                                        }
+                                        openProject(project.id);
+                                      }}
+                                      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-[var(--chat-hover)] ${
+                                        isActiveProject
+                                          ? 'bg-[var(--chat-hover)] text-[var(--chat-text)]'
+                                          : 'text-zinc-100'
+                                      }`}
+                                    >
+                                      <Folder size={15} className="flex-shrink-0 text-zinc-500" />
+                                      <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                                      <span className="text-[11px] text-zinc-500">{count}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {historyNavView === 'archived' && (
+                          archivedConversations.length === 0 ? (
+                            emptyPanel('No archived chats', 'Archive a conversation from the ⋯ menu to see it here.')
+                          ) : (
+                            <div className="space-y-0.5">
+                              <p className="px-2.5 pb-1 text-[11px] font-semibold tracking-wide text-zinc-100">
+                                Archived
+                              </p>
+                              {archivedConversations.map((convo) => renderHistoryRow(convo, 'archived'))}
+                            </div>
+                          )
+                        )}
+
+                        {historyNavView === 'artifacts' &&
+                          emptyPanel(
+                            'Artifacts',
+                            'Generated files, code, and documents from chats will show up here.',
+                          )}
+
+                        {historyNavView === 'scheduled' &&
+                          emptyPanel(
+                            'Scheduled',
+                            'Recurring prompts and timed tasks will appear in this list.',
+                          )}
+
+                        {historyNavView === 'customize' &&
+                          emptyPanel(
+                            'Customize',
+                            'Personas, instructions, and chat preferences will live here.',
+                          )}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+          );
+
+          if (isMultiInterface) {
+            return (
               <div
                 ref={historySidebarRef}
-                className={`chat-history-sidebar ${isMultiInterface ? 'absolute' : 'fixed'} z-[50] transition-all duration-300 ease-in-out ${isMultiInterface ? 'w-60' : 'w-[260px]'} bg-[#0e0e10] border border-[#1e1e21] rounded-lg overflow-hidden ${!isHistoryOpen && isMobile ? 'chat-history-sidebar-closed' : ''}`}
+                className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-sidebar absolute z-[50] w-60 border rounded-lg overflow-hidden transition-all duration-300 ease-in-out`}
+                data-chat-theme-preference={chatTheme}
                 style={{
                   top: '12px',
                   bottom: '12px',
-                  boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-                  left: isMobile
-                    ? (isHistoryOpen ? '12px' : '-100%')
-                    : (isMultiInterface
-                        ? (isHistoryOpen ? '12px' : '-260px')
-                        : (isHistoryOpen ? (isTaskbarHidden ? '8px' : '60px') : (isTaskbarHidden ? '-268px' : '-212px'))),
-                  pointerEvents: isHistoryOpen ? 'auto' : 'none'
+                  left: isHistoryOpen ? '12px' : '-260px',
+                  pointerEvents: isHistoryOpen ? 'auto' : 'none',
+                  ...historySurfaceStyle,
                 }}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
               >
-              {/* Sidebar content — matches bento demo */}
-              <div className="flex flex-col h-full overflow-hidden">
-                {/* Search */}
-                <div className="p-2.5 border-b border-[#1e1e21]">
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#141416] border border-[#1e1e21] cursor-pointer hover:border-[#1e1e21] transition-colors">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
-                    <input
-                      type="search"
-                      placeholder="Search..."
-                      value={historySearchTerm}
-                      onChange={(e) => setHistorySearchTerm(e.target.value)}
-                      className="w-full bg-transparent text-[11px] text-gray-300 placeholder-white/25 focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Conversation list */}
-                <div className="flex-1 overflow-y-auto px-1.5 py-1.5 space-y-0.5 hide-scrollbar">
-                  {conversationHistory.length === 0 ? (
-                    <div className="px-2 py-8 text-center">
-                      <p className="text-[12px] text-white/20">No conversations yet</p>
-                    </div>
-                  ) : (
-                    conversationHistory
-                      .filter(convo => {
-                        const searchTermLower = historySearchTerm.toLowerCase();
-                        if (!searchTermLower) return true;
-                        if (convo.title.toLowerCase().includes(searchTermLower)) return true;
-                        return convo.messages.some(message =>
-                          message.text.toLowerCase().includes(searchTermLower)
-                        );
-                      })
-                      .sort((a, b) => b.timestamp - a.timestamp)
-                      .map(convo => {
-                        const isActive = activeConversationId === convo.id;
-                        return (
-                          <div key={convo.id} className={`px-2.5 py-1.5 rounded-md text-[13px] truncate cursor-pointer transition-colors group relative ${isActive ? 'text-white/90 bg-white/[0.05]' : 'text-white/40 hover:text-white/60'}`}
-                            onClick={() => { if (editingConversationId !== convo.id) { handleLoadConversation(convo.id); toggleHistory(); } }}
-                          >
-                            {editingConversationId === convo.id ? (
-                              <input
-                                id={`edit-title-${convo.id}-${interfaceId}`}
-                                type="text"
-                                value={editTitleText}
-                                onChange={(e) => setEditTitleText(e.target.value)}
-                                onBlur={handleSaveConversationTitle}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') { e.preventDefault(); handleSaveConversationTitle(); }
-                                  else if (e.key === 'Escape') { setEditingConversationId(null); setEditTitleText(''); }
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="w-full bg-[#0e0e10] border border-[#1e1e21] rounded px-2 py-0.5 text-[13px] text-white focus:outline-none focus:border-gray-500"
-                              />
-                            ) : convo.title}
-                            {/* Hover actions */}
-                            <div className={`absolute top-1/2 right-1 transform -translate-y-1/2 flex items-center gap-0.5 transition-opacity duration-150 ${editingConversationId === convo.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                              {editingConversationId === convo.id ? (
-                                <button onClick={(e) => { e.stopPropagation(); handleSaveConversationTitle(); }} className="p-1 text-green-400 hover:bg-green-600/20 rounded" aria-label="Confirm rename"><Check size={12} /></button>
-                              ) : (
-                                <>
-                                  <button onClick={(e) => { e.stopPropagation(); setEditingConversationId(convo.id); setEditTitleText(convo.title); setTimeout(() => document.getElementById(`edit-title-${convo.id}-${interfaceId}`)?.focus(), 50); }} className="p-1 text-white/20 hover:text-white/50 rounded" aria-label="Rename"><FilePenLine size={12} /></button>
-                                  <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmationModal({ isOpen: true, conversationId: convo.id, conversationTitle: convo.title }); }} className="p-1 text-white/20 hover:text-red-400 rounded" aria-label="Delete"><Trash2 size={12} /></button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                  )}
-                </div>
+                {historyPanelBody}
               </div>
-            </div>
-            </>
-          );
+            );
+          }
 
-          // In multi-interface mode, render inline; in single mode, use portal
-          return isMultiInterface ? historySidebarContent : createPortal(historySidebarContent, document.body);
+          if (isMobile) {
+            return createPortal(
+              <div
+                ref={historySidebarRef}
+                className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-sidebar fixed z-[50] w-[260px] border rounded-lg overflow-hidden transition-all duration-300 ease-in-out ${!isHistoryOpen ? 'chat-history-sidebar-closed' : ''}`}
+                data-chat-theme-preference={chatTheme}
+                style={{
+                  top: '12px',
+                  bottom: '12px',
+                  left: isHistoryOpen ? '12px' : '-100%',
+                  pointerEvents: isHistoryOpen ? 'auto' : 'none',
+                  ...historySurfaceStyle,
+                }}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+              >
+                {historyPanelBody}
+              </div>,
+              document.body,
+            );
+          }
+
+          return createPortal(
+            <div
+              ref={historySidebarRef}
+              className="fixed z-[50]"
+              data-history-clip=""
+              style={{
+                top: 0,
+                bottom: 0,
+                left: historyLeftInset,
+                width: 260,
+                overflow: 'hidden',
+                pointerEvents: isHistoryOpen ? 'auto' : 'none',
+              }}
+              aria-hidden={!isHistoryOpen}
+            >
+              <div
+                className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-sidebar h-full w-full overflow-hidden border-y border-r transition-transform duration-300 ease-in-out ${isTaskbarHidden ? 'border-l rounded-none' : 'border-l-0 rounded-none'}`}
+                data-chat-theme-preference={chatTheme}
+                style={{
+                  transform: isHistoryOpen ? 'translateX(0)' : 'translateX(-100%)',
+                  ...historySurfaceStyle,
+                }}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+              >
+                {historyPanelBody}
+              </div>
+            </div>,
+            document.body,
+          );
         })()}
 
         {/* Context Panel - Only show in single interface mode */}
