@@ -27,9 +27,29 @@
 # if these suites are ever moved to a self-hosted Windows runner. Fix the suite's
 # teardown before any such migration.
 #
-# NOTE: this job targets GitHub-hosted `ubuntu-latest`. Hosted minutes have been dead
-# for parts of the org, but this repo's last core-tests/money-tests runs (2026-07-22)
-# completed successfully on hosted runners — verify before assuming it is inert.
+# !! THIS GATE IS CURRENTLY INERT — VERIFIED 2026-07-25, DO NOT ASSUME IT PROTECTS YOU.
+# This job targets GitHub-hosted `ubuntu-latest`, and org-wide hosted Actions billing is
+# dead. Pushing this branch produced run 30150986315 / 30150965339: BOTH jobs failed in
+# ~1 second having executed ZERO steps, annotation verbatim —
+#   "The job was not started because recent account payments have failed or your
+#    spending limit needs to be increased."
+# (This repo's last GREEN core-tests/money-tests runs are 2026-07-22; they predate the
+# billing failure. A green run older than that date proves nothing about today.)
+#
+# So the suites below are only actually enforced by running them LOCALLY. Until billing
+# is restored, this file is documentation, not a gate.
+#
+# Porting it to the self-hosted runner (`[self-hosted, windows, xeno]`, the only lane
+# private repos have) is NOT a drop-in `runs-on:` swap — four things break:
+#   1. `services: postgres` — service containers are not available on a Windows runner.
+#      The suites need a real Postgres; something has to provision one.
+#   2. `sudo apt-get install postgresql-client` — Linux-only; `psql` must come from
+#      elsewhere (the suites shell out to it to create a fresh DB per suite).
+#   3. The `run:` blocks are bash (`set -euo pipefail`) and need an explicit
+#      `shell: bash`; the runner has PowerShell 5.1, not pwsh.
+#   4. `api-key-auth` aborts on Windows (see the caveat above) → guaranteed red.
+# Each is solvable, but it is real work with a queue-starvation risk on the single
+# shared runner — deliberately not attempted as a side effect of the auth fix.
 name: core-tests
 
 on:
