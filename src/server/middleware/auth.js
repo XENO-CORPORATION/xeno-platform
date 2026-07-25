@@ -5,7 +5,9 @@
 
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { getKeyByKid } from '../utils/oidcProvider.js';
+import {
+  getKeyByKid, isAccessToken, ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_TYP,
+} from '../utils/oidcProvider.js';
 
 const JWT_DEFAULT_SECRET = 'xenostudio-super-secret-jwt-key-change-in-production';
 const JWT_SECRET = process.env.JWT_SECRET || JWT_DEFAULT_SECRET;
@@ -20,6 +22,24 @@ if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || JWT_SEC
 // signature). Platform API keys (`xeno-<hex>`) contain no dots, so this is a
 // reliable, allocation-free discriminator between the two credential shapes.
 const JWT_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
+// ── Token-confusion defense (XENO AUTH - SPEC.md §3.2 verify contract) ───────
+// The OIDC provider mints THREE different asymmetric JWTs off the SAME signing
+// key (utils/oidcProvider.js), all verifiable by the same `kid`:
+//
+//   access token  aud='xeno-api'    payload typ='at+jwt'  header typ='at+jwt'
+//   ID token      aud=<client_id>   no payload typ        header typ='JWT'
+//   logout token  aud=<client_id>   `events` claim        header typ='logout+jwt'
+//
+// Verifying only the SIGNATURE therefore accepts all three. That is classic token
+// confusion: an ID token (handed to every relying party, and to the browser) or a
+// back-channel logout token (POSTed by us to an RP's `backchannel_logout_uri`,
+// possibly third-party) could be replayed here as a Bearer ACCESS token and get
+// full API authority as that user. Fail closed: an asymmetric token authenticates
+// ONLY when it is audience-scoped to this resource server AND explicitly typed as
+// an access token. `ACCESS_TOKEN_AUDIENCE` / `ACCESS_TOKEN_TYP` / `isAccessToken`
+// are imported from the ISSUER, which mints with the same constants — verify and
+// mint cannot drift apart.
 
 // Same at-rest scheme the gateway (xeno-api-proxy `getPlatformApiKeyRecord`) and
 // the portal/gateway key-mint use: sha256(rawKey) hex, looked up alongside the
@@ -88,8 +108,11 @@ async function resolveApiKeyUser(req, rawKey) {
  *     what `xeno remote` / the CLI sends).
  * so an OIDC-signed-in user OR an API-key caller works on ALL routes, not only
  * /api/v2/*. `algorithms` is pinned per branch (defends against alg-confusion;
- * the old global verify accepted any algorithm). Header-only by design — the app
- * authenticates via `Authorization: Bearer` and sets NO auth cookie.
+ * the old global verify accepted any algorithm), and asymmetric tokens must also
+ * be audience-scoped (`aud='xeno-api'`) AND typed as access tokens (`typ='at+jwt'`)
+ * — defusing token confusion, where an ID token or a back-channel logout token
+ * signed by the same key was replayable as an access token. Header-only by design
+ * — the app authenticates via `Authorization: Bearer` and sets NO auth cookie.
  * @returns {{ user: object } | { status: number, error: string }}
  */
 export async function resolveAuthedUser(req) {
@@ -110,9 +133,34 @@ export async function resolveAuthedUser(req) {
   if (header && header.alg !== 'HS256' && header.kid) {
     const key = await getKeyByKid(req.db, header.kid);
     if (!key) return { status: 401, error: 'Invalid authentication token' };
-    userId = jwt.verify(token, key.publicKey, { algorithms: [key.alg] }).sub;
+    // `audience` makes jsonwebtoken itself reject a missing/wrong `aud` (it throws
+    // JsonWebTokenError → the 401 branch below/in the middleware); the explicit
+    // re-checks keep the decision local, uniform and unit-testable. Both dimensions
+    // are required — audience alone would still admit an ID/logout token minted for
+    // a client that happened to be registered as `xeno-api`.
+    const payload = jwt.verify(token, key.publicKey, {
+      algorithms: [key.alg],
+      audience: ACCESS_TOKEN_AUDIENCE,
+    });
+    if (!isAccessToken(header, payload)) {
+      return { status: 401, error: 'Invalid authentication token' };
+    }
+    userId = payload.sub;
   } else {
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    // Legacy platform session tokens carry NEITHER `aud` NOR `typ` (authRoutes
+    // `generateToken` / cliAuthRoutes `generateJwt`), so they are unaffected. But if
+    // any FUTURE HS256 token is minted with a type/audience — or with the logout
+    // `events` marker — it must be an access token for this audience or it cannot
+    // authenticate. Same fail-closed rule as the asymmetric branch, no regression.
+    if (decoded.events !== undefined) return { status: 401, error: 'Invalid authentication token' };
+    if (decoded.typ !== undefined && decoded.typ !== ACCESS_TOKEN_TYP) {
+      return { status: 401, error: 'Invalid authentication token' };
+    }
+    if (decoded.aud !== undefined && decoded.aud !== ACCESS_TOKEN_AUDIENCE
+        && !(Array.isArray(decoded.aud) && decoded.aud.includes(ACCESS_TOKEN_AUDIENCE))) {
+      return { status: 401, error: 'Invalid authentication token' };
+    }
     userId = decoded.userId;
     sid = decoded.sid || null;
   }
