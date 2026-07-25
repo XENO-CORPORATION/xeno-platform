@@ -12,9 +12,22 @@ import { delimiter, isAbsolute, join } from 'path';
 import { Router } from 'express';
 import Xeno from 'xeno-ai';
 import { getCreditCost } from '../utils/creditCosts.js';
-import { deductCredits, refundCredits, logUsage } from '../utils/creditTransactions.js';
-import { resolveEntitlements, capDimensions, gateMeta } from '../utils/entitlementGate.js';
-import { watermarkResultData } from '../utils/watermark.js';
+import { logUsage } from '../utils/creditTransactions.js';
+import { resolveEntitlements, capDimensions, capVideoSpec, gateMeta } from '../utils/entitlementGate.js';
+import { watermarkResultData, watermarkVideoData } from '../utils/watermark.js';
+import { meterMediaGeneration } from '../utils/inferenceMeter.js';
+import { MICRO_PER_CREDIT, getBalanceV2 } from '../utils/creditLedgerV2.js';
+import { imageGenLimiter, videoGenLimiter } from '../middleware/rateLimiter.js';
+
+// Cap image batch size: cost×n is charged, but an unbounded n is still a provider-
+// abuse / oversell vector, so clamp requested outputs to a sane maximum.
+const MAX_IMAGE_BATCH = 8;
+
+/** Current available balance in whole credits (best-effort; 0 on error). */
+async function availableCredits(db, userId) {
+  const bal = await getBalanceV2(db, userId).catch(() => null);
+  return bal ? bal.availableMicro / MICRO_PER_CREDIT : 0;
+}
 
 const router = Router();
 const XENO_API_KEY = process.env.XENO_API_KEY || '';
@@ -830,7 +843,7 @@ router.post('/remote/runs/:runId/stop', async (req, res) => {
 });
 
 // ---------- POST /api/xeno/images/generate ----------
-router.post('/images/generate', async (req, res) => {
+router.post('/images/generate', imageGenLimiter, async (req, res) => {
   if (!ensureXenoConfigured(res)) {
     return;
   }
@@ -841,7 +854,7 @@ router.post('/images/generate', async (req, res) => {
   }
 
   try {
-    const { model = 'auto', prompt, width, height, seed, n, ...rest } = req.body || {};
+    const { model = 'auto', prompt, width, height, seed, n, requestId, ...rest } = req.body || {};
 
     if (missingPrompt(prompt)) {
       return res.status(400).json({ error: 'Missing prompt' });
@@ -850,55 +863,76 @@ router.post('/images/generate', async (req, res) => {
     // Entitlement gate: Free = standard resolution + watermark; Pro/Team = 4K + clean.
     const ent = await resolveEntitlements(req.db, userId);
     const dims = capDimensions(ent, width, height);
+    const count = Math.min(Math.max(1, Math.floor(Number(n) || 1)), MAX_IMAGE_BATCH);
+    const unitCost = getCreditCost('image', model);
+    const reqId = requestId || req.headers['x-request-id'] || randomUUID();
 
-    const cost = getCreditCost('image', model);
-    const debit = await deductCredits(req.db, userId, cost);
-
-    if (!debit.success) {
-      return insufficientCreditsResponse(res, cost, debit.currentCredits ?? 0);
-    }
-
+    let metered;
     try {
-      const result = await xenoClient.image.generate({
+      // Reserve unitCost × count up front, run the provider, settle the actual count.
+      metered = await meterMediaGeneration(req.db, userId, {
+        surface: 'image_generation',
+        operation: `image.generate:${model}`,
         model,
-        prompt: prompt.trim(),
-        width: dims.width,
-        height: dims.height,
-        seed,
-        n: n || 1,
-        ...rest,
+        provider: 'xeno',
+        requestId: reqId,
+        unitCostMicro: unitCost * MICRO_PER_CREDIT,
+        count,
+        run: async () => {
+          const result = await xenoClient.image.generate({
+            model,
+            prompt: prompt.trim(),
+            width: dims.width,
+            height: dims.height,
+            seed,
+            n: count,
+            ...rest,
+          });
+          // Watermark BEFORE settle so a watermark failure voids the hold (no charge, no leak).
+          if (ent.watermark && Array.isArray(result?.data)) {
+            result.data = await watermarkResultData(result.data);
+          }
+          return result;
+        },
       });
-
-      let data = result?.data || [];
-      if (ent.watermark) {
-        data = await watermarkResultData(data);
+    } catch (err) {
+      if (err?.http === 402) {
+        return insufficientCreditsResponse(res, unitCost * count, await availableCredits(req.db, userId));
       }
-
-      await logUsage(req.db, userId, `image:${model}`, cost, {
-        route: '/api/xeno/images/generate',
-        model,
-        prompt_length: prompt.trim().length,
-      });
-
-      return res.json({
-        data,
-        model: result?.model || model,
-        credits_used: cost,
-        remaining_credits: debit.newBalance,
-        entitlement: gateMeta(ent),
-        resolution_capped: dims.capped,
-      });
-    } catch (apiError) {
-      await refundCredits(req.db, userId, cost);
-      console.error('[XenoRoutes] Image generate API error:', apiError);
-      const status = getApiErrorStatus(apiError);
+      if (err?.http === 403) {
+        return res.status(403).json({ error: 'Account frozen', code: 'ACCOUNT_FROZEN' });
+      }
+      if (err?.http === 409) {
+        return res.status(409).json({ error: 'Duplicate request — use a new requestId for a new generation', code: 'DUPLICATE_REQUEST' });
+      }
+      // Provider error — the hold was already voided (no charge).
+      console.error('[XenoRoutes] Image generate API error:', err);
+      const status = getApiErrorStatus(err);
       return res.status(status).json({
-        error: getApiErrorMessage(apiError, { model }),
+        error: getApiErrorMessage(err, { model }),
         model,
         status,
         credits_refunded: true,
       });
     }
+
+    const data = metered.result?.data || [];
+    await logUsage(req.db, userId, `image:${model}`, metered.creditsCharged, {
+      route: '/api/xeno/images/generate',
+      model,
+      count: metered.actualCount,
+      prompt_length: prompt.trim().length,
+    });
+
+    return res.json({
+      data,
+      model: metered.result?.model || model,
+      credits_used: metered.creditsCharged,
+      count: metered.actualCount,
+      remaining_credits: await availableCredits(req.db, userId),
+      entitlement: gateMeta(ent),
+      resolution_capped: dims.capped,
+    });
   } catch (error) {
     console.error('[XenoRoutes] Image generate error:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -906,7 +940,7 @@ router.post('/images/generate', async (req, res) => {
 });
 
 // ---------- POST /api/xeno/images/edit ----------
-router.post('/images/edit', async (req, res) => {
+router.post('/images/edit', imageGenLimiter, async (req, res) => {
   if (!ensureXenoConfigured(res)) {
     return;
   }
@@ -917,7 +951,9 @@ router.post('/images/edit', async (req, res) => {
   }
 
   try {
-    const { image, prompt, model = 'auto', ...rest } = req.body || {};
+    // Strip any `n` so the edit is single-output (flat EDIT_COST) and cannot be
+    // batched-for-free through the `...rest` passthrough (IMG-COST-N-2).
+    const { image, prompt, model = 'auto', requestId, n: _ignoredN, ...rest } = req.body || {};
 
     if (!image) {
       return res.status(400).json({ error: 'Missing image' });
@@ -927,49 +963,67 @@ router.post('/images/edit', async (req, res) => {
       return res.status(400).json({ error: 'Missing prompt' });
     }
 
-    const cost = getCreditCost('edit', model);
-    const debit = await deductCredits(req.db, userId, cost);
+    // Entitlement gate resolved BEFORE generation (Free = watermarked; Pro/Team = clean).
+    const ent = await resolveEntitlements(req.db, userId);
+    const unitCost = getCreditCost('edit', model);
+    const reqId = requestId || req.headers['x-request-id'] || randomUUID();
 
-    if (!debit.success) {
-      return insufficientCreditsResponse(res, cost, debit.currentCredits ?? 0);
-    }
-
+    let metered;
     try {
-      const result = await xenoClient.image.edit({
-        image,
-        prompt: prompt.trim(),
+      metered = await meterMediaGeneration(req.db, userId, {
+        surface: 'image_edit',
+        operation: `image.edit:${model}`,
         model,
-        ...rest,
+        provider: 'xeno',
+        requestId: reqId,
+        unitCostMicro: unitCost * MICRO_PER_CREDIT,
+        count: 1,
+        run: async () => {
+          const result = await xenoClient.image.edit({
+            image,
+            prompt: prompt.trim(),
+            model,
+            ...rest,
+          });
+          if (ent.watermark && Array.isArray(result?.data)) {
+            result.data = await watermarkResultData(result.data);
+          }
+          return result;
+        },
       });
-
-      // Entitlement gate: Free = watermarked output; Pro/Team = clean.
-      const ent = await resolveEntitlements(req.db, userId);
-      let data = result?.data || [];
-      if (ent.watermark) {
-        data = await watermarkResultData(data);
+    } catch (err) {
+      if (err?.http === 402) {
+        return insufficientCreditsResponse(res, unitCost, await availableCredits(req.db, userId));
       }
-
-      await logUsage(req.db, userId, `edit:${model}`, cost, {
-        route: '/api/xeno/images/edit',
-        model,
-        prompt_length: prompt.trim().length,
-      });
-
-      return res.json({
-        data,
-        model: result?.model || model,
-        credits_used: cost,
-        remaining_credits: debit.newBalance,
-        entitlement: gateMeta(ent),
-      });
-    } catch (apiError) {
-      await refundCredits(req.db, userId, cost);
-      console.error('[XenoRoutes] Image edit API error:', apiError);
-      return res.status(500).json({
-        error: getApiErrorMessage(apiError),
+      if (err?.http === 403) {
+        return res.status(403).json({ error: 'Account frozen', code: 'ACCOUNT_FROZEN' });
+      }
+      if (err?.http === 409) {
+        return res.status(409).json({ error: 'Duplicate request — use a new requestId for a new generation', code: 'DUPLICATE_REQUEST' });
+      }
+      console.error('[XenoRoutes] Image edit API error:', err);
+      const status = getApiErrorStatus(err);
+      return res.status(status).json({
+        error: getApiErrorMessage(err),
+        status,
         credits_refunded: true,
       });
     }
+
+    const data = metered.result?.data || [];
+    await logUsage(req.db, userId, `edit:${model}`, metered.creditsCharged, {
+      route: '/api/xeno/images/edit',
+      model,
+      prompt_length: prompt.trim().length,
+    });
+
+    return res.json({
+      data,
+      model: metered.result?.model || model,
+      credits_used: metered.creditsCharged,
+      remaining_credits: await availableCredits(req.db, userId),
+      entitlement: gateMeta(ent),
+    });
   } catch (error) {
     console.error('[XenoRoutes] Image edit error:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -977,7 +1031,7 @@ router.post('/images/edit', async (req, res) => {
 });
 
 // ---------- POST /api/xeno/videos/generate ----------
-router.post('/videos/generate', async (req, res) => {
+router.post('/videos/generate', videoGenLimiter, async (req, res) => {
   if (!ensureXenoConfigured(res)) {
     return;
   }
@@ -988,53 +1042,88 @@ router.post('/videos/generate', async (req, res) => {
   }
 
   try {
-    const { model = 'auto', prompt, image, duration, aspect_ratio, resolution, fps, seed, ...rest } = req.body || {};
+    const { model = 'auto', prompt, image, duration, aspect_ratio, resolution, fps, seed, requestId, ...rest } = req.body || {};
 
     if (missingPrompt(prompt)) {
       return res.status(400).json({ error: 'Missing prompt' });
     }
 
-    const cost = getCreditCost('video', model);
-    const debit = await deductCredits(req.db, userId, cost);
+    // Entitlement gate (was MISSING entirely): Free = watermarked, non-commercial;
+    // Pro/Team = clean. Video is Free-eligible (XENO-MONETIZATION §Free) but must be
+    // watermarked — so we gate + watermark, we do NOT block.
+    const ent = await resolveEntitlements(req.db, userId);
+    const unitCost = getCreditCost('video', model);
+    const reqId = requestId || req.headers['x-request-id'] || randomUUID();
+    // Plan ceiling (GAP-5A): Free is clamped to 1080p + short clips; Pro/Team up to 4K + long.
+    const vcap = capVideoSpec(ent, { resolution, duration });
 
-    if (!debit.success) {
-      return insufficientCreditsResponse(res, cost, debit.currentCredits ?? 0);
-    }
-
+    let metered;
     try {
-      const result = await xenoClient.video.generate({
+      metered = await meterMediaGeneration(req.db, userId, {
+        surface: 'video_generation',
+        operation: `video.generate:${model}`,
         model,
-        prompt: prompt.trim(),
-        image,
-        duration,
-        aspect_ratio,
-        resolution,
-        fps,
-        seed,
-        wait: true,
-        ...rest,
+        provider: 'xeno',
+        requestId: reqId,
+        unitCostMicro: unitCost * MICRO_PER_CREDIT,
+        count: 1,
+        run: async () => {
+          const result = await xenoClient.video.generate({
+            model,
+            prompt: prompt.trim(),
+            image,
+            duration: vcap.duration,
+            aspect_ratio,
+            resolution: vcap.resolution,
+            fps,
+            seed,
+            wait: true,
+            ...rest,
+          });
+          // Free tier: watermark every frame (ffmpeg overlay → self-contained data URL).
+          // FAIL-CLOSED — watermarkVideoData throws on failure, which voids the hold
+          // (user not charged) rather than leaking clean, commercial-usable video.
+          if (ent.watermark && Array.isArray(result?.data)) {
+            result.data = await watermarkVideoData(result.data);
+          }
+          return result;
+        },
       });
-
-      await logUsage(req.db, userId, `video:${model}`, cost, {
-        route: '/api/xeno/videos/generate',
+    } catch (err) {
+      if (err?.http === 402) {
+        return insufficientCreditsResponse(res, unitCost, await availableCredits(req.db, userId));
+      }
+      if (err?.http === 403) {
+        return res.status(403).json({ error: 'Account frozen', code: 'ACCOUNT_FROZEN' });
+      }
+      if (err?.http === 409) {
+        return res.status(409).json({ error: 'Duplicate request — use a new requestId for a new generation', code: 'DUPLICATE_REQUEST' });
+      }
+      console.error('[XenoRoutes] Video generate API error:', err);
+      const status = getApiErrorStatus(err);
+      return res.status(status).json({
+        error: getApiErrorMessage(err, { model }),
         model,
-        prompt_length: prompt.trim().length,
-      });
-
-      return res.json({
-        data: result?.data || [],
-        model: result?.model || model,
-        credits_used: cost,
-        remaining_credits: debit.newBalance,
-      });
-    } catch (apiError) {
-      await refundCredits(req.db, userId, cost);
-      console.error('[XenoRoutes] Video generate API error:', apiError);
-      return res.status(500).json({
-        error: getApiErrorMessage(apiError),
+        status,
         credits_refunded: true,
       });
     }
+
+    await logUsage(req.db, userId, `video:${model}`, metered.creditsCharged, {
+      route: '/api/xeno/videos/generate',
+      model,
+      prompt_length: prompt.trim().length,
+    });
+
+    return res.json({
+      data: metered.result?.data || [],
+      model: metered.result?.model || model,
+      credits_used: metered.creditsCharged,
+      remaining_credits: await availableCredits(req.db, userId),
+      entitlement: gateMeta(ent),
+      resolution_capped: vcap.capped,
+      max_resolution: gateMeta(ent).maxResolution,
+    });
   } catch (error) {
     console.error('[XenoRoutes] Video generate error:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -1042,7 +1131,7 @@ router.post('/videos/generate', async (req, res) => {
 });
 
 // ---------- POST /api/xeno/audio/generate ----------
-router.post('/audio/generate', async (req, res) => {
+router.post('/audio/generate', imageGenLimiter, async (req, res) => {
   if (!ensureXenoConfigured(res)) {
     return;
   }
@@ -1053,49 +1142,69 @@ router.post('/audio/generate', async (req, res) => {
   }
 
   try {
-    const { model = 'auto', prompt, duration, seed, ...rest } = req.body || {};
+    const { model = 'auto', prompt, duration, seed, requestId, ...rest } = req.body || {};
 
     if (missingPrompt(prompt)) {
       return res.status(400).json({ error: 'Missing prompt' });
     }
 
-    const cost = getCreditCost('audio', model);
-    const debit = await deductCredits(req.db, userId, cost);
+    // Entitlement gate (was MISSING): resolves plan for commercial/limit labelling.
+    // Audio has no visual watermark path, so the gate metadata is the enforcement seam.
+    const ent = await resolveEntitlements(req.db, userId);
+    const unitCost = getCreditCost('audio', model);
+    const reqId = requestId || req.headers['x-request-id'] || randomUUID();
 
-    if (!debit.success) {
-      return insufficientCreditsResponse(res, cost, debit.currentCredits ?? 0);
-    }
-
+    let metered;
     try {
-      const result = await xenoClient.music.generate({
+      metered = await meterMediaGeneration(req.db, userId, {
+        surface: 'audio_generation',
+        operation: `audio.generate:${model}`,
         model,
-        prompt: prompt.trim(),
-        duration,
-        seed,
-        wait: true,
-        ...rest,
+        provider: 'xeno',
+        requestId: reqId,
+        unitCostMicro: unitCost * MICRO_PER_CREDIT,
+        count: 1,
+        run: async () => xenoClient.music.generate({
+          model,
+          prompt: prompt.trim(),
+          duration,
+          seed,
+          wait: true,
+          ...rest,
+        }),
       });
-
-      await logUsage(req.db, userId, `audio:${model}`, cost, {
-        route: '/api/xeno/audio/generate',
-        model,
-        prompt_length: prompt.trim().length,
-      });
-
-      return res.json({
-        data: result?.data || [],
-        model: result?.model || model,
-        credits_used: cost,
-        remaining_credits: debit.newBalance,
-      });
-    } catch (apiError) {
-      await refundCredits(req.db, userId, cost);
-      console.error('[XenoRoutes] Audio generate API error:', apiError);
-      return res.status(500).json({
-        error: getApiErrorMessage(apiError),
+    } catch (err) {
+      if (err?.http === 402) {
+        return insufficientCreditsResponse(res, unitCost, await availableCredits(req.db, userId));
+      }
+      if (err?.http === 403) {
+        return res.status(403).json({ error: 'Account frozen', code: 'ACCOUNT_FROZEN' });
+      }
+      if (err?.http === 409) {
+        return res.status(409).json({ error: 'Duplicate request — use a new requestId for a new generation', code: 'DUPLICATE_REQUEST' });
+      }
+      console.error('[XenoRoutes] Audio generate API error:', err);
+      const status = getApiErrorStatus(err);
+      return res.status(status).json({
+        error: getApiErrorMessage(err),
+        status,
         credits_refunded: true,
       });
     }
+
+    await logUsage(req.db, userId, `audio:${model}`, metered.creditsCharged, {
+      route: '/api/xeno/audio/generate',
+      model,
+      prompt_length: prompt.trim().length,
+    });
+
+    return res.json({
+      data: metered.result?.data || [],
+      model: metered.result?.model || model,
+      credits_used: metered.creditsCharged,
+      remaining_credits: await availableCredits(req.db, userId),
+      entitlement: gateMeta(ent),
+    });
   } catch (error) {
     console.error('[XenoRoutes] Audio generate error:', error);
     return res.status(500).json({ error: 'Internal server error' });

@@ -15,6 +15,7 @@
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
 import * as billing from '../services/billingService.js';
+import { creditsView, subscriptionView } from '../utils/accountViews.js';
 
 const router = express.Router();
 
@@ -30,8 +31,8 @@ function originOf(req) {
 }
 
 /** Public: lets the pricing UI render plans + know whether checkout is live. */
-router.get('/config', (req, res) => {
-  res.json({ success: true, ...billing.getConfig() });
+router.get('/config', async (req, res) => {
+  res.json({ success: true, ...(await billing.getConfig()) });
 });
 
 /** Current user's credit balance + billing-enabled flag + plan + entitlements. */
@@ -51,6 +52,87 @@ router.get('/entitlements', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('[billing] entitlements error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to load entitlements' });
+  }
+});
+
+/** Billing overview: credits (balance + lifetimes + frozen) + active subscription (or null). */
+router.get('/overview', authMiddleware, async (req, res) => {
+  try {
+    const [credits, subscription] = await Promise.all([
+      creditsView(req.db, req.user.id),
+      subscriptionView(req.db, req.user.id),
+    ]);
+    res.json({ success: true, overview: { credits, subscription } });
+  } catch (err) {
+    console.error('[billing] overview error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to load billing overview' });
+  }
+});
+
+/** Active subscription only (or null). */
+router.get('/subscription', authMiddleware, async (req, res) => {
+  try {
+    res.json({ success: true, subscription: await subscriptionView(req.db, req.user.id) });
+  } catch (err) {
+    console.error('[billing] subscription error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to load subscription' });
+  }
+});
+
+/** The user's credit-ledger history (paginated); amounts in whole credits. */
+router.get('/ledger', authMiddleware, async (req, res) => {
+  try {
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const acct = (await req.db.query('SELECT id FROM credit_accounts WHERE user_id = $1', [req.user.id])).rows[0];
+    if (!acct) return res.json({ success: true, ledger: [], total: 0 });
+    const total = (await req.db.query('SELECT COUNT(*)::int AS n FROM credit_transactions WHERE account_id = $1', [acct.id])).rows[0].n;
+    const rows = (await req.db.query(
+      `SELECT id, type, amount, balance_after, description, reference_type, reference_id, metadata, created_at
+         FROM credit_transactions WHERE account_id = $1
+        ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3`,
+      [acct.id, limit, offset],
+    )).rows;
+    const M = 1_000_000;
+    res.json({
+      success: true,
+      total,
+      ledger: rows.map((r) => ({
+        id: String(r.id),
+        type: r.type,
+        amount: Number(r.amount) / M,
+        balance_after: Number(r.balance_after) / M,
+        description: r.description || null,
+        reference_type: r.reference_type || null,
+        reference_id: r.reference_id || null,
+        metadata: r.metadata || {},
+        created_at: r.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error('[billing] ledger error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to load ledger' });
+  }
+});
+
+/** Public: plan tiers for the pricing UI (Free + subscription plans). */
+router.get('/pricing-tiers', async (req, res) => {
+  try {
+    const subs = billing.getCatalog().filter((i) => i.kind === 'subscription' && i.id !== 'team_monthly');
+    const tiers = [
+      { id: 'free', name: 'Free', monthly_price: 0, credits_included: 0, features: billing.entitlementsFor('free') },
+      ...subs.map((i) => ({
+        id: i.id,
+        name: i.label,
+        monthly_price: i.price,
+        credits_included: i.credits || 0,
+        features: billing.entitlementsFor(i.plan),
+      })),
+    ];
+    res.json({ success: true, tiers });
+  } catch (err) {
+    console.error('[billing] pricing-tiers error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to load pricing tiers' });
   }
 });
 

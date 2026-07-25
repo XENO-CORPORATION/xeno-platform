@@ -189,7 +189,7 @@ const playgroundSections = [
     icon: <MessageSquare size={16} />,
     pages: [
       { id: 'llm', icon: <MessageCircle size={14} />, path: '/overview/chat/llm' },
-      { id: 'voice', icon: <Volume2 size={14} />, path: '/overview/chat/voice' },
+      // XENO: voice mode entry removed — voice de-scoped (no direct provider calls)
       { id: 'search', icon: <Search size={14} />, path: '/overview/chat/search' }
     ]
   },

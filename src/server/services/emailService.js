@@ -68,11 +68,11 @@ function wrapInLayout(title, bodyContent) {
 // Templates
 // --------------------------------------------------------------------------
 const templates = {
-  welcome: ({ displayName, loginUrl }) => ({
+  welcome: ({ displayName, loginUrl, credits }) => ({
     subject: 'Welcome to XENO',
     html: wrapInLayout('Welcome to XENO', `
       <h1>Welcome, ${escapeHtml(displayName)}</h1>
-      <p>Your account has been created successfully. You have <span class="highlight">2,000 credits</span> to get started.</p>
+      <p>Your account has been created successfully.${credits ? ` You have <span class="highlight">${escapeHtml(String(credits))} credits</span> to get started.` : ''}</p>
       <p>XENO is your creative studio — edit images, video, and audio with AI-powered tools.</p>
       <hr class="divider">
       <p style="text-align: center;">
@@ -95,6 +95,20 @@ const templates = {
       <hr class="divider">
       <p class="muted">This link expires in ${expiresIn || '1 hour'}. If you didn't request this, ignore this email.</p>
       <p class="muted">For security, do not share this link with anyone.</p>
+    `),
+  }),
+
+  email_verification: ({ displayName, verifyUrl, expiresIn }) => ({
+    subject: 'Verify your XENO email',
+    html: wrapInLayout('Verify your email', `
+      <h1>Verify your email</h1>
+      <p>Hi ${escapeHtml(displayName)},</p>
+      <p>Confirm this email address to secure your XENO account and enable password recovery.</p>
+      <p style="text-align: center;">
+        <a href="${verifyUrl}" class="btn">Verify Email</a>
+      </p>
+      <hr class="divider">
+      <p class="muted">This link expires in ${expiresIn || '24 hours'}. If you didn't create a XENO account, you can safely ignore this email.</p>
     `),
   }),
 

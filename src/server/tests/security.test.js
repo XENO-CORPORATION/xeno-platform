@@ -87,8 +87,6 @@ async function testUnauthenticatedEndpoints() {
   await assertRequest('POST', '/api/openai/responses/create', 401, 'POST /api/openai/responses/create requires auth');
 
   // Replicate proxy endpoints
-  await assertRequest('POST', '/api/image/replicate/predictions', 401, 'POST /api/image/replicate/predictions requires auth');
-  await assertRequest('GET', '/api/image/replicate/predictions/fake-id', 401, 'GET /api/image/replicate/predictions/:id requires auth');
 
   // Other proxy endpoints
   await assertRequest('POST', '/api/generate-image', 401, 'POST /api/generate-image requires auth');
@@ -99,8 +97,6 @@ async function testUnauthenticatedEndpoints() {
   await assertRequest('POST', '/api/fetch-metadata', 401, 'POST /api/fetch-metadata requires auth', {
     body: { url: 'https://example.com' },
   });
-  await assertRequest('GET', '/api/openai-realtime-session', 401, 'GET /api/openai-realtime-session requires auth');
-  await assertRequest('POST', '/api/openai-realtime-webrtc', 401, 'POST /api/openai-realtime-webrtc requires auth');
 
   // Code execution
   await assertRequest('GET', '/api/piston/runtimes', 401, 'GET /api/piston/runtimes requires auth');

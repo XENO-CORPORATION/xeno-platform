@@ -13,11 +13,29 @@ import rateLimit from 'express-rate-limit';
 // --------------------------------------------------------------------------
 // Helper: normalize IP for IPv6 compatibility
 // --------------------------------------------------------------------------
-function normalizeIp(req) {
-  let ip = req.ip || req.connection?.remoteAddress || 'unknown';
+// The platform sits behind Cloudflare (CF edge → cloudflared → nginx → app). nginx uses
+// `$proxy_add_x_forwarded_for` (APPEND), and with `trust proxy = 1` Express resolves
+// req.ip to a CONSTANT upstream hop (the cloudflared/nginx peer) rather than the client —
+// which would collapse every IP-keyed limiter into ONE shared global bucket (a trivially
+// triggerable, platform-wide auth/login DoS). CF sets `CF-Connecting-IP` to the true client
+// IP at its edge and OVERWRITES any client-supplied value, and neither cloudflared nor nginx
+// rewrite it — so it is the unspoofable, per-client key. Prefer it; fall back to req.ip only
+// for non-CF/direct traffic (which on this box only arrives via the tunnel anyway).
+export function clientIp(req) {
+  let ip = req.headers['cf-connecting-ip']
+    || (req.headers['x-real-ip'])
+    || req.ip
+    || req.connection?.remoteAddress
+    || 'unknown';
+  if (Array.isArray(ip)) ip = ip[0];
+  if (typeof ip === 'string' && ip.includes(',')) ip = ip.split(',')[0].trim();
   // Collapse IPv6-mapped IPv4 (::ffff:127.0.0.1 -> 127.0.0.1)
-  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
-  return ip;
+  if (typeof ip === 'string' && ip.startsWith('::ffff:')) ip = ip.slice(7);
+  return ip || 'unknown';
+}
+
+function normalizeIp(req) {
+  return clientIp(req);
 }
 
 // --------------------------------------------------------------------------
@@ -68,7 +86,7 @@ export const llmLimiter = rateLimit({
     retryAfter: 60,
   },
   keyGenerator: (req) => {
-    const userId = req.user?.id || req.headers['x-user-id'];
+    const userId = req.user?.id; // never the spoofable x-user-id header
     return userId ? `llm:user:${userId}` : `llm:ip:${normalizeIp(req)}`;
   },
 });
@@ -86,7 +104,7 @@ export const imageGenLimiter = rateLimit({
     retryAfter: 60,
   },
   keyGenerator: (req) => {
-    const userId = req.user?.id || req.headers['x-user-id'];
+    const userId = req.user?.id; // never the spoofable x-user-id header
     return userId ? `imggen:user:${userId}` : `imggen:ip:${normalizeIp(req)}`;
   },
 });
@@ -104,7 +122,7 @@ export const videoGenLimiter = rateLimit({
     retryAfter: 300,
   },
   keyGenerator: (req) => {
-    const userId = req.user?.id || req.headers['x-user-id'];
+    const userId = req.user?.id; // never the spoofable x-user-id header
     return userId ? `vidgen:user:${userId}` : `vidgen:ip:${normalizeIp(req)}`;
   },
 });
@@ -150,10 +168,17 @@ export const uploadLimiter = rateLimit({
   max: 50,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   message: {
     success: false,
     error: 'Too many uploads. Please wait before uploading more files.',
     retryAfter: 600,
+  },
+  // Per-user when authed, else per-client IP (CF-Connecting-IP) — never the
+  // collapsed proxy hop (which would be ONE shared global bucket).
+  keyGenerator: (req) => {
+    const userId = req.user?.id;
+    return userId ? `upload:user:${userId}` : `upload:ip:${normalizeIp(req)}`;
   },
 });
 

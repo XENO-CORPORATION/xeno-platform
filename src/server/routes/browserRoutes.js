@@ -1,9 +1,10 @@
 import express from 'express';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import puppeteer from 'puppeteer-core';
+import { assertPublicHttpUrl } from '../utils/urlGuard.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const router = express.Router();
 
 // Browser service configuration
@@ -306,12 +307,13 @@ router.get('/proxy', async (req, res) => {
     // Ignore parse errors
   }
 
-  // Validate URL
+  // Validate URL — SSRF guard: http/https only, public hosts only (no loopback,
+  // private ranges, link-local/metadata, or 0.0.0.0). See utils/urlGuard.js.
   let targetUrl;
   try {
-    targetUrl = new URL(actualUrl);
+    targetUrl = await assertPublicHttpUrl(actualUrl);
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid URL format' });
+    return res.status(400).json({ error: e.code === 'ERR_URL_INVALID' ? 'Invalid URL format' : 'URL not allowed' });
   }
 
   // Skip tracking/analytics/logging endpoints - return empty success
@@ -1445,11 +1447,12 @@ router.post('/proxy', async (req, res) => {
     return res.status(400).json({ error: 'URL query parameter is required' });
   }
 
+  // SSRF guard: http/https only, public hosts only (see utils/urlGuard.js)
   let targetUrl;
   try {
-    targetUrl = new URL(url);
+    targetUrl = await assertPublicHttpUrl(url);
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid URL format' });
+    return res.status(400).json({ error: e.code === 'ERR_URL_INVALID' ? 'Invalid URL format' : 'URL not allowed' });
   }
 
   // Skip tracking/analytics/logging endpoints - return empty success
@@ -1584,40 +1587,38 @@ router.post('/navigate', async (req, res) => {
     return res.status(400).json({ error: 'URL is required' });
   }
 
-  // Validate URL
+  // Validate URL — http/https only (blocks javascript:, file:, and shell payloads)
+  let parsedNavUrl;
   try {
-    new URL(url);
+    parsedNavUrl = new URL(url);
   } catch (e) {
     return res.status(400).json({ error: 'Invalid URL format' });
+  }
+  if (!['http:', 'https:'].includes(parsedNavUrl.protocol)) {
+    return res.status(400).json({ error: 'URL must use http or https' });
   }
 
   console.log(`[Browser] Navigation requested: ${url}`);
 
-  try {
-    // Execute command in the xeno-browser container to open URL in Chrome
-    // Using DISPLAY=:1 for the VNC display
-    const escapedUrl = url.replace(/"/g, '\\"');
-    const command = `docker exec ${BROWSER_HOST} bash -c "DISPLAY=:1 google-chrome --new-window '${escapedUrl}' 2>/dev/null &"`;
+  // SECURITY: execFile with an argv array — NO shell, so the URL can never be
+  // interpreted as shell syntax. Chrome stays open, so we do NOT await the child:
+  // fire it and respond immediately (the old shell command backgrounded with `&`).
+  execFile(
+    'docker',
+    ['exec', BROWSER_HOST, 'env', 'DISPLAY=:1', 'google-chrome', '--new-window', url],
+    { timeout: 15000 },
+    (error) => {
+      if (error && !error.killed) {
+        console.error(`[Browser] Navigation error:`, error.message);
+      }
+    }
+  );
 
-    await execAsync(command);
-
-    console.log(`[Browser] Successfully opened: ${url}`);
-
-    res.json({
-      success: true,
-      url: url,
-      message: 'Browser navigated to URL'
-    });
-  } catch (error) {
-    console.error(`[Browser] Navigation error:`, error.message);
-
-    // Even if command fails, return success as the URL might still open
-    res.json({
-      success: true,
-      url: url,
-      message: 'Navigation command sent'
-    });
-  }
+  res.json({
+    success: true,
+    url: url,
+    message: 'Navigation command sent'
+  });
 });
 
 /**
@@ -1629,21 +1630,27 @@ router.post('/screenshot', async (req, res) => {
     const timestamp = Date.now();
     const screenshotPath = `/tmp/screenshot_${timestamp}.png`;
 
-    // Take screenshot using scrot or import command in the container
-    const command = `docker exec ${BROWSER_HOST} bash -c "DISPLAY=:1 scrot ${screenshotPath} 2>/dev/null || DISPLAY=:1 import -window root ${screenshotPath}"`;
+    // Take screenshot using scrot (fall back to ImageMagick import). No user input
+    // reaches these commands; still uses execFile argv arrays (no shell) throughout.
+    try {
+      await execFileAsync('docker', ['exec', BROWSER_HOST, 'env', 'DISPLAY=:1', 'scrot', screenshotPath], { timeout: 30000 });
+    } catch {
+      await execFileAsync('docker', ['exec', BROWSER_HOST, 'env', 'DISPLAY=:1', 'import', '-window', 'root', screenshotPath], { timeout: 30000 });
+    }
 
-    await execAsync(command);
-
-    // Read the screenshot and return as base64
-    const readCommand = `docker exec ${BROWSER_HOST} cat ${screenshotPath} | base64`;
-    const { stdout } = await execAsync(readCommand);
+    // Read the screenshot bytes and base64-encode in Node (no shell pipe)
+    const { stdout } = await execFileAsync(
+      'docker',
+      ['exec', BROWSER_HOST, 'cat', screenshotPath],
+      { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: 30000 }
+    );
 
     // Clean up
-    await execAsync(`docker exec ${BROWSER_HOST} rm -f ${screenshotPath}`).catch(() => {});
+    await execFileAsync('docker', ['exec', BROWSER_HOST, 'rm', '-f', screenshotPath], { timeout: 15000 }).catch(() => {});
 
     res.json({
       success: true,
-      screenshot: stdout.trim(),
+      screenshot: Buffer.from(stdout).toString('base64'),
       timestamp: timestamp
     });
   } catch (error) {
@@ -1668,6 +1675,13 @@ router.get('/content', async (req, res) => {
       success: false,
       error: 'URL query parameter is required'
     });
+  }
+
+  // SSRF guard: http/https only, public hosts only
+  try {
+    await assertPublicHttpUrl(url);
+  } catch (e) {
+    return res.status(400).json({ success: false, error: 'URL not allowed' });
   }
 
   try {
@@ -1767,6 +1781,13 @@ router.post('/render', async (req, res) => {
     return res.status(400).json({ error: 'URL is required' });
   }
 
+  // SSRF guard: the Browserless container can reach internal services too
+  try {
+    await assertPublicHttpUrl(url);
+  } catch (e) {
+    return res.status(400).json({ error: 'URL not allowed' });
+  }
+
   console.log(`[Browserless] Rendering: ${url}`);
   let browser;
 
@@ -1836,6 +1857,13 @@ router.post('/action', async (req, res) => {
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
+  }
+
+  // SSRF guard
+  try {
+    await assertPublicHttpUrl(url);
+  } catch (e) {
+    return res.status(400).json({ error: 'URL not allowed' });
   }
 
   console.log(`[Browserless] Executing ${actions.length} actions on: ${url}`);
@@ -2006,6 +2034,13 @@ router.post('/screenshot-url', async (req, res) => {
     return res.status(400).json({ error: 'URL is required' });
   }
 
+  // SSRF guard
+  try {
+    await assertPublicHttpUrl(url);
+  } catch (e) {
+    return res.status(400).json({ error: 'URL not allowed' });
+  }
+
   console.log(`[Browserless] Screenshot: ${url}`);
   let browser;
 
@@ -2056,6 +2091,13 @@ router.post('/extract', async (req, res) => {
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
+  }
+
+  // SSRF guard
+  try {
+    await assertPublicHttpUrl(url);
+  } catch (e) {
+    return res.status(400).json({ error: 'URL not allowed' });
   }
 
   console.log(`[Browserless] Extracting data from: ${url}`);

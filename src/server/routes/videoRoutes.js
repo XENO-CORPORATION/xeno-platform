@@ -11,6 +11,8 @@ import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import videoUtilsService from '../services/videoUtilsService.js';
+import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import { deductCredits, refundCredits } from '../utils/creditTransactions.js';
 
 const router = express.Router();
 const execPromise = promisify(exec);
@@ -547,49 +549,86 @@ router.post('/render', requireAuth, async (req, res) => {
 
     const project = projectResult.rows[0];
 
-    // Calculate estimated credits cost (simple formula for now)
+    // Calculate estimated credits cost (simple formula for now) — this stays the
+    // single source of truth for the render price.
     const estimatedCredits = Math.ceil(
       (project.width * project.height * project.duration * project.fps) / 1000000
     );
 
-    // Check user has enough credits
-    const userResult = await req.db.query(
-      'SELECT credits FROM users WHERE id = $1',
-      [userId]
-    );
-
-    if (userResult.rows[0].credits < estimatedCredits) {
+    // Check the CANONICAL v2 ledger balance (null-safe) — never the lossy
+    // users.credits mirror, which drifts and can be null.
+    const balance = await getBalanceV2(req.db, userId);
+    const availableCredits = Math.floor(Number(balance?.availableMicro || 0) / MICRO_PER_CREDIT);
+    if (availableCredits < estimatedCredits) {
       return res.status(402).json({
         success: false,
         error: 'Insufficient credits',
         required: estimatedCredits,
-        available: userResult.rows[0].credits
+        available: availableCredits
       });
     }
 
-    // Create render job
     const jobId = uuidv4();
+
+    // CHARGE the render up front on the v2 ledger (idempotent per job via the
+    // deterministic transactionId — a retried request with the same jobId can
+    // never double-debit). Previously this endpoint never debited at all.
+    const debit = await deductCredits(req.db, userId, estimatedCredits, {
+      transactionId: `video-render:${jobId}`,
+      surface: 'video_studio',
+      operation: 'video.render',
+      dimensions: { projectId: project_id, jobId },
+    });
+    if (!debit.success) {
+      if (debit.frozen) {
+        return res.status(403).json({ success: false, error: 'Account frozen' });
+      }
+      return res.status(402).json({
+        success: false,
+        error: 'Insufficient credits',
+        required: estimatedCredits,
+        available: debit.currentCredits ?? 0
+      });
+    }
+
+    // Create render job. If the job can't be persisted after the debit, REFUND
+    // (reversing entry, idempotent on the refund ref) — never keep the money
+    // for a job that doesn't exist.
     const totalFrames = Math.ceil(project.duration * project.fps);
+    let jobResult;
+    try {
+      jobResult = await req.db.query(`
+        INSERT INTO video_render_jobs (
+          id, project_id, user_id, render_settings, status,
+          total_frames, credits_used
+        )
+        VALUES ($1, $2, $3, $4, 'queued', $5, $6)
+        RETURNING *
+      `, [
+        jobId, project_id, userId, JSON.stringify(render_settings),
+        totalFrames, estimatedCredits
+      ]);
 
-    const jobResult = await req.db.query(`
-      INSERT INTO video_render_jobs (
-        id, project_id, user_id, render_settings, status,
-        total_frames, credits_used
-      )
-      VALUES ($1, $2, $3, $4, 'queued', $5, $6)
-      RETURNING *
-    `, [
-      jobId, project_id, userId, JSON.stringify(render_settings),
-      totalFrames, estimatedCredits
-    ]);
+      // Update project status
+      await req.db.query(
+        'UPDATE video_projects SET status = $1 WHERE id = $2',
+        ['rendering', project_id]
+      );
+    } catch (jobErr) {
+      const refund = await refundCredits(req.db, userId, estimatedCredits, {
+        transactionId: `video-render-refund:${jobId}`,
+        operation: 'video.render',
+      });
+      if (!refund.success) {
+        console.error(`[video] REFUND FAILED after job-create failure: user=${userId} job=${jobId} credits=${estimatedCredits} error=${refund.error} — user charged for a job that was never created; manual reconciliation required`);
+      }
+      throw jobErr;
+    }
 
-    // Update project status
-    await req.db.query(
-      'UPDATE video_projects SET status = $1 WHERE id = $2',
-      ['rendering', project_id]
-    );
-
-    // TODO: Trigger actual rendering process in Docker container
+    // TODO: Trigger actual rendering process in Docker container.
+    // NOTE for the render worker: on job FAILURE it must refund credits_used with
+    // refundCredits(db, userId, credits, { transactionId: `video-render-refund:${jobId}` })
+    // — same idempotent ref as the cancel path below.
 
     res.json({
       success: true,
@@ -667,9 +706,29 @@ router.post('/render/:jobId/cancel', requireAuth, async (req, res) => {
 
     // TODO: Stop Docker container if running
 
+    // The job was charged up front (`video-render:<jobId>`) and never completed —
+    // REFUND it. Reversing entry, idempotent on the refund ref (uq_credit_txn_ref),
+    // and the SQL guard above (status IN queued/processing) means this path fires
+    // at most once per job. Failures are LOUD — a swallowed refund failure is
+    // silently-kept user money.
+    const job = result.rows[0];
+    const creditsToRefund = Number(job.credits_used) || 0;
+    let refunded = false;
+    if (creditsToRefund > 0) {
+      const refund = await refundCredits(req.db, userId, creditsToRefund, {
+        transactionId: `video-render-refund:${jobId}`,
+        operation: 'video.render.cancel',
+      });
+      refunded = refund.success === true;
+      if (!refund.success) {
+        console.error(`[video] REFUND FAILED on cancel: user=${userId} job=${jobId} credits=${creditsToRefund} error=${refund.error} — cancelled job stays charged; manual reconciliation required`);
+      }
+    }
+
     res.json({
       success: true,
-      message: 'Render job cancelled'
+      message: 'Render job cancelled',
+      credits_refunded: refunded ? creditsToRefund : 0
     });
 
   } catch (error) {

@@ -1,9 +1,17 @@
 # Billing — Stripe pay path setup (go-live)
 
-The platform now has a **real pay path**: Stripe Checkout → the existing hash-chained
-**credit ledger** (`creditLedgerV2`). One-time credit packs + recurring subscriptions. This
-turns xenostudio.ai from "free demos" into "can take money," and every product that spends
-credits monetizes through it.
+The platform now has a **real pay path**: Stripe Checkout → subscription plans + the existing
+hash-chained **credit ledger** (`creditLedgerV2`).
+
+> **Monetization model — LOCKED (`XENO MONETIZATION - STRATEGY.md`): XENO sells the HARNESS, not
+> credits.** The PRODUCT is the **subscription** — Free / **Pro €24** / Team (per-seat) /
+> Studio-Enterprise — i.e. the tools + agents + BYOK + ACP/MCP. **Credits are demoted:** the
+> ledger meters ONLY the *optional* **managed-premium** inference path (frontier / 3rd-party
+> models at a 3–5× markup) + the marketplace. BYOK (user's key) and in-house `xeno-rt` cost
+> €0/near-zero and need **no** credits. The credit **packs** in the CATALOG below are therefore
+> an **opt-in top-up for the managed-premium path only — never the headline.** The Pricing page
+> MUST lead with subscriptions; credits are a secondary "top up for premium managed models"
+> affordance. Do not market or frame XENO as "buy credits."
 
 ## What was built (this repo)
 - `src/server/services/billingService.js` — Stripe ⇄ ledger core (checkout, portal, webhook,
@@ -24,22 +32,27 @@ platform is unaffected. It goes live the moment keys are set — no code change.
    Stripe Checkout Session → browser redirects to Stripe.
 2. On payment, Stripe calls `POST /api/billing/webhook` → signature verified → credits granted
    via `addGrant(pool, userId, { kind:'paid' })`.
-3. **One-time packs** credit on `checkout.session.completed`; **subscriptions** credit on
-   `invoice.paid` (first payment **and** every renewal). Every grant is **idempotent**
+3. **One-time packs** grant credits on `checkout.session.completed`. **Subscriptions**
+   activate/renew the PLAN entitlements (Pro/Team **features**) on `invoice.paid` /
+   `customer.subscription.*` — they grant **no** monthly credits (the locked model: subscriptions
+   sell features, credit packs sell compute). Every credit grant is **idempotent**
    (`billing_events` PK guard) so Stripe redelivery never double-credits.
 
 ## Go-live checklist (needs YOU — I can't create accounts or handle keys)
 1. **Create a Stripe account** at dashboard.stripe.com.
-2. **Create Products + Prices** (Stripe dashboard) and copy each `price_…` id:
-   | Item | Type | Suggested |
-   |---|---|---|
-   | Credits — Starter | one-time | $10 → 1,000 cr |
-   | Credits — Plus | one-time | $50 → 5,500 cr |
-   | Credits — Pro pack | one-time | $100 → 12,000 cr |
-   | Pro | recurring / mo | $20 → 2,500 cr/mo |
-   | Team | recurring / mo | $60 → 8,000 cr/mo |
-   *(Credit amounts are defined server-side in `billingService.js` `CATALOG` — change there if
-   you change the pricing.)*
+2. **Create Products + Prices** (Stripe dashboard, **EUR**) and copy each `price_…` id. They MUST
+   match the authoritative `CATALOG` in `billingService.js` (advertised==charged is verified LIVE
+   against the Stripe Price at checkout):
+   | Item | Env var | Type | Price | Grants |
+   |---|---|---|---|---|
+   | Starter pack | `STRIPE_PRICE_CREDITS_SMALL` | one-time | €10 | 1,000 credits |
+   | Plus pack | `STRIPE_PRICE_CREDITS_MEDIUM` | one-time | €50 | 5,500 credits |
+   | Pro pack | `STRIPE_PRICE_CREDITS_LARGE` | one-time | €100 | 12,000 credits |
+   | Pro | `STRIPE_PRICE_PRO_MONTHLY` | recurring / mo | €24 | Pro **features** (no credits) |
+   | Team | `STRIPE_PRICE_TEAM_SEAT_MONTHLY` | recurring / mo, **per seat** | €40 / seat | Pro features + 5 seats |
+   | Team (legacy flat) | `STRIPE_PRICE_TEAM_MONTHLY` | recurring / mo | €60 | optional — leave unset |
+   *(Prices + grants live in `billingService.js` `CATALOG`. **Subscriptions gate FEATURES, not
+   monthly credits.** Change pricing THERE, then update the Stripe Prices to match.)*
 3. **Add a webhook** in Stripe → endpoint `https://xenostudio.ai/api/billing/webhook`, events:
    `checkout.session.completed`, `invoice.paid`. Copy the **signing secret** (`whsec_…`).
 4. **Set env vars** (server `.env`): `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`,

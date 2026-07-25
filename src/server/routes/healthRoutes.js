@@ -53,17 +53,18 @@ router.get('/ready', async (req, res) => {
   if (!migrationsReady) allHealthy = false;
   checks.migrations = { status: migrationsReady ? 'ok' : 'pending' };
 
-  // Database check
+  // Database check. SECURITY: never echo driver error messages — pg errors embed
+  // hostnames/ports/db names. Coarse state + latency only.
   try {
     const dbStart = Date.now();
     await req.db.query('SELECT 1');
     checks.database = { status: 'ok', responseMs: Date.now() - dbStart };
   } catch (err) {
     allHealthy = false;
-    checks.database = { status: 'error', error: err.message };
+    checks.database = { status: 'down' };
   }
 
-  // Redis check
+  // Redis check (same rule: ioredis errors embed host:port).
   try {
     const redisClient = getRedis();
     const redisStart = Date.now();
@@ -71,7 +72,7 @@ router.get('/ready', async (req, res) => {
     checks.redis = { status: 'ok', responseMs: Date.now() - redisStart };
   } catch (err) {
     allHealthy = false;
-    checks.redis = { status: 'error', error: err.message };
+    checks.redis = { status: 'down' };
   }
 
   const status = allHealthy ? 'ready' : 'not_ready';
@@ -85,6 +86,10 @@ router.get('/ready', async (req, res) => {
 // --------------------------------------------------------------------------
 // Detailed health — comprehensive system information
 // --------------------------------------------------------------------------
+// SECURITY: this endpoint is public. It must NOT fingerprint the stack — no exact
+// Postgres server version, no Node version, no NODE_ENV, no Redis memory internals,
+// and NEVER raw driver err.message (pg/ioredis errors embed hostnames/ports/db names).
+// Coarse states ('ok'/'degraded'/'down') + latency numbers only.
 router.get('/health', async (req, res) => {
   const checks = {};
   let overallStatus = 'ok';
@@ -92,31 +97,28 @@ router.get('/health', async (req, res) => {
   // 1. Database
   try {
     const dbStart = Date.now();
-    const result = await req.db.query('SELECT NOW() as time, current_setting(\'server_version\') as version');
+    await req.db.query('SELECT 1');
     checks.database = {
       status: 'ok',
       responseMs: Date.now() - dbStart,
-      version: result.rows[0]?.version,
     };
   } catch (err) {
     overallStatus = 'degraded';
-    checks.database = { status: 'error', error: err.message };
+    checks.database = { status: 'down' };
   }
 
   // 2. Redis
   try {
     const redisClient = getRedis();
     const redisStart = Date.now();
-    const info = await redisClient.info('memory');
-    const memMatch = info.match(/used_memory_human:(\S+)/);
+    await redisClient.ping();
     checks.redis = {
       status: 'ok',
       responseMs: Date.now() - redisStart,
-      usedMemory: memMatch ? memMatch[1] : 'unknown',
     };
   } catch (err) {
     overallStatus = 'degraded';
-    checks.redis = { status: 'error', error: err.message };
+    checks.redis = { status: 'down' };
   }
 
   // 3. R2 / CDN connectivity (lightweight — just check DNS resolution)
@@ -134,29 +136,18 @@ router.get('/health', async (req, res) => {
   } catch (err) {
     // CDN being unreachable is degraded, not critical
     if (overallStatus === 'ok') overallStatus = 'degraded';
-    checks.r2_cdn = { status: 'degraded', error: err.message };
+    checks.r2_cdn = { status: 'degraded' };
   }
 
-  // System info
-  const mem = process.memoryUsage();
   const uptimeSeconds = Math.floor((Date.now() - SERVER_START_TIME) / 1000);
 
   res.status(overallStatus === 'ok' ? 200 : 503).json({
     status: overallStatus,
     timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || '1.0.0',
     uptime: {
       seconds: uptimeSeconds,
       human: formatUptime(uptimeSeconds),
     },
-    memory: {
-      rss: formatBytes(mem.rss),
-      heapUsed: formatBytes(mem.heapUsed),
-      heapTotal: formatBytes(mem.heapTotal),
-      external: formatBytes(mem.external),
-    },
-    node: process.version,
-    environment: process.env.NODE_ENV || 'development',
     checks,
   });
 });
@@ -164,13 +155,6 @@ router.get('/health', async (req, res) => {
 // --------------------------------------------------------------------------
 // Helpers
 // --------------------------------------------------------------------------
-function formatBytes(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
-}
-
 function formatUptime(seconds) {
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { AlertTriangle, ExternalLink, Key, Save, CheckCircle } from 'lucide-react';
 import { API_INSTRUCTIONS, API_INSTRUCTIONS_LEGACY, API_TOKENS } from '../../config/apiConfig';
-import { initializeGeminiSDK } from '../../services/geminiService';
 
 interface ApiTokenNoticeProps {
   serviceKey: string;
@@ -49,26 +48,9 @@ const ApiTokenNotice: React.FC<ApiTokenNoticeProps> = ({ serviceKey, onClose, on
     setError(null);
     
     try {
-      // Handle different services
-      if (serviceKey === 'gemini') {
-        // Initialize Gemini SDK with the new token
-        const success = initializeGeminiSDK(token.trim());
-        if (!success) {
-          throw new Error('Failed to initialize Gemini with the provided token');
-        }
-        
-        // Save token to window objects for both naming conventions
-        window.GEMINI_API_TOKEN = token.trim();
-        window.GEMINI_API_KEY = token.trim(); // For components that use this property name
-        
-        // Update API_TOKENS
-        API_TOKENS.GEMINI_API_TOKEN = token.trim();
-      } else if (serviceKey === 'xeno') {
-        // Save token to window object
-        window.XENO_API_KEY = token.trim();
-        // Update API_TOKENS
-        API_TOKENS.XENO_API_KEY = token.trim();
-      }
+      // XENO: client-side provider token writes removed — the browser holds no
+      // provider keys, and these values were never used for any request. The notice
+      // still calls onTokenSaved so any dependent UI refresh keeps working.
       
       // Success case
       setIsSaving(false);

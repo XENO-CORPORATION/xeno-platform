@@ -1,0 +1,83 @@
+# Money-path gate (Blocker #7 INFRA-7.5).
+#
+# Runs the credit-ledger / billing / media-metering test suites against a real Postgres,
+# each in a FRESH database (the same isolation used on the box). These are the tests that
+# guard the double-entry ledger, hash-chained journal, atomic money-in, refund/clawback,
+# and the metered media hold→settle path — i.e. anything that can mis-charge a customer.
+#
+# NOTE: the org's hosted GitHub Actions may be billing-disabled; this workflow is
+# version-controlled and auto-activates when billing is restored. Until then it can be run
+# on demand (workflow_dispatch), on a self-hosted runner, or locally — the exact per-test
+# loop below works verbatim with any DATABASE_URL.
+name: money-tests
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'src/server/utils/creditLedgerV2.js'
+      - 'src/server/utils/creditTransactions.js'
+      - 'src/server/utils/inferenceMeter.js'
+      - 'src/server/utils/watermark.js'
+      - 'src/server/services/billingService.js'
+      - 'src/server/services/walletService.js'
+      - 'src/server/routes/billingRoutes.js'
+      - 'src/server/database/migrate-account-v2.js'
+      - 'src/server/tests/**'
+      - '.github/workflows/money-tests.yml'
+  pull_request:
+    paths:
+      - 'src/server/**'
+  workflow_dispatch: {}
+
+jobs:
+  money-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: test
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Install server dependencies
+        working-directory: src/server
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Run money-path suites (fresh DB per suite)
+        working-directory: src/server
+        run: |
+          set -euo pipefail
+          SUITES="ledger-v2 ledger-chain ledger-billing ledger-correctness billing-money-in media-metering wallet-service"
+          fail=0
+          for t in $SUITES; do
+            db="t_${t//-/_}"
+            echo "──────── $t ($db) ────────"
+            psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $db"
+            psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db"
+            if ! DATABASE_URL="postgresql://postgres:test@localhost:5432/$db" node "tests/${t}.test.mjs"; then
+              echo "::error::money suite failed: $t"
+              fail=1
+            fi
+          done
+          exit $fail

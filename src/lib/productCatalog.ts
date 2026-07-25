@@ -31,6 +31,8 @@ export interface Product {
   launchPath?: string;
   /** cli: the install command shown on the page */
   install?: string;
+  /** Optional schema.org override when a product supports fewer platforms than its delivery class. */
+  operatingSystem?: string;
   repo?: string;
 }
 
@@ -60,7 +62,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'sound', name: 'XENO Sound', tagline: 'Audio editing, music and voice production.', category: 'Create', status: 'beta', delivery: 'desktop', repo: 'xeno-sound' },
 
   // ── Design ────────────────────────────────────────────────
-  { slug: 'canvas', name: 'XENO Canvas', tagline: 'Multiplayer UI & product design with components.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-canvas' },
+  { slug: 'canvas', name: 'XENO Canvas', tagline: 'Multiplayer UI & product design with components.', category: 'Design', status: 'beta', delivery: 'desktop', repo: 'xeno-canvas' },
   { slug: 'layout', name: 'XENO Layout', tagline: 'Multi-page layouts for print and digital.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-layout' },
   { slug: '3d', name: 'XENO 3D', tagline: '3D modeling, rendering and asset creation.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-3d' },
   { slug: 'architect', name: 'XENO Architect', tagline: 'Architecture, CAD, BIM and interior design.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-architect' },
@@ -80,7 +82,7 @@ export const PRODUCTS: Product[] = [
   // ── Connect ───────────────────────────────────────────────
   { slug: 'comms', name: 'XENO Comms', tagline: 'Human and agent communication for teams.', category: 'Connect', status: 'beta', delivery: 'desktop', repo: 'xeno-comms' },
   { slug: 'post', name: 'XENO Post', tagline: '25+ platform social media command center.', category: 'Connect', status: 'coming-soon', delivery: 'soon', repo: 'xeno-post' },
-  { slug: 'browser', name: 'XENO Browser', tagline: 'The agent-native browser that works the web for you.', category: 'Connect', status: 'coming-soon', delivery: 'soon', repo: 'xeno-browser' },
+  { slug: 'browser', name: 'XENO Browser', tagline: 'The agent-native browser that works the web for you.', category: 'Connect', status: 'beta', delivery: 'desktop', repo: 'xeno-browser' },
   { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'shipping', delivery: 'desktop', r2: 'extension', repo: 'xeno-extension' },
 
   // ── Build ─────────────────────────────────────────────────
@@ -92,7 +94,7 @@ export const PRODUCTS: Product[] = [
   // ── Develop ───────────────────────────────────────────────
   { slug: 'agent-cli', name: 'XENO Agent CLI', tagline: 'Code, automate and control your workspace from the terminal.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xeno-corporation/xeno-agent-cli', repo: 'xeno-agent-cli' },
   { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xeno-corporation/xeno-agent-sdk', repo: 'xeno-agent-sdk' },
-  { slug: 'acp', name: 'XENO ACP', tagline: 'Drive any ACP coding agent through one API.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-acp' },
+  { slug: 'acp', name: 'XENO ACP', tagline: 'Drive approved ACP coding agents through one API.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xeno-corporation/xeno-acp', operatingSystem: 'Windows, Linux', repo: 'xeno-acp' },
   { slug: 'rt', name: 'XENO RT', tagline: 'Run frontier models locally — private and fast.', category: 'Develop', status: 'beta', delivery: 'desktop', repo: 'xeno-rt' },
   { slug: 'shell', name: 'XENO Shell', tagline: 'The XENO desktop environment for every app.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-shell' },
   { slug: 'anima', name: 'XENO Anima', tagline: 'Your personal, always-on agent — it remembers you and gets better.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-anima' },

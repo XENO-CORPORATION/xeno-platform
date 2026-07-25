@@ -16,6 +16,21 @@ const heroContent: Record<string, { title: string; subtitle: string; description
     title: 'Get in',
     subtitle: 'touch.',
     description: "Have a question or feedback? We'd love to hear from you. Our team typically responds within 24 hours."
+  },
+  '/forgot-password': {
+    title: 'Reset your',
+    subtitle: 'password.',
+    description: "Enter your email and we'll send you a secure link to get back into your account."
+  },
+  '/reset-password': {
+    title: 'Choose a new',
+    subtitle: 'password.',
+    description: 'Set a strong new password to secure your account and pick up right where you left off.'
+  },
+  '/verify-email': {
+    title: 'Verify your',
+    subtitle: 'email.',
+    description: 'Confirm your email address to unlock everything Xeno has to offer.'
   }
 };
 

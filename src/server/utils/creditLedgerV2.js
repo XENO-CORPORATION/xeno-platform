@@ -46,9 +46,12 @@ async function ensureAccount(client, userId) {
 
 /** Sum of active holds (micro) for a user. */
 async function activeHoldsMicro(client, userId) {
+  // Only NON-EXPIRED holds reserve balance. A hold that outlives its expires_at (e.g. a
+  // settle that failed all retries and was "left to expire") must stop locking credits —
+  // there is no sweeper voiding rows, so the available-balance math self-heals at expiry.
   const r = await client.query(
     `SELECT COALESCE(SUM(amount_micro - settled_micro), 0)::bigint AS held
-       FROM credit_holds WHERE user_id = $1 AND state = 'held'`,
+       FROM credit_holds WHERE user_id = $1 AND state = 'held' AND expires_at > now()`,
     [userId],
   );
   return BigInt(r.rows[0].held);
@@ -86,7 +89,13 @@ async function grantsAvailable(client, userId) {
   return BigInt(r.rows[0].s);
 }
 
-/** Draw `costMicro` from lots in §4.7 order. Caller has checked availability. */
+/**
+ * Draw `costMicro` from lots in §4.7 order. Caller has checked availability.
+ * Returns the UNCOVERED remainder (0n when lots fully covered the draw). A
+ * non-zero leftover means Σ(lots) < balance — reconciliation drift the caller
+ * MUST surface (see reportLotDrift): the balance already moved, so we never
+ * throw, but silent leftovers make lot/balance divergence invisible.
+ */
 async function drawdownGrants(client, userId, costMicro) {
   let need = costMicro;
   const lots = await client.query(
@@ -108,6 +117,20 @@ async function drawdownGrants(client, userId, costMicro) {
 }
 
 /**
+ * LOUD observability for lot/balance drift (never throws — the money already
+ * moved; this makes the divergence visible for reconciliation instead of
+ * silently discarding the uncovered remainder).
+ */
+function reportLotDrift(op, { userId, accountId = null, requestedMicro, leftoverMicro }) {
+  if (leftoverMicro > 0n) {
+    console.error(
+      `[ledger] LOT DRIFT: ${op} drawdown under-covered — user=${userId} account=${accountId} `
+      + `requested=${requestedMicro}µcr uncovered=${leftoverMicro}µcr (Σ(lots) < balance; needs reconciliation)`,
+    );
+  }
+}
+
+/**
  * Add a grant onto an EXISTING transaction (the caller owns BEGIN/COMMIT), so
  * money-IN can be composed atomically with the caller's own writes (e.g. a Stripe
  * event claim). Appends the tamper-evident journal row so a deposit is auditable —
@@ -119,6 +142,11 @@ export async function addGrantTx(client, userId, { amountMicro, kind = 'paid', p
   const amt = BigInt(Math.max(1, Math.round(amountMicro)));
   const prio = priority ?? (kind === 'free' ? 10 : kind === 'promo' ? 50 : 100);
   const acct = await ensureAccount(client, userId); // SELECT … FOR UPDATE locks the account (race-free hash chain)
+  // DEF-4: if ensureAccount just backfilled a legacy seed balance (balance>0 but no lots),
+  // lot that seed FIRST so Σ(lots) == balance holds continuously. Without this, the seed is
+  // spendable-from-balance but has no lot, so it drifts permanently below balance (and a
+  // later spend can't draw it down). No-op once the account already has lots.
+  await syncGrants(client, acct, userId);
   await client.query(
     'INSERT INTO credit_grants (user_id, account_id, amount_micro, remaining_micro, kind, priority, source_ref, expires_at) VALUES ($1,$2,$3,$3,$4,$5,$6,$7)',
     [userId, acct.id, amt.toString(), kind, prio, sourceRef, expiresAt],
@@ -134,19 +162,23 @@ export async function addGrantTx(client, userId, { amountMicro, kind = 'paid', p
     metadata: JSON.stringify({ kind, sourceRef }),
   });
   await mirrorLegacy(client, userId, newBalance);
-  return { accountId: acct.id, amountMicro: Number(amt), newBalanceMicro: newBalance };
+  return { accountId: acct.id, amountMicro: Number(amt), newBalanceMicro: newBalance, isFrozen: Boolean(acct.is_frozen) };
 }
 
 /** Add a grant (credit top-up / promo / free allotment). Opens its own transaction. */
 export async function addGrant(pool, userId, opts) {
   const client = await pool.connect();
+  let r;
   try {
     await client.query('BEGIN');
-    const r = await addGrantTx(client, userId, opts);
+    r = await addGrantTx(client, userId, opts);
     await client.query('COMMIT');
-    const held = await activeHoldsMicro(pool, userId).catch(() => 0n);
-    return { granted: true, amountMicro: r.amountMicro, kind: opts.kind || 'paid', balance: balanceView(r.newBalanceMicro, held) };
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+  // Pool re-entrancy guard: this read checks out a SECOND connection, so it must
+  // run AFTER client.release() — doing it while still holding the client makes
+  // every call need 2 connections and deadlocks the pool at max concurrency.
+  const held = await activeHoldsMicro(pool, userId).catch(() => 0n);
+  return { granted: true, amountMicro: r.amountMicro, kind: opts.kind || 'paid', balance: balanceView(r.newBalanceMicro, held, r.isFrozen) };
 }
 
 /**
@@ -156,19 +188,35 @@ export async function addGrant(pool, userId, opts) {
  * lots, and appends a reversing journal entry (negative amount, type 'refund').
  * Idempotent via uq_credit_txn_ref when refId is set. Returns
  * { clawedMicro, requestedMicro, shortfallMicro, newBalanceMicro }.
+ *
+ * SIGN CONVENTION (ledger-wide, LOCKED): `credit_transactions.amount` is the
+ * SIGNED BALANCE DELTA — positive when the balance goes UP, negative when it
+ * goes DOWN — so `balance_after = previous balance_after + amount` holds for
+ * every row (debit −, grant +, clawback −, usage-reversal +). Type 'refund'
+ * therefore carries BOTH signs (a Stripe clawback takes money OUT: negative;
+ * a failed-debit reversal puts money back IN: positive) — consumers must read
+ * the SIGN (or metadata.direction), never assume type ⇒ sign. verifyChainV2
+ * hashes amount as an opaque string and assertWithinCaps only sums
+ * type='debit', so both are sign-agnostic. metadata.direction disambiguates
+ * ('clawback' = money-out, 'reversal' = money-in) for type-level aggregation.
  */
 export async function clawbackTx(client, userId, micro, { refType = 'xeno.refund', refId = null, description = 'clawback', metadata = null } = {}) {
   const want = BigInt(Math.max(0, Math.round(micro)));
   const acct = await ensureAccount(client, userId);
   const balance = BigInt(acct.balance);
   const clawed = want < balance ? want : balance; // clamp at zero
-  if (clawed > 0n) await drawdownGrants(client, userId, clawed);
+  if (clawed > 0n) {
+    const leftover = await drawdownGrants(client, userId, clawed);
+    reportLotDrift('clawbackTx', { userId, accountId: acct.id, requestedMicro: clawed, leftoverMicro: leftover });
+  }
   const newBalance = balance - clawed;
   await client.query('UPDATE credit_accounts SET balance=$1, updated_at=now() WHERE id=$2', [newBalance.toString(), acct.id]);
   await insertLedgerEntry(client, {
+    // amount is the signed balance delta (see sign convention above): clawback
+    // takes money OUT → negative. metadata.direction marks it explicitly.
     userId, accountId: acct.id, type: 'refund', amount: (-clawed).toString(), balanceAfter: newBalance.toString(),
     refType, refId, description,
-    metadata: JSON.stringify({ requestedMicro: Number(want), ...(metadata || {}) }),
+    metadata: JSON.stringify({ direction: 'clawback', requestedMicro: Number(want), ...(metadata || {}) }),
   });
   await mirrorLegacy(client, userId, newBalance);
   return { clawedMicro: Number(clawed), requestedMicro: Number(want), shortfallMicro: Number(want - clawed), newBalanceMicro: newBalance };
@@ -183,6 +231,61 @@ export async function clawback(pool, userId, micro, opts = {}) {
     await client.query('COMMIT');
     return r;
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+}
+
+/**
+ * Reverse a just-failed debit — money back IN to the user (a generation was charged
+ * up front, then the provider/watermark failed). Unlike addGrant this is a REVERSING
+ * entry, not a new deposit (DEF-5): it restores balance, DECREMENTS lifetime_spent
+ * (a refund un-does a spend; it is NOT lifetime_earned), re-credits a NEUTRAL paid-
+ * priority lot so drawdown order is unchanged (vs the old kind:'promo', which jumped
+ * the queue and inflated lifetime_earned), and appends a type='refund' journal row
+ * keyed to the original debit's txn via refType 'xeno.refund' — distinct from the
+ * debit's 'xeno.usage' so it never collides with the original, while uq_credit_txn_ref
+ * still makes a REPLAYED refund (same refId) a no-op. Full-fidelity restoration of the
+ * exact drawn lots needs a drawdown-detail schema (money-schema go/no-go); this interim
+ * form fixes the counter/priority/idempotency defects. On the caller's transaction.
+ *
+ * SIGN CONVENTION: amount = signed balance delta (see clawbackTx). A usage
+ * reversal puts money back IN → POSITIVE amount (balance_after = balance + amt).
+ * This is intentionally the opposite sign of clawbackTx under the same type
+ * 'refund': the sign carries direction, metadata.direction labels it.
+ */
+export async function reverseUsageTx(client, userId, micro, { refId = null, description = 'refund' } = {}) {
+  const amt = BigInt(Math.max(1, Math.round(micro)));
+  const acct = await ensureAccount(client, userId);
+  await syncGrants(client, acct, userId); // keep Σ(lots)==balance before re-crediting
+  await client.query(
+    "INSERT INTO credit_grants (user_id, account_id, amount_micro, remaining_micro, kind, priority, source_ref) VALUES ($1,$2,$3,$3,'paid',100,$4)",
+    [userId, acct.id, amt.toString(), refId ? `refund:${refId}` : 'refund'],
+  );
+  const newBalance = BigInt(acct.balance) + amt;
+  await client.query(
+    'UPDATE credit_accounts SET balance=$1, lifetime_spent=GREATEST(0, lifetime_spent-$2), updated_at=now() WHERE id=$3',
+    [newBalance.toString(), amt.toString(), acct.id],
+  );
+  await insertLedgerEntry(client, {
+    userId, accountId: acct.id, type: 'refund', amount: amt.toString(), balanceAfter: newBalance.toString(),
+    refType: 'xeno.refund', refId,
+    description,
+    metadata: JSON.stringify({ direction: 'reversal', reversal: true, refId }),
+  });
+  await mirrorLegacy(client, userId, newBalance);
+  return { reversedMicro: Number(amt), newBalanceMicro: newBalance, isFrozen: Boolean(acct.is_frozen) };
+}
+
+/** Reverse a failed debit, opening its own transaction. */
+export async function reverseUsage(pool, userId, micro, opts = {}) {
+  const client = await pool.connect();
+  let r;
+  try {
+    await client.query('BEGIN');
+    r = await reverseUsageTx(client, userId, micro, opts);
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+  // Pool re-entrancy guard: pool read AFTER release (see addGrant).
+  const held = await activeHoldsMicro(pool, userId).catch(() => 0n);
+  return { success: true, reversedMicro: r.reversedMicro, balance: balanceView(r.newBalanceMicro, held, r.isFrozen) };
 }
 
 /** Freeze / unfreeze an account (dispute response — stops further spend). */
@@ -303,32 +406,33 @@ export async function usageSummary(pool, userId, { from, to, groupBy = 'surface'
   };
 }
 
-/** Posted / pending / available balance (micro). */
+/** Posted / pending / available balance (micro) + freeze state. */
 export async function getBalanceV2(pool, userId) {
   const client = await pool.connect();
   try {
-    const acct = await client.query('SELECT balance FROM credit_accounts WHERE user_id = $1', [userId]);
+    const acct = await client.query('SELECT balance, is_frozen FROM credit_accounts WHERE user_id = $1', [userId]);
     if (acct.rows.length === 0) {
       // No wallet yet → derive from legacy so reads work before first spend.
       const legacy = await client.query('SELECT credits FROM users WHERE id = $1', [userId]);
       const micro = BigInt(Math.max(0, legacy.rows[0]?.credits ?? 0)) * BigInt(MICRO_PER_CREDIT);
-      return balanceView(micro, 0n);
+      return balanceView(micro, 0n, false);
     }
     const posted = BigInt(acct.rows[0].balance);
     const held = await activeHoldsMicro(client, userId);
-    return balanceView(posted, held);
+    return balanceView(posted, held, acct.rows[0].is_frozen);
   } finally {
     client.release();
   }
 }
 
-function balanceView(postedMicro, heldMicro) {
+function balanceView(postedMicro, heldMicro, isFrozen = false) {
   const available = postedMicro - heldMicro;
   return {
     postedMicro: Number(postedMicro),
     pendingMicro: Number(postedMicro), // posted incl. holds reservation view
     availableMicro: Number(available < 0n ? 0n : available),
     currency: 'credits',
+    is_frozen: Boolean(isFrozen),
     asOf: new Date().toISOString(),
   };
 }
@@ -340,6 +444,7 @@ function balanceView(postedMicro, heldMicro) {
 export async function recordUsageV2(pool, userId, event) {
   const costMicro = BigInt(Math.max(0, Math.round(event.costMicro ?? 0)));
   const client = await pool.connect();
+  let outcome; // { duplicate:true } | { duplicate:false, newBalance, held }
   try {
     await client.query('BEGIN');
 
@@ -350,98 +455,113 @@ export async function recordUsageV2(pool, userId, event) {
     );
     if (dupe.rows.length > 0) {
       await client.query('COMMIT');
-      const bal = await getBalanceV2(pool, userId);
-      return { accepted: true, duplicate: true, costMicro: Number(costMicro), transactionId: event.transactionId, balance: bal };
-    }
+      outcome = { duplicate: true };
+    } else {
+      const acct = await ensureAccount(client, userId);
+      if (acct.is_frozen) {
+        await client.query('ROLLBACK');
+        const err = new Error('account frozen');
+        err.code = 'ACCOUNT_FROZEN';
+        throw err;
+      }
+      await syncGrants(client, acct, userId);          // lazily migrate to lots (§4.7)
+      await assertWithinCaps(client, userId, costMicro); // spend-cap invariant (§4.6)
+      const balance = BigInt(acct.balance);
+      const held = await activeHoldsMicro(client, userId);
+      if (balance - held < costMicro) {
+        await client.query('ROLLBACK');
+        const err = new Error('insufficient credits');
+        err.code = 'INSUFFICIENT_CREDITS';
+        throw err;
+      }
 
-    const acct = await ensureAccount(client, userId);
-    if (acct.is_frozen) {
-      await client.query('ROLLBACK');
-      const err = new Error('account frozen');
-      err.code = 'ACCOUNT_FROZEN';
-      throw err;
-    }
-    await syncGrants(client, acct, userId);          // lazily migrate to lots (§4.7)
-    await assertWithinCaps(client, userId, costMicro); // spend-cap invariant (§4.6)
-    const balance = BigInt(acct.balance);
-    const held = await activeHoldsMicro(client, userId);
-    if (balance - held < costMicro) {
-      await client.query('ROLLBACK');
-      const err = new Error('insufficient credits');
-      err.code = 'INSUFFICIENT_CREDITS';
-      throw err;
-    }
+      const leftover = await drawdownGrants(client, userId, costMicro);  // draw from lots in §4.7 order
+      reportLotDrift('recordUsageV2', { userId, accountId: acct.id, requestedMicro: costMicro, leftoverMicro: leftover });
+      const newBalance = balance - costMicro;
+      await client.query(
+        'UPDATE credit_accounts SET balance = $1, lifetime_spent = lifetime_spent + $2, updated_at = now() WHERE id = $3',
+        [newBalance.toString(), costMicro.toString(), acct.id],
+      );
+      await insertLedgerEntry(client, {
+        userId, accountId: acct.id, type: 'debit', amount: (-costMicro).toString(), balanceAfter: newBalance.toString(),
+        refType: REF_TYPE, refId: event.transactionId,
+        description: `${event.surface}:${event.operation}`,
+        metadata: JSON.stringify({ surface: event.surface, operation: event.operation, model: event.model ?? null, ...event.dimensions }),
+      });
+      await insertUsageLog(client, userId, event, costMicro);
+      await mirrorLegacy(client, userId, newBalance);
 
-    await drawdownGrants(client, userId, costMicro);  // draw from lots in §4.7 order
-    const newBalance = balance - costMicro;
-    await client.query(
-      'UPDATE credit_accounts SET balance = $1, lifetime_spent = lifetime_spent + $2, updated_at = now() WHERE id = $3',
-      [newBalance.toString(), costMicro.toString(), acct.id],
-    );
-    await insertLedgerEntry(client, {
-      userId, accountId: acct.id, type: 'debit', amount: (-costMicro).toString(), balanceAfter: newBalance.toString(),
-      refType: REF_TYPE, refId: event.transactionId,
-      description: `${event.surface}:${event.operation}`,
-      metadata: JSON.stringify({ surface: event.surface, operation: event.operation, model: event.model ?? null, ...event.dimensions }),
-    });
-    await insertUsageLog(client, userId, event, costMicro);
-    await mirrorLegacy(client, userId, newBalance);
-
-    await client.query('COMMIT');
-    return {
-      accepted: true,
-      duplicate: false,
-      costMicro: Number(costMicro),
-      transactionId: event.transactionId,
-      balance: balanceView(newBalance, held),
-    };
+      await client.query('COMMIT');
+      outcome = { duplicate: false, newBalance, held };
+    }
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
   } finally {
     client.release();
   }
+  if (outcome.duplicate) {
+    // Pool re-entrancy guard: getBalanceV2 checks out its OWN connection, so it
+    // must run only after client.release() (above) — never while a client is held.
+    const bal = await getBalanceV2(pool, userId);
+    return { accepted: true, duplicate: true, costMicro: Number(costMicro), transactionId: event.transactionId, balance: bal };
+  }
+  return {
+    accepted: true,
+    duplicate: false,
+    costMicro: Number(costMicro),
+    transactionId: event.transactionId,
+    balance: balanceView(outcome.newBalance, outcome.held),
+  };
 }
 
 /** Reserve credits (phase 1). Idempotent on holdId. Throws INSUFFICIENT_CREDITS. */
 export async function holdV2(pool, userId, req) {
   const amountMicro = BigInt(Math.max(1, Math.round(req.amountMicro)));
   const client = await pool.connect();
+  let outcome; // { existingRow } | { row, balance, held, isFrozen }
   try {
     await client.query('BEGIN');
     const existing = await client.query('SELECT * FROM credit_holds WHERE user_id = $1 AND hold_id = $2', [userId, req.holdId]);
     if (existing.rows.length > 0) {
       await client.query('COMMIT');
-      return holdView(existing.rows[0], await getBalanceV2(pool, userId));
+      outcome = { existingRow: existing.rows[0] };
+    } else {
+      const acct = await ensureAccount(client, userId);
+      const balance = BigInt(acct.balance);
+      const held = await activeHoldsMicro(client, userId);
+      if (acct.is_frozen || balance - held < amountMicro) {
+        await client.query('ROLLBACK');
+        const err = new Error('insufficient credits');
+        err.code = acct.is_frozen ? 'ACCOUNT_FROZEN' : 'INSUFFICIENT_CREDITS';
+        throw err;
+      }
+      const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
+      const row = await client.query(
+        `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [userId, acct.id, req.holdId, req.surface, req.operation, amountMicro.toString(), expiresAt.toISOString()],
+      );
+      await client.query('COMMIT');
+      outcome = { row: row.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen) };
     }
-    const acct = await ensureAccount(client, userId);
-    const balance = BigInt(acct.balance);
-    const held = await activeHoldsMicro(client, userId);
-    if (acct.is_frozen || balance - held < amountMicro) {
-      await client.query('ROLLBACK');
-      const err = new Error('insufficient credits');
-      err.code = acct.is_frozen ? 'ACCOUNT_FROZEN' : 'INSUFFICIENT_CREDITS';
-      throw err;
-    }
-    const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
-    const row = await client.query(
-      `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [userId, acct.id, req.holdId, req.surface, req.operation, amountMicro.toString(), expiresAt.toISOString()],
-    );
-    await client.query('COMMIT');
-    return holdView(row.rows[0], balanceView(balance, held + amountMicro));
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
   } finally {
     client.release();
   }
+  if (outcome.existingRow) {
+    // Pool re-entrancy guard: getBalanceV2 needs its own connection → AFTER release.
+    return holdView(outcome.existingRow, await getBalanceV2(pool, userId));
+  }
+  return holdView(outcome.row, balanceView(outcome.balance, outcome.held + amountMicro, outcome.isFrozen));
 }
 
 /** Settle a hold for the actual cost (phase 2). Posting < held restores the rest. */
 export async function settleHoldV2(pool, userId, holdId, actualCostMicro) {
   const client = await pool.connect();
+  let finalRow;
   try {
     await client.query('BEGIN');
     const h = await client.query("SELECT * FROM credit_holds WHERE user_id=$1 AND hold_id=$2 FOR UPDATE", [userId, holdId]);
@@ -449,54 +569,82 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro) {
     const hold = h.rows[0];
     if (hold.state !== 'held') { // idempotent: already settled/voided
       await client.query('COMMIT');
-      return holdView(hold, await getBalanceV2(pool, userId));
+      finalRow = hold;
+    } else {
+      const requested = BigInt(Math.min(Math.max(0, Math.round(actualCostMicro)), Number(hold.amount_micro)));
+      const acct = await ensureAccount(client, userId);
+      await syncGrants(client, acct, userId);
+      // Never drive the balance negative: a refund/dispute clawback can reduce the posted
+      // balance below this hold's reservation while the operation was in flight. Charge only
+      // what's still available (the rest was already returned to the customer).
+      const posted = BigInt(acct.balance);
+      const avail = posted < 0n ? 0n : posted;
+      const actual = requested < avail ? requested : avail;
+      if (actual > 0n) {
+        const leftover = await drawdownGrants(client, userId, actual); // draw from lots (§4.7)
+        reportLotDrift('settleHoldV2', { userId, accountId: acct.id, requestedMicro: actual, leftoverMicro: leftover });
+      }
+      const newBalance = posted - actual;
+      await client.query('UPDATE credit_accounts SET balance=$1, lifetime_spent=lifetime_spent+$2, updated_at=now() WHERE id=$3',
+        [newBalance.toString(), actual.toString(), acct.id]);
+      await client.query("UPDATE credit_holds SET state='settled', settled_micro=$1, updated_at=now() WHERE id=$2",
+        [actual.toString(), hold.id]);
+      await insertLedgerEntry(client, {
+        userId, accountId: acct.id, type: 'debit', amount: (-actual).toString(), balanceAfter: newBalance.toString(),
+        refType: 'xeno.hold', refId: holdId,
+        description: `${hold.surface}:${hold.operation}`,
+        metadata: JSON.stringify({ surface: hold.surface, operation: hold.operation, holdId }),
+      });
+      await insertUsageLog(client, userId, { surface: hold.surface, operation: hold.operation, transactionId: holdId }, actual);
+      await mirrorLegacy(client, userId, newBalance);
+      await client.query('COMMIT');
+      const updated = await client.query('SELECT * FROM credit_holds WHERE id=$1', [hold.id]);
+      finalRow = updated.rows[0];
     }
-    const requested = BigInt(Math.min(Math.max(0, Math.round(actualCostMicro)), Number(hold.amount_micro)));
-    const acct = await ensureAccount(client, userId);
-    await syncGrants(client, acct, userId);
-    // Never drive the balance negative: a refund/dispute clawback can reduce the posted
-    // balance below this hold's reservation while the operation was in flight. Charge only
-    // what's still available (the rest was already returned to the customer).
-    const posted = BigInt(acct.balance);
-    const avail = posted < 0n ? 0n : posted;
-    const actual = requested < avail ? requested : avail;
-    if (actual > 0n) await drawdownGrants(client, userId, actual); // draw from lots (§4.7)
-    const newBalance = posted - actual;
-    await client.query('UPDATE credit_accounts SET balance=$1, lifetime_spent=lifetime_spent+$2, updated_at=now() WHERE id=$3',
-      [newBalance.toString(), actual.toString(), acct.id]);
-    await client.query("UPDATE credit_holds SET state='settled', settled_micro=$1, updated_at=now() WHERE id=$2",
-      [actual.toString(), hold.id]);
-    await insertLedgerEntry(client, {
-      userId, accountId: acct.id, type: 'debit', amount: (-actual).toString(), balanceAfter: newBalance.toString(),
-      refType: 'xeno.hold', refId: holdId,
-      description: `${hold.surface}:${hold.operation}`,
-      metadata: JSON.stringify({ surface: hold.surface, operation: hold.operation, holdId }),
-    });
-    await insertUsageLog(client, userId, { surface: hold.surface, operation: hold.operation, transactionId: holdId }, actual);
-    await mirrorLegacy(client, userId, newBalance);
-    await client.query('COMMIT');
-    const updated = await client.query('SELECT * FROM credit_holds WHERE id=$1', [hold.id]);
-    return holdView(updated.rows[0], await getBalanceV2(pool, userId));
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
   } finally {
     client.release();
   }
+  // Pool re-entrancy guard: getBalanceV2 checks out its own connection → only
+  // after client.release(), or the pool deadlocks at max concurrency.
+  return holdView(finalRow, await getBalanceV2(pool, userId));
 }
 
 /** Release a hold without charging. Idempotent. */
 export async function voidHoldV2(pool, userId, holdId) {
-  const client = await pool.connect();
-  try {
-    await client.query("UPDATE credit_holds SET state='voided', updated_at=now() WHERE user_id=$1 AND hold_id=$2 AND state='held'",
-      [userId, holdId]);
-    const row = await client.query('SELECT * FROM credit_holds WHERE user_id=$1 AND hold_id=$2', [userId, holdId]);
-    if (row.rows.length === 0) { const e = new Error('hold not found'); e.code='NOT_FOUND'; throw e; }
-    return holdView(row.rows[0], await getBalanceV2(pool, userId));
-  } finally {
-    client.release();
-  }
+  // No transaction needed (single idempotent UPDATE + read) — run directly on the
+  // pool so we never hold a client while getBalanceV2 checks out a second one
+  // (pool re-entrancy guard).
+  await pool.query("UPDATE credit_holds SET state='voided', updated_at=now() WHERE user_id=$1 AND hold_id=$2 AND state='held'",
+    [userId, holdId]);
+  const row = await pool.query('SELECT * FROM credit_holds WHERE user_id=$1 AND hold_id=$2', [userId, holdId]);
+  if (row.rows.length === 0) { const e = new Error('hold not found'); e.code='NOT_FOUND'; throw e; }
+  return holdView(row.rows[0], await getBalanceV2(pool, userId));
+}
+
+/**
+ * Void holds whose expiry has passed but were never settled/voided (phantom holds).
+ * getBalanceV2/holdV2 already IGNORE expired holds (activeHoldsMicro filters
+ * expires_at > now), so the available-balance math self-heals — but without this job
+ * the rows accumulate forever in state='held'. This bounds the table and makes the
+ * state truthful. Idempotent; FOR UPDATE SKIP LOCKED so it never contends with a live
+ * settle. Returns the number of holds voided. (Blocker #7 INFRA-7.3.)
+ */
+export async function sweepExpiredHolds(pool, { batchLimit = 1000 } = {}) {
+  const res = await pool.query(
+    `UPDATE credit_holds SET state='voided', updated_at=now()
+       WHERE id IN (
+         SELECT id FROM credit_holds
+           WHERE state='held' AND expires_at <= now()
+           ORDER BY expires_at ASC
+           LIMIT $1
+           FOR UPDATE SKIP LOCKED
+       )`,
+    [batchLimit],
+  );
+  return res.rowCount;
 }
 
 async function insertUsageLog(client, userId, event, costMicro) {

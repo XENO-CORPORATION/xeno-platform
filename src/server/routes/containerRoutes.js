@@ -611,14 +611,15 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/containers/:id/config - Update container configuration
-router.put('/:id/config', async (req, res) => {
+router.put('/:id/config', authMiddleware, async (req, res) => {
   try {
     const { id: containerId } = req.params;
     const { newConfig, applyImmediately = false } = req.body;
 
-    // Get current container
-    const containerQuery = 'SELECT * FROM containers WHERE id = $1';
-    const containerResult = await req.db.query(containerQuery, [containerId]);
+    // Ownership-scoped: only the container's owner may reconfigure it (this route
+    // reprices billing_subscriptions — an unscoped lookup let anyone reprice any user).
+    const containerQuery = 'SELECT * FROM containers WHERE id = $1 AND user_id = $2';
+    const containerResult = await req.db.query(containerQuery, [containerId, req.user.id]);
     
     if (containerResult.rows.length === 0) {
       return res.status(404).json({
@@ -725,13 +726,13 @@ router.put('/:id/config', async (req, res) => {
 });
 
 // POST /api/containers/:id/start - Start container
-router.post('/:id/start', async (req, res) => {
+router.post('/:id/start', authMiddleware, async (req, res) => {
   try {
     const { id: containerId } = req.params;
 
-    // Get container info
-    const containerQuery = 'SELECT * FROM containers WHERE id = $1';
-    const containerResult = await req.db.query(containerQuery, [containerId]);
+    // Get container info (ownership-scoped — only the owner may start their container)
+    const containerQuery = 'SELECT * FROM containers WHERE id = $1 AND user_id = $2';
+    const containerResult = await req.db.query(containerQuery, [containerId, req.user.id]);
     
     if (containerResult.rows.length === 0) {
       return res.status(404).json({
@@ -780,13 +781,13 @@ router.post('/:id/start', async (req, res) => {
 });
 
 // POST /api/containers/:id/stop - Stop container
-router.post('/:id/stop', async (req, res) => {
+router.post('/:id/stop', authMiddleware, async (req, res) => {
   try {
     const { id: containerId } = req.params;
 
-    // Get container info
-    const containerQuery = 'SELECT * FROM containers WHERE id = $1';
-    const containerResult = await req.db.query(containerQuery, [containerId]);
+    // Get container info (ownership-scoped — only the owner may stop their container)
+    const containerQuery = 'SELECT * FROM containers WHERE id = $1 AND user_id = $2';
+    const containerResult = await req.db.query(containerQuery, [containerId, req.user.id]);
     
     if (containerResult.rows.length === 0) {
       return res.status(404).json({
@@ -1084,13 +1085,13 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // GET /api/containers/:id/stats - Get container statistics
-router.get('/:id/stats', async (req, res) => {
+router.get('/:id/stats', authMiddleware, async (req, res) => {
   try {
     const { id: containerId } = req.params;
 
-    // Get container info
-    const containerQuery = 'SELECT * FROM containers WHERE id = $1';
-    const containerResult = await req.db.query(containerQuery, [containerId]);
+    // Get container info (ownership-scoped — only the owner may read their container stats)
+    const containerQuery = 'SELECT * FROM containers WHERE id = $1 AND user_id = $2';
+    const containerResult = await req.db.query(containerQuery, [containerId, req.user.id]);
     
     if (containerResult.rows.length === 0) {
       return res.status(404).json({

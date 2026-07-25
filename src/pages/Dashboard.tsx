@@ -221,8 +221,9 @@ const Dashboard: React.FC = () => {
                     {/* Playground routes - Chat with LLM */}
                     <Route path="/playground/chat/llm" element={<MultiChatContainer />} />
                     <Route path="playground/chat/llm" element={<MultiChatContainer />} />
-                    <Route path="/playground/chat/voice" element={<ChatWithVoice />} />
-                    <Route path="playground/chat/voice" element={<ChatWithVoice />} />
+                    {/* XENO: voice mode routes disabled — voice de-scoped (no direct provider calls) */}
+                    {/* <Route path="/playground/chat/voice" element={<ChatWithVoice />} /> */}
+                    {/* <Route path="playground/chat/voice" element={<ChatWithVoice />} /> */}
                     
                     {/* Playground routes - Search (OLD - TO BE REMOVED/REPLACED) */}
                     {/* <Route path="/playground/search" element={<SearchInterface />} /> */}

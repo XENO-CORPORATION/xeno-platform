@@ -41,17 +41,25 @@ export function isEnabled() {
 }
 
 // ── Catalog ─────────────────────────────────────────────────────────────────
-// Each item resolves its Stripe Price id from an env var. An item with no
-// configured price is returned as `available: false` (the UI can hide/disable
-// it), so partial configuration never 500s.
+// SINGLE SOURCE OF TRUTH for prices. The frontend fetches this (via /api/billing/
+// config) and renders from it — no hardcoded price literals — so the ADVERTISED price
+// always equals the CHARGED price. `price` is the display amount in `CURRENCY`; the
+// authoritative charge is the Stripe Price resolved from `priceEnv` (which MUST be
+// created at the same amount/currency in the Stripe dashboard). An item with no
+// configured price is returned `available: false` so partial config never 500s.
+// Currency is EUR (EU entity + Impressum + Stripe VAT); LOCKED tiers: Free €0 /
+// Pro €24 / Team €40-per-seat / Enterprise custom. Credit packs €10/€50/€100.
+const CURRENCY = (process.env.BILLING_CURRENCY || 'eur').toLowerCase();
 const CATALOG = [
-  { id: 'credits_small',  kind: 'credits',      label: 'Starter',  credits: 1000,  usd: 10,  priceEnv: 'STRIPE_PRICE_CREDITS_SMALL' },
-  { id: 'credits_medium', kind: 'credits',      label: 'Plus',     credits: 5500,  usd: 50,  priceEnv: 'STRIPE_PRICE_CREDITS_MEDIUM', badge: 'Best value' },
-  { id: 'credits_large',  kind: 'credits',      label: 'Pro pack', credits: 12000, usd: 100, priceEnv: 'STRIPE_PRICE_CREDITS_LARGE' },
-  { id: 'pro_monthly',    kind: 'subscription', label: 'Pro (Founding)', plan: 'pro',  credits: 0, usd: 24, interval: 'month', priceEnv: 'STRIPE_PRICE_PRO_MONTHLY' },
-  { id: 'team_monthly',   kind: 'subscription', label: 'Team',     plan: 'team', credits: 0, usd: 60,  interval: 'month', priceEnv: 'STRIPE_PRICE_TEAM_MONTHLY' },
-  // Per-seat Team (LOCKED strategy: ~€40/seat/mo). Stripe quantity = active seats.
-  { id: 'team_seat',      kind: 'subscription', label: 'Team (per seat)', plan: 'team', credits: 0, usd: 40, interval: 'month', perSeat: true, priceEnv: 'STRIPE_PRICE_TEAM_SEAT_MONTHLY' },
+  { id: 'credits_small',  kind: 'credits',      label: 'Starter',  credits: 1000,  price: 10,  priceEnv: 'STRIPE_PRICE_CREDITS_SMALL' },
+  { id: 'credits_medium', kind: 'credits',      label: 'Plus',     credits: 5500,  price: 50,  priceEnv: 'STRIPE_PRICE_CREDITS_MEDIUM', badge: 'Best value' },
+  { id: 'credits_large',  kind: 'credits',      label: 'Pro pack', credits: 12000, price: 100, priceEnv: 'STRIPE_PRICE_CREDITS_LARGE' },
+  { id: 'pro_monthly',    kind: 'subscription', label: 'Pro',      plan: 'pro',  credits: 0, price: 24, interval: 'month', priceEnv: 'STRIPE_PRICE_PRO_MONTHLY' },
+  // Team is PER-SEAT (LOCKED strategy: €40/seat/mo). Stripe quantity = active seats.
+  { id: 'team_seat',      kind: 'subscription', label: 'Team', plan: 'team', credits: 0, price: 40, interval: 'month', perSeat: true, priceEnv: 'STRIPE_PRICE_TEAM_SEAT_MONTHLY' },
+  // Legacy flat-rate Team — kept readable for any pre-existing subscription, NOT offered
+  // publicly (unconfigured priceEnv → available:false; the UI points Team → team_seat).
+  { id: 'team_monthly',   kind: 'subscription', label: 'Team (legacy flat)', plan: 'team', credits: 0, price: 60, interval: 'month', priceEnv: 'STRIPE_PRICE_TEAM_MONTHLY' },
 ];
 
 function resolveItem(raw) {
@@ -59,28 +67,78 @@ function resolveItem(raw) {
   return { ...raw, priceId, available: Boolean(priceId) };
 }
 
-/** Public catalog (never leaks price env NAMES, only ids/labels/availability). */
+/** Public catalog (never leaks price env NAMES, only ids/labels/availability). The `price`
+ *  here is the STATIC fallback; the live path (getPublicCatalog) overlays the real Stripe
+ *  amount so advertised == charged. */
 export function getCatalog() {
-  return CATALOG.map(resolveItem).map(({ priceEnv, ...pub }) => pub);
+  return CATALOG.map(resolveItem).map(({ priceEnv, ...pub }) => ({ ...pub, currency: CURRENCY }));
 }
 
-export function getConfig() {
-  return { enabled: isEnabled(), publishableKey: PUBLISHABLE, catalog: getCatalog() };
+// Live-price cache: priceId → { amount, currency, at }. TTL-bounded so the public /config
+// endpoint does not call Stripe on every render. Overlaying the real Stripe unit_amount is
+// what actually GUARANTEES advertised == charged — the static CATALOG `price` is only a
+// fallback (used when Stripe is off, the price is unconfigured, or the lookup errors).
+const _priceCache = new Map();
+const PRICE_TTL_MS = 5 * 60 * 1000;
+async function livePriceFor(priceId) {
+  if (!stripe || !priceId) return null;
+  const hit = _priceCache.get(priceId);
+  if (hit && (Date.now() - hit.at) < PRICE_TTL_MS) return hit;
+  try {
+    const p = await stripe.prices.retrieve(priceId);
+    const rec = { amount: p.unit_amount != null ? p.unit_amount / 100 : null, currency: (p.currency || CURRENCY).toLowerCase(), at: Date.now() };
+    _priceCache.set(priceId, rec);
+    return rec;
+  } catch { return null; }
 }
 
-// ── Plans & entitlements ─────────────────────────────────────────────────────
+/** Public catalog with LIVE Stripe prices overlaid onto the static fallback. */
+export async function getPublicCatalog() {
+  return Promise.all(CATALOG.map(resolveItem).map(async ({ priceEnv, ...pub }) => {
+    if (stripe && pub.priceId) {
+      const live = await livePriceFor(pub.priceId);
+      if (live && live.amount != null) return { ...pub, price: live.amount, currency: live.currency };
+    }
+    return { ...pub, currency: CURRENCY };
+  }));
+}
+
+export async function getConfig() {
+  return { enabled: isEnabled(), publishableKey: PUBLISHABLE, currency: CURRENCY, catalog: await getPublicCatalog() };
+}
+
+// ── Plans & entitlements (v2) ────────────────────────────────────────────────
 // Subscriptions gate FEATURES, not credits (see XENO-MONETIZATION-AND-ACCOUNT.md).
-// One entitlement source of truth, read by every product. inHouseDailyLimit
-// null = unlimited. Tune the specific limits later; the shape is the contract.
+// v2 model: the free/paid boundary is ENFORCEABILITY, not cosmetics. Free = the
+// standalone local Tool (clean output, NO watermark, full-res LOCAL export, BYOK +
+// in-house xeno-rt fair-use). Paid (Pro/Team) = the connected server-backed Platform
+// (cloud sync, cross-app, agents, collaboration, managed-premium priority, teams).
+// Enforcement is 100% SERVER-SIDE. One entitlement source of truth, read by every
+// product. inHouseDailyLimit null = unlimited. `maxResolution` now ONLY gates
+// SERVER-SIDE managed generation (capDimensions in entitlementGate) — it is NOT a
+// local-export gate.
+// deprecated (v2): watermarking retired; always false — never gate on this.
 const PLAN_ENTITLEMENTS = {
-  free: { plan: 'free', watermark: true,  commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0 },
-  pro:  { plan: 'pro',  watermark: false, commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0 },
-  team: { plan: 'team', watermark: false, commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5 },
+  free: { plan: 'free', commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0, cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
+  pro:  { plan: 'pro',  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0, cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
+  team: { plan: 'team', commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+  // Staff / internal-service accounts (prod has real users with plan='internal').
+  // NOT sellable — never in the CATALOG. All platform features enabled so internal
+  // tooling and service accounts are never gated as free-tier. teamSeats 0: an
+  // internal account is not itself a team container.
+  internal: { plan: 'internal', commercial: true, maxResolution: '4k', priority: true, inHouseDailyLimit: null, privateProjects: true, teamSeats: 0, cloudSync: true, crossApp: true, agents: true, collaboration: true, watermark: false },
 };
 
-/** Feature entitlements for a plan (defaults to free). */
+// Legacy/stray plan names seen in prod that must NOT silently fall back to free.
+// ultra → pro is a PROPOSED mapping (legacy 'ultra' subscribers get pro
+// entitlements) — pending user ratification; adjust here if a different target
+// tier is decided.
+const PLAN_ALIASES = { ultra: 'pro' };
+
+/** Feature entitlements for a plan (aliases resolved; defaults to free). */
 export function entitlementsFor(plan) {
-  return PLAN_ENTITLEMENTS[plan] || PLAN_ENTITLEMENTS.free;
+  const resolved = PLAN_ALIASES[plan] || plan;
+  return PLAN_ENTITLEMENTS[resolved] || PLAN_ENTITLEMENTS.free;
 }
 
 const planForItemId = (itemId) => CATALOG.find((i) => i.id === itemId)?.plan || null;
@@ -207,6 +265,25 @@ async function userIdForCustomer(pool, customerId) {
 }
 
 // ── Checkout ─────────────────────────────────────────────────────────────────
+// EU VAT: auto-calculate + collect tax at checkout. Requires Stripe Tax to be enabled
+// in the dashboard (with tax registrations); gated so an un-provisioned account can still
+// take payments. Set
+// STRIPE_AUTOMATIC_TAX to enable. billing address + tax-id collection are required for
+// correct B2C/B2B (reverse-charge) VAT.
+// OPT-IN (default OFF): Stripe REJECTS automatic_tax.enabled=true unless Stripe Tax is fully
+// provisioned (origin address + registrations), so defaulting ON would break 100% of checkout
+// the moment live keys are added. Turn on AFTER configuring Stripe Tax. (Go-live checklist item.)
+const TAX_ENABLED = process.env.STRIPE_AUTOMATIC_TAX === 'true';
+function taxCheckoutFields() {
+  if (!TAX_ENABLED) return {};
+  return {
+    automatic_tax: { enabled: true },
+    billing_address_collection: 'required',
+    tax_id_collection: { enabled: true },
+    customer_update: { address: 'auto', name: 'auto' },
+  };
+}
+
 export async function createCheckout(pool, user, itemId, { origin }) {
   const item = CATALOG.map(resolveItem).find((i) => i.id === itemId);
   if (!item) { const e = new Error('unknown item'); e.status = 400; throw e; }
@@ -225,6 +302,7 @@ export async function createCheckout(pool, user, itemId, { origin }) {
     success_url: successUrl,
     cancel_url: cancelUrl,
     allow_promotion_codes: true,
+    ...taxCheckoutFields(),
     // Metadata rides on the session (and, for one-time, is what the webhook reads
     // to know how many credits to grant).
     metadata: { xenoUserId: String(user.id), itemId: item.id, credits: String(item.credits), kind: item.kind },
@@ -251,6 +329,7 @@ export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, sea
     success_url: `${base}/overview/billing?billing=success&item=team_seat`,
     cancel_url: `${base}/overview/billing?billing=cancel`,
     allow_promotion_codes: true,
+    ...taxCheckoutFields(),
     subscription_data: { metadata: { xenoWorkspaceId: String(workspaceId), seats: String(qty) } },
     metadata: { xenoUserId: String(user.id), itemId: 'team_seat', kind: 'subscription', xenoWorkspaceId: String(workspaceId), seats: String(qty) },
   });

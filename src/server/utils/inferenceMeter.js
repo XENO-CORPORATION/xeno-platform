@@ -36,6 +36,22 @@ async function withRetry(fn, { attempts = 3, baseMs = 50 } = {}) {
   throw lastErr;
 }
 
+/**
+ * Meter-failure observability. A swallowed settle/void failure silently forfeits
+ * revenue (the hold expires uncharged) or strands a reservation — so every
+ * best-effort metering failure is (a) counted on a monotonic in-process counter
+ * and (b) logged with the grep-able `[meter-failure]` tag + full money context.
+ * Semantics stay NON-FATAL: the user's completion is never failed by metering.
+ */
+export const meterFailureCounters = { settle: 0, void: 0 };
+function reportMeterFailure(kind, err, ctx) {
+  meterFailureCounters[kind] = (meterFailureCounters[kind] || 0) + 1;
+  console.error(
+    `[meter-failure] ${kind} failed (count=${meterFailureCounters[kind]}):`,
+    { ...ctx, error: String(err?.message || err) },
+  );
+}
+
 /** Map a ledger error code to an HTTP-shaped error the route can return directly. */
 function meteringError(code) {
   if (code === 'INSUFFICIENT_CREDITS') {
@@ -91,7 +107,9 @@ export async function meterPremiumChat(db, userId, opts) {
   try {
     result = await run();
   } catch (e) {
-    await voidHoldV2(db, userId, holdId).catch(() => {});
+    await voidHoldV2(db, userId, holdId).catch((ve) => reportMeterFailure('void', ve, {
+      userId, holdId, surface: 'ai_chat', operation: 'chat.completion', heldMicro: estimateMicro,
+    }));
     throw e;
   }
 
@@ -114,8 +132,13 @@ export async function meterPremiumChat(db, userId, opts) {
   try {
     const settled = await settleHoldV2(db, userId, holdId, actualMicro);
     costMicro = settled?.settledMicro ?? costMicro;
-  } catch {
-    // leave hold to expire; do not fail the response
+  } catch (e) {
+    // leave hold to expire; do not fail the response — but NEVER silently: an
+    // unsettled hold is forfeited revenue.
+    reportMeterFailure('settle', e, {
+      userId, holdId, surface: 'ai_chat', operation: 'chat.completion',
+      heldMicro: estimateMicro, actualMicro, model,
+    });
   }
 
   return {
@@ -124,6 +147,123 @@ export async function meterPremiumChat(db, userId, opts) {
     creditsCharged: costMicro / MICRO_PER_CREDIT,
     holdId,
     meteredTokens: { inputTokens, outputTokens, provider, model },
+  };
+}
+
+/**
+ * Meter a FLAT-cost media generation (image / edit / video / audio).
+ *
+ * Same two-phase discipline as meterPremiumChat, but the unit cost is KNOWN up
+ * front (a per-action credit price, not token usage). The ONE difference from chat:
+ * reserve `unitCost × count` (a batch of N images costs N× the unit price) and
+ * SETTLE the number actually produced — if the provider under-delivers, the rest
+ * of the hold is released.
+ *
+ * This closes the media charging holes in one place:
+ *   - cost×n      — the batch is reserved and settled by produced count (not flat ×1);
+ *   - idempotency — a deterministic holdId from requestId means a double-click / retry
+ *                   reuses the same hold rather than charging twice;
+ *   - clean fail  — voidHoldV2 writes NO journal debit (vs deduct-then-refund, which
+ *                   mints a promo grant, inflates lifetime_earned, and is best-effort).
+ *
+ * @param db pg pool (req.db)
+ * @param userId uuid (req.user.id)
+ * @param opts {
+ *   surface, operation, model, provider,
+ *   requestId,                        // idempotency seed (body.requestId | x-request-id | uuid)
+ *   unitCostMicro,                    // per-output cost in µcr = getCreditCost(...) * MICRO_PER_CREDIT
+ *   count = 1,                        // outputs requested (image batch n)
+ *   run: async () => providerResult   // MUST resolve to { data: [...] } (or throw)
+ * }
+ * @returns { result, costMicro, creditsCharged, actualCount, holdId }
+ * @throws  err with err.http (402/403/500) on metering failure; provider errors bubble
+ *          up AFTER the hold is voided (so the route reports them without a charge).
+ */
+export async function meterMediaGeneration(db, userId, opts) {
+  const {
+    surface, operation, model, provider,
+    requestId, unitCostMicro, count = 1, run,
+  } = opts;
+
+  const reqCount = Math.max(1, Math.floor(Number(count) || 1));
+  const unitMicro = Math.max(0, Math.round(Number(unitCostMicro) || 0));
+  const holdId = deterministicTxnId(userId, requestId, surface, operation, model).slice(0, 64);
+  // Reserve the WHOLE batch worst-case (unit × count) BEFORE spending on the provider.
+  const totalMicro = Math.max(1, unitMicro * reqCount);
+
+  // Idempotency guard — the requestId (→ holdId) is a SINGLE-USE key. If a hold with this
+  // id already exists in ANY state (held / settled / voided), this request was already
+  // handled: re-running the provider would generate AGAIN while settleHoldV2 no-ops on the
+  // terminal hold → free, unbounded generation on a reused requestId (and via the void path,
+  // a free success after a first failure). So a reused key is rejected (409); a genuinely
+  // new generation needs a new requestId. (holdV2's own idempotency only prevents a second
+  // RESERVE — it would still let run() execute again — which is exactly the hole.)
+  const prior = await db.query(
+    'SELECT 1 FROM credit_holds WHERE user_id = $1 AND hold_id = $2 LIMIT 1',
+    [userId, holdId],
+  );
+  if (prior.rows.length > 0) {
+    const e = new Error('Duplicate request'); e.code = 'DUPLICATE_REQUEST'; e.http = 409; throw e;
+  }
+
+  // Phase 1 — reserve. INSUFFICIENT_CREDITS → 402 / ACCOUNT_FROZEN → 403 before we spend a
+  // cent on the provider. A concurrent same-key double-click that races past the guard above
+  // collides on the UNIQUE(user_id, hold_id) constraint here → one wins, the other errors
+  // (500), so the provider is never double-run for a single key.
+  try {
+    await holdV2(db, userId, {
+      holdId,
+      amountMicro: totalMicro,
+      surface,
+      operation,
+      expiresInSeconds: 900,
+    });
+  } catch (e) {
+    throw meteringError(e.code);
+  }
+
+  // Run the provider (this closure also applies any watermark, so a watermark
+  // failure is treated as a generation failure). Any throw → void the hold and bubble.
+  let result;
+  try {
+    result = await run();
+  } catch (e) {
+    await voidHoldV2(db, userId, holdId).catch((ve) => reportMeterFailure('void', ve, {
+      userId, holdId, surface, operation, heldMicro: totalMicro,
+    }));
+    throw e;
+  }
+
+  // Phase 2 — settle for the number of outputs ACTUALLY returned (clamped to the reserved
+  // count). Under-delivery releases the remainder. A non-array / missing payload means
+  // nothing usable was delivered (every media route reads result.data as an array) → count 0
+  // and charge nothing, rather than billing the full reserved count for zero outputs.
+  const produced = Array.isArray(result?.data) ? result.data.length : 0;
+  const actualCount = Math.min(Math.max(0, produced), reqCount);
+  const actualMicro = unitMicro * actualCount;
+
+  let costMicro = actualMicro;
+  try {
+    // Retry the settle across a transient ledger/DB blip so a single failure does not strand
+    // the hold. settleHoldV2 is idempotent (no-ops once the hold is not 'held'), so the retry
+    // can never double-charge.
+    const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro));
+    costMicro = settled?.settledMicro ?? costMicro;
+  } catch (e) {
+    // all retries failed — leave the hold to expire rather than fail a completed generation
+    // (getBalanceV2/holdV2 ignore expired holds, so a stranded hold self-heals at expiry).
+    // Loud, never silent: an unsettled settle = forfeited revenue.
+    reportMeterFailure('settle', e, {
+      userId, holdId, surface, operation, heldMicro: totalMicro, actualMicro, actualCount, model,
+    });
+  }
+
+  return {
+    result,
+    costMicro,
+    creditsCharged: costMicro / MICRO_PER_CREDIT,
+    actualCount,
+    holdId,
   };
 }
 
@@ -198,9 +338,14 @@ export async function meterPremiumChatStream(db, userId, opts) {
     try {
       const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro));
       costMicro = settled?.settledMicro ?? costMicro;
-    } catch {
+    } catch (e) {
       // All retries failed — leave the hold to expire (short 120s stream expiry)
       // rather than failing the user's stream. `done` is already set, so this is final.
+      // Loud, never silent: an unsettled stream settle = forfeited revenue.
+      reportMeterFailure('settle', e, {
+        userId, holdId, surface: 'ai_chat', operation: 'chat.completion.stream',
+        heldMicro: estimateMicro, actualMicro, model,
+      });
     }
     return {
       costMicro,
@@ -216,7 +361,9 @@ export async function meterPremiumChatStream(db, userId, opts) {
   async function voidHold() {
     if (done) return;
     done = true;
-    await withRetry(() => voidHoldV2(db, userId, holdId)).catch(() => {});
+    await withRetry(() => voidHoldV2(db, userId, holdId)).catch((e) => reportMeterFailure('void', e, {
+      userId, holdId, surface: 'ai_chat', operation: 'chat.completion.stream', heldMicro: estimateMicro,
+    }));
   }
 
   return {

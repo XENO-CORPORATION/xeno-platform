@@ -28,6 +28,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // Frontend role vocabulary (owner/admin/member/viewer) <-> ReBAC relation.
 const RELATIONS = ['owner', 'admin', 'editor', 'viewer'];
+// Roles an INVITE may grant. 'owner' is deliberately excluded: ownership moves ONLY
+// through the owner-transfer flow — otherwise any admin could mint a co-owner
+// (privilege escalation past the real owner). Enforced on BOTH create and accept.
+const INVITABLE_RELATIONS = new Set(['admin', 'editor', 'viewer']);
 const toRelation = (role) => {
   const r = String(role || '').toLowerCase();
   if (r === 'member') return 'editor';
@@ -353,6 +357,9 @@ router.post('/:id/invites', wrap(async (req, res) => {
     return res.status(400).json({ success: false, error: 'A valid email is required' });
   }
   const role = toRelation(req.body?.role);
+  if (!INVITABLE_RELATIONS.has(role)) {
+    return res.status(403).json({ success: false, error: 'Invites cannot grant the owner role. Use owner-transfer instead.' });
+  }
   const roles = await memberRoles(req.db, wsId);
   const existingUser = (await req.db.query(
     'SELECT id, display_name FROM users WHERE lower(email) = $1 LIMIT 1', [email],
@@ -588,7 +595,13 @@ inviteRouter.post('/:inviteId/accept', wrap(async (req, res) => {
   if (acceptRoles.size >= acceptSeats.limit && !acceptRoles.has(req.user.id)) {
     return res.status(402).json({ success: false, error: `This workspace has reached its seat limit (${acceptSeats.limit}).` });
   }
-  await writeTuples(req.db, { writes: [{ object: WS(inv.workspace_id), relation: toRelation(inv.role), subject: USER(req.user.id) }] });
+  // Defense in depth: even if an 'owner' invite row exists (legacy or direct DB
+  // insert), accepting it must never grant ownership — owner-transfer is the only path.
+  const acceptRelation = toRelation(inv.role);
+  if (!INVITABLE_RELATIONS.has(acceptRelation)) {
+    return res.status(403).json({ success: false, error: 'This invite grants a role that cannot be accepted. Ownership moves only via owner-transfer.' });
+  }
+  await writeTuples(req.db, { writes: [{ object: WS(inv.workspace_id), relation: acceptRelation, subject: USER(req.user.id) }] });
   await req.db.query(
     "UPDATE workspace_invites SET status = 'accepted', accepted_at = now(), invited_user_id = $1 WHERE id = $2",
     [req.user.id, inv.id],

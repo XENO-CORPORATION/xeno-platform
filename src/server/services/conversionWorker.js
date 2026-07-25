@@ -106,6 +106,20 @@ function getFileType(filePath) {
 }
 
 /**
+ * SECURITY: build the output path from basename components only and assert the
+ * resolved path stays INSIDE outputDir (defense-in-depth against traversal via
+ * a crafted outputFormat or filename).
+ */
+function safeOutputPath(outputDir, outputFilename) {
+  const resolvedDir = path.resolve(outputDir);
+  const resolved = path.resolve(resolvedDir, path.basename(outputFilename));
+  if (!resolved.startsWith(resolvedDir + path.sep)) {
+    throw new Error('Invalid output path (escapes output directory)');
+  }
+  return resolved;
+}
+
+/**
  * Convert image files using sharp
  */
 async function convertImage(inputPath, outputFormat, settings, onProgress) {
@@ -113,9 +127,9 @@ async function convertImage(inputPath, outputFormat, settings, onProgress) {
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
-  
+
   const outputFilename = `${path.basename(inputPath, path.extname(inputPath))}.${outputFormat.toLowerCase()}`;
-  const outputPath = path.join(outputDir, outputFilename);
+  const outputPath = safeOutputPath(outputDir, outputFilename);
   
   onProgress(10);
   
@@ -191,8 +205,13 @@ async function convertMediaFile(inputPath, outputFormat, settings, fileType, onP
     }
     
     const outputFilename = `${path.basename(inputPath, path.extname(inputPath))}.${outputFormat.toLowerCase()}`;
-    const outputPath = path.join(outputDir, outputFilename);
-    
+    let outputPath;
+    try {
+      outputPath = safeOutputPath(outputDir, outputFilename);
+    } catch (e) {
+      return reject(e);
+    }
+
     let command = ffmpeg(inputPath);
     
     // Apply quality settings
@@ -266,7 +285,7 @@ async function convertDocument(inputPath, outputFormat, settings, onProgress) {
   
   const inputExt = path.extname(inputPath).toLowerCase();
   const outputFilename = `${path.basename(inputPath, inputExt)}.${outputFormat.toLowerCase()}`;
-  const outputPath = path.join(outputDir, outputFilename);
+  const outputPath = safeOutputPath(outputDir, outputFilename);
   
   onProgress(10);
   

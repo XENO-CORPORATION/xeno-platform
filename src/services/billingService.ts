@@ -17,8 +17,10 @@ export interface BillingItem {
   kind: 'credits' | 'subscription';
   label: string;
   credits: number;
-  usd: number;
+  price: number;        // display amount in `currency` (mirrors the Stripe Price)
+  currency: string;     // ISO code, lowercase ('eur')
   interval?: string;
+  perSeat?: boolean;
   badge?: string;
   available: boolean;
 }
@@ -26,6 +28,7 @@ export interface BillingItem {
 export interface BillingConfig {
   enabled: boolean;
   publishableKey: string;
+  currency: string;
   catalog: BillingItem[];
 }
 
@@ -34,10 +37,18 @@ export async function getBillingConfig(): Promise<BillingConfig> {
   try {
     const res = await fetch(`${API_BASE}/billing/config`);
     const data = await res.json();
-    return { enabled: !!data.enabled, publishableKey: data.publishableKey || '', catalog: data.catalog || [] };
+    return { enabled: !!data.enabled, publishableKey: data.publishableKey || '', currency: (data.currency || 'eur'), catalog: data.catalog || [] };
   } catch {
-    return { enabled: false, publishableKey: '', catalog: [] };
+    return { enabled: false, publishableKey: '', currency: 'eur', catalog: [] };
   }
+}
+
+/** Map catalog itemId → live price (for overlaying onto the static pricing tiers). */
+export async function getLivePriceMap(): Promise<Record<string, { price: number; currency: string }>> {
+  const cfg = await getBillingConfig();
+  const map: Record<string, { price: number; currency: string }> = {};
+  for (const i of cfg.catalog) map[i.id] = { price: i.price, currency: i.currency || cfg.currency };
+  return map;
 }
 
 /** Start Stripe Checkout for a catalog item; on success redirects to Stripe. */
@@ -76,13 +87,18 @@ export async function openBillingPortal(): Promise<{ ok: boolean; error?: string
 
 export interface Entitlements {
   plan: string;
-  watermark: boolean;
-  commercial: boolean;
-  maxResolution: string;
-  priority: boolean;
-  inHouseDailyLimit: number | null; // null = unlimited
-  privateProjects: boolean;
+  commercial: boolean;              // commercial-use license — Pro+
+  maxResolution: string;            // 'standard' | '4k' — gates SERVER-SIDE managed generation only
+  priority: boolean;                // priority on the managed-inference queue — Pro+
+  inHouseDailyLimit: number | null; // null = unlimited (in-house xeno-rt fair-use)
+  privateProjects: boolean;         // cloud-stored private projects — Pro+
   teamSeats: number;
+  cloudSync: boolean;               // cloud sync + multi-device — Pro+
+  crossApp: boolean;                // cross-app workflows — Pro+
+  agents: boolean;                  // agents / automation — Pro+
+  collaboration: boolean;           // real-time collaboration — Team only
+  /** @deprecated (v2): watermarking retired; always false on every tier — never gate on this. */
+  watermark: boolean;
 }
 
 export interface BillingSummary {

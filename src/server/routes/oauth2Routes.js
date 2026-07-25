@@ -47,50 +47,82 @@ router.get('/.well-known/openid-configuration', (req, res) => res.json(discovery
 // auto-continues; otherwise it shows a sign-in / create-account form, signs them
 // in against /api/auth/*, then continues — so the user never hits a dead end.
 // First-party clients auto-approve the grant (Identity Plan §2.3).
-router.get('/authorize', (req, res) => {
+router.get('/authorize', async (req, res) => {
   res.set('content-type', 'text/html; charset=utf-8');
+  // Resolve a human-friendly client name server-side from the registered client
+  // (never echo the raw ?client_id= param — that is attacker-controlled and would
+  // let a crafted value phish as a trusted app). Unknown clients → generic label.
+  const rawId = String(req.query.client_id || '');
+  let appName = 'an application';
+  try {
+    if (rawId) {
+      const r = await req.db.query('SELECT name FROM oauth_clients WHERE client_id = $1', [rawId]);
+      if (r.rows[0] && r.rows[0].name) appName = r.rows[0].name;
+    }
+  } catch { /* keep the generic label if the lookup fails */ }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const app = esc(appName);
   res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Sign in with XENO</title><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-*{box-sizing:border-box}body{font:15px/1.5 system-ui,-apple-system,sans-serif;background:radial-gradient(1200px 600px at 50% -10%,#16161c,#0a0a0c);color:#e7e7ea;display:grid;place-items:center;min-height:100vh;margin:0}
-.card{width:360px;max-width:92vw;padding:32px 28px;background:#101015;border:1px solid #23232b;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-.brand{font-weight:700;letter-spacing:.5px;font-size:13px;color:#9aa0aa;text-transform:uppercase;margin-bottom:6px}
-h1{font-size:20px;margin:0 0 4px}.sub{color:#9aa0aa;font-size:13px;margin:0 0 20px}
-label{display:block;font-size:12px;color:#9aa0aa;margin:12px 0 4px}
-input{width:100%;padding:10px 12px;background:#16161d;border:1px solid #2a2a34;border-radius:9px;color:#fff;font-size:14px}
-input:focus{outline:none;border-color:#7aa2ff}
-button{width:100%;margin-top:18px;padding:11px;background:#5b7cff;border:0;border-radius:9px;color:#fff;font-weight:600;font-size:14px;cursor:pointer}
-button:disabled{opacity:.6;cursor:default}
-.muted{color:#9aa0aa;font-size:13px;text-align:center;margin-top:14px}.muted a{color:#7aa2ff;cursor:pointer;text-decoration:none}
+*{box-sizing:border-box}
+:root{--bg:#121212;--panel:#17171b;--border:#26262d;--muted:#9aa0aa;--text:#f4f4f6;--accent:#a760ff;--accent2:#7c5cff}
+html,body{margin:0}
+body{font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:grid;place-items:center}
+/* Loading interface — mirrors the dashboard's auth-gate loader (ProtectedRoute) */
+.loader{display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center;padding:44px 24px}
+.spin{width:48px;height:48px;border-radius:9999px;border:3px solid rgba(255,255,255,.13);border-bottom-color:#fff;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader .msg{color:rgba(255,255,255,.7);font-size:14px}
+.loader .who{color:var(--muted);font-size:13px}.loader .who b{color:var(--text);font-weight:600}
+/* Sign-in card (fallback only — most users bounce to the branded /auth screen) */
+.card{width:384px;max-width:92vw;padding:34px 30px;background:var(--panel);border:1px solid var(--border);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.logo .dot{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.logo .name{font-weight:700;letter-spacing:.4px;font-size:15px}
+h1{font-size:21px;margin:0 0 5px;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:13.5px;margin:0 0 22px}.sub b{color:var(--text)}
+label{display:block;font-size:12px;color:var(--muted);margin:14px 0 5px}
+input{width:100%;padding:11px 13px;background:#0f0f12;border:1px solid #2b2b33;border-radius:11px;color:#fff;font-size:14px;transition:border-color .15s}
+input:focus{outline:none;border-color:var(--accent)}
+button{width:100%;margin-top:20px;padding:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:11px;color:#fff;font-weight:600;font-size:14.5px;cursor:pointer;transition:opacity .15s}
+button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
+.muted{color:var(--muted);font-size:13px;text-align:center;margin-top:16px}.muted a{color:var(--accent);cursor:pointer;text-decoration:none;font-weight:500}
 .err{color:#ff7a7a;font-size:13px;margin-top:10px;min-height:18px}
-.status{text-align:center;color:#cfd2d8}.hide{display:none}
+.foot{margin-top:22px;text-align:center;color:#565660;font-size:11.5px}
+.hide{display:none}
 </style></head>
-<body><div class="card">
-  <div class="brand">XENO</div>
-  <h1 id="title">Sign in to continue</h1>
-  <p class="sub" id="appsub">Authorize <b id="app">this app</b> to use your XENO account.</p>
-  <div id="status" class="status">Checking your XENO session…</div>
-  <form id="form" class="hide" autocomplete="on">
-    <div id="nameRow" class="hide"><label>Name</label><input id="name" type="text" placeholder="Jane Doe"></div>
-    <label>Email</label><input id="email" type="email" placeholder="you@company.com" required>
-    <label>Password</label><input id="password" type="password" placeholder="••••••••" required>
-    <div class="err" id="err"></div>
-    <button id="submit" type="submit">Sign in &amp; continue</button>
-    <p class="muted"><span id="toggleText">New to XENO?</span> <a id="toggle">Create an account</a></p>
-  </form>
-</div>
+<body>
+  <div id="loader" class="loader">
+    <div class="spin"></div>
+    <div class="msg" id="status">Checking your XENO session…</div>
+    <div class="who">Continue to <b id="app">${app}</b></div>
+  </div>
+  <div id="cardWrap" class="hide"><div class="card">
+    <div class="logo"><div class="dot"></div><div class="name">XENO</div></div>
+    <h1 id="title">Sign in to continue</h1>
+    <p class="sub">Continue to <b id="app2">${app}</b> with your XENO account.</p>
+    <form id="form" autocomplete="on">
+      <div id="nameRow" class="hide"><label>Name</label><input id="name" type="text" placeholder="Jane Doe"></div>
+      <label>Email</label><input id="email" type="email" placeholder="you@company.com" required>
+      <label>Password</label><input id="password" type="password" placeholder="••••••••" required>
+      <div class="err" id="err"></div>
+      <button id="submit" type="submit">Sign in &amp; continue</button>
+      <p class="muted"><span id="toggleText">New to XENO?</span> <a id="toggle">Create an account</a></p>
+    </form>
+    <div class="foot">Secured by XENO · xenostudio.ai</div>
+  </div></div>
 <script>
 (function(){
   var p=new URLSearchParams(location.search);
   var $=function(id){return document.getElementById(id)};
-  $('app').textContent=p.get('client_id')||'this app';
   // Unified auth: hand unauthenticated users to the branded /auth/:app login
   // (full email/password + GitHub/social + MFA), returning here to finish the grant.
   function toAuth(){ var s=(p.get('client_id')||'app').replace(/^xeno-/,''); location.href='/auth/'+encodeURIComponent(s)+'?returnUrl='+encodeURIComponent(location.pathname+location.search); }
   var mode='signin';
   function show(el,on){el.classList[on?'remove':'add']('hide')}
-  function setStatus(t){show($('status'),true);show($('form'),false);$('status').textContent=t}
-  function showForm(msg){show($('status'),false);show($('form'),true);$('err').textContent=msg||''}
+  function setStatus(t){show($('loader'),true);show($('cardWrap'),false);$('status').textContent=t}
+  function showForm(msg){show($('loader'),false);show($('cardWrap'),true);$('err').textContent=msg||''}
   function fail(msg){$('err').textContent=msg;$('submit').disabled=false;$('submit').textContent=mode==='signup'?'Create account & continue':'Sign in & continue'}
 
   function continueWith(tok){

@@ -7,8 +7,15 @@ import express from 'express';
 import fs from 'fs';
 import downloadService from '../services/downloadService.js';
 import { getExtensionReleaseData } from '../services/extensionReleaseService.js';
+import { assertPublicHttpUrl } from '../utils/urlGuard.js';
 
 const router = express.Router();
+
+// Identity comes from authMiddleware (applied at the /api/download mount).
+const requireUser = (req, res, next) => {
+  if (req.user && req.user.id) return next();
+  return res.status(401).json({ success: false, error: 'Authentication required' });
+};
 
 router.get('/extension/releases', async (req, res) => {
   try {
@@ -30,7 +37,7 @@ router.get('/extension/releases', async (req, res) => {
  * POST /api/download/info
  * Fetch media information without downloading
  */
-router.post('/info', async (req, res) => {
+router.post('/info', requireUser, async (req, res) => {
   try {
     const { url, platform } = req.body;
 
@@ -41,17 +48,19 @@ router.post('/info', async (req, res) => {
       });
     }
 
-    // Validate URL format
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    // Validate URL: http/https + public host only (SSRF guard for yt-dlp)
+    try {
+      await assertPublicHttpUrl(url);
+    } catch (e) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid URL format',
+        error: e.code === 'ERR_URL_INVALID' ? 'Invalid URL format' : 'URL not allowed',
       });
     }
 
     console.log(`[Download] Fetching info for: ${url}`);
 
-    const mediaInfo = await downloadService.fetchMediaInfo(url);
+    const mediaInfo = await downloadService.fetchMediaInfo(url, req.user.id);
 
     res.json({
       success: true,
@@ -70,7 +79,7 @@ router.post('/info', async (req, res) => {
  * POST /api/download/start
  * Start downloading media
  */
-router.post('/start', async (req, res) => {
+router.post('/start', requireUser, async (req, res) => {
   try {
     const { url, quality, format, audioOnly } = req.body;
 
@@ -81,12 +90,23 @@ router.post('/start', async (req, res) => {
       });
     }
 
+    // Validate URL: http/https + public host only (SSRF guard for yt-dlp)
+    try {
+      await assertPublicHttpUrl(url);
+    } catch (e) {
+      return res.status(400).json({
+        success: false,
+        error: e.code === 'ERR_URL_INVALID' ? 'Invalid URL format' : 'URL not allowed',
+      });
+    }
+
     console.log(`[Download] Starting download: ${url} (quality: ${quality})`);
 
     const downloadId = await downloadService.startDownload(url, {
       quality: quality || 'best',
       format: format || 'mp4',
       audioOnly: audioOnly || false,
+      userId: req.user.id,
     });
 
     res.json({
@@ -109,11 +129,11 @@ router.post('/start', async (req, res) => {
  * GET /api/download/status/:id
  * Get download progress/status
  */
-router.get('/status/:id', (req, res) => {
+router.get('/status/:id', requireUser, (req, res) => {
   try {
     const { id } = req.params;
 
-    const status = downloadService.getDownloadStatus(id);
+    const status = downloadService.getDownloadStatus(id, req.user.id);
 
     if (!status) {
       return res.status(404).json({
@@ -139,9 +159,9 @@ router.get('/status/:id', (req, res) => {
  * GET /api/download/list
  * List all active downloads
  */
-router.get('/list', (req, res) => {
+router.get('/list', requireUser, (req, res) => {
   try {
-    const downloads = downloadService.getAllDownloads();
+    const downloads = downloadService.getAllDownloads(req.user.id);
 
     res.json({
       success: true,
@@ -160,11 +180,11 @@ router.get('/list', (req, res) => {
  * GET /api/download/file/:id
  * Download the completed file
  */
-router.get('/file/:id', (req, res) => {
+router.get('/file/:id', requireUser, (req, res) => {
   try {
     const { id } = req.params;
 
-    const fileInfo = downloadService.getDownloadFile(id);
+    const fileInfo = downloadService.getDownloadFile(id, req.user.id);
 
     if (!fileInfo) {
       return res.status(404).json({
@@ -228,11 +248,17 @@ router.get('/file/:id', (req, res) => {
  * DELETE /api/download/:id
  * Delete a download
  */
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireUser, (req, res) => {
   try {
     const { id } = req.params;
 
-    downloadService.deleteDownload(id);
+    const deleted = downloadService.deleteDownload(id, req.user.id);
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        error: 'Download not found',
+      });
+    }
 
     res.json({
       success: true,
@@ -273,7 +299,7 @@ router.post('/cleanup', (req, res) => {
  * Save YouTube cookies for authentication
  * Body: { cookies: "Netscape format cookie string" }
  */
-router.post('/cookies', (req, res) => {
+router.post('/cookies', requireUser, (req, res) => {
   try {
     const { cookies } = req.body;
 
@@ -284,7 +310,9 @@ router.post('/cookies', (req, res) => {
       });
     }
 
-    downloadService.saveCookies(cookies);
+    // SECURITY: cookie jar is stored PER-USER (was a single global file shared
+    // by every user's yt-dlp runs).
+    downloadService.saveCookies(req.user.id, cookies);
 
     res.json({
       success: true,
@@ -303,9 +331,9 @@ router.post('/cookies', (req, res) => {
  * GET /api/download/cookies/status
  * Check if cookies are configured
  */
-router.get('/cookies/status', (req, res) => {
+router.get('/cookies/status', requireUser, (req, res) => {
   try {
-    const hasCookies = downloadService.hasCookies();
+    const hasCookies = downloadService.hasCookies(req.user.id);
 
     res.json({
       success: true,
@@ -326,9 +354,9 @@ router.get('/cookies/status', (req, res) => {
  * DELETE /api/download/cookies
  * Remove saved cookies
  */
-router.delete('/cookies', (req, res) => {
+router.delete('/cookies', requireUser, (req, res) => {
   try {
-    downloadService.deleteCookies();
+    downloadService.deleteCookies(req.user.id);
 
     res.json({
       success: true,

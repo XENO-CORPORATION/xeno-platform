@@ -51,6 +51,9 @@ import AuthContent from './pages/AuthContent';
 import DeviceAuthContent from './pages/DeviceAuthContent';
 import HelpContent from './pages/HelpContent';
 import ContactContent from './pages/ContactContent';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
 
 // Import MultiChatContainer for standalone xeno-chat.com domain
 import MultiChatContainer from './components/playground/Chat/MultiChatContainer';
@@ -155,6 +158,10 @@ function App() {
               {/* Unified branded sign-in per app (XENO UNIFIED AUTH spec) */}
               <Route path="/auth/:app" element={<AuthContent />} />
               <Route path="/auth/:app/device" element={<DeviceAuthContent />} />
+              {/* Password reset + email verification — public (the token is the credential) */}
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/help" element={<HelpContent />} />
               <Route path="/contact" element={<ContactContent />} />
             </Route>

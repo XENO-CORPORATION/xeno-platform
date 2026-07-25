@@ -193,7 +193,8 @@ const Terms: React.FC = () => {
             <h2 className="text-2xl font-semibold mb-4 text-white">8. Payment Terms</h2>
             <ul className="list-disc list-inside text-white/60 space-y-2">
               <li>Certain features may require payment of fees</li>
-              <li>All fees are stated in USD unless otherwise specified</li>
+              <li>All fees are stated in EUR (euros) unless otherwise specified</li>
+              <li>Applicable VAT is calculated and shown at checkout and added where required</li>
               <li>Subscription fees are billed in advance on a recurring basis</li>
               <li>Refunds are provided in accordance with our refund policy</li>
               <li>We reserve the right to change pricing with reasonable notice</li>
@@ -221,7 +222,7 @@ const Terms: React.FC = () => {
             </ul>
             <p className="text-white/60 leading-relaxed">
               IN NO EVENT SHALL OUR TOTAL LIABILITY EXCEED THE GREATER OF (A) THE AMOUNT YOU
-              PAID US IN THE TWELVE (12) MONTHS PRIOR TO THE CLAIM, OR (B) ONE HUNDRED DOLLARS ($100).
+              PAID US IN THE TWELVE (12) MONTHS PRIOR TO THE CLAIM, OR (B) ONE HUNDRED EUROS (€100).
             </p>
           </section>
 

@@ -19,13 +19,11 @@ import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import OpenAI, { toFile } from 'openai';
+import Xeno from 'xeno-ai';
 import util from 'util';
 import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
-import axios from 'axios';
-import { createProxyMiddleware } from 'http-proxy-middleware';
 import FormData from 'form-data';
 import pg from 'pg';
 import { createHash, randomBytes, randomUUID } from 'crypto';
@@ -53,7 +51,7 @@ import aiRoutes from './routes/aiRoutes.js';
 import { workspaceRoutes, workspaceInviteRoutes } from './routes/workspaceRoutes.js';
 import { resolveBillingAccountId } from './services/walletService.js';
 import { xenoModelCatalog, PROVIDER_LABELS, prettyModelName, xenoChatCompletion, normalizeXenoModelId, XENO_API_BASE, XENO_API_KEY, xenoApiConfigured } from './utils/xenoChat.js';
-import { meterPremiumChat } from './utils/inferenceMeter.js';
+import { meterPremiumChat, meterMediaGeneration } from './utils/inferenceMeter.js';
 import { estimateMessageTokens, getCreditCost } from './utils/creditCosts.js';
 import { deductCredits, refundCredits, logUsage as logCreditUsage } from './utils/creditTransactions.js';
 import { resolveEntitlements, gateMeta } from './utils/entitlementGate.js';
@@ -66,10 +64,14 @@ import productDownloadRoutes from './routes/productDownloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
+import accountRoutes from './routes/accountRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
+import serviceLedgerRoutes from './routes/serviceLedgerRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
+import handleRoutes from './routes/handleRoutes.js';
 import { oidcAuth } from './middleware/oidcAuth.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
 import { databaseMiddleware } from './middleware/database.js';
@@ -87,11 +89,57 @@ import docsRoutes from './routes/docsRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
 import { requestLoggerMiddleware, logger } from './middleware/requestLogger.js';
 import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } from './middleware/cdnOptimization.js';
-import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter } from './middleware/rateLimiter.js';
+import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter, clientIp } from './middleware/rateLimiter.js';
 import { runAllMigrations } from './services/migrationRunner.js';
 import { migrateAccountV2 } from './database/migrate-account-v2.js';
+import { migrateOidcClients } from './database/migrate-oidc-clients.js';
+import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
+
+// ── Internal-service JSON POST helper (replaces the axios dependency) ──────────
+// Uses the module's existing `fetch` + an AbortController timeout. Returns
+// { ok, status, data } for ANY completed HTTP response (does NOT throw on non-2xx,
+// unlike axios). Throws a tagged { isNoResponse:true } error ONLY when no response
+// arrives (network failure or timeout) — this mirrors axios's error.request branch
+// so callers keep their exact status-code behavior. Zero third-party HTTP client.
+async function postJsonToService(url, body, { timeoutMs = 60000, headers = {} } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let resp;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      const e = new Error(`No response from ${url}: ${err?.message || err}`);
+      e.isNoResponse = true;
+      e.cause = err;
+      throw e;
+    }
+    let data = null;
+    const text = await resp.text();
+    if (text) { try { data = JSON.parse(text); } catch { data = text; } }
+    return { ok: resp.ok, status: resp.status, data };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ── XENO gateway image client (no direct third-party AI) ──────────────────────
+// The platform makes ZERO direct third-party AI calls. Chat image generation + edit
+// route through the XENO gateway's OpenAI-compatible /v1/images/* endpoints — exactly
+// like /api/xeno/images/* (see routes/xenoRoutes.js). XENO_API_KEY is an internal
+// service key that is credit-EXEMPT on the gateway, so the platform meters credits
+// LOCALLY (deductCredits / meterMediaGeneration) with no double charge. When the key
+// is absent, the image branches 500 with a clear "gateway not configured" error.
+const xenoImageClient = process.env.XENO_API_KEY
+  ? new Xeno({ apiKey: process.env.XENO_API_KEY, baseURL: 'https://api.xenostudio.ai/v1' })
+  : null;
 
 // PostgreSQL connection
 const { Pool } = pg;
@@ -159,6 +207,13 @@ app.use(helmet({
 // Remove X-Powered-By header (defense in depth — Helmet also does this)
 app.disable('x-powered-by');
 
+// Trust the reverse-proxy chain (Cloudflare tunnel -> nginx -> app) so req.ip is the
+// REAL client IP, not the loopback proxy hop. Without this every IP-keyed rate limiter
+// (auth, global, generation) collapses to ONE shared global bucket. `1` = trust the first
+// hop (nginx on the same host); the CF edge sets CF-Connecting-IP which nginx forwards as
+// X-Forwarded-For. (Blocker #7 INFRA-7.1.)
+app.set('trust proxy', 1);
+
 // HTTP Parameter Pollution protection
 app.use(hpp());
 
@@ -175,6 +230,8 @@ const globalLimiter = rateLimit({
   max: 200,
   standardHeaders: true, // Return rate limit info in headers
   legacyHeaders: false,
+  validate: { ip: false }, // custom key (CF-Connecting-IP) — skip the built-in req.ip validator
+  keyGenerator: clientIp, // real client IP behind Cloudflare, not the collapsed upstream hop
   message: { success: false, error: 'Too many requests, please try again later.' },
   skip: (req) => {
     // Skip rate limiting for health checks
@@ -189,10 +246,19 @@ const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
+  keyGenerator: clientIp, // per-client (else one collapsed bucket = platform-wide login lockout)
   message: { success: false, error: 'Too many authentication attempts, please try again later.' },
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/register-with-handle', authLimiter);
+// Account-recovery + verification endpoints send email and mutate credentials —
+// same strict, client-IP-keyed limiter as login/register (never the collapsed proxy hop).
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
+app.use('/api/auth/verify-email', authLimiter);
+app.use('/api/auth/resend-verification', authLimiter);
 
 // Stricter rate limiter for AI generation endpoints: 30 requests per minute
 const generationLimiter = rateLimit({
@@ -200,10 +266,49 @@ const generationLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
+  keyGenerator: clientIp,
   message: { success: false, error: 'Generation rate limit exceeded. Please wait before trying again.' },
 });
 app.use('/api/chat/generate', generationLimiter);
 app.use('/api/xeno/', generationLimiter);
+
+// ── Retire legacy un-metered provider endpoints (Blocker #4b / LEAK-8) ─────────
+// These raw OpenAI / FAL passthrough routes predate the metered /api/xeno/* and
+// /api/chat/generate paths. They charge NO credits, apply NO entitlement gate, and
+// return raw provider output (incl. clean URLs) — a live free-inference cost leak
+// while OPENAI_API_KEY is set (FAL ones are inert only because VITE_FAL_KEY is unset).
+// None are called by the frontend/services (verified by whole-repo grep). Disabled by
+// default; set ENABLE_LEGACY_PROVIDER_ENDPOINTS=true only after re-wiring a given route
+// through meterMediaGeneration + watermark.
+const RETIRED_PROVIDER_PATHS = new Set([
+  '/api/generate-image',
+  '/api/openai/images/generations',
+  '/api/openai/images/edits',
+  '/api/openai/images/variations',
+  '/api/openai/responses/create',
+  '/api/ideogram-reframe',
+  '/api/fal',
+]);
+app.use((req, res, next) => {
+  if (process.env.ENABLE_LEGACY_PROVIDER_ENDPOINTS === 'true') return next();
+  // Express routing is NON-strict (trailing slash optional) and CASE-INSENSITIVE, so an
+  // exact case-sensitive Set.has(req.path) is bypassable with `/api/GENERATE-IMAGE` or
+  // `/api/generate-image/` — which would still dispatch to the live un-metered handler.
+  // Normalize the way Express matches (lowercase + strip trailing slashes) before testing.
+  const p = req.path.replace(/\/+$/, '').toLowerCase() || '/';
+  const retired = RETIRED_PROVIDER_PATHS.has(p)
+    || p === '/api/fal'
+    || p.startsWith('/api/fal/')
+    || p.startsWith('/api/fal-direct');
+  if (retired) {
+    return res.status(410).json({
+      error: 'This endpoint has been retired. Use the metered /api/xeno/images/* or /api/chat/generate endpoints.',
+      code: 'ENDPOINT_RETIRED',
+    });
+  }
+  next();
+});
 
 // CRITICAL FIX: Increase server limits for large image data
 // This prevents 431 "Request Header Fields Too Large" errors when processing images
@@ -241,7 +346,9 @@ app.use(cookieParser());
 // IMPORTANT: Mount browser proxy routes BEFORE JSON body parser
 // This allows browser proxy to handle raw POST bodies from proxied pages
 // The browserRoutes handles its own body parsing
-app.use('/api/browser', express.raw({ type: '*/*', limit: '10mb' }), browserRoutes);
+// SECURITY: databaseMiddleware + authMiddleware are REQUIRED — these routes drive
+// docker exec / Browserless / server-side fetch and must never be anonymous.
+app.use('/api/browser', databaseMiddleware, authMiddleware, express.raw({ type: '*/*', limit: '10mb' }), browserRoutes);
 console.log('🌐 Browser routes integrated: /api/browser/* (mounted early for raw body handling)');
 
 // Stripe billing webhook — MUST be mounted BEFORE express.json so the raw request
@@ -268,129 +375,6 @@ app.use(express.text({ limit: '100mb' }));
 
 app.use('/uploads', express.static(uploadsDir));
 
-// FAL.ai Proxy Middleware - Add this before other routes
-const falProxy = createProxyMiddleware({
-  target: 'https://queue.fal.run',
-  changeOrigin: true,
-  secure: true,
-  timeout: 30000, // 30 second timeout
-  proxyTimeout: 30000,
-  ws: false, // Disable websocket proxying
-  followRedirects: true,
-  pathRewrite: function(path, req) {
-    console.log(`FAL.ai Original path: ${path}`);
-    // Remove /api/fal from the beginning of the path
-    const rewrittenPath = path.replace(/^\/api\/fal/, '');
-    console.log(`FAL.ai Rewritten path: ${rewrittenPath}`);
-    return rewrittenPath;
-  },
-  onProxyReq: (proxyReq, req, res) => {
-    console.log(`Proxying FAL.ai request: ${req.method} ${proxyReq.protocol}//${proxyReq.host}${proxyReq.path}`);
-    console.log('FAL.ai request headers:', Object.keys(req.headers));
-    
-    // Set additional headers for better connection handling
-    proxyReq.setHeader('Connection', 'keep-alive');
-    proxyReq.setHeader('Keep-Alive', 'timeout=30, max=100');
-    
-    // Log if Authorization header is present (but not the full value for security)
-    if (req.headers.authorization) {
-      console.log('Authorization header present:', req.headers.authorization.substring(0, 20) + '...');
-    } else {
-      console.log('WARNING: No Authorization header found in request!');
-    }
-  },
-  onProxyRes: (proxyRes, req, res) => {
-    // Add CORS headers to the proxied response
-    proxyRes.headers['Access-Control-Allow-Origin'] = '*';
-    proxyRes.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, OPTIONS';
-    proxyRes.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
-    console.log(`FAL.ai response: ${proxyRes.statusCode} ${proxyRes.statusMessage}`);
-  },
-  onError: (err, req, res) => {
-    console.error('FAL.ai Proxy error:', err);
-    res.status(500).json({
-      error: 'FAL.ai Proxy Error'
-      // SECURITY: Do not expose err.message to clients
-    });
-  },
-  logLevel: 'warn'
-});
-
-// Apply FAL.ai proxy middleware
-app.use('/api/fal', falProxy);
-
-// Note: SAM 2 segmentation is now handled via FAL.ai integration in the chat generation route
-
-// Direct FAL.ai API endpoint as fallback - handle all HTTP methods (auth required)
-app.all('/api/fal-direct/*', databaseMiddleware, authMiddleware, async (req, res) => {
-  try {
-    const falPath = req.path.replace('/api/fal-direct', '');
-    const falUrl = `https://queue.fal.run${falPath}${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`;
-    
-    console.log(`Direct FAL.ai request: ${req.method} ${falUrl}`);
-    if (req.body && Object.keys(req.body).length > 0) {
-      console.log('Request body:', JSON.stringify(req.body, null, 2));
-    }
-    
-    // Get API key from environment
-    const apiKey = process.env.VITE_FAL_KEY;
-    if (!apiKey) {
-      return res.status(401).json({ error: 'FAL API key not configured' });
-    }
-    
-    const fetchOptions = {
-      method: req.method,
-      headers: {
-        'Authorization': `Key ${apiKey}`,
-        'User-Agent': 'XenoStudio/1.0'
-      }
-    };
-    
-    // Only add Content-Type and body for methods that support it
-    if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-      fetchOptions.headers['Content-Type'] = 'application/json';
-      if (req.body && Object.keys(req.body).length > 0) {
-        fetchOptions.body = JSON.stringify(req.body);
-      }
-    }
-    
-    const response = await fetch(falUrl, fetchOptions);
-    
-    const result = await response.text();
-    console.log(`Direct FAL.ai response: ${response.status} ${response.statusText}`);
-    
-    // Only log response body for non-success or if it's short
-    if (!response.ok || result.length < 500) {
-      console.log('Response body:', result);
-    } else {
-      console.log('Response body length:', result.length, 'characters');
-    }
-    
-    // Set appropriate response headers
-    res.status(response.status);
-    if (response.headers.get('content-type')?.includes('application/json')) {
-      res.json(JSON.parse(result));
-    } else {
-      res.send(result);
-    }
-    
-  } catch (error) {
-    console.error('Direct FAL.ai API error:', error);
-    res.status(500).json({
-      error: 'Direct FAL.ai API Error'
-    });
-  }
-});
-
-// Add OpenRouter Key retrieval & Log Check
-const openRouterApiKey = process.env.OPENROUTER_API_KEY;
-console.log('Checking OPENROUTER_API_KEY:', openRouterApiKey ? 'Configured' : 'Not Found!');
-if (!openRouterApiKey) {
-    console.warn('OpenRouter API key (OPENROUTER_API_KEY) not found in .env. API calls will fail.');
-}
-// Optional: Add Referer/Title from .env if needed
-const siteUrl = process.env.YOUR_SITE_URL || ''; // Optional
-const siteTitle = process.env.YOUR_SITE_NAME || ''; // Optional
 
 // Utility function to parse AI response text (FOR HISTORY CLEANING - Make Regex more robust)
 const parseResponseBackend = (fullText) => {
@@ -468,84 +452,15 @@ app.use('/api/filesystem', (req, res, next) => {
   next();
 }, fileSystemRoutes);
 
-// Conversion routes
-app.use('/api/conversion', conversionRoutes);
+// Conversion routes — SECURITY: require auth at the mount (identity comes only from
+// req.user, never from headers). uploadLimiter caps the file-upload endpoint.
+app.use('/api/conversion/upload', uploadLimiter);
+app.use('/api/conversion', databaseMiddleware, authMiddleware, conversionRoutes);
 
 // Video Studio routes (with auth and database middleware)
 app.use('/api/video', databaseMiddleware, authMiddleware, videoRoutes);
 console.log('🎬 Video Studio routes integrated: /api/video/*');
 
-// Replicate API Proxy routes (auth required to prevent API key abuse)
-// Must be defined BEFORE the authenticated image routes
-app.post('/api/image/replicate/predictions', databaseMiddleware, authMiddleware, async (req, res) => {
-  try {
-    const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
-    if (!REPLICATE_API_TOKEN) {
-      return res.status(500).json({ success: false, error: 'Replicate API token is not configured on the server' });
-    }
-    const response = await fetch('https://api.replicate.com/v1/predictions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${REPLICATE_API_TOKEN}` },
-      body: JSON.stringify(req.body)
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      console.error('❌ Replicate API error:', data);
-      return res.status(response.status).json(data);
-    }
-    console.log(`🎨 Created Replicate prediction: ${data.id}`);
-    res.json(data);
-  } catch (error) {
-    console.error('❌ Replicate proxy error:', error);
-    res.status(500).json({ success: false, error: 'Failed to create prediction' });
-  }
-});
-
-app.get('/api/image/replicate/predictions/:predictionId', databaseMiddleware, authMiddleware, async (req, res) => {
-  try {
-    const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
-    const { predictionId } = req.params;
-    if (!REPLICATE_API_TOKEN) {
-      return res.status(500).json({ success: false, error: 'Replicate API token is not configured on the server' });
-    }
-    const response = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Token ${REPLICATE_API_TOKEN}` }
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      return res.status(response.status).json(data);
-    }
-    res.json(data);
-  } catch (error) {
-    console.error('❌ Replicate proxy error:', error);
-    res.status(500).json({ success: false, error: 'Failed to get prediction status' });
-  }
-});
-
-app.post('/api/image/replicate/predictions/:predictionId/cancel', databaseMiddleware, authMiddleware, async (req, res) => {
-  try {
-    const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
-    const { predictionId } = req.params;
-    if (!REPLICATE_API_TOKEN) {
-      return res.status(500).json({ success: false, error: 'Replicate API token is not configured on the server' });
-    }
-    const response = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}/cancel`, {
-      method: 'POST',
-      headers: { 'Authorization': `Token ${REPLICATE_API_TOKEN}` }
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      return res.status(response.status).json(data);
-    }
-    console.log(`🛑 Cancelled Replicate prediction: ${predictionId}`);
-    res.json(data);
-  } catch (error) {
-    console.error('❌ Replicate proxy error:', error);
-    res.status(500).json({ success: false, error: 'Failed to cancel prediction' });
-  }
-});
-console.log('🔄 Replicate API proxy available at: /api/image/replicate/*');
 
 // Xeno AI proxy routes (credit-tracked generation)
 app.use('/api/xeno', databaseMiddleware, authMiddleware, xenoRoutes);
@@ -555,9 +470,17 @@ console.log('🎯 Xeno AI proxy routes integrated: /api/xeno/*');
 // Auth is applied PER-ROUTE inside the router: catalog/listing reads use
 // optionalAuthMiddleware (public, entitlement-aware), while commerce/developer/
 // admin routes require authMiddleware. Mounting with only databaseMiddleware.
+// Rate-limit the metered pay-per-use invoke surface (keyed per user, IP fallback).
+app.use('/api/marketplace/invoke', llmLimiter);
 app.use('/api/marketplace', databaseMiddleware, marketplaceRoutes);
 app.use('/api/billing', databaseMiddleware, billingRoutes);
 console.log('💳 Billing routes integrated: /api/billing/* (checkout, portal, config)');
+
+// Account + dashboard read-aggregation surface (account UI / home dashboard).
+// Pure reads over users + v2 ledger + plan + ReBAC workspaces. Auth per-route.
+app.use('/api/account', databaseMiddleware, accountRoutes);
+app.use('/api/dashboard', databaseMiddleware, dashboardRoutes);
+console.log('👤 Account + dashboard routes integrated: /api/account/* + /api/dashboard/*');
 
 // Workspaces / teams (multi-tenant): workspace entity tables + ReBAC membership
 // (workspace:<id>#<role>@user:<id>). Standard authMiddleware — not OIDC-gated.
@@ -571,9 +494,17 @@ console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspac
 // idempotent, micro-credit spend surface the @xeno/account-client SDK calls.
 // See 'XENO ACCOUNT - ARCHITECTURE.md' + database/migrate-account-v2.js.
 if (process.env.LEDGER_V2_ENABLED === 'true') {
+  // SERVICE-authenticated ledger surface for trusted backend services (e.g.
+  // xeno-agents-api) acting ON BEHALF OF a user via a shared LEDGER_SERVICE_TOKEN.
+  // Mounted with databaseMiddleware (req.db = pool) but WITHOUT oidcAuth/authMiddleware
+  // — the router does its own constant-time bearer-token check and fails CLOSED when
+  // LEDGER_SERVICE_TOKEN is unset. Registered BEFORE the user surface: Express matches
+  // the full path, so the more-specific /api/v2/ledger/service never falls through to
+  // (nor is shadowed by) the /api/v2/ledger user router below.
+  app.use('/api/v2/ledger/service', databaseMiddleware, serviceLedgerRoutes);
   // oidcAuth accepts BOTH the new RS256 OIDC token and the legacy HS256 token.
   app.use('/api/v2/ledger', databaseMiddleware, oidcAuth, v2LedgerRoutes);
-  console.log('💳 Ledger v2 routes integrated: /api/v2/ledger/* (LEDGER_V2_ENABLED)');
+  console.log('💳 Ledger v2 routes integrated: /api/v2/ledger/* + /service/* (LEDGER_V2_ENABLED)');
 }
 
 // ── OIDC provider v2 (additive, flag-gated) ──────────────────────────────────
@@ -585,6 +516,8 @@ if (process.env.OIDC_ENABLED === 'true') {
   app.use('/api/oauth2', databaseMiddleware, oauth2Routes);
   app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
   app.use('/api/v2/authz', databaseMiddleware, oidcAuth, v2AuthzRoutes);
+  // XENO handle registry (handle = login = identity = @xenostudio.ai address)
+  app.use('/api/v2/handles', databaseMiddleware, oidcAuth, handleRoutes);
   app.get('/api/oauth2/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery()));
   console.log('🔐 OIDC provider integrated: /api/oauth2/* + /api/v2/me + /api/v2/authz (OIDC_ENABLED)');
 }
@@ -627,7 +560,7 @@ console.log('👤 User data routes integrated: /api/user-data/*');
 // to handle raw POST bodies from proxied pages. See line ~105.
 
 // AI Routes (for chat completion with multiple providers) - requires auth
-app.use('/api/ai', databaseMiddleware, authMiddleware, aiRoutes);
+app.use('/api/ai', databaseMiddleware, authMiddleware, llmLimiter, aiRoutes);
 
 // YouTube Routes (channel management and analytics)
 // Public routes first (OAuth callback - no auth needed, Google redirects here)
@@ -646,6 +579,8 @@ console.log('🖼️ Office Canvas routes integrated: /api/office-canvas/*');
 
 // Download API routes (YouTube, Twitter, Instagram, TikTok downloads)
 // Extension releases are public (handled by publicPaths in auth middleware)
+// Rate-limit download starts (spawns yt-dlp — expensive).
+app.use('/api/download/start', llmLimiter);
 app.use('/api/download', databaseMiddleware, authMiddleware, downloadRoutes);
 // Public, stable product download deep-links (PRODUCT-PAGES-SPEC.md §4).
 // No auth / no DB — resolves the current installer from R2 and 302s to it.
@@ -961,6 +896,12 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
     if (req.body.task === 'image') {
         console.log('Handling conversational image generation task with Responses API');
         let imgUserId, imgCost = 0, imgCharged = false, imgEnt = null;
+        // Deterministic per-request id: the debit uses `imggen:<id>` as its ledger
+        // transactionId and every refund path uses `imggen-refund:<id>` — so retries
+        // dedupe and a double-refund is impossible. Assigned a real implementation
+        // right after the debit succeeds; a no-op before that.
+        const imgRequestId = randomUUID();
+        let refundImgCharge = async () => {};
         try {
             const { messages, previousResponseId, previousImageGenerationCallId, imageContexts } = req.body;
 
@@ -1000,232 +941,161 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             imgUserId = req.user?.id;
             imgEnt = await resolveEntitlements(req.db, imgUserId);
             imgCost = getCreditCost('image', 'gpt-high');
-            const imgDebit = await deductCredits(req.db, imgUserId, imgCost);
+            const imgDebit = await deductCredits(req.db, imgUserId, imgCost, {
+                transactionId: `imggen:${imgRequestId}`,
+                surface: 'chat',
+                operation: 'image-generation',
+                model: 'gpt-image-1',
+            });
             if (!imgDebit.success) {
                 return res.status(402).json({ error: 'Insufficient credits', required: imgCost, current: imgDebit.currentCredits ?? 0 });
             }
             imgCharged = true;
+            refundImgCharge = async () => {
+                const refundRef = `imggen-refund:${imgRequestId}`;
+                try {
+                    const r = await refundCredits(req.db, imgUserId, imgCost, {
+                        transactionId: refundRef,
+                        operation: 'image-generation',
+                    });
+                    if (!r?.success) {
+                        console.error(`[imggen] refund FAILED user=${imgUserId} ref=${refundRef}:`, r?.error || 'unknown');
+                    }
+                } catch (refundErr) {
+                    console.error(`[imggen] refund ERROR user=${imgUserId} ref=${refundRef}:`, refundErr.message);
+                }
+            };
 
             console.log(`Extracted image prompt (truncated): "${imagePrompt.substring(0, 50)}${imagePrompt.length > 50 ? '... [image prompt truncated for logging]' : ''}"`);
 
-            const openaiApiKey = process.env.OPENAI_API_KEY;
-            if (!openaiApiKey) {
-                console.error('OPENAI_API_KEY is missing or empty in .env file for image generation.');
-                return res.status(500).json({ error: 'Server configuration error: OpenAI API key is not configured.' });
+            // XENO gateway: ZERO direct third-party AI calls. Image generation flows through
+            // the gateway's OpenAI-compatible /v1/images/generations (same client as
+            // /api/xeno/images/*). Credits are already metered LOCALLY above (deductCredits);
+            // XENO_API_KEY is credit-exempt on the gateway, so there is NO double charge.
+            // The gateway does NOT expose /v1/responses, so the old conversational chaining
+            // (previousResponseId / image_generation_call ids) becomes independent generations
+            // — EXCEPT the combination path, which carries real image bytes and is routed
+            // through /v1/images/edits for continuity.
+            if (!xenoImageClient) {
+                console.error('XENO_API_KEY is missing — image gateway is not configured.');
+                if (imgCharged) await refundImgCharge();
+                return res.status(500).json({ error: 'Server configuration error: image gateway is not configured.' });
             }
 
-            const openai = new OpenAI({ apiKey: openaiApiKey });
-
-            // Prepare the request for Responses API
-            let requestPayload = {
-                model: "gpt-4.1-mini", // Use gpt-4.1-mini for Responses API
-                tools: [{ type: "image_generation" }]
+            // Extract just the base64 payload from a gateway image item ({ b64_json } | { url }).
+            const itemToBase64 = async (item) => {
+                if (!item) return null;
+                if (item.b64_json) return item.b64_json;
+                if (item.base64) return item.base64;
+                if (typeof item.url === 'string') {
+                    if (item.url.startsWith('data:')) return item.url.split(',')[1] || null;
+                    if (item.url.startsWith('http')) {
+                        try {
+                            const r = await fetch(item.url);
+                            if (!r.ok) return null;
+                            return Buffer.from(await r.arrayBuffer()).toString('base64');
+                        } catch { return null; }
+                    }
+                }
+                return null;
             };
 
-            // Check if this is a multi-context combination request
+            // Finish an image response: watermark Free output FAIL-CLOSED (a watermark failure
+            // refunds + errors rather than leaking a clean, commercial-usable image to Free),
+            // log usage, and return the frontend's exact response shape.
+            const finishImage = async (rawB64, modelLabel, respId, callId) => {
+                let outImageData = rawB64;
+                if (imgEnt?.watermark) {
+                    try {
+                        outImageData = (await watermarkBuffer(Buffer.from(rawB64, 'base64'))).toString('base64');
+                    } catch (wmErr) {
+                        console.error('[watermark] image task failed (fail-closed, refunding):', wmErr.message);
+                        if (imgCharged) await refundImgCharge();
+                        return res.status(500).json({ error: 'Image generation failed. Please try again.' });
+                    }
+                }
+                await logCreditUsage(req.db, imgUserId, 'image:gpt-image-1', imgCost, { route: '/api/chat/generate:image' }).catch(() => {});
+                return res.json({
+                    imageData: outImageData,
+                    modelIdUsed: modelLabel,
+                    responseId: respId,               // opaque token — preserves the ImageStudio contract
+                    imageGenerationCallId: callId,    // opaque token — preserves the ImageStudio contract
+                    entitlement: gateMeta(imgEnt),
+                });
+            };
+
+            // Multi-context combination carrying real image bytes → route through gateway edit
+            // (combine by editing the PRIMARY image, describing the rest in the prompt — the same
+            // strategy the old Responses path used, now on the gateway).
             const { combinationImages } = req.body;
-            const hasCombinationImages = combinationImages && Array.isArray(combinationImages) && combinationImages.length > 0;
-            
-            if (hasCombinationImages) {
-                console.log('🎨 Processing combination request with', combinationImages.length, 'images');
-                console.log('🎨 Combination images:', combinationImages.map(img => ({
-                    contextId: img.contextId,
-                    description: img.description,
-                    isLatestVersion: img.isLatestVersion
-                })));
-                
-                // For combinations, we use direct image inputs with the LATEST versions
-                const inputArray = [
-                    {
-                        role: "user",
-                        content: [{ type: "input_text", text: imagePrompt }]
-                    }
-                ];
-                
-                // CRITICAL FIX: OpenAI Responses API doesn't support direct 'image' type
-                // For combinations with edited images, we need to use the image editing endpoint instead
-                const hasEditedImages = combinationImages.some(img => img.isLatestVersion && img.imageData);
-                
-                if (hasEditedImages) {
-                    console.log('🎨 Combination includes edited images, switching to image editing approach');
-                    
-                    // For combinations with edited images, we'll use a different strategy:
-                    // 1. Find the primary image (usually the background/scene)
-                    // 2. Use image editing to add the other elements to it
-                    
-                    // Sort by context ID to get consistent primary image (A comes before B)
-                    const sortedImages = [...combinationImages].sort((a, b) => a.contextId.localeCompare(b.contextId));
-                    const primaryImage = sortedImages[0];
-                    const secondaryImages = sortedImages.slice(1);
-                    
-                    if (primaryImage.imageData) {
-                        console.log(`🎨 Using ${primaryImage.contextId} (${primaryImage.description}) as primary image`);
-                        console.log(`🎨 Adding ${secondaryImages.length} secondary images to it`);
-                        
-                        // Create a detailed prompt that describes the combination
-                        const combinationPrompt = `${imagePrompt}. Primary scene: ${primaryImage.description}. Add to this scene: ${secondaryImages.map(img => img.description).join(', ')}.`;
-                        
-                        // Use the image editing endpoint with the primary image
-                        console.log('🎨 Switching to image editing for combination...');
-                        
-                        // Extract base64 data from primary image
-                        let primaryImageData = primaryImage.imageData;
-                        if (primaryImageData.startsWith('data:image/')) {
-                            const base64Match = primaryImageData.match(/data:image\/[^;]+;base64,(.+)/);
-                            if (base64Match && base64Match[1]) {
-                                primaryImageData = base64Match[1];
-                            }
-                        }
-                        
-                        // Call image editing endpoint with proper MIME type
-                        const { toFile } = await import('openai/uploads');
-                        
-                        const editResponse = await openai.images.edit({
-                            image: await toFile(Buffer.from(primaryImageData, 'base64'), 'image.png', { type: 'image/png' }),
-                            prompt: combinationPrompt,
-                            n: 1,
-                            size: "1024x1024",
-                            response_format: "b64_json"
-                        });
-                        
-                        if (editResponse.data && editResponse.data[0] && editResponse.data[0].b64_json) {
-                            console.log('🎨 Image combination via editing successful');
-                            return res.json({
-                                imageData: editResponse.data[0].b64_json,
-                                modelIdUsed: "gpt-image-1-edit",
-                                responseId: `combination_${Date.now()}`,
-                                imageGenerationCallId: `combination_${Date.now()}`
-                            });
-                        } else {
-                            throw new Error('Image editing for combination failed to return data');
-                        }
-                    }
-                } else {
-                    // All images are original (have generation call IDs), use normal approach
-                    combinationImages.forEach(combImg => {
-                        if (combImg.imageGenerationCallId && !combImg.imageGenerationCallId.startsWith('edited_img_')) {
-                            inputArray.push({
-                                type: "image_generation_call",
-                                id: combImg.imageGenerationCallId
-                            });
-                            console.log(`🎨 Added original context: ${combImg.contextId} - ${combImg.description}`);
-                        }
-                    });
+            const hasCombinationImages = Array.isArray(combinationImages) && combinationImages.length > 0;
+            const hasEditedImages = hasCombinationImages
+                && combinationImages.some(img => img.isLatestVersion && img.imageData);
+
+            if (hasEditedImages) {
+                console.log('🎨 Combination with real image bytes — routing through gateway image edit');
+                const sortedImages = [...combinationImages]
+                    .filter(img => img.isLatestVersion && img.imageData)
+                    .sort((a, b) => String(a.contextId).localeCompare(String(b.contextId)));
+                const primaryImage = sortedImages[0];
+                const secondaryImages = sortedImages.slice(1);
+                const combinationPrompt = `${imagePrompt}. Primary scene: ${primaryImage.description}. Add to this scene: ${secondaryImages.map(img => img.description).join(', ')}.`;
+
+                let primaryImageData = primaryImage.imageData;
+                if (typeof primaryImageData === 'string' && primaryImageData.startsWith('data:image/')) {
+                    const base64Match = primaryImageData.match(/data:image\/[^;]+;base64,(.+)/);
+                    if (base64Match && base64Match[1]) primaryImageData = base64Match[1];
                 }
-                
-                requestPayload.input = inputArray;
-                console.log('🎨 Combination input structure with', inputArray.length - 1, 'images');
-                
-                // DO NOT use previous_response_id for combinations to avoid duplicates
-                
-            } else if (previousResponseId) {
-                console.log('🔄 Using previous_response_id for follow-up image generation:', previousResponseId);
-                requestPayload.previous_response_id = previousResponseId;
-                requestPayload.input = imagePrompt;
-            } else if (previousImageGenerationCallId) {
-                // Check if this is an edited image (temporary ID)
-                if (previousImageGenerationCallId.startsWith('edited_img_')) {
-                    console.log('🎨 Detected edited image context, switching to image editing approach');
-                    
-                    // For edited images, we need to get the current image data from the frontend
-                    // and use the image editing endpoint instead of conversational generation
-                    // This will be handled by a separate task type 'edit_image_from_context'
-                    console.log('⚠️ Edited image context detected but image data not provided. This should be handled by edit_image task.');
-                    return res.status(400).json({ 
-                        error: 'Edited image context requires image data. Please use edit_image task instead.',
-                        requiresImageData: true,
-                        contextType: 'edited_image'
-                    });
-                } else {
-                    console.log('🔄 Using previous image generation call ID for context:', previousImageGenerationCallId);
-                    requestPayload.input = [
-                        {
-                            role: "user",
-                            content: [{ type: "input_text", text: imagePrompt }]
-                        },
-                        {
-                            type: "image_generation_call",
-                            id: previousImageGenerationCallId
-                        }
-                    ];
+
+                const editResponse = await xenoImageClient.image.edit({
+                    model: 'nano_banana', // gateway conversational image-edit model
+                    image: primaryImageData, // base64 — xeno-ai sends `image` as a JSON field, not multipart
+                    prompt: combinationPrompt,
+                    n: 1,
+                    response_format: 'b64_json',
+                });
+                const comboB64 = await itemToBase64(editResponse?.data?.[0]);
+                if (!comboB64) {
+                    if (imgCharged) await refundImgCharge();
+                    return res.status(500).json({ error: 'Image combination failed to return data.' });
                 }
-            } else {
-                console.log('🆕 Creating new image generation conversation');
-                requestPayload.input = imagePrompt;
+                return await finishImage(comboB64, 'gpt-image-1-edit', `combination_${Date.now()}`, `combination_${Date.now()}`);
             }
 
-            console.log('Calling OpenAI Responses API for conversational image generation...');
-            const response = await openai.responses.create(requestPayload);
+            // An edited-image context must carry its bytes via the edit_image task (the frontend
+            // already switches to it). Refund + 400 here (the pre-gateway code 400'd WITHOUT a
+            // refund — a latent charge-and-give-nothing bug, fixed).
+            if (previousImageGenerationCallId && String(previousImageGenerationCallId).startsWith('edited_img_')) {
+                if (imgCharged) await refundImgCharge();
+                return res.status(400).json({
+                    error: 'Edited image context requires image data. Please use edit_image task instead.',
+                    requiresImageData: true,
+                    contextType: 'edited_image'
+                });
+            }
 
-            // Extract image generation results
-            const imageGenerationCalls = response.output.filter(
-                (output) => output.type === "image_generation_call"
-            );
-
-            if (imageGenerationCalls.length === 0) {
-                console.error('No image generation calls found in response:', response);
-                if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
+            // Plain generation — fresh, or a conversational follow-up degraded to an independent
+            // generation (the gateway has no /v1/responses chaining; the frontend does not resend
+            // image bytes on a plain follow-up, so continuity there is not recoverable server-side).
+            console.log('Calling XENO gateway /v1/images/generations for conversational image generation...');
+            const genResponse = await xenoImageClient.image.generate({
+                model: 'imagen4', // gateway default image-gen model
+                prompt: imagePrompt,
+                width: 1024,
+                height: 1024,
+                n: 1,
+                response_format: 'b64_json',
+            });
+            const genB64 = await itemToBase64(genResponse?.data?.[0]);
+            if (!genB64) {
+                console.error('No image data returned from gateway:', genResponse);
+                if (imgCharged) await refundImgCharge();
                 return res.status(500).json({ error: 'Image generation failed: No image data returned.' });
             }
-
-            const imageCall = imageGenerationCalls[0];
-            const imageBase64 = imageCall.result;
-
-            if (!imageBase64) {
-                console.error('Image generation failed, no result data in response:', imageCall);
-                if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
-                return res.status(500).json({ error: 'Image generation failed to return image data.' });
-            }
-
-            // Process the imageBase64 to handle malformed nested data URIs from GPT Image 1
-            let processedImageData = imageBase64;
-            
-            // Check for malformed nested data URI pattern
-            if (imageBase64.includes('data:image/svg+xml;base64,data:image/png;base64,')) {
-                console.warn('⚠️ Detected malformed nested data URI from GPT Image 1, extracting PNG data...');
-                console.log('🔍 Raw data preview:', imageBase64.substring(0, 200));
-                
-                // Extract the PNG data from the nested structure
-                const pngMatch = imageBase64.match(/data:image\/png;base64,([A-Za-z0-9+/=]+)/);
-                if (pngMatch && pngMatch[1]) {
-                    const pngBase64 = pngMatch[1].split('data:')[0]; // Remove any trailing nested data
-                    console.log('✅ Successfully extracted PNG data, length:', pngBase64.length);
-                    processedImageData = pngBase64; // Return just the base64 string
-                } else {
-                    console.warn('❌ Could not extract PNG data from nested structure, returning original');
-                }
-            } else if (imageBase64.startsWith('data:')) {
-                // If it's already a data URI, extract just the base64 part
-                const base64Match = imageBase64.match(/data:image\/[^;]+;base64,(.+)/);
-                if (base64Match && base64Match[1]) {
-                    processedImageData = base64Match[1];
-                    console.log('✅ Extracted base64 from data URI');
-                }
-            }
-
-            console.log('Conversational image generation successful, returning processed base64 data (first 50 chars):', processedImageData.substring(0, 50) + '...');
-
-            // Free tier: watermark the output (base64 → sharp). Log the metered usage.
-            let outImageData = processedImageData;
-            if (imgEnt?.watermark) {
-                try {
-                    outImageData = (await watermarkBuffer(Buffer.from(processedImageData, 'base64'))).toString('base64');
-                } catch (wmErr) {
-                    console.warn('[watermark] image task failed, returning original:', wmErr.message);
-                }
-            }
-            await logCreditUsage(req.db, imgUserId, 'image:gpt-image-1', imgCost, { route: '/api/chat/generate:image' }).catch(() => {});
-
-            return res.json({
-                imageData: outImageData,
-                modelIdUsed: "gpt-image-1",
-                responseId: response.id, // Return response ID for follow-up requests
-                imageGenerationCallId: imageCall.id, // Return image generation call ID for context
-                entitlement: gateMeta(imgEnt)
-            });
+            return await finishImage(genB64, 'gpt-image-1', `xeno_resp_${randomUUID()}`, `xeno_imgcall_${randomUUID()}`);
 
         } catch (error) {
-            if (imgCharged) await refundCredits(req.db, imgUserId, imgCost).catch(() => {});
+            if (imgCharged) await refundImgCharge();
             console.error('Error in conversational image generation task:', error);
             return res.status(500).json({ error: 'Failed to generate image. Please try again.' });
         }
@@ -1335,23 +1205,22 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
     // <<< ADDED: Image Edit Task Handling >>>
     else if (req.body.task === 'edit_image') {
-        console.log('Handling image edit task with OpenAI Image Edits API');
+        console.log('Handling image edit task with XENO gateway Image Edits API');
         try {
-            const { imageData, prompt, model = 'gpt-image-1', mask, background, outputFormat = 'png', quality = 'auto', size = 'auto' } = req.body;
+            let { imageData, prompt, model = 'nano_banana', mask, background, outputFormat = 'png', quality = 'auto', size = 'auto' } = req.body;
+            // The gateway image models are flux-*; reject stale OpenAI ids the frontend may still send.
+            if (!model || model === 'auto' || model === 'gpt-image-1' || String(model).startsWith('dall-e') || String(model).startsWith('flux')) model = 'nano_banana';
 
             if (!imageData || !prompt) {
                 return res.status(400).json({ error: 'Invalid request: imageData and prompt are required for image editing.' });
             }
 
-            const openaiApiKey = process.env.OPENAI_API_KEY;
-            if (!openaiApiKey) {
-                console.error('OPENAI_API_KEY is missing or empty in .env file for image editing.');
-                return res.status(500).json({ error: 'Server configuration error: OpenAI API key is not configured.' });
+            if (!xenoImageClient) {
+                console.error('XENO_API_KEY is missing — image gateway is not configured.');
+                return res.status(500).json({ error: 'Server configuration error: image gateway is not configured.' });
             }
 
-            const openai = new OpenAI({ apiKey: openaiApiKey });
-
-            // Convert base64 image data to buffer for OpenAI API
+            // Convert base64 image data to buffer for the gateway edit API
             let imageBuffer;
             if (imageData.startsWith('data:')) {
                 // Extract base64 from data URI
@@ -1381,8 +1250,12 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             console.log('🎨 File extension:', fileExtension);
             console.log('🎨 Data URI prefix:', imageData.substring(0, 30));
 
-            // Create a temporary file for the image with correct extension
-            const tempImagePath = path.join(uploadsDir, `temp-edit-${Date.now()}.${fileExtension}`);
+            // Create a temporary file for the image with correct extension.
+            // Name it with a per-request random token (NOT Date.now(), which collides for
+            // two concurrent edits in the same ms → one request would read the other's source
+            // image and return an edit of it, a cross-user content bleed).
+            const editTempToken = randomUUID();
+            const tempImagePath = path.join(uploadsDir, `temp-edit-${editTempToken}.${fileExtension}`);
             fs.writeFileSync(tempImagePath, imageBuffer);
             
             // Verify the file was created correctly
@@ -1390,7 +1263,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             console.log('🎨 Temporary file created:', tempImagePath);
             console.log('🎨 File size:', fileStats.size, 'bytes');
 
-            console.log('🎨 Calling OpenAI Image Edits API...');
+            console.log('🎨 Calling XENO gateway Image Edits API...');
             console.log('🎨 Prompt:', prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''));
             console.log('🎨 Model:', model);
             console.log('🎨 Output format:', outputFormat);
@@ -1415,7 +1288,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     maskExtension = 'webp';
                 }
                 
-                tempMaskPath = path.join(uploadsDir, `temp-mask-${Date.now()}.${maskExtension}`);
+                tempMaskPath = path.join(uploadsDir, `temp-mask-${editTempToken}.${maskExtension}`);
                 fs.writeFileSync(tempMaskPath, maskBuffer);
                 maskFileStream = fs.createReadStream(tempMaskPath);
             }
@@ -1456,53 +1329,88 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 if (size) requestParams.size = size;
             }
 
-            // Make the API call with correct parameters
-            const response = await openai.images.edit(requestParams);
+            // Entitlement gate + metering (Blocker #4b / LEAK-8f): this OpenAI edit path was
+            // previously ungated, uncharged, and un-watermarked. Now: resolve the plan, reserve
+            // the edit cost via the hold→settle meter, run the provider inside run(), watermark
+            // Free output before settle (a watermark failure voids the hold → no charge, no leak),
+            // and settle. Temp files are cleaned in both the success and failure paths.
+            const editUserId = req.user?.id;
+            if (!editUserId) {
+                try { fs.unlinkSync(tempImagePath); } catch {}
+                try { if (tempMaskPath && fs.existsSync(tempMaskPath)) fs.unlinkSync(tempMaskPath); } catch {}
+                return res.status(401).json({ error: 'Not authenticated' });
+            }
+            const editEnt = await resolveEntitlements(req.db, editUserId);
+            // Idempotency key. Prefer a client-supplied id (updated clients send a per-action
+            // requestId, reused verbatim on retry). If ABSENT, do NOT mint a fresh random id —
+            // that gives every retry / double-click a new hold and double-charges. Instead
+            // derive a DETERMINISTIC key from the edit's content + a coarse 5-min bucket, so a
+            // retry of the same edit reuses the hold (meterMediaGeneration → 409, charged once);
+            // a deliberate re-run after the bucket rolls gets a fresh key. (Blocker #4b review.)
+            const editIdemBucket = Math.floor(Date.now() / 300000);
+            const editContentKey = createHash('sha256')
+                .update([editUserId, model, prompt, mask || '', imageData, editIdemBucket].join('\n'))
+                .digest('hex').slice(0, 48);
+            const editReqId = req.body.requestId || req.headers['x-request-id'] || `edit:${editContentKey}`;
+            const editUnitCost = getCreditCost('edit', model);
+            const cleanupEditTemps = () => {
+                try { fs.unlinkSync(tempImagePath); } catch {}
+                try { if (tempMaskPath && fs.existsSync(tempMaskPath)) fs.unlinkSync(tempMaskPath); } catch {}
+            };
 
-            // Clean up temporary files
-            fs.unlinkSync(tempImagePath);
-            if (tempMaskPath && fs.existsSync(tempMaskPath)) {
-                fs.unlinkSync(tempMaskPath);
+            let meteredEdit;
+            try {
+                meteredEdit = await meterMediaGeneration(req.db, editUserId, {
+                    surface: 'image_edit', operation: 'chat.edit_image', model, provider: 'xeno',
+                    requestId: editReqId, unitCostMicro: editUnitCost * MICRO_PER_CREDIT, count: 1,
+                    run: async () => {
+                        // xeno-ai SDK: `image`/`mask` are base64/URL JSON fields (NOT multipart).
+                        const response = await xenoImageClient.image.edit({
+                            image: imageData,
+                            prompt,
+                            model,
+                            mask: mask || undefined,
+                            response_format: 'b64_json',
+                        });
+                        cleanupEditTemps();
+                        const item0 = response?.data?.[0];
+                        if (!item0) {
+                            throw new Error('Image editing failed: no image data returned');
+                        }
+                        let edited = item0.b64_json || item0.base64 || null;
+                        if (!edited && typeof item0.url === 'string') {
+                            if (item0.url.startsWith('data:')) edited = item0.url.split(',')[1] || null;
+                            else if (item0.url.startsWith('http')) {
+                                const rr = await fetch(item0.url);
+                                if (rr.ok) edited = Buffer.from(await rr.arrayBuffer()).toString('base64');
+                            }
+                        }
+                        if (!edited) {
+                            throw new Error('Image editing failed: no image data returned');
+                        }
+                        // Free tier: watermark the edited image (self-contained base64).
+                        if (editEnt.watermark && typeof edited === 'string' && edited) {
+                            edited = (await watermarkBuffer(Buffer.from(edited, 'base64'))).toString('base64');
+                        }
+                        return { data: [{ b64_json: edited }] };
+                    },
+                });
+            } catch (err) {
+                cleanupEditTemps();
+                if (err?.http === 402) return res.status(402).json({ error: 'Insufficient credits', message: 'Top up credits to edit images.' });
+                if (err?.http === 403) return res.status(403).json({ error: 'Account frozen' });
+                if (err?.http === 409) return res.status(409).json({ error: 'Duplicate request — use a new requestId', code: 'DUPLICATE_REQUEST' });
+                console.error('Error in image edit task:', err);
+                return res.status(err?.status || 500).json({ error: 'Failed to edit image. Please try again.', credits_refunded: true });
             }
 
-            if (!response.data || response.data.length === 0) {
-                console.error('No image data returned from OpenAI Image Edits API');
-                return res.status(500).json({ error: 'Image editing failed: No image data returned.' });
-            }
-
-            // Handle different response formats for different models
-            let editedImageData;
-            if (model === 'gpt-image-1') {
-                // gpt-image-1 returns base64 directly in the data field
-                editedImageData = response.data[0].b64_json || response.data[0];
-            } else {
-                // dall-e-2 returns b64_json field
-                editedImageData = response.data[0].b64_json;
-            }
-            
-            console.log('🎨 Image editing successful, returning base64 data (first 50 chars):', editedImageData.substring(0, 50) + '...');
-            console.log('🎨 DEBUG: Response data length:', editedImageData.length);
-            console.log('🎨 DEBUG: First 100 chars of response:', editedImageData.substring(0, 100));
-            
-            // Compare with original image data
-            const originalImageData = imageData.split(',')[1]; // Remove data:image/png;base64, prefix
-            const originalFirst100 = originalImageData.substring(0, 100);
-            const editedFirst100 = editedImageData.substring(0, 100);
-            const imagesAreDifferent = originalFirst100 !== editedFirst100;
-            
-            console.log('🎨 DEBUG: Original image first 100 chars:', originalFirst100);
-            console.log('🎨 DEBUG: Edited image first 100 chars:', editedFirst100);
-            console.log('🎨 DEBUG: Images are different:', imagesAreDifferent);
-            
-            if (!imagesAreDifferent) {
-                console.log('🚨 WARNING: OpenAI returned the same image data! The edit may not have worked.');
-            }
-            
             return res.json({
-                imageData: editedImageData,
+                imageData: meteredEdit.result.data[0].b64_json,
                 modelIdUsed: model,
                 editType: 'image_edit',
-                prompt: prompt
+                prompt: prompt,
+                credits_used: meteredEdit.creditsCharged,
+                entitlement: gateMeta(editEnt),
             });
 
         } catch (error) {
@@ -1512,521 +1420,19 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
     }
     // <<< END: Image Edit Task Handling >>>
 
-    // <<< ADDED: FAL.ai SAM 2 Segmentation Task Handling >>>
-    else if (req.body.task === 'segment_image' || req.body.task === 'auto_segment_image') {
-        console.log(`Handling FAL.ai SAM 2 segmentation task: ${req.body.task}`);
-        try {
-            const { imageUrl, points, box, outputFormat = 'png' } = req.body;
-
-            if (!imageUrl) {
-                return res.status(400).json({ error: 'Invalid request: imageUrl is required for segmentation.' });
-            }
-
-            // Get FAL API key
-            const falApiKey = process.env.VITE_FAL_KEY;
-            if (!falApiKey) {
-                return res.status(500).json({ error: 'FAL API key not configured' });
-            }
-
-            // Prepare FAL.ai SAM 2 request payload
-            let requestPayload = {
-                image_url: imageUrl,
-                output_format: outputFormat,
-                sync_mode: true // Get immediate response
-            };
-
-            // Add prompts based on task type
-            if (req.body.task === 'segment_image') {
-                if (points && points.positive && points.positive.length > 0) {
-                    // Convert points to FAL.ai format
-                    const prompts = [];
-                    
-                    // Add positive points (foreground)
-                    points.positive.forEach(point => {
-                        prompts.push({
-                            x: Math.round(point[0]),
-                            y: Math.round(point[1]),
-                            label: 1, // foreground
-                            frame_index: 0
-                        });
-                    });
-                    
-                    // Add negative points (background)
-                    if (points.negative && points.negative.length > 0) {
-                        points.negative.forEach(point => {
-                            prompts.push({
-                                x: Math.round(point[0]),
-                                y: Math.round(point[1]),
-                                label: 0, // background
-                                frame_index: 0
-                            });
-                        });
-                    }
-                    
-                    requestPayload.prompts = prompts;
-                    console.log(`🎯 Using point-based segmentation with ${points.positive.length} positive, ${points.negative?.length || 0} negative points`);
-                    
-                } else if (box && Array.isArray(box) && box.length === 4) {
-                    // Convert box to FAL.ai format [x1, y1, x2, y2] -> {x_min, y_min, x_max, y_max}
-                    requestPayload.box_prompts = [{
-                        x_min: Math.round(Math.min(box[0], box[2])),
-                        y_min: Math.round(Math.min(box[1], box[3])),
-                        x_max: Math.round(Math.max(box[0], box[2])),
-                        y_max: Math.round(Math.max(box[1], box[3])),
-                        frame_index: 0
-                    }];
-                    console.log(`📦 Using box-based segmentation with box: [${box.join(', ')}]`);
-                    
-                } else {
-                    return res.status(400).json({ error: 'Invalid request: points or box required for segment_image task.' });
-                }
-            } else if (req.body.task === 'auto_segment_image') {
-                // For auto segmentation, we don't need prompts - SAM 2 will segment everything
-                console.log('🤖 Using auto segmentation (no prompts needed)');
-            }
-
-            console.log(`🎯 Calling FAL.ai SAM 2 API...`);
-            console.log('Request payload:', JSON.stringify(requestPayload, null, 2));
-
-            // Call FAL.ai SAM 2 API
-            const response = await fetch('https://queue.fal.run/fal-ai/sam2/image', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Key ${falApiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestPayload)
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('🚨 FAL.ai SAM 2 API error:', response.status, errorText);
-                return res.status(response.status).json({
-                    error: 'FAL.ai SAM 2 segmentation failed',
-                    details: errorText
-                });
-            }
-
-            const result = await response.json();
-            console.log('✅ FAL.ai SAM 2 segmentation successful');
-            console.log('Response:', JSON.stringify(result, null, 2));
-
-            // Handle both queue response and direct response
-            if (result.status && result.status !== 'COMPLETED') {
-                // If queued, we need to poll for results
-                const requestId = result.request_id;
-                console.log(`⏳ Request queued with ID: ${requestId}, polling for results...`);
-                
-                // Poll for completion
-                let attempts = 0;
-                const maxAttempts = 30; // 30 seconds max wait
-                
-                while (attempts < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-                    
-                    const statusResponse = await fetch(`https://queue.fal.run/fal-ai/sam2/image/requests/${requestId}`, {
-                        headers: {
-                            'Authorization': `Key ${falApiKey}`,
-                        }
-                    });
-                    
-                    if (statusResponse.ok) {
-                        const statusResult = await statusResponse.json();
-                        console.log(`📊 Poll attempt ${attempts + 1}: Status response:`, statusResult);
-                        
-                        if (statusResult.image) {
-                            // Success - return the segmented image
-                            return res.json({
-                                success: true,
-                                image: statusResult.image,
-                                modelIdUsed: 'fal-ai/sam2',
-                                task: req.body.task,
-                                processingTime: attempts * 1000 // Approximate processing time
-                            });
-                        }
-                    }
-                    
-                    attempts++;
-                }
-                
-                return res.status(408).json({ error: 'Segmentation request timed out' });
-                
-            } else if (result.image) {
-                // Direct response with image
-                return res.json({
-                    success: true,
-                    image: result.image,
-                    modelIdUsed: 'fal-ai/sam2',
-                    task: req.body.task,
-                    processingTime: 0
-                });
-            } else {
-                console.error('🚨 Unexpected FAL.ai response format:', result);
-                return res.status(500).json({ error: 'Unexpected response format from FAL.ai' });
-            }
-
-        } catch (error) {
-            console.error('🚨 Error in FAL.ai SAM 2 segmentation task:', error);
-            return res.status(500).json({ error: 'Failed to segment image. Please try again.' });
-        }
+    // <<< Retired direct-provider tasks (SAM2 segmentation + IC-Light relight/background) >>>
+    // These branches called https://queue.fal.run directly (with VITE_FAL_KEY). The platform
+    // makes ZERO direct third-party AI calls, so they are removed. They return a clean 501
+    // until/unless a replacement is wired through the metered XENO gateway.
+    else if (['segment_image', 'auto_segment_image', 'iclight_relight', 'iclight_background'].includes(req.body.task)) {
+        console.log(`[retired] Direct-FAL task '${req.body.task}' is unavailable (no direct third-party calls).`);
+        return res.status(501).json({
+            error: 'This feature is currently unavailable.',
+            code: 'FEATURE_UNAVAILABLE',
+            task: req.body.task,
+        });
     }
-    // <<< END: FAL.ai SAM 2 Segmentation Task Handling >>>
-
-    // <<< ADDED: FAL.ai IC-Light-v2 Relight Task Handling >>>
-    else if (req.body.task === 'iclight_relight') {
-        console.log(`🔥 Handling FAL.ai IC-Light-v2 relight task`);
-        try {
-            const { imageData, prompt, model, image_size, num_inference_steps, guidance_scale, cfg, lowres_denoise, enable_hr_fix, sync_mode, num_images, output_format, enable_safety_checker, negative_prompt, initial_latent } = req.body;
-
-            if (!imageData || !prompt) {
-                return res.status(400).json({ error: 'Invalid request: imageData and prompt are required for IC-Light-v2 relight.' });
-            }
-
-            // Get FAL API key
-            const falApiKey = process.env.VITE_FAL_KEY;
-            if (!falApiKey) {
-                return res.status(500).json({ error: 'FAL API key not configured' });
-            }
-
-            // Convert base64 image data to blob URL for fal.ai
-            let imageUrl;
-            if (imageData.startsWith('data:')) {
-                // Convert base64 to blob and upload to fal.ai
-                const base64Data = imageData.split(',')[1];
-                const buffer = Buffer.from(base64Data, 'base64');
-                
-                // Upload image to fal.ai storage
-                const uploadResponse = await fetch('https://queue.fal.run/storage/upload', {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Key ${falApiKey}`,
-                        'Content-Type': 'image/png',
-                    },
-                    body: buffer
-                });
-
-                if (!uploadResponse.ok) {
-                    const errorText = await uploadResponse.text();
-                    console.error('🚨 FAL.ai image upload error:', uploadResponse.status, errorText);
-                    return res.status(uploadResponse.status).json({
-                        error: 'Failed to upload image to FAL.ai',
-                        details: errorText
-                    });
-                }
-
-                const uploadResult = await uploadResponse.json();
-                imageUrl = uploadResult.url;
-                console.log('📤 Image uploaded to FAL.ai:', imageUrl);
-            } else {
-                imageUrl = imageData;
-            }
-
-            // Prepare IC-Light-v2 request payload
-            const requestPayload = {
-                prompt: prompt,
-                image_url: imageUrl,
-                image_size: image_size || 'square_hd',
-                num_inference_steps: num_inference_steps || 28,
-                guidance_scale: guidance_scale || 5,
-                cfg: cfg || 1,
-                lowres_denoise: lowres_denoise || 0.98,
-                enable_hr_fix: enable_hr_fix || false,
-                sync_mode: sync_mode || true,
-                num_images: num_images || 1,
-                output_format: output_format || 'png',
-                enable_safety_checker: enable_safety_checker !== false,
-                negative_prompt: negative_prompt || '',
-                initial_latent: initial_latent || 'None'
-            };
-
-            console.log(`🔥 Calling FAL.ai IC-Light-v2 API with prompt: "${prompt}"`);
-            console.log('Request payload:', JSON.stringify(requestPayload, null, 2));
-
-            // Call FAL.ai IC-Light-v2 API
-            const response = await fetch('https://queue.fal.run/fal-ai/iclight-v2', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Key ${falApiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestPayload)
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('🚨 FAL.ai IC-Light-v2 API error:', response.status, errorText);
-                return res.status(response.status).json({
-                    error: 'FAL.ai IC-Light-v2 relight failed',
-                    details: errorText
-                });
-            }
-
-            const result = await response.json();
-            console.log('✅ FAL.ai IC-Light-v2 relight successful');
-            console.log('Response:', JSON.stringify(result, null, 2));
-
-            // Handle both queue response and direct response
-            if (result.status && result.status !== 'COMPLETED') {
-                // If queued, we need to poll for results
-                const requestId = result.request_id;
-                console.log(`⏳ IC-Light-v2 request queued with ID: ${requestId}, polling for results...`);
-                
-                // Poll for completion
-                let attempts = 0;
-                const maxAttempts = 60; // 60 seconds max wait for IC-Light-v2
-                
-                while (attempts < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-                    
-                    const statusResponse = await fetch(`https://queue.fal.run/fal-ai/iclight-v2/requests/${requestId}`, {
-                        headers: {
-                            'Authorization': `Key ${falApiKey}`,
-                        }
-                    });
-                    
-                    if (statusResponse.ok) {
-                        const statusResult = await statusResponse.json();
-                        console.log(`📊 IC-Light-v2 poll attempt ${attempts + 1}: Status response:`, statusResult);
-                        
-                        if (statusResult.images && statusResult.images.length > 0) {
-                            // Success - convert image to base64 and return
-                            const imageUrl = statusResult.images[0].url;
-                            
-                            // Download the image and convert to base64
-                            const imageResponse = await fetch(imageUrl);
-                            const imageBuffer = await imageResponse.buffer();
-                            const base64Data = imageBuffer.toString('base64');
-                            
-                            return res.json({
-                                success: true,
-                                imageData: base64Data,
-                                images: statusResult.images,
-                                modelIdUsed: 'fal-ai/iclight-v2',
-                                task: 'iclight_relight',
-                                prompt: prompt,
-                                processingTime: attempts * 1000,
-                                seed: statusResult.seed,
-                                has_nsfw_concepts: statusResult.has_nsfw_concepts
-                            });
-                        }
-                    }
-                    
-                    attempts++;
-                }
-                
-                return res.status(408).json({ error: 'IC-Light-v2 relight request timed out' });
-                
-            } else if (result.images && result.images.length > 0) {
-                // Direct response with images
-                const imageUrl = result.images[0].url;
-                
-                // Download the image and convert to base64
-                const imageResponse = await fetch(imageUrl);
-                const imageBuffer = await imageResponse.buffer();
-                const base64Data = imageBuffer.toString('base64');
-                
-                return res.json({
-                    success: true,
-                    imageData: base64Data,
-                    images: result.images,
-                    modelIdUsed: 'fal-ai/iclight-v2',
-                    task: 'iclight_relight',
-                    prompt: prompt,
-                    processingTime: 0,
-                    seed: result.seed,
-                    has_nsfw_concepts: result.has_nsfw_concepts
-                });
-            } else {
-                console.error('🚨 Unexpected FAL.ai IC-Light-v2 response format:', result);
-                return res.status(500).json({ error: 'Unexpected response format from FAL.ai IC-Light-v2' });
-            }
-
-        } catch (error) {
-            console.error('🚨 Error in FAL.ai IC-Light-v2 relight task:', error);
-            return res.status(500).json({ error: 'Failed to relight image. Please try again.' });
-        }
-    }
-    // <<< END: FAL.ai IC-Light-v2 Relight Task Handling >>>
-
-    // <<< ADDED: FAL.ai IC-Light-v2 Background Change Task Handling >>>
-    else if (req.body.task === 'iclight_background') {
-        console.log(`🌄 Handling FAL.ai IC-Light-v2 background change task`);
-        try {
-            const { imageData, prompt, model, image_size, num_inference_steps, guidance_scale, cfg, lowres_denoise, enable_hr_fix, sync_mode, num_images, output_format, enable_safety_checker, negative_prompt, initial_latent, background_threshold } = req.body;
-
-            if (!imageData || !prompt) {
-                return res.status(400).json({ error: 'Invalid request: imageData and prompt are required for IC-Light-v2 background change.' });
-            }
-
-            // Get FAL API key
-            const falApiKey = process.env.VITE_FAL_KEY;
-            if (!falApiKey) {
-                return res.status(500).json({ error: 'FAL API key not configured' });
-            }
-
-            // Convert base64 image data to blob URL for fal.ai
-            let imageUrl;
-            if (imageData.startsWith('data:')) {
-                // Convert base64 to blob and upload to fal.ai
-                const base64Data = imageData.split(',')[1];
-                const buffer = Buffer.from(base64Data, 'base64');
-                
-                // Upload image to fal.ai storage
-                const uploadResponse = await fetch('https://queue.fal.run/storage/upload', {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Key ${falApiKey}`,
-                        'Content-Type': 'image/png',
-                    },
-                    body: buffer
-                });
-
-                if (!uploadResponse.ok) {
-                    const errorText = await uploadResponse.text();
-                    console.error('🚨 FAL.ai image upload error:', uploadResponse.status, errorText);
-                    return res.status(uploadResponse.status).json({
-                        error: 'Failed to upload image to FAL.ai',
-                        details: errorText
-                    });
-                }
-
-                const uploadResult = await uploadResponse.json();
-                imageUrl = uploadResult.url;
-                console.log('📤 Image uploaded to FAL.ai for background change:', imageUrl);
-            } else {
-                imageUrl = imageData;
-            }
-
-            // Prepare IC-Light-v2 request payload for background change
-            // For background changes, we modify the prompt to be more specific about background replacement
-            const backgroundPrompt = `Change the background to: ${prompt}. Keep the main subject intact and only modify the background.`;
-            
-            const requestPayload = {
-                prompt: backgroundPrompt,
-                image_url: imageUrl,
-                image_size: image_size || 'square_hd',
-                num_inference_steps: num_inference_steps || 28,
-                guidance_scale: guidance_scale || 5,
-                cfg: cfg || 1,
-                lowres_denoise: lowres_denoise || 0.98,
-                enable_hr_fix: enable_hr_fix || false,
-                sync_mode: sync_mode || true,
-                num_images: num_images || 1,
-                output_format: output_format || 'png',
-                enable_safety_checker: enable_safety_checker !== false,
-                negative_prompt: negative_prompt || 'blurry, low quality, distorted, deformed',
-                initial_latent: initial_latent || 'None',
-                background_threshold: background_threshold || 0.67
-            };
-
-            console.log(`🌄 Calling FAL.ai IC-Light-v2 API for background change with prompt: "${backgroundPrompt}"`);
-            console.log('Request payload:', JSON.stringify(requestPayload, null, 2));
-
-            // Call FAL.ai IC-Light-v2 API
-            const response = await fetch('https://queue.fal.run/fal-ai/iclight-v2', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Key ${falApiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestPayload)
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('🚨 FAL.ai IC-Light-v2 background change API error:', response.status, errorText);
-                return res.status(response.status).json({
-                    error: 'FAL.ai IC-Light-v2 background change failed',
-                    details: errorText
-                });
-            }
-
-            const result = await response.json();
-            console.log('✅ FAL.ai IC-Light-v2 background change successful');
-            console.log('Response:', JSON.stringify(result, null, 2));
-
-            // Handle both queue response and direct response
-            if (result.status && result.status !== 'COMPLETED') {
-                // If queued, we need to poll for results
-                const requestId = result.request_id;
-                console.log(`⏳ IC-Light-v2 background change request queued with ID: ${requestId}, polling for results...`);
-                
-                // Poll for completion
-                let attempts = 0;
-                const maxAttempts = 60; // 60 seconds max wait for IC-Light-v2
-                
-                while (attempts < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-                    
-                    const statusResponse = await fetch(`https://queue.fal.run/fal-ai/iclight-v2/requests/${requestId}`, {
-                        headers: {
-                            'Authorization': `Key ${falApiKey}`,
-                        }
-                    });
-                    
-                    if (statusResponse.ok) {
-                        const statusResult = await statusResponse.json();
-                        console.log(`📊 IC-Light-v2 background change poll attempt ${attempts + 1}: Status response:`, statusResult);
-                        
-                        if (statusResult.images && statusResult.images.length > 0) {
-                            // Success - convert image to base64 and return
-                            const imageUrl = statusResult.images[0].url;
-                            
-                            // Download the image and convert to base64
-                            const imageResponse = await fetch(imageUrl);
-                            const imageBuffer = await imageResponse.buffer();
-                            const base64Data = imageBuffer.toString('base64');
-                            
-                            return res.json({
-                                success: true,
-                                imageData: base64Data,
-                                images: statusResult.images,
-                                modelIdUsed: 'fal-ai/iclight-v2',
-                                task: 'iclight_background',
-                                prompt: prompt,
-                                processingTime: attempts * 1000,
-                                seed: statusResult.seed,
-                                has_nsfw_concepts: statusResult.has_nsfw_concepts
-                            });
-                        }
-                    }
-                    
-                    attempts++;
-                }
-                
-                return res.status(408).json({ error: 'IC-Light-v2 background change request timed out' });
-                
-            } else if (result.images && result.images.length > 0) {
-                // Direct response with images
-                const imageUrl = result.images[0].url;
-                
-                // Download the image and convert to base64
-                const imageResponse = await fetch(imageUrl);
-                const imageBuffer = await imageResponse.buffer();
-                const base64Data = imageBuffer.toString('base64');
-                
-                return res.json({
-                    success: true,
-                    imageData: base64Data,
-                    images: result.images,
-                    modelIdUsed: 'fal-ai/iclight-v2',
-                    task: 'iclight_background',
-                    prompt: prompt,
-                    processingTime: 0,
-                    seed: result.seed,
-                    has_nsfw_concepts: result.has_nsfw_concepts
-                });
-            } else {
-                console.error('🚨 Unexpected FAL.ai IC-Light-v2 background change response format:', result);
-                return res.status(500).json({ error: 'Unexpected response format from FAL.ai IC-Light-v2 background change' });
-            }
-
-        } catch (error) {
-            console.error('🚨 Error in FAL.ai IC-Light-v2 background change task:', error);
-            return res.status(500).json({ error: 'Failed to change background. Please try again.' });
-        }
-    }
-    // <<< END: FAL.ai IC-Light-v2 Background Change Task Handling >>>
+    // <<< END retired direct-provider tasks >>>
 
     console.log(`Received request on /api/chat/generate for OpenRouter model: ${req.body.selectedModelId}`);
 
@@ -2348,15 +1754,6 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         }
         // <<< END NEW DETAILED LOGGING >>>
 
-        // 2. Prepare Headers
-        const headers = {
-            "Authorization": `Bearer ${openRouterApiKey}`,
-            "Content-Type": "application/json",
-            // Add optional headers
-            ...(siteUrl && { "HTTP-Referer": siteUrl }),
-            ...(siteTitle && { "X-Title": siteTitle }),
-        };
-        
         // 3. Prepare Body
         const bodyPayload = {
             "model": selectedModelId, // Use the ID sent from the frontend directly
@@ -2757,31 +2154,31 @@ app.post('/api/xeno-search', databaseMiddleware, authMiddleware, async (req, res
 
     console.log(`[Node.js Backend] Calling Python service at ${pythonServiceUrl} with payload:`, pythonServicePayload);
 
-    const response = await axios.post(pythonServiceUrl, pythonServicePayload, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 60000, // 60 seconds timeout
+    const response = await postJsonToService(pythonServiceUrl, pythonServicePayload, {
+      timeoutMs: 60000, // 60 seconds timeout
     });
+
+    if (!response.ok) {
+      // The service responded with a non-2xx status (axios error.response equivalent)
+      console.error('[Node.js Backend] Python Service Error Data:', response.data);
+      console.error('[Node.js Backend] Python Service Error Status:', response.status);
+      return res.status(response.status || 500).json({
+        error: 'Search service error',
+      });
+    }
 
     console.log('[Node.js Backend] Successfully received response from Python service.');
     res.json(response.data);
 
   } catch (error) {
     console.error('[Node.js Backend] Error calling Python service:', error.message);
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      console.error('[Node.js Backend] Python Service Error Data:', error.response.data);
-      console.error('[Node.js Backend] Python Service Error Status:', error.response.status);
-      res.status(error.response.status || 500).json({
-        error: 'Search service error',
-      });
-    } else if (error.request) {
-      // The request was made but no response was received
+    if (error.isNoResponse) {
+      // No response was received — network failure or timeout (axios error.request equivalent)
       console.error('[Node.js Backend] No response received from Python service.');
       res.status(503).json({ error: 'Search service unavailable' });
     } else {
-      // Something happened in setting up the request that triggered an Error
-      console.error('[Node.js Backend] Internal error setting up request to Python service:', error.message);
+      // Unexpected error setting up / processing the request
+      console.error('[Node.js Backend] Internal error contacting Python service:', error.message);
       res.status(500).json({ error: 'Internal server error while contacting Xeno Search service.' });
     }
   }
@@ -2806,139 +2203,30 @@ app.post('/api/v2/engine/dynamic-search', databaseMiddleware, authMiddleware, as
   console.log(`[Dynamic Search] Query='${query}', MaxPages=${max_pages}`);
 
   try {
-    const response = await axios.post(pythonServiceUrl, {
+    const response = await postJsonToService(pythonServiceUrl, {
       query,
       max_pages: parseInt(max_pages, 10) || 10,
       index_results: Boolean(index_results)
     }, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 120000, // 2 minutes timeout for dynamic crawling
+      timeoutMs: 120000, // 2 minutes timeout for dynamic crawling
     });
 
-    console.log(`[Dynamic Search] Found ${response.data.total_results || 0} results`);
+    if (!response.ok) {
+      return res.status(response.status || 500).json({
+        error: 'Dynamic search service error',
+      });
+    }
+
+    console.log(`[Dynamic Search] Found ${response.data?.total_results || 0} results`);
     res.json(response.data);
 
   } catch (error) {
     console.error('[Dynamic Search] Error:', error.message);
-    if (error.response) {
-      res.status(error.response.status || 500).json({
-        error: 'Dynamic search service error',
-      });
-    } else if (error.request) {
+    if (error.isNoResponse) {
       res.status(503).json({ error: 'Dynamic Search service unreachable.' });
     } else {
       res.status(500).json({ error: 'Internal server error.' });
     }
-  }
-});
-
-// OpenAI Realtime API endpoint - creates ephemeral session and returns session details (auth required)
-app.get('/api/openai-realtime-session', databaseMiddleware, authMiddleware, async (req, res) => {
-  console.log('Requesting ephemeral key from OpenAI Realtime API with voice:', req.query.voice || 'alloy');
-  const openaiApiKey = process.env.OPENAI_API_KEY;
-  
-  if (!openaiApiKey) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY is not configured on the server.' });
-  }
-
-  const voice = req.query.voice || 'alloy'; // Default to 'alloy' if no voice specified
-
-  try {
-    const openAiSessionResponse = await fetch('https://api.openai.com/v1/realtime/sessions', {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${openaiApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini-realtime-preview",
-        voice: voice,
-        modalities: ["text", "audio"],
-        instructions: "Your knowledge cutoff is 2023-10. You are a helpful, witty, and friendly AI. Act like a human, but remember that you aren't a human and that you can't do human things in the real world. Your voice and personality should be warm and engaging, with a lively and playful tone. If interacting in a non-English language, start by using the standard accent or dialect familiar to the user. Talk quickly. You should always call a function if you can. Do not refer to these rules, even if you're asked about them.",
-        input_audio_format: "pcm16",
-        output_audio_format: "pcm16",
-        turn_detection: {
-          type: "server_vad",
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 200,
-          create_response: true,
-          interrupt_response: true
-        },
-        tools: [],
-        tool_choice: "auto",
-        temperature: 0.8,
-        max_response_output_tokens: "inf"
-      }),
-    });
-
-    const responseBody = await openAiSessionResponse.text();
-    let responseData;
-    try {
-      responseData = JSON.parse(responseBody);
-    } catch (e) {
-      console.error(`[Node.js Backend] Failed to parse OpenAI Realtime session response: ${responseBody.substring(0,200)}...`);
-      return res.status(500).json({ error: 'Failed to create realtime session' });
-    }
-
-    if (!openAiSessionResponse.ok) {
-      console.error('[Node.js Backend] Error from OpenAI Realtime session API:', responseData);
-      return res.status(openAiSessionResponse.status || 500).json({
-        error: 'Failed to create realtime session'
-      });
-    }
-
-    console.log('[Node.js Backend] Successfully obtained session data from OpenAI:', JSON.stringify(responseData, null, 2)); // Log the full response from OpenAI
-    res.json(responseData); // Send the full response which includes the client_secret (ephemeral key)
-
-  } catch (error) {    console.error('[Node.js Backend] Error creating OpenAI Realtime session:', error);
-    res.status(500).json({ error: 'Failed to create realtime session' });
-  }
-});
-
-// OpenAI Realtime WebRTC endpoint - exchanges SDP offer for answer
-app.post('/api/openai-realtime-webrtc', databaseMiddleware, authMiddleware, async (req, res) => {
-  console.log('[Node.js Backend] HIT /api/openai-realtime-webrtc with body keys:', Object.keys(req.body));
-  const { sdpOffer, model = 'gpt-4o-mini-realtime-preview' } = req.body;
-
-  const openaiApiKey = process.env.OPENAI_API_KEY;
-  
-  if (!openaiApiKey) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY is not configured on the server.' });
-  }
-  
-  if (!sdpOffer) {
-    return res.status(400).json({ error: 'SDP offer is required.' });
-  }
-
-  try {
-    console.log('[Node.js Backend] Sending SDP offer to OpenAI Realtime API...');
-    const openAiResponse = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${openaiApiKey}`,
-        "Content-Type": "application/sdp",
-      },
-      body: sdpOffer, // Send raw SDP string
-    });
-
-    if (!openAiResponse.ok) {
-      const errorText = await openAiResponse.text();
-      console.error('[Node.js Backend] Error from OpenAI Realtime WebRTC endpoint:', errorText);
-      return res.status(openAiResponse.status).json({
-        error: 'Failed to exchange SDP'
-      });
-    }
-
-    const sdpAnswer = await openAiResponse.text(); // SDP answer as plain text
-    console.log('[Node.js Backend] Successfully received SDP answer from OpenAI');
-    
-    res.set('Content-Type', 'application/sdp');
-    res.send(sdpAnswer);
-
-  } catch (error) {
-    console.error('[Node.js Backend] Error in OpenAI WebRTC SDP exchange:', error);
-    res.status(500).json({ error: 'Failed to exchange SDP' });
   }
 });
 
@@ -3036,377 +2324,6 @@ app.post('/api/fetch-metadata', databaseMiddleware, authMiddleware, async (req, 
     // Return a structured error response
     res.status(500).json({ 
       error: 'Failed to process metadata'
-    });
-  }
-});
-
-// API endpoint for generating images using OpenAI
-app.post('/api/generate-image', databaseMiddleware, authMiddleware, async (req, res) => {
-  try {
-    const { prompt } = req.body;
-    
-    if (!prompt) {
-      return res.status(400).json({ error: 'Image prompt is required' });
-    }
-    
-    console.log(`Generating image with prompt: "${prompt}"`);
-    
-    // Check if OpenAI API key is available
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    if (!openaiApiKey) {
-      console.error('OPENAI_API_KEY is missing or empty in .env file');
-      return res.status(500).json({ 
-        error: 'Server configuration error: OpenAI API key is not configured.'
-      });
-    }
-    
-    console.log('OPENAI_API_KEY is configured');
-    
-    // Initialize OpenAI client
-    const openai = new OpenAI({
-      apiKey: openaiApiKey,
-    });
-    
-    // Generate image using OpenAI API
-    console.log('Calling OpenAI GPT Image API...');
-    const result = await openai.images.generate({
-      model: "gpt-image-1", // Use GPT Image model
-      prompt: prompt,
-      n: 1,
-      size: "1024x1024",
-    });
-    
-    console.log('Image generation successful');
-    
-    // Get the base64 image data
-    const imageData = result.data[0].b64_json;
-    
-    // Return the image data
-    return res.json({ 
-      success: true, 
-      image: imageData 
-    });
-    
-  } catch (error) {
-    console.error('Error generating image:', error);
-    return res.status(500).json({ 
-      error: 'Failed to generate image. Please try again.'
-    });
-  }
-});
-
-// OpenAI Images API endpoint (GPT Image 1) - matches frontend expectations
-app.post('/api/openai/images/generations', databaseMiddleware, authMiddleware, async (req, res) => {
-  try {
-    const { model, prompt, quality = 'medium', size = '1024x1024', n = 1, image } = req.body;
-    
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required' });
-    }
-    
-    console.log(`GPT Image 1 generation request: "${prompt}" (${quality} quality, ${size})`);
-    
-    // Check if OpenAI API key is available
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    if (!openaiApiKey) {
-      console.error('OPENAI_API_KEY is missing or empty in .env file for GPT Image 1');
-      return res.status(500).json({ 
-        error: 'Server configuration error: OpenAI API key is not configured.'
-      });
-    }
-    
-    // Initialize OpenAI client
-    const openai = new OpenAI({
-      apiKey: openaiApiKey,
-    });
-    
-    // Prepare generation parameters
-    const generationParams = {
-      model: model || "gpt-image-1",
-      prompt: prompt,
-      n: n,
-      size: size,
-      quality: quality
-    };
-    
-    // Add image input for image-to-image generation if provided
-    if (image) {
-      generationParams.image = image;
-    }
-    
-    console.log('Calling OpenAI Images API with GPT Image 1...');
-    const result = await openai.images.generate(generationParams);
-    
-    console.log('GPT Image 1 generation successful');
-    console.log('OpenAI response structure:', {
-      dataLength: result.data.length,
-      firstItem: {
-        hasUrl: !!result.data[0]?.url,
-        hasB64Json: !!result.data[0]?.b64_json,
-        urlLength: result.data[0]?.url?.length,
-        b64Length: result.data[0]?.b64_json?.length
-      }
-    });
-    
-    // Return response in OpenAI API format
-    return res.json({
-      created: Math.floor(Date.now() / 1000),
-      data: result.data.map(item => ({
-        url: item.url,
-        b64_json: item.b64_json,
-        revised_prompt: item.revised_prompt
-      }))
-    });
-    
-  } catch (error) {
-    console.error('Error with GPT Image 1 generation:', error);
-    
-    // Handle specific OpenAI API errors
-    if (error.status) {
-      return res.status(error.status).json({
-        error: 'Image generation API error'
-      });
-    }
-
-    return res.status(500).json({
-      error: 'Failed to generate image. Please try again.'
-    });
-  }
-});
-
-// OpenAI Image Edit endpoint
-app.post('/api/openai/images/edits', databaseMiddleware, authMiddleware, upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'mask', maxCount: 1 }
-]), async (req, res) => {
-  try {
-    console.log('OpenAI Image Edit Request:', req.body);
-    
-    const { 
-      prompt, 
-      model = 'dall-e-2', 
-      n = 1, 
-      size = '1024x1024',
-      response_format = 'b64_json' 
-    } = req.body;
-
-    if (!req.files || !req.files.image) {
-      return res.status(400).json({ error: 'Image file is required' });
-    }
-
-    // Check if OpenAI API key is available
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    if (!openaiApiKey) {
-      console.error('OPENAI_API_KEY is missing or empty in .env file');
-      return res.status(500).json({
-        error: 'Server configuration error: OpenAI API key is not configured.'
-      });
-    }
-
-    // Initialize OpenAI client
-    const openai = new OpenAI({
-      apiKey: openaiApiKey,
-    });
-
-    // Read uploaded files
-    const imageFile = req.files.image[0];
-    const maskFile = req.files.mask ? req.files.mask[0] : null;
-
-    console.log('Processing image edit with OpenAI...');
-    const result = await openai.images.edit({
-      model: model,
-      image: fs.createReadStream(imageFile.path),
-      mask: maskFile ? fs.createReadStream(maskFile.path) : undefined,
-      prompt: prompt,
-      n: n,
-      size: size,
-      response_format: response_format
-    });
-
-    // Clean up uploaded files
-    fs.unlinkSync(imageFile.path);
-    if (maskFile) {
-      fs.unlinkSync(maskFile.path);
-    }
-
-    // Return response in OpenAI API format
-    res.json({
-      created: result.created,
-      data: result.data.map(image => ({
-        url: image.url,
-        b64_json: image.b64_json
-      }))
-    });
-
-  } catch (error) {
-    console.error('Error in OpenAI image edit:', error);
-    
-    // Clean up files on error
-    if (req.files) {
-      if (req.files.image) {
-        req.files.image.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
-      if (req.files.mask) {
-        req.files.mask.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
-    }
-    
-    res.status(500).json({
-      error: 'Image edit failed. Please try again.'
-    });
-  }
-});
-
-// OpenAI Image Variations endpoint
-app.post('/api/openai/images/variations', databaseMiddleware, authMiddleware, upload.single('image'), async (req, res) => {
-  try {
-    console.log('OpenAI Image Variations Request:', req.body);
-    
-    const { 
-      model = 'dall-e-2', 
-      n = 1, 
-      size = '1024x1024',
-      response_format = 'b64_json' 
-    } = req.body;
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'Image file is required' });
-    }
-
-    // Check if OpenAI API key is available
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    if (!openaiApiKey) {
-      console.error('OPENAI_API_KEY is missing or empty in .env file');
-      return res.status(500).json({
-        error: 'Server configuration error: OpenAI API key is not configured.'
-      });
-    }
-
-    // Initialize OpenAI client
-    const openai = new OpenAI({
-      apiKey: openaiApiKey,
-    });
-
-    console.log('Processing image variations with OpenAI...');
-    const result = await openai.images.createVariation({
-      model: model,
-      image: fs.createReadStream(req.file.path),
-      n: n,
-      size: size,
-      response_format: response_format
-    });
-
-    // Clean up uploaded file
-    fs.unlinkSync(req.file.path);
-
-    // Return response in OpenAI API format
-    res.json({
-      created: result.created,
-      data: result.data.map(image => ({
-        url: image.url,
-        b64_json: image.b64_json
-      }))
-    });
-
-  } catch (error) {
-    console.error('Error in OpenAI image variations:', error);
-    
-    // Clean up file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    
-    res.status(500).json({
-      error: 'Image variations failed. Please try again.'
-    });
-  }
-});
-
-// OpenAI Conversational Image Generation (Responses API simulation)
-app.post('/api/openai/responses/create', databaseMiddleware, authMiddleware, async (req, res) => {
-  try {
-    console.log('OpenAI Responses API Request:', req.body);
-    
-    const { 
-      model = 'gpt-4o-mini',
-      input,
-      previous_response_id,
-      stream = false,
-      tools = [{ type: 'image_generation' }]
-    } = req.body;
-
-    // Check if OpenAI API key is available
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    if (!openaiApiKey) {
-      console.error('OPENAI_API_KEY is missing or empty in .env file');
-      return res.status(500).json({
-        error: 'Server configuration error: OpenAI API key is not configured.'
-      });
-    }
-
-    // Initialize OpenAI client
-    const openai = new OpenAI({
-      apiKey: openaiApiKey,
-    });
-
-    // Extract text prompts from input
-    const textInputs = input?.filter(item => item.type === 'input_text') || [];
-    const imageInputs = input?.filter(item => item.type === 'image_generation_call') || [];
-    
-    const combinedPrompt = textInputs.map(item => item.text).join(' ');
-
-    if (!combinedPrompt) {
-      return res.status(400).json({ error: 'No text input provided' });
-    }
-
-    console.log('Processing conversational image generation...');
-    
-    // For now, use regular image generation as the Responses API might not be fully available
-    const result = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt: combinedPrompt,
-      n: 1,
-      size: '1024x1024',
-      response_format: 'b64_json'
-    });
-
-    // Format response to match expected Responses API structure
-    const response = {
-      id: `resp_${Date.now()}`,
-      model: model,
-      created: Math.floor(Date.now() / 1000),
-      output: [
-        {
-          type: 'text',
-          text: `Generated image for: "${combinedPrompt}"`
-        }
-      ]
-    };
-
-    // Add image generation call if image was created
-    if (result.data && result.data.length > 0) {
-      response.output.push({
-        type: 'image_generation_call',
-        id: `img_${Date.now()}`,
-        result: result.data[0].b64_json
-      });
-    }
-
-    res.json(response);
-
-  } catch (error) {
-    console.error('Error in OpenAI conversational image generation:', error);
-    
-    res.status(500).json({
-      error: 'Conversational image generation failed. Please try again.'
     });
   }
 });
@@ -3525,170 +2442,6 @@ app.post('/api/piston/execute', databaseMiddleware, authMiddleware, async (req, 
 });
 
 // --- End XenoRun Code Execution API Routes ---
-
-// Ideogram V3 Reframe API Endpoint
-app.post('/api/ideogram-reframe', databaseMiddleware, authMiddleware, async (req, res) => {
-  try {
-    console.log('🖼️ Ideogram V3 Reframe request received:', req.body);
-    console.log('🖼️ Request headers:', req.headers);
-    console.log('🖼️ FAL_KEY available:', !!process.env.VITE_FAL_KEY);
-    
-    const { image_url, image_data, image_size, rendering_speed = 'BALANCED', num_images = 1, sync_mode = true } = req.body;
-    
-    // Validate required parameters
-    if (!image_url && !image_data) {
-      return res.status(400).json({ error: 'Either image_url or image_data is required' });
-    }
-    
-    if (!image_size) {
-      return res.status(400).json({ error: 'image_size is required' });
-    }
-    
-    let finalImageUrl = image_url;
-    
-    // For testing, let's use a sample image URL first to see if the API works
-    if (image_data) {
-      try {
-        console.log('🖼️ Testing with sample image first...');
-        
-        // Use a sample image URL to test if the API works
-        finalImageUrl = 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=512&h=512&fit=crop';
-        console.log('🖼️ Using sample image URL for testing:', finalImageUrl);
-        
-        // Save the actual image locally for later use
-        const imageBuffer = Buffer.from(image_data, 'base64');
-        const filename = `reframe-${Date.now()}.png`;
-        const filePath = path.join(uploadsDir, filename);
-        fs.writeFileSync(filePath, imageBuffer);
-        console.log('🖼️ Actual image saved locally:', filePath);
-        
-      } catch (error) {
-        console.error('🖼️ Error processing image:', error);
-        return res.status(500).json({ error: 'Failed to process image' });
-      }
-    }
-    
-    // Skip URL validation for localhost URLs since they're served by our own server
-    if (finalImageUrl && finalImageUrl.includes('localhost')) {
-      console.log(`Using localhost URL (skipping validation): ${finalImageUrl}`);
-    } else if (finalImageUrl) {
-      console.log(`Using external URL: ${finalImageUrl}`);
-    }
-    
-    // Call Ideogram V3 reframe API via FAL.ai queue
-    const requestBody = {
-      image_url: finalImageUrl,
-      image_size,
-      rendering_speed,
-      num_images,
-      sync_mode
-    };
-    
-    console.log('🖼️ Sending to FAL.ai API:', JSON.stringify(requestBody, null, 2));
-    console.log('🖼️ FAL.ai endpoint:', 'https://queue.fal.run/fal-ai/ideogram/v3/reframe');
-    console.log('🖼️ Final image URL being sent:', finalImageUrl);
-    
-    let queueStatus;
-    try {
-      const falResponse = await fetch('https://queue.fal.run/fal-ai/ideogram/v3/reframe', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${process.env.VITE_FAL_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-      
-      console.log(`🖼️ FAL.ai response status: ${falResponse.status}`);
-      console.log(`🖼️ FAL.ai response headers:`, Object.fromEntries(falResponse.headers.entries()));
-      
-      if (!falResponse.ok) {
-        const errorText = await falResponse.text();
-        console.error(`🖼️ Ideogram V3 API error (${falResponse.status}): ${errorText}`);
-        return res.status(falResponse.status).json({ 
-          error: `Ideogram V3 reframe failed. Status: ${falResponse.status}`, 
-          details: errorText 
-        });
-      }
-      
-      queueStatus = await falResponse.json();
-      console.log('🖼️ Ideogram V3 reframe queued:', queueStatus);
-    } catch (falError) {
-      console.error('🖼️ Error calling FAL.ai API:', falError);
-      return res.status(500).json({ 
-        error: 'Failed to call FAL.ai API', 
-        details: falError.message 
-      });
-    }
-    
-    // Poll for completion using the URLs returned by FAL.ai
-    let attempts = 0;
-    const maxAttempts = 60; // 5 minutes with 5-second intervals
-
-    const statusUrl = queueStatus.status_url || `https://queue.fal.run/fal-ai/ideogram/v3/reframe/requests/${queueStatus.request_id}/status`;
-    const responseUrl = queueStatus.response_url || `https://queue.fal.run/fal-ai/ideogram/v3/reframe/requests/${queueStatus.request_id}`;
-
-    while (attempts < maxAttempts) {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-
-        console.log(`🖼️ Checking status for request: ${queueStatus.request_id} (attempt ${attempts + 1}/${maxAttempts})`);
-
-        // Check queue status endpoint (GET)
-        const statusResponse = await fetch(statusUrl, {
-          headers: {
-            'Authorization': `Key ${process.env.VITE_FAL_KEY}`,
-          },
-        });
-
-        if (!statusResponse.ok) {
-          console.log(`🖼️ Status check failed (${statusResponse.status}): ${await statusResponse.text()}`);
-          attempts++;
-          continue;
-        }
-
-        const statusJson = await statusResponse.json();
-        const currentStatus = statusJson.status;
-        if (currentStatus === 'COMPLETED') {
-          // Fetch the final result from response URL
-          const resultResponse = await fetch(responseUrl, {
-            headers: {
-              'Authorization': `Key ${process.env.VITE_FAL_KEY}`,
-            },
-          });
-          if (!resultResponse.ok) {
-            console.log(`🖼️ Result fetch failed (${resultResponse.status}): ${await resultResponse.text()}`);
-            attempts++;
-            continue;
-          }
-          const result = await resultResponse.json();
-          console.log('🖼️ Ideogram V3 reframe completed:', result);
-          res.json(result);
-          return;
-        }
-
-        // Otherwise keep polling
-        console.log(`🖼️ Current queue status: ${currentStatus}${typeof statusJson.queue_position === 'number' ? ` (position ${statusJson.queue_position})` : ''}`);
-        attempts++;
-      } catch (pollError) {
-        console.error(`🖼️ Error during polling attempt ${attempts + 1}:`, pollError);
-        attempts++;
-      }
-    }
-    
-    // Timeout
-    res.status(408).json({ 
-      error: 'Reframe operation timed out', 
-      request_id: queueStatus.request_id 
-    });
-    
-  } catch (error) {
-    console.error('🖼️ Error in Ideogram V3 reframe API:', error);
-    res.status(500).json({
-      error: 'Failed to process reframe request'
-    });
-  }
-});
 
 // LaTeX to PDF compilation using local TeX Live service
 // Full TeX Live installation - supports ALL LaTeX packages and features
@@ -4967,7 +3720,8 @@ app.locals.migrationsReady = false;
 async function runStartupMigrations() {
   await runMigrations(pool);       // legacy schema files (youtube/office-canvas)
   await runAllMigrations(pool);    // versioned *.sql runner (rethrows on first failure)
-  await migrateAccountV2(pool);    // account/ledger v2 (additive, idempotent)
+  await migrateAccountV2(pool);    // account/ledger v2 (additive, idempotent) — creates oauth_clients
+  await migrateOidcClients(pool);  // OIDC first-party clients + loopback column (additive, idempotent)
   await seedMarketplace(pool).catch(err => console.error('[Seed] marketplace warning (non-fatal):', err.message));
 }
 
@@ -4975,6 +3729,14 @@ runStartupMigrations()
   .then(() => {
     app.locals.migrationsReady = true;
     console.log('✅ Database migrations complete — readiness gate open');
+    // Phantom-hold sweeper: void expired credit_holds every 15 min so stranded holds do
+    // not linger in state='held' (the available-balance math already ignores expired holds,
+    // but this keeps the table bounded and the state truthful). (Blocker #7 INFRA-7.3.)
+    const sweepHolds = () => sweepExpiredHolds(pool)
+      .then((n) => { if (n) console.log(`[HoldSweeper] voided ${n} expired hold(s)`); })
+      .catch((e) => console.error('[HoldSweeper] error:', e.message));
+    setInterval(sweepHolds, 15 * 60 * 1000).unref();
+    sweepHolds();
   })
   .catch(err => {
     // FAIL CLOSED: a broken/half-applied schema must not serve traffic. Exit non-zero

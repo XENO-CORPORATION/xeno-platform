@@ -255,7 +255,8 @@ const OverviewContent: React.FC = () => {
             <Route path="train/lora-video" element={<LoRaVideoTrainComponent />} />
             <Route path="train/llm" element={<TextLLMTrainComponent />} />
             <Route path="chat/llm" element={<MultiChatContainer />} />
-            <Route path="chat/voice" element={<ChatWithVoice />} />
+            {/* XENO: voice mode route disabled — voice de-scoped (no direct provider calls) */}
+            {/* <Route path="chat/voice" element={<ChatWithVoice />} /> */}
             <Route path="chat/search" element={<SearchChatInterface />} />
             <Route path="search/general" element={<GeneralSearchInterface />} />
             <Route path="search/finance" element={<FinanceSearchInterface />} />
@@ -316,7 +317,8 @@ const OverviewContent: React.FC = () => {
             <Route path="playground/train/lora-video" element={<Navigate to="train/lora-video" replace />} />
             <Route path="playground/train/llm" element={<Navigate to="train/llm" replace />} />
             <Route path="playground/chat/llm" element={<Navigate to="chat/llm" replace />} />
-            <Route path="playground/chat/voice" element={<Navigate to="chat/voice" replace />} />
+            {/* XENO: voice mode redirect disabled — voice de-scoped (no direct provider calls) */}
+            {/* <Route path="playground/chat/voice" element={<Navigate to="chat/voice" replace />} /> */}
             <Route path="playground/chat/search" element={<Navigate to="chat/search" replace />} />
             <Route path="playground/search/general" element={<Navigate to="search/general" replace />} />
             <Route path="playground/search/finance" element={<Navigate to="search/finance" replace />} />

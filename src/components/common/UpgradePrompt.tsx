@@ -6,19 +6,24 @@ const ACCENT = '#a760ff';
 
 interface UpgradePromptProps {
   /** Where it's shown, for the copy. */
-  context?: 'watermark' | 'resolution' | 'credits' | 'commercial' | 'general';
+  context?: 'cloudSync' | 'crossApp' | 'agents' | 'collaboration' | 'resolution' | 'credits' | 'commercial' | 'general';
   /** Compact inline variant (e.g. under a generated image) vs. full banner. */
   variant?: 'banner' | 'inline';
   className?: string;
   dismissible?: boolean;
 }
 
+// v2: the free/paid boundary is the connected Platform (server-backed features),
+// not cosmetics. No watermark copy — the standalone tool is clean and unwatermarked.
 const COPY: Record<string, { title: string; sub: string }> = {
-  watermark: { title: 'Remove the watermark', sub: 'Pro unlocks watermark-free exports, 4K, and a commercial license.' },
-  resolution: { title: 'Unlock 4K resolution', sub: "You're on standard resolution. Pro generates up to 4K." },
+  cloudSync: { title: 'Sync across your devices', sub: 'Pro adds cloud sync + multi-device — your projects everywhere.' },
+  crossApp: { title: 'Connect your workflows', sub: 'Pro unlocks cross-app workflows across the XENO platform.' },
+  agents: { title: 'Put agents to work', sub: 'Pro unlocks agents & automation across your projects.' },
+  collaboration: { title: 'Work together in real time', sub: 'Team adds real-time collaboration, shared workspaces, and roles.' },
+  resolution: { title: 'Unlock 4K managed generation', sub: "You're on standard resolution. Pro generates up to 4K on managed models." },
   credits: { title: 'Running low on credits', sub: 'Upgrade to Pro or top up — Pro includes unlimited in-house generation.' },
-  commercial: { title: 'Use your work commercially', sub: 'Free outputs are personal-use only. Pro adds a commercial license.' },
-  general: { title: 'Upgrade to Pro', sub: 'Watermark-free · 4K · commercial license · priority — €24/mo.' },
+  commercial: { title: 'Use your work commercially', sub: 'Free is personal-use. Pro adds a commercial-use license.' },
+  general: { title: 'Upgrade to Pro', sub: 'Cloud sync · cross-app · agents · commercial license — €24/mo.' },
 };
 
 /**

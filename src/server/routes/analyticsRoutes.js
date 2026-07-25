@@ -9,22 +9,16 @@
  * - Revenue/billing stats
  *
  * All endpoints require authentication. Admin-only endpoints
- * check for is_admin flag on the user record.
+ * check users.role === 'admin' in the DB (shared requireAdmin guard).
  */
 
 import { Router } from 'express';
+// DB-backed admin guard (users.role === 'admin'). The old local check tested
+// req.user?.is_admin, a column that is never selected AND does not exist — so the
+// guard rejected EVERYONE, including real admins (permanently dead endpoints).
+import { requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
-
-// --------------------------------------------------------------------------
-// Middleware: Require admin role for dashboard endpoints
-// --------------------------------------------------------------------------
-function requireAdmin(req, res, next) {
-  if (!req.user?.is_admin) {
-    return res.status(403).json({ success: false, error: 'Admin access required' });
-  }
-  next();
-}
 
 // --------------------------------------------------------------------------
 // Track an analytics event (public — used by frontend/apps)

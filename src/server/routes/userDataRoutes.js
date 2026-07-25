@@ -6,9 +6,23 @@ const router = express.Router();
 // DATABASE INITIALIZATION
 // ============================================
 
+// SECURITY: same gate as authRoutes /init — in production, DDL endpoints require
+// the SETUP_TOKEN, not just any authenticated user.
+function requireSetupToken(req, res) {
+  if (process.env.NODE_ENV !== 'production') return true;
+  const expected = process.env.SETUP_TOKEN;
+  const provided = req.headers['x-setup-token'] || req.body?.setupToken;
+  if (!expected || provided !== expected) {
+    res.status(403).json({ success: false, error: 'Forbidden' });
+    return false;
+  }
+  return true;
+}
+
 // POST /api/user-data/init - Initialize user data tables
 router.post('/init', async (req, res) => {
   try {
+    if (!requireSetupToken(req, res)) return;
     // Create user_settings table
     await req.db.query(`
       CREATE TABLE IF NOT EXISTS user_settings (

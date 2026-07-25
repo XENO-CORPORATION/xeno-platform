@@ -15,9 +15,7 @@
     "test:remote-status": "node tests/remote-status.test.js"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
     "@xeno-corporation/xeno-agent-cli": "^0.4.22",
-    "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
     "bull": "^4.12.0",
     "cheerio": "^1.0.0",
@@ -35,7 +33,6 @@
     "helmet": "^8.1.0",
     "hpp": "^0.2.3",
     "html-to-docx": "^1.8.0",
-    "http-proxy-middleware": "^2.0.7",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
     "mammoth": "^1.6.0",

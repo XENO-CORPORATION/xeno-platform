@@ -30,6 +30,12 @@ export async function eraseSubject(pool, userId) {
     const links = await client.query('DELETE FROM external_identity_links WHERE platform_user_id = $1', [userId]);
     // 3. Revoke every token/session.
     await client.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE user_id = $1', [userId]).catch(() => {});
+    // 3b. Delete session rows outright: they carry PII (ip_address, user_agent) and —
+    //     in legacy rows — a PLAINTEXT JWT in session_token. This also instantly kills
+    //     every session-backed (sid) token the subject still holds. No .catch(): a
+    //     failure inside the transaction must abort the erasure loudly, not report a
+    //     half-erased subject as erased.
+    await client.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
     // 4. credit_transactions + credit_grants are KEPT — no PII, just opaque ids +
     //    amounts; the §5 hash chain remains valid after erasure.
     await client.query('COMMIT');

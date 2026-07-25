@@ -72,17 +72,31 @@ router.put('/caps', async (req, res) => {
   }
 });
 
-// POST /api/v2/ledger/grants { userId?, amountMicro, kind?, priority?, expiresAt? }
+// POST /api/v2/ledger/grants { userId?, amountMicro, kind?, priority?, expiresAt?, sourceRef }
 // Creates credits → ADMIN ONLY (relation admin on system:credits), else anyone
 // could print money. Arch §4.7.
+// IDEMPOTENCY (required): a grant with a null sourceRef is REPLAYABLE — the
+// uq_credit_txn_ref guard excludes NULL reference_ids, so a retried/duplicated
+// admin request would mint credits twice. The route therefore REQUIRES either a
+// body `sourceRef` or an `Idempotency-Key` header (synthesized into
+// `admin-grant:<key>`); a replay of the same ref hits the unique index → 409.
 router.post('/grants', async (req, res) => {
   try {
     const can = await authzCheck(req.db, { object: 'system:credits', relation: 'admin', subject: `user:${req.user.id}` });
     if (!can.allowed) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'ledger grant requires system admin' } });
     const b = req.body || {};
     const target = b.userId || req.user.id;
-    res.json(await addGrant(req.db, target, { amountMicro: b.amountMicro, kind: b.kind, priority: b.priority, expiresAt: b.expiresAt || null, sourceRef: b.sourceRef || null }));
+    const idemHeader = req.headers['idempotency-key'];
+    const sourceRef = b.sourceRef || (idemHeader ? `admin-grant:${idemHeader}` : null);
+    if (!sourceRef) {
+      return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'sourceRef (or an Idempotency-Key header) is required — an unreferenced grant is replayable' } });
+    }
+    res.json(await addGrant(req.db, target, { amountMicro: b.amountMicro, kind: b.kind, priority: b.priority, expiresAt: b.expiresAt || null, sourceRef }));
   } catch (err) {
+    // Unique-index hit on uq_credit_txn_ref = a replayed sourceRef → conflict, not 500.
+    if (err && err.code === '23505') {
+      return res.status(409).json({ error: { code: 'CONFLICT', message: 'a grant with this sourceRef already exists (idempotent replay rejected)' } });
+    }
     sendErr(res, err);
   }
 });

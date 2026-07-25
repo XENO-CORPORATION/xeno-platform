@@ -11,7 +11,7 @@
  *   import { createXenoAccount } from './xeno-account';
  *   const account = createXenoAccount({ getToken: () => localStorage.getItem('xenoos_auth_token') });
  *   const ent = await account.getEntitlements();
- *   if (ent?.entitlements.watermark) applyWatermark();          // Free tier
+ *   if (await account.can('cloudSync')) enableCloudSync();       // Pro+ (Platform)
  *   if (!(await account.can('commercial'))) blockCommercialExport();
  *   // Send users to manage/upgrade:
  *   window.open(account.billingUrl, '_blank');
@@ -19,13 +19,18 @@
 
 export interface Entitlements {
   plan: string;                 // 'free' | 'pro' | 'team'
-  watermark: boolean;           // true → outputs must be watermarked
-  commercial: boolean;          // commercial-use license
-  maxResolution: string;        // 'standard' | '4k'
-  priority: boolean;            // priority generation queue
-  inHouseDailyLimit: number | null; // null = unlimited (in-house xeno-rt models)
-  privateProjects: boolean;
+  commercial: boolean;          // commercial-use LICENSE (a legal term, not a tech gate) — Pro+
+  maxResolution: string;        // 'standard' | '4k' — gates SERVER-SIDE managed generation only (NOT local export)
+  priority: boolean;            // priority on the managed-inference queue — Pro+
+  inHouseDailyLimit: number | null; // null = unlimited (in-house xeno-rt fair-use daily cap)
+  privateProjects: boolean;     // cloud-stored private projects — Pro+
   teamSeats: number;
+  cloudSync: boolean;           // cloud sync + multi-device — Pro+
+  crossApp: boolean;            // cross-app workflows — Pro+
+  agents: boolean;              // agents / automation — Pro+
+  collaboration: boolean;       // real-time collaboration — Team only
+  /** @deprecated (v2): watermarking retired; always false on every tier — never gate on this. */
+  watermark: boolean;
 }
 
 export interface AccountSummary {
@@ -49,8 +54,10 @@ export interface XenoAccountConfig {
 }
 
 const FREE: Entitlements = {
-  plan: 'free', watermark: true, commercial: false, maxResolution: 'standard',
-  priority: false, inHouseDailyLimit: 50, privateProjects: false, teamSeats: 0,
+  plan: 'free', commercial: false, maxResolution: 'standard', priority: false,
+  inHouseDailyLimit: 50, privateProjects: false, teamSeats: 0,
+  cloudSync: false, crossApp: false, agents: false, collaboration: false,
+  watermark: false, // deprecated (v2): watermarking retired; always false — never gate on this
 };
 
 export function createXenoAccount(cfg: XenoAccountConfig) {
@@ -97,15 +104,19 @@ export function createXenoAccount(cfg: XenoAccountConfig) {
       return r ?? { enabled: false, plan: 'free', status: 'none', credits: 0, currentPeriodEnd: null, entitlements: FREE };
     },
 
-    /** Convenience gate: `await account.can('commercial')`, `can('priority')`, `can('watermarkFree')`, `can('4k')`. */
-    async can(feature: 'commercial' | 'priority' | 'watermarkFree' | '4k' | 'privateProjects'): Promise<boolean> {
+    /** Convenience gate: `await account.can('commercial')`, `can('priority')`, `can('cloudSync')`, `can('4k')`. */
+    async can(feature: 'commercial' | 'priority' | 'watermarkFree' | '4k' | 'privateProjects' | 'cloudSync' | 'crossApp' | 'agents' | 'collaboration'): Promise<boolean> {
       const e = (await this.getEntitlements()).entitlements;
       switch (feature) {
         case 'commercial': return e.commercial;
         case 'priority': return e.priority;
-        case 'watermarkFree': return !e.watermark;
+        case 'watermarkFree': return !e.watermark; // deprecated (v2): always true — watermarking retired
         case '4k': return e.maxResolution === '4k';
         case 'privateProjects': return e.privateProjects;
+        case 'cloudSync': return e.cloudSync;
+        case 'crossApp': return e.crossApp;
+        case 'agents': return e.agents;
+        case 'collaboration': return e.collaboration;
         default: return false;
       }
     },

@@ -80,6 +80,10 @@ const CanvasInterface: React.FC<CanvasInterfaceProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          // Stable idempotency key for THIS edit action (reused on any retry within this
+          // call); the isEditing guard blocks double-clicks. Prevents the server from
+          // minting a fresh id per request and double-charging on retry.
+          requestId: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `edit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           task: 'edit_image',
           imageData: imageDataUrl,
           prompt: editPrompt,

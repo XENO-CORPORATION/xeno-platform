@@ -116,15 +116,46 @@ Flag behavior you can rely on (from the script):
 - `--type` — one of `release | patch | hotfix`; anything else defaults to `release`.
 - `--severity` — `critical` or (default) `normal`; `critical` is highlighted on the site.
 - `--title` — optional short headline; when present, it is preferred over `notes` for the `version.json` `notes` field (capped at 400 chars).
+- `--artifact-dir` — directory holding the electron-builder-generated `latest*.yml`. **Defaults to the installer's own directory**, so you only pass it when the yml is not next to the `.exe` (e.g. a CI artifact download that flattened the layout). See the auto-update section below.
+- `--updater-url` — the product's electron-updater `publish.url`, if it is not the standard `apps/<slug>/`. Accepts a full URL or an already-relative R2 path. Leave it off unless the product's `electron-builder.yml` genuinely diverges.
 - `--dry-run` — prints the `rclone` commands instead of executing them. **Always dry-run first when unsure.**
 
 What it writes to R2:
 
 - `apps/<slug>/v<version>/<InstallerFilename>` — the installer(s), uploaded with `rclone copyto ... --no-traverse` (no cache header → immutable).
+- `apps/<slug>/v<version>/<InstallerFilename>.blockmap` — the differential-update sidecar, when electron-builder emitted one next to the installer.
+- `apps/<slug>/latest.yml` (+ `latest-mac.yml` / `latest-linux.yml` when those installers are passed) — **the electron-updater channel.** See below.
 - `apps/<slug>/releases.json` — the new entry **prepended** to the full history; `latest` recomputed so exactly one stable entry is `latest:true`.
 - `apps/<slug>/version.json` — regenerated from the newest stable entry (filenames only; Hub joins `v<version>/`).
 
-Both JSON files are uploaded with `--header-upload "Cache-Control: no-cache"`; installers are not (they cache forever).
+Both JSON files **and `latest*.yml`** are uploaded with `--header-upload "Cache-Control: no-cache"` (they are moving pointers); installers and blockmaps are not (they cache forever).
+
+##### The auto-update channel (`latest*.yml`) — do not skip this
+
+There are **two** update paths and they read different files:
+
+| path | reads | who |
+|---|---|---|
+| Hub launcher polling | `apps/<slug>/version.json` | XENO Hub, the website download pages |
+| **in-app auto-update** | **`apps/<slug>/latest.yml`** | `electron-updater` inside the product |
+
+`electron-updater` fetches `<publish.url>/latest.yml`. electron-builder **generates** `latest*.yml` at package time next to the installer; before this was wired, the release flow never uploaded it, so **in-app auto-update was silently dead for every product** even though `version.json` looked healthy.
+
+The publisher now handles it automatically:
+
+1. finds `latest.yml` / `latest-mac.yml` / `latest-linux.yml` in the installer's directory (or `--artifact-dir`),
+2. **rewrites the installer references inside it to `v<version>/<file>`** — electron-builder writes a bare filename, which would resolve against `publish.url` to `apps/<slug>/<file>` and **404**, because installers live under `apps/<slug>/v<version>/`. `sha512`/`size` are untouched (they hash content, not path) and the rewrite is idempotent,
+3. uploads each to the product's updater path, defaulting to `apps/<slug>/`.
+
+It **warns and continues** if an expected `latest*.yml` is missing — a missing channel file is not a hard failure, so **check the output**. A release that prints `⚠ no artifact dir to scan for latest*.yml` shipped without an auto-update feed.
+
+> ⚠️ **`latest.yml` existing proves nothing about the product side.** electron-builder emits it for `nsis` regardless of whether the feed URL is valid. The product's `electron-builder.yml` must carry an explicit
+> ```yaml
+> publish:
+>   provider: generic
+>   url: https://updates.xenostudio.ai/apps/<slug>/
+> ```
+> Without it, electron-builder infers a **GitHub** provider from the private repo remote and bakes `provider: github / owner: XENO-CORPORATION / repo: xeno-<slug>` into the installed app's `resources/app-update.yml` — a permanent 404 no amount of correct publishing can fix. Verify by **packaging and reading `win-unpacked/resources/app-update.yml`**, never by the presence of `latest.yml`.
 
 > The script prints a closing reminder: *"trigger a product-pages prerender + frontend deploy so the static/SEO pages reflect the new version."* For a **pure version bump this is optional** — the live page fetches `releases.json` on load, and the prerendered SEO `<head>` (title/description/canonical/OG/JSON-LD) is **not** version-specific, so it does not go stale. Ignore the reminder for Track A; it is satisfied automatically the next time you run a Track B content deploy. Publishing does **not** require redeploying the website.
 
@@ -137,6 +168,7 @@ node scripts/publish-cli-releases.mjs \
   --app <slug> \
   --pkg @xeno-corporation/xeno-<name> \
   --notes ../xeno-<name>/apps/xeno-<name>/src/commands/release-notes.ts \
+  [--install "npm install <package>"] \
   [--out dist-feed] [--dry-run]
 ```
 
@@ -149,7 +181,7 @@ node scripts/publish-cli-releases.mjs \
   --notes ../xeno-agent-cli/apps/xeno-agent-cli/src/commands/release-notes.ts
 ```
 
-- `--app`, `--pkg`, `--notes` are **required**.
+- `--app`, `--pkg`, `--notes` are **required**. `--install` is optional and defaults to the global CLI command; SDK/library packages should pass their package-local install command.
 - The feed is the **intersection** of versions that are BOTH on npm AND carry release notes, newest-first; the npm `latest` dist-tag is flagged `latest`.
 - Writes `apps/<slug>/releases.json` and an npm-shaped `apps/<slug>/version.json` (carries `version`/`date`/`npm`/`install`/`notes`, no windows/mac/linux keys). Both uploaded with `Cache-Control: no-cache`.
 - `--dry-run` prints the `rclone` commands without uploading.
@@ -298,6 +330,11 @@ A release is complete only when **every** applicable box is checked.
 - [ ] `curl -sI https://updates.xenostudio.ai/apps/<slug>/version.json` returns 200 and points at the new latest-stable.
 - [ ] Live `https://xenostudio.ai/product/<slug>/releases` shows the new release.
 - [ ] **(desktop)** `curl -sI "https://xenostudio.ai/product/<slug>/download/win"` returns **302** to the new installer.
+- [ ] **(desktop, in-app auto-update)** `curl -s https://updates.xenostudio.ai/apps/<slug>/latest.yml` returns **200** with the new `version:`, and **every `url:`/`path:` inside it starts with `v<version>/`** — a bare filename there means the download will 404 even though the check succeeds. Then confirm the referenced installer resolves:
+      ```bash
+      curl -sI -r 0-99 "https://updates.xenostudio.ai/apps/<slug>/v<version>/<InstallerFilename>"   # expect 206
+      ```
+- [ ] **(desktop, first release after a config change)** the packaged `win-unpacked/resources/app-update.yml` reads `provider: generic` at `https://updates.xenostudio.ai/apps/<slug>/` — **read the file, do not infer it from `latest.yml` existing.**
 
 **Track A (pure release) — additionally:**
 

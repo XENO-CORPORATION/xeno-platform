@@ -13,6 +13,7 @@ import fetch from 'node-fetch';
 import Redis from 'ioredis';
 import { addGrant, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
+import { sendEmail } from '../services/emailService.js';
 
 // Free-tier starter credits granted on signup so new users can try premium generation.
 const FREE_SIGNUP_CREDITS = Number(process.env.FREE_SIGNUP_CREDITS || 50);
@@ -198,8 +199,8 @@ async function findOrCreateOAuthUser(db, provider, profile) {
     const oauthPasswordHash = await hashPassword(oauthPlaceholderPassword);
 
     const insertResult = await db.query(
-      `INSERT INTO users (id, username, email, password_hash, display_name, avatar_url, email_verified, is_active, status, role, plan, credits, bonus_credits_claimed, created_at, updated_at, last_login)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), NOW())
+      `INSERT INTO users (id, username, email, password_hash, display_name, avatar_url, email_verified, is_active, status, role, plan, credits, bonus_credits_claimed, workspace_activated_at, created_at, updated_at, last_login)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), NOW(), NOW())
        RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed, status, role, plan`,
       [userId, finalUsername, email?.toLowerCase(), oauthPasswordHash, name || finalUsername, avatar, true, true, 'active', 'user', 'free', 0, false]
     );
@@ -252,17 +253,65 @@ async function verifyPassword(password, hashedPassword) {
   return await bcrypt.compare(password, hashedPassword);
 }
 
-// Generate JWT token
-function generateToken(user) {
+// Generate JWT token. When `sid` is provided the token is SESSION-BACKED: it is
+// only valid while its user_sessions row (id = sid) exists, so logout/password
+// reset/account deletion can revoke it instantly (see resolveAuthedUser).
+function generateToken(user, sid) {
   return jwt.sign(
-    { 
+    {
       userId: user.id,
       email: user.email,
-      username: user.username 
+      username: user.username,
+      ...(sid ? { sid } : {})
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
+}
+
+// Frontend base URL for account-recovery / verification links in emails.
+const APP_URL = (process.env.APP_BASE_URL || process.env.FRONTEND_URL || 'https://xenostudio.ai').replace(/\/+$/, '');
+
+// Hash a high-entropy account token (password-reset / email-verification) for at-rest
+// storage. sha256 is correct here — the token is 256-bit random, not a low-entropy
+// password — and keeps lookup a single indexed equality instead of a per-row bcrypt scan.
+function hashToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+// A URL-safe 256-bit single-use token; only its hash is ever persisted.
+function newAccountToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Issue a session-backed JWT: mint sid, sign the token with it, and record the
+// session row (id = sid, token_hash = sha256(jwt) — NEVER the plaintext JWT).
+// If the session write fails we fall back LOUDLY to a stateless (no-sid) token so
+// login still succeeds — a sid token without its row would be dead on arrival.
+async function issueSessionToken(db, user, req) {
+  const sid = uuidv4();
+  const token = generateToken(user, sid);
+  try {
+    await db.query(
+      `INSERT INTO user_sessions (id, user_id, token_hash, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)`,
+      [sid, user.id, hashToken(token), req.ip, req.get('User-Agent')]
+    );
+    return token;
+  } catch (sessionError) {
+    console.error('[auth] SESSION WRITE FAILED — issuing stateless fallback token (revocation unavailable for it):', sessionError.message);
+    return generateToken(user); // legacy stateless token; ages out in <= JWT_EXPIRES_IN
+  }
+}
+
+// Is a decoded sid-token's session gone/expired? Legacy tokens (no sid) are never
+// "revoked" here — they keep the old stateless behavior until they age out.
+async function sessionRevoked(db, decoded) {
+  if (!decoded?.sid) return false;
+  const r = await db.query(
+    'SELECT 1 FROM user_sessions WHERE id = $1 AND user_id = $2 AND expires_at > NOW()',
+    [decoded.sid, decoded.userId]
+  );
+  return r.rows.length === 0;
 }
 
 // SECURITY: /init and /migrate mutate the schema and (re)seed the default admin account.
@@ -334,22 +383,10 @@ router.post('/init', async (req, res) => {
       console.log('Note: Some columns may already exist in users table');
     }
 
-    // Create sessions table for additional security
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS user_sessions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        token_hash VARCHAR(255) NOT NULL,
-        session_token VARCHAR(512),
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW(),
-        ip_address INET,
-        user_agent TEXT
-      )
-    `);
-
-    // Ensure existing deployments have session_token column used by login/register routes
-    await req.db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(512)`);
+    // user_sessions schema is owned by database/migrations/ (baseline +
+    // 20260719010000-unify-user-sessions.sql) — runAllMigrations applies it at boot,
+    // fail-closed, before this route is reachable. No inline DDL here (the previous
+    // inline CREATE drifted from the migration schema and made one writer always fail).
 
     // Check if default admin user exists
     const adminCheck = await req.db.query(
@@ -431,8 +468,8 @@ router.post('/register', async (req, res) => {
     const userId = uuidv4();
 
     const result = await req.db.query(`
-      INSERT INTO users (id, username, email, password_hash, display_name, credits, bonus_credits_claimed, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      INSERT INTO users (id, username, email, password_hash, display_name, credits, bonus_credits_claimed, workspace_activated_at, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NOW())
       RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed
     `, [userId, username.toLowerCase(), email.toLowerCase(), passwordHash, display_name, 0, false]);
 
@@ -442,25 +479,36 @@ router.post('/register', async (req, res) => {
     // so a new user can actually try premium generation. Non-fatal on failure.
     if (FREE_SIGNUP_CREDITS > 0) {
       try {
-        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: 'signup' });
+        // Per-user idempotency key. A constant 'signup' ref collided on uq_credit_txn_ref
+        // for EVERY user after the first (the grant threw and was silently swallowed here),
+        // so only the very first account ever registered actually received signup credits.
+        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: `signup:${user.id}` });
         user.credits = FREE_SIGNUP_CREDITS;
       } catch (grantErr) {
         console.warn('[register] signup credit grant failed:', grantErr.message);
       }
     }
 
-    const token = generateToken(user);
+    // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
+    const token = await issueSessionToken(req.db, user, req);
 
-    // Store session (simplified for now - we can add session tracking later)
+    // Issue an email-verification token + send the verification email. Non-fatal: a
+    // mail-transport hiccup must never fail an otherwise-successful registration, and
+    // verification is soft (never blocks login) so a missed email can't lock a user out.
     try {
-      const tokenHash = await bcrypt.hash(token, 10);
-      await req.db.query(`
-        INSERT INTO user_sessions (user_id, token_hash, session_token, expires_at, ip_address, user_agent)
-        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)
-      `, [user.id, tokenHash, token, req.ip, req.get('User-Agent')]);
-    } catch (sessionError) {
-      console.log('Session storage failed, but user created successfully:', sessionError.message);
-      // Continue without session storage for now
+      const verifyToken = newAccountToken();
+      await req.db.query(
+        `INSERT INTO email_verifications (user_id, email, token_hash, expires_at)
+         VALUES ($1, $2, $3, NOW() + INTERVAL '24 hours')`,
+        [user.id, user.email, hashToken(verifyToken)]
+      );
+      await sendEmail(req.db, 'email_verification', user.email, {
+        displayName: user.display_name || user.email,
+        verifyUrl: `${APP_URL}/verify-email?token=${verifyToken}`,
+        expiresIn: '24 hours',
+      }, user.id);
+    } catch (verifyErr) {
+      console.warn('[register] verification email failed:', verifyErr.message);
     }
 
     res.status(201).json({
@@ -508,14 +556,25 @@ router.post('/login', async (req, res) => {
       ? ['admin@xenostudio.local', 'admin@xenostudio.ai']
       : [normalizedEmail];
 
-    // Find user by email
+    // XENO handle unification: the identifier may also be the user's handle or
+    // their @<MAIL_PRIMARY_DOMAIN> address (handle = login = identity = mailbox).
+    const mailDomain = (process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai').toLowerCase();
+    let handleCandidate = null;
+    if (!normalizedEmail.includes('@')) {
+      handleCandidate = normalizedEmail; // bare handle
+    } else if (normalizedEmail.endsWith(`@${mailDomain}`)) {
+      handleCandidate = normalizedEmail.slice(0, -(`@${mailDomain}`.length)); // you@xenostudio.ai
+    }
+
+    // Find user by email OR handle
     const result = await req.db.query(`
-      SELECT id, username, email, password_hash, display_name, avatar_url, 
+      SELECT id, username, email, password_hash, display_name, avatar_url,
              created_at, email_verified, is_active, last_login, credits, bonus_credits_claimed
-      FROM users 
+      FROM users
       WHERE email = ANY($1::text[])
+         OR ($2::text IS NOT NULL AND lower(username) = $2::text)
       LIMIT 1
-    `, [emailCandidates]);
+    `, [emailCandidates, handleCandidate]);
 
     if (result.rows.length === 0) {
       return res.status(401).json({
@@ -546,20 +605,8 @@ router.post('/login', async (req, res) => {
     // Update last login
     await req.db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
 
-    // Generate token
-    const token = generateToken(user);
-
-    // Store session (simplified for now)
-    try {
-      const tokenHash = await bcrypt.hash(token, 10);
-      await req.db.query(`
-        INSERT INTO user_sessions (user_id, token_hash, session_token, expires_at, ip_address, user_agent)
-        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)
-      `, [user.id, tokenHash, token, req.ip, req.get('User-Agent')]);
-    } catch (sessionError) {
-      console.log('Session storage failed, but login successful:', sessionError.message);
-      // Continue without session storage for now
-    }
+    // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
+    const token = await issueSessionToken(req.db, user, req);
 
     res.json({
       success: true,
@@ -589,6 +636,158 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// ============================================
+// PASSWORD RESET
+// ============================================
+
+// POST /api/auth/forgot-password — issue a reset link.
+// Always responds 200 with the same generic message, whether or not the account
+// exists, so the endpoint can't be used to enumerate registered emails.
+router.post('/forgot-password', async (req, res) => {
+  const generic = {
+    success: true,
+    message: 'If an account exists for that email, a password reset link is on its way.',
+  };
+  try {
+    const { email } = req.body || {};
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const { rows } = await req.db.query(
+      'SELECT id, email, display_name, password_hash, is_active FROM users WHERE email = $1 LIMIT 1',
+      [normalizedEmail]
+    );
+    const user = rows[0];
+    // Only issue a reset for an active, password-capable account (OAuth-only users have
+    // no password_hash). Every other case returns the identical generic response.
+    if (user && user.is_active && user.password_hash) {
+      const resetToken = newAccountToken();
+      await req.db.query(
+        `INSERT INTO password_resets (user_id, token_hash, expires_at)
+         VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
+        [user.id, hashToken(resetToken)]
+      );
+      await sendEmail(req.db, 'password_reset', user.email, {
+        displayName: user.display_name || user.email,
+        resetUrl: `${APP_URL}/reset-password?token=${resetToken}`,
+        expiresIn: '1 hour',
+      }, user.id);
+    }
+    return res.json(generic);
+  } catch (error) {
+    // Log server-side but still return the generic 200 — surfacing a 500 here would
+    // leak that the address matched a real, erroring account.
+    console.error('Forgot-password error:', error.message);
+    return res.json(generic);
+  }
+});
+
+// POST /api/auth/reset-password — consume a reset token and set a new password.
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    if (!token || !password) {
+      return res.status(400).json({ success: false, error: 'Token and new password are required' });
+    }
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters long' });
+    }
+    // Atomic single-use claim: only an unused, unexpired token flips to used_at and
+    // returns its user, so two concurrent submits can't both reset.
+    const claim = await req.db.query(
+      `UPDATE password_resets SET used_at = NOW()
+       WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+       RETURNING user_id`,
+      [hashToken(token)]
+    );
+    if (claim.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'This reset link is invalid or has expired. Please request a new one.',
+      });
+    }
+    const userId = claim.rows[0].user_id;
+    const passwordHash = await hashPassword(password);
+    await req.db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [passwordHash, userId]);
+    // Security: a reset revokes every existing session (a compromised session must not
+    // survive the recovery) and burns any other outstanding reset tokens for this user.
+    await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]).catch((e) => {
+      console.error('[auth] reset-password session revocation failed:', e.message);
+    });
+    await req.db.query('UPDATE password_resets SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [userId]).catch(() => {});
+    return res.json({ success: true, message: 'Your password has been reset. You can now sign in with your new password.' });
+  } catch (error) {
+    console.error('Reset-password error:', error.message);
+    return res.status(500).json({ success: false, error: 'Failed to reset password' });
+  }
+});
+
+// ============================================
+// EMAIL VERIFICATION (soft — never blocks login)
+// ============================================
+
+// POST /api/auth/verify-email — consume an email-verification token.
+router.post('/verify-email', async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (!token) return res.status(400).json({ success: false, error: 'Verification token is required' });
+    const claim = await req.db.query(
+      `UPDATE email_verifications SET verified_at = NOW()
+       WHERE token_hash = $1 AND verified_at IS NULL AND expires_at > NOW()
+       RETURNING user_id`,
+      [hashToken(token)]
+    );
+    if (claim.rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'This verification link is invalid or has expired.' });
+    }
+    await req.db.query('UPDATE users SET email_verified = true WHERE id = $1', [claim.rows[0].user_id]);
+    return res.json({ success: true, message: 'Your email has been verified.' });
+  } catch (error) {
+    console.error('Verify-email error:', error.message);
+    return res.status(500).json({ success: false, error: 'Failed to verify email' });
+  }
+});
+
+// POST /api/auth/resend-verification — re-issue a verification email for the logged-in user.
+router.post('/resend-verification', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ success: false, error: 'No token provided' });
+    let decoded;
+    try { decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }); }
+    catch { return res.status(401).json({ success: false, error: 'Invalid token' }); }
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
+
+    const { rows } = await req.db.query(
+      'SELECT id, email, display_name, email_verified FROM users WHERE id = $1 AND is_active = true',
+      [decoded.userId]
+    );
+    const user = rows[0];
+    if (!user) return res.status(401).json({ success: false, error: 'Invalid token' });
+    if (user.email_verified) return res.json({ success: true, message: 'Your email is already verified.' });
+
+    const verifyToken = newAccountToken();
+    await req.db.query(
+      `INSERT INTO email_verifications (user_id, email, token_hash, expires_at)
+       VALUES ($1, $2, $3, NOW() + INTERVAL '24 hours')`,
+      [user.id, user.email, hashToken(verifyToken)]
+    );
+    await sendEmail(req.db, 'email_verification', user.email, {
+      displayName: user.display_name || user.email,
+      verifyUrl: `${APP_URL}/verify-email?token=${verifyToken}`,
+      expiresIn: '24 hours',
+    }, user.id);
+    return res.json({ success: true, message: 'Verification email sent.' });
+  } catch (error) {
+    console.error('Resend-verification error:', error.message);
+    return res.status(500).json({ success: false, error: 'Failed to resend verification email' });
+  }
+});
+
 // GET /api/auth/validate - Validate current session
 router.get('/validate', async (req, res) => {
   try {
@@ -603,6 +802,9 @@ router.get('/validate', async (req, res) => {
 
     // Verify JWT token
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     
     // Get user from database
     const result = await req.db.query(`
@@ -665,11 +867,22 @@ router.get('/validate', async (req, res) => {
 router.post('/logout', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    
+
     if (token) {
-      // Remove session from database
-      const tokenHash = await bcrypt.hash(token, 10);
-      await req.db.query('DELETE FROM user_sessions WHERE token_hash = $1', [tokenHash]);
+      // The old code did `bcrypt.hash(token)` and looked that up — bcrypt hashes are
+      // salted, so the lookup NEVER matched and logout was a guaranteed no-op.
+      // Now: a sid-token deletes its own session row (instant revocation, enforced by
+      // resolveAuthedUser); anything else falls back to the sha256(token) lookup.
+      let decoded = null;
+      try { decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }); } catch { /* fall through */ }
+      if (decoded?.sid) {
+        await req.db.query(
+          'DELETE FROM user_sessions WHERE id = $1 AND user_id = $2',
+          [decoded.sid, decoded.userId]
+        );
+      } else {
+        await req.db.query('DELETE FROM user_sessions WHERE token_hash = $1', [hashToken(token)]);
+      }
     }
 
     res.json({
@@ -697,37 +910,20 @@ router.post('/migrate', async (req, res) => {
     const adminEmail = 'admin@xenostudio.local';
     const legacyAdminEmail = 'admin@xenostudio.ai';
 
-    // Step 1: Drop and recreate user_sessions table to ensure correct schema
-    try {
-      await req.db.query(`DROP TABLE IF EXISTS user_sessions`);
-      await req.db.query(`
-        CREATE TABLE user_sessions (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_id UUID NOT NULL,
-          token_hash VARCHAR(255) NOT NULL,
-          session_token VARCHAR(512),
-          expires_at TIMESTAMP NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW(),
-          ip_address INET,
-          user_agent TEXT
-        )
-      `);
-      console.log('✅ user_sessions table recreated with correct schema');
-    } catch (error) {
-      console.error('Error recreating user_sessions table:', error);
-      throw error;
-    }
+    // Step 1: user_sessions schema is owned by database/migrations/ — this route
+    // previously did `DROP TABLE IF EXISTS user_sessions` and recreated it, which
+    // destroyed every live session on a world-reachable(-behind-setup-token) endpoint.
+    // The route is now strictly ADDITIVE: no DROPs, ever.
 
-    // Step 2: Add missing columns to existing users table
+    // Step 2: Add missing columns to existing users table (additive-only)
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255)`);
     await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP`);
-    await req.db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(512)`);
     console.log('✅ User table columns added/verified');
-    
+
     // Step 3: Check if admin user exists and update/create it
     const adminCheck = await req.db.query(
       'SELECT id FROM users WHERE id = $1 OR email IN ($2, $3)',
@@ -788,6 +984,9 @@ router.get('/me', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     
     const result = await req.db.query(`
       SELECT id, username, email, display_name, avatar_url, 
@@ -852,6 +1051,9 @@ router.put('/profile', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     const { display_name, username, avatar_url } = req.body;
 
     // Build dynamic update query
@@ -961,6 +1163,9 @@ router.put('/password', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     const { current_password, new_password } = req.body;
 
     if (!current_password || !new_password) {
@@ -1008,9 +1213,15 @@ router.put('/password', async (req, res) => {
       [newPasswordHash, decoded.userId]
     );
 
+    // Security: a password change revokes EVERY session (incl. this one) — any
+    // stolen sid-token dies here. The client must sign in again with the new password.
+    await req.db.query('DELETE FROM user_sessions WHERE user_id = $1', [decoded.userId]).catch((e) => {
+      console.error('[auth] password-change session revocation failed:', e.message);
+    });
+
     res.json({
       success: true,
-      message: 'Password changed successfully'
+      message: 'Password changed successfully. Please sign in again.'
     });
 
   } catch (error) {
@@ -1043,6 +1254,9 @@ router.get('/usage', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
 
     // Get user credits info
     const userResult = await req.db.query(
@@ -1121,6 +1335,9 @@ router.post('/use-credits', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     const { feature, amount } = req.body;
 
     if (!feature || !amount || amount <= 0) {
@@ -1200,6 +1417,9 @@ router.delete('/account', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     const { password } = req.body;
 
     if (!password) {
@@ -1274,6 +1494,9 @@ router.post('/claim-bonus', async (req, res) => {
 
     // Verify JWT token
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     
     // Get user from database with credits and bonus status
     const userResult = await req.db.query(
@@ -1448,24 +1671,9 @@ router.get('/google/callback', async (req, res) => {
       username: googleUser.email?.split('@')[0]
     });
 
-    // Generate JWT
-    const jwtToken = jwt.sign(
-      { userId: user.id, email: user.email, username: user.username },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
-
-    // Store session
-    try {
-      const tokenHash = crypto.createHash('sha256').update(jwtToken).digest('hex');
-      await req.db.query(
-        `INSERT INTO user_sessions (user_id, access_token_hash, expires_at, ip_address, device_type, browser, created_at)
-         VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4, $5, NOW())`,
-        [user.id, tokenHash, req.ip, 'web', req.get('User-Agent')?.substring(0, 100)]
-      );
-    } catch (e) {
-      console.log('Session storage note:', e.message);
-    }
+    // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
+    // password login so revocation works identically for OAuth sign-ins).
+    const jwtToken = await issueSessionToken(req.db, user, req);
 
     // Redirect with token
     const returnUrl = stateData.returnUrl || '/overview';
@@ -1592,24 +1800,9 @@ router.get('/github/callback', async (req, res) => {
       username: githubUser.login
     });
 
-    // Generate JWT
-    const jwtToken = jwt.sign(
-      { userId: user.id, email: user.email, username: user.username },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
-
-    // Store session
-    try {
-      const tokenHash = crypto.createHash('sha256').update(jwtToken).digest('hex');
-      await req.db.query(
-        `INSERT INTO user_sessions (user_id, access_token_hash, expires_at, ip_address, device_type, browser, created_at)
-         VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4, $5, NOW())`,
-        [user.id, tokenHash, req.ip, 'web', req.get('User-Agent')?.substring(0, 100)]
-      );
-    } catch (e) {
-      console.log('Session storage note:', e.message);
-    }
+    // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
+    // password login so revocation works identically for OAuth sign-ins).
+    const jwtToken = await issueSessionToken(req.db, user, req);
 
     const returnUrl = stateData.returnUrl || '/overview';
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
@@ -1727,24 +1920,9 @@ router.get('/twitter/callback', async (req, res) => {
       username: twitterUser.username
     });
 
-    // Generate JWT
-    const jwtToken = jwt.sign(
-      { userId: user.id, email: user.email, username: user.username },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
-
-    // Store session
-    try {
-      const tokenHash = crypto.createHash('sha256').update(jwtToken).digest('hex');
-      await req.db.query(
-        `INSERT INTO user_sessions (user_id, access_token_hash, expires_at, ip_address, device_type, browser, created_at)
-         VALUES ($1, $2, NOW() + INTERVAL '7 days', $3, $4, $5, NOW())`,
-        [user.id, tokenHash, req.ip, 'web', req.get('User-Agent')?.substring(0, 100)]
-      );
-    } catch (e) {
-      console.log('Session storage note:', e.message);
-    }
+    // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
+    // password login so revocation works identically for OAuth sign-ins).
+    const jwtToken = await issueSessionToken(req.db, user, req);
 
     const returnUrl = stateData.returnUrl || '/overview';
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
@@ -1768,6 +1946,9 @@ router.get('/linked-accounts', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
 
     const result = await req.db.query(
       `SELECT provider, provider_email, provider_username, provider_avatar_url, created_at
@@ -1804,6 +1985,9 @@ router.delete('/linked-accounts/:provider', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
     const { provider } = req.params;
 
     if (!['google', 'github', 'twitter'].includes(provider)) {
@@ -1844,6 +2028,97 @@ router.delete('/linked-accounts/:provider', async (req, res) => {
     }
     console.error('Unlink account error:', error);
     res.status(500).json({ success: false, error: 'Failed to unlink account' });
+  }
+});
+
+// ── XENO Mail Door-2: email-first account creation ──────────────────────────
+// Creating a XENO Mail address IS creating the (one) central account: username =
+// handle, email = handle@<MAIL_PRIMARY_DOMAIN> (auto-verified — we host it).
+// The Gmail model: the mail address is the acquisition surface; the workspace
+// account is what the user silently gets. See xeno-mail/docs/IDENTITY-AND-MAILBOX.md.
+
+const XM_HANDLE_RE = /^[a-z0-9](?:[a-z0-9]|[._-](?![._-])){1,30}[a-z0-9]$/;
+
+async function xmCheckHandleFree(db, handle) {
+  if (handle.length < 3 || handle.length > 32 || !XM_HANDLE_RE.test(handle)) return 'invalid';
+  const reserved = await db.query('SELECT 1 FROM reserved_handles WHERE handle = $1', [handle]);
+  if (reserved.rows.length > 0) return 'reserved';
+  const taken = await db.query('SELECT 1 FROM users WHERE lower(username) = $1 LIMIT 1', [handle]);
+  if (taken.rows.length > 0) return 'taken';
+  return null;
+}
+
+// Public availability check for the signup form (no auth — pre-account).
+router.get('/handle-available', async (req, res) => {
+  try {
+    const handle = String(req.query.handle || '').trim().toLowerCase();
+    const domain = (process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai').toLowerCase();
+    const reason = await xmCheckHandleFree(req.db, handle);
+    if (reason) return res.json({ ok: false, reason, handle });
+    res.json({ ok: true, handle, address: `${handle}@${domain}` });
+  } catch (e) {
+    console.error('[handle-available] error:', e.message);
+    res.status(500).json({ ok: false, reason: 'error' });
+  }
+});
+
+// Create the account FROM a handle (email-first signup).
+router.post('/register-with-handle', async (req, res) => {
+  try {
+    const { handle: rawHandle, password, recoveryEmail } = req.body || {};
+    const handle = String(rawHandle || '').trim().toLowerCase();
+    const domain = (process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai').toLowerCase();
+
+    if (!handle || !password) {
+      return res.status(400).json({ success: false, error: 'Handle and password are required' });
+    }
+    if (String(password).length < 8) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters long' });
+    }
+    // Recovery channel: an EXTERNAL email (not one we host — that would be circular).
+    const recovery = recoveryEmail ? String(recoveryEmail).trim().toLowerCase() : null;
+    if (recovery && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recovery) || recovery.endsWith(`@${domain}`))) {
+      return res.status(400).json({ success: false, error: 'Recovery email must be a valid external address' });
+    }
+
+    const reason = await xmCheckHandleFree(req.db, handle);
+    if (reason) {
+      const msg = { invalid: 'Invalid handle', reserved: 'That handle is reserved', taken: 'That address is already taken' }[reason];
+      return res.status(409).json({ success: false, error: msg, reason });
+    }
+
+    const address = `${handle}@${domain}`;
+    const passwordHash = await hashPassword(password);
+    const userId = uuidv4();
+
+    const result = await req.db.query(`
+      INSERT INTO users (id, username, email, password_hash, display_name, email_verified, recovery_email, credits, bonus_credits_claimed, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, NOW(), NOW())
+      RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed
+    `, [userId, handle, address, passwordHash, handle, recovery, 0, false]);
+    const user = result.rows[0];
+
+    // Free-tier starter credits (same as /register; non-fatal).
+    if (FREE_SIGNUP_CREDITS > 0) {
+      try {
+        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: `signup:${user.id}` });
+        user.credits = FREE_SIGNUP_CREDITS;
+      } catch (grantErr) {
+        console.warn('[register-with-handle] signup credit grant failed:', grantErr.message);
+      }
+    }
+
+    // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
+    const token = await issueSessionToken(req.db, user, req);
+
+    console.log(`[register-with-handle] created account ${address} (${user.id})`);
+    res.json({ success: true, token, user: { ...user, xenoAddress: address } });
+  } catch (e) {
+    if (e && e.code === '23505') {
+      return res.status(409).json({ success: false, error: 'That address is already taken', reason: 'taken' });
+    }
+    console.error('[register-with-handle] error:', e.message);
+    res.status(500).json({ success: false, error: 'Registration failed' });
   }
 });
 

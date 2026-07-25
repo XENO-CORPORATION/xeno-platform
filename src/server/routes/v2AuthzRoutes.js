@@ -21,19 +21,37 @@ router.post('/check', async (req, res) => {
 });
 
 // POST /api/v2/authz/write { writes:[{object,relation,subject}], deletes:[...] }
-// Gate: the caller must be admin+ on every touched object, UNLESS the object has
-// no tuples yet (bootstrap: first writer claims it).
+// Gate: the caller must be admin+ on every touched object. The ONLY bootstrap
+// exception (an object with zero tuples) is the legitimate "claim my own new
+// resource" case: every tuple touching that object must be a WRITE that makes
+// the REQUESTER the owner. Anything else on an unclaimed object — granting other
+// subjects, other relations, deletes — is a cross-tenant capture and is refused
+// (pre-fix, any authed user could write arbitrary tuples on ANY zero-tuple object,
+// e.g. claim another tenant's not-yet-tupled workspace/run/project by id).
 router.post('/write', async (req, res) => {
   try {
     const b = req.body || {};
     const me = `user:${req.user.id}`;
-    const objects = [...(b.writes || []), ...(b.deletes || [])].map((t) => t.object);
+    const writes = b.writes || [];
+    const deletes = b.deletes || [];
+    const objects = [...writes, ...deletes].map((t) => t.object);
     for (const object of new Set(objects)) {
       const existing = await listObjectTuples(req.db, object);
-      // Bootstrap-first-owner is allowed for user-owned objects, but NEVER for
-      // system:* (a random user must not be able to claim system:credits, etc.).
+      // Bootstrap is NEVER allowed for system:* (a random user must not be able
+      // to claim system:credits, etc.).
       const isSystem = String(object).startsWith('system:');
-      if (existing.length === 0 && !isSystem) continue;
+      if (existing.length === 0 && !isSystem) {
+        const touchingWrites = writes.filter((t) => t.object === object);
+        const touchingDeletes = deletes.filter((t) => t.object === object);
+        const isSelfOwnerClaim =
+          touchingDeletes.length === 0 &&
+          touchingWrites.length > 0 &&
+          touchingWrites.every((t) => t.relation === 'owner' && t.subject === me);
+        if (isSelfOwnerClaim) continue;
+        return res.status(403).json({
+          error: { code: 'FORBIDDEN', message: `cannot bootstrap ${object}: an unclaimed object only accepts owner=self` },
+        });
+      }
       const can = await check(req.db, { object, relation: 'admin', subject: me });
       if (!can.allowed) {
         return res.status(403).json({ error: { code: 'FORBIDDEN', message: `not an admin of ${object}` } });
@@ -45,10 +63,17 @@ router.post('/write', async (req, res) => {
   }
 });
 
-// GET /api/v2/authz/objects/:type/:id — list tuples on an object
+// GET /api/v2/authz/objects/:type/:id — list tuples on an object. Requires the
+// caller to be at least a member of the object (any relation, incl. viewer via
+// hierarchy) — pre-fix this listed ANY object's members/roles to ANY authed user.
 router.get('/objects/:type/:id', async (req, res) => {
   try {
-    res.json({ tuples: await listObjectTuples(req.db, `${req.params.type}:${req.params.id}`) });
+    const object = `${req.params.type}:${req.params.id}`;
+    const can = await check(req.db, { object, relation: 'member', subject: `user:${req.user.id}` });
+    if (!can.allowed) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: `not a member of ${object}` } });
+    }
+    res.json({ tuples: await listObjectTuples(req.db, object) });
   } catch (e) {
     res.status(500).json({ error: { code: 'PLATFORM_ERROR', message: e.message } });
   }

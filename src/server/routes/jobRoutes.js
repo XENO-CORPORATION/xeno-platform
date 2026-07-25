@@ -6,16 +6,12 @@
 
 import { Router } from 'express';
 import { getAllQueueStats } from '../services/backgroundJobs.js';
+// DB-backed admin guard (users.role === 'admin'). The old local check tested
+// req.user?.is_admin, a column that is never selected AND does not exist — so the
+// guard rejected EVERYONE, including real admins (permanently dead endpoints).
+import { requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
-
-// Admin check
-function requireAdmin(req, res, next) {
-  if (!req.user?.is_admin) {
-    return res.status(403).json({ success: false, error: 'Admin access required' });
-  }
-  next();
-}
 
 // --------------------------------------------------------------------------
 // Get all queue stats
