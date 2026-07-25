@@ -12,13 +12,24 @@
 # 2026-07-25: added the token-confusion gate (auth-token-confusion) + the API-key auth
 # suite, and made middleware/auth.js + middleware/oidcAuth.js trigger paths — the
 # Bearer-resolution path had NO gate at all, which is how the missing `aud`/`typ`
-# verification reached production. Verified locally against postgres:15-alpine:
-# auth-token-confusion 23/0 (and 16/7 against the UNFIXED middleware — it is a real
-# regression gate), api-key-auth 12/0, authz-v2 23/0, oidc-v2 18/0, erasure 7/0,
-# account-recovery 36/0.
+# verification reached production. Re-verified locally against postgres:15-alpine
+# (counts below are the measured ones): auth-token-confusion 28/0 — and 21/28 with 7
+# FAILURES when middleware/auth.js alone is reverted to its pre-fix version, i.e. the
+# ID token and the back-channel logout token both authenticate. It is a real
+# regression gate, not a tautology. Also api-key-auth 12/0, authz-v2 23/0, oidc-v2
+# 18/0, erasure 7/0, account-recovery 36/0, entitlement-gate 26/0,
+# ai-tools-passthrough 6/0.
 #
-# NOTE: like money-tests.yml, this auto-activates when org GitHub Actions billing is
-# restored; until then run it via workflow_dispatch, a self-hosted runner, or locally.
+# CAVEAT — api-key-auth on WINDOWS: all 12 assertions pass, then node aborts during
+# process teardown with a libuv assertion (`!(handle->flags & UV_HANDLE_CLOSING)`,
+# src\win\async.c) → exit 127. Pre-existing, unrelated to auth logic, and NOT
+# reproduced on Linux — harmless on `ubuntu-latest`, but it WOULD red-wall this job
+# if these suites are ever moved to a self-hosted Windows runner. Fix the suite's
+# teardown before any such migration.
+#
+# NOTE: this job targets GitHub-hosted `ubuntu-latest`. Hosted minutes have been dead
+# for parts of the org, but this repo's last core-tests/money-tests runs (2026-07-22)
+# completed successfully on hosted runners — verify before assuming it is inert.
 name: core-tests
 
 on:
