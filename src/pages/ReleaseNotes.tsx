@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Download, Monitor, Apple, Terminal } from 'lucide-react';
 import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
+import { UPDATES_ORIGIN } from '../config/hosts';
 
 interface Asset {
   label: string;
@@ -21,7 +22,7 @@ interface Release {
   };
 }
 
-const R2_BASE = 'https://updates.xenostudio.ai';
+const R2_BASE = UPDATES_ORIGIN;
 
 const platformMeta: Record<string, { label: string; icon: React.ReactNode }> = {
   windows: { label: 'Windows', icon: <Monitor className="w-3.5 h-3.5" /> },

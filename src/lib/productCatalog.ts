@@ -13,7 +13,9 @@
  *   delivery 'soon'    → not shipping yet            → CTA "Join the waitlist"
  * ────────────────────────────────────────────────────────────────────── */
 
-export const R2_BASE = 'https://updates.xenostudio.ai';
+import { UPDATES_ORIGIN } from '../config/hosts';
+
+export const R2_BASE = UPDATES_ORIGIN;
 
 export type Delivery = 'web' | 'desktop' | 'cli' | 'soon';
 export type Status = 'shipping' | 'beta' | 'coming-soon';

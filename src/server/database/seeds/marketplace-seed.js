@@ -14,6 +14,7 @@
  */
 
 import pg from 'pg';
+import { siteUrl, updatesUrl } from '../../config/hosts.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -48,7 +49,7 @@ function appInstallerFilename(name, version) {
 }
 function appDownloadUrl(id, name, version) {
   const file = encodeURIComponent(appInstallerFilename(name, version));
-  return `https://updates.xenostudio.ai/apps/${id}/v${version}/${file}`;
+  return updatesUrl(`/apps/${id}/v${version}/${file}`);
 }
 
 /**
@@ -114,7 +115,7 @@ export async function seedMarketplace(pool) {
         summary: app.description.slice(0, 500),
         description: app.description,
         category: app.category,
-        iconUrl: `https://xenostudio.ai/products/${app.id}/icon.png`,
+        iconUrl: siteUrl(`/products/${app.id}/icon.png`),
         version: app.version,
         artifactUrl: appDownloadUrl(app.id, app.name, app.version),
         artifactR2Key: `apps/${app.id}/v${app.version}/${appInstallerFilename(app.name, app.version)}`,
@@ -123,7 +124,7 @@ export async function seedMarketplace(pool) {
         installMeta: {
           executableName: `${app.name}.exe`,
           installDirName: app.name,
-          versionUrl: `https://updates.xenostudio.ai/apps/${app.id}/version.json`,
+          versionUrl: updatesUrl(`/apps/${app.id}/version.json`),
         },
       });
       apps++;

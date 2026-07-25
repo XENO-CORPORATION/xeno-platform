@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 import Redis from 'ioredis';
+import { siteOrigin, siteUrl, mailDomain } from '../config/hosts.js';
 import { addGrant, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail } from '../services/emailService.js';
@@ -49,7 +50,7 @@ const OAUTH_CONFIG = {
     tokenUrl: 'https://oauth2.googleapis.com/token',
     userInfoUrl: 'https://www.googleapis.com/oauth2/v2/userinfo',
     scopes: ['openid', 'email', 'profile'],
-    callbackUrl: process.env.GOOGLE_CALLBACK_URL || 'https://xenostudio.ai/api/auth/google/callback'
+    callbackUrl: process.env.GOOGLE_CALLBACK_URL || siteUrl('/api/auth/google/callback')
   },
   github: {
     clientId: process.env.GITHUB_CLIENT_ID,
@@ -59,7 +60,7 @@ const OAUTH_CONFIG = {
     userInfoUrl: 'https://api.github.com/user',
     userEmailsUrl: 'https://api.github.com/user/emails',
     scopes: ['user:email', 'read:user'],
-    callbackUrl: process.env.GITHUB_CALLBACK_URL || 'https://xenostudio.ai/api/auth/github/callback'
+    callbackUrl: process.env.GITHUB_CALLBACK_URL || siteUrl('/api/auth/github/callback')
   },
   twitter: {
     clientId: process.env.TWITTER_CLIENT_ID,
@@ -68,12 +69,12 @@ const OAUTH_CONFIG = {
     tokenUrl: 'https://api.twitter.com/2/oauth2/token',
     userInfoUrl: 'https://api.twitter.com/2/users/me',
     scopes: ['users.read', 'tweet.read', 'offline.access'],
-    callbackUrl: process.env.TWITTER_CALLBACK_URL || 'https://xenostudio.ai/api/auth/twitter/callback'
+    callbackUrl: process.env.TWITTER_CALLBACK_URL || siteUrl('/api/auth/twitter/callback')
   }
 };
 
 // Frontend URL for redirects after OAuth
-const FRONTEND_URL = process.env.AUTH_FRONTEND_URL || 'https://xenostudio.ai';
+const FRONTEND_URL = process.env.AUTH_FRONTEND_URL || siteOrigin();
 
 // Helper: build OAuth redirect URL
 function buildOAuthRedirectUrl(returnUrl, token, isNew) {
@@ -270,7 +271,7 @@ function generateToken(user, sid) {
 }
 
 // Frontend base URL for account-recovery / verification links in emails.
-const APP_URL = (process.env.APP_BASE_URL || process.env.FRONTEND_URL || 'https://xenostudio.ai').replace(/\/+$/, '');
+const APP_URL = (process.env.APP_BASE_URL || process.env.FRONTEND_URL || siteOrigin()).replace(/\/+$/, '');
 
 // Hash a high-entropy account token (password-reset / email-verification) for at-rest
 // storage. sha256 is correct here — the token is 256-bit random, not a low-entropy
@@ -558,12 +559,12 @@ router.post('/login', async (req, res) => {
 
     // XENO handle unification: the identifier may also be the user's handle or
     // their @<MAIL_PRIMARY_DOMAIN> address (handle = login = identity = mailbox).
-    const mailDomain = (process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai').toLowerCase();
+    const loginDomain = mailDomain();
     let handleCandidate = null;
     if (!normalizedEmail.includes('@')) {
       handleCandidate = normalizedEmail; // bare handle
-    } else if (normalizedEmail.endsWith(`@${mailDomain}`)) {
-      handleCandidate = normalizedEmail.slice(0, -(`@${mailDomain}`.length)); // you@xenostudio.ai
+    } else if (normalizedEmail.endsWith(`@${loginDomain}`)) {
+      handleCandidate = normalizedEmail.slice(0, -(`@${loginDomain}`.length)); // you@<mail domain>
     }
 
     // Find user by email OR handle
@@ -2052,7 +2053,7 @@ async function xmCheckHandleFree(db, handle) {
 router.get('/handle-available', async (req, res) => {
   try {
     const handle = String(req.query.handle || '').trim().toLowerCase();
-    const domain = (process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai').toLowerCase();
+    const domain = mailDomain();
     const reason = await xmCheckHandleFree(req.db, handle);
     if (reason) return res.json({ ok: false, reason, handle });
     res.json({ ok: true, handle, address: `${handle}@${domain}` });
@@ -2067,7 +2068,7 @@ router.post('/register-with-handle', async (req, res) => {
   try {
     const { handle: rawHandle, password, recoveryEmail } = req.body || {};
     const handle = String(rawHandle || '').trim().toLowerCase();
-    const domain = (process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai').toLowerCase();
+    const domain = mailDomain();
 
     if (!handle || !password) {
       return res.status(400).json({ success: false, error: 'Handle and password are required' });

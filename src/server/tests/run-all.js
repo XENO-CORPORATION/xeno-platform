@@ -13,13 +13,15 @@ import { dirname, join } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const tests = [
+  // Offline unit suite — must run first; it needs no live host.
+  'hosts.test.mjs',
   'health.test.js',
   'auth.test.js',
   'security.test.js',
   'rate-limiting.test.js',
 ];
 
-const BASE_URL = process.env.TEST_API_URL || 'https://xenostudio.ai';
+const BASE_URL = process.env.TEST_API_URL || process.env.XENO_SITE_ORIGIN || 'https://xenostudio.ai';
 console.log(`\nRunning all tests against: ${BASE_URL}\n`);
 
 let totalPassed = 0;

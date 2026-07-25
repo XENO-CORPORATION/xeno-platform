@@ -14,8 +14,9 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { updatesOrigin } from '../src/server/config/hosts.js';
 
-const R2_PUBLIC = 'https://updates.xenostudio.ai';
+const R2_PUBLIC = process.env.XENO_UPDATES_BASE || updatesOrigin();
 const R2_REMOTE = 'r2:xeno-hub-releases';
 const DEFAULT_SLUGS = ['hub', 'pixel', 'motion', 'sound'];
 const LABELS = { windows: 'Windows (x64)', mac: 'macOS', linux: 'Linux (AppImage)' };

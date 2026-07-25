@@ -6,7 +6,9 @@
  * ('gemini-3-flash', 'gpt-5.4', ...), so ids are normalized here — any legacy
  * 'company/model' (OpenRouter-style) prefix is stripped before the call.
  */
-export const XENO_API_BASE = (process.env.XENO_API_BASE_URL || 'https://api.xenostudio.ai/v1').replace(/\/+$/, '');
+import { apiOrigin } from '../config/hosts.js';
+
+export const XENO_API_BASE = (process.env.XENO_API_BASE_URL || `${apiOrigin()}/v1`).replace(/\/+$/, '');
 export const XENO_API_KEY = process.env.XENO_API_KEY || '';
 
 /** Normalize a model id to the XENO API's bare namespace (strip a leading 'company/'). */

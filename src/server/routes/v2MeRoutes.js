@@ -7,6 +7,7 @@
  * OIDC access token OR the legacy HS256 token during transition).
  */
 import express from 'express';
+import { mailDomain } from '../config/hosts.js';
 import { eraseSubject } from '../utils/gdprErasure.js';
 
 const router = express.Router();
@@ -50,7 +51,7 @@ router.get('/', async (req, res) => {
     );
     // XENO handle unification: a conforming, non-reserved handle IS the user's
     // @<MAIL_PRIMARY_DOMAIN> address (one handle = login = identity = mailbox).
-    const domain = process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai';
+    const domain = mailDomain();
     const handle = String(u.username || '').toLowerCase();
     let xenoAddress = null;
     if (/^[a-z0-9](?:[a-z0-9]|[._-](?![._-])){1,30}[a-z0-9]$/.test(handle)) {

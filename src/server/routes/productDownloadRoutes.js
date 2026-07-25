@@ -13,10 +13,11 @@
  * through to the SPA.
  */
 import express from 'express';
+import { updatesOrigin } from '../config/hosts.js';
 
 const router = express.Router();
 
-const R2_PUBLIC = process.env.XENO_UPDATES_BASE || 'https://updates.xenostudio.ai';
+const R2_PUBLIC = process.env.XENO_UPDATES_BASE || updatesOrigin();
 const OS_ALIASES = {
   win: 'windows', windows: 'windows',
   mac: 'mac', macos: 'mac', osx: 'mac',

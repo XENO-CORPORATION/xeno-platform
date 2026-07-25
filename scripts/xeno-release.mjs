@@ -24,8 +24,13 @@ import { createHash } from 'node:crypto';
 import { basename, join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { updatesOrigin } from '../src/server/config/hosts.js';
 
-const R2_PUBLIC = 'https://updates.xenostudio.ai';
+// Sourced from the ONE hostname seam (src/server/config/hosts.js). Override
+// with XENO_UPDATES_BASE (kept for compatibility) or XENO_UPDATES_ORIGIN.
+// release-guide/02-cloudflare-r2.md documented this file as a hardcoded
+// exception; it no longer is.
+const R2_PUBLIC = process.env.XENO_UPDATES_BASE || updatesOrigin();
 const R2_REMOTE = 'r2:xeno-hub-releases';
 const LABELS = { windows: 'Windows (x64)', mac: 'macOS', linux: 'Linux (AppImage)' };
 const VERSION_KEY = { windows: 'windows', mac: 'mac', linux: 'linux' };

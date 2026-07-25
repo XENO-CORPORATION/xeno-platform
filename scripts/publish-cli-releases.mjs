@@ -31,8 +31,9 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { updatesOrigin } from '../src/server/config/hosts.js';
 
-const PUBLIC = process.env.XENO_UPDATES_BASE || 'https://updates.xenostudio.ai';
+const PUBLIC = process.env.XENO_UPDATES_BASE || updatesOrigin();
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);

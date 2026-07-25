@@ -11,6 +11,7 @@ import express from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import Redis from 'ioredis';
+import { siteOrigin } from '../config/hosts.js';
 
 const router = express.Router();
 
@@ -33,7 +34,7 @@ redis.on('connect', () => console.log('[CLI-Auth] Redis connected'));
 // --------------------------------------------------------------------------
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d';
-const WEB_BASE_URL = process.env.WEB_BASE_URL || 'https://xenostudio.ai';
+const WEB_BASE_URL = process.env.WEB_BASE_URL || siteOrigin();
 
 const BROWSER_TTL = 600;        // 10 min
 const DEVICE_TTL = 900;         // 15 min

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Download, ChevronDown, ArrowRight, ArrowLeft } from 'lucide-react';
 import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
+import { UPDATES_ORIGIN } from '../config/hosts';
 
 type Platform = 'windows' | 'mac' | 'linux';
 
@@ -23,7 +24,7 @@ interface Release {
   };
 }
 
-const R2_BASE = 'https://updates.xenostudio.ai';
+const R2_BASE = UPDATES_ORIGIN;
 
 function detectPlatform(): Platform {
   const ua = navigator.userAgent.toLowerCase();

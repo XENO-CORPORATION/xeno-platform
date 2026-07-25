@@ -4,13 +4,14 @@ import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import { updatesOrigin } from '../src/server/config/hosts.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');
 const catalogPath = path.join(repoRoot, 'src', 'server', 'data', 'localModelCatalog.json');
 const bucket = process.env.R2_BUCKET || 'xeno-hub-releases';
 const remotePrefix = `r2:${bucket}`;
-const publicBase = process.env.R2_PUBLIC_URL || 'https://updates.xenostudio.ai';
+const publicBase = process.env.R2_PUBLIC_URL || updatesOrigin();
 const defaultRoots = [
   path.join(os.homedir(), '.cache', 'xrt', 'models'),
   path.join(os.homedir(), '.xeno', 'models'),

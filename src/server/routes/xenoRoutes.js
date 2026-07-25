@@ -10,6 +10,7 @@ import { availableParallelism } from 'os';
 import { delimiter, isAbsolute, join } from 'path';
 
 import { Router } from 'express';
+import { apiOrigin } from '../config/hosts.js';
 import Xeno from 'xeno-ai';
 import { getCreditCost } from '../utils/creditCosts.js';
 import { logUsage } from '../utils/creditTransactions.js';
@@ -63,7 +64,7 @@ const REMOTE_RUNNER_BASE_ENV = [
 const xenoClient = XENO_API_KEY
   ? new Xeno({
       apiKey: XENO_API_KEY,
-      baseURL: 'https://api.xenostudio.ai/v1',
+      baseURL: `${apiOrigin()}/v1`,
     })
   : null;
 
