@@ -94,7 +94,10 @@ export const PRODUCTS: Product[] = [
   { slug: 'notes', name: 'XENO Notes', tagline: 'Notes and knowledge base with AI.', category: 'Library', status: 'coming-soon', delivery: 'soon', repo: 'xeno-notes' },
 
   // ── Connect ───────────────────────────────────────────────
-  { slug: 'comms', name: 'XENO Comms', tagline: 'Human and agent communication for teams.', category: 'Connect', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-comms' },
+  // Internal alpha, not a beta: unsigned installer, alpha test accounts, agents + E2EE
+  // not enabled in the shipped build. 'beta' is the coarsest honest Status we have;
+  // the precise framing lives in src/content/products/comms.ts. See that file's header.
+  { slug: 'comms', name: 'XENO Comms', tagline: 'Messaging for humans and agents — internal alpha.', category: 'Connect', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-comms' },
   // Post runs on its OWN host (post.xenostudio.ai), not a path under xenostudio.ai,
   // so it uses `externalUrl` like xeno-rt rather than `launchPath`. Verified live
   // 2026-07-26: /, /login (real email+password form), /dashboard, /settings, /privacy,
