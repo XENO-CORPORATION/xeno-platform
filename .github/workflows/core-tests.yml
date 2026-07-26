@@ -9,14 +9,55 @@
 # Verified green on the box before wiring (2026-07-14): authz-v2 12/0, oidc-v2 18/0,
 # erasure 6/0, ai-tools-passthrough 6/0.
 #
-# NOTE: like money-tests.yml, this auto-activates when org GitHub Actions billing is
-# restored; until then run it via workflow_dispatch, a self-hosted runner, or locally.
+# 2026-07-25: added the token-confusion gate (auth-token-confusion) + the API-key auth
+# suite, and made middleware/auth.js + middleware/oidcAuth.js trigger paths — the
+# Bearer-resolution path had NO gate at all, which is how the missing `aud`/`typ`
+# verification reached production. Re-verified locally against postgres:15-alpine
+# (counts below are the measured ones): auth-token-confusion 28/0 — and 21/28 with 7
+# FAILURES when middleware/auth.js alone is reverted to its pre-fix version, i.e. the
+# ID token and the back-channel logout token both authenticate. It is a real
+# regression gate, not a tautology. Also api-key-auth 12/0, authz-v2 23/0, oidc-v2
+# 18/0, erasure 7/0, account-recovery 36/0, entitlement-gate 26/0,
+# ai-tools-passthrough 6/0.
+#
+# CAVEAT — api-key-auth on WINDOWS: all 12 assertions pass, then node aborts during
+# process teardown with a libuv assertion (`!(handle->flags & UV_HANDLE_CLOSING)`,
+# src\win\async.c) → exit 127. Pre-existing, unrelated to auth logic, and NOT
+# reproduced on Linux — harmless on `ubuntu-latest`, but it WOULD red-wall this job
+# if these suites are ever moved to a self-hosted Windows runner. Fix the suite's
+# teardown before any such migration.
+#
+# !! THIS GATE IS CURRENTLY INERT — VERIFIED 2026-07-25, DO NOT ASSUME IT PROTECTS YOU.
+# This job targets GitHub-hosted `ubuntu-latest`, and org-wide hosted Actions billing is
+# dead. Pushing this branch produced run 30150986315 / 30150965339: BOTH jobs failed in
+# ~1 second having executed ZERO steps, annotation verbatim —
+#   "The job was not started because recent account payments have failed or your
+#    spending limit needs to be increased."
+# (This repo's last GREEN core-tests/money-tests runs are 2026-07-22; they predate the
+# billing failure. A green run older than that date proves nothing about today.)
+#
+# So the suites below are only actually enforced by running them LOCALLY. Until billing
+# is restored, this file is documentation, not a gate.
+#
+# Porting it to the self-hosted runner (`[self-hosted, windows, xeno]`, the only lane
+# private repos have) is NOT a drop-in `runs-on:` swap — four things break:
+#   1. `services: postgres` — service containers are not available on a Windows runner.
+#      The suites need a real Postgres; something has to provision one.
+#   2. `sudo apt-get install postgresql-client` — Linux-only; `psql` must come from
+#      elsewhere (the suites shell out to it to create a fresh DB per suite).
+#   3. The `run:` blocks are bash (`set -euo pipefail`) and need an explicit
+#      `shell: bash`; the runner has PowerShell 5.1, not pwsh.
+#   4. `api-key-auth` aborts on Windows (see the caveat above) → guaranteed red.
+# Each is solvable, but it is real work with a queue-starvation risk on the single
+# shared runner — deliberately not attempted as a side effect of the auth fix.
 name: core-tests
 
 on:
   push:
     branches: ['**']
     paths:
+      - 'src/server/middleware/auth.js'
+      - 'src/server/middleware/oidcAuth.js'
       - 'src/server/utils/authzReBAC.js'
       - 'src/server/utils/oidcProvider.js'
       - 'src/server/utils/gdprErasure.js'
@@ -68,7 +109,7 @@ jobs:
         working-directory: src/server
         run: |
           set -euo pipefail
-          SUITES="authz-v2 oidc-v2 erasure account-recovery"
+          SUITES="authz-v2 oidc-v2 erasure account-recovery auth-token-confusion api-key-auth"
           fail=0
           for t in $SUITES; do
             db="c_${t//-/_}"

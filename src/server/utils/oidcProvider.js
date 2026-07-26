@@ -18,6 +18,41 @@ import jwt from 'jsonwebtoken';
 
 const ACCESS_TTL_SEC = 10 * 60; // 10 min
 const ID_TTL_SEC = 10 * 60;
+
+// ── What an ACCESS token is (the issuer owns this definition) ────────────────
+// Three different asymmetric JWTs are minted below off the SAME signing key:
+//   access token  aud=ACCESS_TOKEN_AUDIENCE  typ='at+jwt' (payload AND header)
+//   ID token      aud=<client_id>            no payload typ, header typ='JWT'
+//   logout token  aud=<client_id>            `events` claim, header typ='logout+jwt'
+// A verifier that only checks the SIGNATURE therefore cannot tell them apart, and
+// an ID token or a back-channel logout token becomes replayable as an access token
+// (token confusion). Both the mint side and every verify side (middleware/auth.js
+// `resolveAuthedUser`, `introspectToken` below) use the constants + predicate here,
+// so the two can never drift. LOCKED by XENO AUTH - SPEC.md §3.2.
+export const ACCESS_TOKEN_AUDIENCE = 'xeno-api';
+export const ACCESS_TOKEN_TYP = 'at+jwt';
+
+/** RFC 7519 `aud` may be a string or an array of strings. */
+function audienceIncludes(aud, expected) {
+  return Array.isArray(aud) ? aud.includes(expected) : aud === expected;
+}
+
+/**
+ * True ONLY for a token minted as an ACCESS token for this resource server:
+ * audience-scoped to `xeno-api` AND explicitly typed `at+jwt` (RFC 9068 — set in
+ * both the payload and the JOSE header since the provider's first commit, so this
+ * cannot reject any access token we have ever issued). Rejects ID tokens (no
+ * payload `typ`) and back-channel logout tokens (`events`, `typ: 'logout+jwt'`)
+ * even if a client were ever registered under the `xeno-api` client_id.
+ * @param {object|undefined} header decoded JOSE header
+ * @param {object|undefined} payload verified claims
+ */
+export function isAccessToken(header, payload) {
+  if (!payload || !audienceIncludes(payload.aud, ACCESS_TOKEN_AUDIENCE)) return false;
+  if (payload.events !== undefined) return false; // OIDC back-channel logout marker
+  if (payload.typ !== undefined) return payload.typ === ACCESS_TOKEN_TYP;
+  return header?.typ === ACCESS_TOKEN_TYP;
+}
 const REFRESH_TTL_SEC = 30 * 24 * 60 * 60; // 30 days
 const CODE_TTL_SEC = 5 * 60;
 const DEVICE_TTL_SEC = 10 * 60;
@@ -151,9 +186,9 @@ async function mintTokens(db, { user, clientId, scope, sid, nonce }) {
   const now = Math.floor(Date.now() / 1000);
   const base = { iss: issuer(), iat: now, sid };
   const accessToken = jwt.sign(
-    { ...base, sub: user.id, aud: 'xeno-api', client_id: clientId, scope, typ: 'at+jwt' },
+    { ...base, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, scope, typ: ACCESS_TOKEN_TYP },
     key.privatePem,
-    { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: 'at+jwt', kid: key.kid } },
+    { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
   );
   // XENO handle unification: a conforming, non-reserved handle IS the @<domain> address.
   const mailDomain = process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai';
@@ -283,8 +318,8 @@ export async function refreshTokenGrant(db, { refreshToken, clientId }) {
   const key = await getSigningKey(db);
   const now = Math.floor(Date.now() / 1000);
   const access = jwt.sign(
-    { iss: issuer(), iat: now, sub: user.id, aud: 'xeno-api', client_id: clientId, scope: row.scope, sid: row.sid, typ: 'at+jwt' },
-    key.privatePem, { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: 'at+jwt', kid: key.kid } },
+    { iss: issuer(), iat: now, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, scope: row.scope, sid: row.sid, typ: ACCESS_TOKEN_TYP },
+    key.privatePem, { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
   );
   const newRefresh = await issueRefreshToken(db, { userId: user.id, clientId, scope: row.scope, sid: row.sid, familyId: row.family_id });
   return { access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL_SEC, refresh_token: newRefresh, scope: row.scope };
@@ -404,13 +439,19 @@ export async function revokeToken(db, { token, sid }) {
  */
 export async function introspectToken(db, { token }) {
   if (!token) return { active: false };
-  // Try as a signed access token (ES256 or RS256), verified by kid.
+  // Try as a signed access token (ES256 or RS256), verified by kid. Fail CLOSED on
+  // token type: an ID token and a back-channel logout token are signed by the same
+  // key, so without `isAccessToken` this endpoint reported them as an active
+  // `access_token` — a phantom-token edge validator would then admit them.
   try {
     const header = jwt.decode(token, { complete: true })?.header;
     const key = header?.kid ? await getKeyByKid(db, header.kid) : null;
     if (key) {
       const p = jwt.verify(token, key.publicKey, { algorithms: [key.alg] });
-      return { active: true, token_type: 'access_token', sub: p.sub, scope: p.scope, client_id: p.client_id, aud: p.aud, sid: p.sid, exp: p.exp, iss: p.iss };
+      if (isAccessToken(header, p)) {
+        return { active: true, token_type: 'access_token', sub: p.sub, scope: p.scope, client_id: p.client_id, aud: p.aud, sid: p.sid, exp: p.exp, iss: p.iss };
+      }
+      return { active: false };
     }
   } catch { /* not a valid access JWT — fall through */ }
   // Else try as an opaque refresh token.
