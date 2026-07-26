@@ -206,16 +206,70 @@ export class R2Publisher {
    * Upload a moving pointer (releases.json, version.json, <channel>.yml).
    * `Cache-Control: no-cache` is applied by this method — callers cannot forget it.
    */
+  /**
+   * Snapshot the CURRENT remote object before it is overwritten.
+   *
+   * WHY THIS EXISTS — R2 has NO object versioning. Verified 2026-07-26 against an
+   * account-admin R2 token: there is no `/versioning` route, the bucket object exposes
+   * only {name, creation_date, location, storage_class, jurisdiction}, and Cloudflare's
+   * own S3-compatibility table marks PutBucketVersioning / GetBucketVersioning ❌.
+   * So an overwritten POINTER is gone — and pointers are the only objects we overwrite
+   * (installers live under an immutable `v<version>/`, enforced by the immutability gate).
+   *
+   * On 2026-07-26 a stray `import()` of seed-releases.mjs replaced releases.json for
+   * hub/pixel/motion/sound. Only a stale local copy made partial reconstruction possible;
+   * some entries carry placeholder notes permanently. See
+   * `docs/engineering-learnings.md` → "Importing a module to check its syntax EXECUTES it".
+   *
+   * Snapshots are keyed `_snapshots/<key>/<ISO8601>.<ext>` inside the same bucket. They are
+   * bytes-only copies, cost pennies (pointers are KB), and are NOT gated — the bytes are
+   * already live, so scanning them would refuse a rescue of an already-published object.
+   * A snapshot failure NEVER blocks the publish: losing history is bad, being unable to
+   * ship a fix is worse.
+   */
+  async snapshotPointer(key, { label } = {}) {
+    const probe = statRemote(`${this.remote}/${key}`);
+    if (probe.status === 'absent') {
+      console.log(`  snapshot: ${key} does not exist yet (first publish) — nothing to preserve`);
+      return null;
+    }
+    if (probe.status === 'unknown') {
+      // Same discipline as the immutability gate: a BROKEN probe must not read as "nothing
+      // to back up". Warn explicitly so a failed backup is never mistaken for a skipped one.
+      console.warn(`  ⚠ snapshot: could not probe ${key} (${probe.reason}). Overwriting WITHOUT a backup.`);
+      return null;
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const dot = key.lastIndexOf('.');
+    const ext = dot > key.lastIndexOf('/') ? key.slice(dot) : '';
+    const dest = `_snapshots/${key}/${stamp}${ext}`;
+    try {
+      // Server-side copy: no download, no re-upload of bytes that are already live.
+      runRclone(['copyto', `${this.remote}/${key}`, `${this.remote}/${dest}`, '--no-traverse'], {
+        dryRun: this.dryRun,
+        label: label ?? `snapshot ${key}`,
+      });
+      console.log(`  snapshot: ${key} → ${dest}`);
+      return dest;
+    } catch (err) {
+      // Deliberately non-fatal. Losing history is bad; being unable to ship a fix is worse.
+      console.warn(`  ⚠ snapshot of ${key} FAILED (${err?.message ?? err}). The overwrite is NOT undoable — continuing.`);
+      return null;
+    }
+  }
+
   async putPointer(contents, key, { label } = {}) {
     const tmp = mkdtempSync(join(tmpdir(), 'xeno-r2-'));
     const file = join(tmp, basename(key));
     writeFileSync(file, contents);
     await this.gate(file, { requireStructural: false }); // JSON/YML: text, always fully scanned
+    // Preserve the outgoing bytes BEFORE clobbering them. R2 gives us no undo.
+    await this.snapshotPointer(key, { label: label ? `${label} (pre-overwrite)` : undefined });
     runRclone(
       ['copyto', file, `${this.remote}/${key}`, '--header-upload', 'Cache-Control: no-cache', '--no-traverse'],
       { dryRun: this.dryRun, label },
     );
-    this.uploads.push({ key, path: file, kind: 'pointer' });
+    this.uploads.push({ key, path: file, kind: 'pointer', snapshotted: true });
     return file;
   }
 
