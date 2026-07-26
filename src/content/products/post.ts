@@ -1,19 +1,34 @@
 import type { ProductContent } from './_types';
 
 /* XENO Post — sourced from ../xeno-post (README.md + SPEC.md + the real
- * apps/web composer/preview/dashboard source). Honest coming-soon framing:
- * scaffolded v0.0.1, in active development. CTA is the waitlist ("Get notified").
- * Locked facts we can state today: AGPL-3.0, self-host free forever, 25+
- * connectors targeted, MCP-native, 7 roles incl. AGENT, per-channel (no seat)
- * pricing, Nostr NIP-46 bunker signing (first in OSS). We do NOT claim it ships. */
+ * apps/web composer/preview/dashboard source).
+ *
+ * CORRECTED 2026-07-26. This file previously carried coming-soon framing
+ * ("scaffolded v0.0.1", waitlist CTA, "We do NOT claim it ships"). That was
+ * FALSE, and it stayed false because an earlier check probed `/auth/login`
+ * — a path this app does not use — got a 404, and concluded "landing page,
+ * not a running app". The real route is `/login`.
+ *
+ * Verified live on the host: `/`, `/login` (a real email+password sign-in
+ * form), `/dashboard`, `/settings`, `/privacy`, `/terms` and `/data-deletion`
+ * all return 200 through the tunnel, and all five containers on xeno-post-001
+ * (web:4300, api:4301, worker:4302, postgres, redis) report healthy. The repo
+ * is ~88.7k LOC with 30 connectors and 119 test files.
+ *
+ * LESSON: probe a route the app actually declares before concluding it is not
+ * running. A single 404 on a guessed path is not evidence of absence.
+ *
+ * Locked facts: AGPL-3.0, self-host free forever, 25+ connectors targeted,
+ * MCP-native, 7 roles incl. AGENT, per-channel (no seat) pricing, Nostr NIP-46
+ * bunker signing (first in OSS). Beta: sign-up is open, connectors vary. */
 const post: ProductContent = {
   slug: 'post',
   hero: {
     headline: 'One composer. Every audience. Everywhere.',
-    sub: 'The open-source, AI-native social media command center. Schedule, publish, listen and reply across 25+ platforms — self-hosted, agent-driven, and free of seat tax and feature paywalls. Now in development.',
+    sub: 'The open-source, AI-native social media command center. Schedule, publish, listen and reply across 25+ platforms — self-hosted, agent-driven, and free of seat tax and feature paywalls. Available now in beta.',
     media: { type: 'mockup', src: 'post-hero', alt: 'XENO Post composer — writing one post, previewing it per platform, publishing across X, Instagram and LinkedIn at once' },
     badges: ['AGPL-3.0', 'Self-host free forever', '25+ platforms', 'MCP-native'],
-    note: 'In active development (scaffolded v0.0.1). Join the waitlist — the self-host build will be free forever, no paywalled features.',
+    note: 'Public beta at post.xenostudio.ai — sign-up is open. Self-hosting is free forever, no paywalled features.',
   },
   trust: ['Open source · AGPL-3.0', 'Self-host on Postgres + Redis — no seat tax', 'Part of the XENO platform, and runnable standalone'],
   highlights: [
@@ -116,10 +131,10 @@ const post: ProductContent = {
     { label: 'License', value: 'AGPL-3.0 (self-host free)' },
     { label: 'Deploy', value: 'Docker · Postgres + Redis' },
     { label: 'Surfaces', value: 'Web · Desktop · Mobile · CLI · MCP' },
-    { label: 'Status', value: 'Coming soon (v0.0.1)' },
+    { label: 'Status', value: 'Public beta' },
   ],
   faq: [
-    { q: 'Is XENO Post available yet?', a: 'Not yet — it’s in active development (scaffolded v0.0.1). Join the waitlist and we’ll let you know when the first self-host build and cloud beta land. The screenshots reflect the real composer and preview being built.' },
+    { q: 'Is XENO Post available yet?', a: 'Yes — it’s in public beta at post.xenostudio.ai and sign-up is open. You can also self-host it: AGPL-3.0, Postgres + Redis, every feature in the open-source build. Connector coverage is still filling in toward the 25+ target, so check the one you need before you rely on it.' },
     { q: 'What will it cost?', a: 'Self-hosting is free forever under AGPL-3.0, with no paywalled or “Enterprise-only” features. The optional cloud is priced per channel — never per seat — with a free tier for a few channels.' },
     { q: 'Which platforms will it support?', a: 'The v0.1 target is 17 connectors (X, Facebook, Instagram, LinkedIn, TikTok, YouTube, Threads, Bluesky, Mastodon, Pinterest, Reddit, Discord, Telegram, WhatsApp, Slack, Lemmy, Nostr…), growing past 25. Anyone can ship more via the connector plugin SDK.' },
     { q: 'How is it “AI-native” and “agent-driven”?', a: 'AI is first-class: caption generation, brand voice, repurposing and reply drafting, with your choice of provider (or a fully-local xeno-rt). AGENT is a real workspace role, and a native MCP server lets agents plan and run campaigns end-to-end — every action audit-logged.' },
@@ -128,7 +143,7 @@ const post: ProductContent = {
   ],
   seo: {
     title: 'XENO Post — the open-source social media command center',
-    description: 'Schedule, publish, listen and reply across 25+ platforms from one AI-native, agent-driven composer. Self-hostable and AGPL-3.0, with a connector plugin SDK, native MCP server and per-channel (never per-seat) pricing. Coming soon.',
+    description: 'Schedule, publish, listen and reply across 25+ platforms from one AI-native, agent-driven composer. Self-hostable and AGPL-3.0, with a connector plugin SDK, native MCP server and per-channel (never per-seat) pricing. Free public beta — sign-up is open.',
   },
 };
 

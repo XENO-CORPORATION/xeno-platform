@@ -93,7 +93,12 @@ export const PRODUCTS: Product[] = [
 
   // ── Connect ───────────────────────────────────────────────
   { slug: 'comms', name: 'XENO Comms', tagline: 'Human and agent communication for teams.', category: 'Connect', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-comms' },
-  { slug: 'post', name: 'XENO Post', tagline: '25+ platform social media command center.', category: 'Connect', status: 'coming-soon', delivery: 'soon', repo: 'xeno-post' },
+  // Post runs on its OWN host (post.xenostudio.ai), not a path under xenostudio.ai,
+  // so it uses `externalUrl` like xeno-rt rather than `launchPath`. Verified live
+  // 2026-07-26: /, /login (real email+password form), /dashboard, /settings, /privacy,
+  // /terms and /data-deletion all return 200, and all five containers (web, api,
+  // worker, postgres, redis) report healthy on xeno-post-001.
+  { slug: 'post', name: 'XENO Post', tagline: '25+ platform social media command center.', category: 'Connect', status: 'beta', delivery: 'web', repo: 'xeno-post', externalUrl: 'https://post.xenostudio.ai', externalLabel: 'Open XENO Post' },
   { slug: 'browser', name: 'XENO Browser', tagline: 'The agent-native browser that works the web for you.', category: 'Connect', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-browser' },
   // Extension: the public R2 channel was withdrawn and there is no web-store
   // listing yet, so there is nothing to download — 'soon' keeps the CTA honest.
