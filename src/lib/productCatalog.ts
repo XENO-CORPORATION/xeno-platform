@@ -96,7 +96,10 @@ export const PRODUCTS: Product[] = [
   { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xeno-corporation/xeno-agent-sdk', repo: 'xeno-agent-sdk' },
   { slug: 'acp', name: 'XENO ACP', tagline: 'Drive approved ACP coding agents through one API.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xeno-corporation/xeno-acp', operatingSystem: 'Windows, Linux', repo: 'xeno-acp' },
   { slug: 'rt', name: 'XENO RT', tagline: 'Run frontier models locally — private and fast.', category: 'Develop', status: 'beta', delivery: 'desktop', repo: 'xeno-rt' },
-  { slug: 'shell', name: 'XENO Shell', tagline: 'The XENO desktop environment for every app.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-shell' },
+  // Shell ships a PUBLIC unsigned Windows beta (apps/shell/v0.1.0-beta.1, beta
+  // channel) — so it is beta/desktop, not coming-soon/soon. Tagline stays scoped
+  // to what the build does: it is a host layer; no XENO app runs inside it yet.
+  { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop shell with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
   { slug: 'anima', name: 'XENO Anima', tagline: 'Your personal, always-on agent — it remembers you and gets better.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-anima' },
 ];
 

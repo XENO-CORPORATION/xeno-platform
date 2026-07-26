@@ -29,6 +29,9 @@ import SoundStudio from './SoundStudio';
 import Xeno3DEditor from './Xeno3DEditor';
 import AnimaMind from './AnimaMind';
 import AnimaSwarm from './AnimaSwarm';
+import ShellDesktop from './ShellDesktop';
+import ShellMounts from './ShellMounts';
+import ShellDisplays from './ShellDisplays';
 
 /* Built-in product mockups — referenced from a content module's Media as
  * { type: 'mockup', src: '<key>' }. Lets a landing page ship a crisp, faithful
@@ -65,6 +68,9 @@ const MOCKUPS: Record<string, React.ComponentType> = {
   '3d-hero': Xeno3DEditor,
   'anima-hero': AnimaMind,
   'anima-swarm': AnimaSwarm,
+  'shell-hero': ShellDesktop,
+  'shell-mounts': ShellMounts,
+  'shell-displays': ShellDisplays,
 };
 
 export function Mockup({ name }: { name: string }): React.ReactElement | null {
