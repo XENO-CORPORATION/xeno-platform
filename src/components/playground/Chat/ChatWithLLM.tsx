@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'; // Import createPortal
 import ChatEmptyState, { type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
+import ChatShareModal from './ChatShareModal';
 import { MOCK_CHAT_UPDATES } from './mockChatUpdates';
 import { MOCK_CHAT_HISTORY } from './mockChatHistory';
 import { MOCK_CHAT_MODELS } from './mockChatModels';
@@ -1517,6 +1518,19 @@ const MOCK_PROJECT_SCHEDULED = [
 ];
 /** Short title for the large workspace header font (≈ one line next to ⋯ / star). */
 const PROJECT_NAME_MAX_CHARS = 36;
+/**
+ * Tabs of the single Project settings surface. Every entry point opens the modal on one of
+ * these — one door, several handles. Only the active tab's content is rendered.
+ *
+ * Files and Scheduled are deliberately absent: they are content to read, not configuration, and
+ * the rail already owns them. Duplicating a list here would defeat the point of one surface.
+ */
+const PROJECT_SETTINGS_SECTIONS = [
+  { id: 'general', label: 'General' },
+  { id: 'instructions', label: 'Instructions' },
+  { id: 'danger', label: 'Danger zone' },
+] as const;
+type ProjectSettingsSection = (typeof PROJECT_SETTINGS_SECTIONS)[number]['id'];
 const CHAT_THEME_BRIGHTNESS_STORAGE_KEY = 'xeno-chat-theme-brightness';
 const CHAT_CHROME_EDGE_INSET_PX = 12;
 const CHAT_CHROME_TOP_INSET_PX = 8;
@@ -2280,7 +2294,6 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     }
   });
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
-  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [openProjectMenuId, setOpenProjectMenuId] = useState<string | null>(null);
   // Card whose hover overlay (bottom fade + date) is suppressed after a right-click.
   const [suppressCardOverlayId, setSuppressCardOverlayId] = useState<string | null>(null);
@@ -2299,9 +2312,15 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const projectEntryConversationIdRef = useRef<string | null>(null);
   // Non-fatal upload notice shown in the project workspace (e.g. "file too large").
   const [projectFileNotice, setProjectFileNotice] = useState<string | null>(null);
-  // "Set project instructions" modal state.
-  const [instructionsModalProjectId, setInstructionsModalProjectId] = useState<string | null>(null);
+  // Project settings — the one door for configuring a project. `section` is the active tab
+  // (General / Instructions / Danger zone), so rail cards open the same surface on the right page.
+  const [projectSettings, setProjectSettings] = useState<{
+    projectId: string;
+    section: ProjectSettingsSection;
+  } | null>(null);
   const [instructionsDraft, setInstructionsDraft] = useState('');
+  const [settingsNameDraft, setSettingsNameDraft] = useState('');
+  const [settingsDescriptionDraft, setSettingsDescriptionDraft] = useState('');
   const [newChatProjectName, setNewChatProjectName] = useState('');
   const [newChatProjectDescription, setNewChatProjectDescription] = useState('');
   /** If set, the next created project receives this conversation. */
@@ -2313,7 +2332,6 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   const closeCreateProjectModal = useCallback(() => {
     setIsCreateProjectModalOpen(false);
-    setEditingProjectId(null);
     setNewChatProjectName('');
     setNewChatProjectDescription('');
     setPendingProjectAssignConversationId(null);
@@ -2321,19 +2339,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   const openCreateProjectModal = useCallback((options?: { assignConversationId?: string }) => {
     setPendingProjectAssignConversationId(options?.assignConversationId ?? null);
-    setEditingProjectId(null);
     setNewChatProjectName('');
     setNewChatProjectDescription('');
-    setIsProjectsSortOpen(false);
-    setIsCreateProjectModalOpen(true);
-  }, []);
-
-  const openEditProjectModal = useCallback((project: ChatHistoryProject) => {
-    setPendingProjectAssignConversationId(null);
-    setEditingProjectId(project.id);
-    setNewChatProjectName(project.name.slice(0, PROJECT_NAME_MAX_CHARS));
-    setNewChatProjectDescription(project.description ?? '');
-    setOpenProjectMenuId(null);
     setIsProjectsSortOpen(false);
     setIsCreateProjectModalOpen(true);
   }, []);
@@ -2437,32 +2444,58 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     );
   }, []);
 
-  const openInstructionsModal = useCallback((project: ChatHistoryProject) => {
-    setInstructionsModalProjectId(project.id);
-    setInstructionsDraft(project.instructions ?? '');
-  }, []);
+  const openProjectSettings = useCallback(
+    (project: ChatHistoryProject, section: ProjectSettingsSection = 'general') => {
+      setSettingsNameDraft(project.name.slice(0, PROJECT_NAME_MAX_CHARS));
+      setSettingsDescriptionDraft(project.description ?? '');
+      // The rail shows demo instructions when none are saved, so the editor opens on the same
+      // text the user is looking at rather than on an empty box.
+      setInstructionsDraft(project.instructions ?? MOCK_PROJECT_INSTRUCTIONS);
+      setOpenProjectMenuId(null);
+      setIsProjectsSortOpen(false);
+      setProjectSettings({ projectId: project.id, section });
+    },
+    [],
+  );
 
-  const closeInstructionsModal = useCallback(() => {
-    setInstructionsModalProjectId(null);
+  const closeProjectSettings = useCallback(() => {
+    setProjectSettings(null);
+    setSettingsNameDraft('');
+    setSettingsDescriptionDraft('');
     setInstructionsDraft('');
   }, []);
 
-  const saveInstructions = useCallback(() => {
-    setInstructionsModalProjectId((projectId) => {
-      if (projectId) {
-        const trimmed = instructionsDraft.trim();
-        setChatProjects((prev) =>
-          prev.map((project) =>
-            project.id === projectId
-              ? { ...project, instructions: trimmed || undefined, updatedAt: Date.now() }
-              : project,
-          ),
-        );
-      }
-      return null;
-    });
-    setInstructionsDraft('');
-  }, [instructionsDraft]);
+  /**
+   * Name, description and instructions are drafts committed together. File and schedule changes
+   * are immediate actions, so they are deliberately not part of this save.
+   */
+  const saveProjectSettings = useCallback(() => {
+    if (!projectSettings) return;
+    const { projectId } = projectSettings;
+    const name = settingsNameDraft.trim().slice(0, PROJECT_NAME_MAX_CHARS);
+    const description = settingsDescriptionDraft.trim();
+    const instructions = instructionsDraft.trim();
+    setChatProjects((prev) =>
+      prev.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              name: name || project.name,
+              description: description || undefined,
+              instructions: instructions || undefined,
+              updatedAt: Date.now(),
+            }
+          : project,
+      ),
+    );
+    closeProjectSettings();
+  }, [
+    projectSettings,
+    settingsNameDraft,
+    settingsDescriptionDraft,
+    instructionsDraft,
+    closeProjectSettings,
+  ]);
 
   const createChatProject = useCallback((name?: string, description?: string) => {
     const projectName =
@@ -2495,11 +2528,20 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     }
   }, []);
 
-  const closeProjectsPage = useCallback(() => {
+  /**
+   * Full-page chat overlays (Projects list z-45, project workspace z-46, chats catalog z-45)
+   * sit above the message stream. Any navigation to a chat or a blank new chat must leave
+   * them, or the destination opens underneath and looks like a dead click.
+   */
+  const dismissChatOverlays = useCallback(() => {
+    setActiveProjectId(null);
     setIsProjectsPageOpen(false);
+    setIsChatsCatalogOpen(false);
+    setIsChatsCatalogFilterOpen(false);
     setIsProjectsSortOpen(false);
     setProjectsPageSearch('');
     try {
+      localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
       localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
     } catch {
       /* ignore storage failures */
@@ -2507,6 +2549,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   }, []);
 
   const openProject = useCallback((projectId: string) => {
+    setIsChatsCatalogOpen(false);
+    setIsChatsCatalogFilterOpen(false);
     setActiveProjectId(projectId);
     setOpenProjectMenuId(null);
     setProjectFileNotice(null);
@@ -2535,21 +2579,15 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     }
   }, []);
 
-  // Leave the project workspace as soon as a *new* conversation becomes active from within it
-  // (the reused composer sent a message, or a recent chat was opened), revealing the chat.
+  // Leave project overlays once a *different* conversation becomes active from within a project
+  // (new message from the project composer). History clicks go through handleLoadConversation.
   useEffect(() => {
     if (!activeProjectId) return;
     if (activeConversationId && activeConversationId !== projectEntryConversationIdRef.current) {
-      setActiveProjectId(null);
-      setIsProjectsPageOpen(false);
-      try {
-        localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
-        localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
-      } catch {
-        /* ignore storage failures */
-      }
+      dismissChatOverlays();
+      setHistoryNavView('chats');
     }
-  }, [activeConversationId, activeProjectId]);
+  }, [activeConversationId, activeProjectId, dismissChatOverlays]);
 
   // --- NEW: State for Context Limit Warning ---
   const [isContextLimitReached, setIsContextLimitReached] = useState(false);
@@ -5485,6 +5523,11 @@ Please provide a well-structured response using this search context and any mult
     const conversationToLoad = conversationHistory.find(convo => convo.id === conversationId);
     if (conversationToLoad) {
         // console.log("Loading conversation:", conversationId);
+
+        // Leave full-page overlays so the loaded chat is visible, not buried under them.
+        dismissChatOverlays();
+        setHistoryNavView('chats');
+
         setActiveConversationId(conversationId);
 
         // Always load from database when authenticated to ensure fresh data
@@ -5917,21 +5960,6 @@ Please provide a well-structured response using this search context and any mult
   };
 
   const submitCreateProjectModal = () => {
-    if (editingProjectId) {
-      const name =
-        newChatProjectName.trim().slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project';
-      const description = newChatProjectDescription.trim();
-      const now = Date.now();
-      setChatProjects((prev) =>
-        prev.map((project) =>
-          project.id === editingProjectId
-            ? { ...project, name, description: description || undefined, updatedAt: now }
-            : project,
-        ),
-      );
-      closeCreateProjectModal();
-      return;
-    }
     const assignId = pendingProjectAssignConversationId;
     const project = createChatProject();
     if (assignId) {
@@ -6026,6 +6054,15 @@ Please provide a well-structured response using this search context and any mult
       closeRecentsFilterMenu();
     }
   }, [isHistoryOpen, historyNavView, closeRecentsFilterMenu]);
+
+  useEffect(() => {
+    if (!projectSettings) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeProjectSettings();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [projectSettings, closeProjectSettings]);
 
   useEffect(() => {
     if (!isProjectsPageOpen && !isCreateProjectModalOpen) return;
@@ -6225,6 +6262,10 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
   // Placeholder for New Chat action
   const handleNewChat = () => {
+      // Same overlay trap as loading a conversation: a blank chat under Projects/catalog
+      // looks like nothing happened.
+      dismissChatOverlays();
+      setHistoryNavView('chats');
       setMessages([]); // Clear current messages
       setActiveConversationId(null); // Set active ID to null (indicates new chat)
       setInputValue(''); // Clear the input field
@@ -6342,7 +6383,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
               id="create-project-dialog-title"
               className="text-[1.15rem] font-semibold tracking-tight text-[var(--chat-text)]"
             >
-              {editingProjectId ? 'Edit project' : 'Create a project'}
+              Create a project
             </h2>
             <button
               type="button"
@@ -6459,7 +6500,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   color: 'var(--chat-canvas)',
                 }}
               >
-                {editingProjectId ? 'Save changes' : 'Create project'}
+                Create project
               </button>
             </div>
           </div>
@@ -6468,97 +6509,283 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     );
   };
 
-  const renderInstructionsModal = () => {
+  /**
+   * The one configuration surface for a project. Rail cards and the header ⋯ all land here and
+   * scroll to their own section, so there is a single place to learn and a single place to grow.
+   */
+  const renderProjectSettingsModal = () => {
+    const project = chatProjects.find((item) => item.id === projectSettings?.projectId);
+    if (!project || !projectSettings) return null;
+
+    const activeSection = projectSettings.section;
+    const fieldStyle: React.CSSProperties = {
+      backgroundColor: 'var(--chat-canvas)',
+      boxShadow: 'inset 0 0 0 1px var(--chat-border)',
+    };
+    const fieldClassName =
+      'w-full rounded-lg px-3 py-2.5 text-[13px] text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none';
+    const focusField = (event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-accent)';
+    };
+    const blurField = (event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-border)';
+    };
+    const setActiveSection = (section: ProjectSettingsSection) => {
+      setProjectSettings({ projectId: project.id, section });
+    };
     return (
       <div
-        className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+        className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-end justify-center p-0 backdrop-blur-sm sm:items-center sm:p-4`}
         data-chat-theme-preference={chatTheme}
+        data-project-settings-dialog=""
         style={{
           // Dim + blur the page so the dialog is the clear focus.
           backgroundColor: 'rgba(0, 0, 0, 0.45)',
           ...chatThemePreviewStyle,
         }}
-        onClick={closeInstructionsModal}
+        onClick={closeProjectSettings}
       >
         <div
           role="dialog"
           aria-modal="true"
-          aria-labelledby="project-instructions-title"
-          className="flex w-[min(600px,100%)] flex-col overflow-hidden rounded-2xl border"
+          aria-labelledby="project-settings-title"
+          className="flex w-full max-w-[600px] flex-col overflow-hidden rounded-t-2xl border border-b-0 sm:rounded-2xl sm:border"
           style={{
-            height: 560,
+            // dvh accounts for mobile browser chrome; fall back to vh.
+            height: 'min(640px, calc(100dvh - 0.5rem))',
+            maxHeight: 'calc(100dvh - 0.5rem)',
             backgroundColor: 'var(--chat-elevated)',
             borderColor: 'var(--chat-border)',
             color: 'var(--chat-text)',
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="flex-shrink-0 px-5 pt-5 pb-3">
-            <div className="flex items-start justify-between gap-3">
-              <h2
-                id="project-instructions-title"
-                className="text-[1.15rem] font-semibold tracking-tight text-[var(--chat-text)]"
-              >
-                Set project instructions
-              </h2>
+          <div className="flex-shrink-0 px-4 pt-4 pb-3 sm:px-5 sm:pt-5">
+            <div className="flex items-start gap-2 sm:items-center sm:gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <h2
+                    id="project-settings-title"
+                    className="flex-shrink-0 text-[1.05rem] font-semibold tracking-tight text-[var(--chat-text)] sm:text-[1.15rem]"
+                  >
+                    Project settings
+                  </h2>
+                  <div
+                    className="hidden h-4 w-px flex-shrink-0 sm:block"
+                    style={{
+                      backgroundColor: 'color-mix(in srgb, var(--chat-muted) 45%, transparent)',
+                    }}
+                    aria-hidden="true"
+                  />
+                  <nav
+                    className="hidden min-w-0 flex-1 flex-wrap items-center gap-1 sm:flex"
+                    aria-label="Settings sections"
+                    role="tablist"
+                  >
+                    {PROJECT_SETTINGS_SECTIONS.map((section) => {
+                      const isActive = activeSection === section.id;
+                      return (
+                        <button
+                          key={section.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={isActive}
+                          onClick={() => setActiveSection(section.id)}
+                          className={`min-h-8 rounded-md px-2 py-1 text-[11.5px] font-medium transition-colors ${
+                            isActive
+                              ? 'text-[var(--chat-text)]'
+                              : 'text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
+                          }`}
+                          style={
+                            isActive
+                              ? {
+                                  boxShadow:
+                                    'inset 0 0 0 1px color-mix(in srgb, var(--chat-muted) 55%, transparent)',
+                                }
+                              : undefined
+                          }
+                        >
+                          {section.label}
+                        </button>
+                      );
+                    })}
+                  </nav>
+                </div>
+                <p className="mt-1 truncate text-[12px] text-[var(--chat-muted)]">{project.name}</p>
+              </div>
               <button
                 type="button"
-                onClick={closeInstructionsModal}
-                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                aria-label="Close instructions"
+                onClick={closeProjectSettings}
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] sm:h-8 sm:w-8"
+                aria-label="Close project settings"
               >
                 <X size={16} aria-hidden="true" />
               </button>
             </div>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--chat-muted)]">
-              Give XENO context and rules to follow for every chat in this project. These apply on
-              top of your global preferences and the chat's selected style.
-            </p>
+
+            {/* Mobile: tabs sit under the title so they do not crush into one row. */}
+            <nav
+              className="mt-3 flex gap-1 overflow-x-auto pb-0.5 sm:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              aria-label="Settings sections"
+              role="tablist"
+            >
+              {PROJECT_SETTINGS_SECTIONS.map((section) => {
+                const isActive = activeSection === section.id;
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setActiveSection(section.id)}
+                    className={`min-h-9 flex-shrink-0 rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                      isActive
+                        ? 'text-[var(--chat-text)]'
+                        : 'text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
+                    }`}
+                    style={
+                      isActive
+                        ? {
+                            boxShadow:
+                              'inset 0 0 0 1px color-mix(in srgb, var(--chat-muted) 55%, transparent)',
+                          }
+                        : undefined
+                    }
+                  >
+                    {section.label}
+                  </button>
+                );
+              })}
+            </nav>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col px-5 pb-5">
-            <textarea
-              autoFocus
-              value={instructionsDraft}
-              onChange={(event) => setInstructionsDraft(event.target.value)}
-              placeholder="e.g. Think step by step and show your reasoning for complex problems. Prefer concrete examples."
-              className="min-h-0 w-full flex-1 resize-none overflow-y-auto rounded-xl px-3.5 py-3 text-[13px] leading-relaxed text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none scrollbar-thin scrollbar-thumb-zinc-500/40 scrollbar-track-transparent"
-              style={{
-                backgroundColor: 'var(--chat-canvas)',
-                boxShadow: 'inset 0 0 0 1px var(--chat-border)',
-              }}
-              onFocus={(event) => {
-                event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-accent)';
-              }}
-              onBlur={(event) => {
-                event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-border)';
-              }}
-            />
-            <div className="mt-4 flex flex-shrink-0 justify-end gap-2">
+          <div
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-5 scrollbar-thin scrollbar-thumb-zinc-500/40 scrollbar-track-transparent"
+            role="tabpanel"
+          >
+            {activeSection === 'general' && (
+              <div className="space-y-3 pt-2 sm:pt-3">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor={`project-settings-name-${interfaceId}`}
+                    className="block text-[12.5px] font-medium text-[var(--chat-text)]"
+                  >
+                    Project name
+                  </label>
+                  <input
+                    id={`project-settings-name-${interfaceId}`}
+                    type="text"
+                    value={settingsNameDraft}
+                    maxLength={PROJECT_NAME_MAX_CHARS}
+                    onChange={(event) =>
+                      setSettingsNameDraft(event.target.value.slice(0, PROJECT_NAME_MAX_CHARS))
+                    }
+                    placeholder="Name your project"
+                    className={fieldClassName}
+                    style={fieldStyle}
+                    onFocus={focusField}
+                    onBlur={blurField}
+                  />
+                  <p className="text-right text-[11px] tabular-nums text-[var(--chat-muted)]">
+                    {settingsNameDraft.length}/{PROJECT_NAME_MAX_CHARS}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor={`project-settings-description-${interfaceId}`}
+                    className="block text-[12.5px] font-medium text-[var(--chat-text)]"
+                  >
+                    Description
+                  </label>
+                  <textarea
+                    id={`project-settings-description-${interfaceId}`}
+                    value={settingsDescriptionDraft}
+                    onChange={(event) => setSettingsDescriptionDraft(event.target.value)}
+                    placeholder="Describe your project, goals, subject, etc..."
+                    rows={8}
+                    className={`${fieldClassName} min-h-[10rem] resize-y sm:min-h-[14rem]`}
+                    style={fieldStyle}
+                    onFocus={focusField}
+                    onBlur={blurField}
+                  />
+                </div>
+              </div>
+            )}
+
+            {activeSection === 'instructions' && (
+              <div className="flex h-full min-h-0 flex-col space-y-2 pt-2 sm:pt-3">
+                <p className="flex-shrink-0 text-[12px] leading-relaxed text-[var(--chat-muted)]">
+                  Context and rules XENO follows for every chat in this project. These apply on top
+                  of your global preferences and the chat's selected style.
+                </p>
+                <textarea
+                  value={instructionsDraft}
+                  onChange={(event) => setInstructionsDraft(event.target.value)}
+                  placeholder="e.g. Think step by step and show your reasoning for complex problems. Prefer concrete examples."
+                  className={`${fieldClassName} min-h-[12rem] flex-1 resize-y leading-relaxed scrollbar-thin scrollbar-thumb-zinc-500/40 scrollbar-track-transparent sm:min-h-[14rem]`}
+                  style={fieldStyle}
+                  onFocus={focusField}
+                  onBlur={blurField}
+                />
+              </div>
+            )}
+
+            {activeSection === 'danger' && (
+              <div className="space-y-2 pt-2 sm:pt-3">
+                <h3 className="text-[13px] font-semibold text-[var(--chat-danger)]">Danger zone</h3>
+                <p className="text-[12px] leading-relaxed text-[var(--chat-muted)]">
+                  Deleting a project removes it and its files. Conversations are kept.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDeleteProject(project.id);
+                    closeProjectSettings();
+                  }}
+                  className="min-h-10 w-full rounded-lg border px-3 py-2.5 text-[12.5px] font-medium text-[var(--chat-danger)] transition-colors hover:bg-[var(--chat-hover)] sm:w-auto sm:min-h-0 sm:py-2"
+                  style={{ borderColor: 'var(--chat-danger)' }}
+                >
+                  Delete project
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div
+            className="flex flex-shrink-0 flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end sm:gap-2 sm:px-5 sm:py-3.5"
+            style={{ borderColor: 'var(--chat-border)' }}
+          >
+            {activeSection === 'danger' ? (
               <button
                 type="button"
-                onClick={closeInstructionsModal}
-                className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors"
-                style={{
-                  backgroundColor: 'var(--chat-control)',
-                  color: 'var(--chat-text)',
-                }}
+                onClick={closeProjectSettings}
+                className="min-h-10 w-full rounded-lg px-3.5 py-2.5 text-[13px] font-medium transition-colors sm:min-h-0 sm:w-auto sm:py-2"
+                style={{ backgroundColor: 'var(--chat-control)', color: 'var(--chat-text)' }}
               >
-                Cancel
+                Close
               </button>
-              <button
-                type="button"
-                onClick={saveInstructions}
-                className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-opacity"
-                style={{
-                  backgroundColor: 'var(--chat-text)',
-                  color: 'var(--chat-canvas)',
-                }}
-              >
-                Save instructions
-              </button>
-            </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={closeProjectSettings}
+                  className="min-h-10 w-full rounded-lg px-3.5 py-2.5 text-[13px] font-medium transition-colors sm:min-h-0 sm:w-auto sm:py-2"
+                  style={{ backgroundColor: 'var(--chat-control)', color: 'var(--chat-text)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveProjectSettings}
+                  className="min-h-10 w-full rounded-lg px-3.5 py-2.5 text-[13px] font-medium transition-opacity sm:min-h-0 sm:w-auto sm:py-2"
+                  style={{ backgroundColor: 'var(--chat-text)', color: 'var(--chat-canvas)' }}
+                >
+                  Save changes
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -10345,13 +10572,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               }}
               aria-label={isTaskbarHidden ? 'Show toolbar' : 'Hide toolbar'}
               title={isTaskbarHidden ? 'Show toolbar' : 'Hide toolbar'}
-              className="animate-chat-history-chrome-enter-delay flex h-9 items-center px-1 font-display text-[1.05rem] font-semibold leading-none tracking-tight text-white/80 transition-colors hover:text-white active:scale-[0.98]"
+              className="animate-chat-history-chrome-enter-delay flex h-9 items-center px-1 font-display text-[1.05rem] font-semibold tracking-tight text-white/80 transition-colors hover:text-white active:scale-[0.98]"
             >
               XENO
             </button>
             {isProjectsPageOpen && (
               <span
-                className="animate-chat-history-chrome-enter-delay -ml-1 truncate font-display text-[1.05rem] font-medium leading-none tracking-tight text-zinc-500"
+                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-zinc-500"
                 aria-current="page"
               >
                 Projects
@@ -10958,8 +11185,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             }}
                           >
                             <div className="flex items-center justify-between gap-2 py-1 pl-2 pr-0.5">
-                              <button
-                                type="button"
+                              <div
                                 className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
                                 title={project.name}
                               >
@@ -10978,7 +11204,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     Archived
                                   </span>
                                 )}
-                              </button>
+                              </div>
                               <div className="relative flex-shrink-0" data-project-card-menu>
                                 <button
                                   type="button"
@@ -11018,11 +11244,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     <button
                                       type="button"
                                       role="menuitem"
-                                      onClick={() => openEditProjectModal(project)}
+                                      onClick={() => openProjectSettings(project, 'general')}
                                       className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
                                     >
                                       <Pencil size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
-                                      <span>Edit details</span>
+                                      <span>Project settings</span>
                                     </button>
                                     <div className="my-1 border-t" style={{ borderColor: 'var(--chat-border)' }} />
                                     <button
@@ -11150,15 +11376,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     <div className="flex flex-shrink-0 items-center gap-0.5">
                       <button
                         type="button"
-                        onClick={() => openEditProjectModal(project)}
-                        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                        aria-label="Edit project details"
-                        title="Edit details"
-                      >
-                        <MoreVertical size={16} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => handleToggleProjectStar(project.id)}
                         className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                         aria-label={project.isStarred ? 'Unstar project' : 'Star project'}
@@ -11228,15 +11445,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               key={chat.id}
                               type="button"
                               onClick={() => {
-                                handleLoadConversation(chat.id);
-                                setActiveProjectId(null);
-                                setIsProjectsPageOpen(false);
-                                try {
-                                  localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
-                                  localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
-                                } catch {
-                                  /* ignore storage failures */
-                                }
+                                void handleLoadConversation(chat.id);
                               }}
                               className="flex w-full items-center gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--chat-hover)]"
                             >
@@ -11293,22 +11502,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         >
                           <div className="flex items-center justify-between gap-2 py-1 pl-2 pr-0.5">
                             <span className="truncate text-[13px] font-semibold leading-snug tracking-tight text-[var(--chat-text)]">
-                              Instructions
+                              Settings
                             </span>
                             <button
                               type="button"
-                              onClick={() => openInstructionsModal(project)}
+                              onClick={() => openProjectSettings(project, 'general')}
                               className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                              aria-label={project.instructions ? 'Edit instructions' : 'Add instructions'}
-                              title={project.instructions ? 'Edit instructions' : 'Add instructions'}
+                              aria-label="Open project settings"
+                              title="Project settings"
                             >
-                              <Plus size={16} aria-hidden="true" />
+                              <MoreVertical size={16} aria-hidden="true" />
                             </button>
                           </div>
                           <div className="px-1 pb-1.5 pt-0.5">
                             <button
                               type="button"
-                              onClick={() => openInstructionsModal(project)}
+                              onClick={() => openProjectSettings(project, 'instructions')}
                               className="w-full rounded-lg border px-2.5 py-2 text-left transition-[transform,opacity] duration-150 ease-out hover:opacity-90 active:scale-[0.99]"
                               style={railChipStyle}
                             >
@@ -11917,43 +12126,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <button
                   type="button"
                   onClick={() => {
-                    setIsSharePreviewOpen((current) => !current);
+                    setIsSharePreviewOpen(true);
                     setIsChatMoreMenuOpen(false);
                   }}
                   aria-expanded={isSharePreviewOpen}
-                  aria-controls="chat-share-preview"
-                  aria-label="Open share preview"
-                  title="Share conversation preview"
+                  aria-haspopup="dialog"
+                  aria-label="Share conversation"
+                  title="Share conversation"
                   data-active={isSharePreviewOpen ? 'true' : undefined}
                   className={topBarBtnClass(isSharePreviewOpen, 'w-9')}
                 >
                   <Share2 size={16} />
                 </button>
-                <div
-                  id="chat-share-preview"
-                  role="dialog"
-                  aria-label="Share conversation preview"
-                  className={`absolute right-0 top-full z-20 mt-2 w-64 origin-top-right rounded-lg border border-[#2a2a2d] bg-[#0e0e10] p-3 shadow-xl transition-[opacity,transform] duration-200 ease-out ${
-                    isSharePreviewOpen
-                      ? 'visible scale-100 opacity-100'
-                      : 'invisible pointer-events-none scale-95 opacity-0'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-white">Share conversation</p>
-                      <p className="mt-1 text-xs leading-5 text-gray-500">Preview only. A share link and permissions will be connected when the backend is ready.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsSharePreviewOpen(false)}
-                      aria-label="Close share preview"
-                      className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-black/20 hover:text-white"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
               </div>
               )}
 
@@ -13221,7 +13405,26 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {dislikePopupInfo && createPortal(<DislikeFeedbackPopup />, document.body)}
         {deleteConfirmationModal.isOpen && createPortal(<DeleteConfirmationModalComponent />, document.body)}
         {isCreateProjectModalOpen && createPortal(renderCreateProjectModal(), document.body)}
-        {instructionsModalProjectId && createPortal(renderInstructionsModal(), document.body)}
+        {projectSettings && createPortal(renderProjectSettingsModal(), document.body)}
+        {isSharePreviewOpen &&
+          messages.length > 0 &&
+          createPortal(
+            <ChatShareModal
+              conversationId={activeConversationId ?? 'local-draft'}
+              conversationTitle={
+                conversationHistory.find((convo) => convo.id === activeConversationId)?.title
+              }
+              messages={messages.map((message) => ({
+                id: message.id,
+                sender: message.sender,
+                text: message.parsedAnswer || message.text,
+              }))}
+              themeClassName={`chat-themed chat-theme-${resolvedChatTheme}`}
+              themeStyle={chatThemePreviewStyle}
+              onClose={() => setIsSharePreviewOpen(false)}
+            />,
+            document.body,
+          )}
         {historyDragGhostTitle != null &&
           createPortal(
             <div
@@ -13980,8 +14183,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           className={historyNavItemClass(false)}
                           onClick={() => {
                             handleNewChat();
-                            setHistoryNavView('chats');
-                            closeProjectsPage();
                           }}
                         >
                           <Plus size={16} className="flex-shrink-0 text-zinc-100" />
@@ -13992,7 +14193,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           className={historyNavItemClass(historyNavView === 'chats' && !isProjectsPageOpen)}
                           onClick={() => {
                             setHistoryNavView('chats');
-                            closeProjectsPage();
+                            dismissChatOverlays();
                           }}
                         >
                           <MessagesSquare size={16} className="flex-shrink-0" />
@@ -14011,7 +14212,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             type="button"
                             className={historyNavItemClass(historyNavView === 'archived', true)}
                             onClick={() => {
-                              closeProjectsPage();
+                              dismissChatOverlays();
                               setHistoryNavView('archived');
                             }}
                           >
@@ -14023,7 +14224,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           type="button"
                           className={historyNavItemClass(historyNavView === 'artifacts')}
                           onClick={() => {
-                            closeProjectsPage();
+                            dismissChatOverlays();
                             setHistoryNavView('artifacts');
                           }}
                         >
@@ -14034,7 +14235,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           type="button"
                           className={historyNavItemClass(historyNavView === 'scheduled')}
                           onClick={() => {
-                            closeProjectsPage();
+                            dismissChatOverlays();
                             setHistoryNavView('scheduled');
                           }}
                         >
@@ -14045,7 +14246,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           type="button"
                           className={historyNavItemClass(historyNavView === 'customize')}
                           onClick={() => {
-                            closeProjectsPage();
+                            dismissChatOverlays();
                             setHistoryNavView('customize');
                           }}
                         >
@@ -14132,7 +14333,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         type="button"
                                         onClick={(event) => {
                                           event.stopPropagation();
-                                          closeProjectsPage();
+                                          dismissChatOverlays();
                                           setIsChatsCatalogOpen(true);
                                           setChatsCatalogSearch('');
                                           setIsChatsCatalogSelecting(false);

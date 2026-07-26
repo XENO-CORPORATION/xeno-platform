@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import ChatUpdateDemoPanel from './ChatUpdateDemoPanel';
+import { runPixelDissolve } from './pixelDissolve';
 
 /** Body content that fills the shared Example-prompt showcase shell. */
 export type ChatUpdateDemoBody =
@@ -176,6 +177,9 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [copiedUpdateId, setCopiedUpdateId] = useState<string | null>(null);
+  const [isDissolving, setIsDissolving] = useState(false);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const dissolveAbortRef = useRef<AbortController | null>(null);
 
   const configuredUpdates = useMemo(
     () => updates.slice(0, MAX_VISIBLE_UPDATES),
@@ -196,11 +200,28 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
     setCurrentIndex((index) => Math.min(index, availableUpdates.length - 1));
   }, [availableUpdates.length]);
 
+  useEffect(
+    () => () => {
+      dissolveAbortRef.current?.abort();
+    },
+    [],
+  );
+
   const currentUpdate = availableUpdates[currentIndex];
 
   useEffect(() => {
     setCopiedUpdateId(null);
   }, [currentUpdate?.id]);
+
+  // After a dissolve leaves the frame hidden (`leaveHidden`), restore it when the next
+  // update mounts on the same node — otherwise the carousel looks empty until refresh.
+  useEffect(() => {
+    if (isDissolving) return;
+    const frame = frameRef.current;
+    if (!frame) return;
+    frame.style.opacity = '';
+    frame.style.pointerEvents = '';
+  }, [isDissolving, currentUpdate?.id]);
 
   const persistDismissedIds = (nextIds: Set<string>) => {
     try {
@@ -216,6 +237,8 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
   };
 
   const restoreUpdates = () => {
+    dissolveAbortRef.current?.abort();
+    setIsDissolving(false);
     const nextDismissedIds = new Set<string>();
     setDirection(1);
     setCurrentIndex(0);
@@ -251,21 +274,82 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
   }
 
   const showPrevious = () => {
+    if (isDissolving) return;
     setDirection(-1);
     setCurrentIndex((index) => (index - 1 + availableUpdates.length) % availableUpdates.length);
   };
 
   const showNext = () => {
+    if (isDissolving) return;
     setDirection(1);
     setCurrentIndex((index) => (index + 1) % availableUpdates.length);
   };
 
-  const dismissCurrent = () => {
-    const nextDismissedIds = new Set(dismissedIds).add(currentUpdate.id);
+  /**
+   * React state can lag behind disk when a dissolve is aborted before `applyDismiss`.
+   * Always treat localStorage as the source of truth when syncing UI after a dismiss.
+   */
+  const syncDismissedFromStorage = () => {
+    const stored = readDismissedIds(storageKey);
+    setDismissedIds(stored);
     setDirection(1);
-    setCurrentIndex((index) => (index >= availableUpdates.length - 1 ? 0 : index));
-    setDismissedIds(nextDismissedIds);
+    setCurrentIndex((index) => {
+      const remaining = configuredUpdates.filter((update) => !stored.has(update.id)).length;
+      if (remaining === 0) return 0;
+      return Math.min(index, remaining - 1);
+    });
+  };
+
+  const dismissCurrent = () => {
+    if (isDissolving) return;
+
+    const frame = frameRef.current;
+
+    // X means "close What's new" — dismiss every remaining card, not only the one on
+    // screen. Dismissing just the current id made the carousel come back as 2, then 1.
+    const nextDismissedIds = new Set(readDismissedIds(storageKey));
+    for (const update of availableUpdates) {
+      nextDismissedIds.add(update.id);
+    }
     persistDismissedIds(nextDismissedIds);
+
+    // Instant exit when the user asks the OS to cut motion — the effect is the point of
+    // the animation, not a requirement for the dismiss itself.
+    if (prefersReducedMotion || !frame) {
+      syncDismissedFromStorage();
+      return;
+    }
+
+    setIsDissolving(true);
+    dissolveAbortRef.current?.abort();
+    const controller = new AbortController();
+    dissolveAbortRef.current = controller;
+
+    void (async () => {
+      try {
+        await runPixelDissolve(frame, {
+          durationMs: 920,
+          sampleStep: 3,
+          // Extra headroom — dust drifts upward off the top edge.
+          padPx: 72,
+          signal: controller.signal,
+          // As soon as the overlay owns the pixels, drop the cards from React so they
+          // cannot flash back after the dust settles.
+          onCaptured: () => {
+            if (!controller.signal.aborted) {
+              syncDismissedFromStorage();
+            }
+          },
+        });
+      } catch {
+        // Snapshot failures still dismiss — never trap the user on a stuck card.
+        syncDismissedFromStorage();
+      } finally {
+        // Re-sync even on abort: restoreUpdates clears storage first, so this stays empty.
+        syncDismissedFromStorage();
+        setIsDissolving(false);
+      }
+    })();
   };
 
   const copyUpdateValue = async (value: string) => {
@@ -329,7 +413,12 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
       className="w-full"
       role="region"
     >
-      <div data-update-carousel-frame className={FRAME_CLASS_NAME}>
+      <div
+        ref={frameRef}
+        data-update-carousel-frame
+        className={FRAME_CLASS_NAME}
+        aria-busy={isDissolving || undefined}
+      >
         <AnimatePresence initial={false} custom={direction}>
           <motion.article
             key={currentUpdate.id}
@@ -338,7 +427,7 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: prefersReducedMotion ? 0 : 0.22, ease: [0.22, 0.7, 0.2, 1] }}
+            transition={{ duration: prefersReducedMotion || isDissolving ? 0 : 0.22, ease: [0.22, 0.7, 0.2, 1] }}
             aria-label={`${currentIndex + 1} of ${availableUpdates.length}`}
             aria-roledescription="slide"
             className="relative h-[14rem] overflow-y-auto [grid-area:1/1] text-left hide-scrollbar sm:h-[10.5rem]"
@@ -402,8 +491,9 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
                 <button
                   type="button"
                   onClick={showPrevious}
+                  disabled={isDissolving}
                   aria-label="Show previous update"
-                  className={navButtonClassName}
+                  className={`${navButtonClassName} disabled:pointer-events-none disabled:opacity-50`}
                 >
                   <ArrowLeft size={14} />
                 </button>
@@ -415,13 +505,14 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
             <button
               type="button"
               onClick={showDismissInNav ? dismissCurrent : showNext}
+              disabled={isDissolving}
               aria-label={
                 showDismissInNav
                   ? `Dismiss ${currentUpdate.title}`
                   : 'Show next update'
               }
               {...(showDismissInNav ? { 'data-update-carousel-dismiss': true } : {})}
-              className={navButtonClassName}
+              className={`${navButtonClassName} disabled:pointer-events-none disabled:opacity-50`}
             >
               <NextDismissMorphIcon
                 isDismiss={showDismissInNav}

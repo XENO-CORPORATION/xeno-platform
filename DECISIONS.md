@@ -688,3 +688,30 @@ Trade-off accepted: Artifacts/Scheduled/Customize are shells until product defin
 Did the standard apply at our scale? Why / why not: Yes for IA; content depth deferred.
 
 Revisit if: Artifacts or scheduled tasks ship as first-class features.
+
+## 2026-07-25 — Share conversation: two-step modal, mock, backend-ready
+
+Options considered:
+1. Toast-only "Copied link" (Cursor-style) — fastest, weakest privacy UX
+2. Privacy chooser only, no preview
+3. Two-step modal: visibility + preview → link + copy + social (ChatGPT/Gemini composite)
+4. Full backend share (snapshot, revoke, team ACL) in the same ticket
+
+Industry standard (and why they landed there): Separate "who can see" from "here is the
+URL". Personal shares are typically public-by-link snapshots; Team/Enterprise restrict by
+workspace. After 2025 indexing incidents, privacy-by-default and clear copy matter more than
+discoverability toggles
+([OpenAI shared links FAQ](https://help.openai.com/en/articles/7925741-chatgpt-shared-links-faq);
+[Simon Willison on privacy dialogs](https://simonwillison.net/2025/Aug/3/privacy-design/)).
+
+Chosen: Option 3 with mock data — Private / Team / Public all selectable; Team behaves as a
+real mock visibility (not disabled). Component `ChatShareModal.tsx` + a small
+`createShareLink` mock module. Social: Copy + LinkedIn + X + Facebook + Reddit.
+
+Trade-off accepted: No real persistence, revoke, or team ACL yet. Mock URLs are
+session-level. Team does not actually restrict viewers until backend exists.
+
+Did the standard apply at our scale? Why / why not: The dialog shape yes; real ACL no — we
+are too early for workspace sharing, so Team is UI-contract only.
+
+Revisit if: Backend share API lands, or product drops Team until workspaces exist.

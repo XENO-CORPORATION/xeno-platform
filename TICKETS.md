@@ -289,6 +289,53 @@ Temporarily remove every composer drop shadow so the prompt box is defined only 
 - Confirm the tool extension panel also has no drop shadow.
 - Decide whether to restore a thin edge shadow later or keep the flat border-only look.
 
+## Issue #7 — Consolidate project configuration behind one door
+
+Status: In progress on `feature/project-settings-one-door`
+Estimate: 1.5–3 hours (executor's estimate — Andreia's estimate to be recorded)
+
+### Description
+
+The project workspace has two separate modals that configure the same object: `Edit details`
+(name + description, opened from `⋯`) and `Set project instructions` (opened from the Instructions
+card `+`). Both exist because the 260px rail cannot hold their content. Two doors for one job
+breaks the "one obvious control, in the same place, behaving the same way" rule, and neither
+surface can absorb configuration that will never fit in 260px.
+
+Replace both edit paths with a single `Project settings` modal made of sections, entered from
+several places that each scroll to the relevant section. Creating a project keeps its own dialog —
+creating and configuring are different tasks.
+
+### Acceptance criteria
+
+- One `Project settings` modal has three **tabs**: `General` (name + description), `Instructions`,
+  `Danger zone`. Only the active tab's content is shown — not a scroll through every section.
+- Settings contains **no** Files or Scheduled section. Those are content to read, not
+  configuration, and the rail already owns them — a second list would defeat the single surface.
+  (Andreia's correction, 2026-07-25.)
+- `Set project instructions` no longer exists as a separate modal.
+- The create-project dialog no longer has an edit mode; it only creates.
+- Two entry points open the same modal on their own tab: the Settings rail `⋮` opens `General`,
+  the rail Instructions card opens `Instructions`.
+- The `Edit details` item in the project card context menu is renamed `Project settings` and opens
+  `General`.
+- Name, description, and instructions are drafts saved together by one `Save changes` action on
+  General / Instructions; `Cancel` discards them. Danger zone shows only `Close` (delete is
+  immediate).
+- Every editable value in the modal shows the same content the rail shows, including the demo
+  fallbacks, so the two surfaces never contradict each other.
+- `Danger zone` deletes the project and closes the modal.
+- The modal is up to 600px wide on desktop; on small screens it becomes a bottom sheet that
+  fills the width, with tabs on their own row, full-width action buttons, and `dvh` /
+  safe-area insets so phone browser chrome does not clip it.
+- `Escape` and a click on the backdrop close the modal.
+- The rail keeps read-only previews plus its frequent actions (upload a file, open a file).
+- No dependency or backend contract is introduced.
+
+### Verification requested by Andreia
+
+- To be filled in by Andreia before this is called done.
+
 ## Issue #7 — Match empty-chat composer to ElevenLabs bottom-edge elevation
 
 Status: Implemented locally — awaiting review
@@ -316,3 +363,59 @@ The grey “cloud” beside the white prompt was the outer shell surface wrappin
 - On Light, confirm there is no grey side halo around the white prompt.
 - Confirm the outer bottom edge is clearly visible, comparable to the ElevenLabs reference.
 - Check Dark and Dim still read as one plane with a short edge lift.
+
+## Issue #8 — Share conversation modal (mock, backend-ready)
+
+Status: Implemented locally — awaiting review
+Estimate: 3–5 hours
+Actual: ~1.5 hours
+
+### Description
+
+Replace the stub Share popover in an open conversation with a two-step **Share** modal.
+UI uses mock data only, but the create/copy/revoke path goes through a small share API
+module so a real backend can replace the mock without rewriting the modal.
+
+Decisions (Andreia, 2026-07-25):
+- Visibility: Private · Team · Public — Team is selectable and works in the mock (not a
+  disabled "Coming soon" badge).
+- New component: `ChatShareModal.tsx` (not inline in `ChatWithLLM.tsx`).
+- After create: copy link + LinkedIn · X · Facebook · Reddit.
+- Scope now: UI + mock only; real persistence/revoke is a later ticket.
+
+### Acceptance criteria
+
+- Clicking Share in an open conversation opens a centered modal (not the old 264px popover).
+- **Step A — Configure**
+  - Title `Share chat`.
+  - Note: only messages up to this point will be shared.
+  - A short read-only **preview** of the current conversation (at least the latest user +
+    assistant turn, or an empty-state line if somehow empty).
+  - Three visibility options: `Private` (only you), `Team` (teammates with the link),
+    `Public` (anyone with the link). All three are selectable in the mock.
+  - Primary action `Create share link` advances to Step B and calls
+    `createShareLink({ conversationId, visibility, messageCount })` (mock implementation).
+- **Step B — Link ready**
+  - Shows the mock URL in a copy field.
+  - `Copy` copies the URL and shows short confirmation (`Link copied` or equivalent).
+  - Social actions open the platform share URL in a new tab with the mock link
+    (LinkedIn, X, Facebook, Reddit). Private visibility still creates a mock URL for UI
+    continuity; the label/disclaimer states access rules for the chosen visibility.
+  - `Delete link` (mock) clears the current mock share and returns to Step A.
+  - Disclaimer: do not share personal/third-party content without permission; public links
+    can be reshared.
+- Escape and backdrop click close the modal; closing resets to Step A next open unless a
+  mock link is still "active" for this session (session-only mock state is fine).
+- Reduced-motion: no required entrance animation beyond instant open/close.
+- No new npm dependency. No real backend call.
+- `ChatWithLLM.tsx` only opens/closes the modal and passes conversation id + messages for
+  preview; share logic lives in the new module/component.
+
+### Verification requested by Andreia
+
+- Open Share → pick each visibility → Create → confirm Step B appears with a URL.
+- Copy → paste somewhere → URL matches.
+- Each social button opens a share intent with that URL.
+- Delete link returns to Step A.
+- Refresh: mock link does not have to survive (session mock is enough); document that.
+- Confirm the old stub popover is gone.

@@ -42,7 +42,47 @@ Done when: Scheduled tasks and file search are wired (or removed).
 
 ## Project workspace: edit description inline
 
-Reason: v1 shows the project description read-only in the workspace; editing goes through the ⋯ "Edit details" modal.
+Reason: v1 shows the project description read-only in the workspace; editing goes through the ⋯ "Project settings" modal (General section).
 
 Done when: (if wanted) the description can be edited directly inside the workspace.
+
+## Project settings can persist demo instructions as real content
+
+Reason: The rail and the settings modal both fall back to `MOCK_PROJECT_INSTRUCTIONS` when a
+project has none, so the two surfaces agree. But that means opening Project settings on an empty
+project and pressing `Save changes` writes the demo text into the project as if the user had typed
+it. Acceptable while this is a visual prototype; not acceptable once projects hold real work.
+
+Done when: the demo fallback is removed with the rest of the mock data, or the settings editor
+distinguishes "example text" from "saved text".
+
+## File size and extension are not visible anywhere
+
+Reason: Accepted trade-off from removing the Files section out of Project settings (Andreia's
+call, 2026-07-25 — a second list of the same files defeated the single-surface goal). The rail's
+file chips are too narrow for `MD · 4.1 KB`, so that metadata now has no home. Correct fix, if it
+turns out to be wanted, is a rail-level one (tooltip on hover, or a wider file view) — not a
+duplicate list in a settings modal.
+
+Done when: Andreia decides whether file metadata needs to be visible, and where.
+
+## Project / catalog overlays can hide the chat after navigation
+
+Reason: Fixed 2026-07-25 — `dismissChatOverlays()` now runs from `handleLoadConversation`
+and `handleNewChat`, and from history nav items that leave the Projects surface. Kept here
+only if a new overlay is added later without wiring the same exit.
+
+Done when: every path that reveals the message stream also dismisses Projects list,
+project workspace, and chats catalog.
+
+## No type checking runs in this repo
+
+Reason: Found while verifying the project-settings change. `typescript` is not a dependency, so
+`npx tsc --noEmit` refuses to run, and `npm run build` is Vite/esbuild only — esbuild strips types
+without checking them. A type error can therefore reach a green build and a green deploy. Noticed,
+deliberately not fixed: adding a compiler and a `typecheck` script is its own decision (which
+strictness, what to do with the errors it will find on a 14k-line file).
+
+Done when: Andreia decides whether to add `typescript` + a `typecheck` script, and what to do with
+the existing errors it surfaces.
 
