@@ -10,7 +10,6 @@ import ProductReleases from "./pages/ProductReleases";
 import ProductReleaseDetail from "./pages/ProductReleaseDetail";
 import ProductDownload from "./pages/ProductDownload";
 import ProductsIndex from "./pages/ProductsIndex";
-import ExtensionDownload from "./pages/ExtensionDownload";
 import ReleaseNotes from "./pages/ReleaseNotes";
 import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
@@ -140,7 +139,10 @@ function App() {
             {/* Legacy /download retired → the Hub download page (client-side, so
                 in-app links like the header Download button land there too). */}
             <Route path="/download" element={<Navigate to="/product/hub/download" replace />} />
-            <Route path="/product/extension/download" element={<ExtensionDownload />} />
+            {/* /product/extension/download retired: its release feed (R2
+                apps/extension/releases.json) was withdrawn and now 404s, so the
+                page could only render an error. Falls through to the generic
+                /product/:slug/download, which redirects to the product page. */}
             <Route path="/releases/:version" element={<ReleaseNotes />} />
             <Route path="/blog" element={<Blog />} />
             <Route path="/blog/:slug" element={<BlogPost />} />

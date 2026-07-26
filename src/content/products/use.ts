@@ -97,7 +97,7 @@ const use: ProductContent = {
     { title: 'Self-hosted automation', icon: 'Lock', desc: 'Run the substrate on your own machine or a CI container — your screens, secrets and tapes never leave your infrastructure.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Self-host it', desc: 'curl the installer and run `xeno-use serve --port 7780` — no Docker needed for local desktop.' },
+    { step: '1', title: 'Self-host it', desc: 'Once v0.1 ships: curl the installer and run `xeno-use serve --port 7780` — no Docker needed for local desktop.' },
     { step: '2', title: 'Acquire a device', desc: 'Pick a device + sandbox — desktop/mobile/web against local, container or a snapshot VM.' },
     { step: '3', title: 'Act & record', desc: 'Call use.click / type / screenshot from any agent; record the session to a replayable .xuse tape.' },
   ],

@@ -2,7 +2,9 @@ import type { ProductContent } from './_types';
 
 /* XENO Agent CLI — sourced from ../xeno-agent-cli (README/CLAUDE.md + the TUI in
  * apps/xeno-agent-cli/src/ui). A `delivery: cli` product: CTA is the install
- * command + release feed. Honest beta framing (v0.4.x, proprietary). */
+ * command + release feed. Honest beta framing (v0.4.x, proprietary).
+ * Keep versions as the 0.4.x line — npm publishes patches faster than this page
+ * is edited, so an exact number here is wrong within days. */
 const agentCli: ProductContent = {
   slug: 'agent-cli',
   hero: {
@@ -89,7 +91,7 @@ const agentCli: ProductContent = {
     { label: 'Install', value: 'npm -g / curl' },
     { label: 'Runtime', value: 'Node ≥ 20' },
     { label: 'Platforms', value: 'macOS · Linux · Windows' },
-    { label: 'Version', value: '0.4.43 · beta' },
+    { label: 'Version', value: '0.4.x · beta' },
   ],
   faq: [
     { q: 'How do I install it?', a: 'npm install -g @xeno-corporation/xeno-agent-cli, or the curl / PowerShell one-liner. Then run `xeno`.' },

@@ -5,12 +5,19 @@
  * template (`/product/:slug`) is fully driven by this registry, so adding a
  * product = one entry here (+ its releases.json on R2 once it ships).
  *
- * STATUS / DELIVERY are my best guess — correct them freely; they only change
- * which CTA + page variant a product shows, nothing structural.
+ * STATUS / DELIVERY decide which CTA + page variant a product shows. They MUST
+ * match what a visitor can actually get today — a 'desktop' product with no
+ * assets in its R2 feed renders a dead "Builds coming soon" button, and a
+ * 'soon' product whose installer is already public tells a live user to wait.
  *   delivery 'web'     → runs inside xenostudio.ai → CTA "Open"
  *   delivery 'desktop' → downloadable installer     → CTA "Download" + releases
  *   delivery 'cli'     → npm / terminal install      → CTA "Install" + releases
- *   delivery 'soon'    → not shipping yet            → CTA "Join the waitlist"
+ *   delivery 'soon'    → not shipping yet            → CTA "Get notified"
+ *
+ * `externalUrl` overrides the CTA with a plain external link — for products
+ * distributed somewhere other than the R2 feed (e.g. a public GitHub release).
+ * `repoPublic` gates the "View on GitHub" / "Follow development" links: every
+ * XENO repo except xeno-rt is private, and linking one 404s for the public.
  * ────────────────────────────────────────────────────────────────────── */
 
 export const R2_BASE = 'https://updates.xenostudio.ai';
@@ -34,6 +41,11 @@ export interface Product {
   /** Optional schema.org override when a product supports fewer platforms than its delivery class. */
   operatingSystem?: string;
   repo?: string;
+  /** True only when github.com/XENO-CORPORATION/<repo> is publicly readable. */
+  repoPublic?: boolean;
+  /** Distributed off-site (public GitHub release, hosted app): overrides the CTA. */
+  externalUrl?: string;
+  externalLabel?: string;
 }
 
 /** XENO X → 'pixel', 'XENO 3D Gen' → '3d-gen', 'XENO Agent CLI' → 'agent-cli' */
@@ -47,7 +59,7 @@ export function slugify(label: string): string {
 
 export const PRODUCTS: Product[] = [
   // ── Flagship ──────────────────────────────────────────────
-  { slug: 'hub', name: 'XENO Hub', tagline: 'The all-in-one launcher for every XENO app, agent and credit.', category: 'Platform', status: 'shipping', delivery: 'desktop', repo: 'xeno-hub' },
+  { slug: 'hub', name: 'XENO Hub', tagline: 'The all-in-one launcher for every XENO app, agent and credit.', category: 'Platform', status: 'shipping', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-hub' },
 
   // ── Generate (web, in-app) ────────────────────────────────
   { slug: 'image', name: 'XENO Image', tagline: 'Generate images from a prompt with 20+ frontier models.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/auth' },
@@ -56,19 +68,19 @@ export const PRODUCTS: Product[] = [
   { slug: '3d-gen', name: 'XENO 3D Gen', tagline: 'Generate 3D models and scenes from a prompt.', category: 'Generate', status: 'beta', delivery: 'web', launchPath: '/auth' },
 
   // ── Create ────────────────────────────────────────────────
-  { slug: 'pixel', name: 'XENO Pixel', tagline: 'AI-native image editing, design and upscaling.', category: 'Create', status: 'beta', delivery: 'desktop', repo: 'xeno-pixel' },
+  { slug: 'pixel', name: 'XENO Pixel', tagline: 'AI-native image editing, design and upscaling.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-pixel' },
   { slug: 'photo', name: 'XENO Photo', tagline: 'RAW import, organize, retouch and cloud sync.', category: 'Create', status: 'coming-soon', delivery: 'soon', repo: 'xeno-photo' },
-  { slug: 'motion', name: 'XENO Motion', tagline: 'Video editing, motion graphics and AI pipelines.', category: 'Create', status: 'beta', delivery: 'desktop', repo: 'xeno-motion' },
-  { slug: 'sound', name: 'XENO Sound', tagline: 'Audio editing, music and voice production.', category: 'Create', status: 'beta', delivery: 'desktop', repo: 'xeno-sound' },
+  { slug: 'motion', name: 'XENO Motion', tagline: 'Video editing, motion graphics and AI pipelines.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-motion' },
+  { slug: 'sound', name: 'XENO Sound', tagline: 'Audio editing, music and voice production.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-sound' },
 
   // ── Design ────────────────────────────────────────────────
-  { slug: 'canvas', name: 'XENO Canvas', tagline: 'Multiplayer UI & product design with components.', category: 'Design', status: 'beta', delivery: 'desktop', repo: 'xeno-canvas' },
+  { slug: 'canvas', name: 'XENO Canvas', tagline: 'Multiplayer UI & product design with components.', category: 'Design', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-canvas' },
   { slug: 'layout', name: 'XENO Layout', tagline: 'Multi-page layouts for print and digital.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-layout' },
   { slug: '3d', name: 'XENO 3D', tagline: '3D modeling, rendering and asset creation.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-3d' },
   { slug: 'architect', name: 'XENO Architect', tagline: 'Architecture, CAD, BIM and interior design.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-architect' },
 
   // ── Office ────────────────────────────────────────────────
-  { slug: 'docs', name: 'XENO Docs', tagline: 'AI-native document editing.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-docs' },
+  { slug: 'docs', name: 'XENO Docs', tagline: 'AI-native document editing.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-docs' },
   { slug: 'sheets', name: 'XENO Sheets', tagline: 'Spreadsheets with AI built in.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-sheets' },
   { slug: 'slides', name: 'XENO Slides', tagline: 'Presentations with AI built in.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-slides' },
   { slug: 'pdf', name: 'XENO PDF', tagline: 'Edit, convert, sign and chat with PDFs.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-pdf' },
@@ -80,14 +92,16 @@ export const PRODUCTS: Product[] = [
   { slug: 'notes', name: 'XENO Notes', tagline: 'Notes and knowledge base with AI.', category: 'Library', status: 'coming-soon', delivery: 'soon', repo: 'xeno-notes' },
 
   // ── Connect ───────────────────────────────────────────────
-  { slug: 'comms', name: 'XENO Comms', tagline: 'Human and agent communication for teams.', category: 'Connect', status: 'beta', delivery: 'desktop', repo: 'xeno-comms' },
+  { slug: 'comms', name: 'XENO Comms', tagline: 'Human and agent communication for teams.', category: 'Connect', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-comms' },
   { slug: 'post', name: 'XENO Post', tagline: '25+ platform social media command center.', category: 'Connect', status: 'coming-soon', delivery: 'soon', repo: 'xeno-post' },
-  { slug: 'browser', name: 'XENO Browser', tagline: 'The agent-native browser that works the web for you.', category: 'Connect', status: 'beta', delivery: 'desktop', repo: 'xeno-browser' },
-  { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'shipping', delivery: 'desktop', r2: 'extension', repo: 'xeno-extension' },
+  { slug: 'browser', name: 'XENO Browser', tagline: 'The agent-native browser that works the web for you.', category: 'Connect', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-browser' },
+  // Extension: the public R2 channel was withdrawn and there is no web-store
+  // listing yet, so there is nothing to download — 'soon' keeps the CTA honest.
+  { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'coming-soon', delivery: 'soon', operatingSystem: 'Chrome, Edge, Brave (Chromium)', r2: 'extension', repo: 'xeno-extension' },
 
   // ── Build ─────────────────────────────────────────────────
   { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-engine' },
-  { slug: 'workflow', name: 'XENO Workflow', tagline: 'Visual node-based automation pipelines.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-workflow' },
+  { slug: 'workflow', name: 'XENO Workflow', tagline: 'Visual node-based automation pipelines.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-workflow' },
   { slug: 'use', name: 'XENO Use', tagline: "The agent's hands across every device.", category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-use' },
   { slug: 'apps', name: 'XENO Apps', tagline: 'No-code custom apps and internal tools.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-apps' },
 
@@ -95,8 +109,10 @@ export const PRODUCTS: Product[] = [
   { slug: 'agent-cli', name: 'XENO Agent CLI', tagline: 'Code, automate and control your workspace from the terminal.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xeno-corporation/xeno-agent-cli', repo: 'xeno-agent-cli' },
   { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xeno-corporation/xeno-agent-sdk', repo: 'xeno-agent-sdk' },
   { slug: 'acp', name: 'XENO ACP', tagline: 'Drive approved ACP coding agents through one API.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xeno-corporation/xeno-acp', operatingSystem: 'Windows, Linux', repo: 'xeno-acp' },
-  { slug: 'rt', name: 'XENO RT', tagline: 'Run frontier models locally — private and fast.', category: 'Develop', status: 'beta', delivery: 'desktop', repo: 'xeno-rt' },
-  { slug: 'shell', name: 'XENO Shell', tagline: 'The XENO desktop environment for every app.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-shell' },
+  // RT ships as a public GitHub release (signed binaries + SBOMs), not through
+  // the R2 feed — so the CTA links there instead of rendering a dead download.
+  { slug: 'rt', name: 'XENO RT', tagline: 'Run frontier models locally — private and fast.', category: 'Develop', status: 'beta', delivery: 'soon', operatingSystem: 'Windows, Linux', repo: 'xeno-rt', repoPublic: true, externalUrl: 'https://github.com/XENO-CORPORATION/xeno-rt/releases/latest', externalLabel: 'Get the latest release on GitHub' },
+  { slug: 'shell', name: 'XENO Shell', tagline: 'The XENO desktop environment for every app.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
   { slug: 'anima', name: 'XENO Anima', tagline: 'Your personal, always-on agent — it remembers you and gets better.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-anima' },
 ];
 

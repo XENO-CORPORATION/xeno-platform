@@ -82,7 +82,17 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
 
             {/* ── CTA by delivery type ── */}
             <Reveal delay={180} className="mt-8">
-              {product.delivery === 'web' && (
+              {/* Off-site distribution (public GitHub release, hosted app) wins over
+                  the delivery CTA — the R2-backed branches would show a dead button. */}
+              {product.externalUrl && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <a href={product.externalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
+                    <Download className="h-4 w-4" />{product.externalLabel ?? `Get ${product.name}`}<ArrowUpRight className="h-4 w-4" />
+                  </a>
+                </div>
+              )}
+
+              {!product.externalUrl && product.delivery === 'web' && (
                 <div className="flex flex-wrap items-center gap-3">
                   <Link to={product.launchPath ?? '/auth'} className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
                     Open {product.name}<ArrowUpRight className="h-4 w-4" />
@@ -91,7 +101,7 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
                 </div>
               )}
 
-              {product.delivery === 'desktop' && (
+              {!product.externalUrl && product.delivery === 'desktop' && (
                 <div className="flex flex-wrap items-center gap-3">
                   {downloadUrl(os) ? (
                     <a href={downloadUrl(os)!} className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
@@ -109,22 +119,22 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
                 </div>
               )}
 
-              {product.delivery === 'cli' && (
+              {!product.externalUrl && product.delivery === 'cli' && (
                 <div className="max-w-[520px]">
                   <div className="flex items-center justify-between gap-3 rounded-[9px] border border-white/[0.08] bg-[#0d0d0d] px-4 py-3 font-mono text-[13px] text-[#cdc7be]">
                     <span className="flex items-center gap-2 truncate"><Terminal className="h-3.5 w-3.5 shrink-0 text-[#69635b]" />{product.install}</span>
                     <button onClick={copyInstall} className="shrink-0 text-[#827b71] transition-colors hover:text-white">{copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}</button>
                   </div>
-                  {product.repo && <a href={`https://github.com/XENO-CORPORATION/${product.repo}`} className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] text-[#827b71] transition-colors hover:text-white"><Github className="h-3.5 w-3.5" />View on GitHub</a>}
+                  {product.repo && product.repoPublic && <a href={`https://github.com/XENO-CORPORATION/${product.repo}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] text-[#827b71] transition-colors hover:text-white"><Github className="h-3.5 w-3.5" />View on GitHub</a>}
                 </div>
               )}
 
-              {product.delivery === 'soon' && (
+              {!product.externalUrl && product.delivery === 'soon' && (
                 <div className="flex flex-wrap items-center gap-3">
                   <Link to="/auth" className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
                     <Bell className="h-4 w-4" />Get notified
                   </Link>
-                  {product.repo && <a href={`https://github.com/XENO-CORPORATION/${product.repo}`} className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/15 px-5 py-3 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]"><Github className="h-3.5 w-3.5" />Follow development</a>}
+                  {product.repo && product.repoPublic && <a href={`https://github.com/XENO-CORPORATION/${product.repo}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/15 px-5 py-3 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]"><Github className="h-3.5 w-3.5" />Follow development</a>}
                 </div>
               )}
             </Reveal>

@@ -1,20 +1,21 @@
 import type { ProductContent } from './_types';
 
 /* XENO Docs — sourced from ../xeno-docs (README + the real renderer: Toolbar,
- * OutlineSidebar, AIWritingPanel, StatusBar, DocumentEditor). A `delivery: soon`
- * product: CTA is the waitlist ("Get notified"), so the copy is honest
- * coming-soon framing — every claim maps to a feature that exists in the repo,
- * with the AI/embeds requirements stated plainly. */
+ * OutlineSidebar, AIWritingPanel, StatusBar, DocumentEditor). A `delivery:
+ * desktop` product: 0.2.0 is published and downloadable, so the CTA is a real
+ * download. Honest beta framing — every claim maps to a feature that exists in
+ * the shipped build, with the AI/embeds requirements stated plainly. Only a
+ * Windows installer exists; do NOT re-add macOS/Linux until they ship. */
 const docs: ProductContent = {
   slug: 'docs',
   hero: {
     headline: 'Every document tool — and an AI that writes with you.',
-    sub: 'XENO Docs pairs a full word processor with Notion-style block editing and a built-in AI writer. Import your DOCX with fidelity, write with slash commands, and let AI rewrite, translate, and generate — right in the page. Coming soon.',
+    sub: 'XENO Docs pairs a full word processor with Notion-style block editing and a built-in AI writer. Import your DOCX with fidelity, write with slash commands, and let AI rewrite, translate, and generate — right in the page. Now in beta on Windows.',
     media: { type: 'mockup', src: 'docs-hero', alt: 'XENO Docs — the editor with an outline sidebar, formatting toolbar, and the floating AI writing assistant' },
-    badges: ['Windows · macOS · Linux', 'DOCX import & export', 'AI writing built in', 'Coming soon'],
-    note: 'In active development — join the waitlist to get notified at launch. AI features run locally via xeno-rt or in the cloud.',
+    badges: ['Windows desktop', 'DOCX import & export', 'AI writing built in', 'Free beta'],
+    note: 'Free beta (v0.2) · Windows. macOS and Linux builds follow. AI features run locally via xeno-rt or in the cloud.',
   },
-  trust: ['Part of the XENO platform — one sign-in', 'Desktop: Windows · macOS · Linux (Electron)', 'Your documents in an open .xdoc format', 'AI runs local via xeno-rt or in the cloud'],
+  trust: ['Part of the XENO platform — one sign-in', 'Windows desktop (Electron) — macOS & Linux next', 'Your documents in an open .xdoc format', 'AI runs local via xeno-rt or in the cloud'],
   highlights: [
     { value: 'DOCX in, PDF out', label: 'Full-fidelity import & export' },
     { value: 'AI in the page', label: 'Rewrite · translate · generate' },
@@ -76,10 +77,10 @@ const docs: ProductContent = {
       title: 'Live embeds from the whole XENO suite',
       desc: 'Drop a Pixel canvas, a Motion timeline, or a Sound waveform straight into a document — one workspace, one account.',
       bullets: [
-        'Embed blocks for Pixel, Motion, Sound, Sheets, 3D and more',
+        'Embed blocks for the XENO apps you have installed — Pixel, Motion and Sound today',
         '"Open in App" jumps to the source project',
         'One XENO sign-in shared across every app',
-        'Live cross-app embeds require the other XENO apps installed',
+        'More app embeds land as each app ships',
       ],
     },
   ],
@@ -89,7 +90,7 @@ const docs: ProductContent = {
     { title: 'Writers & knowledge teams', icon: 'Sparkles', desc: 'Block-based pages with slash commands, AI rewrite/expand/translate in the margin, and version history for every draft.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Join the waitlist', desc: 'Sign in with your XENO account and get notified the moment XENO Docs opens up.' },
+    { step: '1', title: 'Download & open', desc: 'Get the Windows build and sign in with your XENO account for cloud AI and credits.' },
     { step: '2', title: 'Import or start fresh', desc: 'Open an existing DOCX with fidelity, or start a blank .xdoc and write with "/" slash blocks.' },
     { step: '3', title: 'Write with AI', desc: 'Select text for AI rewrite, translate or summarize — then export to PDF, DOCX, Markdown or HTML.' },
   ],
@@ -101,27 +102,28 @@ const docs: ProductContent = {
       { feature: 'Local / private AI option', xeno: 'via xeno-rt', them: false },
       { feature: 'Citations, mail merge, compare, macros', xeno: true, them: true },
       { feature: 'DOCX import/export fidelity', xeno: 'Target', them: true },
-      { feature: 'Mature ecosystem, templates & add-ons', xeno: 'Coming soon', them: true },
-      { feature: 'Price', xeno: 'Free at launch (planned)', them: 'Subscription' },
+      { feature: 'Mature ecosystem, templates & add-ons', xeno: 'Growing', them: true },
+      { feature: 'Price', xeno: 'Free beta', them: 'Subscription' },
     ],
   },
   specs: [
-    { label: 'Platform', value: 'Windows · macOS · Linux (Electron)' },
+    { label: 'Platform', value: 'Windows (x64) · Electron' },
     { label: 'Editor engine', value: 'TipTap · ProseMirror' },
     { label: 'Formats', value: '.xdoc · DOCX · PDF · MD · HTML' },
-    { label: 'Status', value: 'Coming soon (waitlist)' },
+    { label: 'Status', value: 'v0.2 · beta' },
   ],
   faq: [
-    { q: 'When can I use XENO Docs?', a: 'It’s in active development and not yet released. Join the waitlist with your XENO account and we’ll notify you the moment it’s available.' },
+    { q: 'Can I use XENO Docs yet?', a: 'Yes — the 0.2 beta is available now for Windows. It opens and saves .xdoc, .docx, .md, .html and .txt, exports to PDF, and ships the outline, comments, citations, mail merge and AI writing assistant. It’s an honest beta: expect rough edges, and macOS and Linux builds are still to come.' },
     { q: 'Can I import my Word documents?', a: 'Yes — DOCX import and export is a core goal, with full fidelity as the target. You can also export to PDF, Markdown, HTML and plain text, and everything saves natively as an open .xdoc (plain JSON).' },
     { q: 'What can the AI do?', a: 'Rewrite with a tone (professional, casual, academic, creative, concise, friendly), summarize, expand, fix grammar, translate to 16+ languages, and generate from a prompt — right in the document. Results can replace your selection or insert below.' },
     { q: 'Is it a Word replacement or a Notion replacement?', a: 'Both. You get a full word processor — headings, tables, page layout, citations, mail merge — and Notion-style block editing with slash commands, callouts, toggles and columns, in the same editor.' },
     { q: 'Does the AI work offline or privately?', a: 'XENO Docs is a desktop app. AI features route to a local xeno-rt runtime for private, offline use, or to the cloud with an API key — your choice. Without one of those, the editor still works; only the AI actions are disabled.' },
-    { q: 'How much will it cost?', a: 'Pricing will be announced closer to launch. Join the waitlist to hear first.' },
+    { q: 'Which platforms can I install it on?', a: 'Windows today — that’s the only build we publish. macOS and Linux are planned; the download page will list them the moment they exist.' },
+    { q: 'How much does it cost?', a: 'The beta is free. Cloud AI draws on XENO platform credits; local AI through xeno-rt is free. General-release pricing is announced later.' },
   ],
   seo: {
     title: 'XENO Docs — the AI-native document editor',
-    description: 'A professional document editor that unites a full word processor, Notion-style block editing, and a built-in AI writer. Import DOCX with fidelity; rewrite, translate and generate in the page. Coming soon.',
+    description: 'A professional document editor that unites a full word processor, Notion-style block editing, and a built-in AI writer. Import DOCX with fidelity; rewrite, translate and generate in the page. Free beta on Windows.',
   },
 };
 

@@ -2,8 +2,10 @@ import type { ProductContent } from './_types';
 
 /* XENO SDK — sourced from ../xeno-agent-sdk (README/CHANGELOG + src: create-agent.ts,
  * index.ts, src/ui, src/tools, src/providers). It's the TypeScript agent runtime the
- * whole platform embeds — v0.6.11, proprietary, "built from the same engine as XENO
- * Code". A `delivery: cli` product (npm install). Honest beta framing. */
+ * whole platform embeds — proprietary, "built from the same engine as XENO
+ * Code". A `delivery: cli` product (npm install). Honest beta framing.
+ * Do NOT pin an exact version in this copy: npm moves faster than the page and
+ * a hardcoded patch number is false within a release. Use the 0.x line. */
 const sdk: ProductContent = {
   slug: 'sdk',
   hero: {
@@ -11,7 +13,7 @@ const sdk: ProductContent = {
     sub: 'XENO SDK is the same TypeScript engine that powers XENO Code and the agent sidebar in Pixel, Motion and Sound. Register your app’s actions as tools, drop in the React chat panel, and ship an agent that reads, plans, asks permission and remembers — with any model, cloud or local.',
     media: { type: 'mockup', src: 'sdk-hero', alt: 'XENO SDK embedded in a host app — a createXenoAgent() tool registry on the left, the SDK’s React agent panel with a tool call and permission prompt on the right' },
     badges: ['npm · TypeScript', 'BYO model / local', 'React UI included', 'MCP · plugins'],
-    note: 'Beta (v0.6.11) · proprietary. Embedded in 5+ XENO apps today. Model calls route through the XENO API, your own key, or a local runtime.',
+    note: 'Beta (v0.7.x) · proprietary. Embedded in 5+ XENO apps today. Model calls route through the XENO API, your own key, or a local runtime.',
   },
   trust: ['Node ≥ 20 · ESM · TypeScript 5.7', 'Same engine as XENO Code', 'Every tool call in a JSONL audit ledger'],
   highlights: [
@@ -120,7 +122,7 @@ const sdk: ProductContent = {
     { label: 'Install', value: 'npm · ESM' },
     { label: 'Runtime', value: 'Node ≥ 20 · TS 5.7' },
     { label: 'UI', value: 'React 18+ (optional peer)' },
-    { label: 'Version', value: '0.6.11 · beta' },
+    { label: 'Version', value: '0.7.x · beta' },
   ],
   faq: [
     { q: 'How is the SDK different from the Agent CLI?', a: 'The Agent CLI is the terminal app you run; the SDK is the library it’s built on. If you want to embed the same agent engine — the loop, tools, permissions, memory and audit — inside your own app, you use the SDK.' },
@@ -128,7 +130,7 @@ const sdk: ProductContent = {
     { q: 'Which models can it use?', a: 'It’s provider-agnostic. Use the hosted XENO API, your own key, or run fully local on the xeno-rt runtime or Ollama — any OpenAI-compatible endpoint works, and you can pass your own LLMProvider to swap the transport entirely.' },
     { q: 'Do I have to use React?', a: 'No. The core SDK is headless and has no DOM dependency. The React components live in a separate /ui entry point with React as an optional peer dependency — import them only if you want the pre-built agent sidebar.' },
     { q: 'Is it safe to let the agent run tools?', a: 'You stay in control: four permission modes (default, acceptEdits, plan, bypass), path sandboxing, and destructive-action gates. Every tool call and permission decision is appended to a JSON-lines audit ledger.' },
-    { q: 'Is it open source or free?', a: 'It’s proprietary and in beta (v0.6.11). The package is free to install; model calls route through the XENO API (billed), your own key, or a local model at no cost.' },
+    { q: 'Is it open source or free?', a: 'It’s proprietary and in beta (the 0.7.x line). The package is free to install; model calls route through the XENO API (billed), your own key, or a local model at no cost.' },
   ],
   seo: {
     title: 'XENO SDK — embed an AI agent into any app',

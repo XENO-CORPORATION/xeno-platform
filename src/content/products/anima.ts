@@ -4,18 +4,20 @@ import type { ProductContent } from './_types';
  * apps/cli/src and packages/{mind,soul,runtime,orchestrate,compat-soul}). A
  * personal, always-on agent with an authored **Mind** that earns a **Soul**
  * (episodic memory + self-taught skills); run one, or many that coordinate as a
- * swarm. npm `@xeno/anima`, CLI `anima`. Honest coming-soon framing: the Mind/Soul
- * engine, always-on runtime, tool-use and swarm work today on the CLI (validated
- * live on gpt-5.5); channels (xeno-comms), device hands (xeno-use) and the
- * `.xanima` save format are the next milestones. Delivery `soon` → waitlist CTA. */
+ * swarm. CLI `anima`. Honest coming-soon framing: the Mind/Soul engine, always-on
+ * runtime, tool-use and swarm work in the internal CLI (validated live on
+ * gpt-5.5); channels (xeno-comms), device hands (xeno-use) and the `.xanima` save
+ * format are the next milestones. Delivery `soon` → "Get notified" CTA.
+ * NOTE: `@xeno/anima` is NOT on the npm registry. Do not advertise an install
+ * command or a package name until it is actually published. */
 const anima: ProductContent = {
   slug: 'anima',
   hero: {
     headline: 'A Mind is given. A Soul is earned.',
     sub: 'Anima is your personal, always-on agent — one you author, name, and keep. You write its Mind (voice, values, boundaries, capabilities); it grows a Soul as it runs — episodic memory and skills it teaches itself. So it remembers you and gets better. Run one, or many that coordinate as a swarm.',
     media: { type: 'mockup', src: 'anima-hero', alt: 'XENO Anima CLI — a Mind runs a turn: it recalls from its Soul, replies, records the episode, and teaches itself a new skill' },
-    badges: ['CLI · @xeno/anima', 'Local-first · bring any model', 'Swarm-native', 'Open source · AGPL-3.0'],
-    note: 'In active development (v0.0.1). The Mind/Soul engine, always-on runtime, tool-using turns and the swarm work today on the CLI — validated live on a real model. Channels (xeno-comms) and device hands (xeno-use) are landing next. Join the waitlist.',
+    badges: ['CLI', 'Local-first · bring any model', 'Swarm-native', 'Open source · AGPL-3.0'],
+    note: 'In active development (v0.0.1) and not published yet — there is nothing to install today. The Mind/Soul engine, always-on runtime, tool-using turns and the swarm run in the internal CLI, validated live on a real model. Channels (xeno-comms) and device hands (xeno-use) are landing next. Get notified for the first release.',
   },
   trust: [
     'Node ≥ 20 · macOS · Linux · Windows',
@@ -136,14 +138,14 @@ const anima: ProductContent = {
     ],
   },
   specs: [
-    { label: 'Install', value: 'npm · @xeno/anima' },
+    { label: 'Install', value: 'Not published yet' },
     { label: 'Runtime', value: 'Node ≥ 20' },
     { label: 'Inference', value: 'xeno-rt · BYO model' },
     { label: 'License', value: 'AGPL-3.0 · v0.0.1' },
   ],
   faq: [
     { q: 'What’s the difference between a Mind and a Soul?', a: 'The Mind is the authored seed — a mind.xeno file with personality, values, boundaries and scoped capabilities. The Soul is what the agent earns at runtime: episodic memory, self-taught skills, evolved preferences and a model of the people it serves. A Mind is given; a Soul is earned.' },
-    { q: 'Is it ready to use?', a: 'It’s early (v0.0.1). The Mind/Soul engine, the always-on runtime, tool-using turns, and the swarm (broadcast, handoff, orchestrate) all work today on the CLI and are validated live against a real model. Channels via xeno-comms, device hands via xeno-use, and the .xanima save format are the next milestones. Join the waitlist to hear when it’s ready.' },
+    { q: 'Can I install it yet?', a: 'No — nothing is published to npm yet, so there’s no install command to give you. It’s early (v0.0.1): the Mind/Soul engine, the always-on runtime, tool-using turns, and the swarm (broadcast, handoff, orchestrate) all work in the internal CLI and are validated live against a real model. Channels via xeno-comms, device hands via xeno-use, and the .xanima save format are the next milestones. Get notified and we’ll tell you when the package lands.' },
     { q: 'How is it different from Hermes Agent or OpenClaw?', a: 'Anima is inspired by both and built on the full XENO platform. Two structural differences: the Mind/Soul split makes self-improvement a real, portable, signed artifact instead of a flat memory file; and Minds coordinate as a swarm (broadcast, handoff, orchestrate) where the rivals’ instances run in isolation. It also imports their SOUL.md personas so you can bring what you already have.' },
     { q: 'Can I run it locally and offline?', a: 'Yes — it’s local-first via xeno-rt (GGUF/ONNX), which is OpenAI-compatible, so a single Mind or a whole swarm can run entirely on your machine. Bring any model, and set a per-Mind cloud fallback (Anthropic/OpenAI/Google) only when you allow it.' },
     { q: 'Can I bring my existing persona?', a: 'Yes. Import an OpenClaw brain or Hermes profile — including the 162+ community SOUL.md templates — and it converts up into a mind.xeno, gaining inheritance, signing, capability scoping and a real Soul. It round-trips back to a SOUL.md family too, so you’re never locked in.' },

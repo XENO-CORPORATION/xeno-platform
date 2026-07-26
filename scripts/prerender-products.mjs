@@ -87,7 +87,9 @@ function jsonld(p) {
     operatingSystem: p.operatingSystem ?? OS_BY_DELIVERY[p.delivery] ?? 'Windows',
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
     url: `${SITE}/product/${p.slug}`,
-    ...(p.repo ? { softwareHelp: `https://github.com/XENO-CORPORATION/${p.repo}` } : {}),
+    // Only xeno-rt is a public repo; emitting softwareHelp for a private one
+    // hands crawlers a 404.
+    ...(p.repo && p.repoPublic ? { softwareHelp: `https://github.com/XENO-CORPORATION/${p.repo}` } : {}),
   });
 }
 
