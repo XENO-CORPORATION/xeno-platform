@@ -116,8 +116,13 @@ export const PRODUCTS: Product[] = [
   { slug: 'acp', name: 'XENO ACP', tagline: 'Drive approved ACP coding agents through one API.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xeno-corporation/xeno-acp', operatingSystem: 'Windows, Linux', repo: 'xeno-acp' },
   // RT ships as a public GitHub release (signed binaries + SBOMs), not through
   // the R2 feed — so the CTA links there instead of rendering a dead download.
+  // Keep delivery 'soon': the branch this merged from still had 'desktop', which
+  // would re-render the dead R2 download button this line exists to remove.
   { slug: 'rt', name: 'XENO RT', tagline: 'Run frontier models locally — private and fast.', category: 'Develop', status: 'beta', delivery: 'soon', operatingSystem: 'Windows, Linux', repo: 'xeno-rt', repoPublic: true, externalUrl: 'https://github.com/XENO-CORPORATION/xeno-rt/releases/latest', externalLabel: 'Get the latest release on GitHub' },
-  { slug: 'shell', name: 'XENO Shell', tagline: 'The XENO desktop environment for every app.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
+  // Shell ships a PUBLIC unsigned Windows beta (apps/shell/v0.1.0-beta.1, beta
+  // channel) — so it is beta/desktop, not coming-soon/soon. Tagline stays scoped
+  // to what the build does: it is a host layer; no XENO app runs inside it yet.
+  { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop shell with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
   { slug: 'anima', name: 'XENO Anima', tagline: 'Your personal, always-on agent — it remembers you and gets better.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-anima' },
 ];
 
