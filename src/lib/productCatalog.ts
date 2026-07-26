@@ -82,7 +82,10 @@ export const PRODUCTS: Product[] = [
   { slug: 'notes', name: 'XENO Notes', tagline: 'Notes and knowledge base with AI.', category: 'Library', status: 'coming-soon', delivery: 'soon', repo: 'xeno-notes' },
 
   // ── Connect ───────────────────────────────────────────────
-  { slug: 'comms', name: 'XENO Comms', tagline: 'Human and agent communication for teams.', category: 'Connect', status: 'beta', delivery: 'desktop', repo: 'xeno-comms' },
+  // Internal alpha, not a beta: unsigned installer, alpha test accounts, agents + E2EE
+  // not enabled in the shipped build. 'beta' is the coarsest honest Status we have;
+  // the precise framing lives in src/content/products/comms.ts. See that file's header.
+  { slug: 'comms', name: 'XENO Comms', tagline: 'Messaging for humans and agents — internal alpha.', category: 'Connect', status: 'beta', delivery: 'desktop', repo: 'xeno-comms' },
   { slug: 'post', name: 'XENO Post', tagline: '25+ platform social media command center.', category: 'Connect', status: 'coming-soon', delivery: 'soon', repo: 'xeno-post' },
   { slug: 'browser', name: 'XENO Browser', tagline: 'The agent-native browser that works the web for you.', category: 'Connect', status: 'beta', delivery: 'desktop', repo: 'xeno-browser' },
   { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'shipping', delivery: 'desktop', r2: 'extension', repo: 'xeno-extension' },
