@@ -1,8 +1,13 @@
 import type { ProductContent } from './_types';
 
 /* XENO Notes — sourced from ../xeno-notes (README + the real renderer: TitleBar,
- * Sidebar/PageTree, NoteEditor/EditorToolbar, RightPanel). Honest coming-soon
- * framing: the app is a local-first, block-based knowledge base with linking,
+ * Sidebar/PageTree, NoteEditor/EditorToolbar, RightPanel).
+ *
+ * NOT RELEASED. No XENO Notes build is published, so this page must never tell a
+ * reader to launch or install it — the copy describes what we're building and the
+ * CTA is "Get notified", nothing more.
+ *
+ * Honest coming-soon framing: the app is a local-first, block-based knowledge base with linking,
  * databases and an AI layer (semantic search, writing assistant, auto-tagging)
  * that already ship in the renderer. Features still on the roadmap — real-time
  * collaboration, cloud sync, database formulas/relations, AI Q&A/page-gen — are
@@ -109,7 +114,7 @@ const notes: ProductContent = {
     { title: 'Private, offline research', icon: 'Lock', desc: 'Clip the web, take daily notes, and study with spaced-repetition flashcards — all in a local vault that never has to touch the cloud.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Open your vault', desc: 'Launch from XENO Hub. Your notes are created as plain files in ~/.xeno/notes — no account required to write.' },
+    { step: '1', title: 'Get notified', desc: 'Sign in with your XENO account so we can tell you when the first XENO Notes build is out.' },
     { step: '2', title: 'Write & link', desc: 'Type “/” for any block or “[[” to link a page. Import your existing Markdown, Notion or Evernote notes to start fast.' },
     { step: '3', title: 'Let AI help', desc: 'Search by meaning, ask the AI to summarize or rewrite, and let it tag pages — all without leaving the editor.' },
   ],
@@ -134,7 +139,7 @@ const notes: ProductContent = {
   faq: [
     { q: 'Where are my notes stored?', a: 'On your own machine, in ~/.xeno/notes, as plain files — pages, databases, assets and a vector index for search. There’s no cloud dependency and no subscription lock-in; you can back the folder up or move it like any other files.' },
     { q: 'Does it work offline?', a: 'Yes. XENO Notes is local-first and fully functional without an internet connection. AI features call the XENO agent runtime, but writing, linking, databases and search over your vault work offline.' },
-    { q: 'What can the AI actually do today?', a: 'Semantic search (find notes by meaning via embeddings), an in-editor writing assistant (summarize, expand, rewrite, fix grammar, translate), and AI auto-tagging. Deeper features like whole-vault Q&A and full page generation are on the roadmap.' },
+    { q: 'What will the AI do at launch?', a: 'Semantic search (find notes by meaning via embeddings), an in-editor writing assistant (summarize, expand, rewrite, fix grammar, translate), and AI auto-tagging — those are built. Deeper features like whole-vault Q&A and full page generation are on the roadmap.' },
     { q: 'Can I import my existing notes?', a: 'Yes — import from Markdown files, Notion export ZIPs, Evernote .enex files and OneNote exports. You can export back out to Markdown, PDF or HTML at any time.' },
     { q: 'Is there mobile or real-time collaboration?', a: 'Not yet. XENO Notes is desktop-first (Windows, macOS, Linux). Real-time multi-user editing (CRDT) and multi-device cloud sync are planned, not shipping.' },
     { q: 'When can I use it, and what does it cost?', a: 'It’s coming soon — join the waitlist to be notified when the beta opens. Pricing will be announced closer to release.' },

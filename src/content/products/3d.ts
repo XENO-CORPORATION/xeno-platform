@@ -125,7 +125,7 @@ const threeD: ProductContent = {
     { label: 'Status', value: 'In development (pre-release)' },
   ],
   faq: [
-    { q: 'Is XENO 3D available yet?', a: 'Not yet — it’s in active development (early v0.x builds). Modeling, sculpting, UV, materials, a node-based material editor, animation timeline and a path tracer already work. Join the waitlist and we’ll notify you when the first public build is ready.' },
+    { q: 'Is XENO 3D available yet?', a: 'No — there is no public build to download. It’s in active development (early v0.x): modeling, sculpting, UV, materials, a node-based material editor, animation timeline and a path tracer run in our development builds. Get notified and we’ll tell you when the first public build is ready.' },
     { q: 'What does it replace?', a: 'It aims to unify what you’d normally split across a modeling/sculpt/animation suite and a separate renderer — polygon modeling, sculpting, UV, procedural nodes, animation, simulation and rendering, all in one app.' },
     { q: 'Is it really native, or just web tech?', a: 'The 3D engine is Rust compiled to a native N-API module and renders through wgpu (Vulkan / Metal / DX12). Electron only draws the UI panels — it never touches render frames.' },
     { q: 'Which file formats does it support?', a: 'USD is the primary format, with glTF/GLB, OBJ and STL supported today. FBX and Alembic are planned.' },

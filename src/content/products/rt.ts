@@ -14,8 +14,8 @@ const rt: ProductContent = {
     headline: 'A local model server that speaks OpenAI.',
     sub: 'xeno-rt is a from-scratch Rust inference runtime. Load a GGUF model and serve it over an OpenAI-compatible API — on CPU or CUDA — or generate and chat straight from the terminal. Fast, memory-safe, fully offline, and the same engine that powers inference across the XENO platform.',
     media: { type: 'mockup', src: 'rt-hero', alt: 'XENO RT — the xrt-server booting a local GGUF model and streaming an OpenAI-compatible /v1/chat/completions response' },
-    badges: ['Windows · x64', 'CPU + CUDA', 'GGUF', 'OpenAI-compatible', 'Apache-2.0'],
-    note: 'Beta (v0.2) · Apache-2.0. CPU runs everywhere; the CUDA backend needs Toolkit 12.x.',
+    badges: ['Windows + Linux x64', 'CPU + CUDA', 'GGUF', 'OpenAI-compatible', 'Apache-2.0'],
+    note: 'Beta (v0.2) · Apache-2.0. Released on GitHub — signed Windows and Linux archives with checksums and SBOMs. CPU runs everywhere; the CUDA backend needs Toolkit 12.x.',
   },
   trust: ['Pure Rust — no C/C++ in the hot path', 'GGUF native · mmap zero-copy loading', 'One OpenAI-compatible API for every XENO app'],
   highlights: [
@@ -104,7 +104,7 @@ const rt: ProductContent = {
     { title: 'The engine behind XENO', icon: 'Boxes', desc: 'The shared runtime for local LLM and task-model inference across XENO apps — embeddable via Python or C bindings.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Get the build', desc: 'Download the xrt build for your OS, or build from source — cargo build --release (add --features cuda for GPU).' },
+    { step: '1', title: 'Get the build', desc: 'Grab the v0.2.0 Windows .zip or Linux .tar.gz from the public GitHub release, or build from source — cargo build --release (add --features cuda for GPU).' },
     { step: '2', title: 'Grab a model', desc: 'xrt download --hf-repo … --hf-file … pulls a GGUF from HuggingFace, or point --model at any local file.' },
     { step: '3', title: 'Serve or generate', desc: 'xrt-server --model … --port 3000 exposes the /v1 API; or xrt generate / xrt chat right in the terminal.' },
   ],
@@ -133,6 +133,7 @@ const rt: ProductContent = {
     { q: 'Do I need a GPU?', a: 'No. Hand-tuned CPU kernels (tiled matmul, rayon parallelism, AVX2/NEON-friendly loops) run everywhere. Enable the feature-gated CUDA backend (Toolkit 12.x) for GPU acceleration; the backend auto-resolves, or force it with --backend.' },
     { q: 'Which models and quantizations are supported?', a: 'Llama, Mistral and Qwen family GGUF models, with F32/F16/BF16/Q8_0/Q4_0/Q4_K/Q5_K/Q6_K. Download straight from HuggingFace with xrt download, or load any local GGUF file.' },
     { q: 'Does it only do text?', a: 'LLMs are the core, but the same server also handles multimodal vision inputs (via an mmproj projector) and task-model endpoints such as image background removal — and you can embed the runtime from Python (PyO3) or C.' },
+    { q: 'How do I get it?', a: 'From the public GitHub release — v0.2.0 ships a Windows x86_64 .zip and a Linux x86_64 .tar.gz, each with a SHA-256 checksum and an SPDX SBOM. It is not distributed through the XENO Hub update feed, so the button here takes you to GitHub. macOS builds are not published yet; build from source in the meantime.' },
     { q: 'Is it open source and free?', a: 'Yes — Apache-2.0, and free. It’s in beta (v0.2). Contributions require signing the CLA, and XENO retains the right to use them in both open-source and commercial products.' },
   ],
   seo: {

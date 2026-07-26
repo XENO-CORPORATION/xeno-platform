@@ -14,7 +14,7 @@ const architect: ProductContent = {
     sub: 'An AI-native BIM and CAD tool that carries a building from massing to construction documents in a single, IFC-native model — parametric elements, a real-time 3D viewport, and 2D drawings generated straight from the 3D. No round-tripping between five apps.',
     media: { type: 'mockup', src: 'architect-hero', alt: 'XENO Architect — a professional BIM workspace: contextual ribbon, tool sidebar, a 3D building massing with a selected wall, project browser and IFC properties' },
     badges: ['BIM-native (IFC)', 'Parametric', 'Real-time 3D', 'Windows · macOS · Linux'],
-    note: 'Coming soon — join the waitlist. Early preview (v0.2.0) in active development; the model, drawings and formats below are real, worksharing is still ahead.',
+    note: 'Coming soon — no public build yet. Early preview (v0.2.0) in active development; the model, drawings and formats below are real, worksharing is still ahead.',
   },
   trust: ['Part of the XENO platform — one sign-in', 'IFC-native BIM · real-time WebGL viewport · progressive path tracer', 'Open formats: IFC · DXF · PDF · gbXML'],
   highlights: [
@@ -134,7 +134,7 @@ const architect: ProductContent = {
     { label: 'Status', value: 'Coming soon (v0.2 preview)' },
   ],
   faq: [
-    { q: 'When can I use XENO Architect?', a: 'It’s coming soon — join the waitlist and we’ll notify you. It’s in active development (v0.2.0): the BIM model, parametric elements, real-time viewport, auto 2D drawings, MEP layout, sun study and IFC/DXF/PDF I/O already work; worksharing and the wider ecosystem are still being built.' },
+    { q: 'When can I use XENO Architect?', a: 'Not yet — there is no public build to download. It’s in active development (v0.2.0): the BIM model, parametric elements, real-time viewport, auto 2D drawings, MEP layout, sun study and IFC/DXF/PDF I/O run in our development builds; worksharing and the wider ecosystem are still being built. Get notified and we’ll tell you when the first public build is ready.' },
     { q: 'Is it really BIM and IFC-native?', a: 'Yes. Elements carry IFC classes and property sets, and it imports and exports IFC alongside DXF, PDF and gbXML — so it fits an existing BIM workflow rather than trapping your model. (More formats like DWG, USD and glTF are on the roadmap.)' },
     { q: 'Does it replace Revit, ArchiCAD or SketchUp?', a: 'That’s the goal: BIM, parametric design, real-time rendering and 2D documentation in one tool instead of separate apps and plugins. Being honest — the ecosystem, family libraries and cloud worksharing that mature tools have are still ahead of us.' },
     { q: 'What about parametric / Grasshopper-style design?', a: 'There’s a constraint solver, expression-based parameters with a dependency graph, and parametric families and curtain-wall systems — so changing one value ripples through the model.' },

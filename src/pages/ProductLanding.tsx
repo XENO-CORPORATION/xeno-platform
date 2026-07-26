@@ -102,7 +102,15 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
     setTimeout(() => setCopied(false), 1600);
   };
 
-  const Cta = (
+  /* A product distributed off-site (public GitHub release, hosted app) overrides
+     every delivery CTA — otherwise the R2-backed branches render a dead button. */
+  const Cta = product.externalUrl ? (
+    <a href={product.externalUrl} target="_blank" rel="noreferrer"
+      className="group inline-flex items-center gap-2 rounded-[6px] bg-white px-6 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
+      <Download className="h-4 w-4" />{product.externalLabel ?? `Get ${product.name}`}
+      <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+    </a>
+  ) : (
     <>
       {product.delivery === 'web' && (
         <Link to={product.launchPath ?? '/auth'} className="group inline-flex items-center gap-2 rounded-[6px] bg-white px-6 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">

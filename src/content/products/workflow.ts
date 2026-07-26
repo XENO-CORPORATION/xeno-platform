@@ -2,17 +2,18 @@ import type { ProductContent } from './_types';
 
 /* XENO Workflow — sourced from ../xeno-workflow (README + the real Electron
  * renderer: Toolbar, NodePalette, WorkflowNode, NodeInspector, ExecutionLog,
- * node definitions, the Rust engine notes). Honest "coming-soon" framing: the
- * desktop app + node graph are in active development, not yet released, so the
- * CTA is a waitlist ("Get notified") and the copy speaks to what it will do. */
+ * node definitions, the Rust engine notes). A `delivery: desktop` product: 0.2.0
+ * is published and downloadable, so the CTA is a real download. Honest beta
+ * framing — the node graph, palette, inspector and execution log ship today;
+ * anything still being built stays marked as such. Windows only for now. */
 const workflow: ProductContent = {
   slug: 'workflow',
   hero: {
     headline: 'Automate anything — with AI that runs on your machine.',
     sub: 'A visual, node-based automation studio that wires triggers, 22+ local AI models, your creative apps, logic and APIs into pipelines — executed by a Rust engine with durable runs and time-travel debugging. Fully local. No cloud required.',
     media: { type: 'mockup', src: 'workflow-hero', alt: 'XENO Workflow — a node graph wiring a file trigger through a local AI model to a save step, with the node palette, inspector and live execution log' },
-    badges: ['Local-first', '22+ local AI models', 'Rust engine', 'Free waitlist'],
-    note: 'In active development — not yet released. Join the waitlist for the first build.',
+    badges: ['Windows desktop', 'Local-first', '22+ local AI models', 'Rust engine'],
+    note: 'Beta (v0.2) · Windows. The node graph, palette, inspector and execution log work today; macOS and Linux builds follow.',
   },
   trust: ['Runs locally — your data never leaves your machine', 'Rust execution engine via napi-rs', 'Part of the XENO platform — one sign-in'],
   highlights: [
@@ -107,7 +108,7 @@ const workflow: ProductContent = {
     { title: 'Private, offline automation', icon: 'Lock', desc: 'Keep sensitive work on your own hardware — local AI, local execution, local data. Nothing has to touch someone else’s cloud.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Join the waitlist', desc: 'Sign in with your XENO account and get notified the moment the first desktop build ships.' },
+    { step: '1', title: 'Download & open', desc: 'Get the Windows build and sign in with your XENO account.' },
     { step: '2', title: 'Wire up a pipeline', desc: 'Drag triggers, AI, logic and app nodes onto the canvas and connect their typed ports.' },
     { step: '3', title: 'Run it locally', desc: 'Execute on the Rust engine, watch data flow live, and replay from any checkpoint when something breaks.' },
   ],
@@ -121,26 +122,26 @@ const workflow: ProductContent = {
       { feature: 'Time-travel debugging (replay from a checkpoint)', xeno: true, them: false },
       { feature: '100% local — data never leaves your machine', xeno: true, them: false },
       { feature: 'Mature ecosystem & prebuilt integrations', xeno: 'Growing', them: true },
-      { feature: 'Availability', xeno: 'Coming soon', them: 'Available now' },
+      { feature: 'Availability', xeno: 'Beta (Windows)', them: 'Available now' },
     ],
   },
   specs: [
-    { label: 'Platform', value: 'Windows · macOS · Linux (Electron)' },
+    { label: 'Platform', value: 'Windows (x64) · Electron' },
     { label: 'Engine', value: 'Rust via napi-rs' },
     { label: 'Project format', value: '.xflow' },
-    { label: 'Status', value: 'Coming soon · in development' },
+    { label: 'Status', value: 'v0.2 · beta' },
   ],
   faq: [
-    { q: 'Is XENO Workflow available yet?', a: 'Not yet. It’s in active development — the desktop shell, node graph, palette, inspector and execution log are built, but it hasn’t been released. Join the waitlist and we’ll notify you when the first build is ready.' },
+    { q: 'Is XENO Workflow available yet?', a: 'Yes — the 0.2 beta is downloadable now for Windows. The desktop shell, node graph, typed ports, palette, inspector and execution log all work. It’s an honest beta: some node categories and the always-on server mode are still being built, and macOS and Linux builds are still to come.' },
     { q: 'Does it run in the cloud?', a: 'It’s local-first: the app and its Rust execution engine run on your own machine, so your data and prompts stay local. An always-on server execution mode (scheduled and webhook-triggered) is planned for later.' },
     { q: 'What AI can it use?', a: '22+ local, GPU-accelerated models via xeno-lib (upscale, denoise, background removal, depth, OCR, segmentation and more) as drag-in nodes, plus AI Agent nodes powered by local LLMs through xeno-rt — no cloud dependency or API keys required.' },
     { q: 'How is it different from other automation tools?', a: 'Three things most tools don’t have: local GPU AI models as first-class nodes, native nodes for the XENO creative apps, and a Rust engine with durable execution and time-travel debugging — all running fully offline.' },
     { q: 'Can it drive the other XENO apps?', a: 'That’s the goal — native nodes for Pixel, Motion, Sound, 3D, Architect and Engine. These integration nodes require the target app to be running and are rolling out as each app exposes its automation API.' },
-    { q: 'Will it be free?', a: 'Pricing hasn’t been announced. The waitlist is free — sign up and you’ll hear about availability and pricing first.' },
+    { q: 'Will it be free?', a: 'The beta is free to download and use. General-release pricing hasn’t been announced; local execution stays local, so only cloud features would ever draw on credits.' },
   ],
   seo: {
     title: 'XENO Workflow — local-first AI automation pipelines',
-    description: 'A visual, node-based automation studio with 22+ local AI models, native creative-app nodes and a Rust execution engine with time-travel debugging. Runs fully offline. Join the waitlist.',
+    description: 'A visual, node-based automation studio with 22+ local AI models, native creative-app nodes and a Rust execution engine with time-travel debugging. Runs fully offline. Free beta on Windows.',
   },
 };
 

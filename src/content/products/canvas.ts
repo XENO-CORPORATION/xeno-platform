@@ -1,18 +1,19 @@
 import type { ProductContent } from './_types';
 
 /* XENO Canvas — sourced from ../xeno-canvas (README + SPEC + the real renderer
- * in src/renderer/src). v0.3.0 is the first public release (Windows beta) —
- * the CTA is a real download. Every feature
- * claim maps to shipped code in CHANGELOG.md; cross-repo-gated work (networked
- * multiplayer, boolean geometry, AI, prototyping) is called out as such. */
+ * in src/renderer/src). Public Windows beta — the CTA is a real download. Every
+ * feature claim maps to shipped code in CHANGELOG.md; cross-repo-gated work
+ * (networked multiplayer, boolean geometry, AI, prototyping) is called out as
+ * such. Do NOT hardcode a version number here — the page reads the live one
+ * from the R2 feed, and a pinned number goes stale the next release. */
 const canvas: ProductContent = {
   slug: 'canvas',
   hero: {
     headline: 'Design the whole system, together, in real time.',
     sub: 'A multiplayer product- and UI-design tool — components, variants, design tokens, auto-layout, and dev handoff that actually compiles. Built multiplayer-native from the first commit, on the same vector engine as the rest of the XENO platform.',
     media: { type: 'mockup', src: 'canvas-hero', alt: 'XENO Canvas editor — layers and pages, an auto-layout sign-up frame with a token-bound button, live multiplayer cursors, and a CSS dev-handoff panel' },
-    badges: ['Windows (beta)', 'Real-time multiplayer', 'Components + tokens', 'v0.3.0'],
-    note: 'First public beta — download for Windows. macOS and Linux builds follow.',
+    badges: ['Windows (beta)', 'Real-time multiplayer', 'Components + tokens', 'Free beta'],
+    note: 'Public beta — download for Windows. macOS and Linux builds follow.',
   },
   trust: ['Part of the XENO platform — one sign-in', 'Built on @xeno/core, the shared vector engine', 'Multiplayer-native from the first commit'],
   highlights: [
@@ -127,10 +128,10 @@ const canvas: ProductContent = {
     { label: 'Platforms', value: 'Windows (beta) · macOS & Linux coming' },
     { label: 'Project format', value: '.xcanvas (single-file JSON)' },
     { label: 'Built on', value: 'Electron · React 19 · @xeno/core' },
-    { label: 'Status', value: 'v0.3.0 · first public beta' },
+    { label: 'Status', value: 'Public beta' },
   ],
   faq: [
-    { q: 'Can I use XENO Canvas yet?', a: 'Yes — v0.3.0 is the first public beta, available now for Windows. The design core is real: components with variants, design tokens with modes, auto-layout, pen/vector editing, pages, PNG/SVG export, CSS/Tailwind dev handoff, and local multiplayer. Networked multiplayer, prototyping, and rich text are the next milestones — expect beta rough edges.' },
+    { q: 'Can I use XENO Canvas yet?', a: 'Yes — it’s in public beta, available now for Windows (the download button always serves the current build). The design core is real: components with variants, design tokens with modes, auto-layout, pen/vector editing, pages, PNG/SVG export, CSS/Tailwind dev handoff, and local multiplayer. Networked multiplayer, prototyping, and rich text are the next milestones — expect beta rough edges.' },
     { q: 'What already works today?', a: 'The design core: drawing tools, undo/redo, components with variants and per-instance overrides, design tokens with modes, an auto-layout flexbox engine, text/stroke/gradient/effect controls, image fills and masks, a pen tool with editable anchors, multi-page files, PNG/SVG export, and CSS/Tailwind dev handoff.' },
     { q: 'Is it really multiplayer?', a: 'The architecture is multiplayer-native: the document and history are CRDT-compatible and every edit is an op that replicates. A local cross-window transport proves it end-to-end today; the networked transport over xeno-comms is the next milestone.' },
     { q: 'How is it different from XENO Pixel?', a: 'Pixel is raster and Illustrator-style print vector — single-author, mostly static. Canvas is the live, multi-author, component-driven product-design surface that Figma defined. Canvas can place rasters but won’t ship a brush engine.' },
@@ -139,7 +140,7 @@ const canvas: ProductContent = {
   ],
   seo: {
     title: 'XENO Canvas — multiplayer product & UI design',
-    description: 'A multiplayer product- and UI-design tool with components, variants, design tokens, auto-layout, and dev handoff that compiles. Multiplayer-native, desktop, .xcanvas format. Coming soon — join the waitlist.',
+    description: 'A multiplayer product- and UI-design tool with components, variants, design tokens, auto-layout, and dev handoff that compiles. Multiplayer-native, desktop, .xcanvas format. Free public beta on Windows.',
   },
 };
 

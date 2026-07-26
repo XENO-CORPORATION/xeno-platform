@@ -2,8 +2,9 @@ import type { ProductContent } from './_types';
 
 /* XENO Browser — sourced from ../xeno-browser (README.md + SPEC.md). A CONNECT,
  * Layer-3 product, catalog status beta / delivery desktop → download framing.
- * Public beta as of 0.2.0 (Windows build live; unsigned preview; macOS & Linux
- * to follow). The page sells the thesis (agent-native file I/O) and the design.
+ * Public beta (Windows build live; unsigned preview; macOS & Linux to follow —
+ * only a windows asset exists in the R2 feed, so don't claim the other two).
+ * The page sells the thesis (agent-native file I/O) and the design.
  * Every claim traces to SPEC §2 (file-I/O wall), §5 (verbs), §6 (.xbrowser),
  * §7 (security), §16 (locked decisions). */
 const browser: ProductContent = {
@@ -134,9 +135,9 @@ const browser: ProductContent = {
   },
   specs: [
     { label: 'Engine', value: 'Electron + WebContentsView (Chromium)' },
-    { label: 'Platforms', value: 'Windows · macOS · Linux' },
+    { label: 'Platforms', value: 'Windows (x64) · macOS & Linux planned' },
     { label: 'Project format', value: '.xbrowser (saved Spaces)' },
-    { label: 'Status', value: 'Public beta · v0.2.0' },
+    { label: 'Status', value: 'Public beta' },
   ],
   faq: [
     { q: 'What makes XENO Browser different from a normal browser?', a: 'It’s a real Chromium browser for you, but the AI agent is native to it — not a plugin. The headline capability is agentic file I/O: the agent uploads and downloads files by path, bypassing the native OS file-picker and Save dialogs that block every other web agent.' },
@@ -145,7 +146,7 @@ const browser: ProductContent = {
     { q: 'What is a Space / the .xbrowser format?', a: 'A Space is a saved browsing context — its tabs, pins, profile, and the agent’s task plus allowed mount points (an Arc-Spaces analog). It serializes to a portable .xbrowser file with autosave and crash recovery. Secrets like cookies and tokens live in the profile store, never in a shareable Space file.' },
     { q: 'Does it replace the XENO browser extension?', a: 'No — they complement each other. xeno-extension puts the agent inside your existing Chrome/Edge/Firefox; XENO Browser is the agent inside our own browser, with the full control an extension can’t get. Both implement xeno-use’s use-driver-web contract.' },
     { q: 'Can I run multiple accounts with different fingerprints?', a: 'Yes. The built-in Profile Manager gives each account an isolated identity — its own cookies/storage, proxy, and fingerprint — plus groups, a reusable proxy library with connectivity/IP-geo checks, per-profile extensions, and an action log. Fingerprints are coherent by design for legitimate multi-account isolation; we don’t market “undetectable”, and there’s no CAPTCHA bypass. Simultaneous windows-per-profile is on the roadmap.' },
-    { q: 'When can I use it?', a: 'Now — it’s in public beta. Download the Windows build (v0.2.0, an unsigned preview; macOS & Linux are coming). It ships the file-I/O differentiator working end-to-end from xeno-agent-cli.' },
+    { q: 'When can I use it?', a: 'Now — it’s in public beta. Download the Windows build (an unsigned preview; macOS & Linux are coming). It ships the file-I/O differentiator working end-to-end from xeno-agent-cli.' },
   ],
   seo: {
     title: 'XENO Browser — the agent-native web browser',
