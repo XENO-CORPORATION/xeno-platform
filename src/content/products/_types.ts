@@ -48,4 +48,14 @@ export interface ProductContent {
   specs?: { label: string; value: string }[];
   faq?: { q: string; a: string }[];
   seo?: { title?: string; description?: string }; // overrides the prerender defaults
+  /** Overrides the hero status pill when the coarse catalog Status overstates
+   *  reality (e.g. a 'beta' entry that actually ships as an internal alpha). */
+  statusLabel?: string;
+  /** Shown as a warning band on /product/<slug>/download. Use it whenever the
+   *  installer carries a caveat a visitor must know BEFORE downloading —
+   *  unsigned build, throwaway account, prerelease data loss, no auto-update. */
+  downloadNotice?: string;
+  /** Defaults to true. Set false when the shipped package has auto-update
+   *  disabled, so the download page stops promising updates it won't deliver. */
+  autoUpdates?: boolean;
 }

@@ -33,13 +33,16 @@ const ICONS: Record<string, React.ComponentType<{ className?: string; strokeWidt
   Music, SlidersHorizontal, Gauge, Mic, Upload, Fingerprint,
 };
 
-function StatusPill({ status }: { status: Product['status'] }) {
+/* `override` lets a product state a narrower truth than its coarse catalog
+   Status. Comms is the motivating case: catalog-wise it's the 'beta' bucket,
+   but it ships as an internal alpha and must not read "Public test". */
+function StatusPill({ status, override }: { status: Product['status']; override?: string }) {
   const map = {
     shipping: { label: 'Available now', cls: 'border-emerald-400/30 text-emerald-300/90' },
     beta: { label: 'Beta · Public test', cls: 'border-white/[0.16] text-[#b3aca2]' },
     'coming-soon': { label: 'Coming soon', cls: 'border-white/[0.12] text-[#948d83]' },
   }[status];
-  return <span className={`rounded-[4px] border px-2 py-0.5 text-[11px] font-medium ${map.cls}`}>{map.label}</span>;
+  return <span className={`rounded-[4px] border px-2 py-0.5 text-[11px] font-medium ${map.cls}`}>{override ?? map.label}</span>;
 }
 
 function MediaView({ media }: { media: Media }) {
@@ -164,7 +167,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
               <Reveal delay={60}>
                 <div className="flex flex-wrap items-center gap-3">
                   <Eyebrow>{product.category}</Eyebrow>
-                  <StatusPill status={product.status} />
+                  <StatusPill status={product.status} override={content.statusLabel} />
                 </div>
               </Reveal>
               <Reveal delay={100}>

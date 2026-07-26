@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
-import { ArrowLeft, Download, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Download, Loader2, ShieldCheck } from 'lucide-react';
 import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
 import { Reveal } from '../components/landing-v3/primitives';
 import { getProduct, fetchReleases, downloadLink, type Release } from '../lib/productCatalog';
+import { getProductContent } from '../content/products';
 
 /* /product/:slug/download — the dedicated download page (PRODUCT-PAGES-SPEC.md §3.3).
    Per-OS buttons hit the stable backend deep-links (302 → current installer), with
@@ -26,6 +27,7 @@ const ProductDownload: React.FC = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
   const product = getProduct(slug);
+  const content = getProductContent(slug);
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -95,6 +97,17 @@ const ProductDownload: React.FC = () => {
             {stable && <p className="mt-2 text-[13px] text-[#69635b]">Latest stable v{stable.version} · {stable.date}</p>}
           </Reveal>
 
+          {/* Pre-download caveat. Deliberately ABOVE the buttons — a warning a
+              visitor reads after downloading is not a warning. */}
+          {content?.downloadNotice && (
+            <Reveal delay={80}>
+              <div className="mt-7 flex gap-3 rounded-[12px] border border-[#c9a227]/25 bg-[#c9a227]/[0.07] p-4">
+                <AlertTriangle className="mt-[1px] h-4 w-4 shrink-0" style={{ color: '#d9b341' }} />
+                <p className="text-[13px] leading-[1.65] text-[#cdc7be]">{content.downloadNotice}</p>
+              </div>
+            </Reveal>
+          )}
+
           {loading ? (
             <div className="flex justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-[#827b71]" /></div>
           ) : !stable ? (
@@ -119,7 +132,11 @@ const ProductDownload: React.FC = () => {
 
               <Reveal delay={180}>
                 <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 text-[12.5px] text-[#827b71]">
-                  <span>Updates install automatically from inside {product.name}.</span>
+                  <span>
+                    {content?.autoUpdates === false
+                      ? `This build does not update itself — reinstall from here to move to a newer ${product.name} version.`
+                      : `Updates install automatically from inside ${product.name}.`}
+                  </span>
                   <Link to={`/product/${product.slug}/releases`} className="text-[#b69dff] transition-colors hover:text-white">All versions & release notes →</Link>
                 </div>
               </Reveal>
