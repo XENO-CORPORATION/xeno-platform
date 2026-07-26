@@ -33,6 +33,18 @@ const VERSION_KEY = { windows: 'windows', mac: 'mac', linux: 'linux' };
 // electron-builder-generated names next to the installer in the product's build output.
 const LATEST_YML = { windows: 'latest.yml', mac: 'latest-mac.yml', linux: 'latest-linux.yml' };
 
+// electron-builder names the update-metadata file after the CHANNEL, not "latest". A
+// semver prerelease (0.1.0-beta.1) derives channel `beta`, so it emits `beta.yml` /
+// `beta-mac.yml` / `beta-linux.yml` — NOT latest*.yml. electron-updater then requests
+// `<publish.url>/<channel>.yml`. Scanning only for latest*.yml therefore skips the feed
+// for every prerelease with a single warning, leaving in-app auto-update silently dead —
+// the exact failure this step exists to prevent. XENO Shell 0.1.0-beta.1 is the first
+// beta-channel product and surfaced this.
+const CHANNEL_YML = {
+  stable: LATEST_YML,
+  beta: { windows: 'beta.yml', mac: 'beta-mac.yml', linux: 'beta-linux.yml' },
+};
+
 function parseArgs(argv) {
   const out = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -221,9 +233,21 @@ async function publish(opts) {
     ? [opts['artifact-dir']]
     : [...artifactDirs];
   if (searchDirs.length) {
+    const ymlSet = CHANNEL_YML[channel] ?? LATEST_YML;
     for (const os of ['windows', 'mac', 'linux']) {
-      const ymlName = LATEST_YML[os];
-      const found = searchDirs.map((d) => join(d, ymlName)).find((p) => existsSync(p));
+      const ymlName = ymlSet[os];
+      let found = searchDirs.map((d) => join(d, ymlName)).find((p) => existsSync(p));
+      // Fall back to the stable name so a stable-named file still publishes if a product's
+      // channel derivation disagrees with --channel. Never the reverse: a beta release must
+      // not silently ship its metadata as latest.yml, which stable clients would then consume.
+      if (!found && channel !== 'stable') {
+        const alt = LATEST_YML[os];
+        const altPath = searchDirs.map((d) => join(d, alt)).find((p) => existsSync(p));
+        if (altPath) {
+          console.warn(`  ⚠ ${ymlName} not found, but ${alt} exists. Publishing it AS ${ymlName} (channel=${channel}) so beta clients are fed and stable clients are not.`);
+          found = altPath;
+        }
+      }
       if (!found) {
         // Only warn for an OS whose installer we just published (its channel file is expected).
         if (providedOs.has(os)) {
