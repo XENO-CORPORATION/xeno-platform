@@ -14,6 +14,7 @@
  * OIDC_ENABLED gate on the /api/v2/authz HTTP surface.
  */
 import express from 'express';
+import { siteOrigin } from '../config/hosts.js';
 import crypto from 'crypto';
 import { check, writeTuples, listObjectTuples, ROLE_RANK } from '../utils/authzReBAC.js';
 import { sendEmail } from '../services/emailService.js';
@@ -153,7 +154,7 @@ async function ensurePersonalWorkspace(db, user) {
 
 async function sendInviteEmail(db, ws, invite, inviter) {
   try {
-    const base = process.env.PUBLIC_APP_URL || process.env.APP_URL || 'https://xenostudio.ai';
+    const base = process.env.PUBLIC_APP_URL || process.env.APP_URL || siteOrigin();
     const acceptUrl = `${base}/invite/${invite.token}`;
     await sendEmail(db, 'workspace_invite', invite.invited_email, {
       workspace_name: ws.name,

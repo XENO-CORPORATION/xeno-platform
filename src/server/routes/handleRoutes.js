@@ -12,12 +12,13 @@
  * case-insensitive-unique, not reserved. MAIL_PRIMARY_DOMAIN drives the address.
  */
 import express from 'express';
+import { mailDomain } from '../config/hosts.js';
 
 // Auth + db are applied at the mount point (index.js: databaseMiddleware + oidcAuth),
 // matching the other /api/v2/* routes.
 const router = express.Router();
 
-const PRIMARY_DOMAIN = process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai';
+const PRIMARY_DOMAIN = mailDomain();
 const HANDLE_RE = /^[a-z0-9](?:[a-z0-9]|[._-](?![._-])){1,30}[a-z0-9]$/;
 
 export function normalizeHandle(raw) {

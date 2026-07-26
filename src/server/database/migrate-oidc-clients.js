@@ -15,6 +15,7 @@
  *   node database/migrate-oidc-clients.js
  */
 import pg from 'pg';
+import { siteUrlVariants } from '../config/hosts.js';
 
 const { Pool } = pg;
 
@@ -35,7 +36,12 @@ const CLIENTS = [
   // CLI (device grant + loopback PKCE)
   { id: 'xeno-agent-cli', name: 'XENO Agent CLI', loopback: true },
   // Web (exact-match redirect; the SPA handles OIDC in-browser)
-  { id: 'xeno-web', name: 'XENO Web', loopback: false, redirects: ['https://xenostudio.ai/auth/callback'] },
+  // DUAL-HOME: siteUrlVariants() returns the callback on the canonical site
+  // origin AND on every host in XENO_ALIAS_SITE_ORIGINS. Accepting both is the
+  // safe move — this upsert REPLACES the whole redirect_uris array
+  // (ON CONFLICT DO UPDATE below), so a host omitted here is a host that stops
+  // working the moment this migration re-runs.
+  { id: 'xeno-web', name: 'XENO Web', loopback: false, redirects: siteUrlVariants('/auth/callback') },
   // XENO Mail — web relying party; mail-core (backend) handles the code exchange.
   { id: 'xeno-mail', name: 'XENO Mail', loopback: false, redirects: ['https://mail-api.xenostudio.ai/api/auth/xeno/callback'] },
   // Mobile (registered ahead of build; app-scheme redirect)

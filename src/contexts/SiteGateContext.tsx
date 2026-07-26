@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { SITE_HOSTNAMES } from '../config/hosts';
 
 interface SiteGateContextType {
   isUnlocked: boolean;
@@ -10,7 +11,10 @@ const SiteGateContext = createContext<SiteGateContextType | undefined>(undefined
 
 const SITE_PASSWORD = import.meta.env.VITE_SITE_PASSWORD;
 
-const GATE_ALLOWED_HOSTNAMES = new Set(['xenostudio.ai', 'www.xenostudio.ai']);
+// Derived from src/config/hosts.ts so a second, legitimate domain is not
+// silently locked out by the gate. With no override this is exactly the
+// hardcoded pair it replaced: {'xenostudio.ai', 'www.xenostudio.ai'}.
+const GATE_ALLOWED_HOSTNAMES = new Set<string>(SITE_HOSTNAMES);
 
 const getCurrentHostname = (): string => {
   if (typeof window === 'undefined') {

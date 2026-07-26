@@ -10,6 +10,8 @@
 // Type-only declarations kept for backward compatibility with components that still
 // reference these window properties during the migration. They carry NO values —
 // nothing in the shipped bundle assigns real keys to them.
+import { API_BASE_URL, siteUrl } from './hosts';
+
 declare global {
   interface Window {
     XENO_API_KEY?: string;
@@ -32,7 +34,7 @@ export const API_INSTRUCTIONS = {
       'Create an API key and copy it here'
     ],
     linkText: 'Get Xeno API Key',
-    linkUrl: 'https://xenostudio.ai/account/api-keys',
+    linkUrl: siteUrl('/account/api-keys'),
     placeholder: 'xeno_...'
   },
   gemini: {
@@ -51,7 +53,7 @@ export const API_INSTRUCTIONS = {
 // Get the base URL for the API proxy (non-secret).
 const getApiBaseUrl = () => {
   // Xeno API base URL.
-  return 'https://api.xenostudio.ai/v1';
+  return API_BASE_URL;
 };
 
 /**
@@ -96,7 +98,7 @@ export const API_INSTRUCTIONS_LEGACY = {
       'Create an API key',
       'Enter it below'
     ],
-    url: 'https://xenostudio.ai/account/api-keys'
+    url: siteUrl('/account/api-keys')
   },
   gemini: {
     title: 'Google Gemini API Token',

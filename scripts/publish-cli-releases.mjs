@@ -28,11 +28,12 @@
  *
  * Requires rclone with the R2 remote (default r2:xeno-hub-releases) unless --dry-run.
  */
-import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { updatesOrigin } from '../src/server/config/hosts.js';
+import { R2Publisher } from './lib/r2-upload.mjs';
 
-const PUBLIC = process.env.XENO_UPDATES_BASE || 'https://updates.xenostudio.ai';
+const PUBLIC = process.env.XENO_UPDATES_BASE || updatesOrigin();
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
@@ -122,14 +123,13 @@ async function main() {
   console.error(`  ${relPath}`);
   console.error(`  ${verPath}`);
 
-  // 4) Publish to R2 (no-cache so the site/Hub see updates immediately).
-  const push = (local, dest) => {
-    const a = ['copyto', local, `${REMOTE}/${dest}`, '--header-upload', 'Cache-Control: no-cache', '--no-traverse'];
-    if (DRY) { console.error(`  [dry-run] rclone ${a.join(' ')}`); return; }
-    execFileSync('rclone', a, { stdio: 'inherit' });
-  };
-  push(relPath, 'releases.json');
-  push(verPath, 'version.json');
+  // 4) Publish to R2 through the gated choke point (scripts/lib/r2-upload.mjs).
+  //    These feeds are assembled from the npm registry and the CLI's own
+  //    release-notes.ts — data this script does not author, so it is scanned like
+  //    any other artifact. `Cache-Control: no-cache` is applied by putPointer.
+  const r2 = new R2Publisher({ remote: REMOTE, dryRun: DRY });
+  await r2.putPointer(readFileSync(relPath, 'utf8'), 'releases.json', { label: 'releases.json' });
+  await r2.putPointer(readFileSync(verPath, 'utf8'), 'version.json', { label: 'version.json' });
 
   console.error(`\n✓ ${DRY ? '(dry-run) ' : ''}Published ${APP} feed. Page: https://xenostudio.ai/product/${APP}/releases`);
   console.error(`  Feed: ${PUBLIC}/apps/${APP}/releases.json`);

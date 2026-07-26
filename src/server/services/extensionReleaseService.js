@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { updatesUrl } from '../config/hosts.js';
 
 /**
  * Extension release data for the download page.
@@ -16,7 +17,7 @@ import fetch from 'node-fetch';
  */
 
 const FEED_URL = process.env.EXTENSION_RELEASES_FEED_URL
-  || 'https://updates.xenostudio.ai/apps/extension/releases.json';
+  || updatesUrl('/apps/extension/releases.json');
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 let cache = {

@@ -130,6 +130,34 @@ What it writes to R2:
 
 Both JSON files **and `latest*.yml`** are uploaded with `--header-upload "Cache-Control: no-cache"` (they are moving pointers); installers and blockmaps are not (they cache forever).
 
+##### The safety gates — the publisher refuses rather than ships a broken release
+
+Since 2026-07-26 the publisher will not upload anything it has not verified. Five gates run
+in order; the first four run **before the first byte reaches R2**, so a failure leaves R2
+untouched rather than half-published.
+
+| # | Gate | What it proves | Exit | Escape hatch |
+|---|---|---|---|---|
+| 1 | **Secret** | No secret-shaped string in the **artifact bytes** — ZIP/tar/asar containers are unpacked, and an installer's adjacent `*-unpacked/` tree (including `resources/app.asar`) is scanned | 4 | none — rebuild from clean source |
+| 2 | **Coverage** | An opaque installer (`.exe`/`.dmg`/`.AppImage`) whose payload could not be opened is refused rather than reported clean | 4 | `--allow-unscannable-payload` |
+| 3 | **Immutability** | An existing `v<version>/` artifact is never overwritten with different bytes | 4 | `--allow-overwrite` |
+| 4 | **Feed** | Every `url:`/`path:` in the channel feed names a file being uploaded, in the right layout, with a matching `sha512` and `size` | 2 | `--allow-no-updater-feed` (CLI/library slugs only) |
+| 5 | **Live** | After upload: re-fetch the feed, resolve each ref as electron-updater does, ranged-GET it and require **206 + matching size** | 3 | none |
+
+**`--dry-run` runs gates 1-4 for real** against the local artifacts and uploads nothing, so a
+release can be validated with zero side effects. Gate 5 needs a real upload and is skipped.
+
+Two feed problems are reported differently on purpose, because the correct response differs:
+
+- **`FEED_FILENAME_MISMATCH`** — the feed names a file we are not uploading, but its `sha512`
+  matches one we are. **The bytes are right and only the name is wrong → rewrite the feed, no
+  rebuild.** (This is the motion/workflow defect: the feed said `XENO-Motion-Setup-0.3.4.exe`
+  while the artifact was `XENO Motion Setup 0.3.4.exe`.)
+- **`FEED_CHECKSUM_MISMATCH`** — the name matches but the `sha512` does not. **The feed describes
+  a different build → rebuild.** Never hand-edit a checksum to make a gate pass.
+
+Full code list: `07-troubleshooting.md`. Run the gate tests with `npm run test:release-guard`.
+
 ##### The auto-update channel (`latest*.yml`) — do not skip this
 
 There are **two** update paths and they read different files:
@@ -147,7 +175,10 @@ The publisher now handles it automatically:
 2. **rewrites the installer references inside it to `v<version>/<file>`** — electron-builder writes a bare filename, which would resolve against `publish.url` to `apps/<slug>/<file>` and **404**, because installers live under `apps/<slug>/v<version>/`. `sha512`/`size` are untouched (they hash content, not path) and the rewrite is idempotent,
 3. uploads each to the product's updater path, defaulting to `apps/<slug>/`.
 
-It **warns and continues** if an expected `latest*.yml` is missing — a missing channel file is not a hard failure, so **check the output**. A release that prints `⚠ no artifact dir to scan for latest*.yml` shipped without an auto-update feed.
+A missing or unverifiable channel file is now a **hard failure** (`FEED_MISSING`, exit 2) and
+nothing is uploaded. It used to warn and continue, which is how several products shipped with no
+auto-update feed at all. If a slug legitimately has no in-app updater (CLI/library), pass
+`--allow-no-updater-feed` — that is the only way through, and it is recorded in the output.
 
 > ⚠️ **`latest.yml` existing proves nothing about the product side.** electron-builder emits it for `nsis` regardless of whether the feed URL is valid. The product's `electron-builder.yml` must carry an explicit
 > ```yaml
@@ -158,6 +189,48 @@ It **warns and continues** if an expected `latest*.yml` is missing — a missing
 > Without it, electron-builder infers a **GitHub** provider from the private repo remote and bakes `provider: github / owner: XENO-CORPORATION / repo: xeno-<slug>` into the installed app's `resources/app-update.yml` — a permanent 404 no amount of correct publishing can fix. Verify by **packaging and reading `win-unpacked/resources/app-update.yml`**, never by the presence of `latest.yml`.
 
 > The script prints a closing reminder: *"trigger a product-pages prerender + frontend deploy so the static/SEO pages reflect the new version."* For a **pure version bump this is optional** — the live page fetches `releases.json` on load, and the prerendered SEO `<head>` (title/description/canonical/OG/JSON-LD) is **not** version-specific, so it does not go stale. Ignore the reminder for Track A; it is satisfied automatically the next time you run a Track B content deploy. Publishing does **not** require redeploying the website.
+
+##### 🔴 SPECIAL CASE — XENO Shell's two-stage updater (`--updater-layout both`)
+
+**Shell is the only product whose updater reads `version.json` as a policy manifest.** Every
+other product points electron-updater straight at `apps/<slug>/` and is done. Shell does two
+hops (`xeno-shell/apps/desktop/src/main/updateManager.ts` + `updaterPolicy.ts`):
+
+1. fetch `apps/shell/version.json` and evaluate `channel`, `rolloutPercent` (staged rollout by
+   a stable per-machine bucket) and `rollback` (authorizes a downgrade when ops repoint
+   `version.json` at an older build);
+2. set the electron-updater feed to `<base>v<version>/` and fetch `<channel>.yml` **from inside
+   that directory**.
+
+Two consequences the publisher must honour, and does:
+
+- The copy at `apps/shell/v<version>/<channel>.yml` must carry **bare filenames** — it already
+  lives in the version dir, so a `v<version>/` prefix there resolves to
+  `v<version>/v<version>/<file>` and 404s. The copy at `apps/shell/<channel>.yml` keeps the
+  prefix, exactly like every other product.
+- `version.json` must exist **even though Shell has no stable release**. The normal rule derives
+  it from the newest *stable* entry, which for a beta-only history is none — so stage 1 would
+  never fire and the whole updater would be dead.
+
+Publish it with:
+
+```bash
+node scripts/xeno-release.mjs publish \
+  --app shell --version 0.1.0-beta.1 --date $(date +%F) \
+  --channel beta --updater-layout both --rollout-percent 100 \
+  --title "…" --notes-file ../xeno-shell/CHANGELOG.md \
+  --win "../xeno-shell/apps/desktop/release/XENO Shell Setup 0.1.0-beta.1.exe" \
+  --dry-run
+```
+
+`--updater-layout both` writes both copies with the correct refs for each, verifies each in its
+own layout, and writes a `version.json` carrying `channel` / `rolloutPercent` / `rollback`.
+`--rollback` marks an authorized downgrade. Use `--updater-layout version-dir` only if the
+slug-root copy is genuinely unwanted; `slug-root` (the default) is right for everything else.
+
+> This is a **tested** special case, not a convention — see `scripts/release-guard.test.mjs`
+> ("SHELL: …") and `scripts/xeno-release.latest-yml.test.mjs`. If a second product ever adopts a
+> two-stage updater, it gets the same flag; do not hand-craft feeds again.
 
 #### CLI / npm products → `scripts/publish-cli-releases.mjs`
 

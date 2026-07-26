@@ -51,7 +51,7 @@ These are hard-coded into the publisher scripts and the spec. They are the same 
 | Derived pointer | `apps/<slug>/version.json` |
 | Website product page | `https://xenostudio.ai/product/<slug>` |
 
-**Environment overrides** (`publish-cli-releases.mjs` only): `XENO_UPDATES_BASE` (default `https://updates.xenostudio.ai`) and `XENO_R2_REMOTE` (default `r2:xeno-hub-releases`). `xeno-release.mjs` hard-codes both constants (no env override).
+**Environment overrides.** The public read domain is no longer hard-coded in any publisher: `xeno-release.mjs`, `publish-cli-releases.mjs` and `seed-releases.mjs` all resolve it as `process.env.XENO_UPDATES_BASE || updatesOrigin()`, where `updatesOrigin()` is the one hostname seam (`src/server/config/hosts.js`, itself overridable with `XENO_UPDATES_ORIGIN`). The rclone remote is overridable with `XENO_R2_REMOTE` in `publish-cli-releases.mjs` only; `xeno-release.mjs` and `seed-releases.mjs` pin `r2:xeno-hub-releases`.
 
 **Prerequisite:** rclone configured with an `r2:` remote pointing at the `xeno-hub-releases` bucket. Verify with `rclone listremotes` → you should see `r2:`.
 
@@ -311,9 +311,11 @@ There is exactly one publisher per distribution model. **Pick by how the product
 
 ### 6.1 Desktop / installer products → `scripts/xeno-release.mjs`
 
-This is the **canonical** publisher for anything with downloadable installers (Hub, Pixel, Motion, Sound, Comms, Canvas, …). It uploads the installers, computes `size` + `sha256` for each, prepends a full `Release` entry to `releases.json`, recomputes `latest`, and regenerates `version.json`.
+This is the **canonical** publisher for anything with downloadable installers (Hub, Pixel, Motion, Sound, Comms, Canvas, …). It uploads the installers, computes `size` + `sha256` for each, prepends a full `Release` entry to `releases.json`, recomputes `latest`, regenerates `version.json`, and publishes the electron-updater channel feed.
 
 **Subcommand:** the first positional arg **must** be `publish`. Anything else (or nothing) just prints usage.
+
+**Every R2 write goes through one gated choke point.** `scripts/lib/r2-upload.mjs` (class `R2Publisher`, methods `putArtifact` / `putPointer` / `putDirectory`) is the only way any script in this repo writes to R2 — `xeno-release.mjs`, `publish-cli-releases.mjs`, `publish-extension-releases.mjs` and `seed-releases.mjs` all route through it. The raw `rclone` invoker is module-private and there is deliberately **no unchecked upload export**: the secret scan lives *inside* the uploader, so it cannot be skipped, mis-sequenced, or forgotten. `putPointer` always applies `Cache-Control: no-cache`, so that header can no longer be omitted by a caller.
 
 **Flags:**
 
@@ -328,16 +330,41 @@ This is the **canonical** publisher for anything with downloadable installers (H
 | `--title "..."` | no | Added to the entry only when non-empty; preferred for `version.json.notes`. |
 | `--notes "..."` **or** `--notes-file FILE` | **yes** (one of) | `--notes-file` is read and `.trim()`-med. Empty → the script fails. |
 | `--win <path>` / `--mac <path>` / `--linux <path>` | no | Local installer paths. Provide the OSes you built. (Note the flag is `--win`, not `--windows`.) |
-| `--dry-run` | no | Prints every `rclone` command instead of executing — nothing is uploaded. |
+| `--artifact-dir <dir>` | no | Where to look for the electron-builder channel feed. Default: the directory/directories the installers came from. |
+| `--updater-url <url>` | no | The product's electron-updater `publish.url`, used to derive the feed's R2 key. Scheme+host are stripped. Default `apps/<app>/`. |
+| `--updater-layout slug-root\|version-dir\|both` | no | Where the channel feed is published and how its refs are written. Default `slug-root`. See below. |
+| `--rollout-percent <0-100>` | no | Staged-rollout percentage written into a policy-manifest `version.json` (`version-dir` / `both` layouts only). Default `100`. |
+| `--rollback` | no | Marks the policy manifest as an authorized downgrade (`version-dir` / `both` layouts only). |
+| `--dry-run` | no | Runs gates 1–4 **for real** against the local artifacts and prints every `rclone` command instead of executing it. Nothing is uploaded; only the live gate (5) is skipped. |
+| `--allow-unscannable-payload` | no | Escape hatch for gate 2 — acknowledge an installer whose payload could not be opened. |
+| `--allow-overwrite` | no | Escape hatch for gate 3 — permit replacing an existing `v<version>/` artifact. |
+| `--allow-no-updater-feed` | no | Escape hatch for gate 4 — publish a slug that has no in-app updater (CLI/library products only). |
 
-**What it does, in order:**
+**Updater layouts.** `slug-root` (the default, and what every product except XENO Shell uses) publishes one feed at `apps/<slug>/<channel>.yml` whose installer refs carry the `v<version>/` prefix. `version-dir` publishes the feed at `apps/<slug>/v<version>/<channel>.yml` with **bare** filenames — this is Shell's two-stage updater, which reads `version.json` as a policy manifest (`channel`, `rolloutPercent`, `rollback`) and then points electron-updater inside `v<version>/`. `both` publishes both copies. Getting the prefix backwards is the double-prefix 404 (`FEED_REF_UNEXPECTED_PREFIX`); the publisher rewrites refs per target layout and verifies the result before uploading.
 
-1. For each provided installer: `size = statSync(path).size`, `sha256` (streamed, lowercase hex), `fname = basename(path)`, then `rclone copyto <path> r2:xeno-hub-releases/apps/<slug>/v<version>/<fname> --no-traverse`. Builds `assets[os] = [{ label, file: "v<version>/<fname>", size, sha256 }]`.
-2. Builds the `Release` object (`latest: channel === 'stable'` initially; `title` and `assets` included only when present).
-3. Fetches the existing `releases.json`, **dedupes by (version, channel)**, prepends the new entry, and recomputes `latest` across the whole list (first stable = `latest`).
-4. Regenerates `version.json` from the latest stable entry (filenames only; `notes` = `title || notes` capped at 400 chars). Skips writing it if no stable entry exists.
-5. Uploads both JSON files with `--header-upload "Cache-Control: no-cache" --no-traverse`.
-6. Prints a reminder to trigger a product-pages prerender + frontend deploy (**it does not run that itself** — see §9).
+**Channel feed names are derived from the version, not declared.** electron-builder names the feed after the semver prerelease tag: `0.6.4` → `latest.yml`, `0.1.0-beta.1` → `beta.yml`, `1.0.0-rc.1` → `rc.yml` (plus `-mac.yml` / `-linux.yml` variants). The publisher looks for the derived name first, then the declared `--channel`, then `latest`; if it finds a stable-named file for a prerelease version it **republishes it under the derived channel name**. It never does the reverse, which would feed a prerelease to stable clients.
+
+**What it does, in order.** Every check runs against local files first: **the first byte reaches R2 only once all pre-upload gates pass.** (An earlier version uploaded installers and both JSON pointers *before* checking the feed, which left half-published releases on R2.)
+
+*Phase A — gate. Nothing is uploaded.*
+
+1. For each provided installer: `size = statSync(path).size`, `sha256` (lowercase hex) and `sha512` (base64 — the form the updater feed uses), `fname = basename(path)`. An electron-builder `<installer>.blockmap` sitting next to the installer is picked up as an additional artifact for the same `v<version>/` directory.
+2. **Gate 1 — SECRET.** Scans the **artifact bytes**, not the repo. `.zip`/`.tgz`/`.tar`/`.asar` containers are unpacked in-process, and for an opaque installer the adjacent `*-unpacked/` tree (including `resources/app.asar`) is scanned too. Findings are redacted to a 4-character preview plus a SHA-256 fingerprint. Any finding is a hard refusal — **exit code 4** — with no escape hatch. See §6.4.
+3. **Gate 2 — COVERAGE.** An opaque installer (`.exe`, `.dmg`, `.AppImage`, …) whose payload could not be opened structurally is refused (**exit code 4**) unless `--allow-unscannable-payload` is passed. Publishing from the packager output directory, so the unpacked tree sits next to the installer, is the preferred fix.
+4. **Gate 3 — IMMUTABILITY.** Probes R2 for each `apps/<slug>/v<version>/<file>` key; if it already exists with a **different size**, the publish is refused. Same size = benign re-run. Escape hatch: `--allow-overwrite`.
+5. Builds the `Release` object (`latest: channel === 'stable'` initially; `title` and `assets` included only when present), fetches the existing `releases.json`, **dedupes by (version, channel)**, prepends the new entry, and recomputes `latest` across the whole list (first stable = `latest`). Then derives `version.json` (filenames only; `notes` = `title || notes` capped at 400 chars). For `version-dir` / `both` layouts `version.json` is written from **this** release regardless of channel and carries the policy fields; for `slug-root` it is skipped when no stable entry exists.
+6. **Gate 4 — FEED.** Locates the electron-builder channel feed, rewrites its refs for each target layout, and verifies the result against the artifacts being uploaded: declared version, referenced filenames, `sha512` and `size`. A failure prints one `FEED_*` problem code per defect with a rewrite-or-rebuild verdict, refuses the release — **exit code 2** — and **uploads nothing**. Escape hatch: `--allow-no-updater-feed`, for slugs with no in-app updater.
+
+*Phase B — upload. Every gate above has passed.*
+
+7. Installers and blockmaps go up with `putArtifact` (`rclone copyto … --no-traverse`), building `assets[os] = [{ label, file: "v<version>/<fname>", size, sha256 }]`. `releases.json`, `version.json` and each channel feed go up with `putPointer`, which applies `--header-upload "Cache-Control: no-cache" --no-traverse` itself.
+
+*Phase C — after upload.*
+
+8. **Gate 5 — LIVE** (real publishes only; skipped by `--dry-run`). Re-fetches each feed it just uploaded, resolves every ref exactly as electron-updater does (`new URL(ref, feedUrl)`), and issues a ranged `GET` expecting `206` with a matching total size. On failure it prints `LIVE_*` problem codes and **`THE RELEASE IS BROKEN`**, then exits **3** — the release is on R2 but the auto-update chain does not resolve, so fix it before announcing the version.
+9. Prints a reminder to trigger a product-pages prerender + frontend deploy (**it does not run that itself** — see §9).
+
+> Exit codes: **2** = feed gate, **3** = live gate, **4** = secret/coverage gate, **1** = anything else. Every problem code, with symptom → cause → fix, is catalogued in `07-troubleshooting.md` §9.
 
 **Canonical invocation** (from `RELEASE-TO-WEBSITE.md` §0):
 
@@ -418,6 +445,17 @@ node scripts/publish-cli-releases.mjs \
 | npm package (CLI/SDK), feed auto-derived | `publish-cli-releases.mjs` | Full feed mirrored from npm + `RELEASE_NOTES`; npm-shaped `version.json`. |
 | npm package, single hand-written entry | `xeno-release.mjs` (no `--win/--mac/--linux`) | One `assets`-less entry you author directly. |
 
+### 6.4 The shared secret-pattern set
+
+Every publisher scans the bytes it is about to upload against **one shared pattern file: `scripts/lib/secret-patterns.json`**. It covers XENO platform keys and run tokens, OpenAI / Anthropic / Google / OpenRouter keys, AWS access-key ids, Stripe live secrets, GitHub and npm tokens, Slack tokens, Resend keys, PEM private-key blocks, and rclone R2 credential blocks. Each pattern is `{ id, name, re, flags?, note? }`, where `re` is a JS regex source string.
+
+Two ways to extend it:
+
+- **Edit `scripts/lib/secret-patterns.json`** — the normal path, and the one that benefits every product.
+- **Point `$XENO_SECRET_PATTERNS` at another JSON file of the same shape** — useful for a product-specific credential shape without a repo change.
+
+The overlay is **merged, never substituted**: it can add patterns and it can replace a built-in *by `id`*, but it cannot delete the built-in set. A gate you can switch off from the environment is not a gate. If a pattern produces a false positive, **narrow the pattern** — keep patterns anchored on a distinctive prefix, since entropy-only heuristics are noisy and a noisy gate gets disabled, which is how leaks ship. Do not work around a finding by bypassing the publisher.
+
 ---
 
 ## 7. Writing good release notes
@@ -464,11 +502,21 @@ Because these strings become website copy verbatim, edit them with the same care
 
 For a product that has a `version.json` on R2 but **no `releases.json` yet**, `seed-releases.mjs` backfills a single latest-stable entry so the history file exists.
 
+> **This script REPLACES `releases.json` with ONE entry.** `releases.json` is the canonical, prepend-only history; R2 has no object versioning and there is no server-side copy, so seeding a product that already has a history **deletes that history irreversibly**. On 2026-07-26 a bare `import()` of this module — no arguments, no intent to publish — ran it against the default slug list and wiped the hub, pixel, motion and sound histories. It is a one-off bootstrap, **not** a republish tool.
+
 ```bash
-node scripts/seed-releases.mjs [<slug> …]        # default slugs: hub pixel motion sound
+node scripts/seed-releases.mjs [<slug> …]              # PLAN ONLY (default)
+node scripts/seed-releases.mjs [<slug> …] --confirm    # actually write
+# default slugs: hub pixel motion sound
 ```
 
-It fetches each product's existing `version.json`, synthesizes one `Release` (`latest: true`, `type: 'release'`, `channel: 'stable'`, `severity: 'normal'`, `assets[os].file = "v<version>/<v[os]>"`), and uploads it with `rclone copyto <file> r2:xeno-hub-releases/apps/<slug>/releases.json --header-upload "Cache-Control: no-cache" --no-traverse`. It never touches `version.json` or installers. Run it **once** to bootstrap; use §6 for all subsequent releases.
+Three behaviours exist specifically to make the hazard above unreachable by accident:
+
+- **Plan-only by default.** Without `--confirm` it writes nothing and prints what it *would* seed. There is no way to destroy a history by forgetting a flag.
+- **Inert on import.** `main()` runs only when the file is the process entry point, so `import()`-ing the module publishes nothing.
+- **Refuses to flatten a history.** Before seeding a slug it fetches the existing `releases.json`; if it holds **more than one entry** the slug is refused and skipped, with the advice to use `xeno-release.mjs` (which *prepends*) instead. Escape hatch: `--force-flatten`, which logs the replacement it is about to make.
+
+When it does write, it fetches the product's existing `version.json`, synthesizes one `Release` (`latest: true`, `type: 'release'`, `channel: 'stable'`, `severity: 'normal'`, `assets[os].file = "v<version>/<v[os]>"`), and uploads it through the same gated choke point as every other R2 write (`putPointer` → `rclone copyto … --header-upload "Cache-Control: no-cache" --no-traverse`). It never touches `version.json` or installers. Run it **once** to bootstrap; use §6 for all subsequent releases.
 
 ---
 
@@ -484,6 +532,8 @@ It fetches each product's existing `version.json`, synthesizes one `Release` (`l
 | `/product/<slug>/download/<os>` 302 | `no-store` (set on the redirect by the backend route) | The deep-link must always resolve to the *current* installer. |
 
 **Immutability rule:** never overwrite an existing `v<version>/` installer — versions are permanent. To fix a bad build, publish a new version. `releases.json` is full history: **prepend, never replace**.
+
+This is no longer prose: gate 3 asks R2 whether the key already exists and **refuses** when the bytes differ (escape: `--allow-overwrite`). If the probe itself fails (rclone missing or misconfigured) the publisher says so rather than skipping the check silently.
 
 ### 9.2 Verify the publish
 
@@ -509,7 +559,7 @@ The live releases page and download CTAs read `releases.json` **live**, so a new
 - The **slug is identical everywhere** — catalog, `--app`, R2 path, download route.
 - **Semver, no leading `v`** (the publisher strips it if you pass one).
 - **Always publish BOTH** `releases.json` and `version.json` (the publisher does this for you).
-- **Never overwrite** an existing `v<version>/` installer — installers are immutable.
+- **Never overwrite** an existing `v<version>/` installer — installers are immutable (enforced by gate 3).
 - **`releases.json` is full history** — prepend, don't replace.
 - **Exactly one stable entry has `latest: true`** — the publisher recomputes it; don't hand-edit.
 - **Installers cache forever; the two JSON files are `Cache-Control: no-cache`.**
@@ -522,4 +572,6 @@ The live releases page and download CTAs read `releases.json` **live**, so a new
 - Landing content and documentation authoring (compiled + prerendered → deploy required) — see the landing and docs files in this set.
 - Frontend build, prerender, and on-box deploy — see the deploy guide in this set (operational source: `PRODUCT-LANDING-SPEC.md` §8/§9 and `RELEASE-TO-WEBSITE.md`).
 - Canonical scripts (in `xeno-platform/scripts/`): `xeno-release.mjs`, `publish-cli-releases.mjs`, `seed-releases.mjs`.
+- The gated publish path (in `xeno-platform/scripts/lib/`): `r2-upload.mjs` (the choke point), `secret-scan.mjs` + `secret-patterns.json` (gates 1–2), `feed-integrity.mjs` (gate 4), `live-verify.mjs` (gate 5).
+- Problem codes and exit codes for every gate: `07-troubleshooting.md` §9.
 - Reader/type source of truth: `xeno-platform/src/lib/productCatalog.ts`; download route: `xeno-platform/src/server/routes/productDownloadRoutes.js`.

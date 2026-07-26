@@ -8,6 +8,7 @@
  */
 
 import crypto from 'crypto';
+import { updatesOrigin } from '../config/hosts.js';
 
 // --------------------------------------------------------------------------
 // Cache header presets
@@ -117,7 +118,7 @@ const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
 const R2_ACCESS_KEY = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET = process.env.R2_BUCKET || 'xeno-hub-releases';
-const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://updates.xenostudio.ai';
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || updatesOrigin();
 
 /**
  * Generate a signed URL for private R2 downloads

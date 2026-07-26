@@ -20,7 +20,9 @@
  * XENO repo except xeno-rt is private, and linking one 404s for the public.
  * ────────────────────────────────────────────────────────────────────── */
 
-export const R2_BASE = 'https://updates.xenostudio.ai';
+import { UPDATES_ORIGIN } from '../config/hosts';
+
+export const R2_BASE = UPDATES_ORIGIN;
 
 export type Delivery = 'web' | 'desktop' | 'cli' | 'soon';
 export type Status = 'shipping' | 'beta' | 'coming-soon';

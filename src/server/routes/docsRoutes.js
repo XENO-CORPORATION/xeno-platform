@@ -6,6 +6,7 @@
  */
 
 import { Router } from 'express';
+import { siteOrigin, siteHost } from '../config/hosts.js';
 
 const router = Router();
 
@@ -17,18 +18,18 @@ const openApiSpec = {
   info: {
     title: 'XENO Platform API',
     version: '1.0.0',
-    description: 'The API powering xenostudio.ai — authentication, AI generation, credit management, file handling, and more.',
+    description: `The API powering ${siteHost()} — authentication, AI generation, credit management, file handling, and more.`,
     contact: {
       name: 'XENO Corporation',
-      url: 'https://xenostudio.ai',
-      email: 'support@xenostudio.ai',
+      url: siteOrigin(),
+      email: process.env.SUPPORT_EMAIL || 'support@xenostudio.ai',
     },
     license: {
       name: 'Proprietary',
     },
   },
   servers: [
-    { url: 'https://xenostudio.ai/api', description: 'Production' },
+    { url: `${siteOrigin()}/api`, description: 'Production' },
     { url: 'http://localhost:8080/api', description: 'Local development' },
   ],
   tags: [

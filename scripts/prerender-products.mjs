@@ -17,9 +17,10 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { siteOrigin } from '../src/server/config/hosts.js';
 
 const DIST = 'dist';
-const SITE = 'https://xenostudio.ai';
+const SITE = siteOrigin();
 const OG_IMAGE = `${SITE}/og-default.png`;
 
 function esc(s = '') {

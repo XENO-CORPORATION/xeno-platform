@@ -227,6 +227,91 @@ Remember: **a release is not complete until the R2 feed is updated.** For deskto
 
 ---
 
+## 9. The publisher refused: gate problem codes
+
+**Symptom.** `node scripts/xeno-release.mjs publish …` prints `✖ RELEASE REFUSED` (or `THE RELEASE IS BROKEN`) with one or more bracketed codes and exits non-zero.
+
+**Cause.** One of the five fail-closed gates said no. Gates 1–4 run **before the first byte is uploaded**, so a refusal there means **nothing reached R2** and the previous release is untouched. Gate 5 runs *after* upload, so a failure there means the objects are live but the auto-update chain does not resolve — that one must be fixed, not ignored.
+
+**Exit codes:**
+
+| Exit | Gate | State of R2 |
+|---|---|---|
+| `2` | FEED (pre-upload feed verification) | Nothing uploaded. |
+| `3` | LIVE (post-upload chain verification) | Uploaded, but the update chain is broken. |
+| `4` | SECRET or COVERAGE | Nothing uploaded. |
+| `1` | Anything else (bad flags, missing file, unexpected error) | Nothing uploaded. |
+
+### 9.1 `FEED_*` — the updater feed did not verify (exit 2, nothing uploaded)
+
+**The one distinction that decides everything: rewrite or rebuild.** If the feed names a file we are not uploading but its **sha512 matches** a file we *are* uploading, the bytes are correct and only the name is wrong → **rewrite the feed**. If the name matches but the **sha512 differs**, the feed describes a different build → **rebuild**. Never hand-edit a checksum to make a gate pass.
+
+| Code | Cause | Fix |
+|---|---|---|
+| `FEED_REF_MISSING_VERSION_PREFIX` | A bare filename in a `slug-root` feed. It resolves to `apps/<slug>/<file>`, which does not exist → 404. | **Rewrite** the ref to `v<version>/<file>`. No rebuild. |
+| `FEED_REF_WRONG_PREFIX` | A `slug-root` feed ref carries some prefix other than `v<version>/`. | **Rewrite** the ref to `v<version>/<file>`. No rebuild. |
+| `FEED_REF_UNEXPECTED_PREFIX` | A prefixed ref inside a `v<version>/` feed. It resolves to `v<version>/v<version>/<file>` — a double prefix → 404. | **Rewrite** the ref to the bare filename. No rebuild. |
+| `FEED_FILENAME_MISMATCH` | The feed names a file that is not being uploaded, **but its sha512 matches one that is**. The bytes are correct; only the name is wrong. This is the real motion/workflow defect: the feed said `XENO-Motion-Setup-0.3.4.exe`, the artifact was `XENO Motion Setup 0.3.4.exe`. | **REWRITE the feed** to the artifact's actual filename. **No rebuild.** |
+| `FEED_CHECKSUM_MISMATCH` | The referenced filename matches, but the feed's `sha512` does not match the artifact's bytes — the feed describes a **different build**. | **REBUILD** and re-run the publisher. Never hand-edit the checksum. |
+| `FEED_SIZE_MISMATCH` | The feed's declared `size` differs from the artifact's size. Same meaning as a checksum mismatch: two different builds. | **Rebuild.** |
+| `FEED_VERSION_MISMATCH` | The feed's `version:` line is not the version being published — the feed came from another build. | **Rebuild.** Do not edit the version line. |
+| `FEED_REF_UNRESOLVABLE` | The feed references a file that is neither among the uploads by name **nor** by sha512. Feed and artifacts come from different builds. | **Rebuild.** |
+| `FEED_NO_REFS` | The feed references no installer at all — electron-builder emitted an empty feed. | **Rebuild.** |
+| `FEED_MISSING` | No channel feed (`latest.yml` / `beta.yml` / `…-mac.yml` / `…-linux.yml`) was found next to the installer. electron-builder only emits it when a `generic` publish provider is configured. | Add `publish.provider: generic` + `publish.url` to the product's `electron-builder.yml` and rebuild, or pass `--artifact-dir` if the feed is elsewhere. |
+
+Notes that matter:
+
+- The feed filename is derived from the **semver prerelease tag**, not from `--channel`: `0.6.4` → `latest.yml`, `0.1.0-beta.1` → `beta.yml`, `1.0.0-rc.1` → `rc.yml`. A stable-named file found for a prerelease is republished under the derived name; the reverse never happens.
+- `--allow-no-updater-feed` downgrades this gate to a warning. It is **only** for slugs with no in-app updater (CLI/library products). Using it on a desktop product ships a release whose installed clients can never be fixed remotely.
+- Re-run with `--dry-run` to iterate: gates 1–4 run for real against the local artifacts and upload nothing.
+
+### 9.2 `LIVE_*` — published, but the update chain does not resolve (exit 3)
+
+After a real publish, the publisher re-fetches the feed it just uploaded, resolves every ref exactly as electron-updater does, and issues a ranged `GET` expecting `206` with a matching size. These codes mean the objects are **already on R2** and something is wrong with them.
+
+| Code | Cause | Fix |
+|---|---|---|
+| `LIVE_FEED_UNREACHABLE` | The feed we just uploaded returns non-2xx, or the fetch failed. The upload did not land at that key. | Check `--updater-url` / `--updater-layout`, confirm the object exists on R2, re-publish. In-app auto-update is **dead** until this returns 200. |
+| `LIVE_FEED_VERSION_MISMATCH` | The live feed advertises a different version than the one just published — a stale feed is being served. | Clients will not see this release. Re-upload the feed and re-verify. |
+| `LIVE_FEED_CONTENT_DRIFT` | The feed served from R2 is not byte-identical to what this run uploaded. | Usually a stale CDN copy — confirm the upload carried `Cache-Control: no-cache`, then re-check. If it persists, another publish overwrote the key. |
+| `LIVE_INSTALLER_404` | A ref in the feed resolves to a URL that 404s. **The classic dead-updater signature.** | Either the feed's filename is wrong (compare with what landed in `v<version>/` → §9.1 `FEED_FILENAME_MISMATCH`) or the installer never uploaded. **THE RELEASE IS BROKEN** — fix before announcing. |
+| `LIVE_INSTALLER_BAD_STATUS` | The ranged `GET` returned something other than `206`/`200`. | Investigate the object on R2 before announcing the release. |
+| `LIVE_SIZE_MISMATCH` | The object serving under that key is a different size than what this publish uploaded — a **different build** is live at that URL. | Installers are immutable: do not overwrite. Cut a new version. |
+| `LIVE_INSTALLER_UNREACHABLE` | The ranged `GET` threw (network/DNS/origin). | The feed advertises an installer that cannot be fetched; auto-update fails for every client. Re-check R2 and `updates.xenostudio.ai`. |
+
+---
+
+## 10. The publisher refuses with a secret finding
+
+**Symptom.** `✖ SECRET GATE — refusing to upload <path>`, a redacted finding (`<4 chars>… len=… fp=…`) with the pattern id and the entry it was found in, exit code **4**. Nothing was uploaded.
+
+**Cause.** The **artifact bytes** carry a secret-shaped string. The scan runs inside the uploader (`scripts/lib/r2-upload.mjs`), unpacking `.zip`/`.tgz`/`.tar`/`.asar` containers and the adjacent `*-unpacked/` tree — including `resources/app.asar` — so a key bundled into JS inside a ZIP is visible to it even though a scan of the compressed bytes would not see it.
+
+**Fix — rebuild the artifact. Removing the secret from source is not enough.**
+
+- A pre-built artifact keeps whatever was compiled into it. The 2026-07 incident is exactly this shape: built 2026-03-13, source fixed 2026-07-10, uploaded 2026-07-14 — a live platform key reached the CDN while the repo's own CI guardrail was green, because the publish path never touches CI.
+- **Rebuild from clean source**, confirm the finding is gone (`--dry-run` runs this gate for real and uploads nothing), then publish.
+- **Never** print, paste, or echo the matched value — the tool reports a 4-character preview and a SHA-256 fingerprint precisely so occurrences can be correlated without exposing the secret. If it is a real credential, rotate it (see §6).
+- If the match is a genuine **false positive**, narrow the pattern in `scripts/lib/secret-patterns.json` (or add a more specific one via `$XENO_SECRET_PATTERNS`) — do not bypass the gate. There is no flag that disables it.
+
+**Related refusal — `✖ COVERAGE GATE` (also exit 4).** The artifact is an opaque installer (NSIS `.exe`, `.dmg`, `.AppImage`) whose compressed payload could not be opened, so a clean scan would be a false assurance. Fix, in order of preference: (1) publish from the packager output directory so the adjacent unpacked tree (`release/win-unpacked/`, `mac/<App>.app`, `linux-unpacked/`) sits next to the installer — it contains `resources/app.asar`, which **is** scanned; (2) if the payload genuinely cannot be opened, re-run with `--allow-unscannable-payload` and record why in the release notes. An unscanned payload is how the extension leak shipped.
+
+---
+
+## 11. GUARDRAIL — `seed-releases.mjs` flattens release history
+
+**Symptom.** A product's `/releases` page suddenly shows **one** version where it previously listed the full history, and `https://updates.xenostudio.ai/apps/<slug>/releases.json` is a one-element array.
+
+**Cause.** `scripts/seed-releases.mjs` **replaces** `releases.json` with a single synthesized latest-stable entry. It is a one-off bootstrap for a product that has a `version.json` but no history yet — not a republish tool. R2 has no object versioning and there is no server-side copy, so a flattened history is **gone**. On 2026-07-26 a bare `import()` of that module — no arguments, no intent to publish — executed it against the default slug list (`hub pixel motion sound`) and wiped four histories irreversibly.
+
+**Fix / prevention.**
+
+- **Publish with `xeno-release.mjs`, which prepends.** `seed-releases.mjs` is never the right tool for a new version. See `03-release-data.md` §6 vs §8.
+- The script is now **plan-only by default** (`--confirm` required to write), **inert on `import()`** (it only runs as a process entry point), and it **refuses any slug whose `releases.json` already holds more than one entry** (escape hatch: `--force-flatten`). If you see that refusal, it is doing its job — do not force past it.
+- **If a history was already flattened**, it cannot be recovered from R2. Rebuild `releases.json` by hand from the product's `CHANGELOG` + the installers still present under `apps/<slug>/v*/`, and upload it once with the normal publisher path. Verify with `curl -s https://updates.xenostudio.ai/apps/<slug>/releases.json | head`.
+
+---
+
 ## Quick reference — which failures need a deploy vs. a publish
 
 | You changed / observed | Layer | Action | Deploy? |
@@ -237,5 +322,9 @@ Remember: **a release is not complete until the R2 feed is updated.** For deskto
 | Docs page missing / wrong | Docs (compiled) | Edit module → `npm run build` → deploy (§1) | **Yes** |
 | Deployed but page still old (§3) | Build cache / stale dist | `docker compose build --no-cache frontend` → `up -d frontend` | **Yes** (rebuild) |
 | Whole site returns Cloudflare error (§5) | Origin / VM down | Bring `xeno-platform-001` + `xenostudio-frontend` back up | n/a |
+| Publisher refused, exit 2, `FEED_*` (§9.1) | Updater feed vs. artifacts | sha512 matches → **rewrite the feed**; sha512 differs → **rebuild**. Nothing was uploaded. | **No** |
+| Published, exit 3, `LIVE_*` (§9.2) | Feed on R2 does not resolve to an installer | Fix the feed / re-upload the installer **before announcing** | **No** |
+| Publisher refused, exit 4, secret or coverage (§10) | Secret in the **artifact bytes**, or an unscannable payload | **Rebuild the artifact** (a source fix alone does not clean it) | **No** |
+| `/releases` history collapsed to one entry (§11) | `seed-releases.mjs` flattened `releases.json` | Rebuild the history by hand — R2 has no versioning. Publish with `xeno-release.mjs`, which prepends. | **No** |
 
 When a symptom isn't listed here and you resolve it, append it to this file (symptom → cause → fix) so the next agent doesn't rediscover it.

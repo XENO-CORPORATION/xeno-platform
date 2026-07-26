@@ -15,6 +15,7 @@
  */
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
+import { issuer, mailDomain } from '../config/hosts.js';
 
 const ACCESS_TTL_SEC = 10 * 60; // 10 min
 const ID_TTL_SEC = 10 * 60;
@@ -57,9 +58,10 @@ const REFRESH_TTL_SEC = 30 * 24 * 60 * 60; // 30 days
 const CODE_TTL_SEC = 5 * 60;
 const DEVICE_TTL_SEC = 10 * 60;
 
-function issuer() {
-  return (process.env.OIDC_ISSUER || 'https://xenostudio.ai').replace(/\/+$/, '');
-}
+// `issuer()` now lives in ../config/hosts.js (imported above). It resolves
+// identically: OIDC_ISSUER, else the configured site origin, else the frozen
+// default 'https://xenostudio.ai'. See that module for why an OIDC issuer is
+// the one host in this codebase that CANNOT be dual-homed by widening a list.
 
 // ── Signing key (RS256) ─────────────────────────────────────────────────────
 
@@ -191,13 +193,13 @@ async function mintTokens(db, { user, clientId, scope, sid, nonce }) {
     { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
   );
   // XENO handle unification: a conforming, non-reserved handle IS the @<domain> address.
-  const mailDomain = process.env.MAIL_PRIMARY_DOMAIN || 'xenostudio.ai';
+  const handleDomain = mailDomain();
   const lowHandle = String(user.username || '').toLowerCase();
   let xenoAddress = null;
   if (/^[a-z0-9](?:[a-z0-9]|[._-](?![._-])){1,30}[a-z0-9]$/.test(lowHandle)) {
     try {
       const rsv = await db.query('SELECT 1 FROM reserved_handles WHERE handle = $1', [lowHandle]);
-      if (rsv.rows.length === 0) xenoAddress = `${lowHandle}@${mailDomain}`;
+      if (rsv.rows.length === 0) xenoAddress = `${lowHandle}@${handleDomain}`;
     } catch { /* registry not migrated yet → omit the claim */ }
   }
   const idToken = jwt.sign(

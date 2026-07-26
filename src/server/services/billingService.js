@@ -19,6 +19,7 @@
  *    prices/plans are managed in the Stripe dashboard, not in code.
  */
 import Stripe from 'stripe';
+import { siteOrigin } from '../config/hosts.js';
 import { addGrantTx, clawbackTx, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 
 const SECRET = process.env.STRIPE_SECRET_KEY || '';
@@ -289,7 +290,7 @@ export async function createCheckout(pool, user, itemId, { origin }) {
   if (!item) { const e = new Error('unknown item'); e.status = 400; throw e; }
   if (!item.available) { const e = new Error(`item "${itemId}" has no configured price (set ${item.priceEnv})`); e.status = 400; throw e; }
 
-  const base = process.env.BILLING_APP_URL || origin || 'https://xenostudio.ai';
+  const base = process.env.BILLING_APP_URL || origin || siteOrigin();
   const successUrl = `${base}/overview/billing?billing=success&item=${item.id}`;
   const cancelUrl = `${base}/overview/billing?billing=cancel`;
   const customer = await getOrCreateCustomer(pool, user);
@@ -319,7 +320,7 @@ export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, sea
   const item = CATALOG.map(resolveItem).find((i) => i.id === 'team_seat');
   if (!item?.available) { const e = new Error('team seat price not configured (set STRIPE_PRICE_TEAM_SEAT_MONTHLY)'); e.status = 400; throw e; }
   const qty = Math.max(1, Math.floor(Number(seats) || 1));
-  const base = process.env.BILLING_APP_URL || origin || 'https://xenostudio.ai';
+  const base = process.env.BILLING_APP_URL || origin || siteOrigin();
   const customer = await getOrCreateCustomer(pool, user);
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
@@ -355,7 +356,7 @@ export async function createPortal(pool, user, { origin }) {
   const found = await pool.query('SELECT stripe_customer_id FROM billing_customers WHERE user_id = $1', [uid]);
   const customer = found.rows[0]?.stripe_customer_id;
   if (!customer) { const e = new Error('no billing customer yet'); e.status = 404; throw e; }
-  const base = process.env.BILLING_APP_URL || origin || 'https://xenostudio.ai';
+  const base = process.env.BILLING_APP_URL || origin || siteOrigin();
   const portal = await stripe.billingPortal.sessions.create({ customer, return_url: `${base}/overview/billing` });
   return { url: portal.url };
 }

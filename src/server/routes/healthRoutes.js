@@ -9,6 +9,7 @@
 
 import { Router } from 'express';
 import Redis from 'ioredis';
+import { updatesOrigin } from '../config/hosts.js';
 
 const router = Router();
 
@@ -124,7 +125,7 @@ router.get('/health', async (req, res) => {
   // 3. R2 / CDN connectivity (lightweight — just check DNS resolution)
   try {
     const r2Start = Date.now();
-    const response = await fetch('https://updates.xenostudio.ai/', {
+    const response = await fetch(`${updatesOrigin()}/`, {
       method: 'HEAD',
       signal: AbortSignal.timeout(3000),
     });

@@ -19,11 +19,22 @@
  * Produces on R2 (bucket xeno-hub-releases):
  *   apps/extension/<tag>/<asset>       the mirrored .zip + manifests
  *   apps/extension/releases.json       the metadata feed the backend reads (no-cache)
+ *
+ * ⚠ THIS IS THE SCRIPT THAT LEAKED A LIVE PLATFORM KEY.
+ * It mirrors PRE-BUILT GitHub release assets — artifacts built long before the
+ * current source, by a process this repo does not control — straight onto a public
+ * CDN. On 2026-07-14 it uploaded three 2026-03-13 ZIPs whose bundled JS still
+ * carried a working `xeno-…` platform API key; the key had been removed from source
+ * on 2026-07-10 and xeno-extension's own CI guardrail was green the whole time,
+ * because THIS PATH NEVER TOUCHES CI. Every upload now goes through
+ * scripts/lib/r2-upload.mjs, which unpacks each ZIP and scans every entry before
+ * rclone runs. Do not re-introduce a direct rclone call here.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { R2Publisher, GateError } from './lib/r2-upload.mjs';
 
 const REPO = process.env.EXTENSION_RELEASES_REPO || 'XENO-CORPORATION/xeno-extension';
 const R2_REMOTE = process.env.R2_REMOTE || 'r2:xeno-hub-releases';
@@ -78,15 +89,20 @@ async function main() {
   log(`[ext-publish] ${live.length} non-draft release(s)`);
 
   const stage = mkdtempSync(join(tmpdir(), 'xeno-ext-'));
+  const r2 = new R2Publisher({ remote: R2_REMOTE, dryRun: DRY });
   try {
     const mapped = [];
     for (const r of live) {
       const tag = r.tag_name;
       const dir = join(stage, tag);
       log(`[ext-publish] ${tag}: downloading assets …`);
-      if (!DRY) sh('gh', ['release', 'download', tag, '--repo', REPO, '--dir', dir, '--clobber'], { stdio: 'inherit' });
+      // Assets must be downloaded even in a dry run: the whole point of the gate is
+      // to inspect the BYTES, and a dry run that skips the download would validate
+      // nothing. Only the upload is suppressed.
+      sh('gh', ['release', 'download', tag, '--repo', REPO, '--dir', dir, '--clobber'], { stdio: 'inherit' });
+      log(`[ext-publish] ${tag}: scanning assets before upload …`);
+      await r2.putDirectory(dir, `${R2_PREFIX}/${tag}/`);
       log(`[ext-publish] ${tag}: → R2 ${R2_PREFIX}/${tag}/`);
-      if (!DRY) sh('rclone', ['copy', dir, `${R2_REMOTE}/${R2_PREFIX}/${tag}/`], { stdio: 'inherit' });
       mapped.push(mapRelease(r));
     }
     mapped.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
@@ -102,20 +118,23 @@ async function main() {
       recentReleases: mapped.slice(0, 12),
     };
 
-    const feedPath = join(stage, 'releases.json');
-    writeFileSync(feedPath, JSON.stringify(feed, null, 2));
     log(`[ext-publish] feed: channels=${Object.entries(feed.channels).filter(([, v]) => v).map(([k]) => k).join(',')}`);
-    if (DRY) {
-      log(`[ext-publish] DRY-RUN — would upload releases.json to ${R2_REMOTE}/${R2_PREFIX}/releases.json`);
-      log(JSON.stringify(feed, null, 2).slice(0, 600));
-    } else {
-      // no-cache so the download page always sees the latest feed (like version.json).
-      sh('rclone', ['copyto', feedPath, `${R2_REMOTE}/${R2_PREFIX}/releases.json`, '--header-upload', 'Cache-Control: no-cache'], { stdio: 'inherit' });
-      log(`[ext-publish] published → ${PUBLIC_BASE}/releases.json`);
-    }
+    // no-cache is applied by putPointer — it cannot be forgotten here.
+    await r2.putPointer(JSON.stringify(feed, null, 2), `${R2_PREFIX}/releases.json`, { label: 'releases.json' });
+    if (DRY) log(JSON.stringify(feed, null, 2).slice(0, 600));
+    else log(`[ext-publish] published → ${PUBLIC_BASE}/releases.json`);
+    log(`[ext-publish] ${r2.coverageSummary()}`);
   } finally {
     rmSync(stage, { recursive: true, force: true });
   }
 }
 
-main().catch((e) => { console.error('[ext-publish] FAILED:', e.message); process.exit(1); });
+main().catch((e) => {
+  if (e instanceof GateError) {
+    console.error('[ext-publish] REFUSED —', e.message);
+    console.error('  Nothing was uploaded. This is the gate that the 2026-07-14 key leak needed.');
+    process.exit(4);
+  }
+  console.error('[ext-publish] FAILED:', e.message);
+  process.exit(1);
+});

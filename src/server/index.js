@@ -12,6 +12,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 import express from 'express';
 import cors from 'cors';
+import { apiOrigin, acceptedSiteOrigins } from './config/hosts.js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
@@ -138,7 +139,7 @@ async function postJsonToService(url, body, { timeoutMs = 60000, headers = {} } 
 // LOCALLY (deductCredits / meterMediaGeneration) with no double charge. When the key
 // is absent, the image branches 500 with a clear "gateway not configured" error.
 const xenoImageClient = process.env.XENO_API_KEY
-  ? new Xeno({ apiKey: process.env.XENO_API_KEY, baseURL: 'https://api.xenostudio.ai/v1' })
+  ? new Xeno({ apiKey: process.env.XENO_API_KEY, baseURL: `${apiOrigin()}/v1` })
   : null;
 
 // PostgreSQL connection
@@ -320,9 +321,17 @@ app.use((req, res, next) => {
 });
 
 // CORS: restrict to known origins in production
+// CORS_ORIGINS (explicit CSV) still wins, byte-for-byte as before. Otherwise the
+// list is derived from config/hosts.js: the canonical site origin + its www twin
+// + anything in XENO_ALIAS_SITE_ORIGINS, plus the two dev origins. With no env
+// set this is exactly the array that used to be hardcoded here.
+//
+// DUAL-HOMING: to accept a second domain, add it to XENO_ALIAS_SITE_ORIGINS —
+// do NOT move XENO_SITE_ORIGIN. Widening this allowlist is additive and
+// individually revertible; moving the canonical origin is not.
 const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
-  : ['https://xenostudio.ai', 'https://www.xenostudio.ai', 'http://localhost:5173', 'http://localhost:4040'];
+  : [...acceptedSiteOrigins(), 'http://localhost:5173', 'http://localhost:4040'];
 
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
