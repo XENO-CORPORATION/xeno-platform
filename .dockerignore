@@ -2,6 +2,17 @@
 src/server/
 src/server/**
 
+# ...EXCEPT the hostname seam. scripts/prerender-products.mjs imports siteOrigin()
+# from here to build canonical URLs, OG tags and the sitemap, so excluding it fails
+# the frontend image build with ERR_MODULE_NOT_FOUND — while a LOCAL `npm run build`
+# passes, because locally the file is simply there. The container is the truth.
+# hosts.js is a zero-dependency leaf (constants + env reads, no imports), so
+# re-including it pulls in no backend code. Keep it re-included rather than
+# duplicating the origin into the frontend: one hostname source of truth is the
+# entire point of the seam.
+!src/server/config/
+!src/server/config/hosts.js
+
 node_modules
 npm-debug.log
 .git
