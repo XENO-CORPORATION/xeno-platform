@@ -7,15 +7,37 @@ import type { ProductContent } from './_types';
  * verified surface: /v1/chat/completions + /v1/completions (+SSE), /v1/models,
  * runtime load/unload/status, agent-adaptive paged KV cache, GGUF K-quants,
  * HuggingFace download, plus vision (mmproj) + task-model endpoints and
- * Python/C bindings that exist in-tree. Nothing here is invented. */
+ * Python/C bindings that exist in-tree. Nothing here is invented.
+ *
+ * CORRECTED 2026-07-27, verified against .github/workflows + crates:
+ *  · "SIGNED Windows and Linux archives" was FALSE, and it is the one kind of
+ *    false claim the EXPERIMENTAL posture does not excuse. Unsigned is fine and
+ *    expected; SAYING signed is a security claim we cannot back. The release
+ *    workflow produces SPDX SBOMs (anchore/sbom-action), SHA256SUMS, and GitHub
+ *    build-provenance attestations (actions/attest) — and ZERO signing: no
+ *    cosign, sigstore, gpg, minisign, signtool, Authenticode, codesign or
+ *    notarize anywhere in the 10 workflow files. Say "checksummed, SBOM'd and
+ *    provenance-attested" — never "signed".
+ *  · "NEON" / ARM was FALSE. `grep -ri "neon|aarch64|arm64" crates/` = 0. The
+ *    release matrix has exactly two targets, both x86_64:
+ *    x86_64-unknown-linux-gnu and x86_64-pc-windows-msvc. No macOS, no Apple
+ *    Silicon.
+ *  · "Mistral" was FALSE — zero occurrences in xeno-rt's own code. (The only
+ *    hits repo-wide are in vendored third-party stable-diffusion.cpp docs.)
+ *  · "CUDA Toolkit 12.x" was UNSOURCED. The real declaration is the cudarc
+ *    feature `cuda-12000` (a CUDA 12.0 *API level*), and the workspace pins
+ *    cudarc "0.12" — a CRATE version that reads like a toolkit version and is
+ *    almost certainly where "12.x" came from. The README states the requirement
+ *    in hardware terms: an NVIDIA GPU on the sm_70+ PTX baseline and a
+ *    compatible driver. Use that. */
 const rt: ProductContent = {
   slug: 'rt',
   hero: {
     headline: 'A local model server that speaks OpenAI.',
     sub: 'xeno-rt is a from-scratch Rust inference runtime. Load a GGUF model and serve it over an OpenAI-compatible API — on CPU or CUDA — or generate and chat straight from the terminal. Fast, memory-safe, fully offline, and the same engine that powers inference across the XENO platform.',
     media: { type: 'mockup', src: 'rt-hero', alt: 'XENO RT — the xrt-server booting a local GGUF model and streaming an OpenAI-compatible /v1/chat/completions response' },
-    badges: ['Windows + Linux x64', 'CPU + CUDA', 'GGUF', 'OpenAI-compatible', 'Apache-2.0'],
-    note: 'Beta (v0.2) · Apache-2.0. Released on GitHub — signed Windows and Linux archives with checksums and SBOMs. CPU runs everywhere; the CUDA backend needs Toolkit 12.x.',
+    badges: ['Windows + Linux x86_64', 'CPU + CUDA', 'GGUF', 'OpenAI-compatible', 'Apache-2.0'],
+    note: 'Beta (v0.2) · Apache-2.0. Released on GitHub — Windows and Linux x86_64 archives, each with a SHA-256 checksum, an SPDX SBOM and a GitHub build-provenance attestation. The binaries are NOT code-signed. CPU runs everywhere; the optional CUDA backend needs an NVIDIA GPU on the sm_70+ baseline and a compatible driver.',
   },
   trust: ['Pure Rust — no C/C++ in the hot path', 'GGUF native · mmap zero-copy loading', 'One OpenAI-compatible API for every XENO app'],
   highlights: [
@@ -55,7 +77,7 @@ const rt: ProductContent = {
       title: 'GGUF native, K-quants included',
       desc: 'First-class GGUF with ggml-compatible dequantization across the quant ladder — and one-command downloads from HuggingFace.',
       bullets: [
-        'Llama, Mistral and Qwen family models',
+        'Llama and Qwen family models',
         'F32 · F16 · BF16 · Q8_0 · Q4_0 · Q4_K · Q5_K · Q6_K',
         'xrt download --hf-repo … --hf-file … (cached in ~/.cache/xrt)',
         'Model aliases resolve to local paths automatically',
@@ -68,8 +90,8 @@ const rt: ProductContent = {
       desc: 'Hand-written CPU kernels run everywhere; a feature-gated CUDA backend takes over on GPU. Pick one, or let it resolve automatically.',
       bullets: [
         'Tiled matmul, RMSNorm, RoPE, softmax, SiLU — hand-tuned',
-        'Rayon row-parallelism + AVX2/NEON-friendly loops',
-        'Feature-gated CUDA (PTX kernels) → cuda-resident backend',
+        'Rayon row-parallelism over AVX2-friendly loops (x86_64; no ARM build yet)',
+        'Feature-gated CUDA (PTX kernels, sm_70+ baseline) → cuda-resident backend',
         '--backend auto | cpu | cuda, or the XRT_BACKEND env var',
       ],
     },
@@ -122,18 +144,21 @@ const rt: ProductContent = {
     ],
   },
   specs: [
-    { label: 'Backends', value: 'CPU (AVX2/NEON) · CUDA 12.x' },
+    { label: 'Architectures', value: 'x86_64 only — Windows + Linux' },
+    { label: 'Backends', value: 'CPU (AVX2) · optional CUDA (sm_70+)' },
     { label: 'Model format', value: 'GGUF · Q4_K/Q5_K/Q6_K/Q8_0/F16' },
     { label: 'API', value: 'OpenAI /v1 · SSE streaming' },
+    { label: 'Provenance', value: 'SHA-256 · SPDX SBOM · attestation (unsigned)' },
     { label: 'Version', value: '0.2.0 · beta · Apache-2.0' },
   ],
   faq: [
     { q: 'What is xeno-rt?', a: 'A from-scratch Rust inference runtime (CLI name `xrt`). Load a GGUF model and serve it over an OpenAI-compatible API, or generate and chat from the terminal — on CPU or, optionally, CUDA.' },
     { q: 'Is it really a drop-in for the OpenAI API?', a: 'It implements /v1/chat/completions and /v1/completions (both with SSE streaming) plus /v1/models. Point your existing OpenAI SDK at the local base URL. It also adds runtime load/unload/status endpoints and function-calling support.' },
-    { q: 'Do I need a GPU?', a: 'No. Hand-tuned CPU kernels (tiled matmul, rayon parallelism, AVX2/NEON-friendly loops) run everywhere. Enable the feature-gated CUDA backend (Toolkit 12.x) for GPU acceleration; the backend auto-resolves, or force it with --backend.' },
-    { q: 'Which models and quantizations are supported?', a: 'Llama, Mistral and Qwen family GGUF models, with F32/F16/BF16/Q8_0/Q4_0/Q4_K/Q5_K/Q6_K. Download straight from HuggingFace with xrt download, or load any local GGUF file.' },
+    { q: 'Do I need a GPU?', a: 'No. Hand-tuned CPU kernels (tiled matmul, rayon parallelism, AVX2-friendly loops) run on any supported machine. For GPU acceleration, enable the feature-gated CUDA backend — it targets the sm_70+ PTX baseline and needs a compatible NVIDIA driver. The backend auto-resolves, or force it with --backend.' },
+    { q: 'Which CPUs and platforms are supported?', a: 'x86_64 only, on Windows and Linux — those are the two targets the release builds. There is no ARM or Apple Silicon build, and no macOS release; an earlier version of this page implied NEON/ARM support, which was wrong. On other architectures you would need to build from source, and that path is untested.' },
+    { q: 'Which models and quantizations are supported?', a: 'Llama and Qwen family GGUF models, with F32/F16/BF16/Q8_0/Q4_0/Q4_K/Q5_K/Q6_K. Download straight from HuggingFace with xrt download, or load any local GGUF file.' },
     { q: 'Does it only do text?', a: 'LLMs are the core, but the same server also handles multimodal vision inputs (via an mmproj projector) and task-model endpoints such as image background removal — and you can embed the runtime from Python (PyO3) or C.' },
-    { q: 'How do I get it?', a: 'From the public GitHub release — v0.2.0 ships a Windows x86_64 .zip and a Linux x86_64 .tar.gz, each with a SHA-256 checksum and an SPDX SBOM. It is not distributed through the XENO Hub update feed, so the button here takes you to GitHub. macOS builds are not published yet; build from source in the meantime.' },
+    { q: 'How do I get it, and are the binaries signed?', a: 'From the public GitHub release — v0.2.0 ships a Windows x86_64 .zip and a Linux x86_64 .tar.gz. They are NOT code-signed, so your OS will warn you; we would rather say that than let you assume otherwise. What you do get is a SHA-256 checksum, an SPDX SBOM and a GitHub build-provenance attestation for each archive, so you can verify the bytes and where they were built. (An earlier version of this page said "signed archives" — that was wrong, and signing is not yet in the pipeline.) It is not distributed through the XENO Hub update feed, so the button here takes you to GitHub. macOS builds are not published; build from source in the meantime.' },
     { q: 'Is it open source and free?', a: 'Yes — Apache-2.0, and free. It’s in beta (v0.2). Contributions require signing the CLA, and XENO retains the right to use them in both open-source and commercial products.' },
   ],
   seo: {

@@ -71,6 +71,10 @@ export const PRODUCTS: Product[] = [
 
   // ── Create ────────────────────────────────────────────────
   { slug: 'pixel', name: 'XENO Pixel', tagline: 'AI-native image editing, design and upscaling.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-pixel' },
+  // photo + layout (Design, below) are DOCUMENTATION SCAFFOLDS: 412 lines of
+  // markdown and one commit each, zero product source. Both READMEs say
+  // "nothing here ships yet". coming-soon/soon is correct — but do not let the
+  // page copy imply a designed product. See src/content/products/photo.ts.
   { slug: 'photo', name: 'XENO Photo', tagline: 'RAW import, organize, retouch and cloud sync.', category: 'Create', status: 'coming-soon', delivery: 'soon', repo: 'xeno-photo' },
   { slug: 'motion', name: 'XENO Motion', tagline: 'Video editing, motion graphics and AI pipelines.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-motion' },
   { slug: 'sound', name: 'XENO Sound', tagline: 'Audio editing, music and voice production.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-sound' },
@@ -118,9 +122,16 @@ export const PRODUCTS: Product[] = [
   // ── Develop ───────────────────────────────────────────────
   { slug: 'agent-cli', name: 'XENO Agent CLI', tagline: 'Code, automate and control your workspace from the terminal.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xeno-corporation/xeno-agent-cli', repo: 'xeno-agent-cli' },
   { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xeno-corporation/xeno-agent-sdk', repo: 'xeno-agent-sdk' },
-  { slug: 'acp', name: 'XENO ACP', tagline: 'Drive approved ACP coding agents through one API.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xeno-corporation/xeno-acp', operatingSystem: 'Windows, Linux', repo: 'xeno-acp' },
-  // RT ships as a public GitHub release (signed binaries + SBOMs), not through
-  // the R2 feed — so the CTA links there instead of rendering a dead download.
+  // ACP moved to the @xenosystem npm scope. npm `latest` is @xenosystem/acp@0.1.1;
+  // @xeno-corporation/xeno-acp is frozen at 0.1.0. The page, this install command
+  // and the R2 feed must all name the SAME identity — @xenosystem — or a visitor
+  // installs the older scope by following our own instructions.
+  { slug: 'acp', name: 'XENO ACP', tagline: 'Drive approved ACP coding agents through one API.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xenosystem/acp', operatingSystem: 'Windows, Linux', repo: 'xeno-acp' },
+  // RT ships as a public GitHub release, not through the R2 feed — so the CTA
+  // links there instead of rendering a dead download. The archives are
+  // checksummed, SBOM'd and provenance-attested but NOT code-signed; this
+  // comment previously said "signed binaries", which was false. Unsigned is the
+  // accepted posture; claiming signed is not.
   // Keep delivery 'soon': the branch this merged from still had 'desktop', which
   // would re-render the dead R2 download button this line exists to remove.
   { slug: 'rt', name: 'XENO RT', tagline: 'Run frontier models locally — private and fast.', category: 'Develop', status: 'beta', delivery: 'soon', operatingSystem: 'Windows, Linux', repo: 'xeno-rt', repoPublic: true, externalUrl: 'https://github.com/XENO-CORPORATION/xeno-rt/releases/latest', externalLabel: 'Get the latest release on GitHub' },
@@ -128,7 +139,16 @@ export const PRODUCTS: Product[] = [
   // channel) — so it is beta/desktop, not coming-soon/soon. Tagline stays scoped
   // to what the build does: it is a host layer; no XENO app runs inside it yet.
   { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop shell with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
-  { slug: 'anima', name: 'XENO Anima', tagline: 'Your personal, always-on agent — it remembers you and gets better.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-anima' },
+  // Anima SHIPS. All 8 packages are live on npm at 0.0.2 (verified against the
+  // registry 2026-07-27), so 'coming-soon'/'soon' was telling visitors a product
+  // they can install does not exist. It also suppressed an upgrade signal that
+  // MATTERS: 0.0.1 is published and DEPRECATED for a security defect (missing
+  // SDK dispatch_agent permission gate). Anyone who found 0.0.1 from search got
+  // no warning from this site. The 0.0.1 → 0.0.2 notice is carried explicitly in
+  // src/content/products/anima.ts — do not drop it while 0.0.1 remains installable.
+  // NOTE: https://get.xenostudio.ai/anima (in the repo README) is NXDOMAIN.
+  // npm is the only real install path — never put that host on the page.
+  { slug: 'anima', name: 'XENO Anima', tagline: 'Your personal, always-on agent — it remembers you and gets better.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xenosystem/anima', repo: 'xeno-anima' },
 ];
 
 const BY_SLUG = new Map(PRODUCTS.map((p) => [p.slug, p]));

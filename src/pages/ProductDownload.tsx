@@ -94,7 +94,14 @@ const ProductDownload: React.FC = () => {
 
           <Reveal delay={60}>
             <h1 className="mt-6 text-[clamp(1.9rem,3.2vw,3rem)] font-semibold tracking-[-0.01em] text-[#ece7df]">Download {product.name}</h1>
-            {stable && <p className="mt-2 text-[13px] text-[#69635b]">Latest stable v{stable.version} · {stable.date}</p>}
+            {/* Don't label a build "stable" when the feed says otherwise. `stable`
+                falls back to the newest asset-bearing release, which for a
+                beta-only product (e.g. comms) is a beta entry. */}
+            {stable && (
+              <p className="mt-2 text-[13px] text-[#69635b]">
+                Latest {(stable.channel ?? 'stable') === 'beta' ? 'beta' : 'stable'} v{stable.version} · {stable.date}
+              </p>
+            )}
           </Reveal>
 
           {/* Pre-download caveat. Deliberately ABOVE the buttons — a warning a

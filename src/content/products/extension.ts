@@ -10,21 +10,35 @@ import type { ProductContent } from './_types';
  * store listing yet, so nothing is installable today. Catalog status is
  * coming-soon / delivery soon. Do NOT restore install instructions, a version
  * badge, or a "Free · available" note until a Chrome Web Store listing is live
- * or a new package channel is published. */
+ * or a new package channel is published.
+ *
+ * CORRECTED 2026-07-27 — seven lines claimed Claude and GPT models. The shipped
+ * build's catalog is xAI GROK ONLY. Verified in dist/stable/extension/background/
+ * api-client.js: DEFAULT_MODEL = 'grok-4.3', and FALLBACK_MODELS is four entries,
+ * every one provider:'xai' (grok-4.3, grok-3-mini, grok-3-mini-fast,
+ * grok-4.20-0309-non-reasoning). Same four hard-coded in options/options.html;
+ * sidepanel/index.html ships a single <option value="grok-4.3">. ZERO Claude and
+ * ZERO GPT entries anywhere in the shipped build.
+ * Nuance worth keeping honest in BOTH directions: api-client.js does replace the
+ * built-in list with whatever /v1/models returns, plus locally discovered Ollama
+ * models — so the live list can be wider than the four. What we may NOT do is
+ * name specific Claude/GPT versions as if they were the shipped catalog. This
+ * page is coming-soon today, so no visitor is misled yet; it is fixed now so it
+ * cannot ship false. */
 const extension: ProductContent = {
   slug: 'extension',
   hero: {
     headline: 'An agent that uses your browser like you do.',
-    sub: 'XENO Extension is an AI agent in a Chromium side panel. It reads the page, then clicks, types, fills forms and navigates across tabs to finish the task — in Plan, Agent, or Chat mode, and it asks before it acts. Bring your own model, or run local.',
+    sub: 'XENO Extension is an AI agent in a Chromium side panel. It reads the page, then clicks, types, fills forms and navigates across tabs to finish the task — in Plan, Agent, or Chat mode, and it asks before it acts. It ships with xAI Grok models, and can use whatever your XENO account offers or a local model via Ollama.',
     media: { type: 'mockup', src: 'extension-hero', alt: 'XENO Extension — the side-panel browser agent reading a pricing page and extracting the tiers, with a permission approval prompt' },
     badges: ['Chrome · Edge · Brave', 'Manifest V3', 'BYO model / local', 'Not yet available'],
     note: 'Not currently available to install. The previous download channel has been withdrawn and the Chrome Web Store listing has not been submitted yet — get notified and we’ll tell you the day it goes live.',
   },
-  trust: ['Built for Chromium — Chrome, Edge & Brave', 'Bring your own key, or run local via Ollama', 'Permission-gated — it asks before it acts'],
+  trust: ['Built for Chromium — Chrome, Edge & Brave (not Firefox)', 'Ships with Grok; local models via Ollama', 'Permission-gated — it asks before it acts'],
   highlights: [
     { value: 'In your browser', label: 'Side panel, any tab' },
     { value: 'Plan · Agent · Chat', label: 'Three working modes' },
-    { value: 'Any model', label: 'Claude · GPT · local' },
+    { value: 'Grok built in', label: 'Plus local via Ollama' },
     { value: 'You approve', label: 'Ask or act-on-its-own' },
   ],
   features: [
@@ -91,12 +105,12 @@ const extension: ProductContent = {
     {
       eyebrow: 'Any model', icon: 'Cpu',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(200,150,220,0.14), transparent 60%), linear-gradient(165deg,#170f18,#070707 74%)',
-      title: 'Bring your own model — or run local',
-      desc: 'Pick a model from the toolbar: cloud Claude and GPT through the XENO API or your own key, or a fully local model served by Ollama.',
+      title: 'Grok in the box — or run local',
+      desc: 'Pick a model from the toolbar. The build ships with xAI Grok models selected by default; the list is then refreshed from whatever your XENO account exposes, and any Ollama models it finds running locally are added to it.',
       bullets: [
-        'Claude Sonnet 4.6 / Opus 4.6 / Sonnet 4.5',
-        'GPT-5.3 Codex and GPT-5.2',
-        'Local & private via Ollama',
+        'Ships with Grok 4.3 (default), Grok 4.20, Grok 3 Mini and Grok 3 Mini Fast',
+        'The live list comes from your XENO account — it can be wider than the built-in four',
+        'Local & private via Ollama, auto-discovered',
         'Your key or the XENO API — your choice',
       ],
     },
@@ -117,7 +131,7 @@ const extension: ProductContent = {
       { feature: 'Reads & summarizes the page', xeno: true, them: true },
       { feature: 'Clicks, types & fills forms for you', xeno: true, them: 'Some' },
       { feature: 'Plan / Agent / Chat modes', xeno: true, them: false },
-      { feature: 'Bring your own model / run local', xeno: 'Claude · GPT · Ollama', them: 'One provider' },
+      { feature: 'Bring your own model / run local', xeno: 'Grok · Ollama', them: 'One provider' },
       { feature: 'Permission prompts + site blocklist', xeno: true, them: 'Varies' },
       { feature: 'Multi-tab context (@-mention tabs)', xeno: true, them: false },
       { feature: 'Established web-store presence & reviews', xeno: 'Not listed yet', them: true },
@@ -127,7 +141,7 @@ const extension: ProductContent = {
   specs: [
     { label: 'Browsers', value: 'Chrome · Edge · Brave (Chromium)' },
     { label: 'Manifest', value: 'Manifest V3 · side panel' },
-    { label: 'Models', value: 'Claude · GPT · local (Ollama)' },
+    { label: 'Models', value: 'xAI Grok · local (Ollama)' },
     { label: 'Status', value: 'Not yet available' },
   ],
   faq: [
@@ -135,7 +149,7 @@ const extension: ProductContent = {
     { q: 'Which browsers will it support?', a: 'Any Chromium browser — Chrome, Edge, and Brave. It’s a Manifest V3 extension that opens in the browser’s side panel (Ctrl+Shift+X, or ⌘+Shift+X on macOS). A Safari track is planned.' },
     { q: 'Is there anything I can use in the meantime?', a: 'XENO Browser — it’s in public beta on Windows and puts the same kind of agent inside our own Chromium browser, with capabilities an extension can’t reach.' },
     { q: 'Can it act without asking me?', a: 'By default it’s in Ask mode: it shows an Allow / Deny prompt before each action. You can switch to act-without-asking, and add a site blocklist (say, your bank) — or an allowlist — to bound where it runs.' },
-    { q: 'Which models can it use?', a: 'Cloud Claude (Sonnet 4.6, Opus 4.6, Sonnet 4.5) and GPT (5.3 Codex, 5.2) via the XENO API or your own key — or a fully local model served by Ollama. Pick the model from the toolbar dropdown.' },
+    { q: 'Which models can it use?', a: 'The build ships with xAI Grok models — Grok 4.3 as the default, plus Grok 4.20, Grok 3 Mini and Grok 3 Mini Fast. On connecting it refreshes that list from your XENO account, so what you actually see may be wider, and it adds any Ollama models it finds running locally for fully private use. Pick from the toolbar dropdown. (An earlier version of this page listed specific Claude and GPT models as the shipped catalog — that was wrong.)' },
     { q: 'What can it actually do on a page?', a: 'Read and extract page content, copy it as Markdown, take screenshots, click elements, type text, fill and submit forms, navigate, scroll, select options, press keys, open and switch tabs, search the web, read other URLs, check console logs, and run JavaScript.' },
     { q: 'How much will it cost?', a: 'The extension will be free. Model calls route through the XENO API, your own key, or a local Ollama model — so you only pay for the model usage you choose.' },
   ],

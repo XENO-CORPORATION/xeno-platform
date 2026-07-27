@@ -4,26 +4,53 @@ import type { ProductContent } from './_types';
  * apps/cli/src and packages/{mind,soul,runtime,orchestrate,compat-soul}). A
  * personal, always-on agent with an authored **Mind** that earns a **Soul**
  * (episodic memory + self-taught skills); run one, or many that coordinate as a
- * swarm. CLI `anima`. Honest coming-soon framing: the Mind/Soul engine, always-on
- * runtime, tool-use and swarm work in the internal CLI (validated live on
- * gpt-5.5); channels (xeno-comms), device hands (xeno-use) and the `.xanima` save
- * format are the next milestones. Delivery `soon` → "Get notified" CTA.
- * NOTE: `@xeno/anima` is NOT on the npm registry. Do not advertise an install
- * command or a package name until it is actually published. */
+ * swarm. CLI `anima`.
+ *
+ * CORRECTED 2026-07-27 — this page said the product did not exist, in four
+ * places (catalog coming-soon/soon, the hero note "there is nothing to install
+ * today", the FAQ "Can I install it yet?" → "No", and specs "Install: Not
+ * published yet"). All four were FALSE. Verified against the npm registry:
+ *
+ *   @xenosystem/anima                0.0.1, 0.0.2   latest=0.0.2
+ *   @xenosystem/anima-mind           0.0.1, 0.0.2   latest=0.0.2
+ *   @xenosystem/anima-soul           0.0.1, 0.0.2   latest=0.0.2
+ *   @xenosystem/anima-runtime        0.0.1, 0.0.2   latest=0.0.2
+ *   @xenosystem/anima-orchestrate    0.0.1, 0.0.2   latest=0.0.2
+ *   @xenosystem/anima-compat-soul    0.0.1, 0.0.2   latest=0.0.2
+ *   @xenosystem/anima-channels       0.0.1, 0.0.2   latest=0.0.2
+ *   @xenosystem/anima-format         0.0.1, 0.0.2   latest=0.0.2
+ *
+ * ── THE SECURITY POINT — do not remove while 0.0.1 is installable ────────────
+ * 0.0.1 is published AND DEPRECATED on npm. Its verbatim deprecation string:
+ *   "Security: this build is missing the SDK dispatch_agent permission gate —
+ *    a delegated subagent can read protected files with no prompt.
+ *    Upgrade to 0.0.2."
+ * A "coming soon" page gave anyone who installed 0.0.1 from a search result NO
+ * upgrade signal at all. The 0.0.1 → 0.0.2 notice is therefore carried
+ * EXPLICITLY here: hero note, trust band, a dedicated FAQ entry, and specs.
+ * It comes out only when 0.0.1 is unpublished or otherwise uninstallable.
+ *
+ * NOTE: the repo README advertises https://get.xenostudio.ai/anima. That host is
+ * NXDOMAIN (verified 2026-07-27). npm is the only real install path — never put
+ * that URL on this page.
+ *
+ * Still honestly scoped: the Mind/Soul engine, always-on runtime, tool-use and
+ * swarm work today (validated live on gpt-5.5); channels (xeno-comms), device
+ * hands (xeno-use) and the `.xanima` save format are the next milestones. */
 const anima: ProductContent = {
   slug: 'anima',
   hero: {
     headline: 'A Mind is given. A Soul is earned.',
     sub: 'Anima is your personal, always-on agent — one you author, name, and keep. You write its Mind (voice, values, boundaries, capabilities); it grows a Soul as it runs — episodic memory and skills it teaches itself. So it remembers you and gets better. Run one, or many that coordinate as a swarm.',
     media: { type: 'mockup', src: 'anima-hero', alt: 'XENO Anima CLI — a Mind runs a turn: it recalls from its Soul, replies, records the episode, and teaches itself a new skill' },
-    badges: ['CLI', 'Local-first · bring any model', 'Swarm-native', 'Open source · AGPL-3.0'],
-    note: 'In active development (v0.0.1) and not published yet — there is nothing to install today. The Mind/Soul engine, always-on runtime, tool-using turns and the swarm run in the internal CLI, validated live on a real model. Channels (xeno-comms) and device hands (xeno-use) are landing next. Get notified for the first release.',
+    badges: ['CLI · on npm', 'Local-first · bring any model', 'Swarm-native', 'Open source · AGPL-3.0'],
+    note: 'Early release (v0.0.2) — install with npm install -g @xenosystem/anima. SECURITY: if you already have 0.0.1, upgrade now. 0.0.1 is deprecated because it is missing the SDK dispatch_agent permission gate, which lets a delegated subagent read protected files with no prompt. The Mind/Soul engine, always-on runtime, tool-using turns and the swarm all work today; channels (xeno-comms) and device hands (xeno-use) land next.',
   },
   trust: [
+    'On npm now — 8 packages at v0.0.2',
+    'Running 0.0.1? Upgrade: it is deprecated for a subagent permission-gate defect',
     'Node ≥ 20 · macOS · Linux · Windows',
-    'Local-first via xeno-rt — runs offline, bring any model',
-    'Minds & Souls are Ed25519-signed',
-    'AGPL-3.0 · self-hostable',
+    'AGPL-3.0 · self-hostable · Minds & Souls Ed25519-signed',
   ],
   highlights: [
     { value: 'Mind + Soul', label: 'Authored seed, earned self' },
@@ -120,7 +147,7 @@ const anima: ProductContent = {
     { title: 'Local, private, self-hosted', icon: 'Lock', desc: 'Run a Mind — or a whole swarm — entirely on your machine via xeno-rt. Souls are agent-owned and signed; nothing leaves your box unless you say so.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Author or import a Mind', desc: 'anima mind create — name it, give it a voice, values and scoped capabilities — or import an existing SOUL.md persona.' },
+    { step: '1', title: 'Install, then author a Mind', desc: 'npm install -g @xenosystem/anima (Node ≥ 20), then anima mind create — name it, give it a voice, values and scoped capabilities — or import an existing SOUL.md persona.' },
     { step: '2', title: 'Give it a model', desc: 'anima mind run --rt <xeno-rt url> to run local or cloud, BYO key. Skip --rt for the offline echo driver while you build.' },
     { step: '3', title: 'Let it live', desc: 'It recalls from its Soul, does the work, records what happened, and teaches itself skills. Add more Minds to form a swarm.' },
   ],
@@ -134,18 +161,20 @@ const anima: ProductContent = {
       { feature: 'Persona inheritance / mixins', xeno: true, them: false },
       { feature: 'Signed + capability-scoped', xeno: true, them: false },
       { feature: 'Local-first, bring any model', xeno: true, them: true },
-      { feature: 'Maturity & ecosystem', xeno: 'Early (v0.0.1)', them: true },
+      { feature: 'Maturity & ecosystem', xeno: 'Early (v0.0.2)', them: true },
     ],
   },
   specs: [
-    { label: 'Install', value: 'Not published yet' },
+    { label: 'Install', value: 'npm install -g @xenosystem/anima' },
     { label: 'Runtime', value: 'Node ≥ 20' },
     { label: 'Inference', value: 'xeno-rt · BYO model' },
-    { label: 'License', value: 'AGPL-3.0 · v0.0.1' },
+    { label: 'License', value: 'AGPL-3.0 · v0.0.2' },
+    { label: 'Security', value: 'v0.0.1 deprecated — upgrade to 0.0.2' },
   ],
   faq: [
     { q: 'What’s the difference between a Mind and a Soul?', a: 'The Mind is the authored seed — a mind.xeno file with personality, values, boundaries and scoped capabilities. The Soul is what the agent earns at runtime: episodic memory, self-taught skills, evolved preferences and a model of the people it serves. A Mind is given; a Soul is earned.' },
-    { q: 'Can I install it yet?', a: 'No — nothing is published to npm yet, so there’s no install command to give you. It’s early (v0.0.1): the Mind/Soul engine, the always-on runtime, tool-using turns, and the swarm (broadcast, handoff, orchestrate) all work in the internal CLI and are validated live against a real model. Channels via xeno-comms, device hands via xeno-use, and the .xanima save format are the next milestones. Get notified and we’ll tell you when the package lands.' },
+    { q: 'Can I install it yet?', a: 'Yes — npm install -g @xenosystem/anima (Node ≥ 20). Anima ships as eight packages on npm at v0.0.2: the CLI plus the mind, soul, runtime, orchestrate, compat-soul, channels and format libraries. It is early, and honestly so: the Mind/Soul engine, the always-on runtime, tool-using turns and the swarm (broadcast, handoff, orchestrate) all work and are validated live against a real model, while channels via xeno-comms, device hands via xeno-use and the .xanima save format are the next milestones.' },
+    { q: 'I installed 0.0.1 — do I need to upgrade?', a: 'Yes, upgrade now: npm install -g @xenosystem/anima@latest. Version 0.0.1 is deprecated on npm for a security defect — it is missing the SDK dispatch_agent permission gate, which means a delegated subagent can read protected files with no prompt. In other words, an agent you asked to delegate work could reach files you never approved. 0.0.2 restores the gate. If you are unsure which version you have, run anima --version.' },
     { q: 'How is it different from Hermes Agent or OpenClaw?', a: 'Anima is inspired by both and built on the full XENO platform. Two structural differences: the Mind/Soul split makes self-improvement a real, portable, signed artifact instead of a flat memory file; and Minds coordinate as a swarm (broadcast, handoff, orchestrate) where the rivals’ instances run in isolation. It also imports their SOUL.md personas so you can bring what you already have.' },
     { q: 'Can I run it locally and offline?', a: 'Yes — it’s local-first via xeno-rt (GGUF/ONNX), which is OpenAI-compatible, so a single Mind or a whole swarm can run entirely on your machine. Bring any model, and set a per-Mind cloud fallback (Anthropic/OpenAI/Google) only when you allow it.' },
     { q: 'Can I bring my existing persona?', a: 'Yes. Import an OpenClaw brain or Hermes profile — including the 162+ community SOUL.md templates — and it converts up into a mind.xeno, gaining inheritance, signing, capability scoping and a real Soul. It round-trips back to a SOUL.md family too, so you’re never locked in.' },

@@ -18,6 +18,22 @@ import type { ProductContent } from './_types';
  * LESSON: probe a route the app actually declares before concluding it is not
  * running. A single 404 on a guessed path is not evidence of absence.
  *
+ * CORRECTED AGAIN 2026-07-27 — the opposite error. Four claims here were false:
+ *   1. "GraphQL" — there is NO GraphQL in the codebase. No schema, no resolver,
+ *      no server. Removed. (The product's own docs page already said GraphQL was
+ *      roadmap-only; this landing page contradicted it.)
+ *   2. "Surfaces: Web · Desktop · Mobile · CLI · MCP" — apps/desktop and
+ *      apps/mobile contain ZERO files. Corrected to the surfaces that exist.
+ *   3. "PDF reports" — there is no PDF library anywhere in the repo.
+ *   4. "npm install @xeno-post/connector-<platform>" — those packages 404 on
+ *      npm, and 0 of 28 connectors carry a `publishConfig`. The plugin SDK is
+ *      real as an in-repo contract; it is NOT a published npm channel yet.
+ *
+ * ⚠ STILL OUTSTANDING, NOT FIXABLE FROM THIS REPO: the live post.xenostudio.ai
+ * app serves "GraphQL" ~22× on its own homepage, 7× on /login, and in its OG
+ * image. That copy lives in the xeno-post repo (apps/web) and needs a xeno-post
+ * build + deploy. Fixing this file does not fix that surface.
+ *
  * Locked facts: AGPL-3.0, self-host free forever, 25+ connectors targeted,
  * MCP-native, 7 roles incl. AGENT, per-channel (no seat) pricing, Nostr NIP-46
  * bunker signing (first in OSS). Beta: sign-up is open, connectors vary. */
@@ -87,7 +103,7 @@ const post: ProductContent = {
         'One inbox across every channel, sentiment-tagged with AI reply suggestions',
         'Multi-step approval chains + an external client sign-off portal',
         'Listening over X, Reddit, Mastodon, Bluesky, Nostr, Lemmy, HN & the web',
-        'Per-post, per-channel and cross-channel analytics with PDF reports',
+        'Per-post, per-channel and cross-channel analytics in the dashboard',
       ],
     },
     {
@@ -98,7 +114,7 @@ const post: ProductContent = {
       desc: 'AGPL-3.0 with every feature in the open-source build. A two-container floor, a real connector plugin SDK, and encrypted, self-owned credentials.',
       bullets: [
         'Postgres + Redis floor — one-click Coolify · Railway · Render · CapRover · K8s',
-        'Out-of-tree connectors: npm install @xeno-post/connector-<platform>',
+        'A real connector contract (PostConnector) — write one in-tree today; npm publishing is next',
         'Nostr NIP-46 bunker signing — the first federated scheduler of its kind',
         'Envelope-encrypted tokens (AES-256-GCM) with KMS-style rotation',
       ],
@@ -107,7 +123,7 @@ const post: ProductContent = {
   useCases: [
     { title: 'Solo creators', icon: 'Zap', desc: 'Cross-post once and schedule everywhere with a Buffer-class composer — free forever if you self-host, with native mobile apps on the roadmap.' },
     { title: 'Agencies', icon: 'Users', desc: 'White-label dashboards, client approval portals and multi-workspace tenancy — with per-channel pricing and no seat tax.' },
-    { title: 'Developers & agents', icon: 'Boxes', desc: 'REST + GraphQL + a native MCP server + a connector plugin SDK — the only stack where an AI agent is a first-class workspace member.' },
+    { title: 'Developers & agents', icon: 'Boxes', desc: 'A versioned REST API plus a native MCP server and a connector contract — the only stack where an AI agent is a first-class workspace member.' },
     { title: 'Fediverse & Nostr natives', icon: 'Lock', desc: 'Schedule federated posts without handing over your keys — the only scheduler with NIP-46 bunker signing.' },
   ],
   howItWorks: [
@@ -130,7 +146,7 @@ const post: ProductContent = {
   specs: [
     { label: 'License', value: 'AGPL-3.0 (self-host free)' },
     { label: 'Deploy', value: 'Docker · Postgres + Redis' },
-    { label: 'Surfaces', value: 'Web · Desktop · Mobile · CLI · MCP' },
+    { label: 'Surfaces', value: 'Web · CLI · REST · MCP' },
     { label: 'Status', value: 'Public beta' },
   ],
   faq: [

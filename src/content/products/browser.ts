@@ -6,7 +6,17 @@ import type { ProductContent } from './_types';
  * only a windows asset exists in the R2 feed, so don't claim the other two).
  * The page sells the thesis (agent-native file I/O) and the design.
  * Every claim traces to SPEC §2 (file-I/O wall), §5 (verbs), §6 (.xbrowser),
- * §7 (security), §16 (locked decisions). */
+ * §7 (security), §16 (locked decisions).
+ *
+ * CORRECTED 2026-07-27, verified against both repos:
+ *  · "inside your existing Chrome/Edge/FIREFOX" was FALSE. xeno-extension is a
+ *    Manifest V3 extension built on chrome.sidePanel + chrome.debugger. Firefox
+ *    supports neither, and the repo has no browser_specific_settings, no MV2
+ *    fallback and no webextension-polyfill. Chromium only.
+ *  · "local models where possible" was FALSE. src/main/agent/LLMClient.ts says
+ *    in its own header that "the browser embeds no model runtime", and its
+ *    DEFAULT_BASE is a REMOTE XENO endpoint. Without a key it throws NO_KEY.
+ *    Browsing stays private; the agent's inference does not run locally. */
 const browser: ProductContent = {
   slug: 'browser',
   hero: {
@@ -97,11 +107,11 @@ const browser: ProductContent = {
       eyebrow: 'Engine & privacy',
       icon: 'Cpu',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(220,200,160,0.14), transparent 60%), linear-gradient(165deg,#181614,#070707 74%)',
-      title: 'Real Chromium, local-first, private',
-      desc: 'Real Chromium so every site behaves exactly as in Chrome, with agent inference routed through xeno-rt for on-device models — and no telemetry on your browsing.',
+      title: 'Real Chromium, private browsing, hosted agent',
+      desc: 'Real Chromium so every site behaves exactly as in Chrome, and no telemetry on your browsing. Be clear about one thing though: the browser embeds no model runtime, so the agent’s thinking happens on a XENO endpoint, not on your machine.',
       bullets: [
         'No telemetry on your browsing',
-        'Agent inference routes through xeno-rt — local models where possible',
+        'The agent needs a XENO key and calls a hosted endpoint — no local model is bundled',
         'Built on the shared React 19 + Electron + Zustand XENO stack',
         'One XENO sign-in across the whole platform',
       ],
@@ -144,7 +154,7 @@ const browser: ProductContent = {
     { q: 'Why can’t a normal extension or terminal agent just upload a file?', a: 'Clicking “Attach” makes the browser ask the OS to open a native file-picker dialog, which is OS chrome — not web content. Page JavaScript can’t forge a file list from a path, and an extension’s debugger can detach or be policy-blocked. Because XENO Browser owns the engine, it sets the input’s files directly via main-process CDP, so the dialog never opens.' },
     { q: 'Is it safe to let an agent touch my files?', a: 'Yes — the native dialog is treated as a security feature we replace with scoped consent, not remove. File I/O is confined to bounded mount points, “..” path traversal is rejected, and host-path operations ask for confirmation or run on a capability budget. And it never bypasses CAPTCHAs.' },
     { q: 'What is a Space / the .xbrowser format?', a: 'A Space is a saved browsing context — its tabs, pins, profile, and the agent’s task plus allowed mount points (an Arc-Spaces analog). It serializes to a portable .xbrowser file with autosave and crash recovery. Secrets like cookies and tokens live in the profile store, never in a shareable Space file.' },
-    { q: 'Does it replace the XENO browser extension?', a: 'No — they complement each other. xeno-extension puts the agent inside your existing Chrome/Edge/Firefox; XENO Browser is the agent inside our own browser, with the full control an extension can’t get. Both implement xeno-use’s use-driver-web contract.' },
+    { q: 'Does it replace the XENO browser extension?', a: 'No — they complement each other. xeno-extension puts the agent inside your existing Chromium browser (Chrome, Edge or Brave — it is a Manifest V3 extension built on chrome.sidePanel and chrome.debugger, neither of which Firefox supports); XENO Browser is the agent inside our own browser, with the full control an extension can’t get. Both implement xeno-use’s use-driver-web contract.' },
     { q: 'Can I run multiple accounts with different fingerprints?', a: 'Yes. The built-in Profile Manager gives each account an isolated identity — its own cookies/storage, proxy, and fingerprint — plus groups, a reusable proxy library with connectivity/IP-geo checks, per-profile extensions, and an action log. Fingerprints are coherent by design for legitimate multi-account isolation; we don’t market “undetectable”, and there’s no CAPTCHA bypass. Simultaneous windows-per-profile is on the roadmap.' },
     { q: 'When can I use it?', a: 'Now — it’s in public beta. Download the Windows build (an unsigned preview; macOS & Linux are coming). It ships the file-I/O differentiator working end-to-end from xeno-agent-cli.' },
   ],

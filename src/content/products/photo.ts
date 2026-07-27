@@ -1,34 +1,45 @@
 import type { ProductContent } from './_types';
 
 /* XENO Photo — sourced from ../xeno-photo (README / CLAUDE / CHANGELOG).
- * The repo is a scaffold (v0.0.1, 2026-06-05): non-destructive RAW workflow &
- * library, the XENO answer to Adobe Lightroom. CREATE layer, format .xphoto,
- * local-first, RAW decode via xeno-lib, all AI inference on-device via xeno-rt.
- * Status is coming-soon → honest waitlist framing: nothing ships yet, every
- * "AI/develop" capability is described as the intended surface, not a shipped one. */
+ *
+ * READ THIS BEFORE ADDING ANY CAPABILITY CLAIM. Measured 2026-07-27:
+ *   the repo is 412 lines of markdown, ONE commit, and ZERO product source
+ *   files. Its own README says: "This repository is a **scaffold**. The product
+ *   surface and architecture are being defined — nothing here ships yet."
+ *   (xeno-layout is byte-for-byte the same scaffold, and has no content module
+ *   at all — it renders from the catalog entry alone. Keep it that way.)
+ *
+ * The status was already right (coming-soon / waitlist). What was wrong was the
+ * REGISTER: six feature blocks with four specific bullets each read as a
+ * specified product with a designed feature set. There is no spec and no code —
+ * only an intent. So the page now states the ambition plainly and says, in the
+ * hero and the FAQ, that this is a direction and not a design.
+ *
+ * Rule: no roadmap dates, no version numbers, and nothing phrased as though a
+ * decision has been made, until real code exists in that repo. */
 const photo: ProductContent = {
   slug: 'photo',
   hero: {
     headline: 'Every frame, culled and developed — without overwriting a pixel.',
-    sub: 'XENO Photo is a photographer-first RAW workspace: import and cull thousands of shots, keyword and organize a real catalog, then develop non-destructively with masks and local adjustments — with AI culling, subject masking and denoise running on-device. In development now.',
-    media: { type: 'mockup', src: 'photo-hero', alt: 'XENO Photo — the Develop module: catalog and presets, a RAW landscape with an AI sky mask, Basic develop sliders, and a culling filmstrip' },
-    badges: ['RAW develop', 'Non-destructive', 'Local-first', 'On-device AI', 'Coming soon'],
-    note: 'In development — no build ships yet. Join the waitlist to get the first release.',
+    sub: 'The plan is a photographer-first RAW workspace: import and cull thousands of shots, keyword and organize a real catalog, then develop non-destructively with masks and local adjustments — with AI culling, subject masking and denoise running on-device. This page describes what we intend to build.',
+    media: { type: 'mockup', src: 'photo-hero', alt: 'XENO Photo — a concept mockup of the Develop module: catalog and presets, a RAW landscape with an AI sky mask, Basic develop sliders, and a culling filmstrip' },
+    badges: ['Planned', 'RAW develop', 'Non-destructive', 'Local-first', 'On-device AI'],
+    note: 'Not started. XENO Photo is currently a stated direction, not a product in development: the repository holds documentation only — no application code, and no technical design yet. There is nothing to install, and no date to give you. Join the waitlist and we will tell you when that changes.',
   },
   trust: [
-    'Part of the XENO platform — one sign-in',
-    'Local-first: your catalog lives on your disk',
-    'RAW decode via xeno-lib · AI on-device via xeno-rt',
+    'No code yet — this is the intent, written down honestly',
+    'Planned as local-first: your catalog would live on your disk',
+    'Planned to reuse xeno-lib for RAW decode and xeno-rt for on-device AI',
   ],
   highlights: [
-    { value: 'Non-destructive', label: 'Every edit stays reversible' },
-    { value: 'RAW-native', label: 'Decoded through xeno-lib' },
+    { value: 'Not started', label: 'Docs only — no code yet' },
+    { value: 'Non-destructive', label: 'The core commitment' },
     { value: 'On-device AI', label: 'Cull · mask · denoise · upscale' },
-    { value: '.xphoto', label: 'Your catalog, an open format' },
+    { value: '.xphoto', label: 'Reserved catalog format' },
   ],
   features: [
     {
-      eyebrow: 'Library',
+      eyebrow: 'Planned · Library',
       icon: 'Boxes',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(220,200,160,0.14), transparent 60%), linear-gradient(165deg,#181614,#070707 74%)',
       title: 'A real catalog, built for thousands of frames',
@@ -41,7 +52,7 @@ const photo: ProductContent = {
       ],
     },
     {
-      eyebrow: 'Develop',
+      eyebrow: 'Planned · Develop',
       icon: 'Layers',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(120,170,255,0.16), transparent 60%), linear-gradient(165deg,#0e1320,#070707 74%)',
       title: 'Develop RAW without ever overwriting the original',
@@ -54,7 +65,7 @@ const photo: ProductContent = {
       ],
     },
     {
-      eyebrow: 'AI',
+      eyebrow: 'Planned · AI',
       icon: 'Sparkles',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(170,140,255,0.20), transparent 60%), linear-gradient(165deg,#141020,#070707 74%)',
       title: 'AI that culls the set and masks the subject',
@@ -67,7 +78,7 @@ const photo: ProductContent = {
       ],
     },
     {
-      eyebrow: 'Private',
+      eyebrow: 'Planned · Private',
       icon: 'Cpu',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(120,200,150,0.14), transparent 60%), linear-gradient(165deg,#0e1a14,#070707 74%)',
       title: 'Your photos never have to leave your machine',
@@ -80,7 +91,7 @@ const photo: ProductContent = {
       ],
     },
     {
-      eyebrow: 'Output',
+      eyebrow: 'Planned · Output',
       icon: 'Zap',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(150,200,200,0.14), transparent 60%), linear-gradient(165deg,#10171a,#070707 74%)',
       title: 'Develop one, apply it to the whole set',
@@ -106,32 +117,33 @@ const photo: ProductContent = {
   comparison: {
     competitor: 'most photo catalogs',
     rows: [
-      { feature: 'Non-destructive RAW develop', xeno: true, them: true },
-      { feature: 'On-device AI culling & masking', xeno: 'Built in', them: 'Add-ons' },
-      { feature: 'Local-first, open catalog format', xeno: true, them: false },
-      { feature: 'Runs fully offline', xeno: 'On-device', them: false },
-      { feature: 'Mature presets, plugins & ecosystem', xeno: 'Coming', them: true },
+      { feature: 'Available to use today', xeno: false, them: true },
+      { feature: 'Non-destructive RAW develop', xeno: 'Planned', them: true },
+      { feature: 'On-device AI culling & masking', xeno: 'Planned', them: 'Add-ons' },
+      { feature: 'Local-first, open catalog format', xeno: 'Planned', them: false },
+      { feature: 'Mature presets, plugins & ecosystem', xeno: 'Far off', them: true },
       { feature: 'Cloud library & mobile sync', xeno: 'Planned', them: true },
       { feature: 'Price', xeno: 'TBA', them: 'Subscription' },
     ],
   },
   specs: [
-    { label: 'Replaces', value: 'Adobe Lightroom' },
-    { label: 'Project format', value: '.xphoto' },
-    { label: 'Inference', value: 'On-device · xeno-rt' },
-    { label: 'Status', value: 'In development' },
+    { label: 'Status', value: 'Not started — documentation scaffold only' },
+    { label: 'Aims to replace', value: 'Adobe Lightroom' },
+    { label: 'Project format', value: '.xphoto (reserved)' },
+    { label: 'Inference', value: 'Planned on-device · xeno-rt' },
+    { label: 'Availability', value: 'No build, no date' },
   ],
   faq: [
-    { q: 'Is XENO Photo available yet?', a: 'Not yet. The repository is an early scaffold (v0.0.1) and no build ships today. This page describes the product we’re building — join the waitlist and you’ll get the first release.' },
-    { q: 'Will it read my RAW files?', a: 'Yes — RAW decode runs through the shared xeno-lib native library, and every develop edit is non-destructive: your original file is never overwritten.' },
-    { q: 'Do my photos leave my machine?', a: 'No. XENO Photo is local-first: your catalog and originals stay on your disk, and AI culling, masking, denoise and upscale run on-device through the xeno-rt runtime. Platform sync is planned as an option, not a requirement.' },
-    { q: 'What does the AI actually do?', a: 'It suggests which frames to keep (sharp, eyes-open), paints subject and sky masks in one click, and denoises or upscales high-ISO shots — all locally. You approve every pick and every mask.' },
-    { q: 'Will it replace Adobe Lightroom?', a: 'That’s the goal for the non-destructive RAW workflow and library. A mature preset and plugin ecosystem, plus cloud/mobile sync, are areas where established tools still lead — we’re honest that those come later.' },
-    { q: 'When does it launch, and what will it cost?', a: 'Timing and pricing will be announced later. The waitlist is the way to hear first.' },
+    { q: 'Is XENO Photo available yet?', a: 'No — and to be straight with you, it has not been started. The repository contains documentation and nothing else: no application code, and no technical design. Everything on this page is intent, not implementation, and we would rather you knew that than infer from a polished page that a build is close. Join the waitlist and we will tell you the moment there is something real.' },
+    { q: 'Will it read my RAW files?', a: 'That is the intent — RAW decode through the shared xeno-lib native library, with every develop edit non-destructive so your original file is never overwritten. Nothing is implemented yet, so treat this as the commitment we are designing toward rather than a capability you can check.' },
+    { q: 'Will my photos leave my machine?', a: 'The plan is local-first: your catalog and originals on your disk, with AI culling, masking, denoise and upscale running on-device through the xeno-rt runtime, and platform sync as an option rather than a requirement. That is a design principle we have committed to, not a shipped behaviour.' },
+    { q: 'What is the AI meant to do?', a: 'Suggest which frames to keep (sharp, eyes-open), paint subject and sky masks in one click, and denoise or upscale high-ISO shots — locally, with you approving every pick and every mask. None of it is built yet.' },
+    { q: 'Will it replace Adobe Lightroom?', a: 'That is the goal for the non-destructive RAW workflow and library. It is a large goal and we have not written a line of it yet, so please weigh it accordingly. A mature preset and plugin ecosystem, plus cloud/mobile sync, are areas where established tools lead by years.' },
+    { q: 'When does it launch, and what will it cost?', a: 'We do not know, and we would rather say so than invent a quarter. No development has started, so there is no schedule to share and no pricing. The waitlist is the way to hear first.' },
   ],
   seo: {
-    title: 'XENO Photo — non-destructive RAW workflow & library',
-    description: 'A photographer-first RAW workspace: cull thousands of frames, keyword a real catalog, and develop non-destructively with on-device AI culling, masking and denoise. Local-first, .xphoto format. In development — join the waitlist.',
+    title: 'XENO Photo — planned RAW workflow & library',
+    description: 'A planned photographer-first RAW workspace: cull thousands of frames, keyword a real catalog, and develop non-destructively with on-device AI culling, masking and denoise. Local-first, .xphoto format. Not started — documentation only. Join the waitlist.',
   },
 };
 

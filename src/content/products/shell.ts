@@ -18,7 +18,17 @@ import type { ProductContent } from './_types';
  *    SmartScreen does, everywhere a user could be surprised.
  * Claims below trace to CHANGELOG Phase 1.5-A (host wrapper / displays),
  * 1.5-B (mounts + ACL + sandbox) and 1.5-C (installer, signing gate,
- * auto-update, crash spool, onboarding, perf, a11y). */
+ * auto-update, crash spool, onboarding, perf, a11y).
+ *
+ * CORRECTED 2026-07-27 — the trust bullet read "195 tests and 3 CDP end-to-end
+ * suites, run against the packaged installer". The conjunction was false: it
+ * attached "run against the packaged installer" to BOTH halves. Verified:
+ *   · 196 unit tests (24 vitest files) run under `vitest run` in Node/jsdom.
+ *     They never touch a packaged build — no installer, no Electron binary.
+ *   · The 3 CDP suites (host-shell, mounts, update) DO run against the
+ *     packaged build, via run-packaged.mjs → release/win-unpacked/XENO Shell.exe.
+ *     Note that is the unpacked output directory, not the NSIS installer.
+ * Keep the two claims separate. */
 const shell: ProductContent = {
   slug: 'shell',
   hero: {
@@ -29,7 +39,7 @@ const shell: ProductContent = {
     note: 'Beta channel · v0.1.0-beta.1 · UNSIGNED — Windows SmartScreen will show “Windows protected your PC”; choose More info → Run anyway, or wait for the signed build. No XENO app runs inside Shell yet — see “What it is today”.',
   },
   trust: [
-    '195 tests and 3 CDP end-to-end suites, run against the packaged installer',
+    '196 unit tests, plus 3 CDP end-to-end suites run against the packaged build',
     'Boot p50 661 ms on the reference Windows machine',
     'Per-user install — no admin rights, no system-wide changes',
   ],

@@ -1,16 +1,28 @@
 import type { ProductContent } from './_types';
 
+/* XENO ACP.
+ *
+ * CORRECTED 2026-07-27 — IDENTITY. This page (and the R2 release feed) named
+ * `@xeno-corporation/xeno-acp@0.1.0`, while npm `latest` is
+ * `@xenosystem/acp@0.1.1`. Following our own install command therefore got you
+ * the older scope. The @xenosystem scope is now the single published identity;
+ * verified on the registry, all four packages at 0.1.1:
+ *   @xenosystem/acp · acp-core · acp-agent · acp-provider-manager
+ * The legacy @xeno-corporation/xeno-acp* packages still resolve at 0.1.0 and are
+ * deliberately not linked from here.
+ * The R2 feed (apps/acp/releases.json) is corrected separately — page and feed
+ * MUST name the same scope and the same version. If you bump one, bump both. */
 const acp: ProductContent = {
   slug: 'acp',
   hero: {
     headline: 'Every approved coding agent, behind one API.',
-    sub: 'XENO ACP 0.1.0 drives configured Agent Client Protocol agents in-process or through an OpenAI-compatible local gateway. Install it from npm, consume structured tool and plan events, or use the tested integration inside the XENO Hub agent interface.',
+    sub: 'XENO ACP 0.1.1 drives configured Agent Client Protocol agents in-process or through an OpenAI-compatible local gateway. Install it from npm, consume structured tool and plan events, or use the tested integration inside the XENO Hub agent interface.',
     media: {
       type: 'mockup',
       src: 'acp-hero',
       alt: 'XENO ACP gateway console projecting an ACP turn into structured message, tool, plan and diff events',
     },
-    badges: ['Public beta 0.1.0', 'npm · Node 20+', 'Windows + Linux', 'Apache-2.0'],
+    badges: ['Public beta 0.1.1', 'npm · Node 20+', 'Windows + Linux', 'Apache-2.0'],
     note: 'Product-ready for the documented trusted-local Windows/Linux scope. macOS, official provider-owned ACP wrappers, and hostile-process containment are not claimed.',
   },
   trust: [
@@ -43,8 +55,8 @@ const acp: ProductContent = {
       title: 'Embed it, or call it over HTTP',
       desc: 'The same ACP client engine powers a typed in-process event stream and a local OpenAI-compatible gateway.',
       bullets: [
-        '@xeno-corporation/xeno-acp-core — structured events with no HTTP or OpenAI types',
-        '@xeno-corporation/xeno-acp — /v1/models and /v1/chat/completions',
+        '@xenosystem/acp-core — structured events with no HTTP or OpenAI types',
+        '@xenosystem/acp — /v1/models and /v1/chat/completions',
         'Text and SSE for existing OpenAI-compatible clients',
         'Per-app bearer keys and configured agent allowlists',
       ],
@@ -55,8 +67,8 @@ const acp: ProductContent = {
       title: 'One provider policy boundary',
       desc: 'The agent endpoint and provider-manager package keep catalog, lifecycle, approval, certification and diagnostics decisions in XENO ACP instead of duplicating them in every host.',
       bullets: [
-        '@xeno-corporation/xeno-acp-agent — ACP stdio endpoint and adapter runtime',
-        '@xeno-corporation/xeno-acp-provider-manager — catalog and lifecycle policy',
+        '@xenosystem/acp-agent — ACP stdio endpoint and adapter runtime',
+        '@xenosystem/acp-provider-manager — catalog and lifecycle policy',
         'Definition + policy + hash-pinned approval must all pass',
         'Unimplemented or stale provider approvals fail closed',
       ],
@@ -89,7 +101,7 @@ const acp: ProductContent = {
       eyebrow: 'Release evidence', icon: 'Lock',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(220,200,160,0.14), transparent 60%), linear-gradient(165deg,#181614,#070707 74%)',
       title: 'A reproducible public-beta candidate',
-      desc: 'The 0.1.0 package set is verified as a clean install, as imported libraries, as runnable CLIs, and as a downstream Hub dependency on both validated platforms.',
+      desc: 'The 0.1.1 package set is verified as a clean install, as imported libraries, as runnable CLIs, and as a downstream Hub dependency on both validated platforms.',
       bullets: [
         'Hermetic fixture-backed automated suite; no real provider CLI in CI',
         'Clean package contents, dependency ranges and CLI version checks',
@@ -104,9 +116,9 @@ const acp: ProductContent = {
     { title: 'XENO Hub agent workflows', icon: 'Boxes', desc: 'Manage providers and drive ACP sessions through the Hub agent interface with policy, approval and diagnostics visible to the operator.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Install', desc: 'Run npm install --global @xeno-corporation/xeno-acp on Windows or Linux with Node.js 20 or newer.' },
+    { step: '1', title: 'Install', desc: 'Run npm install --global @xenosystem/acp on Windows or Linux with Node.js 20 or newer.' },
     { step: '2', title: 'Initialize and configure', desc: 'Run xeno-acp init, then edit xeno-acp.config.jsonc with the agents and local bearer keys you want.' },
-    { step: '3', title: 'Start or embed', desc: 'Run xeno-acp --config ./xeno-acp.config.jsonc, or install @xeno-corporation/xeno-acp-core and consume AcpManager in-process.' },
+    { step: '3', title: 'Start or embed', desc: 'Run xeno-acp --config ./xeno-acp.config.jsonc, or install @xenosystem/acp-core and consume AcpManager in-process.' },
   ],
   comparison: {
     competitor: 'per-provider integrations',
@@ -120,7 +132,7 @@ const acp: ProductContent = {
     ],
   },
   specs: [
-    { label: 'Version', value: '0.1.0 · public beta' },
+    { label: 'Version', value: '0.1.1 · public beta' },
     { label: 'Platforms', value: 'Windows · Linux' },
     { label: 'Runtime', value: 'Node.js 20+ · ESM' },
     { label: 'Protocol', value: 'ACP v1 · JSON-RPC over stdio' },
@@ -128,15 +140,15 @@ const acp: ProductContent = {
     { label: 'License', value: 'Apache-2.0' },
   ],
   faq: [
-    { q: 'How do I install XENO ACP?', a: 'Install the gateway with npm install --global @xeno-corporation/xeno-acp, run xeno-acp init, edit the generated local config, then start xeno-acp. Node.js 20 or newer is required.' },
-    { q: 'Can I embed it instead of running HTTP?', a: 'Yes. Install @xeno-corporation/xeno-acp-core and consume AcpManager for the full structured event stream. The core has no HTTP framework and no OpenAI types.' },
-    { q: 'Which platforms are supported?', a: 'Version 0.1.0 is release-tested on Windows and Ubuntu/Linux. macOS is not claimed for this release.' },
+    { q: 'How do I install XENO ACP?', a: 'Install the gateway with npm install --global @xenosystem/acp, run xeno-acp init, edit the generated local config, then start xeno-acp. Node.js 20 or newer is required.' },
+    { q: 'Can I embed it instead of running HTTP?', a: 'Yes. Install @xenosystem/acp-core and consume AcpManager for the full structured event stream. The core has no HTTP framework and no OpenAI types.' },
+    { q: 'Which platforms are supported?', a: 'Version 0.1.1 is release-tested on Windows and Ubuntu/Linux. macOS is not claimed for this release.' },
     { q: 'Which provider paths are official?', a: 'XENO ACP ships configured client definitions plus XENO-owned and XENO-authored local adapter paths. The claude-local and codex-local adapters wrap operator-installed third-party CLIs; they are not official Anthropic or OpenAI ACP implementations.' },
     { q: 'Is a provider process fully sandboxed?', a: 'No. Client-side file and terminal callbacks are workspace-contained, and cooperative adapters are policy-gated. The separate-process supervisor enforces lifecycle controls but does not enforce network or filesystem containment against a hostile child process.' },
     { q: 'Does XENO proxy provider credentials?', a: 'No. Providers use the operator’s own installed and authenticated CLI. XENO ACP does not pool, extract, proxy or resell provider credentials.' },
   ],
   seo: {
-    title: 'XENO ACP 0.1.0 — ACP client, gateway and Hub integration',
+    title: 'XENO ACP 0.1.1 — ACP client, gateway and Hub integration',
     description: 'Install XENO ACP from npm: an embeddable ACP client engine, OpenAI-compatible local gateway, provider policy runtime, and tested XENO Hub agent-interface integration for Windows and Linux.',
   },
 };
