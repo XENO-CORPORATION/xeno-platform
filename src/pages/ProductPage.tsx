@@ -7,6 +7,7 @@ import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
 import { Reveal } from '../components/landing-v3/primitives';
 import ReleaseFeed from '../components/product/ReleaseFeed';
+import ExperimentalNotice from '../components/product/ExperimentalNotice';
 import {
   getProduct, fetchReleases, latestRelease, downloadLink, type Release, type Product,
 } from '../lib/productCatalog';
@@ -138,6 +139,11 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
                 </div>
               )}
             </Reveal>
+
+            {/* The lean page has no content module to hand-write a caveat into,
+                which is exactly why the notice is derived: a desktop product
+                that never gets a landing page still cannot ship silently. */}
+            <Reveal delay={210}><ExperimentalNotice product={product} variant="inline" className="mt-6" /></Reveal>
           </div>
         </section>
 

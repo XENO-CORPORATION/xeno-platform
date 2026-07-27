@@ -144,8 +144,12 @@ const docs: ProductContent = {
     title: 'XENO Docs — the AI-native document editor',
     description: 'A professional document editor that unites a full word processor, Notion-style block editing, and a built-in AI writer. Import DOCX with fidelity; rewrite, translate and generate in the page. Free beta on Windows.',
   },
+  // Product-specific caveats ONLY. The unsigned installer / SmartScreen warning
+  // is no longer written here — it is derived from the catalog and rendered
+  // above this block on the download page (see productCatalog experimentalNotice).
+  // Repeating it made the page say the same thing twice.
   downloadNotice:
-    'This build does NOT update itself. XENO Docs 0.2 ships without an in-app updater, so it will never prompt you and never upgrade — when a newer version is published you will need to come back here and install it over the top. The installer is also not code-signed, so Windows SmartScreen will warn you once. AI features require a XENO account and draw on credits; there is no local-model option in this build.',
+    'This build does NOT update itself. XENO Docs 0.2 ships without an in-app updater, so it will never prompt you and never upgrade — when a newer version is published you will need to come back here and install it over the top. AI features require a XENO account and draw on credits; there is no local-model option in this build.',
   autoUpdates: false,
 };
 

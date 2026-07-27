@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Download, AlertTriangle } from 'lucide-react';
-import { assetUrl, type Release } from '../../lib/productCatalog';
+import { assetUrl, getProduct, experimentalNotice, type Release } from '../../lib/productCatalog';
+import ExperimentalNotice from './ExperimentalNotice';
 
 /* Shared renderer for a product's release / patch / hotfix history.
    Used both on the product overview (recent, limited) and the full
@@ -27,6 +28,8 @@ function TypeBadge({ r }: { r: Release }) {
 function ReleaseRow({ release, slug, defaultOpen, linkToDetail }: { release: Release; slug: string; defaultOpen: boolean; linkToDetail: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   const hasAssets = release.assets && PLATFORMS.some((p) => (release.assets?.[p.key]?.length ?? 0) > 0);
+  const product = getProduct(slug);
+  const notice = product ? experimentalNotice(product) : null;
 
   return (
     <div className="border-t border-white/[0.06]">
@@ -51,8 +54,12 @@ function ReleaseRow({ release, slug, defaultOpen, linkToDetail }: { release: Rel
           {release.notes && (
             <div className="whitespace-pre-line text-[13px] leading-[1.65] text-[#9b948a]">{release.notes}</div>
           )}
+          {/* Every direct asset link below is a download start, so the notice
+              belongs here too — not only on the download page. Rendered only
+              when this release actually ships files. */}
+          {hasAssets && product && notice && <ExperimentalNotice product={product} variant="line" className="mt-4" />}
           {hasAssets && (
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className={`${notice ? 'mt-2.5' : 'mt-4'} grid grid-cols-1 gap-2 sm:grid-cols-3`}>
               {PLATFORMS.map((p) => {
                 const assets = release.assets?.[p.key] ?? [];
                 return (

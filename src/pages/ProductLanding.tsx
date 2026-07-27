@@ -10,9 +10,10 @@ import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
 import { Reveal, SectionHeading, Eyebrow, T, cx } from '../components/landing-v3/primitives';
 import ReleaseFeed from '../components/product/ReleaseFeed';
+import ExperimentalNotice from '../components/product/ExperimentalNotice';
 import { Mockup } from '../components/product/mockups';
 import {
-  fetchReleases, latestRelease, downloadLink, type Release, type Product,
+  fetchReleases, latestRelease, downloadLink, experimentalNotice, type Release, type Product,
 } from '../lib/productCatalog';
 import type { ProductContent, Media } from '../content/products/_types';
 import { getProductDocs } from '../content/docs';
@@ -146,6 +147,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
     </>
   );
 
+  const notice = experimentalNotice(product);
   const hasDocs = !!getProductDocs(product.slug);
   const secondaryLink = 'inline-flex items-center gap-1.5 rounded-[6px] border border-white/[0.10] px-5 py-3 text-[13px] font-medium text-[#d8d2ca] transition-colors hover:border-white/25 hover:bg-white/[0.03]';
   const Secondary = (
@@ -206,7 +208,10 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
                   {latest && <span className="text-[12px] text-[#69635b]">Latest v{latest.version}</span>}
                 </div>
               </Reveal>
-              {content.hero.note && <Reveal delay={250}><p className="mt-4 text-[12px] leading-relaxed text-[#69635b]">{content.hero.note}</p></Reveal>}
+              {/* Maturity + signing, stated where the download starts — derived
+                  from the catalog, never hand-written per page. */}
+              {notice && <Reveal delay={240}><ExperimentalNotice product={product} variant="inline" className="mt-5" /></Reveal>}
+              {content.hero.note && <Reveal delay={260}><p className="mt-4 text-[12px] leading-relaxed text-[#69635b]">{content.hero.note}</p></Reveal>}
             </div>
             <Reveal delay={150}><MediaView media={content.hero.media} /></Reveal>
           </div>

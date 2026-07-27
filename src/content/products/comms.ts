@@ -135,8 +135,12 @@ const comms: ProductContent = {
     description: 'An early internal-alpha messenger for Windows. Direct and group conversations with presence, receipts, and media against live servers. Agent members and end-to-end encryption are built but not yet enabled.',
   },
   statusLabel: 'Internal alpha',
+  // Product-specific caveats ONLY. The unsigned installer / SmartScreen warning
+  // is no longer written here — it is derived from the catalog and rendered
+  // above this block on the download page (see productCatalog experimentalNotice).
+  // What stays is what is true of Comms and nothing else.
   downloadNotice:
-    'This is an internal alpha, not a public release. The installer is unsigned, so Windows SmartScreen will warn you. The app signs you into a temporary alpha test account rather than your XENO account, it is not meaningfully encrypted, and it will not update itself — you will need to reinstall for a newer build. Please do not use it for anything sensitive.',
+    'This is an internal alpha, not a public release. The app signs you into a temporary alpha test account rather than your XENO account, it is not meaningfully encrypted, and it will not update itself — you will need to reinstall for a newer build. Please do not use it for anything sensitive.',
   autoUpdates: false,
 };
 

@@ -18,6 +18,10 @@
  * distributed somewhere other than the R2 feed (e.g. a public GitHub release).
  * `repoPublic` gates the "View on GitHub" / "Follow development" links: every
  * XENO repo except xeno-rt is private, and linking one 404s for the public.
+ *
+ * MATURITY + SIGNING are the honesty fields (see `experimentalNotice` below).
+ * They are DATA, not page copy, precisely so a product cannot silently lose the
+ * notice — and so the notice disappears everywhere the day signing lands.
  * ────────────────────────────────────────────────────────────────────── */
 
 import { UPDATES_ORIGIN } from '../config/hosts';
@@ -26,6 +30,26 @@ export const R2_BASE = UPDATES_ORIGIN;
 
 export type Delivery = 'web' | 'desktop' | 'cli' | 'soon';
 export type Status = 'shipping' | 'beta' | 'coming-soon';
+
+/** How mature the CODE is — orthogonal to `status`, which says how public it is.
+ *  Company posture (2026-07): every XENO product ships as a full release marked
+ *  EXPERIMENTAL until it has been through a code-signed, supported release.
+ *  Omitting the field means 'experimental' — graduating is a deliberate edit
+ *  somebody has to make, never something a product drifts into. */
+export type Maturity = 'experimental' | 'stable';
+
+/** Code-signing posture of the artifact a visitor actually receives.
+ *   'unsigned' → real, downloadable, and NOT code-signed. Windows will warn.
+ *   'signed'   → a certificate is in place; the warning language disappears.
+ *   'none'     → this channel has nothing to code-sign (an npm package, a
+ *                hosted web app). Showing a SmartScreen warning here would be
+ *                its own inaccuracy, so we never do.
+ *  Omitted resolves via `artifactSigning()`, which fails SAFE: anything that
+ *  hands a visitor an executable is treated as unsigned until stated otherwise. */
+export type Signing = 'unsigned' | 'signed' | 'none';
+
+/** What a visitor receives — derived, not authored (see `installChannel`). */
+export type InstallChannel = 'installer' | 'archive' | 'npm' | 'hosted' | 'none';
 
 export interface Product {
   slug: string;            // url + R2 app id (kebab). e.g. 'pixel'
@@ -48,6 +72,12 @@ export interface Product {
   /** Distributed off-site (public GitHub release, hosted app): overrides the CTA. */
   externalUrl?: string;
   externalLabel?: string;
+  /** Defaults to 'experimental' — see the Maturity type. Set 'stable' ONLY once
+   *  the product has had a signed, supported release. */
+  maturity?: Maturity;
+  /** Defaults via `artifactSigning()`. Set 'signed' the day a certificate lands
+   *  and every unsigned notice for this product disappears site-wide. */
+  signing?: Signing;
 }
 
 /** XENO X → 'pixel', 'XENO 3D Gen' → '3d-gen', 'XENO Agent CLI' → 'agent-cli' */
@@ -168,6 +198,10 @@ export const PRODUCTS: Product[] = [
   // accepted posture; claiming signed is not.
   // Keep delivery 'soon': the branch this merged from still had 'desktop', which
   // would re-render the dead R2 download button this line exists to remove.
+  // Because it is 'soon' + externalUrl, installChannel() resolves to 'archive'
+  // (not 'none') — so RT still carries the unsigned notice, framed as binaries
+  // you run rather than an installer you click. That is the whole reason the
+  // channel is derived from delivery AND externalUrl instead of delivery alone.
   { slug: 'rt', name: 'XENO RT', tagline: 'Run frontier models locally — private and fast.', category: 'Develop', status: 'beta', delivery: 'soon', operatingSystem: 'Windows, Linux', repo: 'xeno-rt', repoPublic: true, externalUrl: 'https://github.com/XENO-CORPORATION/xeno-rt/releases/latest', externalLabel: 'Get the latest release on GitHub' },
   // Shell ships a PUBLIC unsigned Windows beta (apps/shell/v0.1.0-beta.1, beta
   // channel) — so it is beta/desktop, not coming-soon/soon. Tagline stays scoped
@@ -188,6 +222,132 @@ export const PRODUCTS: Product[] = [
 const BY_SLUG = new Map(PRODUCTS.map((p) => [p.slug, p]));
 export function getProduct(slug?: string): Product | undefined {
   return slug ? BY_SLUG.get(slug) : undefined;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * EXPERIMENTAL / UNSIGNED notice — derived once, rendered everywhere a
+ * download or install starts (product page, download page, release feed).
+ *
+ * Why it lives here and not in page copy: an unsigned installer that arrives
+ * with no warning feels like malware; one that says "unsigned, here's why,
+ * here's what you'll see" is trustworthy. That statement has to be impossible
+ * to lose. Fourteen hand-written copies would rot the first time somebody adds
+ * a product; one derived field cannot. It also means the day a signing
+ * certificate is configured, `signing: 'signed'` removes the warning from every
+ * surface at once — no copy hunt.
+ *
+ * Precision matters as much as presence. An npm package is not SmartScreen-
+ * affected and a hosted web app has no artifact at all, so a blanket "Windows
+ * will warn you" on either would be its own inaccuracy. The channel decides the
+ * framing; only 'installer' and 'archive' ever mention SmartScreen.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/** What a visitor actually receives from this product's CTA. */
+export function installChannel(p: Product): InstallChannel {
+  if (p.delivery === 'web') return 'hosted';
+  if (p.delivery === 'cli') return 'npm';
+  if (p.delivery === 'desktop') return 'installer';
+  // 'soon' publishes nothing through the R2 feed — unless it is distributed
+  // off-site, which is how xeno-rt ships (public GitHub release archives).
+  return p.externalUrl ? 'archive' : 'none';
+}
+
+/** Resolved signing posture. Fails SAFE: an unset field on a channel that hands
+ *  over an executable resolves to 'unsigned', never to silence. */
+export function artifactSigning(p: Product): Signing {
+  if (p.signing) return p.signing;
+  const ch = installChannel(p);
+  return ch === 'installer' || ch === 'archive' ? 'unsigned' : 'none';
+}
+
+export function productMaturity(p: Product): Maturity {
+  return p.maturity ?? 'experimental';
+}
+
+export interface ExperimentalNotice {
+  channel: InstallChannel;
+  signing: Signing;
+  /** True only where Windows SmartScreen is genuinely in play. */
+  smartScreen: boolean;
+  /** Micro-label. Always carries the maturity word, so `short` never repeats it. */
+  label: string;
+  /** The clause that follows the label in tight spots (hero, a release row).
+   *  Carries the "what you'll see / how to proceed" half — a visitor who only
+   *  ever reads the one-liner still knows what to do. */
+  short: string;
+  /** The paragraph, for the download page. */
+  detail: string;
+  /** How to get past the warning — present only when there is a warning. */
+  steps?: string[];
+}
+
+/**
+ * The one place this is written. Returns null when there is nothing honest to
+ * say: a hosted app, a product with no build yet, or a mature signed release.
+ */
+export function experimentalNotice(p: Product): ExperimentalNotice | null {
+  const channel = installChannel(p);
+  // No artifact, no notice. A hosted app installs nothing, and a pre-launch
+  // product has no build to warn about.
+  if (channel === 'hosted' || channel === 'none') return null;
+
+  const signing = artifactSigning(p);
+  const maturity = productMaturity(p);
+  if (maturity === 'stable' && signing !== 'unsigned') return null;
+
+  const experimental = maturity === 'experimental';
+  const lead = experimental
+    ? `${p.name} is an experimental release — real software you can install and use, not a finished product.`
+    : '';
+
+  if (signing === 'unsigned' && channel === 'installer') {
+    return {
+      channel, signing, smartScreen: true,
+      label: experimental ? 'Experimental · unsigned installer' : 'Unsigned installer',
+      short: 'Windows SmartScreen warns you once before it runs — choose More info → Run anyway. Code signing is on the way.',
+      detail: `${lead} The installer isn’t code-signed yet, so Windows SmartScreen shows “Windows protected your PC” the first time you run it. That warning is about the missing certificate, not about the file. Code signing is coming — when it lands, this notice goes away.`.trim(),
+      steps: [
+        'Click More info on the SmartScreen dialog.',
+        'Choose Run anyway.',
+        'Install as normal. Windows warns again for each new unsigned version.',
+      ],
+    };
+  }
+
+  if (signing === 'unsigned' && channel === 'archive') {
+    return {
+      channel, signing, smartScreen: true,
+      label: experimental ? 'Experimental · unsigned binaries' : 'Unsigned binaries',
+      short: 'Windows can warn the first time you run one — choose More info → Run anyway. Code signing is on the way.',
+      detail: `${lead} The published binaries aren’t code-signed, so Windows can warn the first time you run one. Code signing is coming — when it lands, this notice goes away.`.trim(),
+      steps: [
+        'If Windows warns, choose More info → Run anyway.',
+        'Verify the checksum published alongside the download if you want to check the file yourself.',
+      ],
+    };
+  }
+
+  if (channel === 'npm') {
+    // Deliberately says NOTHING about SmartScreen warning THIS package: an npm
+    // install is not an installer and never triggers it. Claiming otherwise
+    // would be a lie in the reassuring direction, which is still a lie — and it
+    // would train people to click through warnings that do not exist.
+    return {
+      channel, signing, smartScreen: false,
+      label: 'Experimental release',
+      short: 'Commands and APIs can still change between versions. It installs from npm — there’s no installer, and nothing for Windows to warn about.',
+      detail: `${lead} Commands, flags and APIs can still change between versions. It installs from npm, so there’s no installer to code-sign and no SmartScreen warning.`.trim(),
+    };
+  }
+
+  // Experimental but signed (or nothing to sign): drop the warning language,
+  // keep the maturity statement.
+  return {
+    channel, signing, smartScreen: false,
+    label: 'Experimental release',
+    short: 'Expect rough edges and changes between versions.',
+    detail: `${lead} Expect rough edges and changes between versions.`.trim(),
+  };
 }
 
 /* ──────────────────────────────────────────────────────────────────────
