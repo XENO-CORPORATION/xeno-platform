@@ -42,8 +42,8 @@ const sheets: ProductContent = {
     headline: 'A spreadsheet that actually computes — and explains itself.',
     sub: 'A real formula engine, multi-sheet workbooks, and Excel and CSV in both directions. Charts read straight from your ranges, validation stops bad data at the cell, and an AI panel sits beside the grid to write formulas and explain results.',
     media: { type: 'mockup', src: 'sheets-hero', alt: 'XENO Sheets — the grid with a SUMPRODUCT formula in the formula bar, its computed total selected, and the AI panel explaining the result' },
-    badges: ['Experimental · unsigned', 'Windows only', 'Real formula engine', 'XLSX & CSV'],
-    note: 'Experimental 0.2.0 — free to download, and rough on purpose. The installer is not code-signed, so Windows SmartScreen will warn you; choose “More info → Run anyway”. Windows is the only build we have produced. This build does not update itself.',
+    badges: ['Windows only', 'Real formula engine', 'XLSX & CSV', 'Your files stay local'],
+    note: 'Free to download. Windows is the only build we have produced — macOS and Linux are intended but have never been built. This build does not update itself, and the .xsheet format is not frozen yet.',
   },
   trust: ['Part of the XENO platform — one sign-in', 'Your workbooks stay on your machine', 'Opens and writes real .xlsx and .csv'],
   highlights: [
@@ -176,9 +176,11 @@ const sheets: ProductContent = {
     title: 'XENO Sheets — the AI-native spreadsheet',
     description: 'A spreadsheet with a real formula engine, multi-sheet workbooks, XLSX and CSV in both directions, charts from your ranges and an AI panel beside the grid. Experimental unsigned build for Windows.',
   },
-  statusLabel: 'Experimental',
+  // Product-specific caveats ONLY — the experimental/unsigned/SmartScreen posture is
+  // derived from the catalog by experimentalNotice() and already rendered above this
+  // block. See the contract on `downloadNotice` in _types.ts.
   downloadNotice:
-    'This is an EXPERIMENTAL build, published early on purpose. The installer is UNSIGNED, so Windows SmartScreen will show “Windows protected your PC” — choose “More info”, then “Run anyway”. Windows x64 only; no macOS or Linux build exists. It does NOT update itself: there is no in-app updater, so you will need to reinstall from this page to move to a newer version. Pivot tables, sorting and filtering are not wired up yet. The .xsheet format is not frozen — keep a copy of anything important.',
+    'This build does NOT update itself. XENO Sheets 0.2.0 ships without an in-app updater, so it will never prompt you and never upgrade — when a newer version is published you will need to come back here and install it over the top. Windows x64 is the only build we have produced; there is no macOS or Linux installer. Pivot tables, sorting and filtering are not wired up in this build, and the .xsheet document format is not frozen yet, so keep a copy of anything important. AI features require a XENO account and draw on credits.',
   autoUpdates: false,
 };
 

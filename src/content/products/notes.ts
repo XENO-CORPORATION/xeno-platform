@@ -38,8 +38,8 @@ const notes: ProductContent = {
     headline: 'Your second brain — local, linked, and AI-native.',
     sub: 'A block-based knowledge base that keeps your notes as plain files on your own machine. Bi-directional links and a graph view connect everything; databases give it structure; instant full-text search finds anything; and an AI layer writes with you and tags as you go.',
     media: { type: 'mockup', src: 'notes-hero', alt: 'XENO Notes — the page-tree sidebar, block editor with a wiki-link and an AI summary, and the formatting toolbar' },
-    badges: ['Experimental · unsigned', 'Windows only', 'Local-first · your files', 'Bi-directional links'],
-    note: 'Experimental 0.2.0 — free to download, and rough on purpose. The installer is not code-signed, so Windows SmartScreen will warn you; choose “More info → Run anyway”. Windows is the only build we have produced — macOS and Linux are intended but have never been built. This build does not update itself. Mobile & real-time collaboration are on the roadmap.',
+    badges: ['Windows only', 'Local-first · your files', 'Bi-directional links', 'Works offline'],
+    note: 'Free to download. Windows is the only build we have produced — macOS and Linux are intended but have never been built. This build does not update itself. Mobile and real-time collaboration are on the roadmap.',
   },
   trust: ['Part of the XENO platform — one sign-in', 'Your notes live in ~/.xeno/notes as plain files', 'Works fully offline · git-backed page history'],
   highlights: [
@@ -174,9 +174,11 @@ const notes: ProductContent = {
     title: 'XENO Notes — the local-first, AI-native knowledge base',
     description: 'A block-based notes and knowledge base with bi-directional links, a graph view, databases, instant full-text search and a built-in AI writing assistant. Local-first, offline, git-backed. Experimental unsigned build for Windows.',
   },
-  statusLabel: 'Experimental',
+  // Product-specific caveats ONLY — the experimental/unsigned/SmartScreen posture is
+  // derived from the catalog by experimentalNotice() and already rendered above this
+  // block. See the contract on `downloadNotice` in _types.ts.
   downloadNotice:
-    'This is an EXPERIMENTAL build, published early on purpose. The installer is UNSIGNED, so Windows SmartScreen will show “Windows protected your PC” — choose “More info”, then “Run anyway”. Windows x64 only; no macOS or Linux build exists. It does NOT update itself: there is no in-app updater, so you will need to reinstall from this page to move to a newer version. Search is keyword-based, not semantic. Keep a backup of your vault.',
+    'This build does NOT update itself. XENO Notes 0.2.0 ships without an in-app updater, so it will never prompt you and never upgrade — when a newer version is published you will need to come back here and install it over the top. Windows x64 is the only build we have produced; there is no macOS or Linux installer. Search is keyword-based, not semantic — it matches words, not meaning. Your notes are plain files in ~/.xeno/notes, but keep a backup of the folder anyway. AI features require a XENO account and draw on credits.',
   autoUpdates: false,
 };
 
