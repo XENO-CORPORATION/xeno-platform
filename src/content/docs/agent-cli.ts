@@ -41,7 +41,7 @@ It is the reference command‑line client for the XENO agent runtime, and instal
 
 ## Where it fits
 
-The CLI is **Layer 3 (Agent & Automation)** of the XENO ecosystem. It consumes the published \`@xeno-corporation/xeno-agent-sdk\` and routes model calls through the XENO API (\`api.xenostudio.ai\`) or a local runtime. It hands off to XENO Hub and editor bridges through its app‑server.
+The CLI is **Layer 3 (Agent & Automation)** of the XENO ecosystem. It consumes the published \`@xenosystem/agent-sdk\` and routes model calls through the XENO API (\`api.xenostudio.ai\`) or a local runtime. It hands off to XENO Hub and editor bridges through its app‑server.
 
 ## Next steps
 
@@ -57,12 +57,12 @@ The CLI is **Layer 3 (Agent & Automation)** of the XENO ecosystem. It consumes t
           description: 'Install XENO Agent CLI with npm, the install scripts, or from source.',
           body: `# Installation
 
-XENO Agent CLI requires **Node.js 20 or newer**. npm is the canonical distribution channel.
+XENO Agent CLI requires **Node.js 20 or newer**. npm is the only distribution channel.
 
-## npm (recommended)
+## npm
 
 \`\`\`bash
-npm install -g @xeno-corporation/xeno-agent-cli
+npm install -g @xenosystem/agent-cli
 \`\`\`
 
 This installs three equivalent binaries: \`xeno\` (primary), \`xeno-agent\`, and \`xeno-code\` (legacy alias).
@@ -73,29 +73,17 @@ Verify the install:
 xeno --version
 \`\`\`
 
+> **Scope change.** The CLI publishes as \`@xenosystem/agent-cli\` (currently 0.5.x). The older \`@xeno-corporation/xeno-agent-cli\` still resolves but is frozen at 0.4.45, so installing it gets you a materially older build. If you installed the old specifier, \`npm uninstall -g @xeno-corporation/xeno-agent-cli\` first — both packages provide the same \`xeno\` binary.
+
+> **Experimental, unsigned build.** The interactive native terminal is opt-in behind \`XENO_ALLOW_UNSIGNED_NATIVE=1\`; the CLI otherwise runs without it, and \`win32-arm64\` is pipe-mode only.
+
 ## Install scripts
 
-The curl and PowerShell installers are thin wrappers around the npm package — they resolve and print the npm \`dist.integrity\` before installing.
+There are none, and an earlier version of this page said otherwise.
 
-\`\`\`bash
-# macOS / Linux
-curl -fsSL https://xenostudio.ai/install.sh | sh
-\`\`\`
+It documented \`curl -fsSL https://xenostudio.ai/install.sh | sh\` and \`irm https://xenostudio.ai/install.ps1 | iex\`. Neither file is served: both paths fall through to the single-page app and return \`index.html\` with \`content-type: text/html\` — so the command piped a web page into your shell. Use npm above. When a real script channel ships, it will be documented here with a checksum.
 
-\`\`\`powershell
-# Windows (PowerShell)
-irm https://xenostudio.ai/install.ps1 | iex
-\`\`\`
-
-## Standalone (native) channel
-
-To install a self‑contained native build instead of the npm package, set the install channel and verify the published checksums:
-
-\`\`\`bash
-XENO_INSTALL_CHANNEL=native curl -fsSL https://xenostudio.ai/install.sh | sh
-\`\`\`
-
-Native packages are published from \`cli-v*\` release tags with a \`SHA256SUMS.txt\` you can verify.
+The same applies to the standalone native channel, which was documented as \`XENO_INSTALL_CHANNEL=native\` on top of that same non-existent script.
 
 ## From source
 

@@ -123,7 +123,11 @@ const ProductDownload: React.FC = () => {
             </Reveal>
           ) : (
             <>
-              <Reveal delay={100} className="mt-8">{channelBlock(stable, 'stable')}</Reveal>
+              {/* …and don't link a beta build through the stable deep-link either.
+                  If `stable` came from the fallback it IS a beta entry, so the
+                  buttons must carry ?channel=beta or the backend resolves a
+                  different (or missing) asset than the one labelled above. */}
+              <Reveal delay={100} className="mt-8">{channelBlock(stable, (stable.channel ?? 'stable') === 'beta' ? 'beta' : 'stable')}</Reveal>
 
               {showBeta && (
                 <Reveal delay={140}>

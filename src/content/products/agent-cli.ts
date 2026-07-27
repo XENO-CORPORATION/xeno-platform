@@ -2,9 +2,31 @@ import type { ProductContent } from './_types';
 
 /* XENO Agent CLI — sourced from ../xeno-agent-cli (README/CLAUDE.md + the TUI in
  * apps/xeno-agent-cli/src/ui). A `delivery: cli` product: CTA is the install
- * command + release feed. Honest beta framing (v0.4.x, proprietary).
- * Keep versions as the 0.4.x line — npm publishes patches faster than this page
- * is edited, so an exact number here is wrong within days. */
+ * command + release feed. Honest beta framing (proprietary).
+ * Keep versions as an x.y.x LINE — npm publishes patches faster than this page
+ * is edited, so an exact patch number here is wrong within days.
+ *
+ * CORRECTED 2026-07-27, verified against the npm registry:
+ *  · SCOPE. The CLI moved to @xenosystem. npm `latest`:
+ *      @xenosystem/agent-cli            0.5.17   ← the live product
+ *      @xeno-corporation/xeno-agent-cli 0.4.45   ← frozen, 13 patches behind
+ *    Both still resolve, so this was not a dead command — it was a command that
+ *    silently installed an older build. Same defect class as XENO ACP. The
+ *    binaries are unchanged (`xeno`, `xeno-agent`, `xeno-code`), and 0.5.17
+ *    depends on @xenosystem/agent-sdk@0.8.12.
+ *  · THE curl / PowerShell ONE-LINER DOES NOT WORK. This page and the docs
+ *    advertised `curl -fsSL https://xenostudio.ai/install.sh | sh` and
+ *    `irm https://xenostudio.ai/install.ps1 | iex`. Neither file exists: there
+ *    is no install.sh or install.ps1 in public/, so both paths fall through to
+ *    the SPA and return index.html — 200 OK, content-type text/html, the same
+ *    4,311 bytes as the homepage (verified against the live site 2026-07-27).
+ *    Following our own instructions therefore piped an HTML document into `sh`.
+ *    npm is the only working channel; do not restore a one-liner until the
+ *    scripts are actually served AND fetched to confirm it.
+ *  · The published build is EXPERIMENTAL and unsigned, and its own npm
+ *    description says the interactive native terminal is opt-in behind
+ *    XENO_ALLOW_UNSIGNED_NATIVE=1 (win32-arm64 is pipe-mode only). Say so —
+ *    unsigned is the accepted posture, silently surprising people is not. */
 const agentCli: ProductContent = {
   slug: 'agent-cli',
   hero: {
@@ -12,7 +34,7 @@ const agentCli: ProductContent = {
     sub: 'XENO Agent CLI reads your repo, edits with diffs you approve, and runs commands — right in your shell. Bring any model (Claude, GPT, Gemini, or fully local), hand work to a built-in planner→executor→reviewer, and keep every action in an audit ledger.',
     media: { type: 'mockup', src: 'agent-cli-terminal', alt: 'XENO Agent CLI in a terminal — reading files, editing with a diff, running tests' },
     badges: ['npm · one command', 'BYO model / local', 'MCP', 'Auditable'],
-    note: 'Beta (v0.4.x) · proprietary. Model calls route through the XENO API or your own key.',
+    note: 'Beta (v0.5.x) · proprietary · install with npm install -g @xenosystem/agent-cli. The build is experimental and unsigned: the interactive native terminal is opt-in behind XENO_ALLOW_UNSIGNED_NATIVE=1, and everything else runs without it. Model calls route through the XENO API or your own key.',
   },
   trust: ['Node ≥ 20 · macOS · Linux · Windows', 'Bring your own key, or run fully local', 'Every action in a JSONL audit ledger'],
   highlights: [
@@ -71,7 +93,7 @@ const agentCli: ProductContent = {
     { title: 'Private & offline', icon: 'Lock', desc: 'Point it at Ollama or xeno-rt and run fully local — your code and prompts never leave the machine.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Install', desc: 'npm install -g @xeno-corporation/xeno-agent-cli (or the curl / PowerShell one-liner).' },
+    { step: '1', title: 'Install', desc: 'npm install -g @xenosystem/agent-cli (Node ≥ 20). npm is the install channel.' },
     { step: '2', title: 'Pick a model', desc: 'Use the built-in XENO API, your own key, or a local Ollama / xeno-rt model.' },
     { step: '3', title: 'Run xeno', desc: 'Chat, or xeno run "…" to let it plan, edit and execute — every step audited.' },
   ],
@@ -88,17 +110,17 @@ const agentCli: ProductContent = {
     ],
   },
   specs: [
-    { label: 'Install', value: 'npm -g / curl' },
+    { label: 'Install', value: 'npm install -g @xenosystem/agent-cli' },
     { label: 'Runtime', value: 'Node ≥ 20' },
     { label: 'Platforms', value: 'macOS · Linux · Windows' },
-    { label: 'Version', value: '0.4.x · beta' },
+    { label: 'Version', value: '0.5.x · beta · unsigned' },
   ],
   faq: [
-    { q: 'How do I install it?', a: 'npm install -g @xeno-corporation/xeno-agent-cli, or the curl / PowerShell one-liner. Then run `xeno`.' },
+    { q: 'How do I install it?', a: 'npm install -g @xenosystem/agent-cli (Node ≥ 20), then run `xeno`. That is the only install channel — earlier copy here offered a curl / PowerShell one-liner, but those scripts are not served, so the command fetched a web page instead of an installer. It is fixed by removal rather than by a link we cannot back. The package installs three equivalent binaries: xeno, xeno-agent and xeno-code. Note the CLI moved scope: @xeno-corporation/xeno-agent-cli still resolves but is frozen at 0.4.45, so install the @xenosystem one.' },
     { q: 'Which models can it use?', a: 'Cloud Claude, GPT, Gemini, Kimi and Composer via the XENO API or your own key — or run fully local with Ollama or the xeno-rt runtime. Switch models mid-session with /model.' },
     { q: 'Is it safe to let it run commands?', a: 'You stay in control: it asks before writes, edits and shell commands by default. Switch to auto-accept-edits or full-access when you want, and every action is written to an audit ledger.' },
     { q: 'Can I use it in CI / scripts?', a: 'Yes — xeno run --json "…" returns a typed result (status, answer, audit file, token usage, tool summary) with meaningful exit codes.' },
-    { q: 'Is it open source?', a: 'Not currently — it’s proprietary, in beta (v0.4.x). It’s the reference CLI for the XENO agent SDK.' },
+    { q: 'Is it open source?', a: 'Not currently — it’s proprietary, in beta (v0.5.x). It’s the reference CLI for the XENO agent SDK, and it ships on top of @xenosystem/agent-sdk.' },
     { q: 'Is it free?', a: 'The CLI is free to install; model calls route through the XENO API (or your own key / local model). Hosted-usage pricing is announced separately.' },
   ],
   seo: {

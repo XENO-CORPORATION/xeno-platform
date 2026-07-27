@@ -120,7 +120,17 @@ export const PRODUCTS: Product[] = [
   { slug: 'apps', name: 'XENO Apps', tagline: 'No-code custom apps and internal tools.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-apps' },
 
   // ── Develop ───────────────────────────────────────────────
-  { slug: 'agent-cli', name: 'XENO Agent CLI', tagline: 'Code, automate and control your workspace from the terminal.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xeno-corporation/xeno-agent-cli', repo: 'xeno-agent-cli' },
+  // The CLI moved to the @xenosystem scope too: npm `latest` is
+  // @xenosystem/agent-cli@0.5.17, while @xeno-corporation/xeno-agent-cli is
+  // frozen at 0.4.45. Both resolve — which is exactly why the stale command was
+  // dangerous rather than obviously broken: it silently installed an older CLI.
+  { slug: 'agent-cli', name: 'XENO Agent CLI', tagline: 'Code, automate and control your workspace from the terminal.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xenosystem/agent-cli', repo: 'xeno-agent-cli' },
+  // NOT migrated on purpose. @xenosystem/agent-sdk@0.8.12 is ahead of
+  // @xeno-corporation/xeno-agent-sdk@0.7.0, but the SDK docs (src/content/docs/
+  // sdk.ts) carry ~25 code samples that `import` the legacy specifier. Changing
+  // this line alone would tell a reader to install one package and import
+  // another. Migrate the install command and every sample in one pass, or not
+  // at all — a half-migrated SDK doc is worse than a version-behind one.
   { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xeno-corporation/xeno-agent-sdk', repo: 'xeno-agent-sdk' },
   // ACP moved to the @xenosystem npm scope. npm `latest` is @xenosystem/acp@0.1.1;
   // @xeno-corporation/xeno-acp is frozen at 0.1.0. The page, this install command
