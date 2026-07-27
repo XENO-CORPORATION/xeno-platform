@@ -87,7 +87,24 @@ export const PRODUCTS: Product[] = [
 
   // ── Office ────────────────────────────────────────────────
   { slug: 'docs', name: 'XENO Docs', tagline: 'AI-native document editing.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-docs' },
-  { slug: 'sheets', name: 'XENO Sheets', tagline: 'Spreadsheets with AI built in.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-sheets' },
+  // Sheets 0.2.0 (2026-07-27) is the first build that actually carries the formula
+  // engine — the withdrawn 0.1.0 scaffold was packaged ~70 min BEFORE the engine
+  // commit landed. Verified in the packaged asar, not just the build log: the
+  // HyperFormula wrapper config is in the renderer bundle, file:open/file:save are
+  // in the main bundle and Toolbar.tsx really calls them, and the app launches.
+  // Experimental + unsigned; the precise framing lives in src/content/products/sheets.ts.
+  { slug: 'sheets', name: 'XENO Sheets', tagline: 'Spreadsheets with AI built in.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-sheets' },
+  // 🔴 Slides stays coming-soon DELIBERATELY — do not promote it without re-checking.
+  // Its engines are real and 789 tests pass, but NOTHING IN THE APP CALLS THEM:
+  //   · all four export engines (PptxExportEngine/HtmlExportEngine/VideoExportEngine/
+  //     Mp4ExportEngine) have zero references outside engine/export/ and tests/, so
+  //     Rollup tree-shakes them out — verified 0 export literals in the shipped bundle;
+  //   · the preload exposes openFile/saveFileDialog/exportImagesDialog/saveBatch and the
+  //     renderer never calls any of them; there is no application menu and the toolbar's
+  //     only action is "Present".
+  // So a user cannot open, save-as, or export anything — only edit and autosave to
+  // ~/.xeno/slides/{id}.json. Publishing it would repeat the 0.1.0 scaffold mistake.
+  // Ship it when the export engines and the file dialogs are wired to real UI.
   { slug: 'slides', name: 'XENO Slides', tagline: 'Presentations with AI built in.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-slides' },
   { slug: 'pdf', name: 'XENO PDF', tagline: 'Edit, convert, sign and chat with PDFs.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-pdf' },
 
@@ -95,7 +112,14 @@ export const PRODUCTS: Product[] = [
   { slug: 'stock', name: 'XENO Stock', tagline: 'Royalty-free and AI-generated media.', category: 'Library', status: 'coming-soon', delivery: 'soon', repo: 'xeno-stock' },
   { slug: 'fonts', name: 'XENO Fonts', tagline: 'Browse and sync fonts for any project.', category: 'Library', status: 'coming-soon', delivery: 'soon', repo: 'xeno-fonts' },
   { slug: 'assets', name: 'XENO Assets', tagline: 'Central DAM with versions and review.', category: 'Library', status: 'coming-soon', delivery: 'soon', repo: 'xeno-assets' },
-  { slug: 'notes', name: 'XENO Notes', tagline: 'Notes and knowledge base with AI.', category: 'Library', status: 'coming-soon', delivery: 'soon', repo: 'xeno-notes' },
+  // Notes 0.2.0 (2026-07-27) is the first build that actually carries links + graph —
+  // the withdrawn 0.1.0 scaffold was packaged ~60 min BEFORE the engine commit landed.
+  // Verified in the packaged asar: the wikiLink TipTap mark and Backlinks UI are in the
+  // renderer bundle, d3's force-simulation internals (__zoom/velocityDecay/alphaTarget)
+  // are compiled in and GraphView is rendered from App.tsx, notes:findBacklinks is in the
+  // main bundle, and the app launches. Windows only. Experimental + unsigned; search is
+  // MiniSearch (lexical), NOT semantic — see src/content/products/notes.ts.
+  { slug: 'notes', name: 'XENO Notes', tagline: 'Notes and knowledge base with AI.', category: 'Library', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-notes' },
 
   // ── Connect ───────────────────────────────────────────────
   // Internal alpha, not a beta: unsigned installer, alpha test accounts, agents + E2EE

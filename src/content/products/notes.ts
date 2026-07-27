@@ -3,15 +3,25 @@ import type { ProductContent } from './_types';
 /* XENO Notes — sourced from ../xeno-notes (README + the real renderer: TitleBar,
  * Sidebar/PageTree, NoteEditor/EditorToolbar, RightPanel).
  *
- * NOT RELEASED. No XENO Notes build is published, so this page must never tell a
- * reader to launch or install it — the copy describes what we're building and the
- * CTA is "Get notified", nothing more.
+ * RELEASED 2026-07-27 as an EXPERIMENTAL, UNSIGNED 0.2.0 build (Windows x64 only).
  *
- * Honest coming-soon framing: the app is a local-first, block-based knowledge base with linking,
- * databases and an AI layer (writing assistant, auto-tagging)
- * that already ship in the renderer. Features still on the roadmap — real-time
- * collaboration, cloud sync, database formulas/relations, AI Q&A/page-gen — are
- * NOT claimed as available. Desktop only; no mobile.
+ * The 0.1.0 installer previously on R2 was a SCAFFOLD — packaged ~60 minutes before
+ * the engine commit landed, so it had no linking and no graph. It has been withdrawn.
+ * 0.2.0 is built from current source and the engine work is verified present in the
+ * packaged asar (wikiLink mark + Backlinks UI in the renderer bundle, d3 force-sim
+ * internals compiled in with GraphView rendered from App.tsx, notes:findBacklinks in
+ * the main bundle, and the packaged app launches).
+ *
+ * Honest framing: the app is a local-first, block-based knowledge base with linking,
+ * databases and an AI layer (writing assistant, auto-tagging) that ship in the renderer.
+ * Features still on the roadmap — real-time collaboration, cloud sync, AI Q&A/page-gen —
+ * are NOT claimed as available. Desktop only; no mobile.
+ *
+ * ⚠ autoUpdates is FALSE and that is not a placeholder: `electron-updater` is a declared
+ * dependency but is NEVER imported anywhere in src/. latest.yml IS published to R2 and
+ * resolves, but nothing in the app polls it, so an install can only be moved forward by
+ * reinstalling (or via XENO Hub, which polls version.json). Do not flip this to true
+ * until something actually calls autoUpdater.
  *
  * CORRECTED 2026-07-27, verified against the repo:
  *  · "Windows · macOS · Linux" was FALSE. electron-builder declares win/mac/
@@ -28,8 +38,8 @@ const notes: ProductContent = {
     headline: 'Your second brain — local, linked, and AI-native.',
     sub: 'A block-based knowledge base that keeps your notes as plain files on your own machine. Bi-directional links and a graph view connect everything; databases give it structure; instant full-text search finds anything; and an AI layer writes with you and tags as you go.',
     media: { type: 'mockup', src: 'notes-hero', alt: 'XENO Notes — the page-tree sidebar, block editor with a wiki-link and an AI summary, and the formatting toolbar' },
-    badges: ['Windows first', 'Local-first · your files', 'Bi-directional links', 'AI writing assistant'],
-    note: 'Coming soon · join the waitlist to be notified when the beta opens. Windows is the only build we have produced — macOS and Linux are intended but have never been built. Mobile & real-time collaboration are on the roadmap.',
+    badges: ['Experimental · unsigned', 'Windows only', 'Local-first · your files', 'Bi-directional links'],
+    note: 'Experimental 0.2.0 — free to download, and rough on purpose. The installer is not code-signed, so Windows SmartScreen will warn you; choose “More info → Run anyway”. Windows is the only build we have produced — macOS and Linux are intended but have never been built. This build does not update itself. Mobile & real-time collaboration are on the roadmap.',
   },
   trust: ['Part of the XENO platform — one sign-in', 'Your notes live in ~/.xeno/notes as plain files', 'Works fully offline · git-backed page history'],
   highlights: [
@@ -124,7 +134,7 @@ const notes: ProductContent = {
     { title: 'Private, offline research', icon: 'Lock', desc: 'Clip the web, take daily notes, and study with spaced-repetition flashcards — all in a local vault that never has to touch the cloud.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Get notified', desc: 'Sign in with your XENO account so we can tell you when the first XENO Notes build is out.' },
+    { step: '1', title: 'Download & install', desc: 'Grab the experimental Windows build. It is unsigned, so SmartScreen will warn once — choose “More info → Run anyway”.' },
     { step: '2', title: 'Write & link', desc: 'Type “/” for any block or “[[” to link a page. Import your existing Markdown, Notion or Evernote notes to start fast.' },
     { step: '3', title: 'Let AI help', desc: 'Search your whole vault instantly, ask the AI to summarize or rewrite, and let it tag pages — all without leaving the editor.' },
   ],
@@ -146,7 +156,8 @@ const notes: ProductContent = {
     { label: 'Storage', value: 'Local files · ~/.xeno/notes' },
     { label: 'Search', value: 'Full-text (MiniSearch) — not embeddings' },
     { label: 'Editor', value: 'TipTap / ProseMirror' },
-    { label: 'Status', value: 'Coming soon' },
+    { label: 'Status', value: 'Experimental 0.2.0 · unsigned' },
+    { label: 'Updates', value: 'Manual — this build does not self-update' },
   ],
   faq: [
     { q: 'Where are my notes stored?', a: 'On your own machine, in ~/.xeno/notes, as plain files — pages, databases, assets and a search index. There’s no cloud dependency and no subscription lock-in; you can back the folder up or move it like any other files.' },
@@ -154,12 +165,19 @@ const notes: ProductContent = {
     { q: 'What will the AI do at launch?', a: 'An in-editor writing assistant (summarize, expand, rewrite, fix grammar, translate) and AI auto-tagging — those are built. Search is fast full-text search, not semantic: it matches words, with typo tolerance and title/tag weighting, rather than meaning. Earlier copy on this page described embedding-based semantic search; that was wrong, and finding notes by meaning is on the roadmap alongside whole-vault Q&A and page generation.' },
     { q: 'Can I import my existing notes?', a: 'Yes — import from Markdown files, Notion export ZIPs, Evernote .enex files and OneNote exports. You can export back out to Markdown, PDF or HTML at any time.' },
     { q: 'Which desktop platforms will it run on?', a: 'Windows is the only build that has ever been produced. macOS and Linux are intended and the build configuration targets them, but no .dmg or .AppImage has been made yet — so treat them as planned, not supported. Mobile, real-time multi-user editing (CRDT) and multi-device cloud sync are all planned, not shipping.' },
-    { q: 'When can I use it, and what does it cost?', a: 'It’s coming soon — join the waitlist to be notified when the beta opens. Pricing will be announced closer to release.' },
+    { q: 'What does “experimental” actually mean here?', a: 'It means this is an early build we are publishing openly rather than sitting on. The engine works and 681 automated tests cover it, but it has not been through a wide user shake-down: expect rough edges and keep a backup of your vault. Your notes are plain files in ~/.xeno/notes, so nothing is trapped in a proprietary store if you walk away.' },
+    { q: 'Why does Windows warn me about the installer?', a: 'Because it is not code-signed yet. Windows SmartScreen shows “Windows protected your PC” for any installer without a signing certificate, regardless of what it contains. Choose “More info”, then “Run anyway”. Code signing is planned; until then we would rather tell you the warning is coming than pretend it is not.' },
+    { q: 'Will it update itself?', a: 'No. This build has no in-app updater — it will never prompt you and never upgrade on its own. When a newer version is published you will need to come back here and install it over the top. XENO Hub, which polls for new versions, can tell you when one is out.' },
+    { q: 'What does it cost?', a: 'The experimental build is free to download. AI features require a XENO account and draw on credits. Pricing for the finished product will be announced closer to a stable release.' },
   ],
   seo: {
     title: 'XENO Notes — the local-first, AI-native knowledge base',
-    description: 'A block-based notes and knowledge base with bi-directional links, a graph view, databases, instant full-text search and a built-in AI writing assistant. Local-first, offline, git-backed. Coming soon.',
+    description: 'A block-based notes and knowledge base with bi-directional links, a graph view, databases, instant full-text search and a built-in AI writing assistant. Local-first, offline, git-backed. Experimental unsigned build for Windows.',
   },
+  statusLabel: 'Experimental',
+  downloadNotice:
+    'This is an EXPERIMENTAL build, published early on purpose. The installer is UNSIGNED, so Windows SmartScreen will show “Windows protected your PC” — choose “More info”, then “Run anyway”. Windows x64 only; no macOS or Linux build exists. It does NOT update itself: there is no in-app updater, so you will need to reinstall from this page to move to a newer version. Search is keyword-based, not semantic. Keep a backup of your vault.',
+  autoUpdates: false,
 };
 
 export default notes;

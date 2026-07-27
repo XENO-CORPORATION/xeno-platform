@@ -8,6 +8,7 @@ import PhotoDevelop from './PhotoDevelop';
 import CanvasEditor from './CanvasEditor';
 import PostComposer from './PostComposer';
 import DocsEditor from './DocsEditor';
+import SheetsGrid from './SheetsGrid';
 import MotionEditor from './MotionEditor';
 import MotionColor from './MotionColor';
 import MotionAgent from './MotionAgent';
@@ -47,6 +48,7 @@ const MOCKUPS: Record<string, React.ComponentType> = {
   'canvas-hero': CanvasEditor,
   'post-hero': PostComposer,
   'docs-hero': DocsEditor,
+  'sheets-hero': SheetsGrid,
   'motion-hero': MotionEditor,
   'motion-color': MotionColor,
   'motion-agent': MotionAgent,
