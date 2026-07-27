@@ -4,6 +4,7 @@ import { ArrowLeft, Download, Loader2, AlertTriangle } from 'lucide-react';
 import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
 import { Reveal } from '../components/landing-v3/primitives';
+import ExperimentalNotice from '../components/product/ExperimentalNotice';
 import { getProduct, fetchReleases, assetUrl, type Release } from '../lib/productCatalog';
 
 const PLATFORMS: { key: 'windows' | 'mac' | 'linux'; name: string }[] = [
@@ -63,20 +64,26 @@ const ProductReleaseDetail: React.FC = () => {
 
               {release.assets && (
                 <Reveal delay={160}>
-                  <div className="mt-9 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                    {PLATFORMS.map((p) => {
-                      const assets = release.assets?.[p.key] ?? [];
-                      return (
-                        <div key={p.key} className="rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] p-4">
-                          <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#69635b]">{p.name}</div>
-                          {assets.length === 0 ? <p className="text-[12.5px] italic text-[#5d5850]">Not available</p> : assets.map((a) => (
-                            <a key={a.file} href={assetUrl(product, a.file)} className="group flex items-center justify-between py-1.5 text-[13px] text-[#9b948a] transition-colors hover:text-white">
-                              {a.label}<Download className="h-3.5 w-3.5 text-[#5d5850] transition-colors group-hover:text-white" />
-                            </a>
-                          ))}
-                        </div>
-                      );
-                    })}
+                  {/* A permalink is a legitimate entry point — someone can land
+                      here from a changelog link and download without ever
+                      seeing the product or download page. */}
+                  <div className="mt-9">
+                    <ExperimentalNotice product={product} variant="line" className="mb-3" />
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                      {PLATFORMS.map((p) => {
+                        const assets = release.assets?.[p.key] ?? [];
+                        return (
+                          <div key={p.key} className="rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] p-4">
+                            <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#69635b]">{p.name}</div>
+                            {assets.length === 0 ? <p className="text-[12.5px] italic text-[#5d5850]">Not available</p> : assets.map((a) => (
+                              <a key={a.file} href={assetUrl(product, a.file)} className="group flex items-center justify-between py-1.5 text-[13px] text-[#9b948a] transition-colors hover:text-white">
+                                {a.label}<Download className="h-3.5 w-3.5 text-[#5d5850] transition-colors group-hover:text-white" />
+                              </a>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </Reveal>
               )}

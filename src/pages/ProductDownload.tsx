@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, Download, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Info, Download, Loader2, ShieldCheck } from 'lucide-react';
 import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
 import { Reveal } from '../components/landing-v3/primitives';
+import ExperimentalNotice from '../components/product/ExperimentalNotice';
 import { getProduct, fetchReleases, downloadLink, type Release } from '../lib/productCatalog';
 import { getProductContent } from '../content/products';
 
@@ -104,13 +105,27 @@ const ProductDownload: React.FC = () => {
             )}
           </Reveal>
 
-          {/* Pre-download caveat. Deliberately ABOVE the buttons — a warning a
-              visitor reads after downloading is not a warning. */}
+          {/* Pre-download caveats. Deliberately ABOVE the buttons — a warning a
+              visitor reads after downloading is not a warning.
+
+              Two blocks, in order of generality. First the maturity + signing
+              posture, which is DERIVED from the catalog and therefore identical
+              on every product. Then whatever is true only of this product.
+              Both are monochrome so they read as one considered statement
+              rather than a stack of alarms — the amber band this replaced made
+              XENO's own stated posture look like a malware warning. */}
+          <Reveal delay={80}><ExperimentalNotice product={product} variant="band" className="mt-7" /></Reveal>
+
           {content?.downloadNotice && (
-            <Reveal delay={80}>
-              <div className="mt-7 flex gap-3 rounded-[12px] border border-[#c9a227]/25 bg-[#c9a227]/[0.07] p-4">
-                <AlertTriangle className="mt-[1px] h-4 w-4 shrink-0" style={{ color: '#d9b341' }} />
-                <p className="text-[13px] leading-[1.65] text-[#cdc7be]">{content.downloadNotice}</p>
+            <Reveal delay={100}>
+              <div className="mt-3 rounded-[12px] border border-white/[0.09] bg-[#0b0b0b] p-[clamp(16px,1.6vw,22px)]">
+                <div className="flex items-center gap-2.5">
+                  <Info className="h-4 w-4 shrink-0 text-[#948d83]" strokeWidth={1.7} />
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#948d83]">
+                    Specific to {product.name}
+                  </span>
+                </div>
+                <p className="mt-3 text-[13.5px] leading-[1.7] text-[#b3aca2]">{content.downloadNotice}</p>
               </div>
             </Reveal>
           )}

@@ -51,9 +51,12 @@ export interface ProductContent {
   /** Overrides the hero status pill when the coarse catalog Status overstates
    *  reality (e.g. a 'beta' entry that actually ships as an internal alpha). */
   statusLabel?: string;
-  /** Shown as a warning band on /product/<slug>/download. Use it whenever the
-   *  installer carries a caveat a visitor must know BEFORE downloading —
-   *  unsigned build, throwaway account, prerelease data loss, no auto-update. */
+  /** Shown as a band on /product/<slug>/download for caveats true of THIS
+   *  product only — throwaway account, prerelease data loss, no auto-update.
+   *  Do NOT write the experimental/unsigned/SmartScreen posture here: that is
+   *  derived from the catalog (`experimentalNotice`) and already rendered above
+   *  this block on every download surface. Duplicating it makes the page say the
+   *  same thing twice, and leaves a stale copy behind when signing lands. */
   downloadNotice?: string;
   /** Defaults to true. Set false when the shipped package has auto-update
    *  disabled, so the download page stops promising updates it won't deliver. */
