@@ -1,0 +1,30 @@
+{
+  "_source": {
+    "product": "XENO ACP",
+    "slug": "acp",
+    "packages": [
+      "@xenosystem/acp",
+      "@xenosystem/acp-core",
+      "@xenosystem/acp-agent",
+      "@xenosystem/acp-provider-manager"
+    ],
+    "derivedFrom": "xeno-acp @ dbe9bdfe20d914c101a7c15f850928d2b9ff5b8a (branch chore/xenosystem-publish-fixes), docs/CHANGELOG-XACP.md section '0.1.1 - npm scope migration to @xenosystem'",
+    "why": "xeno-acp keeps its release notes in docs/CHANGELOG-XACP.md, not in a RELEASE_NOTES module, so this file is the notes source publish-cli-releases.mjs reads for the acp slug. Update it from the product CHANGELOG when a new version is published.",
+    "note": "0.1.0 is deliberately absent. It is already live in apps/acp/releases.json and is preserved by the publisher's merge; re-deriving it here would overwrite the authored launch entry with a weaker one."
+  },
+
+  "0.1.1": {
+    "title": "npm scope migration to @xenosystem",
+    "type": "patch",
+    "notes": [
+      "The four ACP packages now publish under the @xenosystem npm scope. Identity-only: no runtime behaviour, export, CLI contract or supported-target claim changed.",
+      "@xeno-corporation/xeno-acp is now @xenosystem/acp (the xeno-acp binary is unchanged).",
+      "@xeno-corporation/xeno-acp-core is now @xenosystem/acp-core.",
+      "@xeno-corporation/xeno-acp-agent is now @xenosystem/acp-agent (the xeno-acp-agent binary is unchanged).",
+      "@xeno-corporation/xeno-acp-provider-manager is now @xenosystem/acp-provider-manager.",
+      "The acp- family prefix is deliberately kept: flattening it would collide @xenosystem/acp-core with the rendering engine's @xenosystem/core.",
+      "The version moved to 0.1.1 because a 0.1.0 tarball already exists under each old name — two different tarballs must never share a version string across a rename.",
+      "Supported launch targets are unchanged: Windows and Linux with Node.js 20 or newer."
+    ]
+  }
+}

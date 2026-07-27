@@ -1,0 +1,44 @@
+{
+  "_source": {
+    "product": "XENO Anima",
+    "slug": "anima",
+    "packages": [
+      "@xenosystem/anima",
+      "@xenosystem/anima-mind",
+      "@xenosystem/anima-soul",
+      "@xenosystem/anima-runtime",
+      "@xenosystem/anima-orchestrate",
+      "@xenosystem/anima-compat-soul",
+      "@xenosystem/anima-channels",
+      "@xenosystem/anima-format"
+    ],
+    "derivedFrom": "xeno-anima @ 51b0af7c16bbf9c31772b4b9c17a40fd0474bbca (branch release/anima-v0.0.2), CHANGELOG.md section '[0.0.2] - 2026-07-27 - security release', plus the verbatim npm deprecation string on every 0.0.1 package",
+    "why": "xeno-anima keeps its release notes in CHANGELOG.md, not in a RELEASE_NOTES module, so this file is the notes source publish-cli-releases.mjs reads for the anima slug. Update it from the product CHANGELOG when a new version is published; do not author release copy here that the product repo does not say.",
+    "doNotDrop": "The 0.0.1 entry exists to carry an active security signal. 0.0.1 is still installable from npm, so anyone who found it from a search result needs the upgrade notice. Remove this entry only when 0.0.1 is unpublished or otherwise uninstallable."
+  },
+
+  "0.0.2": {
+    "title": "Security release — the delegation gate 0.0.1 shipped without",
+    "type": "hotfix",
+    "severity": "critical",
+    "notes": [
+      "Everyone on 0.0.1 should upgrade now: npm install -g @xenosystem/anima@latest",
+      "Security: in 0.0.1 the SDK loop's dispatch_agent tool bypassed the permission gate, so a delegated subagent could read protected files with no prompt shown. dispatch_agent is always loaded, so the path was reachable by default.",
+      "0.0.1 also lacked the SDK-loop redaction and the rest of the per-action consent perimeter. npm versions are immutable, so 0.0.1 cannot be repaired in place — 0.0.2 is the remedy.",
+      "Fixed — the consent gate now survives delegation: the SDK's dispatch_agent is wrapped, denied risks are enforced on the child, and the parent's consent state is carried into the subagent.",
+      "Fixed — redaction now applies inside the SDK loop, and the secret scanner decodes and de-Englishes its input, with a tier no flag can override.",
+      "Fixed — the remaining per-action-consent perimeter holes.",
+      "Changed — all eight packages move to 0.0.2 together, including the four with no source change. pnpm pack rewrites workspace:* to an exact version, so a package left at 0.0.1 would permanently hard-pin the vulnerable 0.0.1 siblings back into your dependency tree."
+    ]
+  },
+
+  "0.0.1": {
+    "title": "Deprecated on npm — security: upgrade to 0.0.2",
+    "severity": "critical",
+    "notes": [
+      "DEPRECATED — do not install. Upgrade with: npm install -g @xenosystem/anima@latest",
+      "npm deprecation notice, verbatim: \"Security: this build is missing the SDK dispatch_agent permission gate — a delegated subagent can read protected files with no prompt. Upgrade to 0.0.2.\"",
+      "First public publish of the eight Anima packages: the CLI plus the mind, soul, runtime, orchestrate, compat-soul, channels and format libraries."
+    ]
+  }
+}

@@ -382,7 +382,20 @@ CLI products (agent-cli, sdk) have no installers, so the installer/auto-update m
 
 - **versions + dates** come from the **npm registry** (source of truth for what's actually installable),
 - **notes** come from the package's own **`RELEASE_NOTES`** map (for a CLI, the exact text it shows at startup),
-- the feed is the **intersection** (versions that are BOTH on npm AND carry notes), newest-first, with npm's `latest` dist-tag flagged `latest`.
+- the generated set is the **intersection** (versions that are BOTH on npm AND carry notes), newest-first, with npm's `latest` dist-tag flagged `latest`,
+- that generated set is then **MERGED over the live `releases.json`** — it never replaces it.
+
+> **🔴 MERGE, NEVER REPLACE.** This script used to upload its generated feed as-is. That is
+> safe only while a product keeps ONE npm identity forever. The generated set is scoped to the
+> package named by `--pkg`, so after a **rename** the new registry entry knows nothing about the
+> old versions: when agent-cli moved `@xeno-corporation/xeno-agent-cli` → `@xenosystem/agent-cli`,
+> the new package had **one** version while the live feed held **25** — publishing the generated
+> feed would have deleted all 25, irrecoverably (R2 has no object versioning).
+> Since 2026-07-27 the publisher merges: generated entries win for the versions they cover, every
+> other live entry is **kept verbatim**, and if any live version would still be missing the script
+> **refuses and exits 1** rather than uploading. Old entries keep their original `install` command,
+> which stays historically accurate — 0.4.45 really was installed under the old name.
+> Locked by `scripts/publish-cli-releases.test.mjs` (`npm run test:release-guard`).
 
 **Flags:**
 
@@ -390,7 +403,7 @@ CLI products (agent-cli, sdk) have no installers, so the installer/auto-update m
 |---|---|---|
 | `--app <slug>` | **yes** | R2 folder / product slug. |
 | `--pkg <name>` | **yes** | npm package name, e.g. `@xeno-corporation/xeno-agent-cli`. |
-| `--notes <path>` | **yes** | Path to the CLI's `release-notes.ts` (where `RELEASE_NOTES` lives). |
+| `--notes <path>` | **yes** | Path to the CLI's `release-notes.ts` (where `RELEASE_NOTES` lives), **or** a `.json` file of the same shape — see below. |
 | `--install <command>` | no | Install command recorded in the feed. Defaults to `npm install -g <pkg>`; SDK/library packages should pass their package-local command. |
 | `--out <dir>` | no | Output dir for the built JSON. Default `$TEMP/cli-feed-<APP>`. |
 | `--dry-run` | no | Prints the `rclone` commands instead of uploading. |
@@ -431,9 +444,35 @@ node scripts/publish-cli-releases.mjs \
   - `notes` is the `RELEASE_NOTES[version]` string array joined as `• <item>` bullets.
   - `install` is a package-install convenience field (not part of the `Release` TS type; the site renders notes, not assets). It defaults to `npm install -g <pkg>` and can be overridden with `--install`, for example `npm install @xeno-corporation/xeno-agent-sdk` for the SDK.
 
-5. Builds a CLI-shaped `version.json` (`version`, `date`, `npm`, `install`, `notes` — no OS keys).
-6. Writes both files to `<out>` and pushes each with `rclone copyto <local> r2:xeno-hub-releases/apps/<app>/<file> --header-upload "Cache-Control: no-cache" --no-traverse`.
-7. Prints the page (`https://xenostudio.ai/product/<app>/releases`) and feed (`https://updates.xenostudio.ai/apps/<app>/releases.json`).
+5. **Merges** that generated set over the live `apps/<app>/releases.json`, re-sorts newest-first,
+   recomputes `latest` (npm's dist-tag when present, else the newest stable), and **prints the plan
+   — `ADD` / `UPDATE` / `KEEP` per version, plus the dropped count — before writing anything**.
+   A non-empty dropped list is a hard refusal.
+6. Builds a CLI-shaped `version.json` (`version`, `date`, `npm`, `install`, `notes` — no OS keys).
+7. Writes both files to `<out>` and pushes each through the gated choke point (`putPointer`), which
+   **snapshots the current object to `_snapshots/<key>/<ISO8601>.<ext>` before overwriting it** and
+   applies `Cache-Control: no-cache`.
+8. Prints the page (`https://xenostudio.ai/product/<app>/releases`) and feed (`https://updates.xenostudio.ai/apps/<app>/releases.json`).
+
+#### Notes from a CHANGELOG instead of a `RELEASE_NOTES` module
+
+Not every npm product keeps a startup-notes module. `--notes` therefore also accepts a **`.json`**
+file of the same `{ "<version>": ... }` shape, kept in `scripts/release-notes/<slug>.json`:
+
+- keys beginning with `_` are ignored, so the file carries a **`_source` provenance block** naming
+  the product repo, commit and file the notes were derived from;
+- a version's value is either `string[]` (rendered as `•` bullets, exactly like the TS form) or an
+  object `{ notes, title?, type?, severity?, channel? }` whose extra keys are the schema fields from
+  §2.1 — validated on load, so a typo cannot reach a published feed.
+
+That object form is how a **security/deprecation signal** gets into a feed. `anima` uses it: `0.0.2`
+is `type: hotfix` + `severity: critical` (the red badge on the top, default-open entry) and the
+still-installable, npm-deprecated `0.0.1` carries its verbatim npm deprecation string plus an
+upgrade instruction. Keep such an entry until the bad version is uninstallable.
+
+> Note `severity` is carried in the data but **not currently rendered** by `ReleaseFeed.tsx`. The
+> visible signals are `type` (hotfix draws a red warning badge), `title` (shown inline on the
+> collapsed row) and `notes`. Put the words a user must read in `title`/`notes`, not in `severity`.
 
 > To publish a CLI feed you must first `npm publish` the new version (so it exists on the registry) **and** add its bullets to `RELEASE_NOTES` in `release-notes.ts`. A version present in only one of the two is silently excluded from the feed.
 

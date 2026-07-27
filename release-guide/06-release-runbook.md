@@ -255,9 +255,12 @@ node scripts/publish-cli-releases.mjs \
 ```
 
 - `--app`, `--pkg`, `--notes` are **required**. `--install` is optional and defaults to the global CLI command; SDK/library packages should pass their package-local install command.
-- The feed is the **intersection** of versions that are BOTH on npm AND carry release notes, newest-first; the npm `latest` dist-tag is flagged `latest`.
-- Writes `apps/<slug>/releases.json` and an npm-shaped `apps/<slug>/version.json` (carries `version`/`date`/`npm`/`install`/`notes`, no windows/mac/linux keys). Both uploaded with `Cache-Control: no-cache`.
-- `--dry-run` prints the `rclone` commands without uploading.
+- The generated set is the **intersection** of versions that are BOTH on npm AND carry release notes, newest-first; the npm `latest` dist-tag is flagged `latest`.
+- **It MERGES over the live feed — it never replaces it.** Generated entries win for the versions they cover, every other live entry is kept verbatim, and the script **refuses** if any live version would be lost. This matters most after an npm **rename**, where the new package's registry entry knows nothing about the old versions. It prints an `ADD`/`UPDATE`/`KEEP` plan before writing.
+- `--notes` takes the CLI's `release-notes.ts` **or** a `.json` file of the same shape (`scripts/release-notes/<slug>.json`) for products whose notes live in a CHANGELOG. See **03-release-data.md** §6.2.
+- Writes `apps/<slug>/releases.json` and an npm-shaped `apps/<slug>/version.json` (carries `version`/`date`/`npm`/`install`/`notes`, no windows/mac/linux keys). Both go through the gated uploader, which snapshots the previous object to `_snapshots/` and applies `Cache-Control: no-cache`.
+- `--dry-run` prints the plan and the `rclone` commands without uploading. **Always dry-run first.**
+- CLI products have no installer, so `/product/<slug>/download/win` correctly returns a **404 JSON `NO_ASSET`**, not a 302. That is the expected result — do not "fix" it by inventing an asset.
 
 > **Alternative (single manual entry):** a CLI release can also be published through `xeno-release.mjs` with no installer flags, e.g.
 > `node scripts/xeno-release.mjs publish --app agent-cli --version 0.4.0 --date 2026-06-28 --type release --notes "$(cat CHANGELOG-0.4.0.md)"`.
