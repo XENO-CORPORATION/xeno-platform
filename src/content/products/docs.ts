@@ -16,12 +16,24 @@ import type { ProductContent } from './_types';
  *      feed is not part of this file.
  *  · "50+ languages" for code blocks was wrong. The editor imports lowlight's
  *    `common` bundle (DocumentEditor.tsx), which registers exactly 37.
- *  · "AI runs local via xeno-rt or in the cloud" was wrong in the shipped
- *    build: shared/xeno-ai.ts sends EVERY request to
- *    `${apiBase}/api/ai/chat` on the XENO platform — authed and metered.
- *    There is no localhost path and no way to point it at your own xeno-rt.
- *    (xeno-rt appears once in that file, in a comment, as a label for a
- *    SERVER-SIDE routing tier — not a local option.) */
+ *  · RETRACTED 2026-07-27 — "AI runs local via xeno-rt or in the cloud" was
+ *    marked wrong here on the basis of `shared/xeno-ai.ts`. **xeno-docs does
+ *    not import that file.** Verified: zero hits for `shared/xeno-ai` across
+ *    xeno-docs/src. It uses `DualLLMProvider` from the agent SDK
+ *    (src/main/index.ts:3, src/preload/index.ts:1), whose own doc comment reads
+ *    "Local xeno-rt at localhost:3338 (free, private, fast)" with an `auto` mode
+ *    that "check[s] if local is available, use[s] it if so, otherwise fall[s]
+ *    back to cloud", plus explicit `local` and `cloud` modes. `localhost:3338`
+ *    appears 18x in the shipped app.asar.
+ *
+ *    So the local path is REAL and the original claim was TRUE. A truthfulness
+ *    pass measured the wrong file and deleted an accurate claim — the same
+ *    instrument error as the overstatements it was correcting, pointing the
+ *    other way. Understating a product is a defect too: it costs a user a
+ *    feature they actually have.
+ *
+ *    Copy below restored to describe local-first with cloud fallback. Do not
+ *    re-soften it without checking what xeno-docs ACTUALLY imports. */
 const docs: ProductContent = {
   slug: 'docs',
   hero: {
@@ -29,7 +41,7 @@ const docs: ProductContent = {
     sub: 'XENO Docs pairs a full word processor with Notion-style block editing and a built-in AI writer. Import your DOCX with fidelity, write with slash commands, and let AI rewrite, translate, and generate — right in the page. Now in beta on Windows.',
     media: { type: 'mockup', src: 'docs-hero', alt: 'XENO Docs — the editor with an outline sidebar, formatting toolbar, and the floating AI writing assistant' },
     badges: ['Windows desktop', 'DOCX import & export', 'AI writing built in', 'Free beta'],
-    note: 'Free beta (v0.2) · Windows. macOS and Linux builds follow. Two things to know before installing: AI features call the XENO cloud and draw on credits (there is no local-model option in this build), and this build does NOT auto-update — watch this page for 0.3 and install it over the top.',
+    note: 'Free beta (v0.2) · Windows. macOS and Linux builds follow. Two things to know before installing: AI uses a local xeno-rt at localhost:3338 when one is running and falls back to the XENO cloud otherwise (cloud calls draw on credits; local ones do not), and this build does NOT auto-update — watch this page for 0.3 and install it over the top.',
   },
   trust: ['Part of the XENO platform — one sign-in', 'Windows desktop (Electron) — macOS & Linux next', 'Your documents in an open .xdoc format', 'No auto-update in this build — upgrades are manual'],
   highlights: [
@@ -60,7 +72,7 @@ const docs: ProductContent = {
         'Rewrite with tone: professional, casual, academic, creative, concise, friendly',
         'Summarize, expand, and fix grammar in place',
         'Translate to 16+ languages',
-        'Right-click quick actions · routed through your XENO account, metered on credits',
+        'Right-click quick actions · local xeno-rt when available, XENO cloud otherwise (cloud is metered)',
       ],
     },
     {
@@ -106,7 +118,7 @@ const docs: ProductContent = {
     { title: 'Writers & knowledge teams', icon: 'Sparkles', desc: 'Block-based pages with slash commands, AI rewrite/expand/translate in the margin, and version history for every draft.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Download & open', desc: 'Get the Windows build and sign in with your XENO account for cloud AI and credits.' },
+    { step: '1', title: 'Download & open', desc: 'Get the Windows build. Run a local xeno-rt for private, free AI, or sign in with your XENO account to use the cloud.' },
     { step: '2', title: 'Import or start fresh', desc: 'Open an existing DOCX with fidelity, or start a blank .xdoc and write with "/" slash blocks.' },
     { step: '3', title: 'Write with AI', desc: 'Select text for AI rewrite, translate or summarize — then export to PDF, DOCX, Markdown or HTML.' },
   ],
@@ -126,7 +138,7 @@ const docs: ProductContent = {
     { label: 'Platform', value: 'Windows (x64) · Electron' },
     { label: 'Editor engine', value: 'TipTap · ProseMirror' },
     { label: 'Formats', value: '.xdoc · DOCX · PDF · MD · HTML' },
-    { label: 'AI', value: 'XENO cloud only · metered on credits' },
+    { label: 'AI', value: 'Local xeno-rt when running · XENO cloud otherwise' },
     { label: 'Updates', value: 'Manual — no in-app auto-update' },
     { label: 'Status', value: 'v0.2 · beta' },
   ],
@@ -135,7 +147,7 @@ const docs: ProductContent = {
     { q: 'Can I import my Word documents?', a: 'Yes — DOCX import and export is a core goal, with full fidelity as the target. You can also export to PDF, Markdown, HTML and plain text, and everything saves natively as an open .xdoc (plain JSON).' },
     { q: 'What can the AI do?', a: 'Rewrite with a tone (professional, casual, academic, creative, concise, friendly), summarize, expand, fix grammar, translate to 16+ languages, and generate from a prompt — right in the document. Results can replace your selection or insert below.' },
     { q: 'Is it a Word replacement or a Notion replacement?', a: 'Both. You get a full word processor — headings, tables, page layout, citations, mail merge — and Notion-style block editing with slash commands, callouts, toggles and columns, in the same editor.' },
-    { q: 'Does the AI work offline or privately?', a: 'Not in this build — and earlier copy here said otherwise, which was wrong. Every AI action is sent to the XENO platform over your authenticated account and metered on credits; there is no setting that points the editor at a local xeno-rt. The editor itself works fully offline — only the AI actions need the network. A local-model option is something we want, but it is not shipping today.' },
+    { q: 'Does the AI work offline or privately?', a: 'Yes, if you run a local xeno-rt. XENO Docs uses the agent SDK’s dual provider: in its default auto mode it checks for a local xeno-rt on localhost:3338 and uses it when present — free, private, and never leaving your machine — falling back to the XENO cloud otherwise, where calls are authenticated and metered on credits. The editor itself works fully offline regardless; only cloud AI needs the network. (An earlier version of this page said there was no local option and called the original claim an error. That retraction was itself wrong — it was based on a file this app does not import.)' },
     { q: 'Does it update itself?', a: 'No. XENO Docs 0.2 has no in-app updater, so an installed copy will never notify you or upgrade itself. When 0.3 ships you will need to download it from this page and install it over the top. We would rather tell you that than let you sit on an old build believing it is current.' },
     { q: 'Which platforms can I install it on?', a: 'Windows today — that’s the only build we publish. macOS and Linux are planned; the download page will list them the moment they exist.' },
     { q: 'How much does it cost?', a: 'The beta is free. AI actions draw on XENO platform credits, since they run through the platform. General-release pricing is announced later.' },
@@ -149,7 +161,7 @@ const docs: ProductContent = {
   // above this block on the download page (see productCatalog experimentalNotice).
   // Repeating it made the page say the same thing twice.
   downloadNotice:
-    'This build does NOT update itself. XENO Docs 0.2 ships without an in-app updater, so it will never prompt you and never upgrade — when a newer version is published you will need to come back here and install it over the top. AI features require a XENO account and draw on credits; there is no local-model option in this build.',
+    'This build does NOT update itself. XENO Docs 0.2 ships without an in-app updater, so it will never prompt you and never upgrade — when a newer version is published you will need to come back here and install it over the top. AI uses a local xeno-rt on localhost:3338 when one is running — private and free — and falls back to the XENO cloud otherwise, which needs an account and draws on credits.',
   autoUpdates: false,
 };
 
