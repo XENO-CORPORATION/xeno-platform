@@ -39,24 +39,34 @@ async function loadReleases(slug) {
       const data = await res.json();
       releases = Array.isArray(data) ? data : Array.isArray(data?.releases) ? data.releases : [];
     }
-  } catch { /* fall through to version.json */ }
+  } catch { /* no releases.json -> no download; see below */ }
 
-  if (releases.length === 0) {
-    // Legacy fallback: synthesize a single release from version.json.
-    try {
-      const res = await fetch(`${R2_PUBLIC}/apps/${slug}/version.json`, { cache: 'no-cache' });
-      if (res.ok) {
-        const v = await res.json();
-        if (v?.version) {
-          const assets = {};
-          for (const os of ['windows', 'mac', 'linux']) {
-            if (v[os]) assets[os] = [{ label: os, file: `v${v.version}/${v[os]}` }];
-          }
-          releases = [{ version: v.version, date: v.date, channel: 'stable', latest: true, notes: v.notes ?? '', assets }];
-        }
-      }
-    } catch { /* ignore */ }
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // There is deliberately NO fallback to version.json here.
+  //
+  // A `version.json` with no `releases.json` used to synthesize a one-entry
+  // release, which made this route 302 to a real installer for ANY app that had
+  // ever pushed a latest-pointer — regardless of whether the product was ready.
+  // On 2026-07-27 that was serving 85 MB scaffold builds of XENO Sheets, Slides
+  // and Notes to visitors, while the site marketed all three as "coming soon".
+  // Those artifacts predated their own engine commits: at that build, Sheets had
+  // no formula evaluator, Slides no persistence or export, Notes no links.
+  //
+  // The two files mean different things and the fallback conflated them:
+  //   version.json  = the moving latest pointer the in-app updater polls. An app
+  //                   writes it as soon as it builds ANYTHING.
+  //   releases.json = the curated, prepend-only release HISTORY. Publishing it is
+  //                   the deliberate act of saying "this is downloadable."
+  //
+  // So releases.json is the gate, and its ABSENCE is a decision, not a gap to be
+  // papered over. Verified before removing: every shipping product (hub, pixel,
+  // motion, sound, canvas, docs, browser, shell, comms, workflow, agent-cli) has
+  // both files. The only slugs that relied on this fallback were exactly the
+  // three that must not be downloadable. Blast radius of removal: zero.
+  //
+  // If a product SHOULD be downloadable, publish its releases.json with
+  // scripts/xeno-release.mjs. Do not re-add a fallback here.
+  // ─────────────────────────────────────────────────────────────────────────
 
   cache.set(slug, { at: Date.now(), releases });
   return releases;
