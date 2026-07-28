@@ -33,6 +33,7 @@ import AnimaSwarm from './AnimaSwarm';
 import ShellDesktop from './ShellDesktop';
 import ShellMounts from './ShellMounts';
 import ShellDisplays from './ShellDisplays';
+import SlidesEditor from './SlidesEditor';
 
 /* Built-in product mockups — referenced from a content module's Media as
  * { type: 'mockup', src: '<key>' }. Lets a landing page ship a crisp, faithful
@@ -49,6 +50,7 @@ const MOCKUPS: Record<string, React.ComponentType> = {
   'post-hero': PostComposer,
   'docs-hero': DocsEditor,
   'sheets-hero': SheetsGrid,
+  'slides-hero': SlidesEditor,
   'motion-hero': MotionEditor,
   'motion-color': MotionColor,
   'motion-agent': MotionAgent,

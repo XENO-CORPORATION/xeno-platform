@@ -107,23 +107,25 @@ test('products with no published build say nothing', () => {
   // The download gate (4283c0d) already refuses to serve these. The notice must
   // agree: warning about an installer that does not exist invents a product.
   //
-  // sheets + notes LEFT this list on 2026-07-27 when they published real 0.2.0
-  // installers (the withdrawn 0.1.0 builds were scaffolds that predated their own
-  // engine commits). slides deliberately STAYS: its export engines have no caller
-  // and are tree-shaken out, and the renderer never calls the preload's file
-  // dialogs, so it can neither open, save-as nor export. See productCatalog.ts.
-  for (const slug of ['slides', 'pdf', 'photo', 'layout', 'use', 'apps', 'extension']) {
+  // sheets + notes LEFT this list on 2026-07-27, and slides on 2026-07-28, when
+  // each published a real 0.2.0 installer (the withdrawn 0.1.0 builds were
+  // scaffolds — sheets/notes predated their own engine commits, and slides could
+  // neither open, save-as nor export because its export engines had no caller and
+  // were tree-shaken out). Nothing joins the shipping list on a build log alone:
+  // each was verified in the packaged asar and by launching the installed app.
+  for (const slug of ['pdf', 'photo', 'layout', 'use', 'apps', 'extension']) {
     const p = bySlug(slug);
     assert.equal(installChannel(p), 'none', `${slug}: expected no install channel`);
     assert.equal(noticeFor(slug), null, `${slug}: nothing ships, so nothing is claimed`);
   }
 });
 
-test('sheets + notes ship real unsigned installers and are framed that way', () => {
-  // Both published an experimental, unsigned 0.2.0 on 2026-07-27. Neither sets
-  // `signing`, so this also pins the fail-safe default: anything handing a visitor
-  // an executable is treated as unsigned until somebody states otherwise.
-  for (const slug of ['sheets', 'notes']) {
+test('sheets + notes + slides ship real unsigned installers and are framed that way', () => {
+  // sheets + notes published an experimental, unsigned 0.2.0 on 2026-07-27;
+  // slides on 2026-07-28. None sets `signing`, so this also pins the fail-safe
+  // default: anything handing a visitor an executable is treated as unsigned
+  // until somebody states otherwise.
+  for (const slug of ['sheets', 'notes', 'slides']) {
     const p = bySlug(slug);
     assert.equal(p.status, 'beta', `${slug}: a downloadable product is not coming-soon`);
     assert.equal(p.delivery, 'desktop', `${slug}: ships an installer`);

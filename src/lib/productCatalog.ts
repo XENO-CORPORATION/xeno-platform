@@ -124,18 +124,27 @@ export const PRODUCTS: Product[] = [
   // in the main bundle and Toolbar.tsx really calls them, and the app launches.
   // Experimental + unsigned; the precise framing lives in src/content/products/sheets.ts.
   { slug: 'sheets', name: 'XENO Sheets', tagline: 'Spreadsheets with AI built in.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-sheets' },
-  // 🔴 Slides stays coming-soon DELIBERATELY — do not promote it without re-checking.
-  // Its engines are real and 789 tests pass, but NOTHING IN THE APP CALLS THEM:
-  //   · all four export engines (PptxExportEngine/HtmlExportEngine/VideoExportEngine/
-  //     Mp4ExportEngine) have zero references outside engine/export/ and tests/, so
-  //     Rollup tree-shakes them out — verified 0 export literals in the shipped bundle;
-  //   · the preload exposes openFile/saveFileDialog/exportImagesDialog/saveBatch and the
-  //     renderer never calls any of them; there is no application menu and the toolbar's
-  //     only action is "Present".
-  // So a user cannot open, save-as, or export anything — only edit and autosave to
-  // ~/.xeno/slides/{id}.json. Publishing it would repeat the 0.1.0 scaffold mistake.
-  // Ship it when the export engines and the file dialogs are wired to real UI.
-  { slug: 'slides', name: 'XENO Slides', tagline: 'Presentations with AI built in.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-slides' },
+  // Slides 0.2.0 (2026-07-28) clears the bar this entry used to hold it back for.
+  // The precondition was "ship it when the export engines and the file dialogs are
+  // wired to real UI" — that is now true and was verified in the PACKAGED artifact,
+  // not the source tree:
+  //   · the renderer bundle went 732K → 1345K because actions/fileActions.ts is a
+  //     real caller: PptxGenJS appears 44x in the shipped asar (0 before), along
+  //     with the HTML and canvas exporters that Rollup used to tree-shake away;
+  //   · the installed app was launched and driven — Save wrote a 2.6 KB .xslides,
+  //     Export produced a 45 KB PK\x03\x04 pptx whose ppt/slides/slide1.xml carries
+  //     the deck text, a %PDF-1.4 at /Count 1, a standalone .html and a PNG, and
+  //     Open round-tripped the saved file back into the editor;
+  //   · commands are reachable from a titlebar File menu, toolbar buttons and
+  //     Ctrl+O/S/Shift+S — not shortcut-only.
+  // Launching it also caught a defect no test could see: a zustand selector
+  // returned a fresh array each call, so React aborted the mount with error #185
+  // and EVERY production build had rendered a blank window since 2026-03-18. The
+  // 0.1.0 installer never drew its own UI. Fixed, guarded by a test, and the repo
+  // now carries scripts/packaged-smoke.mjs so the next release must launch too.
+  // Windows only, experimental + unsigned, and NO in-app updater — electron-updater
+  // is not even a dependency. Framing lives in src/content/products/slides.ts.
+  { slug: 'slides', name: 'XENO Slides', tagline: 'Presentations with AI built in.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-slides' },
   { slug: 'pdf', name: 'XENO PDF', tagline: 'Edit, convert, sign and chat with PDFs.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-pdf' },
 
   // ── Library ───────────────────────────────────────────────
