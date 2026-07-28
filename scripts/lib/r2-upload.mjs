@@ -164,7 +164,19 @@ export class R2Publisher {
   /** Immutability: refuse to replace an existing versioned artifact with different bytes. */
   assertNotClobbering(localPath, key) {
     if (this.allowOverwrite) return;
-    if (!/\/v[^/]+\//.test(`/${key}`)) return; // only versioned artifact keys are immutable
+    // Immutable key shapes:
+    //   `.../v<version>/...`  installers, blockmaps, mirrored release assets
+    //   `models/...`          ONNX/GGUF weights — a filename like
+    //                         `models/whisper-base.onnx` carries no version, so the
+    //                         name IS the identity and re-uploading different bytes
+    //                         silently changes what every client resolves. Model keys
+    //                         matched NEITHER this guard nor a snapshot (putArtifact
+    //                         does not snapshot; only putPointer does), so a model
+    //                         overwrite was ungated AND irrecoverable — the same shape
+    //                         as the 2026-07-26 releases.json loss, in a path that had
+    //                         simply never been exercised. R2 has no object versioning.
+    //                         Publish a NEW filename to change weights.
+    if (!/\/v[^/]+\//.test(`/${key}`) && !/^models\//.test(key)) return;
     const probe = statRemote(`${this.remote}/${key}`);
     if (probe.status === 'unknown') {
       if (!this.warnedImmutability) {
