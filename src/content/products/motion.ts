@@ -10,7 +10,7 @@ const motion: ProductContent = {
   slug: 'motion',
   hero: {
     headline: 'One timeline for editing and motion graphics.',
-    sub: 'XENO Motion unifies the cut and the composite — a GPU-accelerated editor and a node-based motion-graphics engine in a single app. Grade with ACES, keyframe, key, track, and let AI transcribe, reframe and isolate — without round-tripping between two programs.',
+    sub: 'XENO Motion unifies the cut and the composite — a GPU-accelerated editor and a node-based motion-graphics engine in a single app. Grade with ACES, keyframe, key, track, and let AI find your scene cuts, reframe for vertical and balance a shot — without round-tripping between two programs.',
     media: { type: 'mockup', src: 'motion-hero', alt: 'XENO Motion editor — media bin, program monitor, the inspector and a multi-track timeline with clips, a cross-dissolve, keyframes and a playhead' },
     badges: ['Windows desktop', 'WebGPU + WebCodecs', 'AI built in', 'Free tier + credits'],
     note: 'Beta (public test) · GPU features need a WebGPU-capable graphics card. Some AI runs in the cloud through your XENO credits.',
@@ -23,7 +23,7 @@ const motion: ProductContent = {
   highlights: [
     { value: 'Edit + motion', label: 'One unified app' },
     { value: 'WebGPU', label: 'GPU compositing & color' },
-    { value: 'AI built in', label: 'Transcribe · reframe · isolate' },
+    { value: 'AI built in', label: 'Scene cuts · reframe · auto color' },
     { value: '< 2s', label: 'Cold start' },
   ],
   features: [
@@ -71,12 +71,12 @@ const motion: ProductContent = {
       icon: 'Sparkles',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(170,140,255,0.20), transparent 60%), linear-gradient(165deg,#141020,#070707 74%)',
       title: 'AI that does the tedious parts',
-      desc: 'Transcribe interviews into a searchable, subtitle-ready timeline, reframe for vertical, isolate a voice, track an object or upscale old footage — from the same app.',
+      desc: 'Find the cuts in a long take, reframe for vertical and balance a shot’s color — one click each, from the same app.',
       bullets: [
-        'Speech-to-text & subtitles (Whisper)',
-        'Auto-reframe, scene detection, object tracking',
-        'Voice isolation and audio denoise',
-        'A built-in agent that can assemble a rough cut for you',
+        'Scene-cut detection on any video clip',
+        'Auto-reframe to the sequence aspect ratio',
+        'Auto color — a histogram-based starting grade',
+        'A built-in agent that can drive the timeline for you',
       ],
     },
     {
@@ -108,12 +108,12 @@ const motion: ProductContent = {
   ],
   gallery: [
     { type: 'mockup', src: 'motion-color', alt: 'XENO Motion color page — a graded program monitor, Lift/Gamma/Gain color wheels and waveform + vectorscope video scopes' },
-    { type: 'mockup', src: 'motion-agent', alt: 'XENO Motion agent — an AI assistant transcribing, arranging, subtitling and reframing a highlight edit on the timeline' },
+    { type: 'mockup', src: 'motion-agent', alt: 'XENO Motion agent — an AI assistant importing, cutting and arranging a highlight edit on the timeline' },
   ],
   useCases: [
     { title: 'Editors & filmmakers', icon: 'Layers', desc: 'Assemble, trim and finish long-form and short-form on one timeline — with proxies, scopes and hardware export built in.' },
     { title: 'Motion & VFX artists', icon: 'Sparkles', desc: 'Keyframe, key, track and composite in a node graph without exporting to a separate motion-graphics tool.' },
-    { title: 'Creators at volume', icon: 'Bot', desc: 'Hand the agent your rushes — it transcribes, picks the beats, arranges a cut, subtitles and reframes for every platform.' },
+    { title: 'Creators at volume', icon: 'Bot', desc: 'Hand the agent your rushes — it imports, cuts, arranges a rough assembly and reframes for every platform, and you review the result.' },
   ],
   howItWorks: [
     { step: '1', title: 'Download & open', desc: 'Get the Windows app, then create a sequence or open an .xmotion project.' },
@@ -126,7 +126,7 @@ const motion: ProductContent = {
       { feature: 'Edit + motion graphics in one app', xeno: true, them: 'Two apps' },
       { feature: 'GPU compositing pipeline', xeno: 'WebGPU (full)', them: 'Partial' },
       { feature: 'Node-based compositing graph', xeno: true, them: 'Layers only' },
-      { feature: 'AI: transcribe · reframe · isolate · track', xeno: 'Built in', them: 'Add-ons' },
+      { feature: 'AI: scene cuts · reframe · auto color', xeno: 'Built in', them: 'Add-ons' },
       { feature: 'Direct hardware encode (NVENC / QSV)', xeno: true, them: 'Via encoder' },
       { feature: 'Cold-start time', xeno: '< 2s', them: '8–15s' },
       { feature: 'Mature plugin & format ecosystem', xeno: 'Growing', them: true },
@@ -143,13 +143,13 @@ const motion: ProductContent = {
     { q: 'Is XENO Motion ready for production work?', a: 'It’s a public test build. The core editor — multi-track timeline, GPU compositing, color, effects, audio and export — works today, and it’s honest beta: expect rough edges and missing polish next to a decade-old suite. Bring feedback.' },
     { q: 'Do I really not need a separate motion-graphics app?', a: 'That’s the core idea. Editing and motion graphics share one project and one timeline — the compositor is a node-based render graph, so you keyframe, mask and composite without exporting to a second program.' },
     { q: 'What formats and codecs can it handle?', a: 'Hardware decode via WebCodecs for H.264, H.265, VP9 and AV1, with an FFmpeg fallback for pro codecs like ProRes, DNxHR and BRAW. Export is direct hardware encode (NVENC / QSV / VideoToolbox) to MP4, MOV, MKV or WebM.' },
-    { q: 'What can the AI actually do?', a: 'Speech-to-text and subtitles (Whisper), auto-reframe, scene detection, object tracking, voice isolation and denoise, and footage upscaling. A built-in agent can go further — transcribe your clips, pick the best moments and assemble a rough cut you review.' },
+    { q: 'What can the AI actually do?', a: 'Three one-click operations on a selected clip: scene-cut detection, auto-reframe to your sequence’s aspect ratio, and auto color (a histogram-based starting grade you then refine by hand). A built-in agent can drive the timeline for you — importing, cutting, arranging, applying effects and opening the export flow. Speech-to-text and stem separation are in development and not yet available.' },
     { q: 'Do I need a powerful computer?', a: 'You need a WebGPU-capable GPU for the compositing, color and effects pipeline. Hardware encoders (NVENC / QSV) speed up export a lot; without one, export falls back to software and is slower.' },
     { q: 'How much does it cost?', a: 'There’s a free tier; heavier AI and cloud features draw on XENO platform credits. Full pricing is announced separately as it leaves beta.' },
   ],
   seo: {
     title: 'XENO Motion — video editing and motion graphics in one app',
-    description: 'A GPU-accelerated video editor and node-based motion-graphics engine in a single app. WebGPU compositing, ACES color, hardware encode, and AI that transcribes, reframes and isolates. Beta on Windows — free tier + credits.',
+    description: 'A GPU-accelerated video editor and node-based motion-graphics engine in a single app. WebGPU compositing, ACES color, hardware encode, and AI that finds scene cuts, reframes and grades. Beta on Windows — free tier + credits.',
   },
 };
 
