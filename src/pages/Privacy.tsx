@@ -120,7 +120,17 @@ const Privacy: React.FC = () => {
 
             <h3 className="text-lg font-medium mb-2 text-white/90">How We Handle OAuth Tokens</h3>
             <ul className="list-disc list-inside text-white/60 space-y-2 mb-4">
-              <li>OAuth tokens are stored securely and encrypted at rest</li>
+              {/*
+                Do not restore an "encrypted at rest" claim here without first
+                implementing it. Verified 2026-07-29: the schema stores
+                `access_token TEXT` / `refresh_token TEXT`, there is not one crypto
+                primitive anywhere in src/server (no createCipheriv, no AES, no
+                encryption key in any .env.example), and the host has no LUKS or
+                dm-crypt volume. Passwords and session tokens ARE hashed — those
+                claims are accurate; this one was not, and it sat in a document
+                that Art. 13 GDPR makes binding.
+              */}
+              <li>OAuth tokens are held in access-restricted storage, separate from your profile</li>
               <li>Tokens are only used to perform actions you explicitly request</li>
               <li>We never share your tokens with third parties</li>
               <li>Tokens are immediately deleted when you disconnect a platform</li>
@@ -164,11 +174,18 @@ const Privacy: React.FC = () => {
             </p>
             <ul className="list-disc list-inside text-white/60 space-y-2">
               <li>All data is transmitted using TLS/SSL encryption</li>
-              <li>Sensitive data (including OAuth tokens) is encrypted at rest</li>
-              <li>Passwords are hashed using secure, one-way algorithms</li>
-              <li>We use secure cloud infrastructure with regular security audits</li>
+              {/*
+                Three claims were removed here on 2026-07-29 because they were not
+                true: at-rest encryption (no crypto primitive in src/server, no LUKS
+                on the host), "regular security audits" (none have been performed),
+                and encrypted backups (the backup path writes plain dumps).
+                Each is a good thing to implement — but a privacy notice has to
+                describe what IS done, and this one is legally binding under
+                Art. 13 GDPR. Re-add a line here only after the control ships.
+              */}
+              <li>Passwords are hashed using bcrypt, and session tokens are stored only as hashes</li>
               <li>Access to user data is restricted to authorized personnel only</li>
-              <li>We maintain regular backups with encryption</li>
+              <li>We maintain regular database backups with tested restores</li>
             </ul>
           </section>
 

@@ -34,11 +34,23 @@ const Cookies: React.FC = () => (
           {
             p: (
               <>
-                We use cookies to keep you securely signed in to your XENO account, to remember your
-                settings and preferences, to keep the platform safe from fraud and abuse, and to understand
-                how our services are used so we can improve them. We do not use cookies to build advertising
-                profiles, and we do not sell the information cookies collect. Where required by law, we ask
-                for your consent before setting non-essential cookies.
+                {/*
+                  This paragraph used to also claim we set cookies "to understand
+                  how our services are used so we can improve them" — i.e.
+                  analytics. We do not: there is no analytics library in the
+                  frontend (no Google Analytics, PostHog or Plausible) and the
+                  landing page sets no cookies at all. Only essential cookies
+                  exist, which is also why no consent banner is required.
+                  Overstating collection is still an inaccurate privacy notice.
+                  If analytics is ever added, this paragraph and the consent
+                  position both have to change in the same commit.
+                */}
+                We use cookies only where they are essential: to keep you securely signed in to your
+                XENO account, to remember your settings and preferences, and to keep the platform safe
+                from fraud and abuse. We do not use analytics or advertising cookies, we do not build
+                advertising profiles, and we do not sell the information cookies collect. Because we set
+                no non-essential cookies, no cookie-consent banner is needed; if that ever changes we
+                will ask for your consent first.
               </>
             ),
           },

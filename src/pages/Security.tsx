@@ -58,11 +58,20 @@ const Security: React.FC = () => (
             h: 'Data encryption',
             p: (
               <>
+                {/*
+                  The removed sentences claimed at-rest AES-256, key management
+                  separated from the data it protects, and scheduled key rotation.
+                  All three were false: src/server contains no crypto primitive at
+                  all, the host has no LUKS or dm-crypt volume (self-hosted QEMU,
+                  so no provider-level encryption either), and there is no key to
+                  manage or rotate. Naming a specific cipher turns a vague claim
+                  into a checkable one — and it did not check out.
+                */}
                 All traffic between your devices and XENO services is encrypted in transit using TLS
                 1.2 or higher, with modern cipher suites and HTTPS enforced across our web properties and
-                APIs. Data you store with us — including projects, account information, and backups — is
-                encrypted at rest using industry-standard algorithms such as AES-256. Encryption keys are
-                managed separately from the data they protect and are rotated on a regular schedule.
+                APIs. Account passwords are stored only as bcrypt hashes, and session tokens only as
+                hashes. Encryption of stored data at rest is not yet implemented; when it ships it will be
+                described here with the guarantees it actually provides.
               </>
             ),
           },
