@@ -396,29 +396,36 @@ export const ContainerConfigWizard: React.FC<{
             <h2 className="text-2xl font-bold mb-4">Advanced Features</h2>
             
             <div className="space-y-4">
-              {[
-                { key: 'backups', name: 'Automated Backups', price: 5, description: 'Daily snapshots with 30-day retention' },
-                { key: 'encryption', name: 'Data Encryption', price: 3, description: 'AES-256 encryption at rest and in transit' },
-                { key: 'prioritySupport', name: 'Priority Support', price: 10, description: '24/7 support with <2 hour response time' }
-              ].map((feature) => (
-                <Card key={feature.key} className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="font-medium">{feature.name}</div>
-                      <div className="text-sm text-gray-500">{feature.description}</div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="text-right">
-                        <div className="font-medium">${feature.price}/month</div>
-                      </div>
-                      <Checkbox
-                        checked={config[feature.key as keyof ContainerConfig] as boolean}
-                        onCheckedChange={(checked) => updateConfig({ [feature.key]: checked })}
-                      />
-                    </div>
-                  </div>
-                </Card>
-              ))}
+              {/*
+                Three paid add-ons were removed here on 2026-07-29, together
+                $18/month, because none of them did anything.
+
+                'Data Encryption' ($3, "AES-256 encryption at rest and in transit")
+                and 'Automated Backups' ($5, "Daily snapshots with 30-day
+                retention") were priced in containerRoutes.js, added to the billed
+                total, and then implemented by setting ENCRYPTION_ENABLED= and
+                BACKUP_ENABLED= as container environment variables. Both variables
+                are written and never read — there is no grep hit that consumes
+                either, no snapshot mechanism, and the volume is a plain Docker
+                mount. 'Priority Support' promised "24/7 support with <2 hour
+                response time", which no one has undertaken to provide.
+
+                Verified before removing: 0 of the 2 containers that have ever
+                existed carried any add-on, so no customer was charged and no
+                refund is owed. Do not re-add a line here until the feature it
+                names is real — a paid feature that silently does nothing is the
+                worst version of this defect, because money changes hands.
+
+                The server still tolerates absent add-on flags, so legacy configs
+                keep working.
+              */}
+              <Card className="p-4">
+                <div className="font-medium">No paid add-ons are available yet</div>
+                <div className="text-sm text-gray-500 mt-1">
+                  Your container is provisioned with the storage, users and languages you chose on the
+                  previous steps. Additional options will appear here once they are implemented.
+                </div>
+              </Card>
             </div>
           </div>
         );
