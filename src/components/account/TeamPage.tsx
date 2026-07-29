@@ -781,10 +781,30 @@ const TeamPage: React.FC = () => {
                 <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Policies</span>
               </div>
               <div className="rounded-md divide-y divide-white/[0.04]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <div><div className="text-[13px] text-zinc-300">Enforce 2FA</div><div className="text-[11px] text-zinc-500 mt-0.5">Require two-factor authentication</div></div>
-                  <button onClick={() => setEnforce2fa(!enforce2fa)} className={`w-8 h-4 rounded relative transition-colors shrink-0 ${enforce2fa ? 'bg-white/[0.20]' : 'bg-white/[0.08]'}`}>
-                    <div className={`w-3 h-3 rounded-sm absolute top-0.5 transition-all ${enforce2fa ? 'left-[18px] bg-[#0a0a0b]' : 'left-0.5 bg-zinc-500'}`} />
+                {/*
+                  This toggle flipped local React state and nothing else. There is
+                  no MFA implementation on the platform — no TOTP library, no
+                  /auth/mfa route, and no server-side producer of `has_2fa` or
+                  `enforce_2fa` — so an administrator could switch on "Require
+                  two-factor authentication" for their whole organisation, see it
+                  turn on, and believe their team was protected when no factor was
+                  ever demanded of anyone.
+
+                  A security control that reports success without enforcing
+                  anything is worse than an absent one. Disabled until TOTP ships.
+                */}
+                <div className="flex items-center justify-between px-4 py-3 opacity-50">
+                  <div>
+                    <div className="text-[13px] text-zinc-300">Enforce 2FA</div>
+                    <div className="text-[11px] text-zinc-500 mt-0.5">Not yet available — two-factor authentication is not implemented</div>
+                  </div>
+                  <button
+                    disabled
+                    aria-disabled="true"
+                    title="Two-factor authentication is not yet implemented on XENO accounts"
+                    className="w-8 h-4 rounded relative shrink-0 bg-white/[0.08] cursor-not-allowed"
+                  >
+                    <div className="w-3 h-3 rounded-sm absolute top-0.5 left-0.5 bg-zinc-600" />
                   </button>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
