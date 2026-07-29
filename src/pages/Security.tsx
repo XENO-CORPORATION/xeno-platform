@@ -35,7 +35,13 @@ const Security: React.FC = () => (
           'Encryption at rest for stored data, backups, and credentials',
           'Least-privilege access controls with role-based permissions for staff',
           'Hardened cloud infrastructure with network isolation and firewalls',
-          'Secure session management with the option to enable multi-factor authentication',
+          // Do not re-add a multi-factor claim here until TOTP actually ships.
+          // This line used to advertise "the option to enable multi-factor
+          // authentication". There is no MFA implementation on this platform:
+          // no TOTP library, no /auth/mfa route, and nothing server-side that
+          // produces a has_2fa field. (xeno-post does implement TOTP MFA — that
+          // is a different product, and its docs are accurate.)
+          'Server-side sessions you can revoke individually or all at once',
           'Scoped API keys you can rotate or revoke at any time',
           'Payment data handled by PCI-compliant processors — we never store raw card numbers',
           'Continuous monitoring, logging, and alerting on production systems',
@@ -80,9 +86,8 @@ const Security: React.FC = () => (
                 Accounts are protected by secure, server-side sessions with sensible expiry and the
                 ability to sign out of active sessions. We support OAuth sign-in with trusted providers
                 and offer scoped API keys for programmatic access — each key can be named, limited, rotated,
-                and revoked independently. You can enable optional multi-factor authentication (MFA) for an
-                additional layer of protection on your account. We recommend MFA for all users and require
-                it for sensitive administrative actions.
+                and revoked independently. Multi-factor authentication is not yet available on XENO
+                accounts; when it ships it will be announced here rather than described in advance.
               </>
             ),
           },
