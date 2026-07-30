@@ -75,6 +75,15 @@ services:
       # OIDC provider (Sign in with XENO). Mounts /api/oauth2/* — off by default;
       # clients live in the oauth_clients DB table (xeno-post, xeno-api-portal).
       - OIDC_ENABLED=true
+      # v2 credit ledger. These two lines existed ONLY on xeno-platform-001 and were
+      # never committed — found 2026-07-30 while reconciling the box against main.
+      # The box is 231 commits behind, and a `git reset --hard origin/main` to catch
+      # it up would have silently deleted both: the ledger flag would have flipped
+      # off and the service token would have gone unset, on the system that meters
+      # money. Committing them is the prerequisite for that reset being safe.
+      # LEDGER_SERVICE_TOKEN is supplied from the box's .env; nothing secret here.
+      - LEDGER_V2_ENABLED=true
+      - LEDGER_SERVICE_TOKEN=${LEDGER_SERVICE_TOKEN}
       - BACKEND_PORT=8080
       - PORT=8080
       - DB_HOST=postgres
