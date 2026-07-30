@@ -229,10 +229,19 @@ quietly. `decrypt()` deliberately passes non-envelope values through, which is w
 deploy before the backfill ran.
 
 **Where the key lives:** `SECRET_BOX_KEY` in the box `.env`, passed to the backend service in
-`docker-compose.yml`. Second copy at `/root/.xeno-secrets/secret-box-key` (0600, root-only, outside
-the repo) because that `.env` has been overwritten before — six `.env.bak-*` siblings attest to it.
-Both copies are on the same box; **off-box escrow is still an operator task.** Key-loss recovery is
-in `docs/DR.md` §7, including the date the cheap recovery path expires.
+`docker-compose.yml`. Replicated to **four copies across three hosts** — a second copy at
+`/root/.xeno-secrets/secret-box-key` on the same box (because that `.env` has been overwritten
+before; six `.env.bak-*` siblings attest to it), plus `xeno-mail-001` and `bnkr-node-001` at
+`/root/.xeno-secrets/xeno-platform-secret-box-key`. All 0600 root-only, verified byte-identical by
+hash. `xeno-private-api-001` was deliberately excluded: its `15433` tunnel to the platform Postgres
+would put the key and the ciphertext it opens on one host. Full custody table, verification command
+and recovery order: `docs/DR.md` §7.
+
+**Silent-failure alarm:** `/api/health` publishes `checks.secretbox`, which decrypts real stored
+values rather than merely checking that a key is set — because a *missing* key is loud (fail-closed
+`encrypt()` throws) while a *wrong* key is silent. `xeno-watch` on `xeno-mail-001` mails on any
+transition into `missing`/`mismatch` and on recovery; the alert path was tested end-to-end with the
+send stubbed (fires, then stays silent while unchanged, then fires on recovery).
 
 **Full sweep, same day:** every secret-shaped column in all 82 tables was checked, not just the
 known ones. Everything else is empty, or hashed by design (`api_keys.key_hash`,
@@ -276,7 +285,7 @@ should go.
 3. **§3 rotate infra credentials** — ✅ **DONE + verified** (all five, incl. `POSTGRES_PASSWORD`). Optional: fail-fast compose flip.
 4. **§4 docker-socket-proxy**, **§5 non-superuser DB role** (Phase 3/4, behind testing).
 5. **New (from §3a Lesson 2):** assess/rotate the api box's local `xeno_platform` DB credential (separate, password-enforced).
-6. **§6 at-rest encryption** — ✅ **DONE + verified**. Remaining operator task: off-box escrow of `SECRET_BOX_KEY`, before **2026-08-13** (see `docs/DR.md` §7).
+6. **§6 at-rest encryption** — ✅ **DONE + verified**, key replicated to three hosts and a wrong key now alarms. Optional remaining hardening: a passphrase-encrypted escrow held off this infrastructure entirely (command in `docs/DR.md` §7 — it must be run by the key holder, not by an agent).
 7. **§7 `.env` permissions** — ✅ **DONE**. Remaining operator call: delete the `.env.bak-*` files once their credentials are rotated.
 
 See `docs/PLATFORM-MODERNIZATION.md` for how these fit the overall roadmap (Phase 4 —
