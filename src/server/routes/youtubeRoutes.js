@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { encrypt, decrypt } from '../utils/secretBox.js';
 import { google } from 'googleapis';
 import crypto from 'crypto';
 
@@ -96,9 +97,11 @@ async function getAuthenticatedClient(db, channelId, userId) {
   const channel = result.rows[0];
   const oauth2Client = createOAuth2Client();
 
+  // Stored encrypted (secretBox). decrypt() passes legacy plaintext through
+  // untouched, so this is safe to deploy before the backfill has run.
   oauth2Client.setCredentials({
-    access_token: channel.access_token,
-    refresh_token: channel.refresh_token,
+    access_token: decrypt(channel.access_token),
+    refresh_token: decrypt(channel.refresh_token),
     expiry_date: new Date(channel.token_expires_at).getTime()
   });
 
@@ -112,7 +115,7 @@ async function getAuthenticatedClient(db, channelId, userId) {
         `UPDATE youtube_channels
          SET access_token = $1, token_expires_at = $2, updated_at = NOW()
          WHERE id = $3`,
-        [credentials.access_token, new Date(credentials.expiry_date), channelId]
+        [encrypt(credentials.access_token), new Date(credentials.expiry_date), channelId]
       );
 
       oauth2Client.setCredentials(credentials);
@@ -504,8 +507,10 @@ publicRouter.get('/callback', async (req, res) => {
              scopes = $10, last_sync_at = NOW(), updated_at = NOW(), is_active = TRUE
          WHERE id = $11`,
         [
-          tokens.access_token,
-          tokens.refresh_token || existingChannel.rows[0].refresh_token,
+          encrypt(tokens.access_token),
+          // The fallback is a value already read from the DB, so it may already
+          // be sealed; encrypt() is idempotent on an existing envelope.
+          encrypt(tokens.refresh_token || existingChannel.rows[0].refresh_token),
           new Date(tokens.expiry_date),
           snippet.title,
           snippet.thumbnails?.high?.url || snippet.thumbnails?.default?.url,
@@ -541,8 +546,8 @@ publicRouter.get('/callback', async (req, res) => {
         parseInt(statistics.subscriberCount) || 0,
         parseInt(statistics.videoCount) || 0,
         parseInt(statistics.viewCount) || 0,
-        tokens.access_token,
-        tokens.refresh_token,
+        encrypt(tokens.access_token),
+        encrypt(tokens.refresh_token),
         new Date(tokens.expiry_date),
         YOUTUBE_CONFIG.scopes
       ]
