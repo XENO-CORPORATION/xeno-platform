@@ -9,6 +9,8 @@
 
 import { Router } from 'express';
 import Redis from 'ioredis';
+import fsp from 'node:fs/promises';
+import nodePath from 'node:path';
 import { updatesOrigin } from '../config/hosts.js';
 
 const router = Router();
@@ -138,6 +140,43 @@ router.get('/health', async (req, res) => {
     // CDN being unreachable is degraded, not critical
     if (overallStatus === 'ok') overallStatus = 'degraded';
     checks.r2_cdn = { status: 'degraded' };
+  }
+
+  /*
+   * 4. Backup freshness.
+   *
+   * The nightly Postgres backup failed every night from 2026-07-14 to 2026-07-29
+   * on the box that holds the credit ledger. The cron fired, pg-backup.sh was not
+   * executable (git stored the blob 100644, so a checkout stripped +x), and the
+   * only record was "Permission denied" appended to a log on the same machine.
+   * A box cannot report that its own backups stopped, for the same reason it
+   * cannot report that it died — so the age of the newest dump is published here,
+   * where the off-box watcher (xeno-mail-001:/usr/local/bin/xeno-watch) can read
+   * it. `backups/` is mounted READ-ONLY into this container solely for this.
+   *
+   * Deliberately does NOT touch overallStatus. A stale backup is an operational
+   * alarm, not "the site is down"; conflating them would drop the platform out of
+   * every uptime monitor over a cron failure. The watcher decides what to page on.
+   */
+  try {
+    const dir = process.env.BACKUP_DIR || '/app/backups';
+    const names = (await fsp.readdir(dir)).filter((n) => n.endsWith('.dump'));
+    if (names.length === 0) {
+      checks.backup = { status: 'error', error: 'no dump found', dir };
+    } else {
+      let newest = 0;
+      for (const name of names) {
+        const st = await fsp.stat(nodePath.join(dir, name));
+        if (st.mtimeMs > newest) newest = st.mtimeMs;
+      }
+      const ageHours = Math.floor((Date.now() - newest) / 3_600_000);
+      // 36h, not 24h, so one late or slow nightly run does not cry wolf.
+      checks.backup = { status: ageHours > 36 ? 'stale' : 'ok', ageHours, count: names.length };
+    }
+  } catch (err) {
+    // An unreadable or unmounted directory is itself worth surfacing — silence
+    // here is precisely the failure mode this check exists to remove.
+    checks.backup = { status: 'unknown', error: String((err && err.code) || err) };
   }
 
   const uptimeSeconds = Math.floor((Date.now() - SERVER_START_TIME) / 1000);
