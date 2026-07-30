@@ -229,7 +229,21 @@ const Pricing: React.FC = () => {
           },
           {
             h: 'Which AI models can I run?',
-            p: <>XENO aggregates the models you can already reach: API-accessible providers you connect with your own key (BYOK), plus open models that run in-house on xeno-rt. Managed-premium routes frontier models for you and meters them in credits. We don't claim exclusive models or to replace any one provider.</>,
+            /*
+             * BYOK was removed from this answer on 2026-07-30 because it does not
+             * exist anywhere in the estate. The platform's own inference router
+             * returns { error: 'byok_unavailable' } for the byok path
+             * (src/server/routes/aiRoutes.js:135 — its comment reads "Until the
+             * XENO API exposes this, byok is unavailable"), and the XENO API
+             * gateway on xeno-private-api-001 contains no BYOK code at all:
+             * checked, zero matches.
+             *
+             * A pricing page is where someone decides whether to pay us, so every
+             * capability named here has to be one they can actually use. Restore
+             * this in the same commit that makes the byok path return something
+             * other than an error — not before.
+             */
+            p: <>XENO aggregates the models you can already reach: open models that run in-house on xeno-rt, plus managed-premium routing that reaches frontier models for you and meters them in credits. Connecting your own provider key (BYOK) is planned and not yet available. We don't claim exclusive models or to replace any one provider.</>,
           },
           {
             h: 'Can I change plans?',
