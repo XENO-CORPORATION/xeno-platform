@@ -59,161 +59,88 @@ const Overview: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Generate mock data for the overview
+  /*
+   * Real data. This block previously fabricated the signed-in user's history:
+   * hardcoded credit usage (used 3750 / total 5000), invented activity entries
+   * ("Futuristic cityscape at night", "Ocean waves animation"), Unsplash
+   * thumbnails, and model names XENO does not offer ("Sora", "GPT-3.5 Turbo").
+   * A dashboard that invents a history is worse than an empty one — the user
+   * cannot tell which of their numbers are real.
+   *
+   * GET /api/dashboard/stats has existed and been deployed since 2026-07-16 and
+   * nothing in the frontend called it. It reads the v2 credit ledger and the
+   * usage tables, so these figures are now the same ones billing charges on.
+   */
   useEffect(() => {
-    // Mock activity data
-    const mockActivity: ActivityItem[] = [];
-    
-    // Image generations
-    mockActivity.push({
-      id: 'act-1',
-      type: 'image',
-      title: 'Futuristic cityscape at night',
-      timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-      thumbnail: 'https://source.unsplash.com/random/300x300?city,night',
-      model: 'Stable Diffusion XL',
-      prompt: 'Futuristic cityscape at night with neon lights and flying cars'
-    });
-    
-    // Video generation
-    mockActivity.push({
-      id: 'act-2',
-      type: 'video',
-      title: 'Ocean waves animation',
-      timestamp: new Date(Date.now() - 1000 * 60 * 120), // 2 hours ago
-      thumbnail: 'https://source.unsplash.com/random/300x300?ocean',
-      model: 'Sora',
-      prompt: 'Realistic ocean waves crashing on a beach at sunset'
-    });
-    
-    // Model training
-    mockActivity.push({
-      id: 'act-3',
-      type: 'model-train',
-      title: 'Customer Support Bot Training',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5), // 5 hours ago
-      model: 'GPT-3.5 Turbo'
-    });
-    
-    // Lab creation
-    mockActivity.push({
-      id: 'act-4',
-      type: 'lab-create',
-      title: 'Image Classification Lab',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-      thumbnail: 'https://source.unsplash.com/random/300x300?tech'
-    });
-    
-    // Upscaling
-    mockActivity.push({
-      id: 'act-5',
-      type: 'upscale',
-      title: 'Portrait enhancement',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3), // 3 hours ago
-      thumbnail: 'https://source.unsplash.com/random/300x300?portrait',
-      model: 'Real-ESRGAN'
-    });
-    
-    // Image generation
-    mockActivity.push({
-      id: 'act-6',
-      type: 'image',
-      title: 'Abstract digital art pattern',
-      timestamp: new Date(Date.now() - 1000 * 60 * 180), // 3 hours ago
-      thumbnail: 'https://source.unsplash.com/random/300x300?abstract',
-      model: 'DALL-E 3'
-    });
-    
-    // More activities
-    mockActivity.push({
-      id: 'act-7',
-      type: 'video',
-      title: 'Flower blooming timelapse',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 10), // 10 hours ago
-      thumbnail: 'https://source.unsplash.com/random/300x300?flower',
-      model: 'Gen-2'
-    });
-    
-    mockActivity.push({
-      id: 'act-8',
-      type: 'upscale',
-      title: 'Video quality enhancement',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 12), // 12 hours ago
-      thumbnail: 'https://source.unsplash.com/random/300x300?video',
-      model: 'Topaz Video AI'
-    });
-    
-    // Sort by timestamp (newest first)
-    mockActivity.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-    
-    // Set recent activity
-    setRecentActivity(mockActivity);
-    
-    // Mock top models data
-    const mockModels: ModelUsage[] = [
-      {
-        name: 'Stable Diffusion XL',
-        type: 'image',
-        runs: 143,
-        credits: 1240,
-        lastUsed: new Date(Date.now() - 1000 * 60 * 30)
-      },
-      {
-        name: 'GPT-3.5 Turbo',
-        type: 'llm',
-        runs: 87,
-        credits: 780,
-        lastUsed: new Date(Date.now() - 1000 * 60 * 180)
-      },
-      {
-        name: 'Sora',
-        type: 'video',
-        runs: 52,
-        credits: 1450,
-        lastUsed: new Date(Date.now() - 1000 * 60 * 120)
-      },
-      {
-        name: 'Real-ESRGAN',
-        type: 'upscale',
-        runs: 28,
-        credits: 280,
-        lastUsed: new Date(Date.now() - 1000 * 60 * 60 * 3)
+    let cancelled = false;
+
+    const authHeaders = (): Record<string, string> => {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("xenoos_auth_token") : null;
+      const workspace = typeof localStorage !== "undefined" ? localStorage.getItem("xeno_active_workspace_id") : null;
+      const h: Record<string, string> = {};
+      // Spread-conditional so a logged-out caller sends no header at all and
+      // correctly gets 401, rather than a literal "Bearer null".
+      if (token) h.Authorization = `Bearer ${token}`;
+      if (workspace) h["x-xeno-workspace"] = workspace;
+      return h;
+    };
+
+    (async () => {
+      try {
+        const res = await fetch("/api/dashboard/stats", { headers: authHeaders() });
+        if (!res.ok) throw new Error(`stats ${res.status}`);
+        const body = await res.json();
+        if (cancelled) return;
+
+        const stats = body?.stats ?? {};
+        const bySurface = Array.isArray(stats.usage_by_surface) ? stats.usage_by_surface : [];
+
+        // Credits: balance is what remains; lifetime_spent is what has been used.
+        const remaining = Number(stats.credits ?? 0);
+        const spent = Number(stats.lifetime_spent ?? 0);
+        setCreditUsage({
+          used: spent,
+          total: spent + remaining,
+          // No per-day series is exposed yet — show nothing rather than invent a
+          // shape. The sparkline renders empty until /api/dashboard/stats returns one.
+          perDay: [],
+        });
+
+        // Usage by surface is the only real "what have I been doing" signal the
+        // backend exposes today. Map it to the existing ModelUsage shape so the
+        // renderer is unchanged; anything we cannot source stays empty.
+        setTopModels(
+          bySurface
+            .filter((r: { events?: number }) => (r.events ?? 0) > 0)
+            .sort((a: { credits?: number }, b: { credits?: number }) => (b.credits ?? 0) - (a.credits ?? 0))
+            .slice(0, 5)
+            .map((r: { surface?: string; events?: number; credits?: number }) => ({
+              name: r.surface ?? "other",
+              count: r.events ?? 0,
+              credits: r.credits ?? 0,
+            })) as ModelUsage[]
+        );
+
+        // Activity and labs have no backing endpoint yet. Empty is the honest
+        // value; both already have an empty branch in the render below
+        // ("No recent activity yet" / the labs equivalent), so the user sees a
+        // real call to action instead of an invented history.
+        setRecentActivity([]);
+        setRecentLabs([]);
+      } catch {
+        // A failed or unauthenticated load shows the empty state, not fake data.
+        if (!cancelled) {
+          setCreditUsage({ used: 0, total: 0, perDay: [] });
+          setTopModels([]);
+          setRecentActivity([]);
+          setRecentLabs([]);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-    ];
-    
-    setTopModels(mockModels);
-    
-    // Mock labs data
-    const mockLabs: LabItem[] = [
-      {
-        id: 'lab-1',
-        name: 'Image Classification Lab',
-        lastModified: new Date(Date.now() - 1000 * 60 * 60 * 24),
-        nodes: 8,
-        thumbnail: 'https://source.unsplash.com/random/300x300?tech,lab'
-      },
-      {
-        id: 'lab-2',
-        name: 'Video Generation Workflow',
-        lastModified: new Date(Date.now() - 1000 * 60 * 60 * 48),
-        nodes: 12,
-        thumbnail: 'https://source.unsplash.com/random/300x300?video,tech'
-      },
-      {
-        id: 'lab-3',
-        name: 'Text to Image Pipeline',
-        lastModified: new Date(Date.now() - 1000 * 60 * 60 * 72),
-        nodes: 5,
-        thumbnail: 'https://source.unsplash.com/random/300x300?art,ai'
-      }
-    ];
-    
-    setRecentLabs(mockLabs);
-    
-    // Simulate loading delay
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 800);
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
   // Listen for create_lab events from buttons on the overview
@@ -437,6 +364,20 @@ const Overview: React.FC = () => {
                     <div className="h-4 bg-white/10 rounded w-12"></div>
                   </div>
                 ))}
+              </div>
+            ) : !topModels?.length ? (
+              /* Activity and Labs already had an empty branch; this one did not,
+                 so with real (often empty) data it rendered a bare heading over
+                 nothing. */
+              <div className="text-center py-8">
+                <Layers className="mx-auto text-white/20 mb-3" size={48} />
+                <p className="text-white/60 mb-4">No usage in the last 30 days</p>
+                <button
+                  onClick={() => navigateTo('/generation/image')}
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-colors"
+                >
+                  Start creating
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
