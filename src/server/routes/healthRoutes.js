@@ -136,22 +136,38 @@ router.get('/health', async (req, res) => {
     checks.redis = { status: 'down' };
   }
 
-  // 3. R2 / CDN connectivity (lightweight — just check DNS resolution)
+  /*
+   * 3. R2 / CDN reachability.
+   *
+   * This probes the updates origin ROOT, and an R2 bucket has no index object
+   * there — so it answers 404 by design, forever. The check used to treat that
+   * as 'degraded', which meant it reported degraded on every single poll while
+   * the CDN was perfectly healthy (verified 2026-07-30: every real object, e.g.
+   * apps/hub/version.json, serves 200). A check that is always red is worse than
+   * no check: it trains everyone to ignore it, and then it cannot warn about the
+   * outage it exists for.
+   *
+   * What this check can honestly claim is REACHABILITY — DNS, TLS and the edge.
+   * Any HTTP response at all proves that, whatever the status code. Only a
+   * network failure, or the edge itself erroring (5xx), is evidence of trouble.
+   */
   try {
     const r2Start = Date.now();
     const response = await fetch(`${updatesOrigin()}/`, {
       method: 'HEAD',
       signal: AbortSignal.timeout(3000),
     });
+    const edgeBroken = response.status >= 500;
+    if (edgeBroken && overallStatus === 'ok') overallStatus = 'degraded';
     checks.r2_cdn = {
-      status: response.ok || response.status === 403 ? 'ok' : 'degraded',
+      status: edgeBroken ? 'degraded' : 'ok',
       responseMs: Date.now() - r2Start,
       statusCode: response.status,
     };
   } catch (err) {
-    // CDN being unreachable is degraded, not critical
+    // No response at all — DNS, TLS or the edge is genuinely unreachable.
     if (overallStatus === 'ok') overallStatus = 'degraded';
-    checks.r2_cdn = { status: 'degraded' };
+    checks.r2_cdn = { status: 'degraded', error: 'unreachable' };
   }
 
   /*
