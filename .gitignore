@@ -40,3 +40,13 @@ tmp-*
 backups/
 *.dump
 *.dump.partial
+
+# Private dev-access secrets. These patterns existed ONLY in the copy of
+# .gitignore on xeno-platform-001 and were never committed — found 2026-07-30
+# while reconciling that box against main. Catching the box up with
+# `git reset --hard origin/main` would have deleted them, making an htpasswd
+# file, a private nginx config and a secrets directory git-visible on the
+# machine where they actually exist. Committing them first makes that reset safe.
+*.htpasswd
+nginx-private.conf
+.bunker-secrets/
