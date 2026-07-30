@@ -90,7 +90,14 @@ export const PRICING_TIERS: PricingTier[] = [
       'Every app: Pixel, Motion, Sound, Canvas & more',
       'Local editing & local files — works offline',
       'Clean, full-resolution exports',
-      'Bring your own API key (BYOK)',
+      // BYOK was listed here and is NOT available: the `byok` inference path in
+      // src/server/routes/aiRoutes.js returns `byok_unavailable`, because BYOK is
+      // owned by the XENO API gateway and is not implemented there yet. This list
+      // is rendered on the landing page, the pricing page and the welcome modal,
+      // so it was promising a feature no user could use. The Pricing page prose
+      // already says BYOK is "planned and not yet available" — keep the claim
+      // there, in the roadmap voice, not here in the shipped-feature list.
+      // Re-add only when the gateway actually serves it.
       'In-house xeno-rt open models — fair-use daily cap',
       'Community support',
     ],
