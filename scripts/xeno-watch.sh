@@ -36,6 +36,12 @@ STATE_FILE="$STATE_DIR/state"
 # has backups/ mounted read-only purely so it can report the newest dump's age.
 BACKUP_HEALTH_URL="${XENO_BACKUP_HEALTH_URL:-https://xenostudio.ai/api/health}"
 BACKUP_STATE_FILE="$STATE_DIR/backup-state"
+# Same health surface, second silent-failure class: the at-rest encryption key.
+SECRETBOX_STATE_FILE="$STATE_DIR/secretbox-state"
+# check_backup fills this from one fetch and check_secretbox reuses it, so the
+# two checks cost a single request. Initialised here because `set -u` would
+# otherwise abort the whole run if the call order were ever changed.
+health=""
 LAST_OK_MAIL="$STATE_DIR/last-weekly"
 FAIL_STREAK_FILE="$STATE_DIR/streak"
 # Two consecutive failures before alerting, so one slow response is not an outage.
@@ -139,9 +145,76 @@ Check, in order:
   fi
 }
 
+# ── At-rest encryption key, observed from OFF the box ───────────────────────
+# Since 2026-07-30 the stored YouTube OAuth tokens are encrypted with
+# SECRET_BOX_KEY. Two ways that goes wrong, and only one is loud:
+#
+#   missing  — the key is gone from the backend env. encrypt() is fail-closed,
+#              so the next channel connect throws. Loud, but only for whoever
+#              happens to be connecting a channel at the time.
+#   mismatch — a key is present but it does not open the stored data. NOTHING
+#              throws on the write path. The site is perfectly healthy, reads
+#              fail one row at a time, and the first report comes from a
+#              customer whose channel stopped working. This is the one this
+#              alert exists for.
+#
+# no-data / unknown deliberately do NOT change state or alert: the first is a
+# legitimate empty table, the second is usually a transient DB blip, and neither
+# is evidence of a key problem. Alerting on them would train the recipient to
+# ignore this mail, which is the same as not sending it.
+check_secretbox() {
+  # $health is already fetched by check_backup from the same endpoint.
+  [ -n "$health" ] || return 0
+
+  sstatus="$(printf '%s' "$health" | sed -n 's/.*"secretbox":{[^}]*"status":"\([a-z-]*\)".*/\1/p')"
+  [ -n "$sstatus" ] || return 0
+
+  case "$sstatus" in
+    no-data|unknown) return 0 ;;
+  esac
+
+  sprev="$(cat "$SECRETBOX_STATE_FILE" 2>/dev/null || echo unknown)"
+  if [ "$sstatus" = "ok" ]; then
+    if [ "$sprev" = "bad" ]; then
+      send_mail "[XENO] encryption key RECOVERED — stored tokens open again" \
+"The platform can decrypt its stored OAuth tokens again.
+
+  reported status : ok
+  at              : $TS"
+    fi
+    echo ok > "$SECRETBOX_STATE_FILE"
+  else
+    if [ "$sprev" != "bad" ]; then
+      send_mail "[XENO] ENCRYPTION KEY PROBLEM — stored OAuth tokens are not opening" \
+"xeno-watch on $(hostname) sees a SECRET_BOX_KEY problem on xeno-platform-001.
+
+  reported status : $sstatus
+  at              : $TS
+
+  missing  = no key in the backend env; connecting a channel will fail.
+  mismatch = a key IS set but it does not decrypt the stored tokens. Do NOT
+             let anything re-encrypt while this is true — writing under a
+             wrong key destroys the originals.
+
+The key exists in four places; compare them before changing anything (hash
+only, never print the value):
+
+  sudo grep '^SECRET_BOX_KEY=' /mnt/projects/xeno-platform/.env | sha256sum
+  sudo cat /root/.xeno-secrets/secret-box-key | sha256sum                    # same box
+  ssh xeno-mail-001  sudo cat /root/.xeno-secrets/xeno-platform-secret-box-key | sha256sum
+  ssh bnkr-node-001       cat /root/.xeno-secrets/xeno-platform-secret-box-key | sha256sum
+
+Restore whichever copy matches the majority, redeploy the backend, then run the
+verification block in docs/DR.md section 7 and require 'failed: 0'."
+    fi
+    echo bad > "$SECRETBOX_STATE_FILE"
+  fi
+}
+
 if [ "$code" = "200" ]; then
   echo 0 > "$FAIL_STREAK_FILE"
   check_backup
+  check_secretbox
   if [ "$prev" = "down" ]; then
     send_mail "[XENO] RECOVERED — xenostudio.ai is responding again" \
 "xeno-watch on $(hostname) confirms recovery.

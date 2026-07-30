@@ -12,11 +12,23 @@ import Redis from 'ioredis';
 import fsp from 'node:fs/promises';
 import nodePath from 'node:path';
 import { updatesOrigin } from '../config/hosts.js';
+import { decrypt, isConfigured } from '../utils/secretBox.js';
 
 const router = Router();
 
 // Track server start time
 const SERVER_START_TIME = Date.now();
+
+/*
+ * secretBox check result, cached.
+ *
+ * The check costs one indexed LIMIT-5 query. /api/health is polled by the
+ * off-box watcher every 5 minutes and by anything else that finds it, so the
+ * result is cached for 5 minutes rather than run per request. A wrong key does
+ * not fix itself between polls, so a stale-by-minutes answer is fine.
+ */
+const SECRETBOX_CACHE_MS = 5 * 60 * 1000;
+let secretBoxCache = { at: 0, value: null };
 
 // Lazy Redis connection for health checks
 let redis = null;
@@ -177,6 +189,62 @@ router.get('/health', async (req, res) => {
     // An unreadable or unmounted directory is itself worth surfacing — silence
     // here is precisely the failure mode this check exists to remove.
     checks.backup = { status: 'unknown', error: String((err && err.code) || err) };
+  }
+
+  /*
+   * 5. At-rest encryption key.
+   *
+   * Since 2026-07-30 the stored YouTube OAuth tokens are encrypted with
+   * SECRET_BOX_KEY (utils/secretBox.js). That creates a new silent-failure mode,
+   * and it is the nastier cousin of the backup one: a MISSING key announces
+   * itself (encrypt() is fail-closed and throws on the next channel connect),
+   * but a WRONG key does not. Everything keeps serving, reads of already-sealed
+   * rows fail one at a time, and nothing aggregates it — you find out when a
+   * customer says their channel stopped working.
+   *
+   * So this does not merely ask "is a key set?" — it decrypts real stored values
+   * and reports whether they actually come back. That is the difference between
+   * "a key is present" and "the RIGHT key is present".
+   *
+   * Statuses: ok | missing (writes will throw) | mismatch (key present but does
+   * not open the data — the dangerous one) | no-data | unknown.
+   *
+   * Like the backup check, this deliberately does NOT touch overallStatus: a key
+   * problem breaks one feature, it is not "the site is down", and conflating the
+   * two would drop the platform out of every uptime monitor. The watcher decides
+   * what to page on. Counts only — no secret, plaintext or ciphertext is emitted.
+   */
+  try {
+    const fresh = Date.now() - secretBoxCache.at < SECRETBOX_CACHE_MS;
+    if (fresh && secretBoxCache.value) {
+      checks.secretbox = secretBoxCache.value;
+    } else if (!isConfigured()) {
+      checks.secretbox = { status: 'missing' };
+      secretBoxCache = { at: Date.now(), value: checks.secretbox };
+    } else {
+      const { rows } = await req.db.query(
+        "SELECT access_token FROM youtube_channels WHERE access_token LIKE 'v1.%' LIMIT 5"
+      );
+      if (rows.length === 0) {
+        checks.secretbox = { status: 'no-data', configured: true };
+      } else {
+        let opened = 0;
+        for (const row of rows) {
+          try {
+            if (decrypt(row.access_token)) opened += 1;
+          } catch {
+            /* counted below as a failure to open */
+          }
+        }
+        checks.secretbox =
+          opened === rows.length
+            ? { status: 'ok', sampled: rows.length }
+            : { status: 'mismatch', sampled: rows.length, opened };
+      }
+      secretBoxCache = { at: Date.now(), value: checks.secretbox };
+    }
+  } catch (err) {
+    checks.secretbox = { status: 'unknown', error: String((err && err.code) || err) };
   }
 
   const uptimeSeconds = Math.floor((Date.now() - SERVER_START_TIME) / 1000);

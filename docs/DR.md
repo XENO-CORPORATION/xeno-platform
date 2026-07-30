@@ -226,32 +226,84 @@ That changes what a disaster recovery actually requires:
 > ciphertext. Without `SECRET_BOX_KEY`, 100 connected YouTube channels are
 > unrecoverable and every owner has to reconnect their channel by hand.
 
-**Where the key lives (both copies on the same box — this is the remaining gap):**
+**Where the key lives — four copies on three hosts:**
 
-| Copy | Path | Mode |
+| Host | Path | Mode |
 |---|---|---|
-| Live | `/mnt/projects/xeno-platform/.env` → `SECRET_BOX_KEY` | `0600` |
-| Backup | `/root/.xeno-secrets/secret-box-key` | `0600`, root-only, outside the repo |
+| `xeno-platform-001` | `/mnt/projects/xeno-platform/.env` → `SECRET_BOX_KEY` (live) | `0600` |
+| `xeno-platform-001` | `/root/.xeno-secrets/secret-box-key` | `0600` root-only |
+| `xeno-mail-001` | `/root/.xeno-secrets/xeno-platform-secret-box-key` | `0600` root-only |
+| `bnkr-node-001` | `/root/.xeno-secrets/xeno-platform-secret-box-key` | `0600` root-only |
 
-The second copy exists because that `.env` has been overwritten before (its six
-`.env.bak-*` siblings are the evidence). It does **not** protect against loss of the box,
-which is the same single-site gap as §6.
+All four verified byte-identical by hash on 2026-07-30. The same-box copy exists because
+that `.env` has been overwritten before (its six `.env.bak-*` siblings are the evidence);
+the two off-box copies exist so losing `xeno-platform-001` does not take the key with it.
+
+**`xeno-private-api-001` was deliberately excluded.** It holds an SSH tunnel to the
+platform Postgres on `127.0.0.1:15433`, so a key copy there would put the key and the
+ciphertext it opens on the *same* host — handing a single compromise both halves. The two
+chosen hosts were checked and have no path to that database, which is what makes a
+cleartext key file on them low-value to an attacker: without the ciphertext it opens
+nothing.
+
+> This is replication, not escrow. It protects against **losing** the key, not against a
+> host being **read**. A true escrow — the key encrypted under a passphrase only you hold,
+> stored off this infrastructure entirely — is still worth doing; see the end of this
+> section.
 
 ### The cheap recovery path, and when it expires
 
 The tokens were plaintext until the backfill, so the pre-backfill dump
 `backups/xenostudio-20260730T162914.dump` still holds all 100 rows in cleartext —
-verified on the day: 100 rows / 200 token values recoverable. While that dump exists,
-losing the key costs nothing.
+verified on the day: 100 rows / 200 token values recoverable.
 
-**Retention is 14 nightly dumps (§1), so that dump rolls off around 2026-08-13.**
-After that date, `SECRET_BOX_KEY` is the *only* way back. Two ways to act on this,
-in preference order:
+**Retention is 14 nightly dumps (§1), so that dump rolls off around 2026-08-13.** Keeping
+it past that date is *not* recommended: it would park 100 live OAuth tokens in cleartext,
+which is the exact exposure the encryption removed. The replication above is what replaces
+it — let the dump age out.
 
-1. **Escrow the key off-box** (password manager / sealed store) — do this regardless.
-2. Or copy that one dump somewhere retention won't prune, as a dated stopgap. This is
-   strictly worse: it keeps 100 live OAuth tokens sitting in cleartext, which is the
-   exposure the encryption was built to remove. Prefer (1).
+### Silent-failure alarm (added 2026-07-30)
+
+A **missing** key is loud: `encrypt()` is fail-closed, so the next channel connect throws.
+A **wrong** key is silent — nothing throws on write, reads fail one row at a time, and the
+first report comes from a customer. So `/api/health` publishes `checks.secretbox`, which
+does not merely ask "is a key set" but decrypts real stored values and reports whether they
+come back:
+
+| status | meaning |
+|---|---|
+| `ok` | sampled values decrypted |
+| `missing` | no key in the backend env — writes will throw |
+| `mismatch` | a key is present but does **not** open the data — the dangerous one |
+| `no-data` | nothing sealed yet |
+| `unknown` | the check itself failed |
+
+`xeno-watch` on `xeno-mail-001` alerts by mail on any transition into `missing`/`mismatch`
+and on recovery. Like `checks.backup`, it deliberately does not affect the overall health
+status — a key problem breaks one feature, it is not "the site is down".
+
+> If you ever see `mismatch`: **do not let anything re-encrypt.** Writing under a wrong key
+> destroys the originals. Compare the four copies by hash, restore the majority, redeploy,
+> then require `failed: 0` from the verification block below.
+
+### Still worth doing: a real off-infrastructure escrow
+
+The four copies are all on machines you operate. To survive losing all of them, encrypt the
+key under a passphrase only you know and keep the result anywhere (including a private
+repo — the ciphertext is inert without the passphrase). Run this yourself, so the
+passphrase never passes through anyone else's hands:
+
+```sh
+ssh xeno-platform-001 "sudo grep '^SECRET_BOX_KEY=' /mnt/projects/xeno-platform/.env" \
+  | openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -out xeno-secret-box-key.enc
+# prompts for a passphrase; store xeno-secret-box-key.enc wherever you like
+
+# to read it back later:
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in xeno-secret-box-key.enc
+```
+
+Verify the file decrypts **before** you rely on it. A passphrase you cannot reproduce is
+the same as no backup.
 
 ### Verifying the key still matches the data
 
