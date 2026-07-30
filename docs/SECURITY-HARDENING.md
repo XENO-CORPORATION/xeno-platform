@@ -229,13 +229,22 @@ quietly. `decrypt()` deliberately passes non-envelope values through, which is w
 deploy before the backfill ran.
 
 **Where the key lives:** `SECRET_BOX_KEY` in the box `.env`, passed to the backend service in
-`docker-compose.yml`. Replicated to **four copies across three hosts** — a second copy at
-`/root/.xeno-secrets/secret-box-key` on the same box (because that `.env` has been overwritten
-before; six `.env.bak-*` siblings attest to it), plus `xeno-mail-001` and `bnkr-node-001` at
-`/root/.xeno-secrets/xeno-platform-secret-box-key`. All 0600 root-only, verified byte-identical by
-hash. `xeno-private-api-001` was deliberately excluded: its `15433` tunnel to the platform Postgres
-would put the key and the ciphertext it opens on one host. Full custody table, verification command
-and recovery order: `docs/DR.md` §7.
+`docker-compose.yml`, replicated to **five copies**, all 0600 root-only and verified
+byte-identical by hash. `xeno-private-api-001` was deliberately excluded: its `15433` tunnel to
+the platform Postgres would put the key and the ciphertext it opens on one host.
+
+The count is misleading on its own — **four of the five are on one physical machine.**
+`xeno-platform-001` and `xeno-mail-001` are VMs 120 and 132 on `bnkr-node-001`, which runs all 28
+VMs in this estate on a single ASUS box behind one Deutsche Telekom line. The fifth copy, on a
+Hetzner vServer (`htznr-bnkr-tunnel-001`), is the only one that survives losing that box.
+`scripts/secret-box-key-check.sh` compares all five by hash (read-only by default) so rotation
+cannot silently leave four stale copies behind. Full custody table: `docs/DR.md` §7.
+
+> Worth noting beyond this key: **the entire XENO platform — site, API, database, mail, and the
+> off-box watcher that is supposed to observe it — runs on that one physical machine.** The
+> watcher is off-*VM*, not off-site, so it cannot report the box dying. That is an infrastructure
+> decision, not a code one, but it bounds what every DR procedure in this repo can actually
+> promise.
 
 **Silent-failure alarm:** `/api/health` publishes `checks.secretbox`, which decrypts real stored
 values rather than merely checking that a key is set — because a *missing* key is loud (fail-closed

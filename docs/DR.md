@@ -226,30 +226,55 @@ That changes what a disaster recovery actually requires:
 > ciphertext. Without `SECRET_BOX_KEY`, 100 connected YouTube channels are
 > unrecoverable and every owner has to reconnect their channel by hand.
 
-**Where the key lives — four copies on three hosts:**
+**Where the key lives — five copies, and only one of them matters for a real disaster:**
 
-| Host | Path | Mode |
+| Host | Path | Physical location |
 |---|---|---|
-| `xeno-platform-001` | `/mnt/projects/xeno-platform/.env` → `SECRET_BOX_KEY` (live) | `0600` |
-| `xeno-platform-001` | `/root/.xeno-secrets/secret-box-key` | `0600` root-only |
-| `xeno-mail-001` | `/root/.xeno-secrets/xeno-platform-secret-box-key` | `0600` root-only |
-| `bnkr-node-001` | `/root/.xeno-secrets/xeno-platform-secret-box-key` | `0600` root-only |
+| `xeno-platform-001` | `.env` → `SECRET_BOX_KEY` (live) | VM 120 **on `bnkr-node-001`** |
+| `xeno-platform-001` | `/root/.xeno-secrets/secret-box-key` | VM 120 **on `bnkr-node-001`** |
+| `xeno-mail-001` | `/root/.xeno-secrets/xeno-platform-secret-box-key` | VM 132 **on `bnkr-node-001`** |
+| `bnkr-node-001` | `/root/.xeno-secrets/xeno-platform-secret-box-key` | the physical host |
+| `htznr-bnkr-tunnel-001` | `/root/.xeno-secrets/xeno-platform-secret-box-key` | **Hetzner vServer — OFF-SITE** |
 
-All four verified byte-identical by hash on 2026-07-30. The same-box copy exists because
-that `.env` has been overwritten before (its six `.env.bak-*` siblings are the evidence);
-the two off-box copies exist so losing `xeno-platform-001` does not take the key with it.
+All `0600` root-only, all verified byte-identical by hash on 2026-07-30.
+
+> **The topology matters more than the count.** `xeno-platform-001` and `xeno-mail-001`
+> are not independent machines — they are VMs 120 and 132 on `bnkr-node-001`, which also
+> runs the other 26 VMs in this estate on a single ASUS box behind one Deutsche Telekom
+> line. Four of the five copies are therefore on **one physical machine**. They protect
+> against a bad `.env` overwrite or a VM rebuild; they do **not** protect against that box
+> dying. The Hetzner copy is the only one that survives it — different provider, different
+> city, different power and network.
 
 **`xeno-private-api-001` was deliberately excluded.** It holds an SSH tunnel to the
 platform Postgres on `127.0.0.1:15433`, so a key copy there would put the key and the
-ciphertext it opens on the *same* host — handing a single compromise both halves. The two
-chosen hosts were checked and have no path to that database, which is what makes a
-cleartext key file on them low-value to an attacker: without the ciphertext it opens
-nothing.
+ciphertext it opens on the *same* host — handing a single compromise both halves. Every
+host that does hold a copy was checked to have no route to that database, which is what
+makes a cleartext key file on them low-value: without the ciphertext, it opens nothing.
 
 > This is replication, not escrow. It protects against **losing** the key, not against a
-> host being **read**. A true escrow — the key encrypted under a passphrase only you hold,
-> stored off this infrastructure entirely — is still worth doing; see the end of this
-> section.
+> host being **read**. A true escrow — the key encrypted under a passphrase only you hold —
+> is still the last mile; see the end of this section.
+
+### Keeping the copies honest
+
+Replication creates its own failure mode: rotate the key on `xeno-platform-001` and forget
+the rest, and you have four confidently wrong files. Restoring one during an incident does
+not fail loudly — it re-encrypts live data under the wrong key and destroys the originals.
+
+```sh
+./scripts/secret-box-key-check.sh                    # read-only comparison of all five
+./scripts/secret-box-key-check.sh --sync --confirm   # push the live key to every escrow
+```
+
+Run the check after **any** key rotation and after rebuilding any of those hosts. It
+compares by sha256 and never prints the key. It has to run from the operator workstation:
+the copies deliberately live on hosts that cannot reach one another, and granting them SSH
+access to each other would weaken that isolation to solve a monitoring problem.
+
+If it reports drift, do **not** restore a drifted copy first. Check
+`/api/health` → `checks.secretbox`: if it says `ok`, the live key still opens the data, so
+the live one is right and the escrows are merely stale — `--sync --confirm` fixes them.
 
 ### The cheap recovery path, and when it expires
 
