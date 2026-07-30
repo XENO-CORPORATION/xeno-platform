@@ -83,6 +83,12 @@ services:
       # money. Committing them is the prerequisite for that reset being safe.
       # LEDGER_SERVICE_TOKEN is supplied from the box's .env; nothing secret here.
       - LEDGER_V2_ENABLED=true
+      # At-rest encryption for stored OAuth tokens (src/server/utils/secretBox.js).
+      # secretBox is FAIL-CLOSED: without this the backend refuses to write a
+      # token rather than silently storing plaintext, so a missing passthrough
+      # here breaks channel connection loudly instead of quietly regressing.
+      # ⚠ Losing the value makes every sealed token unrecoverable.
+      - SECRET_BOX_KEY=${SECRET_BOX_KEY}
       - LEDGER_SERVICE_TOKEN=${LEDGER_SERVICE_TOKEN}
       - BACKEND_PORT=8080
       - PORT=8080
