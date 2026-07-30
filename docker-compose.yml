@@ -155,6 +155,12 @@ services:
       - ./src/server/sam2-uploads:/app/sam2-uploads
       - ./src/server/storage:/app/storage
       - ./conversions:/app/conversions
+      # Backups, READ-ONLY. Mounted solely so /api/health can report how old the
+      # newest dump is — see the backup check in src/server/index.js. The nightly
+      # backup failed silently for 15 days because nothing off-box could observe
+      # it; this is the observation path. `:ro` because the API has no business
+      # being able to modify or delete a backup.
+      - ./backups:/app/backups:ro
       - /var/run/docker.sock:/var/run/docker.sock
       # Video Studio storage
       - ./storage/videos:/app/storage/videos

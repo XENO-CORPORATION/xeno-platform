@@ -32,6 +32,10 @@ ALERT_TO="${XENO_ALERT_TO:-support@xenostudio.ai}"
 ALERT_FROM="${XENO_ALERT_FROM:-XENO Watch <alerts@xenostudio.ai>}"
 STATE_DIR="/var/lib/xeno-watch"
 STATE_FILE="$STATE_DIR/state"
+# Backup freshness is read from the platform's own health surface — the backend
+# has backups/ mounted read-only purely so it can report the newest dump's age.
+BACKUP_HEALTH_URL="${XENO_BACKUP_HEALTH_URL:-https://xenostudio.ai/api/health}"
+BACKUP_STATE_FILE="$STATE_DIR/backup-state"
 LAST_OK_MAIL="$STATE_DIR/last-weekly"
 FAIL_STREAK_FILE="$STATE_DIR/streak"
 # Two consecutive failures before alerting, so one slow response is not an outage.
@@ -86,8 +90,58 @@ code="$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$TARGET_URL" 2>/dev/null |
 prev="$(cat "$STATE_FILE" 2>/dev/null || echo unknown)"
 streak="$(cat "$FAIL_STREAK_FILE" 2>/dev/null || echo 0)"
 
+# ── Backup freshness, observed from OFF the box ─────────────────────────────
+# The platform reports the age of its newest Postgres dump in /api/health under
+# checks.backup. This is the half that was missing: the nightly backup failed
+# every night from 2026-07-14 to 2026-07-29 and the only record was a line in a
+# log on the same machine. A box cannot tell you its own backups stopped, for the
+# same reason it cannot tell you it died.
+#
+# Alerts on state change only, and independently of the up/down state, so a stale
+# backup on a perfectly healthy site still reaches a human.
+check_backup() {
+  health="$(curl -s -m 20 "$BACKUP_HEALTH_URL" 2>/dev/null)"
+  [ -n "$health" ] || return 0
+
+  bstatus="$(printf '%s' "$health" | sed -n 's/.*"backup":{[^}]*"status":"\([a-z]*\)".*/\1/p')"
+  bage="$(printf '%s' "$health" | sed -n 's/.*"backup":{[^}]*"ageHours":\([0-9]*\).*/\1/p')"
+  [ -n "$bstatus" ] || return 0
+
+  bprev="$(cat "$BACKUP_STATE_FILE" 2>/dev/null || echo unknown)"
+  if [ "$bstatus" = "ok" ]; then
+    if [ "$bprev" = "bad" ]; then
+      send_mail "[XENO] backup RECOVERED — a fresh dump exists again" \
+"The platform is producing backups again.
+
+  newest dump : ${bage:-?} hours old
+  at          : $TS"
+    fi
+    echo ok > "$BACKUP_STATE_FILE"
+  else
+    if [ "$bprev" != "bad" ]; then
+      send_mail "[XENO] BACKUP STALE — the nightly Postgres backup is not running" \
+"xeno-watch on $(hostname) sees a stale backup on xeno-platform-001.
+
+  reported status : $bstatus
+  newest dump     : ${bage:-unknown} hours old (alarm above 36)
+  at              : $TS
+
+This is the box that holds the credit ledger. It failed silently for 15 days in
+July 2026 because nothing off-box could see it — this alert is that gap closed.
+
+Check, in order:
+  1. tail /mnt/projects/xeno-platform/backups/backup.log
+  2. ls -l /mnt/projects/xeno-platform/scripts/pg-backup.sh   (must be executable;
+     git stores the blob 100755 — if it is 644 again, a checkout stripped it)
+  3. sudo crontab -l | grep pg-backup"
+    fi
+    echo bad > "$BACKUP_STATE_FILE"
+  fi
+}
+
 if [ "$code" = "200" ]; then
   echo 0 > "$FAIL_STREAK_FILE"
+  check_backup
   if [ "$prev" = "down" ]; then
     send_mail "[XENO] RECOVERED — xenostudio.ai is responding again" \
 "xeno-watch on $(hostname) confirms recovery.

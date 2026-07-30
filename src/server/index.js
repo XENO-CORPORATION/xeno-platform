@@ -654,6 +654,53 @@ app.get('/api/health', async (req, res) => {
     health.checks.database = { status: 'error', error: 'Database connection failed' };
   }
 
+  /*
+   * Backup freshness.
+   *
+   * On 2026-07-30 the nightly Postgres backup was found to have failed EVERY night
+   * since 2026-07-14: the cron fired, pg-backup.sh was not executable (git stored
+   * the blob 100644, so a checkout stripped +x), and the only trace was
+   * "Permission denied" appended to a log file nobody reads. Fifteen days with no
+   * backup of the box that holds the credit ledger, and nothing anywhere said so.
+   *
+   * Liveness could never have caught it — the box was perfectly healthy the whole
+   * time. So the age of the newest dump is reported here, where something off-box
+   * can see it. `backups/` is mounted read-only into this container purely for
+   * this check (see docker-compose.yml).
+   *
+   * Deliberately does NOT change health.status: a stale backup is an operational
+   * alarm, not "the site is down", and conflating them would take the platform
+   * out of every uptime monitor over a cron failure. The off-box watcher
+   * (xeno-mail-001:/usr/local/bin/xeno-watch) decides what to alert on.
+   */
+  try {
+    const fsp = await import('node:fs/promises');
+    const path = await import('node:path');
+    const dir = process.env.BACKUP_DIR || '/app/backups';
+    const entries = await fsp.readdir(dir);
+    const dumps = entries.filter((n) => n.endsWith('.dump'));
+    if (dumps.length === 0) {
+      health.checks.backup = { status: 'error', error: 'no dump found', dir };
+    } else {
+      let newest = 0;
+      for (const name of dumps) {
+        const st = await fsp.stat(path.join(dir, name));
+        if (st.mtimeMs > newest) newest = st.mtimeMs;
+      }
+      const ageHours = Math.floor((Date.now() - newest) / 3_600_000);
+      health.checks.backup = {
+        // 36h, not 24h, so one late or slow nightly run does not cry wolf.
+        status: ageHours > 36 ? 'stale' : 'ok',
+        ageHours,
+        count: dumps.length,
+      };
+    }
+  } catch (err) {
+    // An unreadable/unmounted directory is itself worth surfacing — silence here
+    // is exactly the failure mode this check exists to remove.
+    health.checks.backup = { status: 'unknown', error: String(err && err.code || err) };
+  }
+
   const statusCode = health.status === 'ok' ? 200 : 503;
   res.status(statusCode).json(health);
 });
