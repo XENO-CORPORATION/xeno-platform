@@ -213,3 +213,73 @@ is not installed. To close the gap:
 5. **(Recommended) Restore drill from R2.** Once offsite is live, periodically
    `rclone copy r2:xeno-db-backups/<file> /tmp/` and run the §3 test-restore on it, to
    prove the *offsite* copy is restorable, not just the local one.
+
+---
+
+## 7. `SECRET_BOX_KEY` — a restore is no longer sufficient on its own
+
+Since **2026-07-30**, the OAuth tokens in `youtube_channels` are stored encrypted
+(AES-256-GCM, `src/server/utils/secretBox.js` — see `docs/SECURITY-HARDENING.md` §6).
+That changes what a disaster recovery actually requires:
+
+> **A database restore alone no longer recovers those tokens.** The dump contains
+> ciphertext. Without `SECRET_BOX_KEY`, 100 connected YouTube channels are
+> unrecoverable and every owner has to reconnect their channel by hand.
+
+**Where the key lives (both copies on the same box — this is the remaining gap):**
+
+| Copy | Path | Mode |
+|---|---|---|
+| Live | `/mnt/projects/xeno-platform/.env` → `SECRET_BOX_KEY` | `0600` |
+| Backup | `/root/.xeno-secrets/secret-box-key` | `0600`, root-only, outside the repo |
+
+The second copy exists because that `.env` has been overwritten before (its six
+`.env.bak-*` siblings are the evidence). It does **not** protect against loss of the box,
+which is the same single-site gap as §6.
+
+### The cheap recovery path, and when it expires
+
+The tokens were plaintext until the backfill, so the pre-backfill dump
+`backups/xenostudio-20260730T162914.dump` still holds all 100 rows in cleartext —
+verified on the day: 100 rows / 200 token values recoverable. While that dump exists,
+losing the key costs nothing.
+
+**Retention is 14 nightly dumps (§1), so that dump rolls off around 2026-08-13.**
+After that date, `SECRET_BOX_KEY` is the *only* way back. Two ways to act on this,
+in preference order:
+
+1. **Escrow the key off-box** (password manager / sealed store) — do this regardless.
+2. Or copy that one dump somewhere retention won't prune, as a dated stopgap. This is
+   strictly worse: it keeps 100 live OAuth tokens sitting in cleartext, which is the
+   exposure the encryption was built to remove. Prefer (1).
+
+### Verifying the key still matches the data
+
+Non-destructive, prints no secret — confirms the running backend can still decrypt:
+
+```sh
+sudo docker exec xenostudio-backend node --input-type=module -e '
+const {decrypt,isEncrypted}=await import("/app/utils/secretBox.js");
+const pg=(await import("pg")).default;
+const c=new pg.Client({connectionString:process.env.DATABASE_URL}); await c.connect();
+const {rows}=await c.query("select access_token,refresh_token from youtube_channels");
+let ok=0,bad=0;
+for(const r of rows) for(const v of [r.access_token,r.refresh_token]) {
+  if(!v||!isEncrypted(v)) continue;
+  try { decrypt(v); ok++; } catch { bad++; }
+}
+console.log("decrypt ok:",ok," failed:",bad); await c.end();'
+```
+
+`failed: 0` means the key in the container matches the stored ciphertext. Any non-zero
+`failed` means the environment holds the **wrong** key — stop and restore the right one
+before writing anything, because re-encrypting under a wrong key destroys the originals.
+
+### After a restore, or when moving the box
+
+1. Restore the database as in §2.
+2. Ensure `SECRET_BOX_KEY` is present in `.env` **and** passed through in
+   `docker-compose.yml` (it is, in the `backend` service — do not drop it).
+3. Run the verification block above; require `failed: 0`.
+4. Only then let traffic in. If the key is missing, `encrypt()` throws by design, so
+   channel connection fails loudly instead of silently reverting to plaintext.

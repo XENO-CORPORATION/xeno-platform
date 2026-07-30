@@ -205,6 +205,70 @@ grant surfaces as a runtime failure. Stage it.
 
 ---
 
+## 6. Secrets at rest in Postgres — ✅ **CLOSED 2026-07-30**
+
+**What it was:** 100 YouTube OAuth access + refresh tokens (200 values) sat in `youtube_channels`
+as plaintext `text`. They grant upload and channel-management access to real channels, so anyone
+with a DB dump — or the read access a backup file implies — held those channels.
+
+**What closed it:** `src/server/utils/secretBox.js` — AES-256-GCM, random 12-byte IV per value,
+self-describing envelope `v1.<iv>.<tag>.<ciphertext>` so no schema change was needed. GCM rather
+than CBC specifically because it authenticates: a tampered value throws instead of decrypting to
+garbage that would then be sent to Google as a bearer token. Backfilled with
+`scripts/encrypt-stored-secrets.mjs` (dry-run default, `--confirm` to write, per-row round-trip
+verification before COMMIT, one transaction per table, idempotent).
+
+**Verified live 2026-07-30:** 100/100 access + 100/100 refresh sealed, 0 plaintext; the running
+backend decrypted all 200 with 0 failures; a re-run reports `0 plaintext, 200 already sealed`.
+
+**Fail-closed by design.** `encrypt()` **throws** when `SECRET_BOX_KEY` is absent — it will not
+fall back to storing plaintext, because a silent fallback is exactly how a column ends up looking
+protected while holding cleartext. Consequence to know before deploying: if the key is ever missing
+from the backend's environment, **connecting a channel fails loudly** rather than regressing
+quietly. `decrypt()` deliberately passes non-envelope values through, which is what let the code
+deploy before the backfill ran.
+
+**Where the key lives:** `SECRET_BOX_KEY` in the box `.env`, passed to the backend service in
+`docker-compose.yml`. Second copy at `/root/.xeno-secrets/secret-box-key` (0600, root-only, outside
+the repo) because that `.env` has been overwritten before — six `.env.bak-*` siblings attest to it.
+Both copies are on the same box; **off-box escrow is still an operator task.** Key-loss recovery is
+in `docs/DR.md` §7, including the date the cheap recovery path expires.
+
+**Full sweep, same day:** every secret-shaped column in all 82 tables was checked, not just the
+known ones. Everything else is empty, or hashed by design (`api_keys.key_hash`,
+`users.password_hash`, `user_sessions.*_token_hash`, `oauth_refresh_tokens.token_hash`,
+`password_resets.token_hash`, `email_verifications.token_hash`,
+`marketplace_developer_api_keys.key_hash`). The YouTube tokens were the only real exposure.
+
+> Verification note worth reusing: a sweep that reports "nothing found" is indistinguishable from
+> a sweep that never ran. The result above was only trusted after a **control run** with the
+> sealed-filter removed returned exactly the 200 known values.
+
+---
+
+## 7. Box `.env` was world-readable — ✅ **CLOSED 2026-07-30**
+
+**What it was:** `/mnt/projects/xeno-platform/.env` was mode `664`, and five `.env.bak-*` copies
+were `644`/`664` — world-readable to any account on the box. They hold `JWT_SECRET`,
+`POSTGRES_PASSWORD`, `XENO_API_KEY`, Stripe keys, OAuth client secrets, and now `SECRET_BOX_KEY`.
+Provider keys are protected *only* by file permissions, so this was their at-rest control failing.
+
+**Fixed:** all six files set to `0600`. Verified nothing broke: `bunker` (uid 1000) is the only
+non-root user and its group has no other members, `docker compose` runs as root (which bypasses
+permissions), and containers receive env injected by Docker rather than reading the file. `docker
+compose config` still resolves and the backend stayed `running/healthy`.
+
+`.env.example` was deliberately left `644` — it is committed to git. Checked by hashing every value
+against the live `.env`: the only matches are `AUTH_FRONTEND_URL`, `BILLING_APP_URL`,
+`EXTENSION_RELEASES_REPO` (public URLs and a repo name), and no value has credential shape.
+
+**Not fixed, operator call:** the five `.env.bak-*` files still exist and still contain historical
+secrets, now at `0600`. They were tightened rather than deleted — deleting an operator's backups is
+not this runbook's call. If those credentials are rotated, the backups become dead weight and
+should go.
+
+---
+
 ## Priority order
 
 1. **§1 revoke the box PAT** — code-side DONE (token backs nothing); operator: 1-click revoke + rm the `-pat` backup.
@@ -212,6 +276,8 @@ grant surfaces as a runtime failure. Stage it.
 3. **§3 rotate infra credentials** — ✅ **DONE + verified** (all five, incl. `POSTGRES_PASSWORD`). Optional: fail-fast compose flip.
 4. **§4 docker-socket-proxy**, **§5 non-superuser DB role** (Phase 3/4, behind testing).
 5. **New (from §3a Lesson 2):** assess/rotate the api box's local `xeno_platform` DB credential (separate, password-enforced).
+6. **§6 at-rest encryption** — ✅ **DONE + verified**. Remaining operator task: off-box escrow of `SECRET_BOX_KEY`, before **2026-08-13** (see `docs/DR.md` §7).
+7. **§7 `.env` permissions** — ✅ **DONE**. Remaining operator call: delete the `.env.bak-*` files once their credentials are rotated.
 
 See `docs/PLATFORM-MODERNIZATION.md` for how these fit the overall roadmap (Phase 4 —
 Security & least privilege).
