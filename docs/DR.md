@@ -163,12 +163,71 @@ WantedBy=timers.target
 
 ## 5. Monitoring / what "healthy" looks like
 
+> ⚠️ **Updated 2026-08-01.** This section previously said "alerting is not yet wired."
+> That is out of date — see 5.2. It also understated the risk: **reading `backup.log`
+> is not monitoring.** See the incident in 5.3.
+
+### 5.1 The log (necessary, NOT sufficient)
+
 - `sudo tail backup.log` should show a nightly `OK: verified dump written` + `backup done`.
 - A run that fails logs `ERROR:` and exits non-zero **without** rotating — the previous
   night's good dumps are preserved.
-- Alerting is not yet wired. Minimum manual check: once a week, confirm the newest
-  dump's date in `/mnt/projects/xeno-platform/backups/` is < 24h old and run the §3
-  test-restore.
+
+🔴 **Do not treat the log as the health signal.** A log is only read when someone
+chooses to read it. The 15-night outage in 5.3 wrote its error to this exact file every
+night for two weeks.
+
+### 5.2 What is actually wired (verified 2026-08-01)
+
+| Signal | Where | Behaviour |
+|---|---|---|
+| **Backup freshness** | `/api/health` → `checks.backup` (`src/server/routes/healthRoutes.js:189-208`) | Derived from the **newest dump's mtime**, 36 h staleness threshold. Deliberately does **not** affect overall health status |
+| **Off-box watcher** | `scripts/xeno-watch.sh:108-146`, runs on **`xeno-mail-001`** | Emails on transition to stale **and on recovery**, plus a weekly proof-of-life |
+| **On-box dead-man's-switch** | `scripts/heartbeat.sh:45-66` | Written and cron'd but ⚠️ **INERT** — no-ops without an operator-supplied monitor URL. Per `GO-LIVE-PUNCHLIST.md:62`: *"Today nothing pages if the box dies at 3am."* |
+
+**The correct health question is "how old is the newest dump?", not "did the script
+run?"** — freshness is observable from outside; execution is not.
+
+⚠️ **Alerting that lives on the box cannot fire when the box is what died.** The
+off-box watcher on `xeno-mail-001` is the one that matters. Note both VMs sit on
+`bnkr-node-001` (see §7) — so it survives a VM loss, not a host loss.
+
+### 5.3 🔴 INCIDENT: 15 nights with no backup (2026-07-14 → 2026-07-29)
+
+**`scripts/pg-backup.sh` was stored in git as `100644` — non-executable.** Cron invoked
+it directly, `execve` failed with `Permission denied`, and **the money ledger went 15
+consecutive nights unbacked.**
+
+Everything looked correct: the cron line was present and right, `cron` was active, the
+script existed with perfect contents, this runbook described it as working, and 14
+plausible-looking dated dumps sat in the backup directory going stale.
+
+**Fixed at source:** the blob is now `100755`, and `.gitattributes` forces LF on `*.sh`
+(CRLF produces `bad interpreter` — the same failure, different error string).
+
+**Recurrence checks — run after any redeploy:**
+
+```sh
+# In the repo: every executed script must be 100755. Empty output = good.
+git ls-files -s -- '*.sh' | grep -v '^100755'
+
+# On the box:
+ls -l /mnt/projects/xeno-platform/scripts/pg-backup.sh    # expect -rwxr-xr-x
+sudo crontab -l | grep pg-backup                          # expect the 03:15 line
+find /mnt/projects/xeno-platform/backups -name '*.dump' -mtime -1   # expect ≥1 result
+```
+
+The last command is the only one that proves the system *works* rather than that it is
+*configured*. Full write-up: root `docs/engineering-learnings.md` →
+*"A `100644` file mode in git silently disabled the money-ledger backup for 15 nights."*
+
+### 5.4 Weekly manual check (until offsite + paging are live)
+
+1. Newest dump < 24 h old (command above).
+2. `curl -s localhost:8080/api/health | jq .checks.backup` → not stale.
+3. Once a month, run the §3 test-restore — **and once offsite is live (§6), drill from
+   the R2 copy, not the local one.** Restoring the local dump proves nothing about the
+   copy you would actually reach for in a real disaster.
 
 ---
 
@@ -237,6 +296,28 @@ That changes what a disaster recovery actually requires:
 | `htznr-bnkr-tunnel-001` | `/root/.xeno-secrets/xeno-platform-secret-box-key` | **Hetzner vServer — OFF-SITE** |
 
 All `0600` root-only, all verified byte-identical by hash on 2026-07-30.
+
+### 🔴 The escrow is concentrated — 4 of 5 copies share one physical machine
+
+Read the "Physical location" column again: `xeno-platform-001`, `xeno-mail-001` and
+`bnkr-node-001` itself are **all on `bnkr-node-001`**. Five copies is a comforting
+number that describes **two** real failure domains:
+
+| Failure domain | Copies |
+|---|---|
+| `bnkr-node-001` (physical host) | **4** |
+| `htznr-bnkr-tunnel-001` (Hetzner, off-site) | **1** |
+
+**Lose that one host and the key survives in exactly one place** — a single Hetzner
+vServer that is not itself backed up anywhere described in this document.
+
+**OPERATOR ACTION:** add at least two copies in genuinely independent domains — a
+password manager (1Password/Bitwarden vault), an offline medium, or a different cloud
+provider. Then re-verify all copies are byte-identical by hash and record the date here.
+
+⚠️ **This compounds §6.** Today the dumps are single-site *and* the key that makes them
+useful is effectively single-site. Losing `bnkr-node-001` currently means: no local
+backups, no offsite backups, and one remaining copy of the decryption key.
 
 > **The topology matters more than the count.** `xeno-platform-001` and `xeno-mail-001`
 > are not independent machines — they are VMs 120 and 132 on `bnkr-node-001`, which also
