@@ -7,6 +7,9 @@
   "scripts": {
     "start": "node --max-http-header-size=80000 --max-old-space-size=4096 index.js",
     "dev": "nodemon --max-http-header-size=80000 --max-old-space-size=4096 index.js",
+    "migrate": "node services/migrationRunner.js up",
+    "migrate:status": "node services/migrationRunner.js status",
+    "migrate:down": "node services/migrationRunner.js down",
     "test": "node tests/run-all.js",
     "test:hosts": "node tests/hosts.test.mjs",
     "test:health": "node tests/health.test.js",
