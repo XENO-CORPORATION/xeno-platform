@@ -15,7 +15,8 @@ const ok = (c, m) => { if (c) { pass++; console.log(`  ✓ ${m}`); } else { fail
 const BASE = `
 CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credits bigint DEFAULT 0);
 CREATE TABLE IF NOT EXISTS credit_accounts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE, balance bigint DEFAULT 0,
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE,
+  owner_kind varchar(16) NOT NULL DEFAULT 'user', balance bigint DEFAULT 0,
   lifetime_earned bigint DEFAULT 0, lifetime_spent bigint DEFAULT 0, is_frozen boolean DEFAULT false,
   created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS credit_transactions (

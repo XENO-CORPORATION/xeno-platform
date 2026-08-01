@@ -67,10 +67,13 @@ function meteringError(code) {
  * Meter a premium CHAT completion.
  *
  * @param db pg pool (req.db)
- * @param userId uuid (req.user.id)
+ * @param userId uuid — the BILLING SUBJECT: a user id, or (pooled workspace billing)
+ *   a workspace id. Whenever it may not be a user, `opts.ownerKind` MUST say so, or
+ *   the ledger refuses to create the wallet rather than mis-typing it as 'user'.
  * @param opts {
  *   model, provider, requestId,          // requestId → deterministic, idempotent hold
  *   estInputTokens, maxTokens,           // for the worst-case hold estimate
+ *   ownerKind,                           // 'user' | 'workspace' | 'org' (see above)
  *   run: async () => providerResponse    // MUST return { usage:{prompt_tokens,completion_tokens,total_tokens}, ... }
  * }
  * @returns { result, costMicro, creditsCharged, holdId }
@@ -79,7 +82,7 @@ function meteringError(code) {
 export async function meterPremiumChat(db, userId, opts) {
   const {
     model, provider, requestId,
-    estInputTokens = 0, maxTokens = 1024, run,
+    estInputTokens = 0, maxTokens = 1024, ownerKind = null, run,
   } = opts;
 
   const holdId = deterministicTxnId(userId, requestId, model).slice(0, 64);
@@ -97,6 +100,7 @@ export async function meterPremiumChat(db, userId, opts) {
       surface: 'ai_chat',
       operation: 'chat.completion',
       expiresInSeconds: 900,
+      ownerKind,
     });
   } catch (e) {
     throw meteringError(e.code);
@@ -130,7 +134,7 @@ export async function meterPremiumChat(db, userId, opts) {
 
   let costMicro = Math.min(actualMicro, estimateMicro);
   try {
-    const settled = await settleHoldV2(db, userId, holdId, actualMicro);
+    const settled = await settleHoldV2(db, userId, holdId, actualMicro, { ownerKind });
     costMicro = settled?.settledMicro ?? costMicro;
   } catch (e) {
     // leave hold to expire; do not fail the response — but NEVER silently: an
@@ -173,6 +177,7 @@ export async function meterPremiumChat(db, userId, opts) {
  *   requestId,                        // idempotency seed (body.requestId | x-request-id | uuid)
  *   unitCostMicro,                    // per-output cost in µcr = getCreditCost(...) * MICRO_PER_CREDIT
  *   count = 1,                        // outputs requested (image batch n)
+ *   ownerKind,                        // 'user' | 'workspace' | 'org' — required when userId is not a user
  *   run: async () => providerResult   // MUST resolve to { data: [...] } (or throw)
  * }
  * @returns { result, costMicro, creditsCharged, actualCount, holdId }
@@ -182,7 +187,7 @@ export async function meterPremiumChat(db, userId, opts) {
 export async function meterMediaGeneration(db, userId, opts) {
   const {
     surface, operation, model, provider,
-    requestId, unitCostMicro, count = 1, run,
+    requestId, unitCostMicro, count = 1, ownerKind = null, run,
   } = opts;
 
   const reqCount = Math.max(1, Math.floor(Number(count) || 1));
@@ -217,6 +222,7 @@ export async function meterMediaGeneration(db, userId, opts) {
       surface,
       operation,
       expiresInSeconds: 900,
+      ownerKind,
     });
   } catch (e) {
     throw meteringError(e.code);
@@ -247,7 +253,7 @@ export async function meterMediaGeneration(db, userId, opts) {
     // Retry the settle across a transient ledger/DB blip so a single failure does not strand
     // the hold. settleHoldV2 is idempotent (no-ops once the hold is not 'held'), so the retry
     // can never double-charge.
-    const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro));
+    const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro, { ownerKind }));
     costMicro = settled?.settledMicro ?? costMicro;
   } catch (e) {
     // all retries failed — leave the hold to expire rather than fail a completed generation
@@ -287,14 +293,15 @@ export async function meterMediaGeneration(db, userId, opts) {
  *
  * @param db pg pool (req.db)
  * @param userId uuid (req.user.id)
- * @param opts { model, provider, requestId, estInputTokens, maxTokens }
+ * @param opts { model, provider, requestId, estInputTokens, maxTokens, ownerKind }
+ *   ownerKind ('user' | 'workspace' | 'org') is required when userId is not a user.
  * @returns { holdId, estimateMicro, settled:boolean, settle(fn), voidHold() }
  * @throws  err with err.http (402/403/500) if the Phase-1 hold fails (BEFORE any stream).
  */
 export async function meterPremiumChatStream(db, userId, opts) {
   const {
     model, provider, requestId,
-    estInputTokens = 0, maxTokens = 1024,
+    estInputTokens = 0, maxTokens = 1024, ownerKind = null,
   } = opts;
 
   const holdId = deterministicTxnId(userId, requestId, model).slice(0, 64);
@@ -315,6 +322,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
       surface: 'ai_chat',
       operation: 'chat.completion.stream',
       expiresInSeconds: 120,
+      ownerKind,
     });
   } catch (e) {
     throw meteringError(e.code);
@@ -336,7 +344,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
       : estimateMicro;
     let costMicro = Math.min(actualMicro, estimateMicro);
     try {
-      const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro));
+      const settled = await withRetry(() => settleHoldV2(db, userId, holdId, actualMicro, { ownerKind }));
       costMicro = settled?.settledMicro ?? costMicro;
     } catch (e) {
       // All retries failed — leave the hold to expire (short 120s stream expiry)

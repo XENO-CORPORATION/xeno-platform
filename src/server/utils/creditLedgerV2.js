@@ -14,6 +14,9 @@
  *  - Every spend appends a credit_transactions row (the audit trail) AND an
  *    api_usage_logs row tagged with `surface` (the "from where").
  *  - Idempotent: usage on (user, reference_type, reference_id); holds on hold_id.
+ *  - A wallet's `owner_kind` is ASSERTED by the caller or PROVEN from `users` —
+ *    NEVER inferred. Every primitive takes an optional `ownerKind`; pass it whenever
+ *    the subject may not be a user (workspace/org). See ensureAccount.
  *  - Mirrors users.credits = floor(balance_micro / 1e6) so legacy readers stay
  *    consistent during the strangler-fig transition.
  */
@@ -22,24 +25,95 @@ import crypto from 'node:crypto';
 export const MICRO_PER_CREDIT = 1_000_000;
 const REF_TYPE = 'xeno.usage';
 
-/** Ensure the user has a credit_accounts wallet; backfill from legacy on first touch. */
-async function ensureAccount(client, userId) {
+/**
+ * The wallet OWNER KINDS the ledger recognises. `credit_accounts.user_id` is a bare
+ * subject id — it holds a USER id, a WORKSPACE id, or (soon) an ORG id — and
+ * `owner_kind` is the only thing that says which. Anything outside this set is a
+ * typo, and a typo'd kind would mint a whole new wallet species.
+ */
+export const OWNER_KINDS = Object.freeze(['user', 'workspace', 'org']);
+
+function normalizeOwnerKind(ownerKind) {
+  if (ownerKind === null || ownerKind === undefined) return null;
+  if (!OWNER_KINDS.includes(ownerKind)) {
+    const e = new Error(`unknown owner_kind '${ownerKind}' (expected one of: ${OWNER_KINDS.join(', ')})`);
+    e.code = 'INVALID_OWNER_KIND';
+    throw e;
+  }
+  return ownerKind;
+}
+
+/**
+ * Ensure the SUBJECT has a credit_accounts wallet; backfill from legacy on first touch.
+ *
+ * 🔴 A wallet's `owner_kind` may NEVER be inferred. `user_id` is a bare subject id, so
+ * this function cannot tell a user id from a workspace/org id by looking at it. It used
+ * to omit `owner_kind` from the INSERT and let the column default to 'user' — which
+ * meant ANY primitive called with a non-user subject (walletService's pooled workspace
+ * billing does exactly that) silently minted a wallet typed `owner_kind='user'`, after
+ * which `ensureWorkspaceWallet` throws WALLET_KIND_CONFLICT for that subject FOREVER.
+ *
+ * Now the kind is either ASSERTED by the caller or PROVEN from the `users` table:
+ *   - `ownerKind` given          → create the wallet with exactly that kind;
+ *   - no `ownerKind`, users row  → provably a user; legacy `users.credits` seed as before;
+ *   - no `ownerKind`, no users row → REFUSE (SUBJECT_KIND_UNKNOWN). Never guess.
+ *
+ * An EXISTING wallet is always returned as-is (money is never re-typed). A caller whose
+ * assertion disagrees with the stored kind gets a loud log, not an exception — the row
+ * is already the authority for that subject's balance and failing the spend would turn a
+ * bookkeeping discrepancy into an outage.
+ */
+async function ensureAccount(client, subjectId, ownerKind = null) {
+  const asserted = normalizeOwnerKind(ownerKind);
   const found = await client.query(
-    'SELECT id, balance, is_frozen FROM credit_accounts WHERE user_id = $1 FOR UPDATE',
-    [userId],
+    'SELECT id, balance, is_frozen, owner_kind FROM credit_accounts WHERE user_id = $1 FOR UPDATE',
+    [subjectId],
   );
-  if (found.rows.length > 0) return found.rows[0];
+  if (found.rows.length > 0) {
+    const row = found.rows[0];
+    if (asserted && row.owner_kind && row.owner_kind !== asserted) {
+      console.error(
+        `[ledger] OWNER_KIND MISMATCH: wallet ${subjectId} is stored as owner_kind='${row.owner_kind}' `
+        + `but the caller asserted '${asserted}' — using the EXISTING wallet (a wallet is never re-typed); `
+        + 'this subject needs reconciliation',
+      );
+    }
+    return row;
+  }
+
+  // Non-user subject, explicitly asserted: a workspace/org has no `users` row and no
+  // legacy whole-credit balance to migrate, so it starts empty.
+  if (asserted && asserted !== 'user') {
+    const createdOther = await client.query(
+      `INSERT INTO credit_accounts (user_id, owner_kind, balance, lifetime_earned, lifetime_spent)
+       VALUES ($1, $2, 0, 0, 0)
+       ON CONFLICT (user_id) DO UPDATE SET updated_at = now()
+       RETURNING id, balance, is_frozen, owner_kind`,
+      [subjectId, asserted],
+    );
+    return createdOther.rows[0];
+  }
+
+  // From here the wallet can only be a USER wallet — prove it before creating one.
+  const legacy = await client.query('SELECT credits FROM users WHERE id = $1', [subjectId]);
+  if (legacy.rows.length === 0 && asserted !== 'user') {
+    const e = new Error(
+      `refusing to create a credit wallet for subject ${subjectId}: no users row exists and no `
+      + 'ownerKind was asserted — the wallet type cannot be inferred',
+    );
+    e.code = 'SUBJECT_KIND_UNKNOWN';
+    throw e;
+  }
 
   // Backfill the new wallet from the legacy whole-credit balance (× 1e6).
-  const legacy = await client.query('SELECT credits FROM users WHERE id = $1', [userId]);
   const legacyCredits = legacy.rows[0]?.credits ?? 0;
   const seedMicro = BigInt(Math.max(0, legacyCredits)) * BigInt(MICRO_PER_CREDIT);
   const created = await client.query(
-    `INSERT INTO credit_accounts (user_id, balance, lifetime_earned, lifetime_spent)
-     VALUES ($1, $2, $2, 0)
+    `INSERT INTO credit_accounts (user_id, owner_kind, balance, lifetime_earned, lifetime_spent)
+     VALUES ($1, 'user', $2, $2, 0)
      ON CONFLICT (user_id) DO UPDATE SET updated_at = now()
-     RETURNING id, balance, is_frozen`,
-    [userId, seedMicro.toString()],
+     RETURNING id, balance, is_frozen, owner_kind`,
+    [subjectId, seedMicro.toString()],
   );
   return created.rows[0];
 }
@@ -138,10 +212,14 @@ function reportLotDrift(op, { userId, accountId = null, requestedMicro, leftover
  * uq_credit_txn_ref: a replayed grant with the same ref hits the unique index and
  * rolls the caller's transaction back. Returns { accountId, amountMicro, newBalanceMicro }.
  */
-export async function addGrantTx(client, userId, { amountMicro, kind = 'paid', priority, expiresAt = null, sourceRef = null }) {
+export async function addGrantTx(client, userId, {
+  amountMicro, kind = 'paid', priority, expiresAt = null, sourceRef = null, ownerKind = null,
+}) {
   const amt = BigInt(Math.max(1, Math.round(amountMicro)));
   const prio = priority ?? (kind === 'free' ? 10 : kind === 'promo' ? 50 : 100);
-  const acct = await ensureAccount(client, userId); // SELECT … FOR UPDATE locks the account (race-free hash chain)
+  // `ownerKind` types a wallet this call may CREATE (workspace/org subjects have no
+  // users row); omit it only when the subject is provably a user.
+  const acct = await ensureAccount(client, userId, ownerKind); // SELECT … FOR UPDATE locks the account (race-free hash chain)
   // DEF-4: if ensureAccount just backfilled a legacy seed balance (balance>0 but no lots),
   // lot that seed FIRST so Σ(lots) == balance holds continuously. Without this, the seed is
   // spendable-from-balance but has no lot, so it drifts permanently below balance (and a
@@ -200,9 +278,11 @@ export async function addGrant(pool, userId, opts) {
  * type='debit', so both are sign-agnostic. metadata.direction disambiguates
  * ('clawback' = money-out, 'reversal' = money-in) for type-level aggregation.
  */
-export async function clawbackTx(client, userId, micro, { refType = 'xeno.refund', refId = null, description = 'clawback', metadata = null } = {}) {
+export async function clawbackTx(client, userId, micro, {
+  refType = 'xeno.refund', refId = null, description = 'clawback', metadata = null, ownerKind = null,
+} = {}) {
   const want = BigInt(Math.max(0, Math.round(micro)));
-  const acct = await ensureAccount(client, userId);
+  const acct = await ensureAccount(client, userId, ownerKind);
   const balance = BigInt(acct.balance);
   const clawed = want < balance ? want : balance; // clamp at zero
   if (clawed > 0n) {
@@ -251,9 +331,9 @@ export async function clawback(pool, userId, micro, opts = {}) {
  * This is intentionally the opposite sign of clawbackTx under the same type
  * 'refund': the sign carries direction, metadata.direction labels it.
  */
-export async function reverseUsageTx(client, userId, micro, { refId = null, description = 'refund' } = {}) {
+export async function reverseUsageTx(client, userId, micro, { refId = null, description = 'refund', ownerKind = null } = {}) {
   const amt = BigInt(Math.max(1, Math.round(micro)));
-  const acct = await ensureAccount(client, userId);
+  const acct = await ensureAccount(client, userId, ownerKind);
   await syncGrants(client, acct, userId); // keep Σ(lots)==balance before re-crediting
   await client.query(
     "INSERT INTO credit_grants (user_id, account_id, amount_micro, remaining_micro, kind, priority, source_ref) VALUES ($1,$2,$3,$3,'paid',100,$4)",
@@ -457,7 +537,7 @@ export async function recordUsageV2(pool, userId, event) {
       await client.query('COMMIT');
       outcome = { duplicate: true };
     } else {
-      const acct = await ensureAccount(client, userId);
+      const acct = await ensureAccount(client, userId, event.ownerKind ?? null);
       if (acct.is_frozen) {
         await client.query('ROLLBACK');
         const err = new Error('account frozen');
@@ -527,7 +607,7 @@ export async function holdV2(pool, userId, req) {
       await client.query('COMMIT');
       outcome = { existingRow: existing.rows[0] };
     } else {
-      const acct = await ensureAccount(client, userId);
+      const acct = await ensureAccount(client, userId, req.ownerKind ?? null);
       const balance = BigInt(acct.balance);
       const held = await activeHoldsMicro(client, userId);
       if (acct.is_frozen || balance - held < amountMicro) {
@@ -559,7 +639,7 @@ export async function holdV2(pool, userId, req) {
 }
 
 /** Settle a hold for the actual cost (phase 2). Posting < held restores the rest. */
-export async function settleHoldV2(pool, userId, holdId, actualCostMicro) {
+export async function settleHoldV2(pool, userId, holdId, actualCostMicro, { ownerKind = null } = {}) {
   const client = await pool.connect();
   let finalRow;
   try {
@@ -572,7 +652,11 @@ export async function settleHoldV2(pool, userId, holdId, actualCostMicro) {
       finalRow = hold;
     } else {
       const requested = BigInt(Math.min(Math.max(0, Math.round(actualCostMicro)), Number(hold.amount_micro)));
-      const acct = await ensureAccount(client, userId);
+      // A settle only reaches here when the hold EXISTS, which means holdV2 already
+      // created the wallet — ensureAccount returns the existing row. `ownerKind` is
+      // threaded anyway so the degenerate "hold without wallet" case still refuses
+      // to guess rather than minting a mis-typed wallet.
+      const acct = await ensureAccount(client, userId, ownerKind);
       await syncGrants(client, acct, userId);
       // Never drive the balance negative: a refund/dispute clawback can reduce the posted
       // balance below this hold's reservation while the operation was in flight. Charge only

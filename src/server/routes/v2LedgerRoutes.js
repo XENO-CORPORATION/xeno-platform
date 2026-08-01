@@ -32,6 +32,10 @@ function sendErr(res, err) {
     NOT_FOUND: 404,
     CONFLICT: 409,
     SPEND_CAP_EXCEEDED: 429,
+    // The caller named a subject the ledger cannot type (no users row, no ownerKind)
+    // or supplied a bogus ownerKind — a bad request, not a server fault.
+    SUBJECT_KIND_UNKNOWN: 400,
+    INVALID_OWNER_KIND: 400,
   };
   const status = map[err.code] || 500;
   if (status === 500) console.error('[v2/ledger] error:', err.message);
@@ -91,7 +95,13 @@ router.post('/grants', async (req, res) => {
     if (!sourceRef) {
       return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'sourceRef (or an Idempotency-Key header) is required — an unreferenced grant is replayable' } });
     }
-    res.json(await addGrant(req.db, target, { amountMicro: b.amountMicro, kind: b.kind, priority: b.priority, expiresAt: b.expiresAt || null, sourceRef }));
+    // `target` is admin-supplied and need NOT be a user (a workspace/org wallet can be
+    // granted to), so the admin must assert `ownerKind` for any subject that has no
+    // users row — the ledger refuses to guess (SUBJECT_KIND_UNKNOWN → 400).
+    res.json(await addGrant(req.db, target, {
+      amountMicro: b.amountMicro, kind: b.kind, priority: b.priority,
+      expiresAt: b.expiresAt || null, sourceRef, ownerKind: b.ownerKind || null,
+    }));
   } catch (err) {
     // Unique-index hit on uq_credit_txn_ref = a replayed sourceRef → conflict, not 500.
     if (err && err.code === '23505') {
@@ -124,6 +134,7 @@ router.post('/usage', async (req, res) => {
       model: b.model ?? null,
       provider: b.provider ?? null,
       costMicro: b.costMicro ?? 0,
+      ownerKind: 'user', // req.user.id — always a real user on this authenticated surface
       inputTokens: b.inputTokens ?? null,
       outputTokens: b.outputTokens ?? null,
       dimensions: b.dimensions ?? {},
@@ -146,6 +157,7 @@ router.post('/holds', async (req, res) => {
       amountMicro: b.amountMicro,
       operation: b.operation,
       expiresInSeconds: b.expiresInSeconds ?? 900,
+      ownerKind: 'user', // req.user.id — always a real user on this authenticated surface
     }));
   } catch (err) {
     sendErr(res, err);
@@ -155,7 +167,7 @@ router.post('/holds', async (req, res) => {
 // POST /api/v2/ledger/holds/:holdId/settle
 router.post('/holds/:holdId/settle', async (req, res) => {
   try {
-    res.json(await settleHoldV2(req.db, req.user.id, req.params.holdId, (req.body || {}).actualCostMicro ?? 0));
+    res.json(await settleHoldV2(req.db, req.user.id, req.params.holdId, (req.body || {}).actualCostMicro ?? 0, { ownerKind: 'user' }));
   } catch (err) {
     sendErr(res, err);
   }

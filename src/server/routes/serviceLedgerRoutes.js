@@ -34,6 +34,12 @@ function sendErr(res, err) {
     NOT_FOUND: 404,
     CONFLICT: 409,
     SPEND_CAP_EXCEEDED: 429,
+    // This surface acts ON BEHALF OF A USER, so it deliberately asserts NO ownerKind:
+    // a `userId` with no `users` row is a bad request from the calling service, not a
+    // licence for the ledger to mint a wallet of guessed type. (Previously such an id
+    // silently created an owner_kind='user' wallet and then failed INSUFFICIENT_CREDITS.)
+    SUBJECT_KIND_UNKNOWN: 400,
+    INVALID_OWNER_KIND: 400,
   };
   // A Postgres unique-violation on the holdId (concurrent replay racing past the
   // idempotency SELECT) is a conflict, not a 500.

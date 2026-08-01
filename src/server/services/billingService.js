@@ -405,7 +405,10 @@ async function grantCreditsForEvent(pool, event, userId, credits, session) {
   try {
     await client.query('BEGIN');
     if (await claimEventTx(client, event, userId)) {
-      await addGrantTx(client, String(userId), { amountMicro, kind: 'paid', sourceRef: `stripe:${event.id}` });
+      // Stripe subjects are always real users (the checkout session's platform user).
+      await addGrantTx(client, String(userId), {
+        amountMicro, kind: 'paid', sourceRef: `stripe:${event.id}`, ownerKind: 'user',
+      });
       const pi = session?.payment_intent ? String(session.payment_intent) : null;
       if (pi) {
         await client.query(
@@ -443,6 +446,7 @@ async function clawbackForCharge(pool, event, { paymentIntent, targetRefundMicro
       const r = await clawbackTx(client, String(row.user_id), delta, {
         refType: 'stripe.refund', refId: event.id, description: `refund ${event.type}`,
         metadata: { paymentIntent, eventType: event.type },
+        ownerKind: 'user', // billing_charges.user_id is always a platform user
       });
       await client.query('UPDATE billing_charges SET refunded_micro=$1 WHERE payment_intent=$2', [String(target), paymentIntent]);
       if (r.shortfallMicro > 0) console.warn(`⚠️ [billing] refund shortfall ${r.shortfallMicro}µcr (already spent) user ${row.user_id} (${event.id})`);

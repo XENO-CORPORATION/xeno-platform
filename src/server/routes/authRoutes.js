@@ -483,7 +483,7 @@ router.post('/register', async (req, res) => {
         // Per-user idempotency key. A constant 'signup' ref collided on uq_credit_txn_ref
         // for EVERY user after the first (the grant threw and was silently swallowed here),
         // so only the very first account ever registered actually received signup credits.
-        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: `signup:${user.id}` });
+        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: `signup:${user.id}`, ownerKind: 'user' });
         user.credits = FREE_SIGNUP_CREDITS;
       } catch (grantErr) {
         console.warn('[register] signup credit grant failed:', grantErr.message);
@@ -1540,6 +1540,7 @@ router.post('/claim-bonus', async (req, res) => {
         amountMicro: WELCOME_BONUS_CREDITS * MICRO_PER_CREDIT,
         kind: 'free',
         sourceRef: `welcome-bonus:${user.id}`,
+        ownerKind: 'user',
       });
     } catch (grantErr) {
       await req.db.query('UPDATE users SET bonus_credits_claimed = false WHERE id = $1', [user.id]).catch(() => {});
@@ -2102,7 +2103,7 @@ router.post('/register-with-handle', async (req, res) => {
     // Free-tier starter credits (same as /register; non-fatal).
     if (FREE_SIGNUP_CREDITS > 0) {
       try {
-        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: `signup:${user.id}` });
+        await addGrant(req.db, user.id, { amountMicro: FREE_SIGNUP_CREDITS * MICRO_PER_CREDIT, kind: 'free', sourceRef: `signup:${user.id}`, ownerKind: 'user' });
         user.credits = FREE_SIGNUP_CREDITS;
       } catch (grantErr) {
         console.warn('[register-with-handle] signup credit grant failed:', grantErr.message);

@@ -1821,12 +1821,22 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             // request carries an x-xeno-workspace context whose workspace is in
             // 'pooled' mode and the caller is a member, bill the workspace wallet
             // instead of the personal one. Default (flag off) → bill the user.
+            // The resolved SUBJECT KIND must travel with the subject id. A workspace id
+            // reaching the ledger without it made ensureAccount mint a wallet typed
+            // owner_kind='user' (the column default), which then wedged
+            // ensureWorkspaceWallet with WALLET_KIND_CONFLICT for that workspace forever.
             let billingSubjectId = req.user?.id;
+            let billingSubjectKind = 'user';
             if (process.env.WORKSPACE_BILLING_ENABLED === 'true' && req.headers['x-xeno-workspace']) {
-                try { billingSubjectId = (await resolveBillingAccountId(req.db, req.user.id, String(req.headers['x-xeno-workspace']))).id; }
+                try {
+                    const resolved = await resolveBillingAccountId(req.db, req.user.id, String(req.headers['x-xeno-workspace']));
+                    billingSubjectId = resolved.id;
+                    billingSubjectKind = resolved.kind;
+                }
                 catch (e) { console.warn('[billing] workspace resolve failed, using personal:', e.message); }
             }
             const metered = await meterPremiumChat(req.db, billingSubjectId, {
+                ownerKind: billingSubjectKind,
                 model: bodyPayload.model, provider: 'xeno', requestId: randomUUID(),
                 estInputTokens: estimateMessageTokens(bodyPayload.messages || []),
                 maxTokens: bodyPayload.max_tokens || 4096,

@@ -47,6 +47,10 @@ export async function deductCredits(db, userId, amount, meta = {}) {
       provider: meta.provider ?? null,
       transactionId,
       costMicro,
+      // Subject type travels with the subject. Callers that bill a workspace/org must
+      // pass meta.ownerKind; without it the ledger refuses to create a wallet for a
+      // subject that has no `users` row rather than mis-typing it as 'user'.
+      ownerKind: meta.ownerKind ?? null,
       dimensions: meta.dimensions || {},
     });
     return {
@@ -74,6 +78,7 @@ export async function refundCredits(db, userId, amount, meta = {}) {
     const r = await reverseUsage(db, userId, Math.round(credits * MICRO_PER_CREDIT), {
       refId: meta.transactionId || meta.requestId || meta.sourceRef || null,
       description: meta.operation ? `refund:${meta.operation}` : 'refund',
+      ownerKind: meta.ownerKind ?? null,
     });
     return { success: true, newBalance: wholeFromMicro(r.balance?.postedMicro ?? r.balance?.availableMicro ?? 0) };
   } catch (e) {

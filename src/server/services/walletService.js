@@ -97,6 +97,7 @@ export async function transferToWorkspace(db, fromUserId, workspaceId, credits) 
   try {
     await recordUsageV2(db, fromUserId, {
       surface: 'workspace', operation: 'fund-transfer-out', transactionId: txnId, costMicro,
+      ownerKind: 'user', // fromUserId is always a real user (the funding personal wallet)
       dimensions: { workspaceId },
     });
   } catch (e) {
@@ -118,12 +119,17 @@ export async function transferToWorkspace(db, fromUserId, workspaceId, credits) 
   // silent catch — so the debited-but-not-credited state is visible and fixable.
   try {
     await ensureWorkspaceWallet(db, workspaceId);
-    await addGrant(db, workspaceId, { amountMicro: costMicro, kind: 'paid', sourceRef: txnId });
+    // ownerKind:'workspace' — ensureWorkspaceWallet has already created the correctly
+    // typed row, but the ledger must never be the thing that types it by default.
+    await addGrant(db, workspaceId, {
+      amountMicro: costMicro, kind: 'paid', sourceRef: txnId, ownerKind: 'workspace',
+    });
   } catch (e) {
     try {
       await reverseUsage(db, fromUserId, costMicro, {
         refId: txnId,
         description: `ws-transfer-rollback:${workspaceId}`,
+        ownerKind: 'user',
       });
     } catch (compErr) {
       await recordCompensationFailure(db, {
