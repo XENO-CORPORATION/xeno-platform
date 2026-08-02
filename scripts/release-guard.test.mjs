@@ -20,6 +20,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateRawSync, gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 
 import { loadPatterns, scanArtifact, scanBuffer, isOpaqueArtifact } from './lib/secret-scan.mjs';
 import {
@@ -723,4 +725,61 @@ test('ordinary release text does not trip the gate (no false-positive flood)', (
     'https://updates.xenostudio.ai/apps/shell/v0.1.0-beta.1/XENO Shell Setup 0.1.0-beta.1.exe',
   ].join('\n');
   assert.deepEqual(scanBuffer(Buffer.from(notes), PATTERNS), []);
+});
+
+/**
+ * No script may invoke rclone except the choke point itself.
+ *
+ * The gate in `lib/r2-upload.mjs` only works if it is the ONLY way out. It was built
+ * after 2026-07-26, when five independent rclone call sites with no guard let a script
+ * overwrite release pointers for four shipping products — on a store with no object
+ * versioning, so there was no undo.
+ *
+ * `publish-local-model-catalog.mjs` still had its own `spawnSync('rclone', …)` writing
+ * `models/local-model-catalog.json` with `copyto`: a moving pointer, replaced wholesale,
+ * unscanned and unsnapshotted. One survivor is all it takes — a choke point with a hole
+ * beside it is not a choke point, it is a suggestion.
+ *
+ * COMMENTS ARE STRIPPED BEFORE SCANNING. Without that this test passes on its own prose:
+ * every doc comment here says "rclone", and a guard satisfied by the words describing it
+ * is the exact failure mode this file exists to catch.
+ */
+test('rclone is invoked only inside the gated choke point', () => {
+  const scriptsDir = new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  const { readdirSync, readFileSync: read } = require('node:fs');
+
+  // Everything a shell/JS file could use to reach the binary.
+  const INVOKE = /(spawnSync|spawn|execFileSync|execFile|execSync|exec)\s*\(\s*['"`]rclone|^\s*rclone\s|[|&;]\s*rclone\s/m;
+
+  const stripComments = (src) =>
+    src
+      .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments
+      .replace(/^\s*\/\/.*$/gm, '')       // line comments (js)
+      .replace(/^\s*#.*$/gm, '');         // line comments (sh)
+
+  const ALLOWED = new Set([
+    'r2-upload.mjs',   // the choke point — the one place permitted to invoke it
+    'pg-backup.sh',    // database backups, not the release store; no pointer to clobber
+  ]);
+
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!/\.(mjs|js|sh)$/.test(entry.name)) continue;
+      if (ALLOWED.has(entry.name)) continue;
+      if (entry.name.endsWith('.test.mjs')) continue;   // tests assert about it, by name
+      if (INVOKE.test(stripComments(read(full, 'utf-8')))) offenders.push(entry.name);
+    }
+  };
+  walk(scriptsDir);
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `these scripts invoke rclone directly instead of going through R2Publisher: ${offenders.join(', ')}. ` +
+      'Route the write through scripts/lib/r2-upload.mjs — it scans the payload, snapshots the ' +
+      'pointer it replaces, and refuses to clobber. See CLAUDE.md rule 2b.',
+  );
 });

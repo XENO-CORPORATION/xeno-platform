@@ -68,20 +68,34 @@ async function sha256File(filePath) {
   });
 }
 
-function runRclone(args) {
-  const result = spawnSync('rclone', args, {
-    cwd: repoRoot,
-    encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (result.status !== 0) {
-    throw new Error(result.stderr.trim() || result.stdout.trim() || `rclone exited with code ${result.status ?? 'unknown'}`);
-  }
-  return result.stdout.trim();
+/**
+ * Deliberately refuses. Kept as a throwing stub rather than deleted.
+ *
+ * This script used to invoke rclone itself, straight past the gated choke point in
+ * `scripts/lib/r2-upload.mjs` — whose entire purpose is that no code path uploads
+ * unscanned. It wrote `models/local-model-catalog.json` with `rclone copyto`: a MOVING
+ * POINTER, replaced wholesale, with no secret scan, no snapshot of what it destroyed and
+ * no clobber check. R2 has no object versioning, so that write had no undo. It is the
+ * shape of the 2026-07-26 incident (CLAUDE.md rule 2b) re-armed on a different file.
+ *
+ * A deletion would invite the next author to write a fresh invoker. This names the rule
+ * at the exact spot someone reaches for one.
+ */
+function runRclone() {
+  throw new Error(
+    'publish-local-model-catalog: direct rclone is refused. Every write to R2 goes through ' +
+      'R2Publisher (scripts/lib/r2-upload.mjs), which scans the payload, snapshots the pointer ' +
+      'it is about to replace, and refuses to clobber. See CLAUDE.md rule 2b.',
+  );
 }
 
 async function main() {
   const upload = process.argv.includes('--upload');
+  // Dry-run by DEFAULT, matching every other publisher here: `--upload` says where,
+  // `--confirm` says do it. A publish script whose default is to publish is exactly the
+  // loaded gun rule 2b describes.
+  const dryRun = !process.argv.includes('--confirm');
+  const r2 = new R2Publisher({ remote: remotePrefix, dryRun });
   const modelIds = process.argv.filter((arg) => arg.startsWith('--model=')).map((arg) => arg.slice('--model='.length));
   const catalog = readCatalog();
   const selected = catalog.models.filter((model) => {
@@ -113,9 +127,8 @@ async function main() {
     model.installSpec.sha256 = sha256;
 
     if (upload) {
-      const remoteTarget = `${remotePrefix}/${model.installSpec.artifactKey}`;
-      console.log(`Uploading ${model.id} -> ${remoteTarget}`);
-      runRclone(['copyto', localFile, remoteTarget, '--progress']);
+      // Scanned, clobber-checked and dry-run-aware, because it goes through the gate.
+      await r2.putArtifact(localFile, model.installSpec.artifactKey, { label: model.id });
     } else {
       console.log(`Prepared ${model.id}: ${localFile}`);
     }
@@ -123,10 +136,14 @@ async function main() {
 
   writeCatalog(catalog);
 
-  const manifestRemote = `${remotePrefix}/models/local-model-catalog.json`;
+  const manifestRemote = `${publicBase}/models/local-model-catalog.json`;
   if (upload) {
-    console.log(`Uploading catalog -> ${manifestRemote}`);
-    runRclone(['copyto', catalogPath, manifestRemote]);
+    // A POINTER: one fixed key, replaced wholesale on every publish, on a store with no
+    // object versioning. `putPointer` snapshots the object it is about to overwrite —
+    // which is the only reason this write has an undo.
+    await r2.putPointer(readFileSync(catalogPath, 'utf-8'), 'models/local-model-catalog.json', {
+      label: 'local-model-catalog.json',
+    });
   }
 
   const summary = {
