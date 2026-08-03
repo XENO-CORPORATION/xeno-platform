@@ -149,7 +149,14 @@ try {
   const modeControls = document.querySelector('[data-mode-controls]');
   const agentHub = document.querySelector('[aria-label="Agent actions"]');
   const agentButtons = [...agentHub.querySelectorAll('button')];
-  assert.ok(modeControls?.contains(agentHub), 'Agent actions should appear in the outer mode-controls row, directly beside the Agents tab.');
+  assert.ok(modeControls?.contains(agentHub), 'Agent actions should appear in the mode-controls row, beside the mode tabs.');
+  assert.ok(
+    Boolean(
+      document.querySelector('[aria-label="Chat mode"]')
+      && document.querySelector('[aria-label="Chat mode"]')?.parentElement?.contains(agentHub),
+    ),
+    'Agent actions stay next to Chat / Research / Code / Agents — final position does not jump to the model selector slot.',
+  );
   assert.deepEqual(
     agentButtons.map((button) => button.textContent?.trim()),
     ['Create Agent', 'My Agents', 'Agent Marketplace'],
@@ -158,8 +165,8 @@ try {
   assert.ok(agentButtons.every((button) => button.dataset.mockAction === 'true'), 'Every agent action should be marked as mock data.');
   assert.ok(agentButtons.every((button) => button.className.includes('h-8')), 'Agent actions should use the compact control height.');
   assert.equal(agentHub.dataset.agentActionsState, 'open', 'Agent actions should begin in their open state after entering.');
-  assert.ok(agentButtons.every((button) => button.className.includes('animate-agent-action-enter')), 'Agent actions should enter with the confirmed transform-and-opacity animation.');
-  assert.deepEqual(agentButtons.map((button) => button.style.animationDelay), ['0ms', '40ms', '80ms'], 'Agent actions should enter left-to-right with a staggered delay.');
+  assert.ok(agentButtons.every((button) => button.className.includes('animate-agent-action-enter')), 'Agent actions should enter sliding out from behind the mode tabs.');
+  assert.deepEqual(agentButtons.map((button) => button.style.animationDelay), ['0ms', '55ms', '110ms'], 'Agent actions should enter left-to-right (from behind the mode tabs).');
   assert.equal(document.querySelector('[data-testid="model-selector"]'), null, 'The model selector should be hidden while agent actions are open.');
   assert.ok(document.querySelector('[data-testid="composer"]'), 'The prompt composer should remain visible while the mock Agents actions are open.');
 
@@ -168,10 +175,10 @@ try {
   });
   assert.equal(agentHub.dataset.agentActionsState, 'closing', 'Clicking Agents again should begin closing its contextual actions.');
   assert.ok(agentButtons.every((button) => button.className.includes('animate-agent-action-exit')), 'Closing actions should use the reverse animation.');
-  assert.deepEqual(agentButtons.map((button) => button.style.animationDelay), ['80ms', '40ms', '0ms'], 'Agent actions should close right-to-left with a reverse stagger.');
+  assert.deepEqual(agentButtons.map((button) => button.style.animationDelay), ['110ms', '55ms', '0ms'], 'Agent actions should close right-to-left, sliding back behind the mode tabs.');
 
   await act(async () => {
-    await new Promise((resolve) => window.setTimeout(resolve, 260));
+    await new Promise((resolve) => window.setTimeout(resolve, 420));
   });
   assert.equal(selectedModes.at(-1), 'chat', 'Closing Agent actions with the Agents tab should return the parent to Chat.');
   assert.equal(document.querySelector('[aria-label="Agent actions"]'), null, 'The Agent action strip should unmount after its closing animation completes.');
@@ -186,7 +193,7 @@ try {
   assert.equal(reopenedAgentHub.dataset.agentActionsState, 'closing', 'Selecting a mock action should close the strip before notifying the parent.');
 
   await act(async () => {
-    await new Promise((resolve) => window.setTimeout(resolve, 260));
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
   });
   assert.deepEqual(selectedAgentActions, ['create-agent'], 'Selecting a mock action should notify the parent after the closing animation completes.');
 

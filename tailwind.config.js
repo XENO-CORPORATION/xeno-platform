@@ -73,8 +73,8 @@ module.exports = {
   			'clock-spin': 'clock-spin 0.6s ease-out forwards',
 			'clock-tick': 'clock-tick 0.5s ease-out forwards',
 			'gear-spin': 'gear-spin 0.5s ease-out forwards',
-			'agent-action-enter': 'agent-action-enter 160ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
-			'agent-action-exit': 'agent-action-exit 160ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
+			'agent-action-enter': 'agent-action-enter 280ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
+			'agent-action-exit': 'agent-action-exit 280ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
 			'mode-controls-enter': 'mode-controls-enter 180ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
 			'model-tray-item-enter': 'model-tray-item-enter 180ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
 			'model-tray-item-exit': 'model-tray-item-exit 180ms cubic-bezier(0.22, 0.7, 0.2, 1) both',
@@ -233,7 +233,7 @@ module.exports = {
 			'agent-action-enter': {
 				from: {
 					opacity: '0',
-					transform: 'translateX(-8px)'
+					transform: 'translateX(-28px)'
 				},
 				to: {
 					opacity: '1',
@@ -247,7 +247,7 @@ module.exports = {
 				},
 				to: {
 					opacity: '0',
-					transform: 'translateX(-8px)'
+					transform: 'translateX(-28px)'
 				}
 			},
 			'mode-controls-enter': {

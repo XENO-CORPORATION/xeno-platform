@@ -3,9 +3,8 @@ import {
   ArrowLeft,
   Bot,
   Code2,
-  FilePenLine,
+  FileClock,
   FolderUp,
-  History,
   Library,
   MessageSquare,
   Plus,
@@ -20,7 +19,7 @@ import {
   type ChatMode,
 } from './chatModeConfig';
 
-export type ChatEmptyStateTool = 'system-prompt';
+export type ChatEmptyStateTool = 'recent-files';
 
 interface ChatEmptyStateProps {
   children: React.ReactNode;
@@ -33,7 +32,6 @@ interface ChatEmptyStateProps {
   modelSelector?: (options: { isInlineTray: boolean; onOpenChange: (isOpen: boolean) => void }) => React.ReactNode;
   onAgentActionSelect: (actionId: AgentHubMockActionId) => void;
   onModeChange: (mode: ChatMode) => void;
-  onOpenConversationHistory: () => void;
   onUploadFile: () => void;
   renderToolPanel?: (tool: ChatEmptyStateTool, close: () => void) => React.ReactNode;
   updates?: ChatUpdate[];
@@ -61,9 +59,13 @@ const railButtonClassName =
 const TOOLBAR_POINTER_CLOSE_DELAY_MS = 1000;
 /** Blocks hover-reopen after a tool closes the rail while the pointer is still over it. */
 const TOOLBAR_HOVER_REOPEN_SUPPRESS_MS = 350;
-const AGENT_ACTION_STAGGER_MS = 40;
-const AGENT_ACTION_MOTION_DURATION_MS = 160;
+/** Cascade like the model tray, but slower + longer travel so 3 chips read as one-by-one from the right. */
+const AGENT_ACTION_STAGGER_MS = 55;
+const AGENT_ACTION_MOTION_DURATION_MS = 280;
 const AGENT_ACTION_CLOSE_DURATION_MS = AGENT_ACTION_MOTION_DURATION_MS + AGENT_ACTION_STAGGER_MS * (AGENT_HUB_MOCK_ACTIONS.length - 1);
+
+const agentActionButtonClassName =
+  'chat-mode-action flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.018] px-2 text-[11px] font-medium text-zinc-400 transition-[background-color,border-color,color] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70';
 
 const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   children,
@@ -75,7 +77,6 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   modelSelector,
   onAgentActionSelect,
   onModeChange,
-  onOpenConversationHistory,
   onUploadFile,
   renderToolPanel,
   updates = [],
@@ -84,16 +85,16 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   const handleRef = useRef<HTMLButtonElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const agentActionsCloseTimerRef = useRef<number | null>(null);
-  /** Blocks hover/focus from reopening the rail right after an intentional close (e.g. History). */
+  /** Blocks hover/focus from reopening the rail right after an intentional close (e.g. Upload). */
   const suppressHoverOpenRef = useRef(false);
   const [isRailOpen, setIsRailOpen] = useState(false);
   const [activeTool, setActiveTool] = useState<ChatEmptyStateTool | null>(null);
   const [areAgentActionsRendered, setAreAgentActionsRendered] = useState(activeMode === 'agents');
   const [areAgentActionsClosing, setAreAgentActionsClosing] = useState(false);
+  /** Bumps on each open so CSS enter keyframes remount (browser won't replay the same animation name). */
+  const [agentActionsEpoch, setAgentActionsEpoch] = useState(0);
   const [isModelTrayOpen, setIsModelTrayOpen] = useState(false);
-
-  const prefersReducedMotion = typeof window !== 'undefined'
-    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const previousModeRef = useRef(activeMode);
 
   const clearAgentActionsCloseTimer = useCallback(() => {
     if (agentActionsCloseTimerRef.current !== null) {
@@ -101,6 +102,13 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       agentActionsCloseTimerRef.current = null;
     }
   }, []);
+
+  const openAgentActions = useCallback(() => {
+    clearAgentActionsCloseTimer();
+    setAreAgentActionsClosing(false);
+    setAreAgentActionsRendered(true);
+    setAgentActionsEpoch((epoch) => epoch + 1);
+  }, [clearAgentActionsCloseTimer]);
 
   const closeAgentActions = useCallback((afterClose: () => void) => {
     clearAgentActionsCloseTimer();
@@ -111,8 +119,8 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       setAreAgentActionsRendered(false);
       setAreAgentActionsClosing(false);
       afterClose();
-    }, prefersReducedMotion ? 0 : AGENT_ACTION_CLOSE_DURATION_MS);
-  }, [clearAgentActionsCloseTimer, prefersReducedMotion]);
+    }, AGENT_ACTION_CLOSE_DURATION_MS);
+  }, [clearAgentActionsCloseTimer]);
 
   const closeRail = useCallback((options?: { suppressHoverReopen?: boolean }) => {
     if (closeTimerRef.current !== null) {
@@ -198,17 +206,22 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   }, [activeTool]);
 
   useEffect(() => {
+    const wasAgents = previousModeRef.current === 'agents';
+    previousModeRef.current = activeMode;
+
     if (activeMode === 'agents') {
-      clearAgentActionsCloseTimer();
-      setAreAgentActionsRendered(true);
-      setAreAgentActionsClosing(false);
+      // Only open on a real mode enter. Do not re-assert while already on Agents —
+      // that would clear an in-progress close timer and drop afterClose (e.g. action select).
+      if (!wasAgents) {
+        openAgentActions();
+      }
       return;
     }
 
     clearAgentActionsCloseTimer();
     setAreAgentActionsRendered(false);
     setAreAgentActionsClosing(false);
-  }, [activeMode, clearAgentActionsCloseTimer]);
+  }, [activeMode, clearAgentActionsCloseTimer, openAgentActions]);
 
   useEffect(() => () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
@@ -226,7 +239,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     setActiveTool(tool);
   };
 
-  // Same hover tool rail on empty state and in conversation (upload / history / system prompt).
+  // Same hover tool rail on empty state and in conversation (upload / recent files).
   const showToolRail = !isCompact && !hideToolRail;
   const isOuterExpanded = showToolRail && isRailOpen;
   const extensionPositionClass = activeTool && !isCompact
@@ -236,6 +249,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     ? 'rounded-[1.4rem] border border-white/[0.10] bg-[#141416] shadow-none'
     : 'border border-transparent bg-transparent shadow-none';
   const outerWidthClass = isOuterExpanded ? 'w-[calc(100%_+_3.25rem)] delay-0' : 'w-full delay-100';
+  const railExpandedWidthClass = activeTool === 'recent-files'
+    ? 'w-[min(18rem,88%)] md:w-[18rem]'
+    : 'w-[min(15rem,88%)] md:w-[15rem]';
 
   const handleModeKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
     let nextIndex: number | null = null;
@@ -259,9 +275,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
 
     if (mode === 'agents' && activeMode === 'agents') {
       if (areAgentActionsClosing) {
-        clearAgentActionsCloseTimer();
-        setAreAgentActionsRendered(true);
-        setAreAgentActionsClosing(false);
+        openAgentActions();
         return;
       }
 
@@ -277,6 +291,32 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   // In the narrow project workspace: when Agents opens, replace the mode tabs with the
   // agent actions (same idea as the model tray). Keeps one fixed-height row; nothing overflows.
   const showAgentActionsInPlace = hideToolRail && areAgentActionsRendered;
+
+  const renderAgentActionButtons = () =>
+    AGENT_HUB_MOCK_ACTIONS.map((action) => {
+      const Icon = agentActionIconById[action.id];
+      const actionIndex = AGENT_HUB_MOCK_ACTIONS.indexOf(action);
+      // Enter: from behind the mode tabs, left → right (Create first). Exit: reverse.
+      const animationDelay = areAgentActionsClosing
+        ? (AGENT_HUB_MOCK_ACTIONS.length - 1 - actionIndex) * AGENT_ACTION_STAGGER_MS
+        : actionIndex * AGENT_ACTION_STAGGER_MS;
+
+      return (
+        <button
+          key={`${action.id}-${agentActionsEpoch}`}
+          type="button"
+          data-mock-action="true"
+          className={`${agentActionButtonClassName} ${
+            areAgentActionsClosing ? 'animate-agent-action-exit' : 'animate-agent-action-enter'
+          }`}
+          style={{ animationDelay: `${animationDelay}ms` }}
+          onClick={() => closeAgentActions(() => onAgentActionSelect(action.id))}
+        >
+          <Icon size={13} strokeWidth={1.7} aria-hidden="true" />
+          <span>{action.label}</span>
+        </button>
+      );
+    });
 
   const modeControls = (
     <div
@@ -306,42 +346,29 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
             <button
               type="button"
               onClick={() => closeAgentActions(() => onModeChange('chat'))}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.018] text-zinc-400 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.018] text-zinc-400 transition-[background-color,border-color,color] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${
+                areAgentActionsClosing ? 'animate-agent-action-exit' : 'animate-agent-action-enter'
+              }`}
+              style={{
+                animationDelay: `${
+                  areAgentActionsClosing
+                    ? AGENT_HUB_MOCK_ACTIONS.length * AGENT_ACTION_STAGGER_MS
+                    : 0
+                }ms`,
+              }}
               aria-label="Back to chat modes"
               title="Back"
             >
               <ArrowLeft size={14} aria-hidden="true" />
             </button>
-            {AGENT_HUB_MOCK_ACTIONS.map((action) => {
-              const Icon = agentActionIconById[action.id];
-              const actionIndex = AGENT_HUB_MOCK_ACTIONS.indexOf(action);
-              const animationDelay = areAgentActionsClosing
-                ? (AGENT_HUB_MOCK_ACTIONS.length - 1 - actionIndex) * AGENT_ACTION_STAGGER_MS
-                : actionIndex * AGENT_ACTION_STAGGER_MS;
-
-              return (
-                <button
-                  key={action.id}
-                  type="button"
-                  data-mock-action="true"
-                  className={`chat-mode-action flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.018] px-2 text-[11px] font-medium text-zinc-400 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 motion-reduce:animate-none ${
-                    areAgentActionsClosing ? 'animate-agent-action-exit' : 'animate-agent-action-enter'
-                  }`}
-                  style={{ animationDelay: `${animationDelay}ms` }}
-                  onClick={() => closeAgentActions(() => onAgentActionSelect(action.id))}
-                >
-                  <Icon size={13} strokeWidth={1.7} aria-hidden="true" />
-                  <span>{action.label}</span>
-                </button>
-              );
-            })}
+            {renderAgentActionButtons()}
           </div>
         ) : (
           <>
             <div
               role="tablist"
               aria-label="Chat mode"
-              className="chat-mode-surface flex min-w-max items-center gap-1 rounded-xl border border-white/[0.06] bg-black/15 p-1"
+              className="chat-mode-surface relative z-10 flex min-w-max items-center gap-1 rounded-xl border border-white/[0.06] bg-black/15 p-1"
             >
               {CHAT_MODE_TABS.map((mode, index) => {
                 const Icon = modeIconById[mode.id];
@@ -375,31 +402,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                 role="toolbar"
                 aria-label="Agent actions"
                 data-agent-actions-state={areAgentActionsClosing ? 'closing' : 'open'}
-                className="flex min-w-max items-center gap-1"
+                className="relative z-0 -ml-1 flex min-w-max items-center gap-1"
               >
-                {AGENT_HUB_MOCK_ACTIONS.map((action) => {
-                  const Icon = agentActionIconById[action.id];
-                  const actionIndex = AGENT_HUB_MOCK_ACTIONS.indexOf(action);
-                  const animationDelay = areAgentActionsClosing
-                    ? (AGENT_HUB_MOCK_ACTIONS.length - 1 - actionIndex) * AGENT_ACTION_STAGGER_MS
-                    : actionIndex * AGENT_ACTION_STAGGER_MS;
-
-                  return (
-                    <button
-                      key={action.id}
-                      type="button"
-                      data-mock-action="true"
-                      className={`chat-mode-action flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.018] px-2 text-[11px] font-medium text-zinc-400 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 motion-reduce:animate-none ${
-                        areAgentActionsClosing ? 'animate-agent-action-exit' : 'animate-agent-action-enter'
-                      }`}
-                      style={{ animationDelay: `${animationDelay}ms` }}
-                      onClick={() => closeAgentActions(() => onAgentActionSelect(action.id))}
-                    >
-                      <Icon size={13} strokeWidth={1.7} aria-hidden="true" />
-                      <span>{action.label}</span>
-                    </button>
-                  );
-                })}
+                {renderAgentActionButtons()}
               </div>
             )}
           </>
@@ -483,7 +488,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
             onBlurCapture={handleInteractionBlur}
             className={`absolute inset-y-[-1px] z-20 flex overflow-hidden transition-opacity duration-100 ease-out ${extensionPositionClass} ${extensionSurfaceClass} ${
               activeTool
-                ? 'w-[min(15rem,88%)] md:w-[15rem]'
+                ? railExpandedWidthClass
                 : 'w-[3.25rem]'
             } ${
               isRailOpen
@@ -513,23 +518,11 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                 <button
                   type="button"
                   className={railButtonClassName}
-                  onClick={() => {
-                    onOpenConversationHistory();
-                    closeRail({ suppressHoverReopen: true });
-                  }}
-                  aria-label="Conversation history"
-                  title="Conversation history"
+                  onClick={() => openTool('recent-files')}
+                  aria-label="Recent files"
+                  title="Recent files"
                 >
-                  <History size={16} />
-                </button>
-                <button
-                  type="button"
-                  className={railButtonClassName}
-                  onClick={() => openTool('system-prompt')}
-                  aria-label="System Prompt"
-                  title="System Prompt"
-                >
-                  <FilePenLine size={16} />
+                  <FileClock size={16} />
                 </button>
               </div>
             )}

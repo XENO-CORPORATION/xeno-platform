@@ -1,8 +1,26 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
 import ChatEmptyState, { type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import ChatShareModal from './ChatShareModal';
+import ChatArtifactsPage from './ChatArtifactsPage';
+import ChatScheduledPage from './ChatScheduledPage';
+import ChatGlobalSettingsPage from './ChatGlobalSettingsPage';
+import ChatCustomizePage from './ChatCustomizePage';
+import ChatSettingsModal from './ChatSettingsModal';
+import {
+  bindPendingChatPersona,
+  clearPendingChatPersona,
+  getChatPersonaId,
+  getPersona,
+  setChatPersonaId,
+  type ChatPersona,
+} from './chatCustomize';
+import {
+  bindPendingChatSkills,
+  clearPendingChatSkills,
+  getChatProfile,
+} from './chatSkillsLibrary';
 import { MOCK_CHAT_UPDATES } from './mockChatUpdates';
 import { MOCK_CHAT_HISTORY } from './mockChatHistory';
 import { MOCK_CHAT_MODELS } from './mockChatModels';
@@ -16,7 +34,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchResponse, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Compass, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Lightbulb, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, StopCircle, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star } from 'lucide-react';
+import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Compass, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Lightbulb, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, StopCircle, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -870,7 +888,8 @@ const sourceHighlightStyles = `
     border-left: 1px solid #2a2a2d;
     display: flex;
     flex-direction: column;
-    z-index: 40;
+    /* Above Projects list (45) and project workspace (46). */
+    z-index: 50;
     transition: transform 0.3s ease-in-out;
     transform: translateX(100%);
     overflow: hidden;
@@ -1507,15 +1526,383 @@ const MOCK_PROJECT_FILES = [
     };
   }),
 ];
+/** Demo files for View files in chat when the conversation has no attachments yet. */
+const MOCK_CHAT_FILES: {
+  key: string;
+  name: string;
+  kind: 'file' | 'image';
+  content: string;
+}[] = [
+  {
+    key: 'mock-chat-file-1',
+    name: 'condition-notes.md',
+    kind: 'file',
+    content:
+      '# Condition notes\n\nSurface cleaning test on the lower-right looked stable.\nNo bloom after 48h.\n\nNext: varnish solubility check before any consolidant.',
+  },
+  {
+    key: 'mock-chat-file-2',
+    name: 'palette-swatch.png',
+    kind: 'image',
+    content:
+      '[Image: palette-swatch.png]\n\nPreview is available in the message bubble.',
+  },
+  {
+    key: 'mock-chat-file-3',
+    name: 'client-brief.txt',
+    kind: 'file',
+    content:
+      'Client wants a calmer tone in written updates.\nAvoid jargon unless they ask for technical detail.\nPrefer short paragraphs and clear next steps.',
+  },
+  {
+    key: 'mock-chat-file-4',
+    name: 'materials.csv',
+    kind: 'file',
+    content: 'item,qty\nCotton swabs,120\nIsopropanol,2L\nJapanese tissue,1 pack\nGellan gum,50g',
+  },
+  {
+    key: 'mock-chat-file-5',
+    name: 'reference-detail.jpg',
+    kind: 'image',
+    content:
+      '[Image: reference-detail.jpg]\n\nPreview is available in the message bubble.',
+  },
+];
+
 /** Demo instructions when a project has none saved yet. */
 const MOCK_PROJECT_INSTRUCTIONS =
   'Prefer concise answers. Use conservation vocabulary carefully. When unsure about materials, ask before recommending treatments. Keep tone calm and professional for client-facing drafts.';
-/** Demo scheduled tasks — UI preview only until scheduling is wired. */
+/** Demo scheduled tasks — click opens a themed preview modal until scheduling is wired. */
 const MOCK_PROJECT_SCHEDULED = [
   { id: 'mock-sched-1', title: 'Weekly condition check-in', cadence: 'Every Monday · 09:00', mark: 'Mon' },
   { id: 'mock-sched-2', title: 'Draft client progress note', cadence: 'Every Friday · 16:00', mark: 'Fri' },
   { id: 'mock-sched-3', title: 'Refresh materials inventory', cadence: '1st of month · 10:00', mark: '1st' },
 ];
+
+type ProjectScheduleKind = 'once' | 'daily' | 'weekly' | 'monthly';
+
+type ProjectScheduleDraft = {
+  kind: ProjectScheduleKind;
+  /** 0 = Mon … 6 = Sun */
+  weekday: number;
+  /** YYYY-MM-DD for once */
+  date: string;
+  /** HH:mm */
+  time: string;
+};
+
+const SCHEDULE_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+
+const SCHEDULE_KIND_OPTIONS: { id: ProjectScheduleKind; label: string }[] = [
+  { id: 'once', label: 'Once' },
+  { id: 'daily', label: 'Daily' },
+  { id: 'weekly', label: 'Weekly' },
+  { id: 'monthly', label: 'Monthly' },
+];
+
+const createDefaultScheduleDraft = (): ProjectScheduleDraft => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const jsDay = now.getDay(); // 0 Sun … 6 Sat
+  const weekday = jsDay === 0 ? 6 : jsDay - 1;
+  return {
+    kind: 'weekly',
+    weekday,
+    date: `${yyyy}-${mm}-${dd}`,
+    time: '09:00',
+  };
+};
+
+const markFromScheduleDraft = (draft: ProjectScheduleDraft): string => {
+  if (draft.kind === 'weekly') return SCHEDULE_WEEKDAYS[draft.weekday] ?? 'New';
+  if (draft.kind === 'monthly') return '1st';
+  if (draft.kind === 'daily') return 'Day';
+  const day = draft.date.split('-')[2];
+  return day ?? 'New';
+};
+
+const SCHEDULE_CAL_WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
+/** 12-hour clock labels (01–12). Stored value stays 24h `HH:mm`. */
+const SCHEDULE_HOURS_12 = Array.from({ length: 12 }, (_, index) =>
+  String(index + 1).padStart(2, '0'),
+);
+/** 5-minute steps — cleaner for schedule UI than 60 rows. */
+const SCHEDULE_MINUTES = Array.from({ length: 12 }, (_, index) =>
+  String(index * 5).padStart(2, '0'),
+);
+const SCHEDULE_MERIDIEMS = ['AM', 'PM'] as const;
+type ScheduleMeridiem = (typeof SCHEDULE_MERIDIEMS)[number];
+/** Same speed for open and close. */
+const SCHEDULE_DATE_PICKER_MS = 480;
+/** Add-scheduled-task modal card in/out. */
+const SCHEDULE_CREATE_MODAL_MS = 420;
+/** Appearance / theme popover — readable in/out (too short reads as a hard cut). */
+const THEME_MENU_MS = 300;
+const THEME_MENU_FROM_TRANSFORM = 'translateY(-10px) scale(0.9)';
+/** History header search bar — enter from right, exit to right. */
+const HISTORY_SEARCH_BAR_MS = 280;
+const HISTORY_SEARCH_BAR_FROM_TRANSFORM = 'translateX(32%)';
+/** Text starts after the panel; ease-in so opacity does not jump. */
+const SCHEDULE_DATE_TEXT_DELAY_MS = 280;
+const SCHEDULE_DATE_TEXT_MS = 480;
+const SCHEDULE_DATE_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const SCHEDULE_DATE_TEXT_EASE = 'ease-in';
+
+/**
+ * Shared "grows out of its source toward center" motion for chat card modals.
+ * Origin = which edge/corner the source control lives on.
+ */
+type ChatModalOrigin = 'top-right' | 'right' | 'left' | 'center';
+
+const CHAT_MODAL_MOTION: Record<
+  ChatModalOrigin,
+  { transformOrigin: string; fromTransform: string; keyIn: string; keyOut: string }
+> = {
+  'top-right': {
+    transformOrigin: 'top right',
+    fromTransform: 'translate(18%, -12%) scale(0.42)',
+    keyIn: 'chat-modal-from-top-right-in',
+    keyOut: 'chat-modal-from-top-right-out',
+  },
+  right: {
+    transformOrigin: 'right center',
+    fromTransform: 'translate(22%, 0) scale(0.42)',
+    keyIn: 'chat-modal-from-right-in',
+    keyOut: 'chat-modal-from-right-out',
+  },
+  left: {
+    transformOrigin: 'left center',
+    fromTransform: 'translate(-22%, 0) scale(0.42)',
+    keyIn: 'chat-modal-from-left-in',
+    keyOut: 'chat-modal-from-left-out',
+  },
+  center: {
+    transformOrigin: 'center center',
+    fromTransform: 'scale(0.42)',
+    keyIn: 'chat-modal-from-center-in',
+    keyOut: 'chat-modal-from-center-out',
+  },
+};
+
+const CHAT_MODAL_KEYFRAMES_CSS = `
+  @keyframes chat-modal-from-top-right-in {
+    from { opacity: 0; transform: translate(18%, -12%) scale(0.42); }
+    to { opacity: 1; transform: translate(0, 0) scale(1); }
+  }
+  @keyframes chat-modal-from-top-right-out {
+    from { opacity: 1; transform: translate(0, 0) scale(1); }
+    to { opacity: 0; transform: translate(18%, -12%) scale(0.42); }
+  }
+  @keyframes chat-modal-from-right-in {
+    from { opacity: 0; transform: translate(22%, 0) scale(0.42); }
+    to { opacity: 1; transform: translate(0, 0) scale(1); }
+  }
+  @keyframes chat-modal-from-right-out {
+    from { opacity: 1; transform: translate(0, 0) scale(1); }
+    to { opacity: 0; transform: translate(22%, 0) scale(0.42); }
+  }
+  @keyframes chat-modal-from-left-in {
+    from { opacity: 0; transform: translate(-22%, 0) scale(0.42); }
+    to { opacity: 1; transform: translate(0, 0) scale(1); }
+  }
+  @keyframes chat-modal-from-left-out {
+    from { opacity: 1; transform: translate(0, 0) scale(1); }
+    to { opacity: 0; transform: translate(-22%, 0) scale(0.42); }
+  }
+  @keyframes chat-modal-from-center-in {
+    from { opacity: 0; transform: scale(0.42); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes chat-modal-from-center-out {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(0.42); }
+  }
+`;
+
+const historySearchBarMotionStyle = (
+  shown: boolean,
+  open: boolean,
+): React.CSSProperties => ({
+  willChange: 'transform, opacity',
+  ...(shown
+    ? {
+        animation: `chat-history-search-in ${HISTORY_SEARCH_BAR_MS}ms ${SCHEDULE_DATE_EASE} forwards`,
+      }
+    : !open
+      ? {
+          animation: `chat-history-search-out ${HISTORY_SEARCH_BAR_MS}ms ${SCHEDULE_DATE_EASE} forwards`,
+        }
+      : {
+          opacity: 0,
+          transform: HISTORY_SEARCH_BAR_FROM_TRANSFORM,
+        }),
+});
+
+const chatModalCardMotionStyle = (
+  origin: ChatModalOrigin,
+  shown: boolean,
+  open: boolean,
+): React.CSSProperties => {
+  const motion = CHAT_MODAL_MOTION[origin];
+  return {
+    transformOrigin: motion.transformOrigin,
+    willChange: 'transform, opacity',
+    ...(shown
+      ? {
+          animation: `${motion.keyIn} ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE} forwards`,
+        }
+      : !open
+        ? {
+            animation: `${motion.keyOut} ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE} forwards`,
+          }
+        : {
+            opacity: 0,
+            transform: motion.fromTransform,
+          }),
+  };
+};
+
+/** Appearance popover motion — key remounts so in/out always restart (no skipped CSS animation). */
+const themeMenuPanelMotionStyle = (
+  shown: boolean,
+  open: boolean,
+): React.CSSProperties => ({
+  transformOrigin: 'top right',
+  willChange: 'transform, opacity',
+  ...(shown
+    ? {
+        animation: `chat-theme-menu-in ${THEME_MENU_MS}ms ${SCHEDULE_DATE_EASE} forwards`,
+      }
+    : !open
+      ? {
+          animation: `chat-theme-menu-out ${THEME_MENU_MS}ms ${SCHEDULE_DATE_EASE} forwards`,
+        }
+      : {
+          opacity: 0,
+          transform: THEME_MENU_FROM_TRANSFORM,
+        }),
+});
+
+/** Pixel offset from viewport center to a trigger’s center — card grows from that point. */
+const measureModalFromTrigger = (el: Element | null): { x: number; y: number } => {
+  if (typeof window === 'undefined') return { x: 0, y: 0 };
+  if (!el) {
+    // Fallback: top-right chrome (Customize / ⋯ live there).
+    return { x: window.innerWidth * 0.28, y: -window.innerHeight * 0.32 };
+  }
+  const rect = el.getBoundingClientRect();
+  return {
+    x: rect.left + rect.width / 2 - window.innerWidth / 2,
+    y: rect.top + rect.height / 2 - window.innerHeight / 2,
+  };
+};
+
+const parseScheduleTime = (
+  time: string,
+): { hour12: string; minute: string; meridiem: ScheduleMeridiem; hour24: string } => {
+  const [rawHour = '09', rawMinute = '00'] = (time || '09:00').split(':');
+  const hour24Num = Math.min(23, Math.max(0, Number(rawHour) || 0));
+  const hour24 = String(hour24Num).padStart(2, '0');
+  const minuteNum = Number(rawMinute);
+  const snapped = Number.isFinite(minuteNum)
+    ? String(Math.min(55, Math.round(minuteNum / 5) * 5)).padStart(2, '0')
+    : '00';
+  const minute = SCHEDULE_MINUTES.includes(snapped) ? snapped : '00';
+  const meridiem: ScheduleMeridiem = hour24Num >= 12 ? 'PM' : 'AM';
+  const hour12Num = hour24Num % 12 === 0 ? 12 : hour24Num % 12;
+  const hour12 = String(hour12Num).padStart(2, '0');
+  return { hour12, minute, meridiem, hour24 };
+};
+
+const toScheduleTime24 = (
+  hour12: string,
+  minute: string,
+  meridiem: ScheduleMeridiem,
+): string => {
+  let hour = Number(hour12) || 12;
+  if (meridiem === 'AM') {
+    hour = hour === 12 ? 0 : hour;
+  } else {
+    hour = hour === 12 ? 12 : hour + 12;
+  }
+  const safeMinute = SCHEDULE_MINUTES.includes(minute) ? minute : '00';
+  return `${String(hour).padStart(2, '0')}:${safeMinute}`;
+};
+
+const formatScheduleTimeDisplay = (time: string): string => {
+  const { hour12, minute, meridiem } = parseScheduleTime(time);
+  return `${hour12}:${minute} ${meridiem}`;
+};
+
+const formatProjectScheduleLabel = (draft: ProjectScheduleDraft): string => {
+  const time = formatScheduleTimeDisplay(draft.time.trim() || '09:00');
+  if (draft.kind === 'daily') return `Every day · ${time}`;
+  if (draft.kind === 'monthly') return `1st of month · ${time}`;
+  if (draft.kind === 'weekly') {
+    const day = SCHEDULE_WEEKDAYS[draft.weekday] ?? 'Mon';
+    return `Every ${day} · ${time}`;
+  }
+  if (!draft.date) return `Once · ${time}`;
+  const [y, m, d] = draft.date.split('-').map(Number);
+  const label = new Date(y, (m ?? 1) - 1, d ?? 1).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  return `${label} · ${time}`;
+};
+
+const formatScheduleDateYmd = (date: Date): string => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const formatScheduleDateDisplay = (ymd: string): string => {
+  if (!ymd) return 'Select date';
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return 'Select date';
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+  });
+};
+
+const monthStartFromYmd = (ymd: string): Date => {
+  const now = new Date();
+  if (!ymd) return new Date(now.getFullYear(), now.getMonth(), 1);
+  const [y, m] = ymd.split('-').map(Number);
+  if (!y || !m) return new Date(now.getFullYear(), now.getMonth(), 1);
+  return new Date(y, m - 1, 1);
+};
+
+/** Fixed 6-week grid, Monday-first — keeps calendar height stable. */
+const getScheduleMonthGrid = (
+  viewMonth: Date,
+): { ymd: string; day: number; inMonth: boolean }[] => {
+  const year = viewMonth.getFullYear();
+  const month = viewMonth.getMonth();
+  const first = new Date(year, month, 1);
+  const mondayOffset = (first.getDay() + 6) % 7;
+  const start = new Date(year, month, 1 - mondayOffset);
+  return Array.from({ length: 42 }, (_, index) => {
+    const cell = new Date(
+      start.getFullYear(),
+      start.getMonth(),
+      start.getDate() + index,
+    );
+    return {
+      ymd: formatScheduleDateYmd(cell),
+      day: cell.getDate(),
+      inMonth: cell.getMonth() === month,
+    };
+  });
+};
+
 /** Short title for the large workspace header font (≈ one line next to ⋯ / star). */
 const PROJECT_NAME_MAX_CHARS = 36;
 /**
@@ -1533,7 +1920,10 @@ const PROJECT_SETTINGS_SECTIONS = [
 type ProjectSettingsSection = (typeof PROJECT_SETTINGS_SECTIONS)[number]['id'];
 const CHAT_THEME_BRIGHTNESS_STORAGE_KEY = 'xeno-chat-theme-brightness';
 const CHAT_CHROME_EDGE_INSET_PX = 12;
+/** Vertical inset for floating chrome icons (centers an h-9 control in the bar). */
 const CHAT_CHROME_TOP_INSET_PX = 8;
+/** Shared height for history header + main top bar. Hairline sits at this Y (fixed). */
+const CHAT_CHROME_BAR_HEIGHT_PX = 52;
 
 type ChatTheme = 'system' | 'custom' | 'dark' | 'dim' | 'light';
 type ResolvedChatTheme = Exclude<ChatTheme, 'system' | 'custom'>;
@@ -1732,15 +2122,22 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     isOpen: boolean;
     conversationId: string | null;
     conversationTitle: string | null;
-  }>({ isOpen: false, conversationId: null, conversationTitle: null });
+    /** History sidebar → left; chat ⋯ menu → top-right. */
+    origin: ChatModalOrigin;
+  }>({ isOpen: false, conversationId: null, conversationTitle: null, origin: 'left' });
+  const [isDeleteModalMounted, setIsDeleteModalMounted] = useState(false);
+  const [isDeleteModalShown, setIsDeleteModalShown] = useState(false);
   const [historyRowMenu, setHistoryRowMenu] = useState<{
     conversationId: string;
     top: number;
     left: number;
   } | null>(null);
+  const [isHistoryRowMenuOpen, setIsHistoryRowMenuOpen] = useState(false);
+  const [isHistoryRowMenuMounted, setIsHistoryRowMenuMounted] = useState(false);
+  const [isHistoryRowMenuShown, setIsHistoryRowMenuShown] = useState(false);
   const [historyProjectSubmenuOpen, setHistoryProjectSubmenuOpen] = useState(false);
   const [historyHoveredRowId, setHistoryHoveredRowId] = useState<string | null>(null);
-  type HistoryNavView = 'chats' | 'projects' | 'archived' | 'artifacts' | 'scheduled' | 'customize';
+  type HistoryNavView = 'chats' | 'projects' | 'archived' | 'artifacts' | 'global_settings' | 'scheduled';
   const [historyNavView, setHistoryNavView] = useState<HistoryNavView>('chats');
   const [isPinnedSectionOpen, setIsPinnedSectionOpen] = useState(true);
   const [isRecentsSectionOpen, setIsRecentsSectionOpen] = useState(true);
@@ -1800,6 +2197,15 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       return false;
     }
   });
+  const [isArtifactsPageOpen, setIsArtifactsPageOpen] = useState(false);
+  const [isGlobalSettingsPageOpen, setIsGlobalSettingsPageOpen] = useState(false);
+  const [isScheduledPageOpen, setIsScheduledPageOpen] = useState(false);
+  const [isCustomizePageOpen, setIsCustomizePageOpen] = useState(false);
+  const [isCustomizePageMounted, setIsCustomizePageMounted] = useState(false);
+  const [isCustomizePageShown, setIsCustomizePageShown] = useState(false);
+  /** Kept until unmount so exit returns to the same button. */
+  const [customizeMotionFrom, setCustomizeMotionFrom] = useState({ x: 0, y: 0 });
+  const customizeButtonRef = useRef<HTMLButtonElement>(null);
   // Which project's workspace is open (null = showing the projects list).
   // Persisted so a refresh keeps the user inside the same project.
   const [activeProjectId, setActiveProjectId] = useState<string | null>(() => {
@@ -1848,10 +2254,23 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       : 'light'
   );
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [isThemeMenuMounted, setIsThemeMenuMounted] = useState(false);
+  const [isThemeMenuShown, setIsThemeMenuShown] = useState(false);
   const [themePreviewPosition, setThemePreviewPosition] = useState<number | null>(null);
   const [isTemporaryChat, setIsTemporaryChat] = useState(false);
   const [isSharePreviewOpen, setIsSharePreviewOpen] = useState(false);
+  const [isSharePreviewMounted, setIsSharePreviewMounted] = useState(false);
+  const [isSharePreviewShown, setIsSharePreviewShown] = useState(false);
   const [isChatMoreMenuOpen, setIsChatMoreMenuOpen] = useState(false);
+  const [isChatMoreMenuMounted, setIsChatMoreMenuMounted] = useState(false);
+  const [isChatMoreMenuShown, setIsChatMoreMenuShown] = useState(false);
+  const [isChatFilesModalOpen, setIsChatFilesModalOpen] = useState(false);
+  const [isChatFilesModalMounted, setIsChatFilesModalMounted] = useState(false);
+  const [isChatFilesModalShown, setIsChatFilesModalShown] = useState(false);
+  const [chatFilesSelectedKey, setChatFilesSelectedKey] = useState<string | null>(
+    null,
+  );
+  const [chatFilesCopied, setChatFilesCopied] = useState(false);
   const [isTaskbarHidden, setIsTaskbarHidden] = useState(false);
   const historySidebarRef = useRef<HTMLDivElement>(null);
 
@@ -1907,7 +2326,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       '--chat-surface-muted': tokens.surfaceMuted,
       '--chat-border': tokens.border,
       '--chat-hover': tokens.hover,
-      '--chat-project-preview-fade': tokens.hover,
+      // Dark themes: fade must stay near-canvas (tokens.hover is often too light).
+      '--chat-project-preview-fade': canvasIsLight
+        ? tokens.hover
+        : `color-mix(in srgb, ${tokens.canvas} 82%, ${tokens.elevated} 18%)`,
       '--chat-overlay': tokens.overlay,
       '--chat-accent': tokens.text,
       '--chat-accent-soft': canvasIsLight
@@ -1945,6 +2367,81 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setChatTheme('custom');
     setThemePreviewPosition(null);
   }, []);
+
+  // Appearance popover: same mount → paint closed → show enter / reverse on exit as card modals.
+  useEffect(() => {
+    if (isThemeMenuOpen) {
+      setIsThemeMenuMounted(true);
+      setIsThemeMenuShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsThemeMenuShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isThemeMenuMounted) return;
+    setIsThemeMenuShown(false);
+    const timer = window.setTimeout(() => {
+      setIsThemeMenuMounted(false);
+    }, THEME_MENU_MS);
+    return () => window.clearTimeout(timer);
+  }, [isThemeMenuOpen, isThemeMenuMounted]);
+
+  // ⋯ conversation menu: grow from the button toward center / shrink back to the button.
+  useEffect(() => {
+    if (isChatMoreMenuOpen) {
+      setIsChatMoreMenuMounted(true);
+      setIsChatMoreMenuShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsChatMoreMenuShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isChatMoreMenuMounted) return;
+    setIsChatMoreMenuShown(false);
+    setIsThemeMenuOpen(false);
+    const timer = window.setTimeout(() => {
+      setIsChatMoreMenuMounted(false);
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isChatMoreMenuOpen, isChatMoreMenuMounted]);
+
+  // Files-in-chat popup (⋯ → View files) — same card shell as project file preview.
+  useEffect(() => {
+    if (isChatFilesModalOpen) {
+      setIsChatFilesModalMounted(true);
+      setIsChatFilesModalShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsChatFilesModalShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isChatFilesModalMounted) return;
+    setIsChatFilesModalShown(false);
+    const timer = window.setTimeout(() => {
+      setIsChatFilesModalMounted(false);
+      setChatFilesSelectedKey(null);
+      setChatFilesCopied(false);
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isChatFilesModalOpen, isChatFilesModalMounted]);
 
   // Keep history inset in sync with Overview taskbar (Shift+H / XENO wordmark toggle).
   useEffect(() => {
@@ -2043,6 +2540,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [groupedModels, setGroupedModels] = useState<GroupedModels[]>(MOCK_CHAT_MODELS);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isSettingsModalMounted, setIsSettingsModalMounted] = useState(false);
+  const [isSettingsModalShown, setIsSettingsModalShown] = useState(false);
   const [isConversationSelectorOpen, setIsConversationSelectorOpen] = useState(false);
   const [isWideChatEnabled, setIsWideChatEnabled] = useState(false);
   const [chatAlignment, setChatAlignment] = useState<'center' | 'left' | 'right'>('center');
@@ -2191,7 +2690,6 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [showTopBarBackground, setShowTopBarBackground] = useState(false);
 
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
-  const settingsModalRef = useRef<HTMLDivElement>(null);
   const conversationSelectorButtonRef = useRef<HTMLButtonElement>(null);
   const conversationSelectorDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -2253,7 +2751,34 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // --- NEW: State for History Search --- 
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [isHistorySearchOpen, setIsHistorySearchOpen] = useState(false);
+  const [isHistorySearchMounted, setIsHistorySearchMounted] = useState(false);
+  const [isHistorySearchShown, setIsHistorySearchShown] = useState(false);
   // --- END NEW ---
+
+  // History header search bar: mount → slide in from right; on close slide out to right, then unmount.
+  useEffect(() => {
+    if (isHistorySearchOpen) {
+      setIsHistorySearchMounted(true);
+      setIsHistorySearchShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsHistorySearchShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isHistorySearchMounted) return;
+    setIsHistorySearchShown(false);
+    const timer = window.setTimeout(() => {
+      setIsHistorySearchMounted(false);
+      setHistorySearchTerm('');
+    }, HISTORY_SEARCH_BAR_MS);
+    return () => window.clearTimeout(timer);
+  }, [isHistorySearchOpen, isHistorySearchMounted]);
 
   // A file uploaded into a project (v1: content lives in localStorage, small text only).
   type ProjectFile = {
@@ -2266,6 +2791,12 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     content: string; // extracted text ('text') or metadata note ('base64')
   };
   // TEMPORARY chat-history Projects entry (local only — full project model later)
+  type ProjectScheduledTask = {
+    id: string;
+    title: string;
+    cadence: string;
+    mark: string;
+  };
   type ChatHistoryProject = {
     id: string;
     name: string;
@@ -2276,6 +2807,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     isArchived?: boolean;
     files?: ProjectFile[];
     instructions?: string;
+    scheduledTasks?: ProjectScheduledTask[];
   };
   const chatProjectsStorageKey = 'chatProjects_playground';
   const [chatProjects, setChatProjects] = useState<ChatHistoryProject[]>(() => {
@@ -2294,6 +2826,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     }
   });
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
+  const [isCreateProjectModalMounted, setIsCreateProjectModalMounted] = useState(false);
+  const [isCreateProjectModalShown, setIsCreateProjectModalShown] = useState(false);
   const [openProjectMenuId, setOpenProjectMenuId] = useState<string | null>(null);
   // Card whose hover overlay (bottom fade + date) is suppressed after a right-click.
   const [suppressCardOverlayId, setSuppressCardOverlayId] = useState<string | null>(null);
@@ -2312,12 +2846,86 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const projectEntryConversationIdRef = useRef<string | null>(null);
   // Non-fatal upload notice shown in the project workspace (e.g. "file too large").
   const [projectFileNotice, setProjectFileNotice] = useState<string | null>(null);
+  /** Centered themed preview when opening a file from the project Files rail. */
+  const [projectFilePreview, setProjectFilePreview] = useState<{
+    name: string;
+    content: string;
+  } | null>(null);
+  const [isProjectFilePreviewOpen, setIsProjectFilePreviewOpen] = useState(false);
+  const [isProjectFilePreviewMounted, setIsProjectFilePreviewMounted] = useState(false);
+  const [isProjectFilePreviewShown, setIsProjectFilePreviewShown] = useState(false);
+  const [projectFilePreviewCopied, setProjectFilePreviewCopied] = useState(false);
+  /** Centered themed detail when opening a scheduled task from the project rail. */
+  const [projectScheduledPreview, setProjectScheduledPreview] = useState<{
+    id: string;
+    title: string;
+    cadence: string;
+    mark: string;
+  } | null>(null);
+  const [isProjectScheduledPreviewOpen, setIsProjectScheduledPreviewOpen] =
+    useState(false);
+  const [isProjectScheduledPreviewMounted, setIsProjectScheduledPreviewMounted] =
+    useState(false);
+  const [isProjectScheduledPreviewShown, setIsProjectScheduledPreviewShown] =
+    useState(false);
+  /** Create-task dialog from project rail Scheduled +. */
+  const [isProjectScheduledCreateOpen, setIsProjectScheduledCreateOpen] =
+    useState(false);
+  const [isProjectScheduledCreateMounted, setIsProjectScheduledCreateMounted] =
+    useState(false);
+  const [isProjectScheduledCreateShown, setIsProjectScheduledCreateShown] =
+    useState(false);
+  const [projectScheduledCreateTitle, setProjectScheduledCreateTitle] =
+    useState('');
+  const [projectScheduledCreateSchedule, setProjectScheduledCreateSchedule] =
+    useState<ProjectScheduleDraft>(() => createDefaultScheduleDraft());
+  const [isProjectScheduledWhenOpen, setIsProjectScheduledWhenOpen] =
+    useState(false);
+  const [isProjectScheduledWhenMounted, setIsProjectScheduledWhenMounted] =
+    useState(false);
+  const [isProjectScheduledWhenShown, setIsProjectScheduledWhenShown] =
+    useState(false);
+  const [isProjectScheduledWhenTextShown, setIsProjectScheduledWhenTextShown] =
+    useState(false);
+  /** After slide-in, drop overflow clip so nested calendar is not cut off. */
+  const [isProjectScheduledWhenClipOpen, setIsProjectScheduledWhenClipOpen] =
+    useState(false);
+  const [projectScheduledWhenPanelHeight, setProjectScheduledWhenPanelHeight] =
+    useState(0);
+  const projectScheduledWhenContentRef = useRef<HTMLDivElement>(null);
+  const [isProjectScheduleDateOpen, setIsProjectScheduleDateOpen] =
+    useState(false);
+  const [isProjectScheduleDateMounted, setIsProjectScheduleDateMounted] =
+    useState(false);
+  const [isProjectScheduleDateShown, setIsProjectScheduleDateShown] =
+    useState(false);
+  const [isProjectScheduleDateTextShown, setIsProjectScheduleDateTextShown] =
+    useState(false);
+  const [projectScheduleDatePanelHeight, setProjectScheduleDatePanelHeight] =
+    useState(0);
+  const projectScheduleDateContentRef = useRef<HTMLDivElement>(null);
+  const [isProjectScheduleTimeOpen, setIsProjectScheduleTimeOpen] =
+    useState(false);
+  const [isProjectScheduleTimeMounted, setIsProjectScheduleTimeMounted] =
+    useState(false);
+  const [isProjectScheduleTimeShown, setIsProjectScheduleTimeShown] =
+    useState(false);
+  const [isProjectScheduleTimeTextShown, setIsProjectScheduleTimeTextShown] =
+    useState(false);
+  const [projectScheduleTimePanelHeight, setProjectScheduleTimePanelHeight] =
+    useState(0);
+  const projectScheduleTimeContentRef = useRef<HTMLDivElement>(null);
+  const [projectScheduleCalendarMonth, setProjectScheduleCalendarMonth] =
+    useState<Date>(() => monthStartFromYmd(createDefaultScheduleDraft().date));
   // Project settings — the one door for configuring a project. `section` is the active tab
   // (General / Instructions / Danger zone), so rail cards open the same surface on the right page.
   const [projectSettings, setProjectSettings] = useState<{
     projectId: string;
     section: ProjectSettingsSection;
   } | null>(null);
+  const [isProjectSettingsOpen, setIsProjectSettingsOpen] = useState(false);
+  const [isProjectSettingsMounted, setIsProjectSettingsMounted] = useState(false);
+  const [isProjectSettingsShown, setIsProjectSettingsShown] = useState(false);
   const [instructionsDraft, setInstructionsDraft] = useState('');
   const [settingsNameDraft, setSettingsNameDraft] = useState('');
   const [settingsDescriptionDraft, setSettingsDescriptionDraft] = useState('');
@@ -2331,10 +2939,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   }, [chatProjects, chatProjectsStorageKey]);
 
   const closeCreateProjectModal = useCallback(() => {
+    // Intent only — drafts clear after the exit animation.
     setIsCreateProjectModalOpen(false);
-    setNewChatProjectName('');
-    setNewChatProjectDescription('');
-    setPendingProjectAssignConversationId(null);
   }, []);
 
   const openCreateProjectModal = useCallback((options?: { assignConversationId?: string }) => {
@@ -2344,6 +2950,33 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsProjectsSortOpen(false);
     setIsCreateProjectModalOpen(true);
   }, []);
+
+  // Same enter/exit orchestration as Project settings / Add scheduled task.
+  useEffect(() => {
+    if (isCreateProjectModalOpen) {
+      setIsCreateProjectModalMounted(true);
+      setIsCreateProjectModalShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsCreateProjectModalShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isCreateProjectModalMounted) return;
+    setIsCreateProjectModalShown(false);
+    const timer = window.setTimeout(() => {
+      setIsCreateProjectModalMounted(false);
+      setNewChatProjectName('');
+      setNewChatProjectDescription('');
+      setPendingProjectAssignConversationId(null);
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isCreateProjectModalOpen, isCreateProjectModalMounted]);
 
   const handleToggleProjectStar = useCallback((projectId: string) => {
     setChatProjects((prev) =>
@@ -2444,6 +3077,427 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     );
   }, []);
 
+  const openProjectFilePreview = useCallback(
+    (file: {
+      name: string;
+      content?: string;
+      encoding?: 'text' | 'base64';
+      type?: string;
+    }) => {
+      setIsContextPanelOpen(false);
+      setIsEditingContextPanel(false);
+      setIsProjectScheduledPreviewOpen(false);
+      const raw = file.content?.trim() ?? '';
+      let content = raw;
+      if (!content) {
+        content = 'No preview available for this file.';
+      } else if (file.encoding === 'base64' && file.type?.startsWith('image/')) {
+        content = raw || 'Image attachment — binary preview not shown in this mock.';
+      } else if (file.encoding === 'base64') {
+        content = raw || 'Binary file — text preview not available.';
+      }
+      setProjectFilePreview({ name: file.name, content });
+      setProjectFilePreviewCopied(false);
+      setIsProjectFilePreviewOpen(true);
+    },
+    [],
+  );
+
+  const closeProjectFilePreview = useCallback(() => {
+    setIsProjectFilePreviewOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (isProjectFilePreviewOpen) {
+      setIsProjectFilePreviewMounted(true);
+      setIsProjectFilePreviewShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsProjectFilePreviewShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isProjectFilePreviewMounted) return;
+    setIsProjectFilePreviewShown(false);
+    const timer = window.setTimeout(() => {
+      setIsProjectFilePreviewMounted(false);
+      setProjectFilePreview(null);
+      setProjectFilePreviewCopied(false);
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isProjectFilePreviewOpen, isProjectFilePreviewMounted]);
+
+  const copyProjectFilePreview = useCallback(async () => {
+    if (!projectFilePreview) return;
+    try {
+      await navigator.clipboard.writeText(projectFilePreview.content);
+      setProjectFilePreviewCopied(true);
+      window.setTimeout(() => setProjectFilePreviewCopied(false), 1500);
+    } catch (error) {
+      console.error('Failed to copy project file preview:', error);
+    }
+  }, [projectFilePreview]);
+
+  const openProjectScheduledPreview = useCallback(
+    (task: { id: string; title: string; cadence: string; mark: string }) => {
+      setIsContextPanelOpen(false);
+      setIsProjectFilePreviewOpen(false);
+      setProjectScheduledPreview(task);
+      setIsProjectScheduledPreviewOpen(true);
+    },
+    [],
+  );
+
+  const closeProjectScheduledPreview = useCallback(() => {
+    setIsProjectScheduledPreviewOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (isProjectScheduledPreviewOpen) {
+      setIsProjectScheduledPreviewMounted(true);
+      setIsProjectScheduledPreviewShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsProjectScheduledPreviewShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isProjectScheduledPreviewMounted) return;
+    setIsProjectScheduledPreviewShown(false);
+    const timer = window.setTimeout(() => {
+      setIsProjectScheduledPreviewMounted(false);
+      setProjectScheduledPreview(null);
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isProjectScheduledPreviewOpen, isProjectScheduledPreviewMounted]);
+
+  const resetProjectScheduleDatePanel = useCallback(() => {
+    setIsProjectScheduleDateOpen(false);
+    setIsProjectScheduleDateMounted(false);
+    setIsProjectScheduleDateShown(false);
+    setIsProjectScheduleDateTextShown(false);
+    setProjectScheduleDatePanelHeight(0);
+  }, []);
+
+  const resetProjectScheduleTimePanel = useCallback(() => {
+    setIsProjectScheduleTimeOpen(false);
+    setIsProjectScheduleTimeMounted(false);
+    setIsProjectScheduleTimeShown(false);
+    setIsProjectScheduleTimeTextShown(false);
+    setProjectScheduleTimePanelHeight(0);
+  }, []);
+
+  const resetProjectScheduledWhenPanel = useCallback(() => {
+    setIsProjectScheduledWhenOpen(false);
+    setIsProjectScheduledWhenMounted(false);
+    setIsProjectScheduledWhenShown(false);
+    setIsProjectScheduledWhenTextShown(false);
+    setIsProjectScheduledWhenClipOpen(false);
+    setProjectScheduledWhenPanelHeight(0);
+  }, []);
+
+  const openProjectScheduledCreate = useCallback(() => {
+    const draft = createDefaultScheduleDraft();
+    setIsProjectScheduledPreviewOpen(false);
+    setProjectScheduledCreateTitle('');
+    setProjectScheduledCreateSchedule(draft);
+    resetProjectScheduledWhenPanel();
+    resetProjectScheduleDatePanel();
+    resetProjectScheduleTimePanel();
+    setProjectScheduleCalendarMonth(monthStartFromYmd(draft.date));
+    setIsProjectScheduledCreateOpen(true);
+  }, [
+    resetProjectScheduleDatePanel,
+    resetProjectScheduleTimePanel,
+    resetProjectScheduledWhenPanel,
+  ]);
+
+  const closeProjectScheduledCreate = useCallback(() => {
+    // Intent only — form reset waits until exit animation finishes.
+    setIsProjectScheduledCreateOpen(false);
+    resetProjectScheduledWhenPanel();
+    resetProjectScheduleDatePanel();
+    resetProjectScheduleTimePanel();
+  }, [
+    resetProjectScheduleDatePanel,
+    resetProjectScheduleTimePanel,
+    resetProjectScheduledWhenPanel,
+  ]);
+
+  useEffect(() => {
+    if (isProjectScheduledCreateOpen) {
+      setIsProjectScheduledCreateMounted(true);
+      setIsProjectScheduledCreateShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsProjectScheduledCreateShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isProjectScheduledCreateMounted) return;
+    setIsProjectScheduledCreateShown(false);
+    const timer = window.setTimeout(() => {
+      setIsProjectScheduledCreateMounted(false);
+      setProjectScheduledCreateTitle('');
+      setProjectScheduledCreateSchedule(createDefaultScheduleDraft());
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isProjectScheduledCreateOpen, isProjectScheduledCreateMounted]);
+
+  // When panel — open: panel then text. Close: slide whole shell away (no empty box).
+  useEffect(() => {
+    if (isProjectScheduledWhenOpen) {
+      setIsProjectScheduledWhenMounted(true);
+      setIsProjectScheduledWhenShown(false);
+      setIsProjectScheduledWhenTextShown(false);
+      return;
+    }
+    if (!isProjectScheduledWhenMounted) return;
+    // Nested date/time must drop immediately or they keep height:auto + empty shell.
+    resetProjectScheduleDatePanel();
+    resetProjectScheduleTimePanel();
+    setIsProjectScheduledWhenClipOpen(false);
+    // Mirror open: text exits first (same fade/slide), then panel slides away.
+    setIsProjectScheduledWhenTextShown(false);
+    const panelTimer = window.setTimeout(() => {
+      setIsProjectScheduledWhenShown(false);
+    }, SCHEDULE_DATE_TEXT_MS);
+    const unmountTimer = window.setTimeout(() => {
+      setIsProjectScheduledWhenMounted(false);
+      setProjectScheduledWhenPanelHeight(0);
+    }, SCHEDULE_DATE_TEXT_MS + SCHEDULE_DATE_PICKER_MS);
+    return () => {
+      window.clearTimeout(panelTimer);
+      window.clearTimeout(unmountTimer);
+    };
+  }, [
+    isProjectScheduledWhenOpen,
+    isProjectScheduledWhenMounted,
+    resetProjectScheduleDatePanel,
+    resetProjectScheduleTimePanel,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!isProjectScheduledWhenMounted) return;
+    const panel = projectScheduledWhenContentRef.current;
+    if (panel) setProjectScheduledWhenPanelHeight(panel.scrollHeight);
+  }, [
+    isProjectScheduledWhenMounted,
+    projectScheduledCreateSchedule.kind,
+    isProjectScheduledWhenTextShown,
+  ]);
+
+  useEffect(() => {
+    if (!isProjectScheduledWhenOpen || !isProjectScheduledWhenMounted) return;
+    const frame = window.requestAnimationFrame(() => {
+      setIsProjectScheduledWhenShown(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isProjectScheduledWhenOpen, isProjectScheduledWhenMounted]);
+
+  useEffect(() => {
+    if (!isProjectScheduledWhenOpen || !isProjectScheduledWhenShown) return;
+    const timer = window.setTimeout(() => {
+      setIsProjectScheduledWhenTextShown(true);
+    }, SCHEDULE_DATE_TEXT_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [isProjectScheduledWhenOpen, isProjectScheduledWhenShown]);
+
+  useEffect(() => {
+    if (!isProjectScheduledWhenShown) {
+      setIsProjectScheduledWhenClipOpen(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setIsProjectScheduledWhenClipOpen(true);
+    }, SCHEDULE_DATE_PICKER_MS);
+    return () => window.clearTimeout(timer);
+  }, [isProjectScheduledWhenShown]);
+
+  useEffect(() => {
+    if (isProjectScheduleDateOpen) {
+      setIsProjectScheduleDateMounted(true);
+      setIsProjectScheduleDateShown(false);
+      setIsProjectScheduleDateTextShown(false);
+      return;
+    }
+    // Close: text out first, then panel slides under the date field, then unmount.
+    if (!isProjectScheduleDateMounted) return;
+    setIsProjectScheduleDateTextShown(false);
+    const panelTimer = window.setTimeout(() => {
+      setIsProjectScheduleDateShown(false);
+    }, SCHEDULE_DATE_TEXT_MS);
+    const unmountTimer = window.setTimeout(() => {
+      setIsProjectScheduleDateMounted(false);
+      setProjectScheduleDatePanelHeight(0);
+    }, SCHEDULE_DATE_TEXT_MS + SCHEDULE_DATE_PICKER_MS);
+    return () => {
+      window.clearTimeout(panelTimer);
+      window.clearTimeout(unmountTimer);
+    };
+  }, [isProjectScheduleDateOpen, isProjectScheduleDateMounted]);
+
+  // Measure before paint so the slide does not wait on a second frame.
+  useLayoutEffect(() => {
+    if (!isProjectScheduleDateMounted) return;
+    const panel = projectScheduleDateContentRef.current;
+    if (panel) setProjectScheduleDatePanelHeight(panel.scrollHeight);
+  }, [isProjectScheduleDateMounted, projectScheduleCalendarMonth]);
+
+  // One frame after the closed state paints, then slide — avoids double-rAF lag.
+  useEffect(() => {
+    if (!isProjectScheduleDateOpen || !isProjectScheduleDateMounted) return;
+    const frame = window.requestAnimationFrame(() => {
+      setIsProjectScheduleDateShown(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isProjectScheduleDateOpen, isProjectScheduleDateMounted]);
+
+  // Open only: text after panel. Close sequence is handled above.
+  useEffect(() => {
+    if (!isProjectScheduleDateOpen || !isProjectScheduleDateShown) return;
+    const timer = window.setTimeout(() => {
+      setIsProjectScheduleDateTextShown(true);
+    }, SCHEDULE_DATE_TEXT_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [isProjectScheduleDateOpen, isProjectScheduleDateShown]);
+
+  useEffect(() => {
+    if (projectScheduledCreateSchedule.kind !== 'once') {
+      setIsProjectScheduleDateOpen(false);
+    }
+  }, [projectScheduledCreateSchedule.kind]);
+
+  const toggleProjectScheduleDatePicker = useCallback(() => {
+    setIsProjectScheduleTimeOpen(false);
+    setIsProjectScheduleDateOpen((open) => {
+      if (!open) {
+        setProjectScheduleCalendarMonth(
+          monthStartFromYmd(projectScheduledCreateSchedule.date),
+        );
+      }
+      return !open;
+    });
+  }, [projectScheduledCreateSchedule.date]);
+
+  useEffect(() => {
+    if (isProjectScheduleTimeOpen) {
+      setIsProjectScheduleTimeMounted(true);
+      setIsProjectScheduleTimeShown(false);
+      setIsProjectScheduleTimeTextShown(false);
+      return;
+    }
+    if (!isProjectScheduleTimeMounted) return;
+    setIsProjectScheduleTimeTextShown(false);
+    const panelTimer = window.setTimeout(() => {
+      setIsProjectScheduleTimeShown(false);
+    }, SCHEDULE_DATE_TEXT_MS);
+    const unmountTimer = window.setTimeout(() => {
+      setIsProjectScheduleTimeMounted(false);
+      setProjectScheduleTimePanelHeight(0);
+    }, SCHEDULE_DATE_TEXT_MS + SCHEDULE_DATE_PICKER_MS);
+    return () => {
+      window.clearTimeout(panelTimer);
+      window.clearTimeout(unmountTimer);
+    };
+  }, [isProjectScheduleTimeOpen, isProjectScheduleTimeMounted]);
+
+  useLayoutEffect(() => {
+    if (!isProjectScheduleTimeMounted) return;
+    const panel = projectScheduleTimeContentRef.current;
+    if (panel) setProjectScheduleTimePanelHeight(panel.scrollHeight);
+  }, [isProjectScheduleTimeMounted]);
+
+  useEffect(() => {
+    if (!isProjectScheduleTimeOpen || !isProjectScheduleTimeMounted) return;
+    const frame = window.requestAnimationFrame(() => {
+      setIsProjectScheduleTimeShown(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isProjectScheduleTimeOpen, isProjectScheduleTimeMounted]);
+
+  useEffect(() => {
+    if (!isProjectScheduleTimeOpen || !isProjectScheduleTimeShown) return;
+    const timer = window.setTimeout(() => {
+      setIsProjectScheduleTimeTextShown(true);
+    }, SCHEDULE_DATE_TEXT_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [isProjectScheduleTimeOpen, isProjectScheduleTimeShown]);
+
+  const toggleProjectScheduleTimePicker = useCallback(() => {
+    setIsProjectScheduleDateOpen(false);
+    setIsProjectScheduleTimeOpen((open) => !open);
+  }, []);
+
+  const setProjectScheduleTimePart = useCallback(
+    (part: 'hour12' | 'minute' | 'meridiem', value: string) => {
+      setProjectScheduledCreateSchedule((prev) => {
+        const current = parseScheduleTime(prev.time);
+        const hour12 = part === 'hour12' ? value : current.hour12;
+        const minute = part === 'minute' ? value : current.minute;
+        const meridiem =
+          part === 'meridiem' && (value === 'AM' || value === 'PM')
+            ? value
+            : current.meridiem;
+        return {
+          ...prev,
+          time: toScheduleTime24(hour12, minute, meridiem),
+        };
+      });
+    },
+    [],
+  );
+
+  const submitProjectScheduledCreate = useCallback(() => {
+    const title = projectScheduledCreateTitle.trim();
+    if (!title || !activeProjectId) return;
+    const cadence = formatProjectScheduleLabel(projectScheduledCreateSchedule);
+    const mark = markFromScheduleDraft(projectScheduledCreateSchedule);
+    const task: ProjectScheduledTask = {
+      id: `sched-${Date.now().toString(36)}`,
+      title,
+      cadence,
+      mark,
+    };
+    setChatProjects((prev) =>
+      prev.map((project) => {
+        if (project.id !== activeProjectId) return project;
+        const existing =
+          (project.scheduledTasks?.length ?? 0) > 0
+            ? (project.scheduledTasks ?? [])
+            : [...MOCK_PROJECT_SCHEDULED];
+        return {
+          ...project,
+          scheduledTasks: [task, ...existing],
+          updatedAt: Date.now(),
+        };
+      }),
+    );
+    closeProjectScheduledCreate();
+    setProjectScheduledPreview(task);
+    setIsProjectScheduledPreviewOpen(true);
+  }, [
+    activeProjectId,
+    closeProjectScheduledCreate,
+    projectScheduledCreateSchedule,
+    projectScheduledCreateTitle,
+  ]);
+
   const openProjectSettings = useCallback(
     (project: ChatHistoryProject, section: ProjectSettingsSection = 'general') => {
       setSettingsNameDraft(project.name.slice(0, PROJECT_NAME_MAX_CHARS));
@@ -2454,16 +3508,43 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       setOpenProjectMenuId(null);
       setIsProjectsSortOpen(false);
       setProjectSettings({ projectId: project.id, section });
+      setIsProjectSettingsOpen(true);
     },
     [],
   );
 
   const closeProjectSettings = useCallback(() => {
-    setProjectSettings(null);
-    setSettingsNameDraft('');
-    setSettingsDescriptionDraft('');
-    setInstructionsDraft('');
+    // Intent only — drafts clear after the exit animation (same as Add scheduled task).
+    setIsProjectSettingsOpen(false);
   }, []);
+
+  // Same enter/exit orchestration as Add scheduled task modal.
+  useEffect(() => {
+    if (isProjectSettingsOpen) {
+      setIsProjectSettingsMounted(true);
+      setIsProjectSettingsShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsProjectSettingsShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isProjectSettingsMounted) return;
+    setIsProjectSettingsShown(false);
+    const timer = window.setTimeout(() => {
+      setIsProjectSettingsMounted(false);
+      setProjectSettings(null);
+      setSettingsNameDraft('');
+      setSettingsDescriptionDraft('');
+      setInstructionsDraft('');
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isProjectSettingsOpen, isProjectSettingsMounted]);
 
   /**
    * Name, description and instructions are drafts committed together. File and schedule changes
@@ -2517,6 +3598,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const openProjectsPage = useCallback(() => {
     setHistoryNavView('projects');
     setIsProjectsPageOpen(true);
+    setIsArtifactsPageOpen(false);
+    setIsGlobalSettingsPageOpen(false);
+    setIsScheduledPageOpen(false);
+    setIsCustomizePageOpen(false);
     setIsChatsCatalogOpen(false);
     setIsChatsCatalogFilterOpen(false);
     setProjectsPageSearch('');
@@ -2528,6 +3613,184 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     }
   }, []);
 
+  const openArtifactsPage = useCallback(() => {
+    setHistoryNavView('artifacts');
+    setIsArtifactsPageOpen(true);
+    setIsGlobalSettingsPageOpen(false);
+    setIsScheduledPageOpen(false);
+    setIsCustomizePageOpen(false);
+    setIsProjectsPageOpen(false);
+    setActiveProjectId(null);
+    setIsChatsCatalogOpen(false);
+    setIsChatsCatalogFilterOpen(false);
+    setIsProjectsSortOpen(false);
+    try {
+      localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
+      localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
+    } catch {
+      /* ignore storage failures */
+    }
+  }, []);
+
+  const openGlobalSettingsPage = useCallback(() => {
+    setHistoryNavView('global_settings');
+    setIsGlobalSettingsPageOpen(true);
+    setIsArtifactsPageOpen(false);
+    setIsScheduledPageOpen(false);
+    setIsCustomizePageOpen(false);
+    setIsProjectsPageOpen(false);
+    setActiveProjectId(null);
+    setIsChatsCatalogOpen(false);
+    setIsChatsCatalogFilterOpen(false);
+    setIsProjectsSortOpen(false);
+    try {
+      localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
+      localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
+    } catch {
+      /* ignore storage failures */
+    }
+  }, []);
+
+  const openScheduledPage = useCallback(() => {
+    setHistoryNavView('scheduled');
+    setIsScheduledPageOpen(true);
+    setIsArtifactsPageOpen(false);
+    setIsGlobalSettingsPageOpen(false);
+    setIsCustomizePageOpen(false);
+    setIsProjectsPageOpen(false);
+    setActiveProjectId(null);
+    setIsChatsCatalogOpen(false);
+    setIsChatsCatalogFilterOpen(false);
+    setIsProjectsSortOpen(false);
+    try {
+      localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
+      localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
+    } catch {
+      /* ignore storage failures */
+    }
+  }, []);
+
+  const openCustomizePage = useCallback((trigger?: EventTarget | null) => {
+    // Floating window over whatever is open — do not replace Projects/Artifacts/etc.
+    const el =
+      trigger instanceof Element
+        ? trigger
+        : customizeButtonRef.current;
+    setCustomizeMotionFrom(measureModalFromTrigger(el));
+    setIsSettingsModalOpen(false);
+    setIsCustomizePageOpen(true);
+  }, []);
+
+  const openChatSettings = useCallback(() => {
+    setIsCustomizePageOpen(false);
+    setIsSettingsModalOpen(true);
+  }, []);
+
+  const closeChatSettings = useCallback(() => {
+    setIsSettingsModalOpen(false);
+  }, []);
+
+  // Identical orchestration to Add scheduled task (single effect).
+  useEffect(() => {
+    if (isSettingsModalOpen) {
+      setIsSettingsModalMounted(true);
+      setIsSettingsModalShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsSettingsModalShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isSettingsModalMounted) return;
+    setIsSettingsModalShown(false);
+    const timer = window.setTimeout(() => {
+      setIsSettingsModalMounted(false);
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isSettingsModalOpen, isSettingsModalMounted]);
+
+  useEffect(() => {
+    if (isSharePreviewOpen) {
+      setIsSharePreviewMounted(true);
+      setIsSharePreviewShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsSharePreviewShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isSharePreviewMounted) return;
+    setIsSharePreviewShown(false);
+    const timer = window.setTimeout(() => {
+      setIsSharePreviewMounted(false);
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isSharePreviewOpen, isSharePreviewMounted]);
+
+  // Customize (briefcase) — same enter/exit as other card modals. States are above; no TDZ.
+  useEffect(() => {
+    if (isCustomizePageOpen) {
+      setIsCustomizePageMounted(true);
+      setIsCustomizePageShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsCustomizePageShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isCustomizePageMounted) return;
+    setIsCustomizePageShown(false);
+    const timer = window.setTimeout(() => {
+      setIsCustomizePageMounted(false);
+      setCustomizeMotionFrom({ x: 0, y: 0 });
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isCustomizePageOpen, isCustomizePageMounted]);
+
+  useEffect(() => {
+    if (deleteConfirmationModal.isOpen) {
+      setIsDeleteModalMounted(true);
+      setIsDeleteModalShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsDeleteModalShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isDeleteModalMounted) return;
+    setIsDeleteModalShown(false);
+    const timer = window.setTimeout(() => {
+      setIsDeleteModalMounted(false);
+      setDeleteConfirmationModal({
+        isOpen: false,
+        conversationId: null,
+        conversationTitle: null,
+        origin: 'left',
+      });
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [deleteConfirmationModal.isOpen, isDeleteModalMounted]);
+
   /**
    * Full-page chat overlays (Projects list z-45, project workspace z-46, chats catalog z-45)
    * sit above the message stream. Any navigation to a chat or a blank new chat must leave
@@ -2536,6 +3799,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const dismissChatOverlays = useCallback(() => {
     setActiveProjectId(null);
     setIsProjectsPageOpen(false);
+    setIsArtifactsPageOpen(false);
+    setIsGlobalSettingsPageOpen(false);
+    setIsScheduledPageOpen(false);
+    setIsCustomizePageOpen(false);
     setIsChatsCatalogOpen(false);
     setIsChatsCatalogFilterOpen(false);
     setIsProjectsSortOpen(false);
@@ -2551,6 +3818,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const openProject = useCallback((projectId: string) => {
     setIsChatsCatalogOpen(false);
     setIsChatsCatalogFilterOpen(false);
+    setIsArtifactsPageOpen(false);
+    setIsGlobalSettingsPageOpen(false);
+    setIsScheduledPageOpen(false);
+    setIsCustomizePageOpen(false);
     setActiveProjectId(projectId);
     setOpenProjectMenuId(null);
     setProjectFileNotice(null);
@@ -2572,6 +3843,16 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const closeProject = useCallback(() => {
     setActiveProjectId(null);
     pendingChatProjectIdRef.current = null;
+    setIsProjectFilePreviewOpen(false);
+    setIsProjectFilePreviewMounted(false);
+    setIsProjectFilePreviewShown(false);
+    setProjectFilePreview(null);
+    setProjectFilePreviewCopied(false);
+    setIsProjectScheduledPreviewOpen(false);
+    setIsProjectScheduledPreviewMounted(false);
+    setIsProjectScheduledPreviewShown(false);
+    setProjectScheduledPreview(null);
+    setIsProjectScheduledCreateOpen(false);
     try {
       localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
     } catch {
@@ -2623,9 +3904,39 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   // --- NEW: State for Full-screen Image Viewer ---
   const [isFullScreenImageOpen, setIsFullScreenImageOpen] = useState(false);
+  const [isFullScreenImageMounted, setIsFullScreenImageMounted] = useState(false);
+  const [isFullScreenImageShown, setIsFullScreenImageShown] = useState(false);
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState<string | null>(null);
   const [viewerShowsDownloadButton, setViewerShowsDownloadButton] = useState(false); // New state for download button visibility
   // --- END Full-screen Image Viewer STATE ---
+
+  // Must sit below the useState above — otherwise TDZ crashes the whole chat (black screen).
+  useEffect(() => {
+    if (isFullScreenImageOpen) {
+      setIsFullScreenImageMounted(true);
+      setIsFullScreenImageShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsFullScreenImageShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isFullScreenImageMounted) return;
+    setIsFullScreenImageShown(false);
+    const timer = window.setTimeout(() => {
+      setIsFullScreenImageMounted(false);
+      setFullScreenImageUrl((prev) => {
+        if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+        return null;
+      });
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isFullScreenImageOpen, isFullScreenImageMounted]);
 
   const [isFetchingMetadata, setIsFetchingMetadata] = useState(false);
   const metadataCache = useRef<Record<string, any>>({});
@@ -2999,16 +4310,6 @@ interface QueueState {
             setDislikePopupInfo(null);
         }
       }
-      // Close settings modal
-      if (
-        isSettingsModalOpen &&
-        settingsButtonRef.current &&
-        !settingsButtonRef.current.contains(event.target as Node) &&
-        settingsModalRef.current &&
-        !settingsModalRef.current.contains(event.target as Node)
-      ) {
-          setIsSettingsModalOpen(false);
-      }
       // Close conversation selector dropdown
       if (
         isConversationSelectorOpen &&
@@ -3025,7 +4326,7 @@ interface QueueState {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isAttachMenuOpen, isRecentFilesOpen, isVoiceModeMenuOpen, isThemeMenuOpen, isChatMoreMenuOpen, isSystemPromptOpen, modelTooltipInfo, feedbackPopupInfo, dislikePopupInfo, isSettingsModalOpen, isConversationSelectorOpen]);
+  }, [isAttachMenuOpen, isRecentFilesOpen, isVoiceModeMenuOpen, isThemeMenuOpen, isChatMoreMenuOpen, isSystemPromptOpen, modelTooltipInfo, feedbackPopupInfo, dislikePopupInfo, isConversationSelectorOpen]);
 
   // --- NEW: useEffect for Hover Previews in Chat Area ---
   useEffect(() => {
@@ -4391,6 +5692,8 @@ interface QueueState {
 
                             setConversationHistory(prevHistory => [newConversation, ...prevHistory]);
                             setActiveConversationId(dbConversation.id);
+                            void bindPendingChatSkills(dbConversation.id);
+                            void bindPendingChatPersona(dbConversation.id);
                             console.log("Created new conversation in database:", dbConversation.id);
                         }
                     } catch (error) {
@@ -4407,6 +5710,8 @@ interface QueueState {
                         };
                         setConversationHistory(prevHistory => [newConversation, ...prevHistory]);
                         setActiveConversationId(newConvoId);
+                        void bindPendingChatSkills(newConvoId);
+                        void bindPendingChatPersona(newConvoId);
                     }
                 } else {
                     // Not authenticated, use local storage
@@ -4422,6 +5727,8 @@ interface QueueState {
 
                     setConversationHistory(prevHistory => [newConversation, ...prevHistory]);
                     setActiveConversationId(newConvoId);
+                    void bindPendingChatSkills(newConvoId);
+                    void bindPendingChatPersona(newConvoId);
                     // console.log("Created new conversation in history:", newConvoId);
                 }
                 // The pending project link (if any) has now been applied to the new conversation.
@@ -5574,11 +6881,27 @@ Please provide a well-structured response using this search context and any mult
           patchConversation(conversationId, { isUnread: false });
         }
 
-        // --- Load System Prompt ---
-        const loadedPrompt = conversationToLoad.systemPrompt || '';
-        setSystemPrompt(loadedPrompt);
-        setSavedSystemPrompt(loadedPrompt);
-        setIsSystemPromptOpen(false); // Close prompt panel if open
+        // --- Load System Prompt / This-chat persona ---
+        const storedPersonaId = await getChatPersonaId(conversationId);
+        if (storedPersonaId) {
+          const persona = await getPersona(storedPersonaId);
+          if (persona) {
+            setSelectedPersona(persona.id);
+            setSystemPrompt(persona.prompt);
+            setSavedSystemPrompt(persona.prompt);
+          } else {
+            const loadedPrompt = conversationToLoad.systemPrompt || '';
+            setSystemPrompt(loadedPrompt);
+            setSavedSystemPrompt(loadedPrompt);
+            setSelectedPersona(null);
+          }
+        } else {
+          const loadedPrompt = conversationToLoad.systemPrompt || '';
+          setSystemPrompt(loadedPrompt);
+          setSavedSystemPrompt(loadedPrompt);
+          setSelectedPersona(null);
+        }
+        setIsSystemPromptOpen(false);
         // --- End Load System Prompt ---
         // Keep history open — it closes only via the panel X.
         // Optional: Reset input, system prompt, etc. or load them from conversation if saved
@@ -5679,9 +7002,52 @@ Please provide a well-structured response using this search context and any mult
   // --- END NEW ---
 
   const closeHistoryRowMenu = useCallback(() => {
-    setHistoryRowMenu(null);
+    setIsHistoryRowMenuOpen(false);
     setHistoryProjectSubmenuOpen(false);
   }, []);
+
+  /** Same ⋯ again → close. Other row's ⋯ → move/open there. */
+  const toggleHistoryRowMenu = useCallback(
+    (conversationId: string, top: number, left: number) => {
+      if (
+        isHistoryRowMenuOpen &&
+        historyRowMenu?.conversationId === conversationId
+      ) {
+        closeHistoryRowMenu();
+        return;
+      }
+      setHistoryProjectSubmenuOpen(false);
+      setHistoryRowMenu({ conversationId, top, left });
+      setIsHistoryRowMenuOpen(true);
+    },
+    [closeHistoryRowMenu, historyRowMenu?.conversationId, isHistoryRowMenuOpen],
+  );
+
+  // Conversation ⋯ menu — same mount/shown card motion as top-bar more menu.
+  useEffect(() => {
+    if (isHistoryRowMenuOpen && historyRowMenu) {
+      setIsHistoryRowMenuMounted(true);
+      setIsHistoryRowMenuShown(false);
+      let frame2 = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          setIsHistoryRowMenuShown(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frame1);
+        window.cancelAnimationFrame(frame2);
+      };
+    }
+    if (!isHistoryRowMenuMounted) return;
+    setIsHistoryRowMenuShown(false);
+    const timer = window.setTimeout(() => {
+      setIsHistoryRowMenuMounted(false);
+      setHistoryRowMenu(null);
+      setHistoryProjectSubmenuOpen(false);
+    }, SCHEDULE_CREATE_MODAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [isHistoryRowMenuOpen, isHistoryRowMenuMounted, historyRowMenu]);
 
   const patchConversation = useCallback((conversationId: string, patch: Partial<Conversation>) => {
     setConversationHistory((prevHistory) =>
@@ -5972,11 +7338,17 @@ Please provide a well-structured response using this search context and any mult
   };
 
   useEffect(() => {
-    if (!historyRowMenu) return;
+    if (!isHistoryRowMenuOpen || !historyRowMenu) return;
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       const el = target instanceof Element ? target : target?.parentElement;
-      if (el?.closest?.('[data-history-row-menu]')) return;
+      // Menu panel, or the ⋯ trigger (toggle handles close — don't close-then-reopen).
+      if (
+        el?.closest?.('[data-history-row-menu]') ||
+        el?.closest?.('[data-history-row-menu-trigger]')
+      ) {
+        return;
+      }
       closeHistoryRowMenu();
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -6008,6 +7380,7 @@ Please provide a well-structured response using this search context and any mult
           isOpen: true,
           conversationId: convo.id,
           conversationTitle: convo.title,
+          origin: 'left',
         });
         closeHistoryRowMenu();
       }
@@ -6019,6 +7392,7 @@ Please provide a well-structured response using this search context and any mult
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [
+    isHistoryRowMenuOpen,
     historyRowMenu,
     conversationHistory,
     closeHistoryRowMenu,
@@ -6056,16 +7430,43 @@ Please provide a well-structured response using this search context and any mult
   }, [isHistoryOpen, historyNavView, closeRecentsFilterMenu]);
 
   useEffect(() => {
-    if (!projectSettings) return;
+    if (!projectFilePreview) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeProjectFilePreview();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [projectFilePreview, closeProjectFilePreview]);
+
+  useEffect(() => {
+    if (!projectScheduledPreview) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeProjectScheduledPreview();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [projectScheduledPreview, closeProjectScheduledPreview]);
+
+  useEffect(() => {
+    if (!isProjectScheduledCreateMounted) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeProjectScheduledCreate();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isProjectScheduledCreateMounted, closeProjectScheduledCreate]);
+
+  useEffect(() => {
+    if (!isProjectSettingsMounted) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeProjectSettings();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [projectSettings, closeProjectSettings]);
+  }, [isProjectSettingsMounted, closeProjectSettings]);
 
   useEffect(() => {
-    if (!isProjectsPageOpen && !isCreateProjectModalOpen) return;
+    if (!isProjectsPageOpen && !isCreateProjectModalMounted) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       if (isCreateProjectModalOpen) {
@@ -6084,6 +7485,7 @@ Please provide a well-structured response using this search context and any mult
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [
     closeCreateProjectModal,
+    isCreateProjectModalMounted,
     isCreateProjectModalOpen,
     isProjectsPageOpen,
     isProjectsSortOpen,
@@ -6217,6 +7619,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       setSelectedPersona(personaId);
       setSystemPrompt(persona.prompt);
       setSavedSystemPrompt(persona.prompt);
+      void setChatPersonaId(activeConversationId, personaId);
       setIsSystemPromptOpen(false);
       setIsCustomPromptOpen(false);
     }
@@ -6268,15 +7671,35 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       setHistoryNavView('chats');
       setMessages([]); // Clear current messages
       setActiveConversationId(null); // Set active ID to null (indicates new chat)
+      void clearPendingChatSkills();
+      void clearPendingChatPersona();
       setInputValue(''); // Clear the input field
       setEmptyStateMode('chat');
       setIsXenoSearchEnabled(false);
-      // Optional: Clear other states like system prompt, toggles, attachments if desired
-      setSystemPrompt('');
-      setSavedSystemPrompt('');
       setIsSystemPromptOpen(false);
       setAttachedFiles([]);
       setShowThinkingId(null);
+      // Seed This-chat persona from account default (still per-chat after that).
+      void (async () => {
+        const profile = await getChatProfile();
+        if (!profile.defaultPersonaId) {
+          setSystemPrompt('');
+          setSavedSystemPrompt('');
+          setSelectedPersona(null);
+          return;
+        }
+        const persona = await getPersona(profile.defaultPersonaId);
+        if (persona) {
+          await setChatPersonaId(null, persona.id);
+          setSelectedPersona(persona.id);
+          setSystemPrompt(persona.prompt);
+          setSavedSystemPrompt(persona.prompt);
+        } else {
+          setSystemPrompt('');
+          setSavedSystemPrompt('');
+          setSelectedPersona(null);
+        }
+      })();
       // Reset toggles based on the selected model's capabilities after clearing
       syncTogglesForModel(selectedModel);
   };
@@ -6353,18 +7776,22 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
     return (
       <div
-        className={`chat-themed chat-theme-${resolvedChatTheme} fixed top-0 right-0 bottom-0 z-[999] flex items-center justify-center p-4`}
+        className={`chat-themed chat-theme-${resolvedChatTheme} fixed top-0 right-0 bottom-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
         data-chat-theme-preference={chatTheme}
         data-create-project-dialog=""
         style={{
           left:
             (isTaskbarHidden ? 0 : 52) +
             (!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0),
-          backgroundColor: 'transparent',
+          backgroundColor: isCreateProjectModalShown
+            ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
+            : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
+          transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
           ...chatThemePreviewStyle,
         }}
         onClick={closeCreateProjectModal}
       >
+        <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
         <div
           role="dialog"
           aria-modal="true"
@@ -6375,6 +7802,12 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             borderColor: 'var(--chat-border)',
             color: 'var(--chat-text)',
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+            // New project CTA sits top-right on the Projects page.
+            ...chatModalCardMotionStyle(
+              'top-right',
+              isCreateProjectModalShown,
+              isCreateProjectModalOpen,
+            ),
           }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -6535,21 +7968,24 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     };
     return (
       <div
-        className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-end justify-center p-0 backdrop-blur-sm sm:items-center sm:p-4`}
+        className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
         data-chat-theme-preference={chatTheme}
         data-project-settings-dialog=""
         style={{
-          // Dim + blur the page so the dialog is the clear focus.
-          backgroundColor: 'rgba(0, 0, 0, 0.45)',
+          backgroundColor: isProjectSettingsShown
+            ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
+            : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
+          transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
           ...chatThemePreviewStyle,
         }}
         onClick={closeProjectSettings}
       >
+        <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="project-settings-title"
-          className="flex w-full max-w-[600px] flex-col overflow-hidden rounded-t-2xl border border-b-0 sm:rounded-2xl sm:border"
+          className="flex w-full max-w-[600px] flex-col overflow-hidden rounded-2xl border will-change-transform"
           style={{
             // dvh accounts for mobile browser chrome; fall back to vh.
             height: 'min(640px, calc(100dvh - 0.5rem))',
@@ -6559,6 +7995,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             color: 'var(--chat-text)',
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
             paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            ...chatModalCardMotionStyle(
+              'top-right',
+              isProjectSettingsShown,
+              isProjectSettingsOpen,
+            ),
           }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -6794,7 +8235,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
   // --- NEW: Delete Confirmation Modal Component --- 
   const DeleteConfirmationModalComponent: React.FC = () => {
-    if (!deleteConfirmationModal.isOpen || !deleteConfirmationModal.conversationId || deleteConfirmationModal.conversationTitle === null) {
+    if (
+      !isDeleteModalMounted ||
+      !deleteConfirmationModal.conversationId ||
+      deleteConfirmationModal.conversationTitle === null
+    ) {
         return null;
     }
 
@@ -6812,11 +8257,15 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           data-chat-theme-preference={chatTheme}
           data-delete-chat-dialog=""
           style={{
-            backgroundColor: 'color-mix(in srgb, var(--chat-text) 28%, transparent)',
+            backgroundColor: isDeleteModalShown
+              ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
+              : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
+            transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
             ...chatThemePreviewStyle,
           }}
           onClick={handleCancelDelete}
         >
+            <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
             <div
               role="dialog"
               aria-modal="true"
@@ -6827,21 +8276,26 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 borderColor: 'var(--chat-border)',
                 color: 'var(--chat-text)',
                 boxShadow: '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
+                ...chatModalCardMotionStyle(
+                  deleteConfirmationModal.origin,
+                  isDeleteModalShown,
+                  deleteConfirmationModal.isOpen,
+                ),
               }}
               onClick={(event) => event.stopPropagation()}
             >
                 <div className="p-4">
-                    <h2 id="delete-chat-dialog-title" className="text-lg font-semibold text-zinc-100">
+                    <h2 id="delete-chat-dialog-title" className="text-lg font-semibold text-[var(--chat-text)]">
                       Delete chat?
                     </h2>
                 </div>
 
-                <hr className="border-t border-[#1e1e21]" />
+                <hr className="border-t border-[var(--chat-border)]" />
 
                 <div className="p-4">
-                    <p className="text-sm text-zinc-500">
+                    <p className="text-sm text-[var(--chat-muted)]">
                         This will delete{' '}
-                        <strong className="font-semibold text-zinc-100">
+                        <strong className="font-semibold text-[var(--chat-text)]">
                           {deleteConfirmationModal.conversationTitle}
                         </strong>
                         .
@@ -6849,20 +8303,29 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 </div>
 
                 <div
-                  className="flex justify-end gap-3 border-t border-[#1e1e21] px-4 py-3"
+                  className="flex justify-end gap-3 border-t border-[var(--chat-border)] px-4 py-3"
                   style={{ backgroundColor: 'var(--chat-surface)' }}
                 >
-                    <button
+                    <button 
                         type="button"
                         onClick={handleCancelDelete}
-                        className="rounded-md border border-[#1e1e21] bg-[#1e1e21] px-4 py-1.5 text-sm font-medium text-zinc-100 transition-colors hover:bg-[#2a2a2d]"
+                        className="rounded-md border border-[var(--chat-border)] bg-[var(--chat-control)] px-4 py-1.5 text-sm font-medium text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
                     >
                         Cancel
                     </button>
-                    <button
+                    <button 
                         type="button"
                         onClick={handleConfirm}
-                        className="rounded-md bg-red-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700"
+                        className="rounded-md px-4 py-1.5 text-sm font-medium text-white transition-colors"
+                        style={{
+                          backgroundColor: 'var(--chat-danger)',
+                        }}
+                        onMouseEnter={(event) => {
+                          event.currentTarget.style.backgroundColor = 'var(--chat-danger-hover)';
+                        }}
+                        onMouseLeave={(event) => {
+                          event.currentTarget.style.backgroundColor = 'var(--chat-danger)';
+                        }}
                     >
                         Delete
                     </button>
@@ -6950,107 +8413,106 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   };
 
   const renderEmptyStateToolPanel = (tool: ChatEmptyStateTool, close: () => void) => {
-    const panelHeader = (title: string) => (
-      <div className="mb-3 flex items-center justify-between border-b border-white/[0.07] pb-2.5">
-        <span className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-400">{title}</span>
-        <button
-          type="button"
-          data-tool-panel-close
-          onClick={close}
-          aria-label={`Close ${title}`}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
-        >
-          <X size={14} />
-        </button>
-      </div>
+    if (tool !== 'recent-files') return null;
+
+    const filteredRecent = recentFiles.filter(
+      (file) =>
+        !recentFilesSearchQuery.trim() ||
+        file.name.toLowerCase().includes(recentFilesSearchQuery.toLowerCase()),
     );
 
     return (
-      <div className="flex h-full min-h-0 flex-col" aria-label="System Prompt panel">
-        {panelHeader('System Prompt')}
-        {isCustomPromptOpen ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <textarea
-              autoFocus
-              placeholder="Enter custom system prompt…"
-              value={systemPrompt}
-              onChange={(event) => setSystemPrompt(event.target.value)}
-              className="min-h-28 flex-1 resize-none rounded-lg border border-white/[0.08] bg-black/20 p-2.5 text-xs leading-5 text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-white/25"
+      <div className="flex h-full min-h-0 flex-col" aria-label="Recent files panel">
+        <div className="mb-3 flex items-center justify-between border-b border-[var(--chat-border)] pb-2.5">
+          <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--chat-muted)]">
+            Recent
+          </span>
+          <button
+            type="button"
+            data-tool-panel-close
+            onClick={close}
+            aria-label="Close Recent files"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-accent)]"
+          >
+            <X size={14} />
+          </button>
+        </div>
+        {recentFiles.length > 3 && (
+          <div className="relative mb-2 flex-shrink-0">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]"
+              aria-hidden="true"
             />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setIsCustomPromptOpen(false)}
-                className="h-8 flex-1 rounded-lg border border-white/[0.08] text-xs text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                disabled={!systemPrompt.trim()}
-                onClick={() => {
-                  setSavedSystemPrompt(systemPrompt);
-                  setSelectedPersona('custom');
-                  setIsCustomPromptOpen(false);
-                  setIsSystemPromptSaved(true);
-                  setTimeout(() => setIsSystemPromptSaved(false), 1500);
-                  close();
-                }}
-                className="h-8 flex-1 rounded-lg border border-white/[0.08] text-xs text-zinc-300 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-35"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {PERSONAS.map((persona) => (
-              <button
-                key={persona.id}
-                type="button"
-                onClick={() => {
-                  handlePersonaSelect(persona.id);
-                  close();
-                }}
-                className={`flex h-9 w-full items-center justify-between rounded-lg px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${
-                  selectedPersona === persona.id
-                    ? 'bg-white/[0.08] text-white'
-                    : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100'
-                }`}
-              >
-                {persona.label}
-                {selectedPersona === persona.id && <Check size={13} />}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedPersona('custom');
-                setIsCustomPromptOpen(true);
-              }}
-              className={`flex h-9 w-full items-center justify-between rounded-lg px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${
-                selectedPersona === 'custom'
-                  ? 'bg-white/[0.08] text-white'
-                  : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100'
-              }`}
-            >
-              Custom
-              {selectedPersona === 'custom' && <Check size={13} />}
-            </button>
-            {selectedPersona && (
-              <button
-                type="button"
-                onClick={() => {
-                  handleClearSystemPrompt();
-                  close();
-                }}
-                className="mt-2 h-8 w-full rounded-lg border border-white/[0.07] text-xs text-zinc-500 transition-colors hover:border-white/[0.15] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
-              >
-                Clear selection
-              </button>
-            )}
+            <input
+              type="search"
+              placeholder="Search files…"
+              value={recentFilesSearchQuery}
+              onChange={(event) => setRecentFilesSearchQuery(event.target.value)}
+              className="h-8 w-full rounded-md border border-[var(--chat-border)] bg-[var(--chat-control)] py-1.5 pl-7 pr-2 text-xs text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-accent)]"
+            />
           </div>
         )}
+        <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto hide-scrollbar">
+          {filteredRecent.length === 0 ? (
+            <div className="px-2 py-6 text-center text-[var(--chat-muted)]">
+              <FileClock size={22} className="mx-auto mb-2 text-[var(--chat-muted)]" aria-hidden="true" />
+              <p className="text-xs font-medium text-[var(--chat-muted)]">No recent files</p>
+              <p className="mt-1 text-[11px] leading-snug">
+                Files you upload will appear here
+              </p>
+            </div>
+          ) : (
+            filteredRecent.map((file) => (
+              <div
+                key={file.id}
+                className="group flex items-center gap-1 rounded-lg px-1.5 py-1.5 hover:bg-[var(--chat-hover)]"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleReattachRecentFile(file);
+                    close();
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  title={`Attach ${file.name}`}
+                >
+                  {file.type.startsWith('image/') && file.preview ? (
+                    <img
+                      src={file.preview}
+                      alt=""
+                      className="h-6 w-6 flex-shrink-0 rounded object-cover"
+                    />
+                  ) : (
+                    <FileText
+                      size={15}
+                      className="flex-shrink-0 text-[var(--chat-muted)]"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12px] text-[var(--chat-text)]">
+                      {file.name}
+                    </span>
+                    <span className="block truncate text-[10px] text-[var(--chat-muted)]">
+                      {(file.size / 1024).toFixed(1)} KB ·{' '}
+                      {new Date(file.lastUsed).toLocaleDateString()}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveRecentFile(file.id)}
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-[var(--chat-muted)] opacity-0 transition-opacity hover:text-[var(--chat-danger)] group-hover:opacity-100"
+                  aria-label={`Remove ${file.name} from recent`}
+                  title="Remove"
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     );
   };
@@ -8190,19 +9652,24 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     };
 
     const individualContainerStyle: React.CSSProperties = {
-      background: 'rgba(51, 51, 51, 0.9)',
-      color: 'white',
-      padding: '4px 8px', // Slightly reduced padding for individual boxes
+      backgroundColor: 'var(--chat-elevated)',
+      color: 'var(--chat-text)',
+      border: '1px solid var(--chat-border)',
+      padding: '4px 8px',
       borderRadius: '4px',
-      fontSize: '0.75rem', // Slightly smaller font
-      boxShadow: '0 2px 5px rgba(0,0,0,0.5)',
+      fontSize: '0.75rem',
+      boxShadow: '0 2px 8px color-mix(in srgb, var(--chat-text) 14%, transparent)',
       whiteSpace: 'nowrap',
     };
 
     const modelName = findModelById(groupedModels, modelTooltipInfo.modelId)?.name || modelTooltipInfo.modelId;
 
     return (
-      <div ref={modelTooltipRef} style={mainContainerStyle}>
+      <div
+        ref={modelTooltipRef}
+        className={`chat-themed chat-theme-${resolvedChatTheme}`}
+        style={{ ...mainContainerStyle, ...chatThemePreviewStyle }}
+      >
         <div style={individualContainerStyle}>Model: {modelName}</div>
         {modelTooltipInfo.tokenCount !== undefined && (
           <div style={individualContainerStyle}>Tokens: {modelTooltipInfo.tokenCount}</div>
@@ -8244,23 +9711,29 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       top: `${position.y}px`,
       zIndex: 100,
       width: '220px',
-      background: '#1a1a1d',
-      color: '#e4e4e7',
+      backgroundColor: 'var(--chat-elevated)',
+      color: 'var(--chat-text)',
+      border: '1px solid var(--chat-border)',
       borderRadius: '12px',
-      boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
+      boxShadow: '0 5px 15px color-mix(in srgb, var(--chat-text) 16%, transparent)',
       overflow: 'hidden',
+      ...chatThemePreviewStyle,
     };
 
     return (
-      <div ref={feedbackPopupRef} style={popupStyle}>
+      <div
+        ref={feedbackPopupRef}
+        className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover`}
+        style={popupStyle}
+      >
         <ul className="p-2 space-y-1">
           {feedbackOptions.map((option) => (
             <li key={option.type}>
               <button
                 onClick={() => handleFeedbackSubmit(option.type)}
-                className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md text-left transition-colors hover:bg-[#2a2a2d]"
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
               >
-                <option.icon size={16} className="text-gray-400" />
+                <option.icon size={16} className="text-[var(--chat-muted)]" />
                 <span>{option.label}</span>
               </button>
             </li>
@@ -8305,23 +9778,29 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       top: `${position.y}px`,
       zIndex: 100,
       width: '220px',
-      background: '#1a1a1d',
-      color: '#e4e4e7',
+      backgroundColor: 'var(--chat-elevated)',
+      color: 'var(--chat-text)',
+      border: '1px solid var(--chat-border)',
       borderRadius: '12px',
-      boxShadow: '0 5px 15px rgba(0,0,0,0.4)',
+      boxShadow: '0 5px 15px color-mix(in srgb, var(--chat-text) 16%, transparent)',
       overflow: 'hidden',
+      ...chatThemePreviewStyle,
     };
 
     return (
-      <div ref={dislikePopupRef} style={popupStyle}>
+      <div
+        ref={dislikePopupRef}
+        className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover`}
+        style={popupStyle}
+      >
         <ul className="p-2 space-y-1">
           {dislikeOptions.map((option) => (
             <li key={option.type}>
               <button
                 onClick={() => handleDislikeFeedbackSubmit(option.type)}
-                className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md text-left transition-colors hover:bg-[#2a2a2d]"
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
               >
-                <option.icon size={16} className="text-gray-400" />
+                <option.icon size={16} className="text-[var(--chat-muted)]" />
                 <span>{option.label}</span>
               </button>
             </li>
@@ -8428,7 +9907,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
   // --- NEW: Handler to Cancel Deletion ---
   const handleCancelDelete = () => {
-      setDeleteConfirmationModal({ isOpen: false, conversationId: null, conversationTitle: null });
+      setDeleteConfirmationModal((prev) => ({ ...prev, isOpen: false }));
   };
   // --- END NEW ---
 
@@ -8539,16 +10018,22 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   const FullScreenImageViewer: React.FC<{
     imageUrl: string | null;
     isOpen: boolean;
+    isShown: boolean;
     onClose: () => void;
     showDownloadButton?: boolean;
-  }> = ({ imageUrl, isOpen, onClose, showDownloadButton }) => {
-    if (!isOpen || !imageUrl) return null;
+  }> = ({ imageUrl, isOpen, isShown, onClose, showDownloadButton }) => {
+    if (!imageUrl) return null;
 
     return (
       <div
-        className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 image-viewer-overlay"
+        className="fixed inset-0 z-[1000] flex items-center justify-center p-4 image-viewer-overlay backdrop-blur-md"
+        style={{
+          backgroundColor: isShown ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0)',
+          transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
+        }}
         onClick={onClose}
       >
+        <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
         <div className="group absolute top-4 right-4 z-[1001] w-16 h-16 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out -z-10"></div>
           { (showDownloadButton === undefined || showDownloadButton === true) && (
@@ -8578,6 +10063,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         </div>
         <div
           className="relative flex h-[90vh] w-[90vw] items-center justify-center"
+          style={chatModalCardMotionStyle('center', isShown, isOpen)}
           onClick={(e) => e.stopPropagation()}
         >
           <img
@@ -9257,45 +10743,116 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     ? conversationHistory.find((convo) => convo.id === activeConversationId)
     : undefined;
 
-  const openChatFilesPanel = () => {
+  const conversationFileItems = useMemo(() => {
+    const items: {
+      key: string;
+      name: string;
+      kind: 'file' | 'image';
+      content: string;
+    }[] = [];
+
     for (const message of messages) {
-      if (message.userFileAttachment) {
-        handleShowFileInContextPanel(message.userFileAttachment as any);
-        return;
+      if (message.userFileAttachment?.name) {
+        const attachment = message.userFileAttachment;
+        const raw = attachment.content?.trim() ?? '';
+        let content = raw;
+        if (!content) {
+          content = 'No preview available for this file.';
+        } else if (attachment.encoding === 'base64') {
+          content = raw || 'Binary file — text preview not available.';
+        }
+        items.push({
+          key: `${message.id}-file`,
+          name: attachment.name,
+          kind: 'file',
+          content,
+        });
       }
-      if (message.userImageAttachment?.file || message.userImageAttachment?.base64Data) {
-        const image = message.userImageAttachment;
-        setContextPanelContent({
-          type: 'file',
-          title: image.name || 'Image',
+      const images =
+        message.userImageAttachments && message.userImageAttachments.length > 0
+          ? message.userImageAttachments
+          : message.userImageAttachment
+            ? [message.userImageAttachment]
+            : [];
+      images.forEach((image, index) => {
+        if (!image?.name && !image?.file && !image?.base64Data) return;
+        items.push({
+          key: `${message.id}-image-${index}`,
+          name: image.name || 'Image',
+          kind: 'image',
           content: image.base64Data
             ? `[Image: ${image.name || 'attachment'}]\n\nPreview is available in the message bubble.`
             : `[Image: ${image.name || 'attachment'}]`,
         });
-        setIsContextPanelOpen(true);
-        return;
-      }
+      });
     }
-    setContextPanelContent({
-      type: 'context',
-      title: 'Files in chat',
-      content: 'No files attached in this conversation yet.',
-    });
-    setIsContextPanelOpen(true);
+    // Empty chats show mock files so the list + preview can be judged visually.
+    return items.length > 0 ? items : MOCK_CHAT_FILES;
+  }, [messages]);
+
+  const chatFilesSelected = useMemo(
+    () =>
+      conversationFileItems.find((item) => item.key === chatFilesSelectedKey) ??
+      null,
+    [conversationFileItems, chatFilesSelectedKey],
+  );
+
+  const openChatFilesPanel = () => {
+    setIsProjectFilePreviewOpen(false);
+    setIsContextPanelOpen(false);
+    setChatFilesSelectedKey(null);
+    setChatFilesCopied(false);
+    setIsChatFilesModalOpen(true);
   };
 
+  const closeChatFilesModal = useCallback(() => {
+    setIsChatFilesModalOpen(false);
+  }, []);
+
+  const copyChatFilesPreview = useCallback(async () => {
+    if (!chatFilesSelected) return;
+    try {
+      await navigator.clipboard.writeText(chatFilesSelected.content);
+      setChatFilesCopied(true);
+      window.setTimeout(() => setChatFilesCopied(false), 1500);
+    } catch (error) {
+      console.error('Failed to copy chat file preview:', error);
+    }
+  }, [chatFilesSelected]);
+
+  useEffect(() => {
+    if (!isChatFilesModalMounted) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeChatFilesModal();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isChatFilesModalMounted, closeChatFilesModal]);
+
   const moreMenuItemClass =
-    'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]';
+    'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]';
 
   const topBarBtnClass = (isActive: boolean, extra = '') =>
-    `chat-top-bar-btn flex h-9 items-center justify-center rounded-lg border text-white/80 transition-[background-color,border-color,color] active:scale-[0.98] ${
+    `chat-top-bar-btn flex h-9 items-center justify-center rounded-lg border text-[var(--chat-muted)] transition-[background-color,border-color,color] active:scale-[0.98] ${
       isActive
         ? 'border-transparent text-[var(--chat-text)]'
-        : 'border-white/[0.08] hover:border-white/20 hover:bg-black/20'
+        : 'border-[var(--chat-border)] hover:border-[var(--chat-border)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
     } ${extra}`.trim();
 
   // The one-and-only primary composer. Rendered in the empty/active chat AND reused verbatim
   // inside the project workspace (forceCompact) so the two can never visually diverge.
+  // "What's new" is empty-new-chat only — hide under Projects / Artifacts / Skills / Scheduled / Customize
+  // (and project workspace / chats catalog), or the fixed restore chip paints over those pages.
+  const showWhatsNewOnSurface =
+    messages.length === 0 &&
+    !isProjectsPageOpen &&
+    !isArtifactsPageOpen &&
+    !isGlobalSettingsPageOpen &&
+    !isScheduledPageOpen &&
+    !isCustomizePageOpen &&
+    !activeProjectId &&
+    !isChatsCatalogOpen;
+
   const renderPrimaryComposer = (options?: { forceCompact?: boolean }) => (
           <div className="relative z-10">
           <ChatEmptyState
@@ -9319,10 +10876,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             )}
             onAgentActionSelect={handleEmptyStateAgentAction}
             onModeChange={handleEmptyStateModeChange}
-            onOpenConversationHistory={() => setIsHistoryOpen(true)}
             onUploadFile={handleUploadFile}
             renderToolPanel={renderEmptyStateToolPanel}
-            updates={MOCK_CHAT_UPDATES}
+            updates={
+              showWhatsNewOnSurface && !options?.forceCompact
+                ? MOCK_CHAT_UPDATES
+                : undefined
+            }
           >
           {/* Queue Container */}
           {queue.messages.length > 0 && (
@@ -9479,7 +11039,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             {/* Controls Row */}
             <div className={`chat-input-controls flex items-center justify-between gap-2 ${messages.length === 0 ? 'mt-1.5 md:mt-2' : 'mt-1'}`}>
               <div className="flex items-center gap-1 md:gap-2 relative">
-                  {/* Attach lives on the hover tool rail (empty + conversation), not in the input row. */}
+                  {/* Attach / Recent live on the hover tool rail (empty + conversation). */}
                   <div className="relative hidden">
                       <button
                           ref={attachButtonRef}
@@ -9494,27 +11054,27 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <div 
                           ref={attachMenuRef}
                           className={`
-                              absolute bottom-full left-0 mb-2 z-30 
-                              w-64 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-xl 
-                              transition-all duration-200 ease-out origin-bottom-left 
+                              absolute bottom-full left-0 z-30 mb-2 origin-bottom-left
+                              w-64 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
+                              transition-all duration-200 ease-out
                               ${isAttachMenuOpen 
                                   ? 'opacity-100 scale-100 visible' 
                                   : 'opacity-0 scale-95 invisible' 
                               }
                           `}
                        >
-                           <div className="p-2 space-y-1">
-                               <button onClick={handleUploadFile} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-300 hover:bg-[#2a2a2d] rounded-md text-left">
-                                   <FolderUp size={18} />
+                           <div className="space-y-1 p-2">
+                               <button onClick={handleUploadFile} className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] hover:bg-[var(--chat-hover)]">
+                                   <FolderUp size={18} className="text-[var(--chat-muted)]" />
                                    <span>Upload a file</span>
                                </button>
-                               <div className="border-t border-[#1e1e21] mx-1 my-1"></div>
-                               <button onClick={handleShowRecent} className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-300 hover:bg-[#2a2a2d] rounded-md text-left">
+                               <div className="mx-1 my-1 border-t border-[var(--chat-border)]"></div>
+                               <button onClick={handleShowRecent} className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] hover:bg-[var(--chat-hover)]">
                                    <div className="flex items-center gap-3">
-                                      <FileClock size={18} />
+                                      <FileClock size={18} className="text-[var(--chat-muted)]" />
                                       <span>Recent</span>
                           </div>
-                                   <ChevronDown size={16} className="transform -rotate-90 text-gray-400" /> 
+                                   <ChevronDown size={16} className="-rotate-90 transform text-[var(--chat-muted)]" /> 
                             </button>
                            </div>
                          </div>
@@ -9523,10 +11083,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             ref={recentFilesPanelRef}
                             className={`
                                 hide-scrollbar
-                                absolute bottom-full left-full ml-2 mb-2 z-30 
-                                w-72 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-xl 
-                                max-h-[300px] overflow-y-auto 
-                                transition-all duration-200 ease-out origin-bottom-left 
+                                absolute bottom-full left-full z-30 mb-2 ml-2 origin-bottom-left
+                                max-h-[300px] w-72 overflow-y-auto rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
+                                transition-all duration-200 ease-out
                                 ${isRecentFilesOpen && isAttachMenuOpen 
                                     ? 'opacity-100 scale-100 visible' 
                                     : 'opacity-0 scale-95 invisible' 
@@ -9534,25 +11093,25 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             `}
                             style={{ left: 'calc(16rem + 0.5rem)' }} // Adjust positioning if needed
                           >
-                                 <div className="p-2 space-y-1">
+                                 <div className="space-y-1 p-2">
                                      {/* Recent Files Search */}
                                      {recentFiles.length > 3 && (
                                        <div className="relative mb-2">
-                                         <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                                         <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 transform text-[var(--chat-muted)]" />
                                          <input
                                            type="text"
                                            placeholder="Search files..."
                                            value={recentFilesSearchQuery}
                                            onChange={(e) => setRecentFilesSearchQuery(e.target.value)}
-                                           className="w-full bg-[#0a0a0b] border border-[#1e1e21] rounded-md py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
+                                           className="w-full rounded-md border border-[var(--chat-border)] bg-[var(--chat-canvas)] py-1.5 pl-7 pr-2 text-xs text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-accent)]"
                                          />
                                        </div>
                                      )}
                                      {recentFiles.length === 0 ? (
-                                       <div className="px-3 py-6 text-center text-gray-500 text-sm">
-                                         <FileClock size={24} className="mx-auto mb-2 text-gray-600" />
+                                       <div className="px-3 py-6 text-center text-sm text-[var(--chat-muted)]">
+                                         <FileClock size={24} className="mx-auto mb-2 text-[var(--chat-muted)]" />
                                          <p>No recent files</p>
-                                         <p className="text-xs mt-1">Files you attach will appear here</p>
+                                         <p className="mt-1 text-xs">Files you attach will appear here</p>
                                        </div>
                                      ) : (
                                        recentFiles
@@ -9561,7 +11120,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            file.name.toLowerCase().includes(recentFilesSearchQuery.toLowerCase())
                                          )
                                          .map((file: typeof recentFiles[0]) => (
-                                         <div key={file.id} className="group flex items-center justify-between px-2 py-1.5 text-sm text-gray-300 hover:bg-[#2a2a2d] rounded-md cursor-pointer">
+                                         <div key={file.id} className="group flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-sm text-[var(--chat-text)] hover:bg-[var(--chat-hover)]">
                                            <div 
                                              className="flex items-center gap-2 overflow-hidden flex-1" 
                                              onClick={() => handleReattachRecentFile(file)}
@@ -9750,7 +11309,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         type="button"
                         data-composer-send-button
                         onClick={handleVoiceSend}
-                        className={`flex items-center justify-center transition-[background-color,color,transform,opacity] duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#141416] ${inputValue.trim() || attachedFiles.length > 0 ? 'bg-zinc-100 text-[#111113] hover:bg-white motion-safe:animate-send-button-enter' : 'cursor-not-allowed border border-white/10 bg-[#161618] text-zinc-600'} ${composerActionButtonSizeClass}`}
+                        className={`flex items-center justify-center transition-[background-color,color,transform,opacity] duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chat-canvas)] ${inputValue.trim() || attachedFiles.length > 0 ? 'bg-[var(--chat-accent)] text-[var(--chat-on-accent)] hover:opacity-90 motion-safe:animate-send-button-enter' : 'cursor-not-allowed border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)]'} ${composerActionButtonSizeClass}`}
                         aria-label="Send message"
                         disabled={!(inputValue.trim() || attachedFiles.length > 0) || isContextLimitReached}
                       >
@@ -9778,6 +11337,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             scrollbar-width: none;  /* Firefox */
           }
 
+          @keyframes chat-theme-menu-in {
+            from { opacity: 0; transform: translateY(-10px) scale(0.9); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+          @keyframes chat-theme-menu-out {
+            from { opacity: 1; transform: translateY(0) scale(1); }
+            to { opacity: 0; transform: translateY(-8px) scale(0.92); }
+          }
+
           /* Chat LLM owns these tokens. They do not affect the rest of XENO. */
           .chat-theme-dark {
             --chat-canvas: #0a0a0a;
@@ -9791,8 +11359,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             --chat-surface-muted: #a3a3a3;
             --chat-border: rgba(255, 255, 255, 0.10);
             --chat-hover: #404040;
-            /* Solid fill for project-card date fade (must stay opaque in every theme). */
-            --chat-project-preview-fade: #404040;
+            /* Solid fill for project-card date fade — near canvas, not hover gray. */
+            --chat-project-preview-fade: #171717;
             --chat-top-bar-btn-active: color-mix(in srgb, var(--chat-canvas) 55%, black);
             --chat-overlay: rgba(0, 0, 0, 0.18);
             --chat-accent: #fafafa;
@@ -9944,7 +11512,29 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           .chat-themed [class*="bg-[#252527]"] { background-color: var(--chat-control) !important; }
           .chat-themed [class*="bg-[#2a2a2d]"],
           .chat-themed [class*="bg-[#3a3a3d]"] { background-color: var(--chat-control-strong) !important; }
-          .chat-themed [class*="bg-black"] { background-color: var(--chat-overlay) !important; }
+          /* Only bare bg-black* fills — not hover:bg-black/… class substrings. */
+          .chat-themed [class~="bg-black"],
+          .chat-themed [class*=" bg-black/"],
+          .chat-themed [class^="bg-black/"] { background-color: var(--chat-overlay) !important; }
+          .chat-themed [data-model-tray] {
+            background-color: var(--chat-elevated) !important;
+            border-color: var(--chat-border) !important;
+            color: var(--chat-text) !important;
+          }
+          .chat-themed [data-composer-send-button]:not(:disabled) {
+            background-color: var(--chat-accent) !important;
+            color: var(--chat-on-accent) !important;
+          }
+          .chat-themed [data-composer-send-button]:disabled {
+            background-color: var(--chat-control) !important;
+            color: var(--chat-muted) !important;
+            border-color: var(--chat-border) !important;
+          }
+          .chat-themed .xeno-search-container {
+            background: var(--chat-surface) !important;
+            border-color: var(--chat-border) !important;
+            color: var(--chat-text) !important;
+          }
           .chat-themed .chat-input-container { box-shadow: var(--chat-input-shadow) !important; }
           /* Outer shell: dark fill. Inner input keeps its own border for definition. */
           .chat-themed [data-chat-composer-shell] {
@@ -10561,7 +12151,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               onClick={() => setIsHistoryOpen(true)}
               aria-label="Open conversation history"
               title="Open history"
-              className="animate-chat-history-chrome-enter flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08] text-white/80 transition-colors hover:border-white/20 hover:bg-black/20 hover:text-white active:scale-[0.98]"
+              className="animate-chat-history-chrome-enter flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08] text-white/80 transition-colors hover:border-white/20 hover:bg-[var(--chat-hover)] hover:text-white active:scale-[0.98]"
             >
               <PanelLeftOpen size={16} aria-hidden="true" />
             </button>
@@ -10582,6 +12172,30 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 aria-current="page"
               >
                 Projects
+              </span>
+            )}
+            {isArtifactsPageOpen && (
+              <span
+                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-zinc-500"
+                aria-current="page"
+              >
+                Artifacts
+              </span>
+            )}
+            {isGlobalSettingsPageOpen && (
+              <span
+                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-zinc-500"
+                aria-current="page"
+              >
+                Settings
+              </span>
+            )}
+            {isScheduledPageOpen && (
+              <span
+                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-zinc-500"
+                aria-current="page"
+              >
+                Scheduled
               </span>
             )}
           </div>
@@ -10835,7 +12449,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     <div className="flex flex-col gap-0.5">
                       {catalogConversations.map((convo) => {
                         const isSelected = chatsCatalogSelectedIds.includes(convo.id);
-                        const menuOpen = historyRowMenu?.conversationId === convo.id;
+                        const menuOpen =
+                          isHistoryRowMenuOpen &&
+                          historyRowMenu?.conversationId === convo.id;
                         return (
                           <div
                             key={convo.id}
@@ -10905,6 +12521,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 </span>
                                 <button
                                   type="button"
+                                  data-history-row-menu-trigger=""
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     const rect = event.currentTarget.getBoundingClientRect();
@@ -10913,12 +12530,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       Math.max(8, rect.right - menuWidth),
                                       window.innerWidth - menuWidth - 8,
                                     );
-                                    setHistoryProjectSubmenuOpen(false);
-                                    setHistoryRowMenu({
-                                      conversationId: convo.id,
-                                      top: rect.bottom + 4,
-                                      left,
-                                    });
+                                    toggleHistoryRowMenu(convo.id, rect.bottom + 4, left);
                                   }}
                                   className={`absolute right-0 flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-opacity hover:bg-[var(--chat-control)] hover:text-[var(--chat-text)] ${
                                     menuOpen
@@ -11022,9 +12634,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         role="menu"
                         className="chat-history-popover absolute left-0 top-full z-10 mt-1.5 min-w-full w-max overflow-hidden rounded-xl border p-1"
                         style={{
-                          backgroundColor: 'color-mix(in srgb, var(--chat-elevated) 94%, white)',
-                          borderColor: 'color-mix(in srgb, var(--chat-border) 75%, white)',
-                          boxShadow: '0 12px 28px -8px rgba(0, 0, 0, 0.65)',
+                          backgroundColor: 'var(--chat-elevated)',
+                          borderColor: 'var(--chat-border)',
+                          boxShadow:
+                            '0 12px 28px -8px color-mix(in srgb, var(--chat-text) 18%, transparent)',
                         }}
                       >
                         {(
@@ -11227,9 +12840,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     role="menu"
                                     className="absolute right-0 top-full z-20 mt-1.5 w-[8.5rem] overflow-hidden rounded-xl border p-1"
                                     style={{
-                                      backgroundColor: 'color-mix(in srgb, var(--chat-elevated) 94%, white)',
-                                      borderColor: 'color-mix(in srgb, var(--chat-border) 75%, white)',
-                                      boxShadow: '0 12px 28px -8px rgba(0, 0, 0, 0.65)',
+                                      backgroundColor: 'var(--chat-elevated)',
+                                      borderColor: 'var(--chat-border)',
+                                      boxShadow:
+                                        '0 12px 28px -8px color-mix(in srgb, var(--chat-text) 18%, transparent)',
                                     }}
                                   >
                                     <button
@@ -11320,6 +12934,122 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             </div>
           );
         })()}
+        {isArtifactsPageOpen && (
+          <ChatArtifactsPage
+            pageLeft={!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0}
+            onClose={() => {
+              setIsArtifactsPageOpen(false);
+              setHistoryNavView('chats');
+            }}
+          />
+        )}
+        {isScheduledPageOpen && (
+          <ChatScheduledPage
+            pageLeft={!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0}
+            onClose={() => {
+              setIsScheduledPageOpen(false);
+              setHistoryNavView('chats');
+            }}
+          />
+        )}
+        {isGlobalSettingsPageOpen && (
+          <ChatGlobalSettingsPage
+            pageLeft={!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0}
+            onClose={() => {
+              setIsGlobalSettingsPageOpen(false);
+              setHistoryNavView('chats');
+            }}
+            onApplyPersona={(persona: ChatPersona | null) => {
+              if (persona) {
+                setSelectedPersona(persona.id);
+                setSystemPrompt(persona.prompt);
+                setSavedSystemPrompt(persona.prompt);
+                void setChatPersonaId(activeConversationId, persona.id);
+              } else {
+                setSelectedPersona(null);
+                setSystemPrompt('');
+                setSavedSystemPrompt('');
+                void setChatPersonaId(activeConversationId, null);
+              }
+            }}
+            onSaveInstructionsLive={(text) => {
+              if (!selectedPersona) {
+                setSystemPrompt(text);
+                setSavedSystemPrompt(text);
+              }
+            }}
+          />
+        )}
+        {isCustomizePageMounted && (
+          <ChatCustomizePage
+            onClose={() => setIsCustomizePageOpen(false)}
+            conversationId={activeConversationId}
+            isOpen={isCustomizePageOpen}
+            isShown={isCustomizePageShown}
+            motionFrom={customizeMotionFrom}
+          />
+        )}
+        {isSettingsModalMounted &&
+          createPortal(
+            <div
+              className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+              data-chat-theme-preference={chatTheme}
+              data-chat-settings-dialog=""
+              style={{
+                backgroundColor: isSettingsModalShown
+                  ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
+                  : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
+                transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
+                ...chatThemePreviewStyle,
+              }}
+              onClick={closeChatSettings}
+            >
+              <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
+              <div
+                className="w-full max-w-[48rem] will-change-transform"
+                style={chatModalCardMotionStyle(
+                  'top-right',
+                  isSettingsModalShown,
+                  isSettingsModalOpen,
+                )}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ChatSettingsModal
+                  onClose={closeChatSettings}
+                  conversationId={activeConversationId}
+                  onApplyPersona={(persona: ChatPersona | null) => {
+                    if (persona) {
+                      setSelectedPersona(persona.id);
+                      setSystemPrompt(persona.prompt);
+                      setSavedSystemPrompt(persona.prompt);
+                    } else {
+                      setSelectedPersona(null);
+                      setSystemPrompt('');
+                      setSavedSystemPrompt('');
+                    }
+                  }}
+                  chatAlignment={chatAlignment}
+                  onChatAlignmentChange={setChatAlignment}
+                  isWideChatEnabled={isWideChatEnabled}
+                  onWideChatChange={setIsWideChatEnabled}
+                  chatFontSize={chatFontSize}
+                  onChatFontSizeChange={setChatFontSize}
+                  isMobile={isMobile}
+                  maxInterfacesReached={maxInterfacesReached}
+                  isMultiInterface={!!isMultiInterface}
+                  onCreateNewInterface={onCreateNewInterface}
+                  onCloseInterface={
+                    onCloseInterface
+                      ? () => onCloseInterface(interfaceId)
+                      : undefined
+                  }
+                  canExport={messages.length > 0}
+                  onExportMarkdown={handleExportConversation}
+                />
+              </div>
+            </div>,
+            document.body,
+          )}
         {activeProjectId && (() => {
           const project = chatProjects.find((p) => p.id === activeProjectId);
           if (!project) return null;
@@ -11339,11 +13069,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             ? projectFiles
             : projectFiles.slice(0, PROJECT_FILES_PREVIEW_LIMIT);
           const hasHiddenProjectFiles = projectFiles.length > PROJECT_FILES_PREVIEW_LIMIT;
+          const realScheduled = project.scheduledTasks ?? [];
+          const projectScheduled =
+            realScheduled.length > 0 ? realScheduled : MOCK_PROJECT_SCHEDULED;
           return (
             <div
               className="absolute inset-0 z-[46] main-content-transition overflow-hidden"
               style={{
                 left: pageLeft,
+                right:
+                  isContextPanelOpen && !isMultiInterface
+                    ? contextPanelWidth
+                    : 0,
                 backgroundColor: 'var(--chat-canvas)',
                 color: 'var(--chat-text)',
               }}
@@ -11647,7 +13384,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       <button
                                         type="button"
                                         onClick={() =>
-                                          handleShowFileInContextPanel({
+                                          openProjectFilePreview({
                                             name: file.name,
                                             type: file.type,
                                             content: file.content,
@@ -11695,6 +13432,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             </span>
                             <button
                               type="button"
+                              onClick={openProjectScheduledCreate}
                               className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                               aria-label="Add scheduled task"
                               title="Add scheduled task"
@@ -11703,10 +13441,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             </button>
                           </div>
                           <div className="flex flex-col gap-1.5 px-1 pb-1.5 pt-0.5">
-                            {MOCK_PROJECT_SCHEDULED.map((task) => (
-                              <div
+                            {projectScheduled.map((task) => (
+                              <button
                                 key={task.id}
-                                className="rounded-lg border px-2.5 py-2"
+                                type="button"
+                                onClick={() => openProjectScheduledPreview(task)}
+                                className="rounded-lg border px-2.5 py-2 text-left transition-[transform,opacity] duration-150 ease-out hover:opacity-90 active:scale-[0.99]"
                                 style={railChipStyle}
                               >
                                 <div className="flex items-baseline gap-2">
@@ -11722,7 +13462,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     </p>
                                   </div>
                                 </div>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         </div>
@@ -11737,23 +13477,24 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {/* Top Bar - matches PDF/Word interface style */}
         <div
           ref={topBarRef}
-          className={`chat-top-bar absolute top-0 left-0 z-30 flex flex-col main-content-transition bg-[#0a0a0b] ${
-            isMultiInterface ? 'px-2 py-1' : 'px-0 py-2'
+          className={`chat-top-bar absolute top-0 left-0 z-30 flex main-content-transition bg-[#0a0a0b] ${
+            isMultiInterface ? 'flex-col px-2 py-1' : 'items-center px-0'
           }`}
           style={{
             right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px',
             backgroundColor: 'var(--chat-canvas)',
+            ...(!isMultiInterface ? { height: CHAT_CHROME_BAR_HEIGHT_PX } : null),
           }}
         >
           {/* Buttons row */}
-          <div className="relative flex w-full flex-shrink-0 items-center justify-between">
-          {/* Left side - System Prompt, Clear/Save (history opens from the empty-state tool rail) */}
+          <div className="relative flex h-full w-full flex-shrink-0 items-center justify-between">
+          {/* Left side - System Prompt, Clear/Save (history opens from floating chrome / sidebar) */}
           <div ref={leftButtonsRef} className={`chat-top-bar-buttons relative flex items-center ${isMultiInterface ? 'gap-1' : 'gap-2 md:gap-2'} transition-all duration-300 ease-in-out`}
             style={{ marginLeft: !isMultiInterface && isHistoryOpen && !isMobile ? '260px' : '0px' }}>
               {/* Spacer: floating icon/XENO (z-60) sits here when history chrome is visible. */}
               {!isMultiInterface && showClosedHistoryChrome && (
                 <div
-                  className={`h-9 flex-shrink-0 ${isProjectsPageOpen ? 'w-[13.5rem]' : 'w-[8.25rem]'}`}
+                  className={`h-9 flex-shrink-0 ${isProjectsPageOpen || isArtifactsPageOpen || isGlobalSettingsPageOpen || isScheduledPageOpen ? 'w-[13.5rem]' : 'w-[8.25rem]'}`}
                   aria-hidden="true"
                 />
               )}
@@ -11765,10 +13506,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   onClick={toggleSystemPrompt}
                   onMouseEnter={() => setIsSystemPromptButtonHovered(true)}
                   onMouseLeave={() => setIsSystemPromptButtonHovered(false)}
-                  className={`chat-system-prompt-btn flex h-9 w-[8rem] items-center justify-center gap-2 rounded-lg border border-white/[0.08] px-3 py-1.5 text-sm text-white/80 transition-colors hover:border-white/20 hover:bg-black/20 ${selectedPersona ? 'border-gray-500' : ''}`}
+                  className={`chat-system-prompt-btn flex h-9 w-[8rem] items-center justify-center gap-2 rounded-lg border border-[var(--chat-border)] px-3 py-1.5 text-sm text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] ${selectedPersona ? 'border-[var(--chat-accent)] text-[var(--chat-text)]' : ''}`}
                 >
                   <FilePenLine size={16} className="flex-shrink-0" />
-                  <span className="truncate hidden md:inline">
+                  <span className="hidden truncate md:inline">
                     {selectedPersona && selectedPersona !== 'custom'
                       ? PERSONAS.find(p => p.id === selectedPersona)?.label
                       : selectedPersona === 'custom'
@@ -11778,7 +13519,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 </button>
                 {(isSystemPromptButtonHovered && !isSystemPromptOpen && !isCustomPromptOpen) && (
                   <div className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2">
-                    <ChevronDown size={16} className="text-gray-500" />
+                    <ChevronDown size={16} className="text-[var(--chat-muted)]" />
                   </div>
                 )}
                 <div
@@ -11787,33 +13528,33 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 >
                   {PERSONAS.map((persona) => (
                     <button key={persona.id} onClick={() => handlePersonaSelect(persona.id)}
-                      className={`flex h-9 w-[8rem] items-center justify-center rounded-lg border px-3 py-1.5 text-sm transition-colors ${selectedPersona === persona.id ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'}`}
+                      className={`flex h-9 w-[8rem] items-center justify-center rounded-lg border px-3 py-1.5 text-sm transition-colors ${selectedPersona === persona.id ? 'border-[var(--chat-accent)] bg-[var(--chat-control)] text-[var(--chat-text)]' : 'border-[var(--chat-border)] bg-[var(--chat-elevated)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'}`}
                     >{persona.label}</button>
                   ))}
                   <button onClick={() => { setIsSystemPromptOpen(false); setIsCustomPromptOpen(true); }}
-                    className={`flex h-9 w-[8rem] items-center justify-center rounded-lg border px-3 py-1.5 text-sm transition-colors ${selectedPersona === 'custom' ? 'border-gray-500 text-white' : 'border-[#1e1e21] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'}`}
+                    className={`flex h-9 w-[8rem] items-center justify-center rounded-lg border px-3 py-1.5 text-sm transition-colors ${selectedPersona === 'custom' ? 'border-[var(--chat-accent)] bg-[var(--chat-control)] text-[var(--chat-text)]' : 'border-[var(--chat-border)] bg-[var(--chat-elevated)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'}`}
                   >Custom</button>
                   {selectedPersona && (
                     <button onClick={handleClearSystemPrompt}
-                      className="flex h-9 w-[8rem] items-center justify-center rounded-lg border border-[#1e1e21] px-3 py-1.5 text-sm text-gray-400 transition-colors hover:border-red-500/50 hover:text-red-400"
+                      className="flex h-9 w-[8rem] items-center justify-center rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] px-3 py-1.5 text-sm text-[var(--chat-muted)] transition-colors hover:border-[var(--chat-danger)] hover:text-[var(--chat-danger)]"
                     >Clear</button>
                   )}
                 </div>
-                <div className={`absolute left-0 top-full z-20 mt-[10px] origin-top-left overflow-hidden rounded-lg border border-[#2a2a2d] bg-[#0e0e10] shadow-xl transition-all duration-200 ease-out ${isCustomPromptOpen ? 'visible scale-100 opacity-100' : 'pointer-events-none invisible scale-95 opacity-0'}`}
+                <div className={`absolute left-0 top-full z-20 mt-[10px] origin-top-left overflow-hidden rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl transition-all duration-200 ease-out ${isCustomPromptOpen ? 'visible scale-100 opacity-100' : 'pointer-events-none invisible scale-95 opacity-0'}`}
                   style={{ width: '18rem' }}>
                   <textarea placeholder="Enter custom system prompt..." value={systemPrompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSystemPrompt(e.target.value)}
-                    className="h-32 w-full resize-none border-b border-[#2a2a2d] bg-[#0e0e10] p-3 text-sm text-gray-200 placeholder-gray-500 outline-none scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent" />
+                    className="h-32 w-full resize-none border-b border-[var(--chat-border)] bg-[var(--chat-elevated)] p-3 text-sm text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]" />
                   <div className="flex gap-2 p-2">
                     <button onClick={() => { setIsCustomPromptOpen(false); setIsSystemPromptOpen(true); }}
-                      className="flex-1 rounded-lg border border-white/[0.08] px-3 py-1.5 text-sm text-gray-400 transition-colors hover:border-white/20 hover:bg-black/20 hover:text-white">Back</button>
+                      className="flex-1 rounded-lg border border-[var(--chat-border)] px-3 py-1.5 text-sm text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]">Back</button>
                     <button onClick={() => { setSavedSystemPrompt(systemPrompt); setIsCustomPromptOpen(false); setSelectedPersona('custom'); setIsSystemPromptSaved(true); setTimeout(() => setIsSystemPromptSaved(false), 1500); }}
                       disabled={!systemPrompt.trim()}
-                      className={`flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${systemPrompt.trim() ? 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white' : 'cursor-not-allowed border-white/[0.04] text-gray-600'}`}>Save</button>
+                      className={`flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${systemPrompt.trim() ? 'border-[var(--chat-border)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]' : 'cursor-not-allowed border-[var(--chat-border)] text-[var(--chat-muted)] opacity-40'}`}>Save</button>
                   </div>
                 </div>
               </div>
               )}
-          </div>
+                      </div>
 
           {/* Center - Token Count (mobile only, non-multi-interface) - absolutely centered */}
           {isMobile && !isMultiInterface && (
@@ -11839,55 +13580,54 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               <button
                 ref={conversationSelectorButtonRef}
                 onClick={() => setIsConversationSelectorOpen(!isConversationSelectorOpen)}
-                className={`flex items-center justify-center gap-2 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 max-w-[14rem] ${isConversationSelectorOpen ? 'border-gray-500' : ''}`}
+                className={`flex h-9 max-w-[14rem] items-center justify-center gap-2 rounded-lg border border-[var(--chat-border)] px-3 py-1.5 text-sm text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] ${isConversationSelectorOpen ? 'border-[var(--chat-accent)] text-[var(--chat-text)]' : ''}`}
               >
-                <MessageSquarePlus size={16} className="text-gray-500 flex-shrink-0" />
-                <span className="truncate max-w-[10rem]">
+                <MessageSquarePlus size={16} className="flex-shrink-0 text-[var(--chat-muted)]" />
+                <span className="max-w-[10rem] truncate">
                   {activeConversationId
                     ? (conversationHistory.find(c => c.id === activeConversationId)?.title || 'Select Chat')
                     : 'New Chat'}
                 </span>
-                <ChevronDown size={14} className={`text-gray-500 flex-shrink-0 transition-transform ${isConversationSelectorOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={14} className={`flex-shrink-0 text-[var(--chat-muted)] transition-transform ${isConversationSelectorOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Conversation Selector Dropdown */}
               <div
                 ref={conversationSelectorDropdownRef}
                 className={`
-                  absolute top-full left-1/2 -translate-x-1/2 mt-[10px] z-20
-                  transition-all duration-200 ease-out origin-top
+                  absolute left-1/2 top-full z-20 mt-[10px] origin-top -translate-x-1/2
+                  max-h-80 w-64 overflow-hidden rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
+                  transition-all duration-200 ease-out
                   ${isConversationSelectorOpen
-                    ? 'opacity-100 scale-100 visible'
-                    : 'opacity-0 scale-95 invisible pointer-events-none'
+                    ? 'visible scale-100 opacity-100'
+                    : 'pointer-events-none invisible scale-95 opacity-0'
                   }
-                  bg-[#0e0e10] border border-[#2a2a2d] rounded-lg shadow-xl
-                  w-64 max-h-80 overflow-hidden
                 `}
               >
                 {/* Search */}
-                <div className="p-2 border-b border-[#2a2a2d]">
+                <div className="border-b border-[var(--chat-border)] p-2">
                   <div className="relative">
-                    <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                    <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 transform text-[var(--chat-muted)]" />
                     <input
                       type="text"
                       placeholder="Search conversations..."
                       value={conversationSearchQuery}
                       onChange={(e) => setConversationSearchQuery(e.target.value)}
-                      className="w-full bg-[#0a0a0b] border border-[#1e1e21] rounded-md py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
+                      className="w-full rounded-md border border-[var(--chat-border)] bg-[var(--chat-canvas)] py-1.5 pl-7 pr-2 text-xs text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-accent)]"
                     />
                   </div>
                 </div>
 
                 {/* Conversation List */}
-                <div className="overflow-y-auto max-h-56 hide-scrollbar">
+                <div className="hide-scrollbar max-h-56 overflow-y-auto">
                   {isSelectorLoading ? (
                     <div className="flex items-center justify-center py-4">
-                      <Loader2 size={20} className="text-gray-500 animate-spin" />
+                      <Loader2 size={20} className="animate-spin text-[var(--chat-muted)]" />
                     </div>
                   ) : selectorConversations.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-4 text-center">
-                      <Clock size={20} className="text-gray-600 mb-2" />
-                      <p className="text-gray-500 text-xs">No conversations yet</p>
+                      <Clock size={20} className="mb-2 text-[var(--chat-muted)]" />
+                      <p className="text-xs text-[var(--chat-muted)]">No conversations yet</p>
                     </div>
                   ) : (() => {
                     const filteredConversations = selectorConversations
@@ -11899,8 +13639,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                     return filteredConversations.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-4 text-center">
-                        <Search size={20} className="text-gray-600 mb-2" />
-                        <p className="text-gray-500 text-xs">No matches found</p>
+                        <Search size={20} className="mb-2 text-[var(--chat-muted)]" />
+                        <p className="text-xs text-[var(--chat-muted)]">No matches found</p>
                       </div>
                     ) : (
                       <div className="py-1">
@@ -11912,14 +13652,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               setIsConversationSelectorOpen(false);
                               setConversationSearchQuery('');
                             }}
-                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                            className={`w-full px-3 py-2 text-left text-sm transition-colors ${
                               activeConversationId === convo.id
-                                ? 'bg-[#2a2a2d] text-white'
-                                : 'text-gray-300 hover:bg-[#2a2a2d]/50'
+                                ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                                : 'text-[var(--chat-text)] hover:bg-[var(--chat-hover)]'
                             }`}
                           >
                             <p className="truncate text-xs">{convo.title}</p>
-                            <p className="text-[10px] text-gray-500 mt-0.5">
+                            <p className="mt-0.5 text-[10px] text-[var(--chat-muted)]">
                               {new Date(convo.timestamp).toLocaleDateString()}
                             </p>
                           </button>
@@ -11930,13 +13670,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 </div>
 
                 {/* New Chat option */}
-                <div className="border-t border-[#2a2a2d] p-2">
+                <div className="border-t border-[var(--chat-border)] p-2">
                   <button
                     onClick={() => {
                       handleNewChat();
                       setIsConversationSelectorOpen(false);
                     }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-[#2a2a2d]/50 rounded-md transition-colors"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                   >
                     <Plus size={14} />
                     <span>New Conversation</span>
@@ -11957,7 +13697,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             }`}
             style={
               !isMultiInterface
-                ? { top: 0, right: CHAT_CHROME_EDGE_INSET_PX }
+                ? { top: CHAT_CHROME_TOP_INSET_PX, right: CHAT_CHROME_EDGE_INSET_PX }
                 : undefined
             }
           >
@@ -12002,19 +13742,19 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   <ThemeTriggerIcon size={16} />
                   <ChevronDown size={12} className={`text-gray-500 transition-transform duration-200 ${isThemeMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
+                {isThemeMenuMounted && (
                 <div
+                  key={isThemeMenuShown ? 'chat-theme-menu-in' : 'chat-theme-menu-out'}
                   id="chat-theme-menu"
                   role="dialog"
                   aria-label="Chat LLM theme"
+                  aria-hidden={!isThemeMenuOpen}
                   onMouseDown={(event) => event.stopPropagation()}
-                  className={`absolute right-0 top-full z-20 mt-2 w-52 origin-top-right rounded-lg border border-[#2a2a2d] bg-[#0e0e10] p-2.5 shadow-xl transition-[opacity,transform] duration-200 ease-out ${
-                    isThemeMenuOpen
-                      ? 'visible scale-100 opacity-100'
-                      : 'invisible pointer-events-none scale-95 opacity-0'
-                  }`}
+                  className="absolute right-0 top-full z-20 mt-2 w-52 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] p-2.5 shadow-xl"
+                  style={themeMenuPanelMotionStyle(isThemeMenuShown, isThemeMenuOpen)}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs font-medium text-white">Appearance</span>
+                    <span className="text-xs font-medium text-[var(--chat-text)]">Appearance</span>
                     <button
                       type="button"
                       aria-pressed={chatTheme === 'system'}
@@ -12082,6 +13822,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </div>
                   </div>
                 </div>
+                )}
               </div>
               )}
 
@@ -12090,7 +13831,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <button
                     onClick={handleRefreshConversation}
                     disabled={isRefreshing}
-                    className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/20 hover:bg-black/20 transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/20 hover:bg-[var(--chat-hover)] transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     aria-label="Refresh conversation"
                 >
                     <RefreshCcw size={16} className={isRefreshing ? 'animate-spin' : ''} />
@@ -12099,7 +13840,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               {isMultiInterface && messages.length > 0 && (
                 <button
                     onClick={handleNewChat}
-                    className="flex h-9 items-center justify-center rounded-lg border border-white/[0.08] px-3 py-1.5 text-white/80 transition-colors hover:border-white/20 hover:bg-black/20"
+                    className="flex h-9 items-center justify-center rounded-lg border border-white/[0.08] px-3 py-1.5 text-white/80 transition-colors hover:border-white/20 hover:bg-[var(--chat-hover)]"
                     aria-label="Start New Chat"
                 >
                     <SquarePen size={16} />
@@ -12111,7 +13852,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     setIsMessageSearchOpen(!isMessageSearchOpen);
                     if (isMessageSearchOpen) setMessageSearchQuery('');
                   }}
-                  className={`flex h-9 items-center justify-center rounded-lg border px-3 py-1.5 text-white/80 transition-colors hover:border-white/20 hover:bg-black/20 ${
+                  className={`flex h-9 items-center justify-center rounded-lg border px-3 py-1.5 text-white/80 transition-colors hover:border-white/20 hover:bg-[var(--chat-hover)] ${
                     isMessageSearchOpen ? 'border-gray-500' : 'border-[#1e1e21]'
                   }`}
                   aria-label="Search messages"
@@ -12149,7 +13890,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   onClick={() => {
                     setIsChatMoreMenuOpen((open) => !open);
                     setIsSharePreviewOpen(false);
-                    setIsThemeMenuOpen(false);
+                    if (isChatMoreMenuOpen) setIsThemeMenuOpen(false);
                   }}
                   aria-expanded={isChatMoreMenuOpen}
                   aria-haspopup="menu"
@@ -12160,17 +13901,27 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 >
                   <MoreVertical size={16} />
                 </button>
+                {isChatMoreMenuMounted && (
+                <>
+                <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
                 <div
+                  key={isChatMoreMenuShown ? 'chat-more-menu-in' : 'chat-more-menu-out'}
                   role="menu"
-                  className={`absolute right-0 top-full z-30 mt-2 w-[220px] origin-top-right rounded-xl border border-[#2a2a2d] bg-[#141416] p-1 shadow-xl transition-[opacity,transform] duration-150 ease-out ${
-                    isChatMoreMenuOpen
-                      ? 'visible scale-100 opacity-100'
-                      : 'pointer-events-none invisible scale-95 opacity-0'
-                  }`}
-                  style={{ backgroundColor: 'var(--chat-elevated)', borderColor: 'var(--chat-border)' }}
+                  aria-hidden={!isChatMoreMenuOpen}
+                  className="absolute right-0 top-full z-30 mt-2 w-[220px] rounded-xl border border-[#2a2a2d] bg-[#141416] p-1 shadow-xl"
+                  style={{
+                    backgroundColor: 'var(--chat-elevated)',
+                    borderColor: 'var(--chat-border)',
+                    pointerEvents: isChatMoreMenuShown ? 'auto' : 'none',
+                    ...chatModalCardMotionStyle(
+                      'top-right',
+                      isChatMoreMenuShown,
+                      isChatMoreMenuOpen,
+                    ),
+                  }}
                 >
-                  <button
-                    type="button"
+                    <button
+                      type="button"
                     role="menuitem"
                     className={moreMenuItemClass}
                     onClick={() => {
@@ -12220,6 +13971,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         isOpen: true,
                         conversationId: activeHistoryConvo.id,
                         conversationTitle: activeHistoryConvo.title,
+                        origin: 'top-right',
                       });
                       setIsChatMoreMenuOpen(false);
                     }}
@@ -12230,98 +13982,158 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                   <div className="my-1 border-t border-[#1e1e21]" />
 
-                  <div ref={themeMenuRef} className="relative">
+                  <div ref={themeMenuRef}>
                     <button
                       type="button"
                       role="menuitem"
                       className={moreMenuItemClass}
                       aria-expanded={isThemeMenuOpen}
+                      aria-controls="chat-theme-menu-inline"
                       onClick={() => setIsThemeMenuOpen((open) => !open)}
                     >
                       <ThemeTriggerIcon size={14} className="flex-shrink-0 text-zinc-500" />
                       <span>Theme</span>
-                      <ChevronRight size={14} className={`ml-auto text-zinc-500 transition-transform ${isThemeMenuOpen ? 'rotate-90' : ''}`} />
+                      <ChevronRight
+                        size={14}
+                        className={`ml-auto text-zinc-500 transition-transform duration-200 ${
+                          isThemeMenuOpen ? 'rotate-90' : ''
+                        }`}
+                      />
                     </button>
-                    {isThemeMenuOpen && (
-                      <div
-                        id="chat-theme-menu"
-                        role="dialog"
-                        aria-label="Chat LLM theme"
-                        onMouseDown={(event) => event.stopPropagation()}
-                        className="mt-1 rounded-lg border border-[#2a2a2d] bg-[#0e0e10] p-2.5"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-xs font-medium text-white">Appearance</span>
-                          <button
-                            type="button"
-                            aria-pressed={chatTheme === 'system'}
-                            onClick={() => handleChatThemeChange('system', false)}
-                            className={`flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] transition-colors active:scale-[0.98] ${
-                              chatTheme === 'system'
-                                ? 'border-[var(--chat-border)] bg-[var(--chat-hover)] text-[var(--chat-text)]'
-                                : 'border-[var(--chat-border)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
-                            }`}
-                          >
-                            <Monitor size={13} aria-hidden="true" />
-                            System
-                          </button>
-                        </div>
-                        <p className="mt-1 text-[11px] text-[var(--chat-muted)]">
-                          {chatTheme === 'system' ? 'Following your device' : `Theme ${displayedThemeSliderPosition}%`}
-                        </p>
-                        <div className="mt-3 px-1">
-                          <div className="chat-theme-waveform-control relative">
-                            <div className="chat-theme-waveform" aria-hidden="true">
-                              {Array.from({ length: THEME_WAVEFORM_BAR_COUNT }, (_, index) => {
-                                const position = index * THEME_BRIGHTNESS_STEP;
-                                const isThemeStop = index === 0 || index === Math.floor(THEME_WAVEFORM_BAR_COUNT / 2) || index === THEME_WAVEFORM_BAR_COUNT - 1;
-                                const isSelected = position === displayedThemeSliderPosition;
-                                return (
-                                  <span
-                                    key={index}
-                                    className="chat-theme-waveform-bar"
-                                    data-stop={isThemeStop}
-                                    data-selected={isSelected}
-                                    data-percentage={position}
-                                    style={{ backgroundColor: getThemePreviewTokens(position).canvas }}
-                                  />
-                                );
-                              })}
-                            </div>
-                            <input
-                              className="chat-theme-slider"
-                              type="range"
-                              min="0"
-                              max="100"
-                              step={THEME_BRIGHTNESS_STEP}
-                              value={displayedThemeSliderPosition}
-                              aria-label="Theme brightness"
-                              aria-valuetext={getThemeSliderValueText(displayedThemeSliderPosition)}
-                              onChange={(event) => setThemePreviewPosition(Number(event.currentTarget.value))}
-                              onPointerUp={(event) => commitThemeSliderPosition(Number(event.currentTarget.value))}
-                              onPointerCancel={() => setThemePreviewPosition(null)}
-                              onKeyUp={(event) => {
-                                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-                                commitThemeSliderPosition(Number(event.currentTarget.value));
-                              }}
-                            />
+                    {/* Inline accordion — grows the ⋯ menu instead of a floating popover. */}
+                    <div
+                      id="chat-theme-menu-inline"
+                      role="region"
+                      aria-label="Chat LLM theme"
+                      aria-hidden={!isThemeMenuOpen}
+                      className="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                      style={{
+                        gridTemplateRows: isThemeMenuShown ? '1fr' : '0fr',
+                        opacity: isThemeMenuShown ? 1 : 0,
+                        pointerEvents: isThemeMenuShown ? 'auto' : 'none',
+                      }}
+                    >
+                      <div className="min-h-0 overflow-hidden">
+                        <div
+                          className="mx-1 mb-1 mt-0.5 rounded-md border p-2.5"
+                          style={{
+                            borderColor: 'var(--chat-border)',
+                            backgroundColor: 'var(--chat-canvas)',
+                          }}
+                          onMouseDown={(event) => event.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-xs font-medium text-[var(--chat-text)]">
+                              Appearance
+                            </span>
+                            <button
+                              type="button"
+                              aria-pressed={chatTheme === 'system'}
+                              onClick={() => handleChatThemeChange('system', false)}
+                              className={`flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] transition-colors active:scale-[0.98] ${
+                                chatTheme === 'system'
+                                  ? 'border-[var(--chat-border)] bg-[var(--chat-hover)] text-[var(--chat-text)]'
+                                  : 'border-[var(--chat-border)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
+                              }`}
+                            >
+                              <Monitor size={13} aria-hidden="true" />
+                              System
+                            </button>
                           </div>
-                          <div className="mt-2 grid grid-cols-3 text-[10px] text-[var(--chat-muted)]">
-                            {VISUAL_CHAT_THEME_OPTIONS.map((option, index) => (
-                              <span
-                                key={option.id}
-                                className={index === 0 ? 'text-left' : index === 1 ? 'text-center' : 'text-right'}
-                              >
-                                {option.label}
-                              </span>
-                            ))}
+                          <p className="mt-1 text-[11px] text-[var(--chat-muted)]">
+                            {chatTheme === 'system'
+                              ? 'Following your device'
+                              : `Theme ${displayedThemeSliderPosition}%`}
+                          </p>
+                          <div className="mt-3 px-1">
+                            <div className="chat-theme-waveform-control relative">
+                              <div className="chat-theme-waveform" aria-hidden="true">
+                                {Array.from(
+                                  { length: THEME_WAVEFORM_BAR_COUNT },
+                                  (_, index) => {
+                                    const position = index * THEME_BRIGHTNESS_STEP;
+                                    const isThemeStop =
+                                      index === 0 ||
+                                      index ===
+                                        Math.floor(THEME_WAVEFORM_BAR_COUNT / 2) ||
+                                      index === THEME_WAVEFORM_BAR_COUNT - 1;
+                                    const isSelected =
+                                      position === displayedThemeSliderPosition;
+                                    return (
+                                      <span
+                                        key={index}
+                                        className="chat-theme-waveform-bar"
+                                        data-stop={isThemeStop}
+                                        data-selected={isSelected}
+                                        data-percentage={position}
+                                        style={{
+                                          backgroundColor:
+                                            getThemePreviewTokens(position).canvas,
+                                        }}
+                                      />
+                                    );
+                                  },
+                                )}
+                              </div>
+                              <input
+                                className="chat-theme-slider"
+                                type="range"
+                                min="0"
+                                max="100"
+                                step={THEME_BRIGHTNESS_STEP}
+                                value={displayedThemeSliderPosition}
+                                aria-label="Theme brightness"
+                                aria-valuetext={getThemeSliderValueText(
+                                  displayedThemeSliderPosition,
+                                )}
+                                onChange={(event) =>
+                                  setThemePreviewPosition(
+                                    Number(event.currentTarget.value),
+                                  )
+                                }
+                                onPointerUp={(event) =>
+                                  commitThemeSliderPosition(
+                                    Number(event.currentTarget.value),
+                                  )
+                                }
+                                onPointerCancel={() => setThemePreviewPosition(null)}
+                                onKeyUp={(event) => {
+                                  if (
+                                    !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
+                                      event.key,
+                                    )
+                                  ) {
+                                    return;
+                                  }
+                                  commitThemeSliderPosition(
+                                    Number(event.currentTarget.value),
+                                  );
+                                }}
+                              />
+                            </div>
+                            <div className="mt-2 grid grid-cols-3 text-[10px] text-[var(--chat-muted)]">
+                              {VISUAL_CHAT_THEME_OPTIONS.map((option, index) => (
+                                <span
+                                  key={option.id}
+                                  className={
+                                    index === 0
+                                      ? 'text-left'
+                                      : index === 1
+                                        ? 'text-center'
+                                        : 'text-right'
+                                  }
+                                >
+                                  {option.label}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
 
-                  <button
+              <button
                     type="button"
                     role="menuitem"
                     className={moreMenuItemClass}
@@ -12339,20 +14151,32 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     type="button"
                     role="menuitem"
                     className={moreMenuItemClass}
-                    onClick={() => {
-                      setIsMessageSearchOpen(true);
+                    onClick={(event) => {
+                      openCustomizePage(event.currentTarget);
                       setIsChatMoreMenuOpen(false);
                     }}
                   >
-                    <Search size={14} className="flex-shrink-0 text-zinc-500" />
-                    <span>Search messages</span>
+                    <Briefcase size={14} className="flex-shrink-0 text-zinc-500" />
+                    <span>Customize</span>
                   </button>
                   <button
                     type="button"
                     role="menuitem"
                     className={moreMenuItemClass}
+                onClick={() => {
+                      setIsMessageSearchOpen(true);
+                      setIsChatMoreMenuOpen(false);
+                }}
+              >
+                    <Search size={14} className="flex-shrink-0 text-zinc-500" />
+                    <span>Search messages</span>
+              </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={moreMenuItemClass}
                     onClick={() => {
-                      setIsSettingsModalOpen(true);
+                      openChatSettings();
                       setIsChatMoreMenuOpen(false);
                     }}
                   >
@@ -12372,27 +14196,52 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     <span>New chat</span>
                   </button>
                 </div>
+                </>
+                )}
               </div>
               )}
 
             <div className="relative flex-shrink-0">
               {(isMultiInterface || messages.length === 0) ? (
+              <div className="flex items-center gap-1.5">
+              <button
+                  ref={customizeButtonRef}
+                  type="button"
+                  onClick={(event) => {
+                    openCustomizePage(event.currentTarget);
+                    setIsSettingsModalOpen(false);
+                    setIsChatMoreMenuOpen(false);
+                    setIsSharePreviewOpen(false);
+                    setIsThemeMenuOpen(false);
+                  }}
+                  data-active={isCustomizePageOpen ? 'true' : undefined}
+                  className={topBarBtnClass(isCustomizePageOpen, 'w-9')}
+                  aria-label="Customize"
+                  title="Customize"
+              >
+                  <Briefcase size={16} />
+              </button>
               <button
                   ref={settingsButtonRef}
                   type="button"
                   onClick={() => {
-                    setIsSettingsModalOpen(!isSettingsModalOpen);
+                    if (isSettingsModalOpen) {
+                      closeChatSettings();
+                    } else {
+                      openChatSettings();
+                    }
                     setIsChatMoreMenuOpen(false);
                     setIsSharePreviewOpen(false);
                     setIsThemeMenuOpen(false);
                   }}
                   data-active={isSettingsModalOpen ? 'true' : undefined}
                   className={topBarBtnClass(isSettingsModalOpen, 'w-9')}
-                  aria-label="Settings"
-                  title="Settings"
+                  aria-label="Chat settings"
+                  title="Chat settings"
               >
                   <Settings size={16} />
               </button>
+              </div>
               ) : (
               <button
                   ref={settingsButtonRef}
@@ -12402,176 +14251,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   className="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0"
               />
               )}
-              <div
-                 ref={settingsModalRef}
-                 className={`
-                    absolute top-full right-0 mt-[10px] z-20
-                    transition-all duration-200 ease-out origin-top-right
-                    ${isSettingsModalOpen
-                      ? 'opacity-100 scale-100 visible'
-                      : 'opacity-0 scale-95 invisible'
-                    }
-                    bg-[#0e0e10] border border-[#2a2a2d] rounded-lg shadow-xl
-                    overflow-hidden
-            `}
-            style={{ width: 'calc(36px + 10rem + 36px + 24px)' }}>
-              {/* Layout Section */}
-              <div className="p-3">
-                {/* Alignment Options - Hidden on mobile */}
-                {!isMobile && (
-                  <div className="flex gap-2 mb-3">
-                    <button
-                      onClick={() => setChatAlignment(chatAlignment === 'left' ? 'center' : 'left')}
-                      className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                        chatAlignment === 'left'
-                          ? 'bg-[#0e0e10] border-gray-500 text-white'
-                          : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
-                      }`}
-                    >
-                      Left
-                    </button>
-                    <button
-                      onClick={() => setChatAlignment('center')}
-                      className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                        chatAlignment === 'center'
-                          ? 'bg-[#0e0e10] border-gray-500 text-white'
-                          : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
-                      }`}
-                    >
-                      Center
-                    </button>
-                    <button
-                      onClick={() => setChatAlignment(chatAlignment === 'right' ? 'center' : 'right')}
-                      className={`flex-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                        chatAlignment === 'right'
-                          ? 'bg-[#0e0e10] border-gray-500 text-white'
-                          : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
-                      }`}
-                    >
-                      Right
-                    </button>
-                  </div>
-                )}
-
-                {/* Wide Toggle - Hidden on mobile */}
-                {!isMobile && (
-                  <button
-                    onClick={() => setIsWideChatEnabled(!isWideChatEnabled)}
-                    className={`w-full px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      isWideChatEnabled
-                        ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
-                    }`}
-                  >
-                    Wide
-                  </button>
-                )}
-
-                {/* Font Size Control */}
-                <div className={`flex gap-2 items-center ${!isMobile ? 'mt-3' : ''}`}>
-                  <span className="text-xs text-gray-500 mr-1">Text</span>
-                  <button
-                    onClick={() => {
-                      setChatFontSize('small');
-                      try { localStorage.setItem('xeno_chat_font_size', 'small'); } catch {}
-                    }}
-                    className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
-                      chatFontSize === 'small'
-                        ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
-                    }`}
-                  >
-                    <span className="text-[10px]">A</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setChatFontSize('medium');
-                      try { localStorage.setItem('xeno_chat_font_size', 'medium'); } catch {}
-                    }}
-                    className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
-                      chatFontSize === 'medium'
-                        ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
-                    }`}
-                  >
-                    <span className="text-xs">A</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setChatFontSize('large');
-                      try { localStorage.setItem('xeno_chat_font_size', 'large'); } catch {}
-                    }}
-                    className={`flex-1 px-2 py-1.5 rounded-lg border transition-colors ${
-                      chatFontSize === 'large'
-                        ? 'bg-[#0e0e10] border-gray-500 text-white'
-                        : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
-                    }`}
-                  >
-                    <span className="text-sm">A</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Divider - Hidden on mobile */}
-              {!isMobile && <div className="border-t border-[#2a2a2d]" />}
-
-              {/* Interface Section - Hidden on mobile */}
-              {!isMobile && (
-                <div className="p-3">
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => {
-                        if (onCreateNewInterface && !maxInterfacesReached) {
-                          onCreateNewInterface();
-                          setIsSettingsModalOpen(false);
-                        }
-                      }}
-                      disabled={maxInterfacesReached}
-                      className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                        maxInterfacesReached
-                          ? 'border-white/[0.04] text-gray-600 cursor-not-allowed'
-                          : 'border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white'
-                      }`}
-                    >
-                      <Plus size={14} />
-                      <span>New Interface</span>
-                    </button>
-
-                    {isMultiInterface && onCloseInterface && (
-                      <button
-                        onClick={() => {
-                          onCloseInterface(interfaceId);
-                          setIsSettingsModalOpen(false);
-                        }}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border bg-[#0e0e10] border-[#1e1e21] text-gray-400 hover:border-red-500/50 hover:text-red-400 transition-colors"
-                      >
-                        <X size={14} />
-                        <span>Close Interface</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Export Section */}
-              {messages.length > 0 && (
-                <>
-                  <div className="border-t border-[#2a2a2d]" />
-                  <div className="p-3">
-                    <button
-                      onClick={() => {
-                        handleExportConversation();
-                        setIsSettingsModalOpen(false);
-                      }}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-white/[0.08] text-gray-400 hover:border-white/20 hover:bg-black/20 hover:text-white transition-colors"
-                    >
-                      <Download size={14} />
-                      <span>Export as Markdown</span>
-                    </button>
-                  </div>
-                </>
-              )}
-              </div>
             </div>
           </div>
           {!isMultiInterface && (
@@ -12586,29 +14265,29 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
         {/* Message Search Bar */}
         {isMessageSearchOpen && (
-          <div className="w-full px-4 py-2 bg-[#0a0a0b] border-b border-[#2a2a2d]">
+          <div className="w-full border-b border-[var(--chat-border)] bg-[var(--chat-canvas)] px-4 py-2">
             <div className={`${isMultiInterface ? 'max-w-full' : (isWideChatEnabled ? 'max-w-[67.5rem]' : 'max-w-[45rem]')} mx-auto`}>
               <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 transform text-[var(--chat-muted)]" />
                 <input
                   type="text"
                   placeholder="Search in conversation..."
                   value={messageSearchQuery}
                   onChange={(e) => setMessageSearchQuery(e.target.value)}
                   autoFocus
-                  className="w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg py-2 pl-10 pr-10 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
+                  className="w-full rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] py-2 pl-10 pr-10 text-sm text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-accent)]"
                 />
                 {messageSearchQuery && (
                   <button
                     onClick={() => setMessageSearchQuery('')}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 transform text-[var(--chat-muted)] hover:text-[var(--chat-text)]"
                   >
                     <X size={16} />
                   </button>
                 )}
               </div>
               {messageSearchQuery && (
-                <p className="text-xs text-gray-500 mt-1.5 ml-1">
+                <p className="ml-1 mt-1.5 text-xs text-[var(--chat-muted)]">
                   {messages.filter(m =>
                     !m.isThinkingPlaceholder && !m.isDotPlaceholder &&
                     (m.text?.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
@@ -12740,12 +14419,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                          className="chat-message-bubble flex w-full max-w-[90%] flex-col gap-2 rounded-xl border border-[#1e1e21] bg-[#0e0e10] p-2 text-white md:max-w-[75%]"
                                      >
                                          <div className="rounded-lg border border-blue-500/70 bg-[#0a0a0b]/40 px-2.5 py-2 transition-colors focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/25">
-                                           <textarea
+                                         <textarea
                                              ref={editInputRef}
                                              value={editText}
                                              onChange={(e) => setEditText(e.target.value)}
                                              className="min-h-[2.75rem] w-full resize-y bg-transparent text-[15px] leading-6 text-white outline-none scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent"
-                                             rows={1}
+                                               rows={1}
                                            />
                                          </div>
                                          <div className="flex items-start gap-1.5 text-xs leading-4 text-zinc-500">
@@ -12758,20 +14437,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            <button
                                              type="button"
                                              onClick={handleCancelEdit}
-                                             className="rounded-md border border-[#2a2a2d] bg-[#141416] px-3 py-1 text-[13px] text-zinc-200 transition-colors hover:bg-[#1a1a1d]"
+                                             className="rounded-md border border-[var(--chat-border)] bg-[var(--chat-control)] px-3 py-1 text-[13px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
                                              aria-label="Cancel edit"
                                            >
-                                             Cancel
-                                           </button>
+                                                   Cancel
+                                               </button>
                                            <button
                                              type="button"
                                              onClick={() => void handleSaveEdit()}
-                                             className="rounded-md bg-zinc-100 px-3 py-1 text-[13px] font-medium text-[#111113] transition-colors hover:bg-white"
+                                             className="rounded-md bg-[var(--chat-accent)] px-3 py-1 text-[13px] font-medium text-[var(--chat-on-accent)] transition-opacity hover:opacity-90"
                                              aria-label="Save changes"
                                            >
-                                             Save
-                                           </button>
-                                         </div>
+                                                   Save
+                                               </button>
+                                           </div>
                                        </div>
                                   ) : (
                                      <div data-message-id={message.id} className="chat-message-bubble group flex max-w-[90%] min-w-0 flex-col items-end md:max-w-[75%]">
@@ -12795,8 +14474,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                  if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
                                                  return url;
                                                });
-                                               setIsFullScreenImageOpen(true);
-                                               setViewerShowsDownloadButton(true);
+                                                      setIsFullScreenImageOpen(true);
+                                                      setViewerShowsDownloadButton(true);
                                              };
 
                                              return (
@@ -12826,34 +14505,34 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                          </button>
                                                        );
                                                      })}
-                                                   </div>
-                                                 )}
+                                             </div>
+                                           )}
 
-                                                 {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content) && (
-                                                   <div
+                                           {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content) && (
+                                            <div
                                                      className="mb-1.5 ml-auto mr-0 flex max-w-[250px] cursor-pointer items-center gap-2 rounded-lg border border-[#1e1e21]/50 bg-[#2a2a2d]/50 p-2 transition-colors hover:bg-[#2a2a2d]"
-                                                     onClick={() => {
-                                                       if (message.userFileAttachment) {
-                                                         if (message.userFileAttachment.file) {
-                                                           const fileToShow: AttachedFile = {
-                                                             id: `user-attached-${message.userFileAttachment.name}-${message.id}`,
-                                                             name: message.userFileAttachment.name,
-                                                             type: message.userFileAttachment.type,
-                                                             fileObject: message.userFileAttachment.file
-                                                           };
-                                                           handleShowFileInContextPanel(fileToShow);
-                                                         } else {
-                                                           handleShowFileInContextPanel(message.userFileAttachment as any);
-                                                         }
-                                                       }
-                                                     }}
-                                                   >
+                                              onClick={() => {
+                                                if (message.userFileAttachment) {
+                                                  if (message.userFileAttachment.file) {
+                                                    const fileToShow: AttachedFile = {
+                                                      id: `user-attached-${message.userFileAttachment.name}-${message.id}`,
+                                                      name: message.userFileAttachment.name,
+                                                      type: message.userFileAttachment.type,
+                                                      fileObject: message.userFileAttachment.file
+                                                    };
+                                                    handleShowFileInContextPanel(fileToShow);
+                                                  } else {
+                                                    handleShowFileInContextPanel(message.userFileAttachment as any);
+                                                  }
+                                                }
+                                              }}
+                                            >
                                                      <FileText size={18} className="flex-shrink-0 text-blue-400" />
                                                      <span className="truncate text-sm text-gray-300" title={message.userFileAttachment.name}>
-                                                       {message.userFileAttachment.name}
-                                                     </span>
-                                                   </div>
-                                                 )}
+                                                {message.userFileAttachment.name}
+                                              </span>
+                                            </div>
+                                           )}
 
                                                  {message.text ? (
                                                    <div className="overflow-hidden rounded-2xl rounded-br-none border border-[#1e1e21] bg-[#0e0e10] p-3 text-white">
@@ -12913,13 +14592,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           <div className="flex items-center justify-end gap-2 mt-3">
                                             <button
                                               onClick={handleCancelAiEdit}
-                                              className="text-sm text-gray-400 hover:text-gray-200 px-3 py-1.5 transition-colors"
+                                              className="px-3 py-1.5 text-sm text-[var(--chat-muted)] transition-colors hover:text-[var(--chat-text)]"
                                             >
                                               Cancel
                                             </button>
                                             <button
                                               onClick={handleSaveAiEdit}
-                                              className="rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-semibold text-[#111113] transition-colors hover:bg-white"
+                                              className="rounded-md bg-[var(--chat-accent)] px-4 py-1.5 text-sm font-semibold text-[var(--chat-on-accent)] transition-opacity hover:opacity-90"
                                             >
                                               Save
                                             </button>
@@ -13011,7 +14690,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           <div className="w-full pl-[1.125rem] mb-4">
                                               <div
                                                   onClick={() => setShowThinkingId(message.id)}
-                                                  className="flex items-center justify-between w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-4 py-2.5 cursor-pointer hover:border-white/20 hover:bg-black/20 transition-colors"
+                                                  className="flex items-center justify-between w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-4 py-2.5 cursor-pointer hover:border-white/20 hover:bg-[var(--chat-hover)] transition-colors"
                                               >
                                                   <div className="flex items-center gap-2">
                                                       <Lightbulb size={16} className="text-gray-500" />
@@ -13369,7 +15048,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               >
                 <ChevronDown size={20} />
               </button>
-            </div>
+                </div>
           )}
           {/* Only mount the primary composer here when NOT inside a project workspace — the
               workspace renders its own instance and they share refs, so only one may exist. */}
@@ -13403,10 +15082,906 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {modelTooltipInfo && createPortal(<ModelInfoTooltip />, document.body)}
         {feedbackPopupInfo && createPortal(<FeedbackPopup />, document.body)}
         {dislikePopupInfo && createPortal(<DislikeFeedbackPopup />, document.body)}
-        {deleteConfirmationModal.isOpen && createPortal(<DeleteConfirmationModalComponent />, document.body)}
-        {isCreateProjectModalOpen && createPortal(renderCreateProjectModal(), document.body)}
-        {projectSettings && createPortal(renderProjectSettingsModal(), document.body)}
-        {isSharePreviewOpen &&
+        {isDeleteModalMounted && createPortal(<DeleteConfirmationModalComponent />, document.body)}
+        {isCreateProjectModalMounted && createPortal(renderCreateProjectModal(), document.body)}
+        {isProjectSettingsMounted &&
+          projectSettings &&
+          createPortal(renderProjectSettingsModal(), document.body)}
+        {isProjectFilePreviewMounted &&
+          projectFilePreview &&
+          createPortal(
+            <div
+              className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+              data-chat-theme-preference={chatTheme}
+              data-project-file-preview=""
+              style={{
+                backgroundColor: isProjectFilePreviewShown
+                  ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
+                  : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
+                transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
+                ...chatThemePreviewStyle,
+              }}
+              onClick={closeProjectFilePreview}
+            >
+              <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="project-file-preview-title"
+                className="flex h-[min(40rem,80vh)] w-full max-w-[48rem] flex-col overflow-hidden rounded-2xl border"
+                style={{
+                  backgroundColor: 'var(--chat-elevated)',
+                  borderColor: 'var(--chat-border)',
+                  color: 'var(--chat-text)',
+                  boxShadow:
+                    '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
+                  ...chatModalCardMotionStyle(
+                    'right',
+                    isProjectFilePreviewShown,
+                    isProjectFilePreviewOpen,
+                  ),
+                }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex flex-shrink-0 items-center gap-2 border-b px-4 py-3"
+                  style={{ borderColor: 'var(--chat-border)' }}
+                >
+                  <FileText
+                    size={14}
+                    className="flex-shrink-0 text-[var(--chat-muted)]"
+                    aria-hidden="true"
+                  />
+                  <h2
+                    id="project-file-preview-title"
+                    className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight text-[var(--chat-text)]"
+                  >
+                    {projectFilePreview.name}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => void copyProjectFilePreview()}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                    title={projectFilePreviewCopied ? 'Copied' : 'Copy'}
+                  >
+                    {projectFilePreviewCopied ? (
+                      <Check size={14} aria-hidden="true" />
+                    ) : (
+                      <Copy size={14} aria-hidden="true" />
+                    )}
+                    {projectFilePreviewCopied ? 'Copied' : 'Copy'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeProjectFilePreview}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                    aria-label="Close file preview"
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                  <pre className="whitespace-pre-wrap break-words font-mono text-[13.5px] leading-relaxed text-[var(--chat-text)]">
+                    {projectFilePreview.content}
+                  </pre>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
+        {isProjectScheduledPreviewMounted &&
+          projectScheduledPreview &&
+          createPortal(
+            <div
+              className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+              data-chat-theme-preference={chatTheme}
+              data-project-scheduled-preview=""
+              style={{
+                backgroundColor: isProjectScheduledPreviewShown
+                  ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
+                  : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
+                transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
+                ...chatThemePreviewStyle,
+              }}
+              onClick={closeProjectScheduledPreview}
+            >
+              <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="project-scheduled-preview-title"
+                className="flex w-full max-w-[28rem] flex-col overflow-hidden rounded-2xl border"
+                style={{
+                  backgroundColor: 'var(--chat-elevated)',
+                  borderColor: 'var(--chat-border)',
+                  color: 'var(--chat-text)',
+                  boxShadow:
+                    '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
+                  ...chatModalCardMotionStyle(
+                    'right',
+                    isProjectScheduledPreviewShown,
+                    isProjectScheduledPreviewOpen,
+                  ),
+                }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div
+                  className="flex flex-shrink-0 items-center gap-2 border-b px-4 py-3"
+                  style={{ borderColor: 'var(--chat-border)' }}
+                >
+                  <Clock
+                    size={14}
+                    className="flex-shrink-0 text-[var(--chat-muted)]"
+                    aria-hidden="true"
+                  />
+                  <h2
+                    id="project-scheduled-preview-title"
+                    className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight text-[var(--chat-text)]"
+                  >
+                    Scheduled task
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={closeProjectScheduledPreview}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                    aria-label="Close scheduled task"
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-4 px-4 py-4">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                      Title
+                    </p>
+                    <p className="mt-1 text-[14px] font-medium text-[var(--chat-text)]">
+                      {projectScheduledPreview.title}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                      When
+                    </p>
+                    <p className="mt-1 text-[13px] text-[var(--chat-text)]">
+                      {projectScheduledPreview.cadence}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                      Mark
+                    </p>
+                    <p className="mt-1 font-mono text-[12px] uppercase tracking-[0.12em] text-[var(--chat-muted)]">
+                      {projectScheduledPreview.mark}
+                    </p>
+                  </div>
+                  <p className="text-[11.5px] leading-relaxed text-[var(--chat-muted)]">
+                    Preview only — edit and run land when the scheduler is live.
+                  </p>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
+        {isProjectScheduledCreateMounted &&
+          createPortal(
+            <div
+              className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+              data-chat-theme-preference={chatTheme}
+              data-project-scheduled-create=""
+              style={{
+                backgroundColor: isProjectScheduledCreateShown
+                  ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
+                  : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
+                transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
+                ...chatThemePreviewStyle,
+              }}
+              onClick={closeProjectScheduledCreate}
+            >
+              <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="project-scheduled-create-title"
+                className="flex w-full max-w-[28rem] flex-col overflow-visible rounded-2xl border will-change-transform"
+                style={{
+                  backgroundColor: 'var(--chat-elevated)',
+                  borderColor: 'var(--chat-border)',
+                  color: 'var(--chat-text)',
+                  boxShadow:
+                    '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
+                  ...chatModalCardMotionStyle(
+                    'right',
+                    isProjectScheduledCreateShown,
+                    isProjectScheduledCreateOpen,
+                  ),
+                }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div
+                  className="flex flex-shrink-0 items-center gap-2 overflow-hidden rounded-t-2xl border-b px-4 py-3"
+                  style={{ borderColor: 'var(--chat-border)' }}
+                >
+                  <Clock
+                    size={14}
+                    className="flex-shrink-0 text-[var(--chat-muted)]"
+                    aria-hidden="true"
+                  />
+                  <h2
+                    id="project-scheduled-create-title"
+                    className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight text-[var(--chat-text)]"
+                  >
+                    Add scheduled task
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={closeProjectScheduledCreate}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                    aria-label="Close add scheduled task"
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-3 px-4 py-4">
+                  <label className="block">
+                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                      Title
+                    </span>
+                    <input
+                      type="text"
+                      value={projectScheduledCreateTitle}
+                      onChange={(event) =>
+                        setProjectScheduledCreateTitle(event.target.value)
+                      }
+                      placeholder="Weekly condition check-in"
+                      autoFocus
+                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[13px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]"
+                      style={{
+                        borderColor: 'var(--chat-border)',
+                        backgroundColor: 'var(--chat-surface)',
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          submitProjectScheduledCreate();
+                        }
+                      }}
+                    />
+                  </label>
+                  <div className="block">
+                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                      When
+                    </span>
+                    <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setIsProjectScheduledWhenOpen((open) => {
+                          if (open) {
+                            resetProjectScheduleDatePanel();
+                            resetProjectScheduleTimePanel();
+                          }
+                          return !open;
+                        })
+                      }
+                      aria-expanded={isProjectScheduledWhenOpen}
+                      className="relative z-20 flex h-10 w-full items-center justify-between gap-2 rounded-lg border px-3 text-left text-[13px] text-[var(--chat-text)] outline-none transition-colors hover:bg-[var(--chat-hover)]"
+                      style={{
+                        borderColor: 'var(--chat-border)',
+                        backgroundColor: 'var(--chat-surface)',
+                      }}
+                    >
+                      <span className="min-w-0 truncate">
+                        {formatProjectScheduleLabel(projectScheduledCreateSchedule)}
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`flex-shrink-0 text-[var(--chat-muted)] transition-transform ${
+                          isProjectScheduledWhenOpen ? 'rotate-180' : ''
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    {isProjectScheduledWhenMounted && (
+                      <div
+                        className={`absolute left-0 right-0 top-full z-10 pt-1 ${
+                          isProjectScheduledWhenClipOpen ||
+                          isProjectScheduleDateMounted ||
+                          isProjectScheduleTimeMounted
+                            ? 'overflow-visible'
+                            : 'overflow-hidden'
+                        }`}
+                        style={{
+                          // Fixed height only while sliding; unlock after open so the
+                          // nested calendar/time pickers (absolute) are not clipped.
+                          height:
+                            isProjectScheduledWhenClipOpen ||
+                            isProjectScheduleDateMounted ||
+                            isProjectScheduleTimeMounted
+                              ? 'auto'
+                              : projectScheduledWhenPanelHeight > 0
+                                ? projectScheduledWhenPanelHeight + 4
+                                : 0,
+                          pointerEvents: isProjectScheduledWhenShown
+                            ? 'auto'
+                            : 'none',
+                        }}
+                      >
+                      <div
+                        ref={projectScheduledWhenContentRef}
+                        className="rounded-lg border p-3 will-change-transform"
+                        style={{
+                          borderColor: 'var(--chat-border)',
+                          backgroundColor: 'var(--chat-surface)',
+                          // Same transform duration open ↔ close (no opacity — it made close feel faster).
+                          transform: isProjectScheduledWhenShown
+                            ? 'translateY(0)'
+                            : 'translateY(calc(-100% - 4px))',
+                          transition: `transform ${SCHEDULE_DATE_PICKER_MS}ms ${SCHEDULE_DATE_EASE}`,
+                        }}
+                      >
+                        <div
+                          style={{
+                            opacity: isProjectScheduledWhenTextShown ? 1 : 0,
+                            transform: isProjectScheduledWhenTextShown
+                              ? 'translateY(0)'
+                              : 'translateY(10px)',
+                            // Enter: ease-in. Exit: ease-out — same motion, reversed.
+                            transition: isProjectScheduledWhenTextShown
+                              ? `opacity ${SCHEDULE_DATE_TEXT_MS}ms ease-in, transform ${SCHEDULE_DATE_TEXT_MS}ms ease-in`
+                              : `opacity ${SCHEDULE_DATE_TEXT_MS}ms ease-out, transform ${SCHEDULE_DATE_TEXT_MS}ms ease-out`,
+                          }}
+                        >
+                        <div className="flex flex-wrap gap-1">
+                          {SCHEDULE_KIND_OPTIONS.map((option) => {
+                            const active =
+                              projectScheduledCreateSchedule.kind === option.id;
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                onClick={() =>
+                                  setProjectScheduledCreateSchedule((prev) => ({
+                                    ...prev,
+                                    kind: option.id,
+                                  }))
+                                }
+                                className="rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors"
+                                style={{
+                                  backgroundColor: active
+                                    ? 'var(--chat-control)'
+                                    : 'transparent',
+                                  color: active
+                                    ? 'var(--chat-text)'
+                                    : 'var(--chat-muted)',
+                                  border: active
+                                    ? '1px solid var(--chat-border)'
+                                    : '1px solid transparent',
+                                }}
+                              >
+                                {option.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Fixed height so Once/Daily/Weekly/Monthly swaps do not resize the panel */}
+                        <div className="mt-3 h-[4.75rem]">
+                          {projectScheduledCreateSchedule.kind === 'once' && (
+                            <div className="block">
+                              <span className="mb-1.5 block text-[11px] text-[var(--chat-muted)]">
+                                Date
+                              </span>
+                              {/* Anchor: calendar slides out from under the date field.
+                                  Raise whole stack above Time while the calendar is open. */}
+                              <div
+                                className={`relative ${
+                                  isProjectScheduleDateMounted ? 'z-30' : 'z-10'
+                                }`}
+                              >
+                              <div
+                                className="relative z-20 flex h-9 w-full items-center gap-1 rounded-md border pl-2.5 pr-1"
+                                style={{
+                                  borderColor: 'var(--chat-border)',
+                                  backgroundColor: 'var(--chat-elevated)',
+                                }}
+                              >
+                                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--chat-text)]">
+                                  {formatScheduleDateDisplay(
+                                    projectScheduledCreateSchedule.date,
+                                  )}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={toggleProjectScheduleDatePicker}
+                                  aria-label={
+                                    isProjectScheduleDateOpen
+                                      ? 'Close calendar'
+                                      : 'Open calendar'
+                                  }
+                                  aria-expanded={isProjectScheduleDateOpen}
+                                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                                >
+                                  <Calendar size={14} aria-hidden="true" />
+                                </button>
+                              </div>
+                              {isProjectScheduleDateMounted && (
+                                <div
+                                  className="absolute left-0 right-0 top-full z-30 overflow-hidden pt-1"
+                                  style={{
+                                    height:
+                                      projectScheduleDatePanelHeight > 0
+                                        ? projectScheduleDatePanelHeight + 4
+                                        : 0,
+                                    pointerEvents: isProjectScheduleDateShown
+                                      ? 'auto'
+                                      : 'none',
+                                  }}
+                                  role="dialog"
+                                  aria-label="Choose date"
+                                >
+                                  <div
+                                    ref={projectScheduleDateContentRef}
+                                    className="rounded-md border shadow-md will-change-transform"
+                                    style={{
+                                      borderColor: 'var(--chat-border)',
+                                      backgroundColor: 'var(--chat-surface)',
+                                      // Slides from under the date field (up = hidden beneath it).
+                                      transform: isProjectScheduleDateShown
+                                        ? 'translateY(0)'
+                                        : 'translateY(calc(-100% - 4px))',
+                                      transition: `transform ${SCHEDULE_DATE_PICKER_MS}ms ${SCHEDULE_DATE_EASE}`,
+                                    }}
+                                  >
+                                    {/* Panel first; text fades slowly (ease-in) so it does not pop. */}
+                                    <div
+                                      style={{
+                                        opacity: isProjectScheduleDateTextShown
+                                          ? 1
+                                          : 0,
+                                        transform: isProjectScheduleDateTextShown
+                                          ? 'translateY(0)'
+                                          : 'translateY(10px)',
+                                        transition: `opacity ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}, transform ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}`,
+                                      }}
+                                    >
+                                  <div className="flex items-center justify-between px-2.5 pb-1 pt-2.5">
+                                    <span className="text-[12px] font-semibold text-[var(--chat-text)]">
+                                      {projectScheduleCalendarMonth.toLocaleDateString(
+                                        undefined,
+                                        { month: 'long', year: 'numeric' },
+                                      )}
+                                    </span>
+                                    <div className="flex items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setProjectScheduleCalendarMonth(
+                                            (month) =>
+                                              new Date(
+                                                month.getFullYear(),
+                                                month.getMonth() - 1,
+                                                1,
+                                              ),
+                                          )
+                                        }
+                                        className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                                        aria-label="Previous month"
+                                      >
+                                        <ChevronLeft size={14} aria-hidden="true" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setProjectScheduleCalendarMonth(
+                                            (month) =>
+                                              new Date(
+                                                month.getFullYear(),
+                                                month.getMonth() + 1,
+                                                1,
+                                              ),
+                                          )
+                                        }
+                                        className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                                        aria-label="Next month"
+                                      >
+                                        <ChevronRight size={14} aria-hidden="true" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-7 gap-0.5 px-2 pb-1">
+                                    {SCHEDULE_CAL_WEEKDAYS.map((day) => (
+                                      <span
+                                        key={day}
+                                        className="py-1 text-center text-[10px] font-medium text-[var(--chat-muted)]"
+                                      >
+                                        {day}
+                                      </span>
+                                    ))}
+                                    {getScheduleMonthGrid(
+                                      projectScheduleCalendarMonth,
+                                    ).map((cell) => {
+                                      const selected =
+                                        cell.ymd ===
+                                        projectScheduledCreateSchedule.date;
+                                      return (
+                                        <button
+                                          key={cell.ymd}
+                                          type="button"
+                                          onClick={() => {
+                                            setProjectScheduledCreateSchedule(
+                                              (prev) => ({
+                                                ...prev,
+                                                date: cell.ymd,
+                                              }),
+                                            );
+                                            setIsProjectScheduleDateOpen(false);
+                                          }}
+                                          className="h-7 rounded-md text-[11px] font-medium transition-colors"
+                                          style={{
+                                            backgroundColor: selected
+                                              ? 'var(--chat-control)'
+                                              : 'transparent',
+                                            color: selected
+                                              ? 'var(--chat-text)'
+                                              : cell.inMonth
+                                                ? 'var(--chat-text)'
+                                                : 'var(--chat-muted)',
+                                            opacity: cell.inMonth ? 1 : 0.45,
+                                          }}
+                                          aria-pressed={selected}
+                                        >
+                                          {cell.day}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div
+                                    className="flex items-center justify-between border-t px-2.5 py-1.5"
+                                    style={{ borderColor: 'var(--chat-border)' }}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setProjectScheduledCreateSchedule(
+                                          (prev) => ({
+                                            ...prev,
+                                            date: '',
+                                          }),
+                                        );
+                                        setIsProjectScheduleDateOpen(false);
+                                      }}
+                                      className="rounded-md px-1.5 py-1 text-[11px] text-[var(--chat-muted)] transition-colors hover:text-[var(--chat-text)]"
+                                    >
+                                      Clear
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const today = formatScheduleDateYmd(
+                                          new Date(),
+                                        );
+                                        setProjectScheduledCreateSchedule(
+                                          (prev) => ({
+                                            ...prev,
+                                            date: today,
+                                          }),
+                                        );
+                                        setProjectScheduleCalendarMonth(
+                                          monthStartFromYmd(today),
+                                        );
+                                        setIsProjectScheduleDateOpen(false);
+                                      }}
+                                      className="rounded-md px-1.5 py-1 text-[11px] text-[var(--chat-muted)] transition-colors hover:text-[var(--chat-text)]"
+                                    >
+                                      Today
+                                    </button>
+                                  </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              </div>
+                            </div>
+                          )}
+
+                          {projectScheduledCreateSchedule.kind === 'daily' && (
+                            <p className="pt-6 text-[12px] text-[var(--chat-muted)]">
+                              Runs every day at the time below.
+                            </p>
+                          )}
+
+                          {projectScheduledCreateSchedule.kind === 'weekly' && (
+                            <div>
+                              <span className="mb-1.5 block text-[11px] text-[var(--chat-muted)]">
+                                Day
+                              </span>
+                              <div className="grid grid-cols-7 gap-1">
+                                {SCHEDULE_WEEKDAYS.map((day, index) => {
+                                  const active =
+                                    projectScheduledCreateSchedule.weekday === index;
+                                  return (
+                                    <button
+                                      key={day}
+                                      type="button"
+                                      onClick={() =>
+                                        setProjectScheduledCreateSchedule((prev) => ({
+                                          ...prev,
+                                          weekday: index,
+                                        }))
+                                      }
+                                      className="h-8 rounded-md text-[11px] font-medium transition-colors"
+                                      style={{
+                                        backgroundColor: active
+                                          ? 'var(--chat-control)'
+                                          : 'transparent',
+                                        color: active
+                                          ? 'var(--chat-text)'
+                                          : 'var(--chat-muted)',
+                                        border: '1px solid var(--chat-border)',
+                                      }}
+                                      aria-pressed={active}
+                                    >
+                                      {day.slice(0, 1)}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {projectScheduledCreateSchedule.kind === 'monthly' && (
+                            <p className="pt-6 text-[12px] text-[var(--chat-muted)]">
+                              Runs on the 1st of each month.
+                            </p>
+                          )}
+                        </div>
+
+                        <div
+                          className={`relative mt-3 block ${
+                            isProjectScheduleDateMounted
+                              ? 'z-0'
+                              : isProjectScheduleTimeMounted
+                                ? 'z-30'
+                                : 'z-10'
+                          }`}
+                        >
+                          <span className="mb-1.5 block text-[11px] text-[var(--chat-muted)]">
+                            Time
+                          </span>
+                          <div
+                            className="relative flex h-9 w-full items-center gap-1 rounded-md border pl-2.5 pr-1"
+                            style={{
+                              borderColor: 'var(--chat-border)',
+                              backgroundColor: 'var(--chat-elevated)',
+                            }}
+                          >
+                            <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--chat-text)]">
+                              {formatScheduleTimeDisplay(
+                                projectScheduledCreateSchedule.time,
+                              )}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={toggleProjectScheduleTimePicker}
+                              aria-label={
+                                isProjectScheduleTimeOpen
+                                  ? 'Close time picker'
+                                  : 'Open time picker'
+                              }
+                              aria-expanded={isProjectScheduleTimeOpen}
+                              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                            >
+                              <Clock size={14} aria-hidden="true" />
+                            </button>
+                          </div>
+                          {isProjectScheduleTimeMounted && (
+                            <div
+                              className="absolute left-0 right-0 top-full z-30 overflow-hidden pt-1"
+                              style={{
+                                height:
+                                  projectScheduleTimePanelHeight > 0
+                                    ? projectScheduleTimePanelHeight + 4
+                                    : 0,
+                                pointerEvents: isProjectScheduleTimeShown
+                                  ? 'auto'
+                                  : 'none',
+                              }}
+                              role="dialog"
+                              aria-label="Choose time"
+                            >
+                              <div
+                                ref={projectScheduleTimeContentRef}
+                                className="rounded-md border shadow-md will-change-transform"
+                                style={{
+                                  borderColor: 'var(--chat-border)',
+                                  backgroundColor: 'var(--chat-surface)',
+                                  transform: isProjectScheduleTimeShown
+                                    ? 'translateY(0)'
+                                    : 'translateY(calc(-100% - 4px))',
+                                  transition: `transform ${SCHEDULE_DATE_PICKER_MS}ms ${SCHEDULE_DATE_EASE}`,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    opacity: isProjectScheduleTimeTextShown
+                                      ? 1
+                                      : 0,
+                                    transform: isProjectScheduleTimeTextShown
+                                      ? 'translateY(0)'
+                                      : 'translateY(10px)',
+                                    transition: `opacity ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}, transform ${SCHEDULE_DATE_TEXT_MS}ms ${SCHEDULE_DATE_TEXT_EASE}`,
+                                  }}
+                                >
+                                  {(() => {
+                                    const selected = parseScheduleTime(
+                                      projectScheduledCreateSchedule.time,
+                                    );
+                                    return (
+                                      <div className="grid grid-cols-3 gap-1 p-2">
+                                        <div>
+                                          <span className="mb-1 block px-1 text-[10px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                                            Hour
+                                          </span>
+                                          <div
+                                            className="max-h-36 overflow-y-auto rounded-md border p-0.5"
+                                            style={{
+                                              borderColor: 'var(--chat-border)',
+                                            }}
+                                          >
+                                            {SCHEDULE_HOURS_12.map((hour) => {
+                                              const active =
+                                                selected.hour12 === hour;
+                                              return (
+                                                <button
+                                                  key={hour}
+                                                  type="button"
+                                                  onClick={() =>
+                                                    setProjectScheduleTimePart(
+                                                      'hour12',
+                                                      hour,
+                                                    )
+                                                  }
+                                                  className="flex h-7 w-full items-center justify-center rounded text-[12px] font-medium transition-colors"
+                                                  style={{
+                                                    backgroundColor: active
+                                                      ? 'var(--chat-control)'
+                                                      : 'transparent',
+                                                    color: active
+                                                      ? 'var(--chat-text)'
+                                                      : 'var(--chat-muted)',
+                                                  }}
+                                                  aria-pressed={active}
+                                                >
+                                                  {hour}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <span className="mb-1 block px-1 text-[10px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                                            Min
+                                          </span>
+                                          <div
+                                            className="max-h-36 overflow-y-auto rounded-md border p-0.5"
+                                            style={{
+                                              borderColor: 'var(--chat-border)',
+                                            }}
+                                          >
+                                            {SCHEDULE_MINUTES.map((minute) => {
+                                              const active =
+                                                selected.minute === minute;
+                                              return (
+                                                <button
+                                                  key={minute}
+                                                  type="button"
+                                                  onClick={() =>
+                                                    setProjectScheduleTimePart(
+                                                      'minute',
+                                                      minute,
+                                                    )
+                                                  }
+                                                  className="flex h-7 w-full items-center justify-center rounded text-[12px] font-medium transition-colors"
+                                                  style={{
+                                                    backgroundColor: active
+                                                      ? 'var(--chat-control)'
+                                                      : 'transparent',
+                                                    color: active
+                                                      ? 'var(--chat-text)'
+                                                      : 'var(--chat-muted)',
+                                                  }}
+                                                  aria-pressed={active}
+                                                >
+                                                  {minute}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <span className="mb-1 block px-1 text-[10px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                                            AM/PM
+                                          </span>
+                                          <div
+                                            className="rounded-md border p-0.5"
+                                            style={{
+                                              borderColor: 'var(--chat-border)',
+                                            }}
+                                          >
+                                            {SCHEDULE_MERIDIEMS.map((meridiem) => {
+                                              const active =
+                                                selected.meridiem === meridiem;
+                                              return (
+                                                <button
+                                                  key={meridiem}
+                                                  type="button"
+                                                  onClick={() =>
+                                                    setProjectScheduleTimePart(
+                                                      'meridiem',
+                                                      meridiem,
+                                                    )
+                                                  }
+                                                  className="flex h-7 w-full items-center justify-center rounded text-[12px] font-medium transition-colors"
+                                                  style={{
+                                                    backgroundColor: active
+                                                      ? 'var(--chat-control)'
+                                                      : 'transparent',
+                                                    color: active
+                                                      ? 'var(--chat-text)'
+                                                      : 'var(--chat-muted)',
+                                                  }}
+                                                  aria-pressed={active}
+                                                >
+                                                  {meridiem}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        </div>
+                      </div>
+                      </div>
+                    )}
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={closeProjectScheduledCreate}
+                      className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors"
+                      style={{
+                        backgroundColor: 'var(--chat-control)',
+                        color: 'var(--chat-text)',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={submitProjectScheduledCreate}
+                      disabled={!projectScheduledCreateTitle.trim()}
+                      className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                      style={{
+                        backgroundColor: 'var(--chat-text)',
+                        color: 'var(--chat-canvas)',
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
+        {isSharePreviewMounted &&
           messages.length > 0 &&
           createPortal(
             <ChatShareModal
@@ -13421,8 +15996,152 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               }))}
               themeClassName={`chat-themed chat-theme-${resolvedChatTheme}`}
               themeStyle={chatThemePreviewStyle}
+              isOpen={isSharePreviewOpen}
+              isShown={isSharePreviewShown}
               onClose={() => setIsSharePreviewOpen(false)}
             />,
+            document.body,
+          )}
+        {isChatFilesModalMounted &&
+          createPortal(
+            <div
+              className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+              data-chat-theme-preference={chatTheme}
+              data-chat-files-preview=""
+              style={{
+                backgroundColor: isChatFilesModalShown
+                  ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
+                  : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
+                transition: `background-color ${SCHEDULE_CREATE_MODAL_MS}ms ${SCHEDULE_DATE_EASE}`,
+                ...chatThemePreviewStyle,
+              }}
+              onClick={closeChatFilesModal}
+            >
+              <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="chat-files-dialog-title"
+                className="flex h-[min(40rem,80vh)] w-full max-w-[48rem] flex-col overflow-hidden rounded-2xl border"
+                style={{
+                  backgroundColor: 'var(--chat-elevated)',
+                  borderColor: 'var(--chat-border)',
+                  color: 'var(--chat-text)',
+                  boxShadow:
+                    '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
+                  // Same shell as project file preview; origin top-right (⋯ control).
+                  ...chatModalCardMotionStyle(
+                    'top-right',
+                    isChatFilesModalShown,
+                    isChatFilesModalOpen,
+                  ),
+                }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div
+                  className="flex flex-shrink-0 items-center gap-2 border-b px-4 py-3"
+                  style={{ borderColor: 'var(--chat-border)' }}
+                >
+                  {chatFilesSelected ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChatFilesSelectedKey(null);
+                        setChatFilesCopied(false);
+                      }}
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                      aria-label="Back to files list"
+                      title="Back"
+                    >
+                      <ChevronLeft size={16} aria-hidden="true" />
+                    </button>
+                  ) : (
+                    <FileText
+                      size={14}
+                      className="flex-shrink-0 text-[var(--chat-muted)]"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <h2
+                    id="chat-files-dialog-title"
+                    className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight text-[var(--chat-text)]"
+                  >
+                    {chatFilesSelected ? chatFilesSelected.name : 'Files in chat'}
+                  </h2>
+                  {chatFilesSelected && (
+                    <button
+                      type="button"
+                      onClick={() => void copyChatFilesPreview()}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                      title={chatFilesCopied ? 'Copied' : 'Copy'}
+                    >
+                      {chatFilesCopied ? (
+                        <Check size={14} aria-hidden="true" />
+                      ) : (
+                        <Copy size={14} aria-hidden="true" />
+                      )}
+                      {chatFilesCopied ? 'Copied' : 'Copy'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={closeChatFilesModal}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                    aria-label="Close files in chat"
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                  {chatFilesSelected ? (
+                    <pre className="whitespace-pre-wrap break-words font-mono text-[13.5px] leading-relaxed text-[var(--chat-text)]">
+                      {chatFilesSelected.content}
+                    </pre>
+                  ) : conversationFileItems.length === 0 ? (
+                    <p className="py-10 text-center text-[13px] leading-relaxed text-[var(--chat-muted)]">
+                      No files attached in this conversation yet.
+                    </p>
+                  ) : (
+                    <ul className="flex flex-col gap-1" role="list">
+                      {conversationFileItems.map((item) => (
+                        <li key={item.key}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setChatFilesSelectedKey(item.key);
+                              setChatFilesCopied(false);
+                            }}
+                            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13px] transition-colors hover:bg-[var(--chat-hover)]"
+                          >
+                            {item.kind === 'image' ? (
+                              <FileImage
+                                size={15}
+                                className="flex-shrink-0 text-[var(--chat-muted)]"
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              <FileText
+                                size={15}
+                                className="flex-shrink-0 text-[var(--chat-muted)]"
+                                aria-hidden="true"
+                              />
+                            )}
+                            <span className="min-w-0 flex-1 truncate text-[var(--chat-text)]">
+                              {item.name}
+                            </span>
+                            <ChevronRight
+                              size={14}
+                              className="flex-shrink-0 text-[var(--chat-muted)]"
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>,
             document.body,
           )}
         {historyDragGhostTitle != null &&
@@ -13451,7 +16170,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             </div>,
             document.body,
           )}
-        {historyRowMenu && (() => {
+        {isHistoryRowMenuMounted && historyRowMenu && (() => {
           const menuConvo = conversationHistory.find((item) => item.id === historyRowMenu.conversationId);
           if (!menuConvo) return null;
           const isPinned = Boolean(menuConvo.isPinned);
@@ -13462,9 +16181,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]';
           const shortcutClass = 'ml-auto text-[11px] text-zinc-500';
           return createPortal(
+            <>
+            <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
             <div
+              key={isHistoryRowMenuShown ? 'history-row-menu-in' : 'history-row-menu-out'}
               data-history-row-menu=""
               role="menu"
+              aria-hidden={!isHistoryRowMenuOpen}
               className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[188px] rounded-xl border p-1`}
               style={{
                 top: historyRowMenu.top,
@@ -13472,6 +16195,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 backgroundColor: 'var(--chat-elevated)',
                 borderColor: 'var(--chat-border)',
                 color: 'var(--chat-text)',
+                pointerEvents: isHistoryRowMenuShown ? 'auto' : 'none',
+                ...chatModalCardMotionStyle(
+                  'top-right',
+                  isHistoryRowMenuShown,
+                  isHistoryRowMenuOpen,
+                ),
                 ...chatThemePreviewStyle,
               }}
               onClick={(event) => event.stopPropagation()}
@@ -13488,7 +16217,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <Pin size={14} className={`flex-shrink-0 ${isPinned ? 'fill-current text-zinc-100' : 'text-zinc-500'}`} />
                 <span>{isPinned ? 'Unpin' : 'Pin'}</span>
                 <span className={shortcutClass}>P</span>
-              </button>
+                </button>
               <button
                 type="button"
                 role="menuitem"
@@ -13548,7 +16277,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       ))
                     )}
                     <div className="my-1 border-t border-[#1e1e21]" />
-                    <button
+                      <button
                       type="button"
                       role="menuitem"
                       className={menuItemClass}
@@ -13559,7 +16288,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     >
                       <Plus size={13} className="flex-shrink-0 text-zinc-500" />
                       <span>New project</span>
-                    </button>
+                      </button>
                     {menuConvo.projectId && (
                       <button
                         type="button"
@@ -13572,9 +16301,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       >
                         <span>Remove from project</span>
                       </button>
-                    )}
-                  </div>
-                )}
+              )}
+            </div>
+          )}
               </div>
 
               <div className="my-1 border-t border-[#1e1e21]" />
@@ -13583,7 +16312,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 type="button"
                 role="menuitem"
                 className={menuItemClass}
-                onClick={() => {
+                                        onClick={() => {
                   void handleArchiveConversation(menuConvo.id, !isArchived);
                   closeHistoryRowMenu();
                 }}
@@ -13592,7 +16321,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <span>{isArchived ? 'Unarchive' : 'Archive'}</span>
                 <span className={shortcutClass}>A</span>
               </button>
-              <button
+                                    <button
                 type="button"
                 role="menuitem"
                 className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-red-400 transition-colors hover:bg-[var(--chat-hover)]"
@@ -13601,6 +16330,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     isOpen: true,
                     conversationId: menuConvo.id,
                     conversationTitle: menuConvo.title,
+                    origin: 'left',
                   });
                   closeHistoryRowMenu();
                 }}
@@ -13609,7 +16339,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <span>Delete</span>
                 <span className="ml-auto text-[11px] text-red-400/70">D</span>
               </button>
-            </div>,
+            </div>
+            </>,
             document.body,
           );
         })()}
@@ -13740,8 +16471,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <span>{groupLabel[recentsGroupBy]}</span>
                       <ChevronRight size={13} />
                     </span>
-                  </button>
-                </div>
+                                    </button>
+                                </div>
 
                 {recentsFilterSubmenu && submenuOptions.length > 0 && (
                   <div
@@ -13762,7 +16493,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         {'separatedBefore' in option && option.separatedBefore && (
                           <div className="my-1 border-t border-[#1e1e21]" />
                         )}
-                        <button
+                                    <button
                           type="button"
                           role="menuitem"
                           className={menuItemClass}
@@ -13775,31 +16506,28 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           {option.selected && (
                             <Check size={14} className="ml-auto flex-shrink-0 text-[var(--chat-accent)]" aria-hidden="true" />
                           )}
-                        </button>
+                                    </button>
                       </React.Fragment>
                     ))}
-                  </div>
-                )}
-              </div>
+                                </div>
+                            )}
+                        </div>
             );
           })(),
           document.body,
         )}
-        {isFullScreenImageOpen && createPortal(
-          <FullScreenImageViewer
-            imageUrl={fullScreenImageUrl}
-            isOpen={isFullScreenImageOpen}
-            onClose={() => {
-              setIsFullScreenImageOpen(false);
-              setFullScreenImageUrl((prev) => {
-                if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
-                return null;
-              });
-            }}
-            showDownloadButton={viewerShowsDownloadButton}
-          />,
-          document.body
-        )}
+        {isFullScreenImageMounted &&
+          fullScreenImageUrl &&
+          createPortal(
+            <FullScreenImageViewer
+              imageUrl={fullScreenImageUrl}
+              isOpen={isFullScreenImageOpen}
+              isShown={isFullScreenImageShown}
+              onClose={() => setIsFullScreenImageOpen(false)}
+              showDownloadButton={viewerShowsDownloadButton}
+            />,
+            document.body,
+          )}
 
         {/* History Sidebar - Slides in from left */}
         {/* In multi-interface mode: render inside the interface container */}
@@ -13819,12 +16547,31 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           };
           const historyPanelBody = (
               <div className="flex flex-col h-full overflow-hidden">
-                {/* Brand + search / close — Claude-style header, XENO branded */}
-                <div className="flex items-center justify-between gap-2 border-b border-[var(--chat-border)] px-3 py-2.5">
-                  {isHistorySearchOpen ? (
-                    <>
+                {/* Brand + search / close — height matches top bar; hairline is shared (portal). */}
+                <div
+                  className="flex flex-shrink-0 items-center justify-between gap-2 overflow-hidden px-3"
+                  style={{ height: CHAT_CHROME_BAR_HEIGHT_PX }}
+                >
+                  <style>{`
+                    @keyframes chat-history-search-in {
+                      from { opacity: 0; transform: translateX(32%); }
+                      to { opacity: 1; transform: translateX(0); }
+                    }
+                    @keyframes chat-history-search-out {
+                      from { opacity: 1; transform: translateX(0); }
+                      to { opacity: 0; transform: translateX(32%); }
+                    }
+                  `}</style>
+                  {isHistorySearchMounted ? (
+                    <div
+                      className="flex min-w-0 flex-1 items-center gap-0.5"
+                      style={historySearchBarMotionStyle(
+                        isHistorySearchShown,
+                        isHistorySearchOpen,
+                      )}
+                    >
                       <div
-                        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5"
+                        className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5"
                         style={{ backgroundColor: 'var(--chat-control)' }}
                       >
                         <Search size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
@@ -13837,7 +16584,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           onKeyDown={(e) => {
                             if (e.key === 'Escape') {
                               setIsHistorySearchOpen(false);
-                              setHistorySearchTerm('');
                             }
                           }}
                           className="w-full min-w-0 bg-transparent text-[12.5px] text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none"
@@ -13848,15 +16594,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         type="button"
                         onClick={() => {
                           setIsHistorySearchOpen(false);
-                          setHistorySearchTerm('');
                         }}
                         aria-label="Close search"
                         title="Close search"
-                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                       >
                         <X size={15} />
                       </button>
-                    </>
+                    </div>
                   ) : (
                     <>
                       <span className="truncate font-display text-[1.125rem] font-semibold leading-none tracking-tight text-[var(--chat-text)]">
@@ -13872,7 +16617,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           }}
                           aria-label="Close conversation history"
                           title="Close"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                         >
                           <PanelLeftClose size={16} aria-hidden="true" />
                         </button>
@@ -13881,7 +16626,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           onClick={() => setIsHistorySearchOpen(true)}
                           aria-label="Search conversations"
                           title="Search"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                         >
                           <Search size={16} aria-hidden="true" />
                         </button>
@@ -13998,7 +16743,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   const renderHistoryRow = (convo: Conversation, rowSection: 'pinned' | 'recents' | 'archived' = 'recents') => {
                     const isActive = activeConversationId === convo.id;
                     const isEditingTitle = editingConversationId === convo.id;
-                    const menuOpen = historyRowMenu?.conversationId === convo.id;
+                    const menuOpen =
+                      isHistoryRowMenuOpen &&
+                      historyRowMenu?.conversationId === convo.id;
                     const isRowHovered = historyHoveredRowId === convo.id || menuOpen;
                     const isPinnedRow = rowSection === 'pinned';
                     const canDrag = !isEditingTitle && (isPinnedRow || rowSection === 'recents');
@@ -14087,9 +16834,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       >
                         {isEditingTitle ? (
                           <div className="flex min-w-0 items-center gap-0.5 rounded border border-[#1e1e21] bg-[#0e0e10] pr-0.5">
-                            <input
+                                         <input
                               id={`edit-title-${convo.id}-${interfaceId}`}
-                              type="text"
+                                           type="text"
                               value={editTitleText}
                               onChange={(e) => setEditTitleText(e.target.value)}
                               onBlur={handleSaveConversationTitle}
@@ -14118,15 +16865,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             >
                               <Check size={12} />
                             </button>
-                          </div>
-                        ) : (
+                                       </div>
+                                     ) : (
                           <span className="flex min-w-0 items-center gap-1.5">
                             {convo.isUnread && (
                               <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-zinc-100" aria-label="Unread" />
                             )}
                             <MessageSquare size={13} className="flex-shrink-0 text-zinc-500" aria-hidden="true" />
                             <HistoryConversationTitle title={convo.title} isSliding={isRowHovered} />
-                          </span>
+                                               </span>
                         )}
                         <div
                           className={`absolute top-1/2 right-1 flex -translate-y-1/2 items-center transition-opacity duration-150 ${
@@ -14137,22 +16884,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
                           }`}
                         >
-                          <button
+                                           <button 
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
+                            data-history-row-menu-trigger=""
+                                             onClick={(e) => {
+                                               e.stopPropagation();
                               const rect = e.currentTarget.getBoundingClientRect();
                               const menuWidth = 188;
                               const left = Math.min(
                                 Math.max(8, rect.right - menuWidth),
                                 window.innerWidth - menuWidth - 8,
                               );
-                              setHistoryProjectSubmenuOpen(false);
-                              setHistoryRowMenu({
-                                conversationId: convo.id,
-                                top: rect.bottom + 4,
-                                left,
-                              });
+                              toggleHistoryRowMenu(convo.id, rect.bottom + 4, left);
                             }}
                             className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-[var(--chat-hover)] hover:text-zinc-200"
                             aria-label="Conversation actions"
@@ -14161,9 +16904,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             title="More options"
                           >
                             <MoreVertical size={14} />
-                          </button>
-                        </div>
-                      </div>
+                                             </button>
+                                         </div>
+                          </div>
                     );
                   };
 
@@ -14171,14 +16914,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     <div className="px-3 py-10 text-center">
                       <p className="text-[13px] font-medium text-zinc-100">{title}</p>
                       <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-500">{body}</p>
-                    </div>
+                        </div>
                   );
 
-                  return (
+                              return (
                     <>
                       {/* Top nav — separate from Pinned / Recents */}
                       <div className="flex-shrink-0 space-y-0.5 border-b border-[#1e1e21] px-1.5 py-2">
-                        <button
+                                <button
                           type="button"
                           className={historyNavItemClass(false)}
                           onClick={() => {
@@ -14187,7 +16930,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         >
                           <Plus size={16} className="flex-shrink-0 text-zinc-100" />
                           <span>New</span>
-                        </button>
+                                </button>
                         <button
                           type="button"
                           className={historyNavItemClass(historyNavView === 'chats' && !isProjectsPageOpen)}
@@ -14199,18 +16942,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <MessagesSquare size={16} className="flex-shrink-0" />
                           <span>Chats and tasks</span>
                         </button>
-                        <button
-                          type="button"
-                          className={historyNavItemClass(historyNavView === 'projects' || isProjectsPageOpen)}
-                          onClick={openProjectsPage}
-                        >
-                          <Folder size={16} className="flex-shrink-0" />
-                          <span>Projects</span>
-                        </button>
                         {hasArchivedConversations && (
                           <button
                             type="button"
-                            className={historyNavItemClass(historyNavView === 'archived', true)}
+                            className={historyNavItemClass(historyNavView === 'archived')}
                             onClick={() => {
                               dismissChatOverlays();
                               setHistoryNavView('archived');
@@ -14222,37 +16957,36 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         )}
                         <button
                           type="button"
-                          className={historyNavItemClass(historyNavView === 'artifacts')}
-                          onClick={() => {
-                            dismissChatOverlays();
-                            setHistoryNavView('artifacts');
-                          }}
+                          className={historyNavItemClass(historyNavView === 'projects' || isProjectsPageOpen)}
+                          onClick={openProjectsPage}
+                        >
+                          <Folder size={16} className="flex-shrink-0" />
+                          <span>Projects</span>
+                        </button>
+                      <button
+                          type="button"
+                          className={historyNavItemClass(historyNavView === 'artifacts' || isArtifactsPageOpen)}
+                          onClick={openArtifactsPage}
                         >
                           <Shapes size={16} className="flex-shrink-0" />
                           <span>Artifacts</span>
-                        </button>
-                        <button
+                      </button>
+                      <button
                           type="button"
-                          className={historyNavItemClass(historyNavView === 'scheduled')}
-                          onClick={() => {
-                            dismissChatOverlays();
-                            setHistoryNavView('scheduled');
-                          }}
+                          className={historyNavItemClass(historyNavView === 'global_settings' || isGlobalSettingsPageOpen)}
+                          onClick={openGlobalSettingsPage}
+                        >
+                          <Settings size={16} className="flex-shrink-0" />
+                          <span>Settings</span>
+                      </button>
+                      <button
+                          type="button"
+                          className={historyNavItemClass(historyNavView === 'scheduled' || isScheduledPageOpen)}
+                          onClick={openScheduledPage}
                         >
                           <Clock size={16} className="flex-shrink-0" />
                           <span>Scheduled</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={historyNavItemClass(historyNavView === 'customize')}
-                          onClick={() => {
-                            dismissChatOverlays();
-                            setHistoryNavView('customize');
-                          }}
-                        >
-                          <Briefcase size={16} className="flex-shrink-0" />
-                          <span>Customize</span>
-                        </button>
+                      </button>
                       </div>
 
                       {/* Content under the top nav */}
@@ -14280,9 +17014,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       ? 'history-pin-section-reveal'
                                       : ''
                                   }`}
-                                >
-                                  <button
-                                    type="button"
+                      >
+                        <button
+                          type="button"
                                     onClick={() => setIsPinnedSectionOpen((open) => !open)}
                                     aria-expanded={isPinnedSectionOpen}
                                     className="flex w-full items-center gap-1 px-2.5 pb-1 text-left text-[11px] font-semibold tracking-wide text-zinc-100 transition-colors hover:text-white"
@@ -14295,7 +17029,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       }`}
                                       aria-hidden="true"
                                     />
-                                  </button>
+                        </button>
                                   {isPinnedSectionOpen &&
                                     pinnedConversations.map((convo) => renderHistoryRow(convo, 'pinned'))}
                                 </div>
@@ -14313,8 +17047,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                   onMouseLeave={() => setIsRecentsSectionHovered(false)}
                                 >
                                   <div className="flex items-center justify-between gap-1 px-1 pb-1">
-                                    <button
-                                      type="button"
+                        <button
+                          type="button"
                                       onClick={() => setIsRecentsSectionOpen((open) => !open)}
                                       aria-expanded={isRecentsSectionOpen}
                                       className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-left text-[11px] font-semibold tracking-wide text-zinc-100 transition-colors hover:text-white"
@@ -14327,7 +17061,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         }`}
                                         aria-hidden="true"
                                       />
-                                    </button>
+                        </button>
                                     <div className="flex flex-shrink-0 items-center gap-0.5">
                                       <button
                                         type="button"
@@ -14351,8 +17085,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       >
                                         <ArrowUpRight size={13} aria-hidden="true" />
                                       </button>
-                                      <button
-                                        type="button"
+                              <button
+                                type="button"
                                         onClick={(event) => {
                                           event.stopPropagation();
                                           const rect = event.currentTarget.getBoundingClientRect();
@@ -14392,9 +17126,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           <path d="M5.5 10h5" />
                                           <path d="M13.5 15h5" />
                                         </svg>
-                                      </button>
-                                    </div>
-                                  </div>
+                              </button>
+                            </div>
+                          </div>
                                   {isRecentsSectionOpen &&
                                     (recentConversations.length === 0 ? (
                                       <p className="px-2.5 py-3 text-[12px] text-zinc-600">No matching conversations</p>
@@ -14407,7 +17141,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             </p>
                                           )}
                                           {group.items.map((convo) => renderHistoryRow(convo, 'recents'))}
-                                        </div>
+                      </div>
                                       ))
                                     ))}
                                 </div>
@@ -14418,14 +17152,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                         {historyNavView === 'projects' && (
                           <div className="space-y-2">
-                            <button
-                              type="button"
+                      <button
+                        type="button"
                               onClick={() => openCreateProjectModal()}
                               className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]"
                             >
                               <Plus size={15} />
                               <span>New project</span>
-                            </button>
+                      </button>
                             {chatProjects.length === 0 ? (
                               emptyPanel('No projects yet', 'Create a project to group related conversations.')
                             ) : (
@@ -14462,8 +17196,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                   );
                                 })}
                               </div>
-                            )}
-                          </div>
+                  )}
+                </div>
                         )}
 
                         {historyNavView === 'archived' && (
@@ -14475,27 +17209,33 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 Archived
                               </p>
                               {archivedConversations.map((convo) => renderHistoryRow(convo, 'archived'))}
-                            </div>
+                </div>
                           )
                         )}
 
-                        {historyNavView === 'artifacts' &&
-                          emptyPanel(
-                            'Artifacts',
-                            'Generated files, code, and documents from chats will show up here.',
-                          )}
+                        {historyNavView === 'artifacts' && !isArtifactsPageOpen && (
+                          <div className="px-3 py-8 text-center">
+                            <p className="text-[12px] text-zinc-500">
+                              Artifacts open in the main panel.
+                            </p>
+                          </div>
+                        )}
 
-                        {historyNavView === 'scheduled' &&
-                          emptyPanel(
-                            'Scheduled',
-                            'Recurring prompts and timed tasks will appear in this list.',
-                          )}
+                        {historyNavView === 'global_settings' && !isGlobalSettingsPageOpen && (
+                          <div className="px-3 py-8 text-center">
+                            <p className="text-[12px] text-zinc-500">
+                              Settings open in the main panel.
+                            </p>
+                          </div>
+                        )}
 
-                        {historyNavView === 'customize' &&
-                          emptyPanel(
-                            'Customize',
-                            'Personas, instructions, and chat preferences will live here.',
-                          )}
+                        {historyNavView === 'scheduled' && !isScheduledPageOpen && (
+                          <div className="px-3 py-8 text-center">
+                            <p className="text-[12px] text-zinc-500">
+                              Scheduled opens in the main panel.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </>
                   );
@@ -14520,7 +17260,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 onTouchEnd={handleTouchEnd}
               >
                 {historyPanelBody}
-              </div>
+                  </div>
             );
           }
 
@@ -14562,7 +17302,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               aria-hidden={!isHistoryOpen}
             >
               <div
-                className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-sidebar h-full w-full overflow-hidden border-y border-r transition-transform duration-300 ease-in-out ${isTaskbarHidden ? 'border-l rounded-none' : 'border-l-0 rounded-none'}`}
+                className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-sidebar h-full w-full overflow-hidden border-b border-r transition-transform duration-300 ease-in-out ${isTaskbarHidden ? 'border-l rounded-none' : 'border-l-0 rounded-none'}`}
                 data-chat-theme-preference={chatTheme}
                 style={{
                   transform: isHistoryOpen ? 'translateX(0)' : 'translateX(-100%)',
@@ -14572,7 +17312,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 onTouchEnd={handleTouchEnd}
               >
                 {historyPanelBody}
-              </div>
+                            </div>
             </div>,
             document.body,
           );

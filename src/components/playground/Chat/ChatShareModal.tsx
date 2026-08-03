@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Check, Copy, X } from 'lucide-react';
 import {
   VISIBILITY_OPTIONS,
@@ -12,6 +12,7 @@ import {
   type ShareVisibility,
   type SocialPlatform,
 } from './chatShare';
+import { PublicGlobeIcon } from './PublicGlobeIcon';
 
 type ShareStep = 'configure' | 'ready';
 
@@ -129,67 +130,22 @@ const TeamBuildingIcon: React.FC<IconMotionProps> = ({ selected, reduceMotion })
   </svg>
 );
 
-/**
- * Public: sphere rock — tip left → right → settle, like nudging a desk globe.
- */
-const PublicGlobeIcon: React.FC<IconMotionProps> = ({ selected, reduceMotion }) => (
-  <span
-    className="inline-flex h-4 w-4 items-center justify-center"
-    style={{ perspective: 200 }}
-    aria-hidden="true"
-  >
-    <motion.span
-      className="inline-flex"
-      style={{ transformStyle: 'preserve-3d', transformOrigin: '50% 70%' }}
-      initial={false}
-      animate={
-        selected
-          ? {
-              rotateX: [0, 12, 10, 0],
-              rotateZ: [0, -16, 14, 0],
-            }
-          : { rotateX: 0, rotateZ: 0 }
-      }
-      transition={
-        reduceMotion
-          ? { duration: 0 }
-          : {
-              duration: 0.55,
-              ease: CHECK_EASE,
-              times: [0, 0.35, 0.7, 1],
-            }
-      }
-    >
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="12" cy="12" r="9" />
-        <ellipse cx="12" cy="12" rx="4" ry="9" />
-        <path d="M3 12h18" />
-      </svg>
-    </motion.span>
-  </span>
-);
-
-const VisibilityOptionIcon: React.FC<IconMotionProps & { visibility: ShareVisibility }> = ({
-  visibility,
-  selected,
-  reduceMotion,
-}) => {
+const VisibilityOptionIcon: React.FC<
+  IconMotionProps & { visibility: ShareVisibility; spinRequest?: number }
+> = ({ visibility, selected, reduceMotion, spinRequest }) => {
   if (visibility === 'private') {
     return <PrivateLockIcon selected={selected} reduceMotion={reduceMotion} />;
   }
   if (visibility === 'team') {
     return <TeamBuildingIcon selected={selected} reduceMotion={reduceMotion} />;
   }
-  return <PublicGlobeIcon selected={selected} reduceMotion={reduceMotion} />;
+  return (
+    <PublicGlobeIcon
+      selected={selected}
+      reduceMotion={reduceMotion}
+      spinRequest={spinRequest}
+    />
+  );
 };
 
 /** White square pops in; the check stroke draws after — Instant when motion is reduced. */
@@ -201,7 +157,7 @@ const DrawnCheckMark: React.FC<{ reduceMotion: boolean; optionId: string }> = ({
     key={optionId}
     className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-white text-black"
     aria-hidden="true"
-    initial={reduceMotion ? false : { scale: 0.55, opacity: 0 }}
+    initial={reduceMotion ? false : { scale: 0.25, opacity: 0 }}
     animate={{ scale: 1, opacity: 1 }}
     transition={
       reduceMotion
@@ -236,6 +192,9 @@ export type ChatShareModalProps = {
   /** Theme class pair already used by chat modals, e.g. `chat-themed chat-theme-dark`. */
   themeClassName?: string;
   themeStyle?: React.CSSProperties;
+  /** Enter/exit card motion (grows from Share control, top-right). */
+  isOpen?: boolean;
+  isShown?: boolean;
 };
 
 const SOCIAL_ACTIONS: { id: SocialPlatform; label: string }[] = [
@@ -248,6 +207,19 @@ const SOCIAL_ACTIONS: { id: SocialPlatform; label: string }[] = [
 const stripPreviewText = (text: string): string =>
   text.replace(/\s+/g, ' ').trim();
 
+const SHARE_MODAL_MS = 420;
+const SHARE_MODAL_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const SHARE_MODAL_KEYFRAMES = `
+  @keyframes chat-share-modal-in {
+    from { opacity: 0; transform: translate(18%, -12%) scale(0.42); }
+    to { opacity: 1; transform: translate(0, 0) scale(1); }
+  }
+  @keyframes chat-share-modal-out {
+    from { opacity: 1; transform: translate(0, 0) scale(1); }
+    to { opacity: 0; transform: translate(18%, -12%) scale(0.42); }
+  }
+`;
+
 const ChatShareModal: React.FC<ChatShareModalProps> = ({
   conversationId,
   conversationTitle,
@@ -255,13 +227,18 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
   onClose,
   themeClassName = 'chat-themed',
   themeStyle,
+  isOpen = true,
+  isShown = true,
 }) => {
-  const prefersReducedMotion = Boolean(useReducedMotion());
+  // OS "prefers-reduced-motion" was true here and skipped every share-row
+  // micro-animation (check draw, lock click, team windows, globe). Play them.
+  const prefersReducedMotion = false;
   const existing = getActiveShareLink(conversationId);
   const [step, setStep] = useState<ShareStep>(existing ? 'ready' : 'configure');
   const [visibility, setVisibility] = useState<ShareVisibility>(
     existing?.visibility ?? 'private',
   );
+  const [globeSpinRequest, setGlobeSpinRequest] = useState(0);
   const [link, setLink] = useState<ShareLink | null>(existing);
   const [isCreating, setIsCreating] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -341,23 +318,41 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
       className={`${themeClassName} fixed inset-0 z-[999] flex items-end justify-center p-0 backdrop-blur-sm sm:items-center sm:p-4`}
       data-chat-share-dialog=""
       style={{
-        backgroundColor: 'rgba(0, 0, 0, 0.45)',
+        backgroundColor: isShown
+          ? 'color-mix(in srgb, var(--chat-canvas) 35%, rgba(0, 0, 0, 0.55))'
+          : 'transparent',
+        transition: `background-color ${SHARE_MODAL_MS}ms ${SHARE_MODAL_EASE}`,
         ...themeStyle,
       }}
       onClick={onClose}
     >
+      <style>{SHARE_MODAL_KEYFRAMES}</style>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="chat-share-title"
-        className="flex w-full max-w-[520px] flex-col overflow-hidden rounded-t-2xl border border-b-0 sm:rounded-2xl sm:border"
+        className="flex w-full max-w-[520px] flex-col overflow-hidden rounded-t-2xl border border-b-0 will-change-transform sm:rounded-2xl sm:border"
         style={{
           maxHeight: 'calc(100dvh - 0.5rem)',
           backgroundColor: 'var(--chat-elevated)',
           borderColor: 'var(--chat-border)',
           color: 'var(--chat-text)',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+          boxShadow:
+            '0 8px 32px color-mix(in srgb, var(--chat-text) 16%, transparent)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          transformOrigin: 'top right',
+          ...(isShown
+            ? {
+                animation: `chat-share-modal-in ${SHARE_MODAL_MS}ms ${SHARE_MODAL_EASE} forwards`,
+              }
+            : !isOpen
+              ? {
+                  animation: `chat-share-modal-out ${SHARE_MODAL_MS}ms ${SHARE_MODAL_EASE} forwards`,
+                }
+              : {
+                  opacity: 0,
+                  transform: 'translate(18%, -12%) scale(0.42)',
+                }),
         }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -446,7 +441,12 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    onClick={() => setVisibility(option.id)}
+                    onClick={() => {
+                      setVisibility(option.id);
+                      if (option.id === 'public') {
+                        setGlobeSpinRequest((n) => n + 1);
+                      }
+                    }}
                     className={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-[var(--chat-hover)] ${
                       index > 0 ? 'border-t' : ''
                     }`}
@@ -461,6 +461,7 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
                         visibility={option.id}
                         selected={selected}
                         reduceMotion={prefersReducedMotion}
+                        spinRequest={option.id === 'public' ? globeSpinRequest : undefined}
                       />
                     </span>
                     <span className="min-w-0 flex-1">

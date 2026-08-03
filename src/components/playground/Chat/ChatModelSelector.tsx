@@ -402,18 +402,18 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
           data-model-tray
           role="dialog"
           aria-label="Choose a model"
-          className={`absolute right-0 z-30 flex max-h-[min(28rem,60vh)] w-[min(34rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-white/[0.10] bg-[#121214] shadow-[0_18px_50px_rgba(0,0,0,0.48)] transition-[opacity,transform,visibility] duration-200 ease-out ${
+          className={`absolute right-0 z-30 flex max-h-[min(28rem,60vh)] w-[min(34rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-[0_18px_50px_color-mix(in_srgb,var(--chat-text)_18%,transparent)] transition-[opacity,transform,visibility] duration-200 ease-out ${
             isMinimal ? 'top-full mt-2 origin-top-right' : 'bottom-full mb-2 origin-bottom-right'
           } ${
             isOpen ? 'visible translate-x-0 opacity-100' : 'invisible translate-x-3 opacity-0'
           }`}
         >
-          <div className="border-b border-white/[0.06] px-3 py-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.09em] text-zinc-500">Choose a model</p>
+          <div className="border-b border-[var(--chat-border)] px-3 py-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.09em] text-[var(--chat-muted)]">Choose a model</p>
           </div>
           <div className="overflow-y-auto overscroll-contain p-2">
             {groupedModels.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-zinc-500">
+              <div className="px-4 py-8 text-center text-sm text-[var(--chat-muted)]">
                 {isLoading ? 'Loading models...' : 'No models available.'}
               </div>
             ) : (
@@ -423,8 +423,8 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                   .reduce((total, previousGroup) => total + previousGroup.models.length, 0);
 
                 return (
-                  <div key={group.companyName} className="border-b border-white/[0.06] px-1 py-2.5 last:border-b-0">
-                    <p className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+                  <div key={group.companyName} className="border-b border-[var(--chat-border)] px-1 py-2.5 last:border-b-0">
+                    <p className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--chat-muted)]">
                       {group.companyName}
                     </p>
                     <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
@@ -439,18 +439,18 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                             aria-current={isSelected ? 'true' : undefined}
                             onClick={() => handleSelect(model)}
                             style={{ animationDelay: `${(modelOffset + modelIndex) * 35}ms` }}
-                            className={`flex min-w-0 items-center justify-between gap-3 rounded-lg border px-2.5 py-2 text-left text-[12px] transition-[background-color,border-color,color,transform] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-white/60 motion-reduce:animate-none ${
+                            className={`flex min-w-0 items-center justify-between gap-3 rounded-lg border px-2.5 py-2 text-left text-[12px] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-border)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--chat-accent)] motion-reduce:animate-none ${
                               isOpen ? 'motion-safe:animate-model-tray-item-enter' : ''
                             } ${
                               isSelected
-                                ? 'border-white/[0.18] bg-white/[0.08] text-white'
-                                : 'border-white/[0.06] bg-white/[0.018] text-zinc-400'
+                                ? 'border-[var(--chat-border)] bg-[var(--chat-control-strong)] text-[var(--chat-text)]'
+                                : 'border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)]'
                             }`}
                           >
                             <span className="min-w-0 truncate">{model.name}</span>
-                            <span className="flex flex-shrink-0 items-center gap-1.5 text-[10px] tabular-nums text-zinc-600">
+                            <span className="flex flex-shrink-0 items-center gap-1.5 text-[10px] tabular-nums text-[var(--chat-muted)]">
                               {formatTokenCount(model.maxTokens)}
-                              {isSelected && <Check size={12} className="text-zinc-200" />}
+                              {isSelected && <Check size={12} className="text-[var(--chat-accent)]" />}
                             </span>
                           </button>
                         );

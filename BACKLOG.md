@@ -1,10 +1,22 @@
 # Backlog
 
+## Chat LLM display name UI (removed with Profile tab)
+
+Reason: Chat settings → Profile (display name) was removed when persona moved into This chat. `getChatProfile` / `saveChatProfile` still hold `displayName`.
+
+Done when: Andreia picks a home (Preferences, Sidebar Settings, or drop) and the field is wired or deleted on purpose.
+
+## Remove unused Earth texture from Public globe trials
+
+Reason: `public/share/earth-map.jpg` was pulled for rejected A+D/B/C globe demos. Share Public icon is now lucide micro-motion only.
+
+Done when: file (and empty `public/share/` if unused) deleted, or reused elsewhere on purpose.
+
 ## Attach "Recent files" menu after paperclip removal
 
-Reason: Conversation paperclip was removed; upload is on the hover tool rail. The old attach menu also had Recent files — that path is hidden with the paperclip.
+Reason: Conversation paperclip was removed; upload is on the hover tool rail. Recent files are now on the same rail (Upload + Recent).
 
-Done when: Recent files is reachable from the rail or another deliberate entry point.
+Done when: Confirmed in review, then remove this backlog note (or keep only if Recent needs fileObject restore for real re-attach).
 
 ## Revisit chat date separators
 
