@@ -4,8 +4,24 @@
  * Different rate limits for different endpoint categories:
  * - Auth endpoints: strict (prevent brute force)
  * - LLM/AI proxy: per-user credit-based + IP fallback
- * - Static/public pages: lenient
  * - API general: moderate
+ *
+ * ── RULE: every limiter exported from this file MUST be mounted somewhere ──────
+ * An exported-but-unmounted rate limiter is not a security control, it is a
+ * decoy: it reads as protection in review while enforcing nothing. Four used to
+ * live here (authLimiter, staticLimiter, apiLimiter, webhookLimiter) with ZERO
+ * import sites; they have been deleted rather than mounted (see the note at the
+ * bottom of this file for the per-limiter reasoning). If you add a limiter here,
+ * mount it in the same commit. Enforced by tests/route-mounting.test.mjs.
+ *
+ * ── RULE: every limiter MUST set an explicit keyGenerator ─────────────────────
+ * express-rate-limit's DEFAULT key is `req.ip`. This app sits behind
+ * CF edge → cloudflared → nginx, nginx APPENDS to X-Forwarded-For, and
+ * `trust proxy = 1` therefore resolves req.ip to the CONSTANT loopback hop.
+ * A limiter that takes the default key is not "per IP" here — it is ONE GLOBAL
+ * BUCKET shared by every visitor on earth, i.e. a trivially triggerable
+ * platform-wide outage of whatever it protects. Always pass
+ * `keyGenerator: <something built on clientIp()>` + `validate: { ip: false }`.
  */
 
 import rateLimit from 'express-rate-limit';
@@ -39,36 +55,34 @@ function normalizeIp(req) {
 }
 
 // --------------------------------------------------------------------------
-// 1. Auth rate limiter — very strict to prevent credential stuffing
+// 1. Account-email limiter — token-minting / mail-sending endpoints
 // --------------------------------------------------------------------------
-export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 attempts per window
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { ip: false },
-  message: {
-    success: false,
-    error: 'Too many authentication attempts. Please try again in 15 minutes.',
-    retryAfter: 900,
-  },
-  keyGenerator: (req) => {
-    const email = req.body?.email || '';
-    return `auth:${normalizeIp(req)}:${email}`;
-  },
-});
-
-// Password reset — even stricter
+// Mounted in index.js on /api/auth/forgot-password and /api/auth/resend-verification.
+// These are the endpoints that MINT a single-use account token and SEND mail to an
+// address the caller merely names, so the abuse is inbox flooding + mail-reputation
+// burn, not credential guessing. 3/hour sits on top of (not instead of) the 10-per-
+// 15-min auth limiter already covering the whole /api/auth surface.
+//
+// NOT mounted on /api/auth/reset-password: that endpoint CONSUMES a 256-bit
+// single-use token (routes/authRoutes.js newAccountToken → randomBytes(32)) which is
+// atomically claimed, so guessing is infeasible and the 10-per-15-min limiter is the
+// right cap. A 3/hour cap there would lock a legitimate user out of their own reset
+// after three rejections by the password-policy check.
 export const passwordResetLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   message: {
     success: false,
     error: 'Too many password reset attempts. Please try again in 1 hour.',
     retryAfter: 3600,
   },
+  // MUST be explicit — the default req.ip key collapses to one global bucket behind
+  // this proxy chain, which would make 3 requests/hour a platform-wide password-reset
+  // outage for every user at once. See the header note.
+  keyGenerator: (req) => `pwreset:${normalizeIp(req)}`,
 });
 
 // --------------------------------------------------------------------------
@@ -128,40 +142,7 @@ export const videoGenLimiter = rateLimit({
 });
 
 // --------------------------------------------------------------------------
-// 3. Static pages / public endpoints — lenient
-// --------------------------------------------------------------------------
-export const staticLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 300, // Very generous for static content
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: 'Too many requests. Please slow down.',
-    retryAfter: 60,
-  },
-});
-
-// --------------------------------------------------------------------------
-// 4. General API rate limiter — moderate default
-// --------------------------------------------------------------------------
-export const apiLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: 'Too many requests. Please try again later.',
-    retryAfter: 60,
-  },
-  skip: (req) => {
-    return req.path === '/api/status' || req.path === '/health' || req.path === '/api/health';
-  },
-});
-
-// --------------------------------------------------------------------------
-// 5. Upload rate limiter — prevent abuse of file upload
+// 3. Upload rate limiter — prevent abuse of file upload
 // --------------------------------------------------------------------------
 export const uploadLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
@@ -182,29 +163,37 @@ export const uploadLimiter = rateLimit({
   },
 });
 
-// --------------------------------------------------------------------------
-// 6. Webhook delivery limiter — prevent webhook flood
-// --------------------------------------------------------------------------
-export const webhookLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: 'Webhook rate limit exceeded.',
-    retryAfter: 60,
-  },
-});
+// NOTE: no default export. The aggregate `export default { ...allLimiters }` this file
+// used to carry had no import site either, and it defeated the whole point of the
+// unmounted-limiter check — a limiter reachable only through a bag nobody opens still
+// looks "used" to a naive grep. Named exports only, every one of them imported.
 
-export default {
-  authLimiter,
-  passwordResetLimiter,
-  llmLimiter,
-  imageGenLimiter,
-  videoGenLimiter,
-  staticLimiter,
-  apiLimiter,
-  uploadLimiter,
-  webhookLimiter,
-};
+// ── DELETED LIMITERS — do not re-add without reading this ─────────────────────
+// Four limiters were exported from this file with ZERO import sites anywhere in
+// src/server. Each was reviewed and DELETED rather than mounted:
+//
+// • authLimiter — keyed `auth:<ip>:<email>`, 10 per 15 min. Strictly DOMINATED by
+//   the IP-only auth limiter already mounted in index.js on the same seven
+//   /api/auth/* paths: for any fixed IP, count(ip,email) <= count(ip), so a
+//   per-(ip,email) bucket can never trip before the per-ip bucket it sits behind.
+//   Adding the email to the key SUBDIVIDES the budget — it makes the limit looser
+//   (an attacker stuffing many emails from one IP gets a fresh 10 per email),
+//   not tighter. Mounting it would have been pure ceremony.
+//   The genuine gap it did NOT cover is an ACCOUNT-targeted limiter (keyed on
+//   email alone) to blunt distributed password spraying against one user. That is
+//   a real control worth adding, but it is a new design (it introduces a
+//   victim-lockout DoS that needs handling), not a re-mount of this one.
+//
+// • staticLimiter — 300/min for "static content". Express serves no rate-limitable
+//   static surface here (nginx + Cloudflare front all of it), and the limiter took
+//   the default req.ip key, so mounting it would have been one global bucket.
+//
+// • apiLimiter — 200/min. A duplicate of the `globalLimiter` already mounted on
+//   '/api/' in index.js, with the same window and max but WITHOUT the clientIp
+//   keyGenerator. Mounting it would have added a collapsed global 200/min cap on
+//   top of a working per-client one.
+//
+// • webhookLimiter — 100/min, default key. /api/webhooks already sits under the
+//   mounted '/api/' globalLimiter. A collapsed global 100/min bucket in front of
+//   webhook delivery drops other tenants' legitimate deliveries once any single
+//   caller is noisy.

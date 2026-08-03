@@ -393,7 +393,71 @@ router.post('/upload', getUserId, upload.array('files'), async (req, res) => {
   }
 });
 
+// GET /api/filesystem/search - Search files and folders
+//
+// ⚠ MUST stay registered BEFORE `GET /:id` below. Express matches layers in
+// REGISTRATION order, so a `/:id` param route registered first swallows every literal
+// sibling: this handler used to sit ~300 lines further down and NEVER ran — every
+// /api/filesystem/search call was served by the get-entry-by-id handler with
+// id='search'. Regression-gated by tests/route-mounting.test.mjs.
+router.get('/search', getUserId, async (req, res) => {
+  try {
+    const { query: searchQuery, type, limit = 50 } = req.query;
+    const userId = req.userId;
+
+    if (!searchQuery || searchQuery.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: 'Search query is required'
+      });
+    }
+
+    let searchSQL = `
+      SELECT fe.*, fp.permission,
+             CASE WHEN fe.type = 'file' THEN fv.version_number ELSE NULL END as current_version
+      FROM filesystem_entries fe
+      LEFT JOIN file_permissions fp ON fe.id = fp.entry_id AND fp.user_id = $1
+      LEFT JOIN file_versions fv ON fe.id = fv.file_id AND fv.version_number = (
+        SELECT MAX(version_number) FROM file_versions WHERE file_id = fe.id
+      )
+      WHERE fe.user_id = $1 AND fe.is_deleted = false
+      AND (fe.name ILIKE $2 OR fe.path ILIKE $2)
+    `;
+
+    const searchParams = [userId, `%${searchQuery}%`];
+
+    if (type && (type === 'file' || type === 'folder')) {
+      searchSQL += ' AND fe.type = $3';
+      searchParams.push(type);
+    }
+
+    searchSQL += ' ORDER BY fe.type, fe.name LIMIT $' + (searchParams.length + 1);
+    searchParams.push(parseInt(limit));
+
+    const result = await req.db.query(searchSQL, searchParams);
+
+    res.json({
+      success: true,
+      data: {
+        entries: result.rows,
+        count: result.rows.length,
+        query: searchQuery
+      }
+    });
+
+  } catch (error) {
+    console.error('Search filesystem error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to search filesystem',
+      message: 'Operation failed'
+    });
+  }
+});
+
 // GET /api/filesystem/:id - Get file/folder details
+//
+// ⚠ Param route — keep it AFTER every literal GET sibling on this router (see above).
 router.get('/:id', getUserId, async (req, res) => {
   try {
     const { id } = req.params;
@@ -690,61 +754,6 @@ router.get('/:id/download', getUserId, async (req, res) => {
   }
 });
 
-// GET /api/filesystem/search - Search files and folders
-router.get('/search', getUserId, async (req, res) => {
-  try {
-    const { query: searchQuery, type, limit = 50 } = req.query;
-    const userId = req.userId;
-
-    if (!searchQuery || searchQuery.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        error: 'Search query is required'
-      });
-    }
-
-    let searchSQL = `
-      SELECT fe.*, fp.permission,
-             CASE WHEN fe.type = 'file' THEN fv.version_number ELSE NULL END as current_version
-      FROM filesystem_entries fe
-      LEFT JOIN file_permissions fp ON fe.id = fp.entry_id AND fp.user_id = $1
-      LEFT JOIN file_versions fv ON fe.id = fv.file_id AND fv.version_number = (
-        SELECT MAX(version_number) FROM file_versions WHERE file_id = fe.id
-      )
-      WHERE fe.user_id = $1 AND fe.is_deleted = false
-      AND (fe.name ILIKE $2 OR fe.path ILIKE $2)
-    `;
-
-    const searchParams = [userId, `%${searchQuery}%`];
-
-    if (type && (type === 'file' || type === 'folder')) {
-      searchSQL += ' AND fe.type = $3';
-      searchParams.push(type);
-    }
-
-    searchSQL += ' ORDER BY fe.type, fe.name LIMIT $' + (searchParams.length + 1);
-    searchParams.push(parseInt(limit));
-
-    const result = await req.db.query(searchSQL, searchParams);
-
-    res.json({
-      success: true,
-      data: {
-        entries: result.rows,
-        count: result.rows.length,
-        query: searchQuery
-      }
-    });
-
-  } catch (error) {
-    console.error('Search filesystem error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to search filesystem',
-      message: 'Operation failed'
-    });
-  }
-});
 
 // GET /api/filesystem/:id/history - Get file operation history
 router.get('/:id/history', getUserId, async (req, res) => {

@@ -126,7 +126,15 @@ export function discovery() {
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],
     code_challenge_methods_supported: ['S256'],
-    token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
+    // PUBLIC CLIENTS ONLY. Every XENO product is an OIDC public client authenticating
+    // with PKCE-S256 — locked by 'XENO AUTH - SPEC.md' and restated in
+    // database/migrate-oidc-clients.js ("client_secret decorative"). The token endpoint
+    // (routes/oauth2Routes.js POST /token) dispatches purely on grant_type and NEVER
+    // reads req.body.client_secret, so advertising `client_secret_post` told a relying
+    // party its secret authenticated it when nothing verified the secret at all.
+    // Do NOT re-add it without first implementing confidential-client authentication —
+    // which would itself require a change to the locked AUTH SPEC.
+    token_endpoint_auth_methods_supported: ['none'],
     // We sign ES256 (getSigningKey prefers/generates ES256); any legacy RS256 keys
     // stay in JWKS so older tokens keep verifying. Advertise honestly (XENO AUTH §3.2).
     id_token_signing_alg_values_supported: ['ES256', 'RS256'],

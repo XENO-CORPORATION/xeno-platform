@@ -90,7 +90,7 @@ import docsRoutes from './routes/docsRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
 import { requestLoggerMiddleware, logger } from './middleware/requestLogger.js';
 import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } from './middleware/cdnOptimization.js';
-import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter, clientIp } from './middleware/rateLimiter.js';
+import { passwordResetLimiter, llmLimiter, uploadLimiter, clientIp } from './middleware/rateLimiter.js';
 import { runAllMigrations } from './services/migrationRunner.js';
 import { migrateAccountV2 } from './database/migrate-account-v2.js';
 import { migrateOidcClients } from './database/migrate-oidc-clients.js';
@@ -260,6 +260,17 @@ app.use('/api/auth/forgot-password', authLimiter);
 app.use('/api/auth/reset-password', authLimiter);
 app.use('/api/auth/verify-email', authLimiter);
 app.use('/api/auth/resend-verification', authLimiter);
+
+// On TOP of the 10-per-15-min limiter above, the two endpoints that MINT a single-use
+// account token and SEND mail to a caller-named address get the dedicated 3-per-hour
+// control (middleware/rateLimiter.js passwordResetLimiter). Those are the inbox-flood /
+// mail-reputation vectors; the 10-per-15-min cap alone allowed ~40 reset mails an hour
+// to an arbitrary victim from one client. Deliberately NOT applied to
+// /api/auth/reset-password: that endpoint consumes a 256-bit single-use token, so it
+// needs no extra brute-force margin, and a 3/hour cap there would lock a legitimate
+// user out of their own reset after three password-policy rejections.
+app.use('/api/auth/forgot-password', passwordResetLimiter);
+app.use('/api/auth/resend-verification', passwordResetLimiter);
 
 // Stricter rate limiter for AI generation endpoints: 30 requests per minute
 const generationLimiter = rateLimit({

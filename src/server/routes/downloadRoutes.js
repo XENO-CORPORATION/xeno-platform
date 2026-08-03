@@ -245,8 +245,37 @@ router.get('/file/:id', requireUser, (req, res) => {
 });
 
 /**
+ * DELETE /api/download/cookies
+ * Remove saved cookies.
+ *
+ * ⚠ MUST stay registered BEFORE `DELETE /:id` below. Express matches layers in
+ * REGISTRATION order, so a `/:id` param route registered first swallows every
+ * literal sibling path: `DELETE /cookies` ran `deleteDownload('cookies', userId)`,
+ * 404'd, and the user's stored YouTube auth cookies were NEVER deleted while the
+ * UI reported success. Regression-gated by tests/route-mounting.test.mjs.
+ */
+router.delete('/cookies', requireUser, (req, res) => {
+  try {
+    downloadService.deleteCookies(req.user.id);
+
+    res.json({
+      success: true,
+      message: 'Cookies deleted',
+    });
+  } catch (error) {
+    console.error('[Download] Error deleting cookies:', error);
+    res.status(500).json({
+      success: false,
+      error:'Failed to delete cookies',
+    });
+  }
+});
+
+/**
  * DELETE /api/download/:id
  * Delete a download
+ *
+ * ⚠ Param route — keep it LAST among the DELETE handlers on this router (see above).
  */
 router.delete('/:id', requireUser, (req, res) => {
   try {
@@ -346,27 +375,6 @@ router.get('/cookies/status', requireUser, (req, res) => {
     res.status(500).json({
       success: false,
       error:'Failed to check cookies status',
-    });
-  }
-});
-
-/**
- * DELETE /api/download/cookies
- * Remove saved cookies
- */
-router.delete('/cookies', requireUser, (req, res) => {
-  try {
-    downloadService.deleteCookies(req.user.id);
-
-    res.json({
-      success: true,
-      message: 'Cookies deleted',
-    });
-  } catch (error) {
-    console.error('[Download] Error deleting cookies:', error);
-    res.status(500).json({
-      success: false,
-      error:'Failed to delete cookies',
     });
   }
 });

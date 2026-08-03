@@ -2899,6 +2899,45 @@ router.post('/groups', async (req, res) => {
  * PUT /api/youtube/groups/:id
  * Update a channel group
  */
+/**
+ * PUT /api/youtube/groups/reorder
+ * Reorder groups
+ *
+ * ⚠ MUST stay registered BEFORE `PUT /groups/:id` below. Express matches layers in
+ * REGISTRATION order, so a `/groups/:id` param route registered first swallows this
+ * literal sibling: this handler used to sit below it and NEVER ran — a reorder was
+ * served by the update-group handler as `WHERE id = 'reorder'`, so group ordering
+ * silently never persisted. Regression-gated by tests/route-mounting.test.mjs.
+ */
+router.put('/groups/reorder', async (req, res) => {
+  try {
+    const { groupIds } = req.body; // Array of group IDs in new order
+
+    if (!Array.isArray(groupIds)) {
+      return res.status(400).json({ success: false, error: 'groupIds must be an array' });
+    }
+
+    // Update sort_order for each group
+    for (let i = 0; i < groupIds.length; i++) {
+      await req.db.query(
+        'UPDATE youtube_channel_groups SET sort_order = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3',
+        [i, groupIds[i], req.user.id]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to reorder groups:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+/**
+ * PUT /api/youtube/groups/:id
+ * Update a channel group
+ *
+ * ⚠ Param route — keep it AFTER every literal `/groups/<name>` sibling (see above).
+ */
 router.put('/groups/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -2946,33 +2985,6 @@ router.delete('/groups/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to delete group:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-/**
- * PUT /api/youtube/groups/reorder
- * Reorder groups
- */
-router.put('/groups/reorder', async (req, res) => {
-  try {
-    const { groupIds } = req.body; // Array of group IDs in new order
-
-    if (!Array.isArray(groupIds)) {
-      return res.status(400).json({ success: false, error: 'groupIds must be an array' });
-    }
-
-    // Update sort_order for each group
-    for (let i = 0; i < groupIds.length; i++) {
-      await req.db.query(
-        'UPDATE youtube_channel_groups SET sort_order = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3',
-        [i, groupIds[i], req.user.id]
-      );
-    }
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Failed to reorder groups:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
