@@ -78,7 +78,15 @@ jobs:
         working-directory: src/server
         run: |
           set -euo pipefail
-          SUITES="authz-v2 oidc-v2 erasure account-recovery auth-token-confusion api-key-auth"
+          # 2026-08-03: added fresh-db-boot — the virgin-DB reproduction suite. It drives a
+          # throwaway database through the EXACT production startup sequence (runMigrations →
+          # runAllMigrations → migrateAccountV2), asserts the resulting public table set
+          # matches prod, and re-runs the whole sequence to prove re-boot idempotency. It
+          # existed in src/server/tests/ and was run by NO gate, so "does the platform still
+          # boot on an empty database" was unverified on every commit. Verified green against
+          # postgres:15-alpine before wiring (84/84 tables, both boots, no already-exists
+          # errors). It must stay in a fresh-DB-per-suite loop — it is destructive by design.
+          SUITES="authz-v2 oidc-v2 erasure account-recovery auth-token-confusion api-key-auth fresh-db-boot"
           fail=0
           for t in $SUITES; do
             db="c_${t//-/_}"
@@ -98,6 +106,23 @@ jobs:
           set -euo pipefail
           XENO_API_KEY=test node tests/ai-tools-passthrough.test.mjs
           node tests/entitlement-gate.test.mjs
+
+      # Structural gates — hermetic (no DB, no network), so they run on every push.
+      #   route-mounting  — every route file is mounted; no route is shadowed by an
+      #     earlier registration on the same router; no rate limiter is exported and
+      #     never mounted; OIDC discovery advertises only auth methods the token
+      #     endpoint implements. This is the gate that catches the route-shadowing
+      #     class of bug, which is invisible to handler-level unit tests.
+      #   suite-coverage  — every suite in src/server/tests/ is wired to a gate (or is
+      #     declared ungated with a written reason). Without it, adding a test file
+      #     that nothing runs is a silent no-op.
+      - name: Run structural gates (route mounting, suite coverage)
+        working-directory: src/server
+        run: |
+          set -euo pipefail
+          node tests/route-mounting.test.mjs
+          node tests/suite-coverage.test.mjs
+          node tests/remote-status.test.js
 
   # Advisory typecheck — NOT blocking yet. `strict:true` was never enforced (vite/esbuild
   # strips types), so the fallout is unknown/likely large; this surfaces the errors in CI

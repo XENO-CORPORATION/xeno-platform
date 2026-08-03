@@ -73,7 +73,24 @@ jobs:
           # (a mis-typed workspace wallet permanently wedges ensureWorkspaceWallet).
           # migration-runner pins migration checksum recording + the rollback path; it is
           # destructive by design and relies on the fresh-DB-per-suite isolation below.
-          SUITES="ledger-v2 ledger-chain ledger-billing ledger-correctness billing-money-in media-metering wallet-service ledger-owner-kind migration-runner"
+          #
+          # 2026-08-03: added service-ledger + ledger-audit-fixes. Both already existed in
+          # src/server/tests/ and were run by NO gate at all:
+          #   • service-ledger      — the ONLY test of routes/serviceLedgerRoutes.js, the
+          #     shared-LEDGER_SERVICE_TOKEN surface that xeno-agents-api bills real money
+          #     through (token gate fail-closed, hold/settle/void, 402, replay idempotency).
+          #     It needs NO extra CI secret: the suite sets LEDGER_SERVICE_TOKEN itself.
+          #   • ledger-audit-fixes  — the regression gate for the 2026-07-19 money defects
+          #     (video-render charging, saga compensation as a reversing entry, plan
+          #     resolution, is_frozen plumbing, grant replay, in-house daily limit).
+          # Verified green against postgres:15-alpine before wiring:
+          # service-ledger 15/0, ledger-audit-fixes 41/0.
+          #
+          # Deliberately NOT here: credit-mirror-drift. It is a live-DATA probe, so on a
+          # fresh CI database it passes vacuously, and against these suites' databases it
+          # fails by design (ledger-audit-fixes poisons users.credits on purpose to prove
+          # the mirror is not the decision input). See tests/suite-coverage.test.mjs.
+          SUITES="ledger-v2 ledger-chain ledger-billing ledger-correctness billing-money-in media-metering wallet-service ledger-owner-kind migration-runner service-ledger ledger-audit-fixes"
           fail=0
           for t in $SUITES; do
             db="t_${t//-/_}"

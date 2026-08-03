@@ -445,18 +445,144 @@ Health and readiness probes.
 
 ---
 
-## FAL Proxy (`/api/fal`)
+## Account (`/api/account`) -- accountRoutes.js
 
-Inline proxy middleware forwarding requests to the fal.ai API. No authentication required. Configured in `index.js` via `createProxyMiddleware`.
+Mounted at `index.js` (`app.use('/api/account', databaseMiddleware, accountRoutes)`).
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/account/overview` | JWT | Account overview (plan, credits, usage summary) |
+| GET | `/account/notifications` | JWT | Account notifications |
 
 ---
 
-## Unmounted Route Files
+## OIDC Provider (`/api/oauth2`) -- oauth2Routes.js
 
-The following route files exist in `src/server/routes/` but are **not mounted** in the server:
+**Flag-gated:** mounted only when `OIDC_ENABLED=true`. The "Sign in with XENO" origin for the
+whole ecosystem -- see `XENO AUTH - SPEC.md`. All clients are **public** clients authenticating
+with PKCE-S256; there is no confidential-client (`client_secret`) support and the discovery
+document advertises `token_endpoint_auth_methods_supported: ["none"]` only.
 
-- **accountRoutes.js** -- Workspace management, billing overview, project management, member/invite management. Contains 23 endpoints for a workspace-based billing system.
-- **creditsRoutes.js** -- Payment method management (Stripe) and credit purchase. Contains 4 endpoints.
-- **terminalRoutes.js** -- Terminal container management, execution, stats, logs, and templates. Contains 11 endpoints.
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/oauth2/.well-known/openid-configuration` | None | OIDC discovery document |
+| GET | `/oauth2/openid-configuration` | None | Discovery document (alias) |
+| GET | `/oauth2/jwks` | None | JWKS public signing keys (ES256, legacy RS256 retained) |
+| GET | `/oauth2/authorize` | None | Authorization Code + PKCE-S256 start (RFC 8252 loopback allowed) |
+| POST | `/oauth2/authorize` | JWT | Consent/approve -- issues the authorization code |
+| POST | `/oauth2/token` | None | Token endpoint; `grant_type` = `authorization_code` \| `refresh_token` \| device code |
+| POST | `/oauth2/device_authorization` | None | RFC 8628 device grant start |
+| POST | `/oauth2/device/approve` | JWT | Approve a pending device-code request |
+| POST | `/oauth2/revoke` | None | RFC 7009 revoke a refresh token + its family |
+| POST | `/oauth2/introspect` | None | RFC 7662 token introspection |
+| POST | `/oauth2/end_session` | JWT | Session logout by `sid` |
 
-These are prepared for future features and will be mounted when their corresponding frontend UI is ready.
+---
+
+## Account v2 -- Me (`/api/v2/me`) -- v2MeRoutes.js
+
+**Flag-gated:** mounted only when `OIDC_ENABLED=true`, behind `oidcAuth` (accepts the RS256/ES256
+OIDC access token and the legacy HS256 token). This is also the OIDC `userinfo_endpoint`.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/v2/me` | OIDC | Current subject profile (userinfo) |
+| POST | `/v2/me/erase` | OIDC | GDPR erasure request |
+| POST | `/v2/me/activate-workspace` | OIDC | Set the active workspace for the subject |
+
+---
+
+## Account v2 -- Authorization (`/api/v2/authz`) -- v2AuthzRoutes.js
+
+**Flag-gated:** `OIDC_ENABLED=true`, behind `oidcAuth`. ReBAC relationship-tuple surface.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/v2/authz/check` | OIDC | Check a relation (subject, relation, object) |
+| POST | `/v2/authz/write` | OIDC | Write/delete relationship tuples |
+| GET | `/v2/authz/objects/:type/:id` | OIDC | List relations on an object |
+
+---
+
+## Account v2 -- Handles (`/api/v2/handles`) -- handleRoutes.js
+
+**Flag-gated:** `OIDC_ENABLED=true`, behind `oidcAuth`. XENO handle registry
+(handle = login = identity = `@xenostudio.ai` address).
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/v2/handles/check` | OIDC | Check handle availability |
+| POST | `/v2/handles/claim` | OIDC | Claim a handle |
+
+---
+
+## Ledger v2 -- User surface (`/api/v2/ledger`) -- v2LedgerRoutes.js
+
+**Flag-gated:** mounted only when `LEDGER_V2_ENABLED=true`, behind `oidcAuth`.
+Double-entry, hash-chained, idempotent micro-credit ledger. **Money path** -- changes here are
+gated by `.github/workflows/money-tests.yml`.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/v2/ledger/balance` | OIDC | Current balance (micro-credits) |
+| GET | `/v2/ledger/usage` | OIDC | Usage history |
+| POST | `/v2/ledger/usage` | OIDC | Record metered usage |
+| GET | `/v2/ledger/verify` | OIDC | Verify the hash-chained journal |
+| PUT | `/v2/ledger/caps` | OIDC | Set spend caps |
+| POST | `/v2/ledger/grants` | OIDC | Add a credit grant (idempotent by `sourceRef`) |
+| POST | `/v2/ledger/holds` | OIDC | Reserve a hold |
+| POST | `/v2/ledger/holds/:holdId/settle` | OIDC | Settle a hold at actual cost, release remainder |
+| POST | `/v2/ledger/holds/:holdId/void` | OIDC | Void a hold, release the reservation |
+
+---
+
+## Ledger v2 -- Service surface (`/api/v2/ledger/service`) -- serviceLedgerRoutes.js
+
+**Flag-gated:** mounted only when `LEDGER_V2_ENABLED=true`. Registered **before** the user
+surface above so the more specific path wins. Authenticated by a shared
+`LEDGER_SERVICE_TOKEN` bearer (constant-time compare, **fails closed** when the env var is
+unset) -- **no** `oidcAuth`/`authMiddleware`, no `req.user`. This is the surface trusted backend
+services (e.g. `xeno-agents-api`) bill through on behalf of a user. **Money path.**
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/v2/ledger/service/holds` | Service token | Reserve a hold for `userId` (402 when insufficient) |
+| POST | `/v2/ledger/service/holds/:holdId/settle` | Service token | Settle at actual cost, release remainder |
+| POST | `/v2/ledger/service/holds/:holdId/void` | Service token | Void the hold |
+
+---
+
+## Retired endpoints (`/api/fal`, legacy provider passthroughs)
+
+These paths are **retired** and answer `410 Gone` with `code: "ENDPOINT_RETIRED"` unless
+`ENABLE_LEGACY_PROVIDER_ENDPOINTS=true`. They predate the metered surface, charged no credits,
+and applied no entitlement gate. Use `/api/xeno/images/*` or `/api/chat/generate` instead.
+
+`/api/generate-image`, `/api/openai/images/generations`, `/api/openai/images/edits`,
+`/api/openai/images/variations`, `/api/openai/responses/create`, `/api/ideogram-reframe`,
+`/api/fal` (and `/api/fal/*`, `/api/fal-direct*`).
+
+---
+
+## Route-file mount status
+
+**Every** route file in `src/server/routes/` is mounted. There is no "prepared but unmounted"
+set, and this document must never claim otherwise.
+
+> A previous revision of this file carried an "Unmounted Route Files" section asserting that
+> `accountRoutes.js` was unmounted with 23 endpoints (it is mounted at `index.js`, and has 2
+> routes in 109 lines) and that `creditsRoutes.js` and `terminalRoutes.js` existed unmounted
+> (neither file exists). That section was a standing invitation to delete live, money- and
+> auth-adjacent routes. `src/server/tests/route-mounting.test.mjs` now asserts mount coverage
+> mechanically, so the claim cannot silently rot again -- if a route file really does become
+> unmounted, that test fails rather than this prose being quietly updated.
+
+Two files are mounted **indirectly** and are easy to miss when grepping `index.js`:
+
+- `containerRoutes.js` -- mounted at `/api/containers` by `containerIntegration.js`
+  (`integrateContainerProvisioning(app)`).
+- `productDownloadRoutes.js` -- mounted at `/product` (not under `/api`).
+
+Six routers are **flag-gated** and absent from a default boot: `oauth2Routes`, `v2MeRoutes`,
+`v2AuthzRoutes`, `handleRoutes` (all `OIDC_ENABLED=true`), and `v2LedgerRoutes`,
+`serviceLedgerRoutes` (both `LEDGER_V2_ENABLED=true`).

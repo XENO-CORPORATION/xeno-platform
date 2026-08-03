@@ -13,8 +13,19 @@ import { dirname, join } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const tests = [
-  // Offline unit suite — must run first; it needs no live host.
+  // Offline unit suites — must run first; they need no live host and no database.
   'hosts.test.mjs',
+  // Structural gate: every route file is mounted, no route is shadowed by an earlier
+  // registration, no rate limiter is exported-but-unmounted, and OIDC discovery
+  // advertises only what the token endpoint implements.
+  'route-mounting.test.mjs',
+  // Meta-gate: every suite in tests/ is wired to a gate (this is the check that would
+  // have caught service-ledger / ledger-audit-fixes / fresh-db-boot / remote-status
+  // sitting in the tree with nothing running them).
+  'suite-coverage.test.mjs',
+  // Hermetic (fake db) — remote-run status/event surface on xenoRoutes.
+  'remote-status.test.js',
+  // Live-host smoke suites — these hit TEST_API_URL over the network.
   'health.test.js',
   'auth.test.js',
   'security.test.js',

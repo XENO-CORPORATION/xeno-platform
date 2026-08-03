@@ -16,7 +16,13 @@
     "test:auth": "node tests/auth.test.js",
     "test:security": "node tests/security.test.js",
     "test:rate-limiting": "node tests/rate-limiting.test.js",
-    "test:remote-status": "node tests/remote-status.test.js"
+    "test:remote-status": "node tests/remote-status.test.js",
+    "test:route-mounting": "node tests/route-mounting.test.mjs",
+    "test:suite-coverage": "node tests/suite-coverage.test.mjs",
+    "test:service-ledger": "node tests/service-ledger.test.mjs",
+    "test:fresh-db-boot": "node tests/fresh-db-boot.test.mjs",
+    "_comment:test:mirror-drift": "OPERATIONAL probe, not a CI gate — point DATABASE_URL at a POPULATED (production) database. --min-accounts makes a vacuous 0-account run FAIL instead of passing green.",
+    "test:mirror-drift": "node tests/credit-mirror-drift.test.mjs --min-accounts=1"
   },
   "dependencies": {
     "@xeno-corporation/xeno-agent-cli": "^0.4.22",
