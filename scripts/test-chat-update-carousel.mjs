@@ -9,11 +9,18 @@ import { fileURLToPath } from 'node:url';
 const { act } = testUtils;
 const storageKey = 'xeno_chat_update_carousel_test';
 const motionStubPath = fileURLToPath(new URL('./framer-motion-test-stub.mjs', import.meta.url));
+const dissolveStubPath = fileURLToPath(new URL('./pixel-dissolve-test-stub.mjs', import.meta.url));
 const vite = await createServer({
   appType: 'custom',
   logLevel: 'error',
   optimizeDeps: { noDiscovery: true },
-  resolve: { alias: { 'framer-motion': motionStubPath } },
+  resolve: {
+    alias: {
+      'framer-motion': motionStubPath,
+      '/src/components/playground/Chat/pixelDissolve': dissolveStubPath,
+      './pixelDissolve': dissolveStubPath,
+    },
+  },
   server: { middlewareMode: true },
 });
 let dom;
@@ -104,6 +111,7 @@ try {
 
   const themedRoot = document.createElement('div');
   themedRoot.className = 'chat-themed chat-theme-light';
+  themedRoot.setAttribute('data-chat-theme-preference', 'light');
   document.body.appendChild(themedRoot);
 
   window.localStorage.removeItem(storageKey);
@@ -223,56 +231,18 @@ try {
     'Dismiss must stay outside the animated slide.',
   );
 
+  // X closes every remaining card (not only the one on screen), then shows What's new.
   const dismissThird = document.querySelector('[aria-label="Dismiss Update three"]');
   await act(async () => {
     dismissThird.click();
   });
-  assert.deepEqual(JSON.parse(window.localStorage.getItem(storageKey)), ['update-three']);
-  assert.ok(document.querySelector('article[aria-label="1 of 2"]'), 'Dismissing the final update should leave the earlier updates.');
-  assert.equal(
-    document.querySelector('[data-update-carousel-frame]')?.className,
-    fixedFrameClasses,
-    'The carousel frame classes must remain identical when a shorter update appears.',
-  );
-  const shorterSlideClasses = document.querySelector('article[aria-label="1 of 2"]')?.className;
-  assert.ok(shorterSlideClasses?.includes('h-[14rem]') && shorterSlideClasses?.includes('sm:h-[10.5rem]'), 'Every slide should occupy the same responsive frame height.');
-  assert.ok(
-    document.querySelector('[data-update-carousel-content]')?.className.includes('pb-14'),
-    'Slide content should keep bottom padding for the pinned navigation controls.',
+  const storedAfterDismiss = JSON.parse(window.localStorage.getItem(storageKey) ?? '[]').sort();
+  assert.deepEqual(
+    storedAfterDismiss,
+    ['update-one', 'update-three', 'update-two'],
+    'Dismiss should persist every remaining update id.',
   );
 
-  await act(async () => {
-    document.querySelector('[aria-label="Show next update"]').click();
-  });
-  assert.ok(document.querySelector('article[aria-label="2 of 2"]'), 'Next should reach the new final update.');
-  const dismissSecond = document.querySelector('[aria-label="Dismiss Update two"]');
-  await act(async () => {
-    dismissSecond.click();
-  });
-  assert.deepEqual(JSON.parse(window.localStorage.getItem(storageKey)), ['update-three', 'update-two']);
-  assert.ok(document.querySelector('article[aria-label="1 of 1"]'), 'One remaining update should still render.');
-  assert.equal(document.querySelector('[aria-label="Show next update"]'), null, 'One update should hide the next arrow.');
-  assert.equal(document.querySelector('[aria-label="Show previous update"]'), null, 'One update should hide the previous arrow.');
-  assert.doesNotMatch(document.body.textContent, /1 \/ 1/, 'One update should hide the position indicator.');
-  assert.ok(
-    document.querySelector('[data-update-carousel-dismiss]'),
-    'A lone remaining update should still expose dismiss in the nav.',
-  );
-
-  await act(async () => {
-    root.unmount();
-  });
-  rootElement.innerHTML = '';
-  root = createRoot(rootElement);
-
-  await renderCarousel();
-  assert.match(document.body.textContent, /Update one/, 'The remaining update should survive remount.');
-  assert.doesNotMatch(document.body.textContent, /Update two|Update three/, 'Dismissed updates should remain hidden.');
-
-  const dismissFirst = document.querySelector('[aria-label="Dismiss Update one"]');
-  await act(async () => {
-    dismissFirst.click();
-  });
   const restoreButton = document.querySelector('[data-update-carousel-restore]');
   assert.equal(
     restoreButton?.textContent?.replace(/\s+/g, ' ').trim(),
@@ -283,18 +253,28 @@ try {
     restoreButton?.className.includes('fixed')
       && restoreButton?.className.includes('bottom-5')
       && restoreButton?.className.includes('right-5'),
-    'The restore control should sit fixed at the bottom-right of the page.',
+    'The restore control should sit fixed at the bottom-right of the page (viewport).',
+  );
+  assert.ok(
+    !restoreButton?.className.includes('inset-0')
+      && !restoreButton?.classList.contains('chat-themed'),
+    'Restore must be the chip alone — no full-screen .chat-themed overlay.',
   );
   assert.ok(
     restoreButton?.className.includes('h-9')
-      && restoreButton?.className.includes('rounded-lg')
-      && restoreButton?.className.includes('border-white/[0.08]'),
-    'The restore control should use the same bordered control chrome as the top-right chat buttons.',
+      && restoreButton?.className.includes('rounded-lg'),
+    'The restore control should keep compact control chrome.',
+  );
+  assert.ok(
+    restoreButton?.style?.color
+      && restoreButton?.style?.backgroundColor
+      && restoreButton?.style?.borderColor,
+    'The restore control should paint with resolved theme colors (inline from the Chat shell).',
   );
   assert.equal(
     restoreButton?.parentElement,
-    themedRoot,
-    'The restore control must portal into .chat-themed so Light theme tokens still apply.',
+    document.body,
+    'The restore control must portal to document.body so it anchors to the page, not the composer slot.',
   );
   assert.equal(document.querySelector('[data-update-carousel-frame]'), null, 'Dismissed state must not keep the large carousel frame.');
   assert.equal(document.querySelector('article'), null, 'No slides should remain while the restore control is shown.');

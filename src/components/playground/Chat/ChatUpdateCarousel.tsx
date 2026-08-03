@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import ChatUpdateDemoPanel from './ChatUpdateDemoPanel';
-import { runPixelDissolve } from './pixelDissolve';
+import { captureDissolvePlate, runPixelDissolve } from './pixelDissolve';
 
 /** Body content that fills the shared Example-prompt showcase shell. */
 export type ChatUpdateDemoBody =
@@ -168,6 +168,61 @@ const readDismissedIds = (storageKey: string): Set<string> => {
   }
 };
 
+/** Read live Chat theme tokens from the shell — portaled nodes cannot rely on class-only vars. */
+const readChatThemeChipStyles = (): {
+  color: string;
+  borderColor: string;
+  backgroundColor: string;
+  hoverBackgroundColor: string;
+} => {
+  const fallback = {
+    color: '#fafafa',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#262626',
+    hoverBackgroundColor: '#404040',
+  };
+
+  try {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return fallback;
+
+    const themeHost = document.querySelector<HTMLElement>(
+      '.chat-themed[data-chat-theme-preference]',
+    );
+    if (!themeHost) return fallback;
+
+    const styles = window.getComputedStyle(themeHost);
+    const token = (name: string, next: string) => {
+      const value = styles.getPropertyValue(name)?.trim();
+      return value || next;
+    };
+
+    // Light shell uses a near-white canvas — pick light fallbacks when tokens are missing.
+    const canvas = token('--chat-canvas', '');
+    const isLight =
+      canvas.toLowerCase() === '#ffffff'
+      || canvas.toLowerCase() === '#fff'
+      || themeHost.classList.contains('chat-theme-light');
+
+    if (isLight) {
+      return {
+        color: token('--chat-text', '#0a0a0a'),
+        borderColor: token('--chat-border', '#d4d4d4'),
+        backgroundColor: token('--chat-elevated', '#ffffff'),
+        hoverBackgroundColor: token('--chat-control', '#f5f5f5'),
+      };
+    }
+
+    return {
+      color: token('--chat-text', fallback.color),
+      borderColor: token('--chat-border', fallback.borderColor),
+      backgroundColor: token('--chat-elevated', fallback.backgroundColor),
+      hoverBackgroundColor: token('--chat-control', fallback.hoverBackgroundColor),
+    };
+  } catch {
+    return fallback;
+  }
+};
+
 const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
   storageKey = DEFAULT_STORAGE_KEY,
   updates,
@@ -180,6 +235,9 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
   const [isDissolving, setIsDissolving] = useState(false);
   const frameRef = useRef<HTMLDivElement>(null);
   const dissolveAbortRef = useRef<AbortController | null>(null);
+  const dissolveLockRef = useRef(false);
+  /** After a slide has entered once, never re-run fall-in opacity:0 on re-render. */
+  const fallInPlayedForIdRef = useRef<string | null>(null);
 
   const configuredUpdates = useMemo(
     () => updates.slice(0, MAX_VISIBLE_UPDATES),
@@ -220,6 +278,7 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
     const frame = frameRef.current;
     if (!frame) return;
     frame.style.opacity = '';
+    frame.style.visibility = '';
     frame.style.pointerEvents = '';
   }, [isDissolving, currentUpdate?.id]);
 
@@ -239,6 +298,7 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
   const restoreUpdates = () => {
     dissolveAbortRef.current?.abort();
     setIsDissolving(false);
+    dissolveLockRef.current = false;
     const nextDismissedIds = new Set<string>();
     setDirection(1);
     setCurrentIndex(0);
@@ -246,62 +306,28 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
     persistDismissedIds(nextDismissedIds);
   };
 
-  if (configuredUpdates.length === 0) return null;
-
-  if (!currentUpdate) {
-    // Empty-state chrome uses transform (-translate-y-1/2), which traps position:fixed.
-    // Portal into `.chat-themed` (not the transformed child) so:
-    // 1) fixed still anchors to the page
-    // 2) Light/Dark theme overrides still apply (body is outside the themed tree)
-    if (typeof document === 'undefined') return null;
-
-    const portalRoot =
-      document.querySelector('.chat-themed') ?? document.body;
-
-    return createPortal(
-      <button
-        type="button"
-        data-update-carousel-restore
-        onClick={restoreUpdates}
-        aria-label="What's new"
-        className="fixed bottom-5 right-5 z-[80] flex h-9 items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] px-3 py-1.5 text-sm text-white/80 transition-colors hover:border-white/20 hover:bg-black/20 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
-      >
-        <Sparkles size={16} aria-hidden="true" />
-        <span>What's new</span>
-      </button>,
-      portalRoot,
-    );
-  }
+  /** Apply dismissals from the in-memory set — do not re-read storage (avoids a lost restore button). */
+  const applyDismissedIds = (nextIds: Set<string>) => {
+    persistDismissedIds(nextIds);
+    setDismissedIds(new Set(nextIds));
+    setDirection(1);
+    setCurrentIndex(0);
+  };
 
   const showPrevious = () => {
-    if (isDissolving) return;
+    if (isDissolving || dissolveLockRef.current) return;
     setDirection(-1);
     setCurrentIndex((index) => (index - 1 + availableUpdates.length) % availableUpdates.length);
   };
 
   const showNext = () => {
-    if (isDissolving) return;
+    if (isDissolving || dissolveLockRef.current) return;
     setDirection(1);
     setCurrentIndex((index) => (index + 1) % availableUpdates.length);
   };
 
-  /**
-   * React state can lag behind disk when a dissolve is aborted before `applyDismiss`.
-   * Always treat localStorage as the source of truth when syncing UI after a dismiss.
-   */
-  const syncDismissedFromStorage = () => {
-    const stored = readDismissedIds(storageKey);
-    setDismissedIds(stored);
-    setDirection(1);
-    setCurrentIndex((index) => {
-      const remaining = configuredUpdates.filter((update) => !stored.has(update.id)).length;
-      if (remaining === 0) return 0;
-      return Math.min(index, remaining - 1);
-    });
-  };
-
   const dismissCurrent = () => {
-    if (isDissolving) return;
+    if (isDissolving || dissolveLockRef.current) return;
 
     const frame = frameRef.current;
 
@@ -311,46 +337,87 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
     for (const update of availableUpdates) {
       nextDismissedIds.add(update.id);
     }
-    persistDismissedIds(nextDismissedIds);
 
-    // Instant exit when the user asks the OS to cut motion — the effect is the point of
-    // the animation, not a requirement for the dismiss itself.
-    if (prefersReducedMotion || !frame) {
-      syncDismissedFromStorage();
+    if (!frame) {
+      applyDismissedIds(nextDismissedIds);
       return;
     }
 
-    setIsDissolving(true);
+    dissolveLockRef.current = true;
     dissolveAbortRef.current?.abort();
     const controller = new AbortController();
     dissolveAbortRef.current = controller;
 
+    // Keep the live card visible during capture. No setState and no cover-clone
+    // (clone on document.body loses themed CSS → empty flash → reappear → dissolve).
+    // Handoff happens inside runPixelDissolve: overlay painted, then live hidden.
     void (async () => {
       try {
-        await runPixelDissolve(frame, {
-          durationMs: 920,
-          sampleStep: 3,
-          // Extra headroom — dust drifts upward off the top edge.
-          padPx: 72,
+        const { plate } = await captureDissolvePlate(frame, {
           signal: controller.signal,
-          // As soon as the overlay owns the pixels, drop the cards from React so they
-          // cannot flash back after the dust settles.
-          onCaptured: () => {
-            if (!controller.signal.aborted) {
-              syncDismissedFromStorage();
-            }
-          },
+        });
+        if (controller.signal.aborted) {
+          // Still dismiss — never leave the user with a hidden card and no restore chip.
+          return;
+        }
+
+        await runPixelDissolve(frame, {
+          plate,
+          // Snappy dissolve — restore chip is applied only in finally (after this await).
+          durationMs: prefersReducedMotion ? 220 : 450,
+          sampleStep: 3,
+          padPx: 120,
+          signal: controller.signal,
+          onCaptured: () => setIsDissolving(true),
         });
       } catch {
         // Snapshot failures still dismiss — never trap the user on a stuck card.
-        syncDismissedFromStorage();
       } finally {
-        // Re-sync even on abort: restoreUpdates clears storage first, so this stays empty.
-        syncDismissedFromStorage();
+        // Only after dissolve settles — do not move this into onCaptured (chip appeared too early).
+        applyDismissedIds(nextDismissedIds);
         setIsDissolving(false);
+        dissolveLockRef.current = false;
       }
     })();
   };
+
+  if (configuredUpdates.length === 0) return null;
+
+  if (!currentUpdate) {
+    // Fixed to the viewport (page). Inline theme colors from the live Chat shell — CSS vars
+    // on a body portal are unreliable; hard-coded zinc also ignored Light theme.
+    if (typeof document === 'undefined') return null;
+
+    const chip = readChatThemeChipStyles();
+
+    return createPortal(
+      <button
+        type="button"
+        data-update-carousel-restore
+        data-update-carousel-restore-root
+        onClick={restoreUpdates}
+        aria-label="What's new"
+        className="fixed bottom-5 right-5 z-[200] flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1"
+        style={{
+          color: chip.color,
+          borderColor: chip.borderColor,
+          backgroundColor: chip.backgroundColor,
+          // Ring matches border token without Tailwind theme coupling.
+          boxShadow: 'none',
+        }}
+        onMouseEnter={(event) => {
+          event.currentTarget.style.backgroundColor = chip.hoverBackgroundColor;
+        }}
+        onMouseLeave={(event) => {
+          event.currentTarget.style.backgroundColor = chip.backgroundColor;
+        }}
+      >
+        <Sparkles size={16} aria-hidden="true" />
+        <span>What's new</span>
+      </button>,
+      document.body,
+    );
+  }
 
   const copyUpdateValue = async (value: string) => {
     try {
@@ -381,14 +448,17 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
       };
 
   // Content falls into place after the slide arrives; arrows + dismiss stay outside this tree.
+  // Play fall-in only the first render of each slide id — later re-renders must not flash.
+  const slideId = currentUpdate.id;
+  const playFallIn =
+    !prefersReducedMotion && fallInPlayedForIdRef.current !== slideId;
+  if (playFallIn) {
+    fallInPlayedForIdRef.current = slideId;
+  }
+
   const fallIn = (order: number) =>
-    prefersReducedMotion
+    playFallIn
       ? {
-          initial: { opacity: 1, y: 0 },
-          animate: { opacity: 1, y: 0 },
-          transition: { duration: 0 },
-        }
-      : {
           initial: { opacity: 0, y: -16 },
           animate: { opacity: 1, y: 0 },
           transition: {
@@ -396,6 +466,11 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
             delay: 0.06 + order * 0.07,
             ease: [0.22, 0.7, 0.2, 1] as const,
           },
+        }
+      : {
+          initial: false as const,
+          animate: { opacity: 1, y: 0 },
+          transition: { duration: 0 },
         };
 
   let fallOrder = 0;

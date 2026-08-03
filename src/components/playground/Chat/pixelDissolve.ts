@@ -1,199 +1,60 @@
 /**
- * Bottom-to-top pixel disintegration for a DOM node. No extra deps.
+ * Bottom-to-top pixel disintegration for a DOM node.
  *
- * The element is snapshotted onto a "plate" canvas drawn 1:1, then hidden. Each cell of
- * the plate is punched out exactly once, in a randomised order inside a wide travelling
- * band — so there is never a straight boundary, only a ragged, thinning edge. Each punched
- * cell becomes a dust particle on a fixed overlay canvas, which is why overflow:hidden
- * parents cannot clip the dust.
- *
- * Cost is bounded: every cell is punched once for the whole animation, and only cells still
- * in flight are drawn per frame.
+ * Capture while the live card stays visible, then in one synchronous handoff:
+ * paint a fixed overlay on document.body → hide the live node → dissolve.
+ * No cover-clone (cloning into body loses themed CSS and flashes empty).
  */
 
+import { toCanvas } from 'html-to-image';
+
 type DissolveCell = {
-  /** Snapshot-space origin, device px — where the hole gets punched. */
   deviceX: number;
   deviceY: number;
-  /** Overlay-space origin, CSS px — where the dust starts. */
   x: number;
   y: number;
   vx: number;
   vy: number;
-  /** Precomputed `rgb(...)`; building this per frame is the hot path. */
   color: string;
   alpha: number;
-  /** Normalised time (0..1) at which this cell leaves the plate. */
   departAt: number;
   size: number;
 };
 
 export type PixelDissolveOptions = {
-  /** Total animation time in ms. */
   durationMs?: number;
-  /** Sample every N CSS pixels (higher = coarser dust, cheaper). */
   sampleStep?: number;
-  /** Extra canvas padding so dust can drift outside the card. */
   padPx?: number;
-  /**
-   * When true (default for dismiss), the element stays opacity:0 after the
-   * animation so React can unmount it without a one-frame flash.
-   */
   leaveHidden?: boolean;
-  /**
-   * Fired once the overlay owns the pixels. Safe to unmount / replace `element`
-   * from here — the rest of the animation does not need the live DOM node.
-   */
+  /** Pre-captured plate — take this BEFORE any React state change. */
+  plate?: HTMLCanvasElement;
   onCaptured?: () => void;
   signal?: AbortSignal;
 };
 
-/** Fraction of the duration the band's leading edge takes to cross the card (bottom → top). */
-const SWEEP_SPAN = 0.58;
-/** Randomised delay window per cell — this is what makes the edge ragged, not a line. */
-const BAND_SPAN = 0.26;
-/**
- * How long one cell's dust stays alive. Kept short on purpose: the first pixels must be
- * gone before the next ones leave, otherwise the dust piles up into a solid noise block
- * instead of thinning out. SWEEP + BAND + FLIGHT must stay <= 1.
- */
-const FLIGHT_SPAN = 0.15;
+/** Wave occupies most of the timeline; dust flight fills the rest. */
+const SWEEP_SPAN = 0.68;
+const BAND_SPAN = 0.06;
+/** Short enough to stay snappy at ~450ms total; long enough to read upward dust. */
+const FLIGHT_SPAN = 0.34;
+const DUST_ALPHA_FLOOR = 20;
+/** Only some cells become flying dust — denser plate punch, sparser trail (reference look). */
+const DUST_SPAWN_CHANCE = 0.45;
 
-const STYLE_PROPS = [
-  'background-color',
-  'background-image',
-  'border-top-width',
-  'border-right-width',
-  'border-bottom-width',
-  'border-left-width',
-  'border-top-style',
-  'border-right-style',
-  'border-bottom-style',
-  'border-left-style',
-  'border-top-color',
-  'border-right-color',
-  'border-bottom-color',
-  'border-left-color',
-  'border-radius',
-  'box-shadow',
-  'color',
-  'font-family',
-  'font-size',
-  'font-weight',
-  'font-style',
-  'letter-spacing',
-  'line-height',
-  'text-align',
-  'text-transform',
-  'opacity',
-  'padding-top',
-  'padding-right',
-  'padding-bottom',
-  'padding-left',
-  'display',
-  'flex-direction',
-  'flex-wrap',
-  'align-items',
-  'justify-content',
-  'gap',
-  'row-gap',
-  'column-gap',
-  'grid-template-columns',
-  'grid-template-rows',
-  'overflow',
-  'white-space',
-  'text-overflow',
-  'width',
-  'height',
-  'min-width',
-  'min-height',
-  'max-width',
-  'max-height',
-  'position',
-  'inset',
-  'top',
-  'right',
-  'bottom',
-  'left',
-  'z-index',
-  'transform',
-  'filter',
-] as const;
-
-const copyComputedTree = (source: Element, target: Element) => {
-  if (source instanceof HTMLElement && target instanceof HTMLElement) {
-    const computed = getComputedStyle(source);
-    let cssText = '';
-    for (const prop of STYLE_PROPS) {
-      cssText += `${prop}:${computed.getPropertyValue(prop)};`;
-    }
-    // Keep layout box stable inside the SVG foreignObject.
-    cssText += 'box-sizing:border-box;margin:0;';
-    target.style.cssText = cssText;
-  }
-
-  const sourceChildren = source.children;
-  const targetChildren = target.children;
-  const count = Math.min(sourceChildren.length, targetChildren.length);
-  for (let i = 0; i < count; i += 1) {
-    copyComputedTree(sourceChildren[i], targetChildren[i]);
-  }
-};
-
-const loadImage = (url: string): Promise<HTMLImageElement> =>
-  new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('pixelDissolve: snapshot image failed to load'));
-    image.src = url;
-  });
+/** Smoothstep — eases the whole wave so it doesn't feel linear / stepped. */
+const smoothstep = (u: number) => u * u * (3 - 2 * u);
 
 const createPlateCanvas = (cssWidth: number, cssHeight: number, scale: number) => {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.floor(cssWidth * scale));
   canvas.height = Math.max(1, Math.floor(cssHeight * scale));
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { alpha: true });
   if (!ctx) throw new Error('pixelDissolve: 2d context unavailable');
   return { canvas, ctx };
 };
 
-/**
- * Render `element` into a canvas at device resolution.
- * Uses SVG foreignObject + inlined computed styles — good enough for this self-contained card.
- */
-const snapshotElement = async (
+const solidCardCanvas = (
   element: HTMLElement,
-  cssWidth: number,
-  cssHeight: number,
-  scale: number,
-): Promise<HTMLCanvasElement> => {
-  const clone = element.cloneNode(true) as HTMLElement;
-  copyComputedTree(element, clone);
-  clone.style.width = `${cssWidth}px`;
-  clone.style.height = `${cssHeight}px`;
-  clone.style.maxWidth = `${cssWidth}px`;
-  clone.style.maxHeight = `${cssHeight}px`;
-  clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-
-  const serialized = new XMLSerializer().serializeToString(clone);
-  const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${cssWidth}" height="${cssHeight}">
-  <foreignObject width="100%" height="100%">${serialized}</foreignObject>
-</svg>`;
-
-  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  const image = await loadImage(url);
-
-  const { canvas, ctx } = createPlateCanvas(cssWidth, cssHeight, scale);
-  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas;
-};
-
-/**
- * Fallback when the SVG snapshot fails: a flat monochrome card silhouette.
- * Still disintegrates bottom → top so dismiss never looks broken.
- */
-const silhouetteCanvas = (
   cssWidth: number,
   cssHeight: number,
   scale: number,
@@ -202,8 +63,7 @@ const silhouetteCanvas = (
   const w = canvas.width;
   const h = canvas.height;
   const radius = 16 * scale;
-
-  ctx.fillStyle = '#111113';
+  ctx.fillStyle = getComputedStyle(element).backgroundColor || 'rgb(17, 17, 19)';
   ctx.beginPath();
   ctx.moveTo(radius, 0);
   ctx.arcTo(w, 0, w, h, radius);
@@ -212,34 +72,71 @@ const silhouetteCanvas = (
   ctx.arcTo(0, 0, w, 0, radius);
   ctx.closePath();
   ctx.fill();
-
-  // Lighter band on the left (title zone) so the dust is not one flat gray.
-  const gradient = ctx.createLinearGradient(0, 0, w * 0.55, 0);
-  gradient.addColorStop(0, 'rgba(228,228,231,0.22)');
-  gradient.addColorStop(1, 'rgba(228,228,231,0)');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, w * 0.55, h);
-
   return canvas;
 };
 
-/** Below this the cell is treated as empty: punched out, but it produces no dust. */
-const DUST_ALPHA_FLOOR = 18;
+/** Capture the live card. Call before any setState. Keep the card visible during this. */
+export const captureDissolvePlate = async (
+  element: HTMLElement,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ plate: HTMLCanvasElement; cssWidth: number; cssHeight: number; rect: DOMRect }> => {
+  const rect = element.getBoundingClientRect();
+  const cssWidth = Math.max(1, Math.round(rect.width));
+  const cssHeight = Math.max(1, Math.round(rect.height));
+  // 1× is enough for soft dust and keeps the wave smooth on mid-range GPUs.
+  const scale = 1;
 
-/**
- * One cell per sampled block, sorted by departure time so each frame only has to walk
- * the cells that just left instead of the whole grid.
- *
- * Every cell is scheduled, including transparent ones. Skipping them would leave the
- * anti-aliased pixels inside them — the rounded corners — painted on the plate forever.
- */
+  if (options.signal?.aborted) {
+    throw new Error('pixelDissolve: aborted');
+  }
+
+  try {
+    const painted = await toCanvas(element, {
+      width: cssWidth,
+      height: cssHeight,
+      pixelRatio: scale,
+      cacheBust: true,
+      skipFonts: true,
+    });
+    if (painted.width < 2 || painted.height < 2) {
+      throw new Error('pixelDissolve: empty snapshot');
+    }
+    return { plate: painted, cssWidth, cssHeight, rect };
+  } catch {
+    return {
+      plate: solidCardCanvas(element, cssWidth, cssHeight, scale),
+      cssWidth,
+      cssHeight,
+      rect,
+    };
+  }
+};
+
+/** @deprecated Cover clones lose themed CSS on document.body and flash empty — do not use. */
+export const placeCoverClone = (element: HTMLElement): HTMLElement => {
+  const rect = element.getBoundingClientRect();
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.style.cssText = [
+    'position:fixed',
+    `left:${rect.left}px`,
+    `top:${rect.top}px`,
+    `width:${rect.width}px`,
+    `height:${rect.height}px`,
+    'margin:0',
+    'z-index:9998',
+    'pointer-events:none',
+  ].join(';');
+  document.body.appendChild(clone);
+  return clone;
+};
+
 const buildCells = (
   plate: HTMLCanvasElement,
   sampleStep: number,
-  scale: number,
+  plateScale: number,
 ): { cells: DissolveCell[]; stepDevice: number } => {
   const ctx = plate.getContext('2d');
-  const stepDevice = Math.max(1, Math.floor(sampleStep * scale));
+  const stepDevice = Math.max(1, Math.floor(sampleStep * plateScale));
   if (!ctx) return { cells: [], stepDevice };
 
   const { data, width, height } = ctx.getImageData(0, 0, plate.width, plate.height);
@@ -249,27 +146,30 @@ const buildCells = (
     for (let x = 0; x < width; x += stepDevice) {
       const i = (y * width + x) * 4;
       const alpha = data[i + 3];
-      // Canvas Y grows downward — bottom edge is normalizedY ≈ 1 and leaves first.
+      if (alpha < DUST_ALPHA_FLOOR) continue;
+
+      // Bottom (high y) → low departAt → leaves first. Pure vertical wave.
       const normalizedY = height <= 1 ? 1 : y / (height - 1);
-      // Leading edge sweeps bottom → top; the random term spreads each row's departure over
-      // BAND_SPAN, so neighbours leave at different times and the edge never reads as a line.
       const departAt = Math.min(
         1 - FLIGHT_SPAN,
-        (1 - normalizedY) * SWEEP_SPAN + Math.random() ** 1.5 * BAND_SPAN,
+        (1 - normalizedY) * SWEEP_SPAN + Math.random() ** 2 * BAND_SPAN,
       );
+
+      const cssStep = stepDevice / plateScale;
+      const spawnDust = Math.random() < DUST_SPAWN_CHANCE;
 
       cells.push({
         deviceX: x,
         deviceY: y,
-        x: x / scale,
-        y: y / scale,
-        // Drift upward (negative Y) with a little sideways scatter — matches B→T dissolve.
-        vx: (Math.random() - 0.5) * 1.15,
-        vy: -(0.45 + Math.random() * 1.4 + normalizedY * 0.55),
+        x: x / plateScale,
+        y: y / plateScale,
+        // Almost no horizontal drift — vertical exit like the reference, rotated.
+        vx: spawnDust ? (Math.random() - 0.5) * 0.28 : 0,
+        vy: spawnDust ? -(1.2 + Math.random() * 1.6) : 0,
         color: `rgb(${data[i]},${data[i + 1]},${data[i + 2]})`,
-        alpha: alpha < DUST_ALPHA_FLOOR ? 0 : alpha / 255,
+        alpha: spawnDust ? Math.min(1, alpha / 255) : 0,
         departAt,
-        size: Math.max(1, stepDevice / scale) * (0.7 + Math.random() * 0.6),
+        size: Math.max(1.4, cssStep * (0.75 + Math.random() * 0.5)),
       });
     }
   }
@@ -279,8 +179,8 @@ const buildCells = (
 };
 
 /**
- * Disintegrates `element` into pixels from bottom to top. Resolves when the dust has settled.
- * The element is temporarily opacity:0; callers decide when to unmount / replace it.
+ * Disintegrates `element` into fine pixels from bottom to top (vertical).
+ * Prefer: captureDissolvePlate (card still visible) → runPixelDissolve({ plate }).
  */
 export const runPixelDissolve = async (
   element: HTMLElement,
@@ -289,36 +189,43 @@ export const runPixelDissolve = async (
   if (typeof window === 'undefined') return;
   if (options.signal?.aborted) return;
 
-  const durationMs = options.durationMs ?? 920;
+  const durationMs = options.durationMs ?? 450;
   const sampleStep = options.sampleStep ?? 3;
-  const padPx = options.padPx ?? 64;
+  const padPx = options.padPx ?? 120;
   const leaveHidden = options.leaveHidden !== false;
 
-  const rect = element.getBoundingClientRect();
-  const cssWidth = Math.max(1, Math.round(rect.width));
-  const cssHeight = Math.max(1, Math.round(rect.height));
-  const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+  let plate = options.plate;
+  let cssWidth: number;
+  let cssHeight: number;
+  let rect: DOMRect;
 
-  let plate: HTMLCanvasElement;
-  try {
-    plate = await snapshotElement(element, cssWidth, cssHeight, scale);
-  } catch {
-    plate = silhouetteCanvas(cssWidth, cssHeight, scale);
+  if (plate) {
+    // Re-measure at handoff so the overlay sits on the card even if the page scrolled.
+    rect = element.getBoundingClientRect();
+    cssWidth = Math.max(1, Math.round(rect.width));
+    cssHeight = Math.max(1, Math.round(rect.height));
+  } else {
+    const captured = await captureDissolvePlate(element, { signal: options.signal });
+    plate = captured.plate;
+    cssWidth = captured.cssWidth;
+    cssHeight = captured.cssHeight;
+    rect = captured.rect;
   }
 
   if (options.signal?.aborted) return;
 
-  const { cells, stepDevice } = buildCells(plate, sampleStep, scale);
+  const plateScale = plate.width / Math.max(1, cssWidth);
+  const { cells, stepDevice } = buildCells(plate, sampleStep, plateScale);
   const plateCtx = plate.getContext('2d');
   if (cells.length === 0 || !plateCtx) return;
-  // Every later plate draw removes pixels instead of adding them.
   plateCtx.globalCompositeOperation = 'destination-out';
 
   const overlay = document.createElement('canvas');
   const overlayWidth = cssWidth + padPx * 2;
   const overlayHeight = cssHeight + padPx * 2;
-  overlay.width = Math.floor(overlayWidth * scale);
-  overlay.height = Math.floor(overlayHeight * scale);
+  overlay.width = Math.max(1, Math.floor(overlayWidth * plateScale));
+  overlay.height = Math.max(1, Math.floor(overlayHeight * plateScale));
+  overlay.setAttribute('data-dissolve-overlay', 'true');
   overlay.style.cssText = [
     'position:fixed',
     `left:${rect.left - padPx}px`,
@@ -329,24 +236,23 @@ export const runPixelDissolve = async (
     'z-index:9999',
   ].join(';');
 
-  const ctx = overlay.getContext('2d');
+  const ctx = overlay.getContext('2d', { alpha: true });
   if (!ctx) return;
-  ctx.scale(scale, scale);
-  // The plate is already at device resolution — resampling it would blur the card.
+  ctx.setTransform(plateScale, 0, 0, plateScale, 0, 0);
   ctx.imageSmoothingEnabled = false;
 
-  const host =
-    element.closest('.chat-themed') instanceof HTMLElement
-      ? (element.closest('.chat-themed') as HTMLElement)
-      : document.body;
-  host.appendChild(overlay);
+  // --- Single synchronous handoff: overlay on → live off. No blank frame. ---
+  document.body.appendChild(overlay);
+  ctx.clearRect(0, 0, overlayWidth, overlayHeight);
+  ctx.drawImage(plate, padPx, padPx, cssWidth, cssHeight);
 
   const previousOpacity = element.style.opacity;
+  const previousVisibility = element.style.visibility;
   const previousPointerEvents = element.style.pointerEvents;
   element.style.opacity = '0';
+  element.style.visibility = 'hidden';
   element.style.pointerEvents = 'none';
 
-  // Overlay has the snapshot — caller may remove the live node now.
   options.onCaptured?.();
 
   const start = performance.now();
@@ -354,15 +260,14 @@ export const runPixelDissolve = async (
   await new Promise<void>((resolve) => {
     let frameId = 0;
     let nextCell = 0;
-    /** Cells punched out of the plate and still visible as dust. */
     const inFlight: DissolveCell[] = [];
 
     const cleanup = () => {
       cancelAnimationFrame(frameId);
       overlay.remove();
-      // Element may already be unmounted via onCaptured — only restore if it survived.
       if (!leaveHidden && element.isConnected) {
         element.style.opacity = previousOpacity;
+        element.style.visibility = previousVisibility;
         element.style.pointerEvents = previousPointerEvents;
       }
       resolve();
@@ -380,9 +285,11 @@ export const runPixelDissolve = async (
         return;
       }
 
-      const t = Math.min(1, (now - start) / durationMs);
+      const raw = Math.min(1, (now - start) / durationMs);
+      // Ease the timeline so the wave + dust accelerate/settle instead of ticking linearly.
+      const t = smoothstep(raw);
 
-      // Punch the cells whose turn came since the last frame — each cell, exactly once.
+      // Punch every cell that is due this frame — no per-frame cap (that caused stair-steps).
       while (nextCell < cells.length && cells[nextCell].departAt <= t) {
         const cell = cells[nextCell];
         nextCell += 1;
@@ -391,7 +298,6 @@ export const runPixelDissolve = async (
       }
 
       ctx.clearRect(0, 0, overlayWidth, overlayHeight);
-      // What is left of the card: real snapshot pixels, holes and all.
       ctx.drawImage(plate, padPx, padPx, cssWidth, cssHeight);
 
       for (let i = inFlight.length - 1; i >= 0; i -= 1) {
@@ -404,14 +310,14 @@ export const runPixelDissolve = async (
           continue;
         }
 
-        const ease = 1 - (1 - local) ** 2;
-        // Steep falloff — a particle is more than half gone a third of the way through.
-        ctx.globalAlpha = cell.alpha * (1 - local) ** 2.6;
+        // Softer ease-out on flight + alpha so dust fades instead of popping off.
+        const ease = 1 - (1 - local) ** 3;
+        ctx.globalAlpha = cell.alpha * (1 - smoothstep(local));
         ctx.fillStyle = cell.color;
-        const size = cell.size * (1 - local * 0.55);
+        const size = cell.size * (1 - local * 0.28);
         ctx.fillRect(
-          padPx + cell.x + cell.vx * ease * 36,
-          padPx + cell.y + cell.vy * ease * 62,
+          padPx + cell.x + cell.vx * ease * 22,
+          padPx + cell.y + cell.vy * ease * 160,
           size,
           size,
         );
@@ -419,7 +325,7 @@ export const runPixelDissolve = async (
 
       ctx.globalAlpha = 1;
 
-      if (t < 1) {
+      if (t < 1 || nextCell < cells.length || inFlight.length > 0) {
         frameId = requestAnimationFrame(tick);
       } else {
         options.signal?.removeEventListener('abort', onAbort);
