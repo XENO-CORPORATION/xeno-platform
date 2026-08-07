@@ -2015,7 +2015,7 @@ const CHAT_THEME_SURFACE_PALETTES: readonly ChatThemePreviewTokens[] = [
   createChatThemePalette('#282b31', '#383c44', '#464b55', '#505661', '#69717c', '#f7f8fa', '#c5cad0', '#565d67', '#69717c', '#383c44'),
   createChatThemePalette('#30343b', '#41464d', '#505661', '#5b626d', '#757d88', '#f8f9fa', '#d0d4d9', '#626a74', '#757d88', '#41464d'),
   createChatThemePalette('#3b4048', '#4b515b', '#5d6470', '#686f7b', '#858c96', '#fafafa', '#e0e2e6', '#707782', '#858c96', '#4b515b'),
-  createChatThemePalette('#5e646d', '#707781', '#858c96', '#9198a1', '#aab0b7', '#fafafa', '#e4e6e9', '#858c96', '#aab0b7', '#707781'),
+  createChatThemePalette('#414956', '#4d5562', '#59616f', '#656e7c', '#7a8492', '#fafafa', '#d5dae2', '#59616f', '#656e7c', '#4d5562'),
   createChatThemePalette('#d7d9dd', '#e1e3e6', '#eceef0', '#f1f2f3', '#f6f7f8', '#0a0a0a', '#55585d', '#dfe1e4', '#f6f7f8', '#e1e3e6'),
   createChatThemePalette('#ffffff', '#fafafa', '#ffffff', '#f5f5f5', '#e5e5e5', '#0a0a0a', '#737373', '#e5e5e5', '#f5f5f5', '#fafafa'),
 ];
