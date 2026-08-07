@@ -2,10 +2,12 @@ import type { ProductContent } from './_types';
 
 /* XENO Hub — sourced from ../xeno-hub (README + the real Electron renderer:
  * HubInterface, CreativeAppsContent, TitleBar, StorePage, creativeAppsStore,
- * marketplaceStore, updater). Shipping desktop launcher (v0.5.x). Honest note:
+ * marketplaceStore, updater). Shipping desktop launcher (v0.6.x). Honest note:
  * a couple of panels (OS/containers, home Showcase) are still preview/mock.
  * PLATFORMS: only a Windows installer is published — every release in the R2
- * feed is windows-only. Do not claim macOS/Linux until those builds ship. */
+ * feed is windows-only. Do not claim macOS/Linux until those builds ship.
+ * SIGNING: the published Windows installer is currently UNSIGNED, so users see
+ * a SmartScreen prompt on first run. Do not imply a signed/verified install. */
 const hub: ProductContent = {
   slug: 'hub',
   hero: {
@@ -131,7 +133,7 @@ const hub: ProductContent = {
     { label: 'Platforms', value: 'Windows (x64)' },
     { label: 'Engine', value: 'Electron 33 · React 19' },
     { label: 'Account', value: 'XENO sign-in (device flow)' },
-    { label: 'Status', value: 'Shipping · v0.5.x' },
+    { label: 'Status', value: 'Shipping · v0.6.x' },
   ],
   faq: [
     { q: 'What is XENO Hub?', a: 'It’s the desktop launcher for the whole XENO ecosystem — one window to install, update and launch every XENO app, run a built-in agent and tools, browse the marketplace, and manage your credits.' },
