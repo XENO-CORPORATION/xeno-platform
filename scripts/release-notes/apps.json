@@ -1,0 +1,35 @@
+{
+  "_source": {
+    "product": "XENO Apps",
+    "slug": "apps",
+    "derivedFrom": "xeno-apps @ branch feat/phase-a, working tree verified 2026-08-08 against SOURCE (package.json 0.1.0, src/renderer/src/engine/**, src/main/data/**, electron-builder.yml, release/XENO Apps Setup 0.1.0.exe)",
+    "why": "xeno-apps has no usable release notes of its own: its CHANGELOG.md is stale (latest entry 0.0.1, and the Unreleased section still reads 'Still scaffold only - no application code yet' while the repo holds ~110 source files, 428 passing tests and a built installer). These notes were therefore derived from the code, not from that file. Re-derive from SOURCE on every release until the product repo's CHANGELOG is repaired.",
+    "status": "DRAFT - NOT PUBLISHED. 0.1.0 is not on R2 and the catalog entry for 'apps' is still status:coming-soon / delivery:soon. Publishing is a deliberate later step; see the RELEASE-DAY FLIP note in src/content/products/apps.ts.",
+    "deliveryNote": "XENO Apps ships a desktop installer, so the release is cut with scripts/xeno-release.mjs (--win), NOT publish-cli-releases.mjs. This file is the reviewed source for --notes-file; pass the 0.1.0 notes text to that flag. It is kept here rather than in the product repo because that repo is outside this agent's write boundary.",
+    "date": "Deliberately absent. No release date is stated until the release step sets one."
+  },
+
+  "0.1.0": {
+    "title": "First release - build an app out of panels",
+    "type": "release",
+    "channel": "stable",
+    "notes": [
+      "First public build of XENO Apps. It is an experimental, unsigned release for Windows: SmartScreen will show \"Windows protected your PC\" - choose More info, then Run anyway.",
+      "Compose an app from 21 first-party panels - table, chart, metrics, tree, fields, calendar, connectors, inspector, layers, history, transport, viewport, console, runs, terminal, diff, find, comments, consent, account and color.",
+      "FRONT and BACK are two projections of one graph. FRONT is the working app; BACK is the same app as a node canvas. BACK draws over FRONT rather than replacing it, so the two views cannot disagree.",
+      "Wire panels together by dragging between pins on the BACK canvas, in either direction, snapping only to type-compatible ports - or through the Wiring panel in FRONT.",
+      "Eight logic nodes for the steps that belong to no panel: expression, map, filter, text-formatter, json-transform, if-else, switch and code.",
+      "Real data: HTTP and GraphQL endpoints, CSV and JSON files, and pasted-in rows. Requests are made from the main process, so cross-origin rules are not a constraint.",
+      "Network access is per-origin and consented before a socket opens - an unapproved host is unreachable, not filtered after the fact, and a damaged consent store fails closed. Review grants in File, Permissions.",
+      "Credentials are stored in the OS keystore and referenced as $cred:<id>. There is deliberately no channel that reads a secret back out, and nothing is written into your .xapp.",
+      "Place the same panel more than once - each instance carries its own configuration and state.",
+      "Authoring undo and redo across wires, logic nodes, placement, instances and configuration.",
+      "Run-on-open triggers, so a saved app shows data as soon as it opens instead of restoring an empty layout. Triggers are validated against each panel's declared commands.",
+      "Five starter templates - support desk dashboard, records and detail, service monitor, review workspace, and blank - built through the same API you drive by hand.",
+      "Save and reopen a single .xapp: indented JSON carrying the composition only, with panels referenced by manifest id rather than embedded. No credentials and no absolute paths are written into it.",
+      "Panel Studio: write your own panel and run it in an opaque-origin iframe with no network, no filesystem and no GPU. Local storage is the one grantable capability. It is a plain iframe rather than a JS isolate, so a runaway loop hangs that frame.",
+      "Known limits in this release: there is no AI - no model is called anywhere in this build. There is no way to publish, share or export a built app; you save a local .xapp. There is no auto-update, so a new version means downloading it again. There are no SQL or database sources, and no execution wires, which means no retry, checkpointing or execution-order guarantee. The Terminal panel is a scripted emulator, not a shell. Windows only - macOS and Linux are configured but not built.",
+      "Verified by 428 unit tests and a 36-gate harness that drives the real application in a real window, including against the packaged build."
+    ]
+  }
+}

@@ -180,6 +180,18 @@ export const PRODUCTS: Product[] = [
   { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-engine' },
   { slug: 'workflow', name: 'XENO Workflow', tagline: 'Visual node-based automation pipelines.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-workflow' },
   { slug: 'use', name: 'XENO Use', tagline: "The agent's hands across every device.", category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-use' },
+  // A Windows 0.1.0 installer EXISTS (built 2026-08-07) and the rich landing +
+  // docs are authored (src/content/products/apps.ts, src/content/docs/apps.ts).
+  // This entry stays coming-soon/soon ON PURPOSE: nothing is on R2 yet, and per
+  // the header rule a 'desktop' product with an empty feed renders a dead
+  // "Builds coming soon" button. scripts/experimental-notice.test.mjs pins this
+  // — 'apps' is in its "products with no published build say nothing" list.
+  // RELEASE DAY: flip to status:'beta', delivery:'desktop',
+  // operatingSystem:'Windows' AND move 'apps' to that test's shipped-unsigned
+  // installer case in the SAME commit, or the gate fails. Notes for the release
+  // are staged in scripts/release-notes/apps.json. The build is unsigned (so the
+  // SmartScreen notice derives automatically) and has NO updater, which is why
+  // the content module sets autoUpdates:false.
   { slug: 'apps', name: 'XENO Apps', tagline: 'No-code custom apps and internal tools.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-apps' },
 
   // ── Develop ───────────────────────────────────────────────

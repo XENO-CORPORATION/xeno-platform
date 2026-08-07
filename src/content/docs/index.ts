@@ -14,11 +14,12 @@ import workflow from './workflow';
 import architect from './architect';
 import threeD from './3d';
 import engine from './engine';
+import apps from './apps';
 
 /* Registry of product documentation. A product listed here gets a full docs
  * section at /docs/<slug>; products NOT here show "coming soon" on the hub.
  * Add a product = author src/content/docs/<slug>.ts and import it here. */
-const MODULES: ProductDocs[] = [agentCli, hub, sdk, pixel, motion, comms, canvas, rt, post, acp, sound, workflow, architect, threeD, engine];
+const MODULES: ProductDocs[] = [agentCli, hub, sdk, pixel, motion, comms, canvas, rt, post, acp, sound, workflow, architect, threeD, engine, apps];
 
 const BY_SLUG = new Map(MODULES.map((m) => [m.slug, m]));
 

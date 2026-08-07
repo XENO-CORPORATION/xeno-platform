@@ -34,6 +34,7 @@ import ShellDesktop from './ShellDesktop';
 import ShellMounts from './ShellMounts';
 import ShellDisplays from './ShellDisplays';
 import SlidesEditor from './SlidesEditor';
+import AppsBuilder from './AppsBuilder';
 
 /* Built-in product mockups — referenced from a content module's Media as
  * { type: 'mockup', src: '<key>' }. Lets a landing page ship a crisp, faithful
@@ -75,6 +76,7 @@ const MOCKUPS: Record<string, React.ComponentType> = {
   'shell-hero': ShellDesktop,
   'shell-mounts': ShellMounts,
   'shell-displays': ShellDisplays,
+  'apps-hero': AppsBuilder,
 };
 
 export function Mockup({ name }: { name: string }): React.ReactElement | null {
