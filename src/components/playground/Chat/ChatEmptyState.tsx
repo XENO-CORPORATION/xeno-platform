@@ -346,7 +346,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
             <button
               type="button"
               onClick={() => closeAgentActions(() => onModeChange('chat'))}
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.018] text-zinc-400 transition-[background-color,border-color,color] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.018] text-zinc-500 transition-[background-color,border-color,color] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${
                 areAgentActionsClosing ? 'animate-agent-action-exit' : 'animate-agent-action-enter'
               }`}
               style={{

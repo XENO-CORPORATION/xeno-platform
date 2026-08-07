@@ -67,92 +67,6 @@ const CUSTOMIZE_MODAL_KEYFRAMES = `
 
 const RADIUS = 'rounded-[6px]';
 
-const dayMs = 24 * 60 * 60 * 1000;
-const mockNow = Date.now();
-
-/** Demo rows when this chat has no installed skills — so the category layout can be judged. */
-const MOCK_CUSTOMIZE_SKILLS: ChatSkill[] = [
-  {
-    id: 'mock-customize-intake',
-    name: 'Intake form helper',
-    summary: 'Questions for a new object intake',
-    author: 'You',
-    enabled: true,
-    updatedAt: mockNow - 2 * dayMs,
-  },
-  {
-    id: 'mock-customize-condition',
-    name: 'Condition report',
-    summary: 'Structured condition notes for clients',
-    author: 'XENO',
-    enabled: true,
-    updatedAt: mockNow - 1 * dayMs,
-  },
-  {
-    id: 'mock-customize-glossary',
-    name: 'Glossary builder',
-    summary: 'Define terms for a client pack',
-    author: 'You',
-    enabled: false,
-    updatedAt: mockNow - 3 * dayMs,
-  },
-  {
-    id: 'mock-customize-timeline',
-    name: 'Project timeline',
-    summary: 'Phased timeline for the open job',
-    author: 'Studio',
-    enabled: true,
-    updatedAt: mockNow - 5 * dayMs,
-  },
-  {
-    id: 'mock-customize-qc',
-    name: 'QC pass',
-    summary: 'Final quality checklist before handoff',
-    author: 'You',
-    enabled: false,
-    updatedAt: mockNow - 12 * 60 * 60 * 1000,
-  },
-  {
-    id: 'mock-customize-handoff',
-    name: 'Handoff note',
-    summary: 'Shift handoff for the next conservator',
-    author: 'You',
-    enabled: true,
-    updatedAt: mockNow - 4 * 60 * 60 * 1000,
-  },
-  {
-    id: 'mock-customize-solvent',
-    name: 'Solvent plan',
-    summary: 'Solubility tests before cleaning',
-    author: 'XENO',
-    enabled: true,
-    updatedAt: mockNow - 6 * dayMs,
-  },
-  {
-    id: 'mock-customize-packing',
-    name: 'Packing spec',
-    summary: 'Crate / wrap notes for transport',
-    author: 'Studio',
-    enabled: false,
-    updatedAt: mockNow - 8 * dayMs,
-  },
-  {
-    id: 'mock-customize-email',
-    name: 'Client email',
-    summary: 'Calm update for the client inbox',
-    author: 'You',
-    enabled: true,
-    updatedAt: mockNow - 9 * dayMs,
-  },
-  {
-    id: 'mock-customize-estimate',
-    name: 'Estimate scope',
-    summary: 'Hours and phases for a quote',
-    author: 'XENO',
-    enabled: false,
-    updatedAt: mockNow - 10 * dayMs,
-  },
-];
 
 const formatUpdated = (ts: number): string => {
   const diff = Date.now() - ts;
@@ -165,17 +79,6 @@ const formatUpdated = (ts: number): string => {
     month: 'short',
     day: 'numeric',
   });
-};
-
-const filterMockSkills = (search: string): ChatSkill[] => {
-  const q = search.trim().toLowerCase();
-  if (!q) return MOCK_CUSTOMIZE_SKILLS;
-  return MOCK_CUSTOMIZE_SKILLS.filter(
-    (skill) =>
-      skill.name.toLowerCase().includes(q) ||
-      skill.summary.toLowerCase().includes(q) ||
-      skill.author.toLowerCase().includes(q),
-  );
 };
 
 /**
@@ -191,7 +94,6 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
   motionFrom = { x: 0, y: 0 },
 }) => {
   const [skills, setSkills] = useState<ChatSkill[]>([]);
-  const [usingMockSkills, setUsingMockSkills] = useState(false);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<SkillCategoryId | null>(
@@ -256,13 +158,7 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
 
   const refresh = async (search = query) => {
     const rows = await listSkills({ query: search, conversationId });
-    if (rows.length > 0) {
-      setUsingMockSkills(false);
-      setSkills(rows);
-      return;
-    }
-    setUsingMockSkills(true);
-    setSkills(filterMockSkills(search));
+    setSkills(rows);
   };
 
   useEffect(() => {
@@ -321,14 +217,6 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
   }, [skills, query]);
 
   const toggleSkill = async (skill: ChatSkill) => {
-    if (usingMockSkills) {
-      setSkills((prev) =>
-        prev.map((row) =>
-          row.id === skill.id ? { ...row, enabled: !row.enabled } : row,
-        ),
-      );
-      return;
-    }
     await setSkillEnabled(skill.id, !skill.enabled, conversationId);
     await refresh(query);
   };

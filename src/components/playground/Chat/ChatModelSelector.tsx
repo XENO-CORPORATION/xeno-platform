@@ -340,7 +340,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
               className="group absolute inset-y-0 left-0 z-10 flex w-10 items-center justify-start bg-gradient-to-r from-[#0f0f11] via-[#0f0f11]/90 to-transparent pl-1 focus-visible:outline-none"
               aria-label="Show previous models"
             >
-              <ChevronLeft data-inline-model-scroll-hint size={14} className="text-zinc-300" />
+              <ChevronLeft data-inline-model-scroll-hint size={14} className="text-zinc-500" />
             </button>
           )}
 
@@ -352,7 +352,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
               className="group absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end bg-gradient-to-l from-[#0f0f11] via-[#0f0f11]/90 to-transparent pr-1 focus-visible:outline-none"
               aria-label="Show more models"
             >
-              <ChevronRight data-inline-model-scroll-hint size={14} className="text-zinc-300" />
+              <ChevronRight data-inline-model-scroll-hint size={14} className="text-zinc-500" />
             </button>
           )}
         </div>
@@ -385,7 +385,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
           isLoading ? (
             <Loader2 size={14} className="flex-shrink-0 animate-spin text-zinc-500" />
           ) : isReasoningActive ? (
-            <BrainCircuit size={14} className="flex-shrink-0 text-zinc-300" />
+            <BrainCircuit size={14} className="flex-shrink-0 text-zinc-500" />
           ) : (
             <Brain size={14} className="flex-shrink-0 text-zinc-500" />
           )

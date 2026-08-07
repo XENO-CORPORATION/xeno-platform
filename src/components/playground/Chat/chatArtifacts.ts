@@ -30,61 +30,7 @@ const day = 24 * 60 * 60 * 1000;
 const now = Date.now();
 
 /** Seed store — session-level until backend persists. */
-let artifactsStore: ChatArtifact[] = [
-  {
-    id: 'art-cond-report',
-    title: 'Condition report outline',
-    kind: 'document',
-    conversationId: 'mock-convo-intake',
-    conversationTitle: 'Conservation intake',
-    previewText:
-      '1. Object identification\n2. Materials and construction\n3. Condition summary\n4. Proposed treatment\n5. Risks and constraints',
-    createdAt: now - 12 * day,
-    updatedAt: now - 2 * day,
-  },
-  {
-    id: 'art-palette-notes',
-    title: 'Palette extraction notes',
-    kind: 'code',
-    conversationId: 'mock-convo-pigment',
-    conversationTitle: 'Pigment match chat',
-    previewText:
-      'const swatches = [\n  { name: "lead white", hex: "#F4F1E8" },\n  { name: "umber", hex: "#635147" },\n];',
-    createdAt: now - 20 * day,
-    updatedAt: now - 5 * day,
-  },
-  {
-    id: 'art-crop-set',
-    title: 'Before / after crop set',
-    kind: 'image',
-    conversationId: 'mock-convo-panel',
-    conversationTitle: 'Panel repair',
-    previewText: '4 crops · panel edge detail · raking light · UV note attached',
-    createdAt: now - 40 * day,
-    updatedAt: now - 18 * day,
-  },
-  {
-    id: 'art-client-email',
-    title: 'Client email draft',
-    kind: 'document',
-    conversationId: 'mock-convo-progress',
-    conversationTitle: 'Progress update',
-    previewText:
-      'Dear …,\n\nWork this week focused on surface consolidation. Next steps are reversible fills only after your approval.',
-    createdAt: now - 8 * day,
-    updatedAt: now - 1 * day,
-  },
-  {
-    id: 'art-tooling-html',
-    title: 'Studio checklist widget',
-    kind: 'html',
-    conversationId: 'mock-convo-tools',
-    conversationTitle: 'Lab helpers',
-    previewText: '<section class="checklist">… weekly studio pass …</section>',
-    createdAt: now - 3 * day,
-    updatedAt: now - 3 * day,
-  },
-];
+let artifactsStore: ChatArtifact[] = [];
 
 const matchesQuery = (artifact: ChatArtifact, query: string): boolean => {
   const q = query.trim().toLowerCase();

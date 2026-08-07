@@ -526,7 +526,7 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
                   {currentUpdate.label && labelMotion && (
                     <motion.span
                       {...labelMotion}
-                      className="rounded-md border border-white/[0.12] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-400"
+                      className="rounded-md border border-white/[0.12] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-500"
                     >
                       {currentUpdate.label}
                     </motion.span>
@@ -534,7 +534,7 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
                 </div>
                 <motion.p
                   {...descriptionMotion}
-                  className="max-w-[48ch] text-sm leading-5 text-zinc-400"
+                  className="max-w-[48ch] text-sm leading-5 text-zinc-500"
                 >
                   {clampUpdateDescription(currentUpdate.description)}
                 </motion.p>

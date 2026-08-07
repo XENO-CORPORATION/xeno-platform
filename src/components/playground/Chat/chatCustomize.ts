@@ -70,120 +70,21 @@ const day = 24 * 60 * 60 * 1000;
 const now = Date.now();
 
 /** Built-in personas — shared catalog until backend owns them. */
-let personasStore: ChatPersona[] = [
-  {
-    id: 'conservator',
-    label: 'Conservator',
-    summary: 'Calm client tone · reversible steps',
-    prompt:
-      'You are a conservation professional. Prefer concise answers. Use conservation vocabulary carefully. When unsure about materials, ask before recommending treatments. Keep tone calm and professional for client-facing drafts.',
-    updatedAt: now - 2 * day,
-  },
-  {
-    id: 'studio-notes',
-    label: 'Studio notes',
-    summary: 'Lab notes · short, dated bullets',
-    prompt:
-      'You help write studio lab notes. Prefer short dated bullets, materials named plainly, and clear next actions. No fluff.',
-    updatedAt: now - 5 * day,
-  },
-  {
-    id: 'engineer',
-    label: 'Engineer',
-    summary: 'Code, debug, system design',
-    prompt:
-      'You are an expert software engineer. Help with coding, debugging, system design, and technical problem-solving. Provide clear, efficient solutions with best practices.',
-    updatedAt: now - 40 * day,
-  },
-  {
-    id: 'lawyer',
-    label: 'Lawyer',
-    summary: 'Legal information · not advice',
-    prompt:
-      'You are an experienced legal professional. Provide legal information, help draft documents, explain legal concepts, and offer guidance on legal matters. Note: This is not legal advice.',
-    updatedAt: now - 40 * day,
-  },
-  {
-    id: 'copywriter',
-    label: 'Copywriter',
-    summary: 'Marketing and clear messaging',
-    prompt:
-      'You are a skilled copywriter and content creator. Help craft compelling copy, marketing content, blog posts, and creative writing with engaging tone and clear messaging.',
-    updatedAt: now - 40 * day,
-  },
-];
+let personasStore: ChatPersona[] = [];
 
 let profileStore: CustomizeProfile = {
-  instructions:
-    'Prefer concise answers. Keep English technical terms. When explaining, check understanding with a short question.',
-  activePersonaId: 'conservator',
+  instructions: '',
+  activePersonaId: null,
   updatedAt: now - 1 * day,
 };
 
-let connectorsStore: ChatConnector[] = [
-  {
-    id: 'conn-gmail',
-    name: 'Gmail',
-    type: 'Web',
-    status: 'not_connected',
-    updatedAt: now - 60 * day,
-  },
-  {
-    id: 'conn-drive',
-    name: 'Google Drive',
-    type: 'Web',
-    status: 'not_connected',
-    updatedAt: now - 60 * day,
-  },
-  {
-    id: 'conn-slack',
-    name: 'Slack',
-    type: 'Web',
-    status: 'connected',
-    updatedAt: now - 4 * day,
-  },
-  {
-    id: 'conn-github',
-    name: 'GitHub',
-    type: 'Web',
-    status: 'not_connected',
-    updatedAt: now - 90 * day,
-  },
-];
+let connectorsStore: ChatConnector[] = [];
 
-let pluginsStore: ChatPlugin[] = [
-  {
-    id: 'plugin-studio-pack',
-    name: 'Studio pack',
-    summary: 'Condition notes + client digest skills',
-    author: 'XENO',
-    installed: true,
-    updatedAt: now - 6 * day,
-  },
-  {
-    id: 'plugin-research',
-    name: 'Research pack',
-    summary: 'Source check + citation helpers',
-    author: 'XENO',
-    installed: false,
-    updatedAt: now - 15 * day,
-  },
-];
+let pluginsStore: ChatPlugin[] = [];
 
 let memoryStore: MemorySettings = {
   generateFromChats: false,
-  entries: [
-    {
-      id: 'mem-1',
-      text: 'Prefers conservation vocabulary; ask before recommending irreversible treatments.',
-      updatedAt: now - 2 * day,
-    },
-    {
-      id: 'mem-2',
-      text: 'Client emails should stay calm and short.',
-      updatedAt: now - 9 * day,
-    },
-  ],
+  entries: [],
   updatedAt: now - 2 * day,
 };
 

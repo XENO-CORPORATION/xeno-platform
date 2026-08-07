@@ -21,9 +21,6 @@ import {
   clearPendingChatSkills,
   getChatProfile,
 } from './chatSkillsLibrary';
-import { MOCK_CHAT_UPDATES } from './mockChatUpdates';
-import { MOCK_CHAT_HISTORY } from './mockChatHistory';
-import { MOCK_CHAT_MODELS } from './mockChatModels';
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
 import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
@@ -2352,6 +2349,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         ? tokens.control
         : `color-mix(in srgb, ${tokens.canvas} 55%, black)`,
       '--chat-tool-rail-stroke-soft': railIsLight ? 'rgba(24, 24, 27, 0.48)' : 'rgba(245, 245, 245, 0.58)',
+      // History sidebar tracks the interpolated surface at every custom brightness;
+      // the fixed Light theme keeps its warm cream via the CSS fallback.
+      '--chat-history-fill': tokens.surface,
+      '--chat-history-border': tokens.border,
+      '--chat-history-shadow': canvasIsLight ? '0 4px 18px rgba(0, 0, 0, 0.06)' : 'none',
     } as React.CSSProperties;
   }, [chatTheme, chatThemeBrightness, themePreviewPosition]);
   const handleChatThemeChange = useCallback((nextTheme: ChatTheme, closeMenu = true) => {
@@ -2537,7 +2539,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [searchProvider, setSearchProvider] = useState<'google' | 'brave'>('google');
   const [isSearchProviderDropdownOpen, setIsSearchProviderDropdownOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model>(DEFAULT_MODEL);
-  const [groupedModels, setGroupedModels] = useState<GroupedModels[]>(MOCK_CHAT_MODELS);
+  const [groupedModels, setGroupedModels] = useState<GroupedModels[]>([]);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSettingsModalMounted, setIsSettingsModalMounted] = useState(false);
@@ -4216,9 +4218,9 @@ interface QueueState {
 
         console.log(`✅ Loaded ${models.length} company groups with models`);
       } catch (error) {
-        console.error('❌ Failed to load models, using fallback:', error);
-        // Keep the temporary local visual-review models when the auth-gated
-        // catalog is unavailable. Production keeps this list empty.
+        console.error('❌ Failed to load models:', error);
+        // No local fallback catalog — the model list stays empty until the
+        // auth-gated /api/models call succeeds.
       } finally {
         setIsModelsLoading(false);
       }
@@ -4508,23 +4510,6 @@ interface QueueState {
           }
         }
       }
-      // TEMPORARY visual review: seed mock history when empty; always refresh
-      // the document + image attachment demos so layout review stays current.
-      setConversationHistory((prev) => {
-        const mocks = MOCK_CHAT_HISTORY as Conversation[];
-        const attachmentDemoIds = new Set([
-          'mock-history-document-attach',
-          'mock-history-image-attach',
-        ]);
-        const attachmentDemos = mocks.filter((mock) =>
-          attachmentDemoIds.has(mock.id),
-        );
-        const base = prev.length === 0 ? mocks : prev;
-        const withoutStaleDemos = base.filter(
-          (convo) => !attachmentDemoIds.has(convo.id),
-        );
-        return [...attachmentDemos, ...withoutStaleDemos];
-      });
       setIsHistoryLoading(false);
     };
 
@@ -9591,11 +9576,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       willChange: 'transform',
       zIndex: 9999,
       width: '300px',
-      backgroundColor: '#111113',
-      border: '1px solid #1e1e21',
+      backgroundColor: 'var(--chat-elevated)',
+      border: '1px solid var(--chat-border)',
       borderRadius: '8px',
       boxShadow: '0 5px 15px rgba(0, 0, 0, 0.5)',
-      color: 'white',
+      color: 'var(--chat-text)',
       fontSize: '0.8rem',
       pointerEvents: 'auto',
       opacity: 1,
@@ -9606,14 +9591,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     };
     
     return (
-      <div 
-        ref={indicatorPreviewRef} 
-        style={popupStyle} 
-        className="indicator-preview-popup"
+      <div
+        ref={indicatorPreviewRef}
+        style={{ ...popupStyle, ...chatThemePreviewStyle }}
+        className={`indicator-preview-popup chat-themed chat-theme-${resolvedChatTheme}`}
         onMouseEnter={handleIndicatorPopupMouseEnter}
         onMouseLeave={handleIndicatorPopupMouseLeave}
       >
-        <div style={{ padding: '8px 10px', borderBottom: '1px solid #1e1e21', fontWeight: 500 }}>
+        <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--chat-border)', fontWeight: 500 }}>
           Sources for this section
         </div>
         <ul style={{ listStyle: 'none', padding: '8px 10px', margin: 0, maxHeight: '150px', overflowY: 'auto' }}>
@@ -10880,7 +10865,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             renderToolPanel={renderEmptyStateToolPanel}
             updates={
               showWhatsNewOnSurface && !options?.forceCompact
-                ? MOCK_CHAT_UPDATES
+                ? []
                 : undefined
             }
           >
@@ -11460,9 +11445,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           /* Light only: history a step darker than white, warm-neutral (no blue cast). */
           .chat-theme-light .chat-history-sidebar,
           .chat-theme-light.chat-history-sidebar {
-            background-color: #f1f0ee !important;
-            border-color: rgba(0, 0, 0, 0.10) !important;
-            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06) !important;
+            background-color: var(--chat-history-fill, #f1f0ee) !important;
+            border-color: var(--chat-history-border, rgba(0, 0, 0, 0.10)) !important;
+            box-shadow: var(--chat-history-shadow, 0 4px 18px rgba(0, 0, 0, 0.06)) !important;
           }
           /* Claude pinned DnD: .df-drag-shiftable { transition: transform .12s ease-out }
              Recents label is ALSO shiftable — transforms must move it or rows overlap it. */
