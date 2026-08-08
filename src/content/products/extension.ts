@@ -6,11 +6,25 @@ import type { ProductContent } from './_types';
  * a side-panel browser agent that reads pages and acts on them (click / type /
  * navigate / forms), gated by a permission mode.
  *
- * AVAILABILITY — the direct-download channel was WITHDRAWN and there is no web
- * store listing yet, so nothing is installable today. Catalog status is
- * coming-soon / delivery soon. Do NOT restore install instructions, a version
- * badge, or a "Free · available" note until a Chrome Web Store listing is live
- * or a new package channel is published.
+ * AVAILABILITY — updated 2026-08-08. The earlier note said nothing was
+ * installable and to restore install copy only once "a Chrome Web Store listing
+ * is live OR a new package channel is published". The second condition is now
+ * MET: 1.1.0 is published to R2 (apps/extension/, feed at releases.json) after
+ * the 1.0.0 artifacts were withdrawn for embedding a since-rotated shared key.
+ *
+ * But this is a TESTER channel, not general availability, and the copy must say
+ * so: **Chrome has blocked installing extensions from outside the Web Store on
+ * Windows since Chrome 33.** A downloaded ZIP cannot be installed the normal
+ * way — it must be loaded via Developer Mode → Load unpacked, Chrome nags about
+ * developer-mode extensions on every start, and it does not auto-update. So:
+ * describe how to load it and who it is for, and do NOT claim general
+ * availability or add a "Free · available" note until a Web Store listing is
+ * live.
+ *
+ * ⚠️ Do NOT give the catalog entry an `externalUrl` to surface a download. That
+ * flips installChannel() to 'archive', which asserts smartScreen:true and tells
+ * the visitor to click through "More info → Run anyway" — a warning this product
+ * can never trigger. Pinned by scripts/experimental-notice.test.mjs.
  *
  * CORRECTED 2026-07-27 — seven lines claimed Claude and GPT models. The shipped
  * build's catalog is xAI GROK ONLY. Verified in dist/stable/extension/background/
@@ -22,19 +36,20 @@ import type { ProductContent } from './_types';
  * Nuance worth keeping honest in BOTH directions: api-client.js does replace the
  * built-in list with whatever /v1/models returns, plus locally discovered Ollama
  * models — so the live list can be wider than the four. What we may NOT do is
- * name specific Claude/GPT versions as if they were the shipped catalog. This
- * page is coming-soon today, so no visitor is misled yet; it is fixed now so it
- * cannot ship false. */
+ * name specific Claude/GPT versions as if they were the shipped catalog.
+ * (When that correction was made the page was coming-soon, so nobody had been
+ * misled; it now offers a real download, which is exactly why it had to be
+ * right before this point.) */
 const extension: ProductContent = {
   slug: 'extension',
   hero: {
     headline: 'An agent that uses your browser like you do.',
     sub: 'XENO Extension is an AI agent in a Chromium side panel. It reads the page, then clicks, types, fills forms and navigates across tabs to finish the task — in Plan, Agent, or Chat mode, and it asks before it acts. It ships with xAI Grok models, and can use whatever your XENO account offers or a local model via Ollama.',
     media: { type: 'mockup', src: 'extension-hero', alt: 'XENO Extension — the side-panel browser agent reading a pricing page and extracting the tiers, with a permission approval prompt' },
-    badges: ['Chrome · Edge · Brave', 'Manifest V3', 'BYO model / local', 'Not yet available'],
-    note: 'Not currently available to install. The previous download channel has been withdrawn and the Chrome Web Store listing has not been submitted yet — get notified and we’ll tell you the day it goes live.',
+    badges: ['Chrome · Edge · Brave', 'Manifest V3', 'BYO model / local', 'Tester build · load unpacked'],
+    note: 'A 1.1.0 tester build is available to download, but it is not on the Chrome Web Store yet — and Chrome refuses to install extensions from outside the store, so you have to load it yourself via Developer Mode → Load unpacked. That means no auto-update and a developer-mode reminder from Chrome each time it starts. Get notified and we’ll tell you the day the store listing goes live.',
   },
-  trust: ['Built for Chromium — Chrome, Edge & Brave (not Firefox)', 'Ships with Grok; local models via Ollama', 'Permission-gated — it asks before it acts'],
+  trust: ['Built for Chromium — Chrome, Edge & Brave (not Firefox)', 'Ships with Grok; local models via Ollama', 'Permission-gated — it asks before it acts', 'Ships no API key — you pick the provider'],
   highlights: [
     { value: 'In your browser', label: 'Side panel, any tab' },
     { value: 'Plan · Agent · Chat', label: 'Three working modes' },
@@ -121,9 +136,9 @@ const extension: ProductContent = {
     { title: 'Private & local', icon: 'Lock', desc: 'Run a local model through Ollama and blocklist sensitive sites, so your browsing and prompts stay on your machine.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Get notified', desc: 'Sign in with your XENO account so we can tell you when the web-store listing goes live.' },
-    { step: '2', title: 'Open the side panel', desc: 'Press Ctrl+Shift+X (⌘+Shift+X on macOS), then pick a model and a mode.' },
-    { step: '3', title: 'Ask it to do something', desc: 'Describe the task — it plans, acts with your approval, and works across your tabs.' },
+    { step: '1', title: 'Load the tester build', desc: 'Download and unzip 1.1.0, open chrome://extensions, turn on Developer mode, then choose “Load unpacked”. Chrome blocks off-store installs, so this is the only route until the Web Store listing is live.' },
+    { step: '2', title: 'Pick where the AI runs', desc: 'Sign in to XENO, point it at a local Ollama model, or paste your own key. It ships with no key of its own, so this step is not optional.' },
+    { step: '3', title: 'Open the side panel', desc: 'Press Ctrl+Shift+X (⌘+Shift+X on macOS), choose a model and a mode, and describe the task — it plans, acts with your approval, and works across your tabs.' },
   ],
   comparison: {
     competitor: 'most browser AI extensions',
@@ -135,17 +150,20 @@ const extension: ProductContent = {
       { feature: 'Permission prompts + site blocklist', xeno: true, them: 'Varies' },
       { feature: 'Multi-tab context (@-mention tabs)', xeno: true, them: false },
       { feature: 'Established web-store presence & reviews', xeno: 'Not listed yet', them: true },
-      { feature: 'Available to install today', xeno: false, them: true },
+      { feature: 'One-click install from the Web Store', xeno: 'Not yet', them: true },
+      { feature: 'Download a build and load it yourself today', xeno: '1.1.0', them: 'Rarely' },
     ],
   },
   specs: [
     { label: 'Browsers', value: 'Chrome · Edge · Brave (Chromium)' },
     { label: 'Manifest', value: 'Manifest V3 · side panel' },
     { label: 'Models', value: 'xAI Grok · local (Ollama)' },
-    { label: 'Status', value: 'Not yet available' },
+    { label: 'Status', value: '1.1.0 tester build · not on the Web Store' },
   ],
   faq: [
-    { q: 'Can I install it right now?', a: 'No. There’s no way to install XENO Extension today: the direct-download channel has been withdrawn and it hasn’t been submitted to the Chrome Web Store yet. We’d rather say that plainly than leave you clicking a broken link. Use “Get notified” and we’ll tell you the day a listing is live.' },
+    { q: 'Can I install it right now?', a: 'You can run it, but not the easy way. The 1.1.0 build is published and you can download it — however it is not on the Chrome Web Store yet, and since Chrome 33 Chrome refuses to install extensions from anywhere else on Windows. So the only route is the developer one: unzip it, open chrome://extensions, turn on Developer mode, and choose “Load unpacked”. Chrome will remind you about developer-mode extensions every time it starts, and the build will not auto-update. If that sounds like more than you want, use “Get notified” and we’ll tell you the day the store listing is live.' },
+    { q: 'Why isn’t it on the Chrome Web Store yet?', a: 'It hasn’t been submitted. The build itself is ready — it ships no API key, the safety gates are enforced in code, and a browser test suite loads the packaged build into a real Chrome on every change. What’s outstanding is the store developer account and the review submission, which is paperwork on our side, not engineering.' },
+    { q: 'What happened to the earlier 1.0.0 download?', a: 'It was withdrawn. Those builds bundled a shared XENO API key so that cloud inference worked with no account, which meant every install was using one key belonging to us. That key has been retired and rotated, the affected downloads were removed, and 1.1.0 ships no key at all — you choose a provider instead. If you still have 1.0.0 installed, upgrading deletes any stored copy of the old key automatically.' },
     { q: 'Which browsers will it support?', a: 'Any Chromium browser — Chrome, Edge, and Brave. It’s a Manifest V3 extension that opens in the browser’s side panel (Ctrl+Shift+X, or ⌘+Shift+X on macOS). A Safari track is planned.' },
     { q: 'Is there anything I can use in the meantime?', a: 'XENO Browser — it’s in public beta on Windows and puts the same kind of agent inside our own Chromium browser, with capabilities an extension can’t reach.' },
     { q: 'Can it act without asking me?', a: 'By default it’s in Ask mode: it shows an Allow / Deny prompt before each action. You can switch to act-without-asking, and add a site blocklist (say, your bank) — or an allowlist — to bound where it runs.' },

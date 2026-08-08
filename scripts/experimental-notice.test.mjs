@@ -113,11 +113,36 @@ test('products with no published build say nothing', () => {
   // neither open, save-as nor export because its export engines had no caller and
   // were tree-shaken out). Nothing joins the shipping list on a build log alone:
   // each was verified in the packaged asar and by launching the installed app.
-  for (const slug of ['pdf', 'photo', 'layout', 'use', 'apps', 'extension']) {
+  for (const slug of ['pdf', 'photo', 'layout', 'use', 'apps']) {
     const p = bySlug(slug);
     assert.equal(installChannel(p), 'none', `${slug}: expected no install channel`);
     assert.equal(noticeFor(slug), null, `${slug}: nothing ships, so nothing is claimed`);
   }
+});
+
+test('the browser extension says nothing — because it hands over no executable', () => {
+  // extension LEFT the list above on 2026-08-08: it now publishes a real build
+  // (1.1.0 on R2, apps/extension/). It still resolves to no channel and no
+  // notice, and that is CORRECT rather than an oversight — which is exactly why
+  // it needs its own case instead of hiding inside "no published build".
+  //
+  // What ships is a ~170 KB ZIP of JavaScript, not an installer. Nothing is
+  // executed, so Windows never warns and there is no signature to be missing.
+  // Every notice branch that would apply to it (`archive`) asserts
+  // smartScreen:true and tells the visitor to click through "More info → Run
+  // anyway" — advice for a dialog that will never appear. Per the playbook's own
+  // rule, a SmartScreen warning on something that triggers none is a lie in the
+  // reassuring direction, and still a lie.
+  //
+  // ⚠️ Do NOT "fix" this by giving the catalog entry an `externalUrl`: that flips
+  // installChannel() to 'archive' and manufactures precisely that false warning.
+  // The honest disclosure for this product — Developer-Mode load, no auto-update,
+  // Web Store listing pending — is carried in src/content/products/extension.ts,
+  // because it is a distribution caveat, not a code-signing one.
+  const p = bySlug('extension');
+  assert.equal(installChannel(p), 'none', 'extension: a ZIP of JS is not an install channel');
+  assert.equal(noticeFor('extension'), null, 'extension: nothing to sign, nothing to warn about');
+  assert.equal(p.externalUrl, undefined, 'extension: an externalUrl would fabricate a SmartScreen warning');
 });
 
 test('sheets + notes + slides ship real unsigned installers and are framed that way', () => {

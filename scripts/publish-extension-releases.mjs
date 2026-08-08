@@ -107,15 +107,28 @@ async function main() {
     }
     mapped.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
+    /* A channel pointer must resolve to something INSTALLABLE. The 1.0.0
+     * stable/beta/preview releases had their ZIPs withdrawn (they embedded the
+     * retired shared key) and now carry only provenance JSON, so selecting them
+     * would advertise a "beta channel" whose download does not exist — the
+     * reassuring-direction lie the secret gate exists to prevent, one layer up.
+     * Withdrawn releases stay in recentReleases, where their notes explain why. */
+    const installable = mapped.filter((m) => m.primaryAsset);
+    const withdrawn = mapped.filter((m) => !m.primaryAsset);
+    if (withdrawn.length) {
+      log(`[ext-publish] ${withdrawn.length} release(s) have no downloadable asset and are NOT offered as a channel: `
+        + withdrawn.map((m) => m.tag).join(', '));
+    }
+
     const feed = {
       repo: REPO,
       generatedAt: new Date().toISOString(),
       channels: {
-        stable: mapped.find((m) => m.channel === 'stable') || null,
-        beta: mapped.find((m) => m.channel === 'beta') || null,
-        preview: mapped.find((m) => m.channel === 'preview') || null,
+        stable: installable.find((m) => m.channel === 'stable') || null,
+        beta: installable.find((m) => m.channel === 'beta') || null,
+        preview: installable.find((m) => m.channel === 'preview') || null,
       },
-      recentReleases: mapped.slice(0, 12),
+      recentReleases: mapped.map((m) => (m.primaryAsset ? m : { ...m, withdrawn: true })).slice(0, 12),
     };
 
     log(`[ext-publish] feed: channels=${Object.entries(feed.channels).filter(([, v]) => v).map(([k]) => k).join(',')}`);
