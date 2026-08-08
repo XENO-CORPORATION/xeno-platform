@@ -58,6 +58,7 @@ and the legacy plural pages are redirected and retired.
 | `/product/:slug/releases` | **Release history** — the full changelog feed (newest-first), each entry expandable with notes + per-OS download links. | Prerendered SPA |
 | `/product/:slug/releases/:version` | **Single release** — one version's notes, type/channel/severity, and downloads. Canonical permalink for "what changed in X.Y.Z". | Prerendered SPA |
 | `/product/:slug/docs` | **Docs** — optional. Renders product docs or 302s to the product's docs home if external. | Prerendered SPA / redirect |
+| `/product/:slug/privacy` | **Product privacy policy** — optional, present when the content module authors `privacy`. Covers what THAT product does with your data, which for products that read user content (the browser extension) is materially more than the platform policy at `/privacy`. Required by app/web-store submissions, which link this URL. No authored policy → redirect to `/privacy`. | Prerendered SPA / redirect |
 | `/product/:slug/download/:os` | **Stable installer redirect** — 302 to the current latest-stable asset on R2. (See §4.) | Backend 302 |
 | `/product/:slug/download/:os/:version` | **Pinned installer redirect** — 302 to that version's asset on R2. | Backend 302 |
 

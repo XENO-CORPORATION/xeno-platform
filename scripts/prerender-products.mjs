@@ -143,6 +143,35 @@ function docHeadFor({ title, desc, canonical, productName }) {
   ].join('\n    ');
 }
 
+/* A privacy policy is not a SoftwareApplication and carries no price offer, so it
+ * gets WebPage schema rather than reusing headFor()'s product JSON-LD. */
+function privacyHeadFor({ title, desc, canonical, productName }) {
+  const ld = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: title,
+    description: desc,
+    about: productName,
+    isPartOf: { '@type': 'WebSite', name: 'XENO Studio', url: SITE },
+    url: canonical,
+  });
+  return [
+    `<title>${esc(title)}</title>`,
+    `<meta name="description" content="${esc(desc)}">`,
+    `<link rel="canonical" href="${canonical}">`,
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:site_name" content="XENO Studio">`,
+    `<meta property="og:title" content="${esc(title)}">`,
+    `<meta property="og:description" content="${esc(desc)}">`,
+    `<meta property="og:url" content="${canonical}">`,
+    `<meta property="og:image" content="${OG_IMAGE}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:title" content="${esc(title)}">`,
+    `<meta name="twitter:description" content="${esc(desc)}">`,
+    `<script type="application/ld+json">${ld}</script>`,
+  ].join('\n    ');
+}
+
 function renderPage(template, p, head) {
   // Drop the SPA's default <title>, inject the route head before </head>.
   return template
@@ -192,6 +221,22 @@ async function main() {
         urls.push(`/product/${p.slug}/${seg}`);
         pages++;
       }
+    }
+
+    // Per-product privacy policy — prerendered whenever a content module authors
+    // one, and deliberately NOT gated on delivery/status: the extension is
+    // coming-soon with delivery 'soon', and its web-store submission links this
+    // exact URL. A reviewer fetching it must get real HTML with a real <title>,
+    // not the empty SPA shell every unprerendered route returns.
+    if (content?.privacy) {
+      writePage(`product/${p.slug}/privacy`, renderPage(template, p, privacyHeadFor({
+        title: `${p.name} privacy policy`,
+        desc: `How ${p.name} handles your data — what it processes, where that data goes, and what it never does.`,
+        canonical: `${SITE}/product/${p.slug}/privacy`,
+        productName: p.name,
+      })));
+      urls.push(`/product/${p.slug}/privacy`);
+      pages++;
     }
   }
 

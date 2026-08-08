@@ -26,6 +26,38 @@ export interface FeatureSpotlight {
   media?: Media;          // the visual for this feature (alternates side-to-side)
 }
 
+/** One block of a per-product privacy policy. `bullets[].term` renders as a bold
+ *  lead-in, so "Page content you direct it to work with." reads as a definition
+ *  list rather than a wall of prose. */
+export interface PrivacySection {
+  heading: string;
+  body?: string;
+  bullets?: { term?: string; text: string }[];
+  /** Rendered after the bullets — use for the qualifying sentence that would
+   *  otherwise have to be smuggled into the last bullet. */
+  footnote?: string;
+}
+
+/** A product-specific privacy policy served at /product/<slug>/privacy.
+ *
+ *  This exists because some products process data the PLATFORM policy at
+ *  /privacy does not describe — the browser extension reads page content
+ *  through chrome.debugger and can send it to a provider the user chose, which
+ *  is exactly the disclosure a web-store review asks for. A store listing needs
+ *  a stable public URL for it, so it must be a real prerendered route and not a
+ *  markdown file in the product repo.
+ *
+ *  Author it next to the product's other content and keep it in sync with the
+ *  product repo's own PRIVACY.md — that file is what ships to reviewers. */
+export interface ProductPrivacy {
+  /** ISO date (YYYY-MM-DD). Rendered verbatim; keep it truthful. */
+  updated: string;
+  intro: string;
+  sections: PrivacySection[];
+  /** Contact address for privacy questions. */
+  contact: string;
+}
+
 export interface ProductContent {
   slug: string;                                   // MUST match the catalog entry
   hero: {
@@ -48,6 +80,10 @@ export interface ProductContent {
   specs?: { label: string; value: string }[];
   faq?: { q: string; a: string }[];
   seo?: { title?: string; description?: string }; // overrides the prerender defaults
+  /** Product-specific privacy policy. When present, /product/<slug>/privacy
+   *  becomes a real prerendered page; when absent, that URL redirects to the
+   *  platform-wide /privacy so the path is never a dead end. */
+  privacy?: ProductPrivacy;
   /** Overrides the hero status pill when the coarse catalog Status overstates
    *  reality (e.g. a 'beta' entry that actually ships as an internal alpha). */
   statusLabel?: string;

@@ -9,6 +9,7 @@ import ProductPage from "./pages/ProductPage";
 import ProductReleases from "./pages/ProductReleases";
 import ProductReleaseDetail from "./pages/ProductReleaseDetail";
 import ProductDownload from "./pages/ProductDownload";
+import ProductPrivacy from "./pages/ProductPrivacy";
 import ProductsIndex from "./pages/ProductsIndex";
 import ReleaseNotes from "./pages/ReleaseNotes";
 import Blog from "./pages/Blog";
@@ -134,6 +135,11 @@ function App() {
             <Route path="/product/:slug/releases/:version" element={<ProductReleaseDetail />} />
             {/* Canonical docs live under /docs — redirect the per-product path in. */}
             <Route path="/product/:slug/docs" element={<ProductDocsRedirect />} />
+            {/* Per-product privacy policy. A web-store listing needs a stable
+                public URL for a policy describing what THAT product does with
+                your data. Products with no authored policy redirect to the
+                platform-wide /privacy, so this path is never a dead end. */}
+            <Route path="/product/:slug/privacy" element={<ProductPrivacy />} />
             {/* XENO Swarm was renamed to XENO Anima — keep old links working. */}
             <Route path="/product/swarm" element={<Navigate to="/product/anima" replace />} />
             {/* Legacy /download retired → the Hub download page (client-side, so

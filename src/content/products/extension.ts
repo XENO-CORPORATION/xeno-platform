@@ -157,6 +157,67 @@ const extension: ProductContent = {
     title: 'XENO Extension — the AI browser agent for Chrome & Edge',
     description: 'A Manifest V3 side-panel agent that reads the page and acts on it — clicks, types, fills forms and navigates across tabs, in Plan / Agent / Chat mode, gated by a permission prompt. Bring your own model or run local. Not yet available to install.',
   },
+  /* Mirrors ../../../xeno-extension/PRIVACY.md — that file is what a web-store
+   * reviewer reads, this is the public URL the listing points at. Keep the two in
+   * sync and keep `updated` equal to the date in that file: the policy text last
+   * changed 2026-07-17, and publishing it later does not make it newer. */
+  privacy: {
+    updated: '2026-07-17',
+    intro: 'XENO Extension is an AI agent that acts on web pages on your behalf. This policy explains what data it processes, where that data goes, and what it never does.',
+    sections: [
+      {
+        heading: 'What the extension processes',
+        bullets: [
+          { term: 'Page content you direct it to work with.', text: 'To answer questions or perform actions, the extension reads the content, structure and accessibility tree of the active tab, and of any tab you explicitly tag. This happens only for tasks you start.' },
+          { term: 'Your instructions.', text: 'The messages you type into the side panel.' },
+          { term: 'Screenshots.', text: 'Captured only when you explicitly ask for one.' },
+        ],
+      },
+      {
+        heading: 'Where that data goes',
+        body: 'Page content and instructions are sent to the AI provider you choose, and to nobody else:',
+        bullets: [
+          { term: 'XENO Cloud.', text: 'Routed through the XENO platform at xenostudio.ai using your signed-in account, which meters usage. Governed by the XENO platform privacy policy.' },
+          { term: 'XENO Direct API.', text: 'Sent to the XENO inference API at api.xenostudio.ai using a XENO API key that you enter yourself.' },
+          { term: 'Ollama (local).', text: 'Stays on your machine. Nothing leaves your computer.' },
+          { term: 'Custom endpoint.', text: 'Sent to the OpenAI-compatible URL you configure, using your own key.' },
+        ],
+        footnote: 'You choose which provider is active in Settings → AI Provider, and the local and bring-your-own options need no XENO account. For the research tools (web search and read-web-page) only the search query or the public URL is sent to the configured provider, and the extension blocks and redacts outbound queries that contain secret-shaped tokens.',
+      },
+      {
+        heading: 'What is stored, and where',
+        bullets: [
+          { term: 'Locally on your device.', text: 'In chrome.storage.local: your settings, provider configuration, any custom endpoint key you enter, and your chat history. Chat history is truncated and never includes image attachments.' },
+          { term: 'Your XENO session token.', text: 'Stored locally and used only to authenticate cloud requests. It is never exposed to web pages.' },
+          { term: 'No server of our own.', text: 'The extension runs no server and keeps no server-side copy of your page content or chats beyond what your chosen AI provider processes to fulfil a request.' },
+        ],
+      },
+      {
+        heading: 'What the extension never does',
+        bullets: [
+          { text: 'It ships no shared API key, and never bills usage to anyone but the account or endpoint you configure.' },
+          { text: 'It does not collect your browsing history, and runs no analytics and no advertising.' },
+          { text: 'It does not sell or share your data with third parties.' },
+          { text: 'It does not transmit page content anywhere except the AI or research provider you selected for that task.' },
+          { text: 'It does not enter passwords or submit sensitive forms without your explicit confirmation.' },
+        ],
+      },
+      {
+        heading: 'Permissions',
+        body: 'Every permission the extension requests maps to a capability you can see: reading the page in order to act on it, performing trusted input, and reaching a local model you are running. Broad host access exists because an agent has to work on whichever site you point it at. The per-permission justification is published with the web-store listing.',
+      },
+      {
+        heading: 'Your controls',
+        bullets: [
+          { text: 'Sign out at any time (Settings → Sign out) to stop all cloud requests.' },
+          { text: 'Use Ollama or a custom endpoint to keep your data local or on your own provider.' },
+          { text: 'Clear chat history from the side panel.' },
+          { text: 'Configure site allow and block lists to bound where the agent may act.' },
+        ],
+      },
+    ],
+    contact: 'privacy@xenostudio.ai',
+  },
 };
 
 export default extension;
