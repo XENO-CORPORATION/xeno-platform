@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
+import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
 import ChatEmptyState, { type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import ChatShareModal from './ChatShareModal';
