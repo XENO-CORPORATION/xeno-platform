@@ -25,6 +25,7 @@ import {
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
 import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
+import ThinkingStatus from './ThinkingStatus';
 import { getGroupedModels, GroupedModels, Model } from '@/services/modelService';
 import { chatService } from '@/services/chatService';
 import { chatComplete } from '@/services/aiService';
@@ -32,7 +33,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchResponse, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Compass, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Lightbulb, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, StopCircle, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar } from 'lucide-react';
+import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Compass, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Lightbulb, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Square, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -294,6 +295,7 @@ interface ChatMessage {
     answerTokenCount?: number; // NEW: Token count for the AI's answer
     isLoading?: boolean; // NEW: Flag for search loading state
     isXenoDeepSearchContainer?: boolean; // New flag to identify deep search containers
+    isStreaming?: boolean; // True while the answer is being revealed (typewriter); actions hidden until done
 }
 
 // --- NEW: Interface for Conversation History Item ---
@@ -3947,6 +3949,20 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // --- State for voice input ---
   const [isVoiceInputActive, setIsVoiceInputActive] = useState(false);
   const [isVoiceModeMenuOpen, setIsVoiceModeMenuOpen] = useState(false);
+  // Keep the voice menu mounted through its exit animation.
+  const [isVoiceMenuClosing, setIsVoiceMenuClosing] = useState(false);
+  const voiceMenuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openVoiceMenu = useCallback(() => {
+    if (voiceMenuCloseTimer.current) clearTimeout(voiceMenuCloseTimer.current);
+    setIsVoiceMenuClosing(false);
+    setIsVoiceModeMenuOpen(true);
+  }, []);
+  const closeVoiceMenu = useCallback(() => {
+    setIsVoiceModeMenuOpen(false);
+    setIsVoiceMenuClosing(true);
+    if (voiceMenuCloseTimer.current) clearTimeout(voiceMenuCloseTimer.current);
+    voiceMenuCloseTimer.current = setTimeout(() => setIsVoiceMenuClosing(false), 150);
+  }, []);
   const [voiceInputMode, setVoiceInputMode] = useState<VoiceInputMode>(() => {
     if (typeof window === 'undefined') return 'tap';
 
@@ -4250,7 +4266,7 @@ interface QueueState {
         voiceControlRef.current &&
         !voiceControlRef.current.contains(event.target as Node)
       ) {
-        setIsVoiceModeMenuOpen(false);
+        closeVoiceMenu();
       }
       if (
         isThemeMenuOpen &&
@@ -5042,6 +5058,41 @@ interface QueueState {
     stopVoiceInput();
   };
 
+  // --- Typewriter reveal (client-side "streaming" of the answer) -----------
+  // The mock (and today's real backend) return the whole answer at once. We
+  // reveal it word-by-word for a streaming feel. This is the exact seam where
+  // real SSE token streaming plugs in later. Set TYPEWRITER_ENABLED = false to
+  // show answers whole again.
+  const TYPEWRITER_ENABLED = true;
+  const typewriterRef = useRef<{ id: string; full: string; timer: ReturnType<typeof setInterval> } | null>(null);
+
+  const finishTypewriter = useCallback(() => {
+    const tw = typewriterRef.current;
+    if (!tw) return;
+    clearInterval(tw.timer);
+    typewriterRef.current = null;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === tw.id ? { ...m, parsedAnswer: tw.full, isStreaming: false } : m)),
+    );
+  }, []);
+
+  const startTypewriter = useCallback((id: string, full: string) => {
+    finishTypewriter(); // complete any previous reveal before starting a new one
+    // Split keeping whitespace so whole words appear (smoother than per-char).
+    const tokens = full.split(/(\s+)/);
+    const perTick = Math.max(1, Math.ceil(tokens.length / 90)); // ~90 frames, any length
+    let shown = 0;
+    const reveal = () => {
+      shown = Math.min(tokens.length, shown + perTick);
+      const slice = tokens.slice(0, shown).join('');
+      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, parsedAnswer: slice } : m)));
+      if (shown >= tokens.length) finishTypewriter();
+    };
+    const timer = setInterval(reveal, 28);
+    typewriterRef.current = { id, full, timer };
+    reveal(); // first words immediately — no empty flash
+  }, [finishTypewriter]);
+
   // --- Reusable Function to Fetch AI Response ---
   // MODIFIED: Added explicit return type annotation and structural fixes
   const fetchAiResponse = async (
@@ -5588,11 +5639,20 @@ interface QueueState {
         }
             
         // --- Update Messages State and History ---
-        // First, update the messages state
+        // First, update the messages state. For a normal text answer, insert it
+        // empty + streaming and reveal it word-by-word (typewriter); history/DB
+        // below still receives the FULL updatedMessage.
+        const applyTypewriter =
+            TYPEWRITER_ENABLED && !updatedMessage.imageData && !updatedMessage.isError && !!updatedMessage.parsedAnswer;
+        const fullAnswerForReveal = updatedMessage.parsedAnswer || '';
         setMessages(prevMessages => {
-            const newMessages = [...prevMessages.filter(msg => msg.id !== localPlaceholderId), updatedMessage];
-            return newMessages;
+            const base = prevMessages.filter(msg => msg.id !== localPlaceholderId);
+            const display = applyTypewriter
+                ? { ...updatedMessage, parsedAnswer: '', isStreaming: true }
+                : updatedMessage;
+            return [...base, display];
         });
+        if (applyTypewriter) startTypewriter(updatedMessage.id, fullAnswerForReveal);
 
         // Then, update the conversation history separately to prevent double updates
         const now = Date.now();
@@ -5800,6 +5860,8 @@ interface QueueState {
   // --- End Reusable Function ---
 
   const handleStopGeneration = () => {
+    // If the answer is mid-typewriter, reveal it in full and stop typing.
+    finishTypewriter();
     if (abortController) {
       abortController.abort();
       console.log("User initiated stop generation.");
@@ -11196,8 +11258,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       )}
               </div>
                   <div className="flex items-center gap-2 md:gap-3">
-                  {isLoading ? (
-                    // While generating: Queue (if typing) else Stop — both 40x40 to match Send/Voice.
+                  {(isLoading || messages.some((m) => m.isStreaming)) ? (
+                    // While generating OR typing out the answer: Queue (if typing) else Stop.
                     (inputValue.trim() || attachedFiles.length > 0) ? (
                       <button
                         onClick={addToQueue}
@@ -11210,9 +11272,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <button
                         onClick={handleStopGeneration}
                         title="Stop generating"
-                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#2a2a2d] text-white transition-colors hover:bg-[#3a3a3d]"
+                        aria-label="Stop generating"
+                        className={`${composerActionButtonSizeClass} flex items-center justify-center bg-[#0e0e10] text-white transition-all hover:bg-[#2a2a2d] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70`}
                       >
-                        <StopCircle size={18} />
+                        <Square size={14} fill="currentColor" strokeWidth={0} />
                       </button>
                     )
                   ) : (
@@ -11225,7 +11288,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         <button
                           type="button"
                           data-voice-mode-trigger
-                          onClick={() => setIsVoiceModeMenuOpen((isOpen) => !isOpen)}
+                          onClick={() => (isVoiceModeMenuOpen ? closeVoiceMenu() : openVoiceMenu())}
                           className="absolute right-full mr-1 flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-[#242426] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                           aria-label="Voice input options"
                           aria-expanded={isVoiceModeMenuOpen}
@@ -11252,12 +11315,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           )}
                           <Mic size={16} className={`relative ${isVoiceInputActive ? 'text-red-500' : 'text-gray-400'}`} />
                         </button>
-                        {isVoiceModeMenuOpen && (
+                        {(isVoiceModeMenuOpen || isVoiceMenuClosing) && (
                           <div
                             data-voice-mode-popover
                             role="dialog"
                             aria-label="Voice input options"
-                            className="absolute right-0 top-full z-40 mt-1.5 w-40 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] px-2 py-1.5 shadow-lg shadow-black/20"
+                            className={`absolute -right-10 bottom-full z-40 mb-1.5 w-40 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] px-2 py-1.5 shadow-lg shadow-black/20 ${isVoiceModeMenuOpen ? 'voice-menu-in' : 'voice-menu-out'}`}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex min-w-0 items-center gap-1.5">
@@ -11280,10 +11343,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 }`}
                               >
                                 <span
-                                  className={`pointer-events-none absolute left-[2px] top-1/2 block h-2.5 w-2.5 rounded-[3px] transition-[transform,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${
+                                  className={`pointer-events-none absolute left-[2px] top-1/2 block rounded-[3px] transition-[transform,background-color,width,height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${
                                     voiceInputMode === 'hold'
-                                      ? 'translate-x-[14px] -translate-y-1/2 bg-[var(--chat-elevated)] shadow-sm'
-                                      : 'translate-x-0 -translate-y-1/2 bg-[var(--chat-text)]'
+                                      ? 'h-3 w-3 translate-x-[12px] -translate-y-1/2 bg-[var(--chat-elevated)]'
+                                      : 'h-2.5 w-2.5 translate-x-0 -translate-y-1/2 bg-[var(--chat-text)]'
                                   }`}
                                 />
                               </button>
@@ -11868,6 +11931,39 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             40% { content: '.'; }
             60% { content: '..'; }
             80%, 100% { content: '...'; }
+          }
+
+          /* Blinking caret shown at the end of the answer while it types out. */
+          .xeno-caret {
+            display: inline-block;
+            width: 2px;
+            height: 1.05em;
+            margin-left: 2px;
+            vertical-align: text-bottom;
+            background: currentColor;
+            opacity: 0.75;
+            animation: xeno-caret-blink 1s steps(2, start) infinite;
+          }
+          @keyframes xeno-caret-blink {
+            50% { opacity: 0; }
+          }
+
+          /* Voice-mode ("Hold to record") popover — appear/disappear. */
+          .voice-menu-in {
+            transform-origin: bottom right;
+            animation: voice-menu-in 150ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+          }
+          .voice-menu-out {
+            transform-origin: bottom right;
+            animation: voice-menu-out 150ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+          }
+          @keyframes voice-menu-in {
+            from { opacity: 0; transform: translateY(6px) scale(0.96); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+          @keyframes voice-menu-out {
+            from { opacity: 1; transform: translateY(0) scale(1); }
+            to { opacity: 0; transform: translateY(6px) scale(0.96); }
           }
 
           /* Xeno Sources Container Styles */
@@ -14357,7 +14453,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     } else if (message.isDotPlaceholder) {
                         return (
                             <div key={message.id} className="flex justify-start w-full pl-[1.125rem] py-2">
-                                <span className="w-2 h-2 bg-gray-500 rounded-full animate-pulse" />
+                                <ThinkingStatus
+                                    mode={emptyStateMode}
+                                    searching={isXenoSearchEnabled}
+                                    theme={resolvedChatTheme === 'light' ? 'light' : 'dark'}
+                                />
                             </div>
                         );
                     } else if (message.isCancelled) {
@@ -14852,7 +14952,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               <ImageContainer message={message} />
                                           )}
 
-                                          {!message.isError && message.parsedAnswer && (
+                                          {!message.isError && (message.parsedAnswer || message.isStreaming) && (
                                                   /* Do not put prose-pre:bg-* / child bg utilities on this wrapper:
                                                      theme CSS uses [class*="bg-…"] and would paint the whole answer. */
                                                   <div className="prose prose-sm max-w-none dark:!prose-invert text-white prose-strong:text-white prose-strong:font-bold prose-code:text-[#f6b98b] prose-code:px-2 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-[15px] prose-code:font-normal prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-lg prose-pre:border prose-pre:border-[#232021] prose-pre:p-4 prose-pre:font-mono prose-pre:text-white prose-pre:text-[15px] prose-pre:overflow-x-auto">
@@ -14895,12 +14995,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 >
   {message.parsedAnswer}
 </ReactMarkdown>
+                                               {message.isStreaming && <span className="xeno-caret" aria-hidden="true" />}
                                                </div>
                                           )}
                                       </div>
                                        
                                       {/* 4. Action Buttons */}
-                                      {!message.isError && !message.isLoading && message.parsedAnswer && (
+                                      {!message.isError && !message.isLoading && !message.isStreaming && message.parsedAnswer && (
                                           <div
                                               className={`flex items-center justify-between pl-3 action-buttons
                                                 ${isLastAiMessage

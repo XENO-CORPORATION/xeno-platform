@@ -82,6 +82,7 @@ type GenerateBody = {
   messages?: GenerateMessage[];
   selectedModelId?: string;
   task?: string;
+  useSearchTool?: boolean;
 };
 
 /** 1×1 transparent PNG — placeholder for the image task (polished in a later step). */
@@ -177,12 +178,26 @@ export const installChatMock = (): void => {
     try {
       if (matchesPath(url, '/api/chat/generate') && (init?.method ?? 'GET').toUpperCase() === 'POST') {
         const body: GenerateBody = init?.body ? JSON.parse(init.body as string) : {};
-        // 600–1400ms so the Thinking / dot placeholder + live timer are visible.
-        const delay = 600 + Math.floor(Math.random() * 800);
+        // Longer when "searching" so the multi-step thinking timeline plays out;
+        // shorter for a plain chat answer.
+        const delay = body.useSearchTool
+          ? 4200 + Math.floor(Math.random() * 1200)
+          : 1800 + Math.floor(Math.random() * 1200);
         return await jsonResponse(mockGenerate(body), delay);
       }
       if (matchesPath(url, '/api/models')) {
         return await jsonResponse(MOCK_MODELS, 150);
+      }
+      if (matchesPath(url, '/api/tokenize/messages')) {
+        // Local ~4-chars-per-token estimate, in the shape the service expects.
+        // Mainly here to stop the offline 500 retry flood from the tokenizer.
+        const body = init?.body ? JSON.parse(init.body as string) : {};
+        const msgs: Array<{ content?: string; text?: string }> = body.messages ?? [];
+        const messageTokens = msgs.map((m) => Math.ceil(((m.content ?? m.text ?? '').length) / 4));
+        const systemTokens = Math.ceil(((body.systemPrompt ?? '') as string).length / 4);
+        const overhead = msgs.length * 4 + (body.systemPrompt ? 4 : 0);
+        const total = messageTokens.reduce((a: number, b: number) => a + b, 0) + systemTokens + overhead;
+        return await jsonResponse({ success: true, messageTokens, systemTokens, total, overhead });
       }
     } catch {
       // If anything goes wrong building the mock, fall through to the real fetch.
