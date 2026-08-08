@@ -171,9 +171,16 @@ const extension: ProductContent = {
     { q: 'What can it actually do on a page?', a: 'Read and extract page content, copy it as Markdown, take screenshots, click elements, type text, fill and submit forms, navigate, scroll, select options, press keys, open and switch tabs, search the web, read other URLs, check console logs, and run JavaScript.' },
     { q: 'How much will it cost?', a: 'The extension will be free. Model calls route through the XENO API, your own key, or a local Ollama model — so you only pay for the model usage you choose.' },
   ],
+  /* `description` is the ONE piece of this page that is server-rendered (it is
+   * the meta/og/twitter description in the prerendered <head>); everything else
+   * is client-rendered from the bundle. So it has to be updated in the same pass
+   * as the body copy or the page contradicts itself exactly where crawlers and
+   * social cards read it — which is what happened on 2026-08-08 when the body
+   * started offering a tester build while this line still said "Not yet
+   * available to install". */
   seo: {
     title: 'XENO Extension — the AI browser agent for Chrome & Edge',
-    description: 'A Manifest V3 side-panel agent that reads the page and acts on it — clicks, types, fills forms and navigates across tabs, in Plan / Agent / Chat mode, gated by a permission prompt. Bring your own model or run local. Not yet available to install.',
+    description: 'A Manifest V3 side-panel agent that reads the page and acts on it — clicks, types, fills forms and navigates across tabs, in Plan / Agent / Chat mode, gated by a permission prompt. Bring your own model or run local. A 1.1.0 tester build is available to load unpacked; the Chrome Web Store listing is not live yet.',
   },
   /* Mirrors ../../../xeno-extension/PRIVACY.md — that file is what a web-store
    * reviewer reads, this is the public URL the listing points at. Keep the two in
