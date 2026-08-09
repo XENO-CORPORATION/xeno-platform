@@ -16,6 +16,8 @@ import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import Learn from "./pages/Learn";
 import LearnTutorial from "./pages/LearnTutorial";
+import Forum from "./pages/Forum";
+import ForumThread from "./pages/ForumThread";
 import RemoteRuns from "./pages/RemoteRuns";
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
@@ -154,6 +156,14 @@ function App() {
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/learn/:slug" element={<LearnTutorial />} />
+            {/* XENO Forum. Only :shortId resolves a thread — the trailing slug is
+                decorative, so a retitled thread never breaks a citation (SPEC D9).
+                /community redirects in because that is what people type and what
+                inbound links will use. */}
+            <Route path="/forum" element={<Forum />} />
+            <Route path="/forum/t/:shortId" element={<ForumThread />} />
+            <Route path="/forum/t/:shortId/:slug" element={<ForumThread />} />
+            <Route path="/community" element={<Navigate to="/forum" replace />} />
             <Route path="/remote/runs" element={
               <ProtectedRoute>
                 <RemoteRuns />
