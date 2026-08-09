@@ -31,7 +31,8 @@ requireText('catalog', catalog, "delivery: 'cli'");
 requireText('catalog', catalog, "install: 'npm install -g @xenosystem/acp'");
 requireText('catalog', catalog, "operatingSystem: 'Windows, Linux'");
 
-for (const [label, source] of [['product', product], ['docs', docs], ['release notes', releaseNotes]]) {
+// LIVE surfaces must name the SHIPPING identity — this is what a visitor installs.
+for (const [label, source] of [['product', product], ['docs', docs]]) {
   requireText(label, source, '@xenosystem/acp');
   requireText(label, source, 'Windows');
   requireText(label, source, 'Linux');
@@ -42,7 +43,20 @@ for (const [label, source] of [['product', product], ['docs', docs], ['release n
   forbidText(label, source, '@xeno-acp/');
 }
 
-requireText('prerendered product', prerenderedProduct, 'XENO ACP 0.1.0');
+// The 0.1.0 release notes are a HISTORICAL record. 0.1.0 really did ship as
+// @xeno-corporation/xeno-acp, so that document must keep saying so — renaming it
+// would make it describe a tarball that never existed. Assert the old identity
+// here deliberately; do not "migrate" this file.
+requireText('release notes', releaseNotes, '@xeno-corporation/xeno-acp');
+for (const needle of ['Windows', 'Linux', 'macOS', 'XENO Hub']) {
+  requireText('release notes', releaseNotes, needle);
+}
+for (const needle of ['0.1.0-alpha', 'private alpha', '@xeno-acp/']) {
+  forbidText('release notes', releaseNotes, needle);
+}
+
+// npm `latest` is 0.1.1; the page states 0.1.1. This assertion still read 0.1.0.
+requireText('prerendered product', prerenderedProduct, 'XENO ACP 0.1.1');
 requireText('prerendered product', prerenderedProduct, '"operatingSystem":"Windows, Linux"');
 forbidText('prerendered product', prerenderedProduct, 'Windows, macOS, Linux');
 requireText('prerendered installation docs', prerenderedInstall, 'Install the public npm packages');
