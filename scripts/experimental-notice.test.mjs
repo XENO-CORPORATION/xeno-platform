@@ -144,6 +144,20 @@ test('the browser extension offers a real download and never claims SmartScreen'
     'extension: no SmartScreen click-through language anywhere in the notice');
 });
 
+test('nothing offers a download while still calling itself coming-soon', () => {
+  // A "Coming soon" chip rendered beside a working Download button contradicts
+  // itself, and the chip is what a visitor scanning /products actually reads.
+  // This generalises the rule the sheets/notes/slides case states for installers
+  // ("a downloadable product is not coming-soon") to EVERY way a build reaches a
+  // visitor, including the off-site externalUrl route the extension uses.
+  for (const p of PRODUCTS) {
+    const reachable = !!p.externalUrl || installChannel(p) === 'installer';
+    if (!reachable) continue;
+    assert.notEqual(p.status, 'coming-soon',
+      `${p.slug}: hands over a build (${p.externalUrl ? 'externalUrl' : 'installer'}) while badged "Coming soon"`);
+  }
+});
+
 test('dropping extension\'s signing:none would fabricate a SmartScreen warning', () => {
   // The failure this guards is a one-word deletion: 'archive' DEFAULTS to unsigned,
   // so removing `signing: 'none'` silently turns the notice into "More info → Run

@@ -189,7 +189,13 @@ export const PRODUCTS: Product[] = [
   //
   // ⚠️ externalUrl is VERSION-PINNED: bump it on every extension release, or the
   // download button serves a stale build. Step in xeno-extension/docs/RELEASE.md.
-  { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'coming-soon', delivery: 'soon', operatingSystem: 'Chrome, Edge, Brave (Chromium)', r2: 'extension', repo: 'xeno-extension', signing: 'none', externalUrl: 'https://updates.xenostudio.ai/apps/extension/extension-stable-v1.1.0/xeno-browser-agent-stable-1.1.0.zip', externalLabel: 'Download 1.1.0 — load unpacked' },
+  // status:'beta' not 'coming-soon' — a "Coming soon" chip beside a working
+  // Download button contradicts itself, and the playbook's release-day step is to
+  // flip status once the build is genuinely published. `delivery` deliberately
+  // STAYS 'soon': flipping it to 'desktop' would route the page at the installer
+  // R2 convention (version.json, per-OS download page) that this product does not
+  // use, and would render a dead "All platforms & versions" link.
+  { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'beta', delivery: 'soon', operatingSystem: 'Chrome, Edge, Brave (Chromium)', r2: 'extension', repo: 'xeno-extension', signing: 'none', externalUrl: 'https://updates.xenostudio.ai/apps/extension/extension-stable-v1.1.0/xeno-browser-agent-stable-1.1.0.zip', externalLabel: 'Download 1.1.0 — load unpacked' },
 
   // ── Build ─────────────────────────────────────────────────
   { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-engine' },
