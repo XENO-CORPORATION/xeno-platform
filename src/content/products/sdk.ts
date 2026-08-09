@@ -10,16 +10,16 @@ const sdk: ProductContent = {
   slug: 'sdk',
   hero: {
     headline: 'The agent runtime inside every XENO app — now yours to embed.',
-    sub: 'XENO SDK is the same TypeScript engine that powers XENO Code and the agent sidebar in Pixel, Motion and Sound. Register your app’s actions as tools, drop in the React chat panel, and ship an agent that reads, plans, asks permission and remembers — with any model, cloud or local.',
-    media: { type: 'mockup', src: 'sdk-hero', alt: 'XENO SDK embedded in a host app — a createXenoAgent() tool registry on the left, the SDK’s React agent panel with a tool call and permission prompt on the right' },
-    badges: ['npm · TypeScript', 'BYO model / local', 'React UI included', 'MCP · plugins'],
-    note: 'Beta (v0.7.x) · proprietary. Embedded in 5+ XENO apps today. Model calls route through the XENO API, your own key, or a local runtime.',
+    sub: 'XENO SDK is the same TypeScript engine that powers XENO Code and the agent sidebar in Pixel, Motion and Sound. Register your app’s actions as tools, drop in the ready-made chat panel, and ship an agent that reads, plans, asks permission and remembers — with any model, cloud or local.',
+    media: { type: 'mockup', src: 'sdk-hero', alt: 'XENO SDK embedded in a host app — a createXenoAgent() tool registry on the left, the SDK’s agent panel with a tool call and permission prompt on the right' },
+    badges: ['npm · TypeScript', 'BYO model / local', 'Framework-free UI', 'MCP · plugins'],
+    note: 'Beta (v0.9.x) · proprietary. Embedded in 5+ XENO apps today. Model calls route through the XENO API, your own key, or a local runtime.',
   },
   trust: ['Node ≥ 20 · ESM · TypeScript 5.7', 'Same engine as XENO Code', 'Every tool call in a JSONL audit ledger'],
   highlights: [
     { value: 'One call', label: 'createXenoAgent() to embed' },
     { value: 'Any model', label: 'Cloud · local · OpenAI-compatible' },
-    { value: 'React UI', label: 'Drop-in agent sidebar' },
+    { value: 'Zero peer deps', label: 'Drop-in agent sidebar' },
     { value: 'Auditable', label: 'Every action logged' },
   ],
   features: [
@@ -86,10 +86,10 @@ const sdk: ProductContent = {
     {
       eyebrow: 'Embed anywhere', icon: 'Boxes',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(120,200,150,0.14), transparent 60%), linear-gradient(165deg,#0e1a14,#070707 74%)',
-      title: 'React UI, Electron helpers, MCP & plugins',
-      desc: 'A separate /ui entry ships the whole agent sidebar as React components. Or run the loop headless behind a JSON-RPC app-server, extend it with MCP servers, hooks and plugins.',
+      title: 'Agent UI, Electron helpers, MCP & plugins',
+      desc: 'A separate /ui entry ships the whole agent sidebar as a framework-free renderer — no React, no build step, no peer dependency. Or run the loop headless behind a JSON-RPC app-server, extend it with MCP servers, hooks and plugins.',
       bullets: [
-        'AgentChatPanel, useAgent, permission & tool-call UI',
+        'mountAgentUi, controller API, permission & tool-call UI',
         'Electron bridge for renderer-process agents',
         'MCP servers, lifecycle hooks & a plugin system',
         'JSON-RPC app-server for headless / remote runs',
@@ -102,15 +102,15 @@ const sdk: ProductContent = {
     { title: 'Headless automation', icon: 'Zap', desc: 'Run the loop server-side behind the JSON-RPC app-server or an MCP server, and wire it into pipelines and other agents.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Install', desc: 'npm install @xeno-corporation/xeno-agent-sdk — ESM, Node ≥ 20, TypeScript types included.' },
+    { step: '1', title: 'Install', desc: 'npm install @xenosystem/agent-sdk — ESM, Node ≥ 20, TypeScript types included.' },
     { step: '2', title: 'Register your tools', desc: 'Map your app’s actions to a tool registry, then call createXenoAgent({ tools, model }).' },
-    { step: '3', title: 'Drop in the UI', desc: 'Mount AgentChatPanel + useAgent from /ui — or run the loop headless. Every action is audited.' },
+    { step: '3', title: 'Drop in the UI', desc: 'Mount the sidebar with mountAgentUi() from /ui — or run the loop headless. Every action is audited.' },
   ],
   comparison: {
     competitor: 'most agent frameworks',
     rows: [
       { feature: 'Full agent loop (read · plan · act)', xeno: true, them: true },
-      { feature: 'Embeddable React chat UI included', xeno: true, them: 'Add-on' },
+      { feature: 'Embeddable chat UI included, no framework peer', xeno: true, them: 'Add-on' },
       { feature: 'Permission modes + path sandboxing', xeno: true, them: 'Varies' },
       { feature: 'Built-in JSONL audit ledger', xeno: true, them: false },
       { feature: 'Planner/executor/reviewer delegation', xeno: 'Built in', them: 'DIY' },
@@ -121,20 +121,20 @@ const sdk: ProductContent = {
   specs: [
     { label: 'Install', value: 'npm · ESM' },
     { label: 'Runtime', value: 'Node ≥ 20 · TS 5.7' },
-    { label: 'UI', value: 'React 18+ (optional peer)' },
-    { label: 'Version', value: '0.7.x · beta' },
+    { label: 'UI', value: 'Framework-free · no peer deps' },
+    { label: 'Version', value: '0.9.x · beta' },
   ],
   faq: [
     { q: 'How is the SDK different from the Agent CLI?', a: 'The Agent CLI is the terminal app you run; the SDK is the library it’s built on. If you want to embed the same agent engine — the loop, tools, permissions, memory and audit — inside your own app, you use the SDK.' },
-    { q: 'How do I embed an agent?', a: 'Register your app’s operations as a tool registry (each with a description, an execute function, and confirm/destructive flags), then call createXenoAgent({ tools, model }). Optionally mount the /ui React panel to get a full chat sidebar.' },
+    { q: 'How do I embed an agent?', a: 'Register your app’s operations as a tool registry (each with a description, an execute function, and confirm/destructive flags), then call createXenoAgent({ tools, model }). Optionally call mountAgentUi() from /ui to get a full chat sidebar.' },
     { q: 'Which models can it use?', a: 'It’s provider-agnostic. Use the hosted XENO API, your own key, or run fully local on the xeno-rt runtime or Ollama — any OpenAI-compatible endpoint works, and you can pass your own LLMProvider to swap the transport entirely.' },
-    { q: 'Do I have to use React?', a: 'No. The core SDK is headless and has no DOM dependency. The React components live in a separate /ui entry point with React as an optional peer dependency — import them only if you want the pre-built agent sidebar.' },
+    { q: 'Do I have to use React?', a: 'No — and you cannot accidentally pull it in. The SDK declares no peer dependencies at all. The core is headless with no DOM dependency, and the /ui entry point is a framework-free renderer that talks to the DOM directly, so it drops into React, Vue, Svelte or a plain page alike. Mount it with mountAgentUi(), or subscribe to the controller and render the snapshot with your own components.' },
     { q: 'Is it safe to let the agent run tools?', a: 'You stay in control: four permission modes (default, acceptEdits, plan, bypass), path sandboxing, and destructive-action gates. Every tool call and permission decision is appended to a JSON-lines audit ledger.' },
-    { q: 'Is it open source or free?', a: 'It’s proprietary and in beta (the 0.7.x line). The package is free to install; model calls route through the XENO API (billed), your own key, or a local model at no cost.' },
+    { q: 'Is it open source or free?', a: 'It’s proprietary and in beta (the 0.9.x line). The package is free to install; model calls route through the XENO API (billed), your own key, or a local model at no cost.' },
   ],
   seo: {
     title: 'XENO SDK — embed an AI agent into any app',
-    description: 'The TypeScript agent runtime behind every XENO app. Register your actions as tools, drop in the React chat panel, and ship an agent with permissions, memory, delegation and an audit ledger — any model, cloud or local.',
+    description: 'The TypeScript agent runtime behind every XENO app. Register your actions as tools, drop in the ready-made chat panel, and ship an agent with permissions, memory, delegation and an audit ledger — any model, cloud or local.',
   },
 };
 

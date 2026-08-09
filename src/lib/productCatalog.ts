@@ -209,13 +209,16 @@ export const PRODUCTS: Product[] = [
   // frozen at 0.4.45. Both resolve — which is exactly why the stale command was
   // dangerous rather than obviously broken: it silently installed an older CLI.
   { slug: 'agent-cli', name: 'XENO Agent CLI', tagline: 'Code, automate and control your workspace from the terminal.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xenosystem/agent-cli', repo: 'xeno-agent-cli' },
-  // NOT migrated on purpose. @xenosystem/agent-sdk@0.8.12 is ahead of
-  // @xeno-corporation/xeno-agent-sdk@0.7.0, but the SDK docs (src/content/docs/
-  // sdk.ts) carry ~25 code samples that `import` the legacy specifier. Changing
-  // this line alone would tell a reader to install one package and import
-  // another. Migrate the install command and every sample in one pass, or not
-  // at all — a half-migrated SDK doc is worse than a version-behind one.
-  { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xeno-corporation/xeno-agent-sdk', repo: 'xeno-agent-sdk' },
+  // Migrated 2026-08-09, in ONE pass as the previous note here required: this
+  // install command, every sample in src/content/docs/sdk.ts, and the product
+  // page all name @xenosystem/agent-sdk together. npm `latest` is 0.9.0;
+  // @xeno-corporation/xeno-agent-sdk is frozen at 0.7.0.
+  // The /ui samples were REWRITTEN, not renamed — that subpath no longer ships
+  // React (`AgentChatPanel`/`AgentStatusBar`/`useAgent` exist nowhere in the
+  // package). It is now a framework-free controller: createAgentUiController,
+  // mountAgentUi, createAgentUiView, dispatchAgentUiAction. The SDK declares
+  // NO peer dependencies, so any "React is an optional peer" claim is false.
+  { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xenosystem/agent-sdk', repo: 'xeno-agent-sdk' },
   // ACP moved to the @xenosystem npm scope. npm `latest` is @xenosystem/acp@0.1.1;
   // @xeno-corporation/xeno-acp is frozen at 0.1.0. The page, this install command
   // and the R2 feed must all name the SAME identity — @xenosystem — or a visitor
