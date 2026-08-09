@@ -120,29 +120,38 @@ test('products with no published build say nothing', () => {
   }
 });
 
-test('the browser extension says nothing — because it hands over no executable', () => {
-  // extension LEFT the list above on 2026-08-08: it now publishes a real build
-  // (1.1.0 on R2, apps/extension/). It still resolves to no channel and no
-  // notice, and that is CORRECT rather than an oversight — which is exactly why
-  // it needs its own case instead of hiding inside "no published build".
+test('the browser extension offers a real download and never claims SmartScreen', () => {
+  // extension LEFT the "no published build" list on 2026-08-08: 1.1.0 is on R2 and
+  // the page links it, so the visitor gets a working Download button.
   //
-  // What ships is a ~170 KB ZIP of JavaScript, not an installer. Nothing is
-  // executed, so Windows never warns and there is no signature to be missing.
-  // Every notice branch that would apply to it (`archive`) asserts
-  // smartScreen:true and tells the visitor to click through "More info → Run
-  // anyway" — advice for a dialog that will never appear. Per the playbook's own
-  // rule, a SmartScreen warning on something that triggers none is a lie in the
-  // reassuring direction, and still a lie.
-  //
-  // ⚠️ Do NOT "fix" this by giving the catalog entry an `externalUrl`: that flips
-  // installChannel() to 'archive' and manufactures precisely that false warning.
-  // The honest disclosure for this product — Developer-Mode load, no auto-update,
-  // Web Store listing pending — is carried in src/content/products/extension.ts,
-  // because it is a distribution caveat, not a code-signing one.
+  // The earlier version of this gate asserted `externalUrl === undefined`, which
+  // pinned a MECHANISM rather than the outcome — and the mechanism was wrong: with
+  // no externalUrl the page rendered only "Get notified", so the copy promised a
+  // build the page would not hand over. What actually matters is that this product
+  // never claims a Windows warning it cannot trigger.
   const p = bySlug('extension');
-  assert.equal(installChannel(p), 'none', 'extension: a ZIP of JS is not an install channel');
-  assert.equal(noticeFor('extension'), null, 'extension: nothing to sign, nothing to warn about');
-  assert.equal(p.externalUrl, undefined, 'extension: an externalUrl would fabricate a SmartScreen warning');
+  const n = noticeFor('extension');
+  assert.ok(p.externalUrl, 'extension: the published build must be reachable from the page');
+  assert.match(p.externalUrl, /\/apps\/extension\/.*\.zip$/, 'extension: the CTA must point at the published ZIP');
+  assert.equal(installChannel(p), 'archive');
+  assert.equal(artifactSigning(p), 'none', 'extension: a ZIP of JS has nothing to code-sign');
+  assert.ok(n, 'extension: a published build still carries the experimental framing');
+  assert.equal(n.smartScreen, false,
+    'extension: a ZIP of JavaScript never triggers SmartScreen — claiming it does is the '
+    + 'reassuring-direction lie, and it trains people to click through warnings that do not exist');
+  assert.equal(productMaturity(p), 'experimental', 'extension: still experimental');
+  assert.ok(!/SmartScreen|Run anyway/i.test(`${n.short} ${n.detail} ${(n.steps ?? []).join(' ')}`),
+    'extension: no SmartScreen click-through language anywhere in the notice');
+});
+
+test('dropping extension\'s signing:none would fabricate a SmartScreen warning', () => {
+  // The failure this guards is a one-word deletion: 'archive' DEFAULTS to unsigned,
+  // so removing `signing: 'none'` silently turns the notice into "More info → Run
+  // anyway" for a dialog that cannot appear. Prove the default is what bites.
+  const { signing, ...withoutSigning } = bySlug('extension');
+  assert.equal(artifactSigning(withoutSigning), 'unsigned', 'the archive default is unsigned');
+  assert.equal(experimentalNotice(withoutSigning).smartScreen, true,
+    'without signing:none the notice claims SmartScreen — which is exactly why the field is set');
 });
 
 test('sheets + notes + slides ship real unsigned installers and are framed that way', () => {

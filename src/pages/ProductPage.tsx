@@ -90,6 +90,14 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
                   <a href={product.externalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
                     <Download className="h-4 w-4" />{product.externalLabel ?? `Get ${product.name}`}<ArrowUpRight className="h-4 w-4" />
                   </a>
+                  {/* An off-site download on a still-'soon' product is a tester build,
+                      not general availability — so keep the notify path rather than
+                      implying this is the finished thing. */}
+                  {product.delivery === 'soon' && (
+                    <Link to="/auth" className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/15 px-5 py-3 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]">
+                      <Bell className="h-3.5 w-3.5" />Notify me when it ships
+                    </Link>
+                  )}
                 </div>
               )}
 

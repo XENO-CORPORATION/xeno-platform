@@ -21,10 +21,14 @@ import type { ProductContent } from './_types';
  * availability or add a "Free · available" note until a Web Store listing is
  * live.
  *
- * ⚠️ Do NOT give the catalog entry an `externalUrl` to surface a download. That
- * flips installChannel() to 'archive', which asserts smartScreen:true and tells
- * the visitor to click through "More info → Run anyway" — a warning this product
- * can never trigger. Pinned by scripts/experimental-notice.test.mjs.
+ * The catalog entry DOES carry an `externalUrl` (the published ZIP) so the page
+ * renders a real Download button — without it the CTA was only "Get notified",
+ * and this copy would have promised a build the page refused to hand over.
+ * ⚠️ That is safe ONLY because the entry also sets `signing: 'none'`:
+ * externalUrl makes installChannel() resolve to 'archive', which DEFAULTS to
+ * unsigned and would assert smartScreen:true — "More info → Run anyway" for a
+ * dialog a ZIP of JavaScript can never trigger. Do not remove that field.
+ * Both directions are pinned by scripts/experimental-notice.test.mjs.
  *
  * CORRECTED 2026-07-27 — seven lines claimed Claude and GPT models. The shipped
  * build's catalog is xAI GROK ONLY. Verified in dist/stable/extension/background/

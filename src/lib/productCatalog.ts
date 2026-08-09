@@ -172,9 +172,24 @@ export const PRODUCTS: Product[] = [
   // worker, postgres, redis) report healthy on xeno-post-001.
   { slug: 'post', name: 'XENO Post', tagline: '25+ platform social media command center.', category: 'Connect', status: 'beta', delivery: 'web', repo: 'xeno-post', externalUrl: 'https://post.xenostudio.ai', externalLabel: 'Open XENO Post' },
   { slug: 'browser', name: 'XENO Browser', tagline: 'The agent-native browser that works the web for you.', category: 'Connect', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-browser' },
-  // Extension: the public R2 channel was withdrawn and there is no web-store
-  // listing yet, so there is nothing to download — 'soon' keeps the CTA honest.
-  { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'coming-soon', delivery: 'soon', operatingSystem: 'Chrome, Edge, Brave (Chromium)', r2: 'extension', repo: 'xeno-extension' },
+  // Extension: 1.1.0 IS published (R2 apps/extension/), so the page links the real
+  // download. It stays delivery:'soon' + status:'coming-soon' because there is no
+  // Chrome Web Store listing and Chrome has refused off-store installs on Windows
+  // since Chrome 33 — this is a load-unpacked tester build, not availability.
+  //
+  // 🔴 `signing: 'none'` is REQUIRED and is not decoration. externalUrl makes
+  // installChannel() resolve to 'archive', and 'archive' defaults to 'unsigned',
+  // whose notice asserts smartScreen:true and tells the visitor to click through
+  // "More info → Run anyway". What ships here is a ZIP of JavaScript: Windows never
+  // executes it, no dialog can ever appear, and there is no signature to be missing.
+  // 'none' means "nothing to sign", which drops the warning while KEEPING the
+  // experimental framing. Removing it fabricates a warning for a dialog that cannot
+  // exist — the reassuring-direction lie the playbook forbids. Pinned by
+  // scripts/experimental-notice.test.mjs.
+  //
+  // ⚠️ externalUrl is VERSION-PINNED: bump it on every extension release, or the
+  // download button serves a stale build. Step in xeno-extension/docs/RELEASE.md.
+  { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'coming-soon', delivery: 'soon', operatingSystem: 'Chrome, Edge, Brave (Chromium)', r2: 'extension', repo: 'xeno-extension', signing: 'none', externalUrl: 'https://updates.xenostudio.ai/apps/extension/extension-stable-v1.1.0/xeno-browser-agent-stable-1.1.0.zip', externalLabel: 'Download 1.1.0 — load unpacked' },
 
   // ── Build ─────────────────────────────────────────────────
   { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-engine' },
