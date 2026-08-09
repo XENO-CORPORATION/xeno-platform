@@ -23,11 +23,16 @@ const forbidText = (label, haystack, needle) => {
 requireText('catalog', catalog, "slug: 'acp'");
 requireText('catalog', catalog, "status: 'beta'");
 requireText('catalog', catalog, "delivery: 'cli'");
-requireText('catalog', catalog, "install: 'npm install -g @xeno-corporation/xeno-acp'");
+// ACP migrated to the @xenosystem scope (npm `latest` is @xenosystem/acp@0.1.1;
+// @xeno-corporation/xeno-acp is frozen at 0.1.0). This gate asserted the OLD
+// name long after the catalog moved, so it failed on the corrected content —
+// and its product-page check passed only because a comment explaining the
+// rename happened to contain the legacy string. Assert the shipping identity.
+requireText('catalog', catalog, "install: 'npm install -g @xenosystem/acp'");
 requireText('catalog', catalog, "operatingSystem: 'Windows, Linux'");
 
 for (const [label, source] of [['product', product], ['docs', docs], ['release notes', releaseNotes]]) {
-  requireText(label, source, '@xeno-corporation/xeno-acp');
+  requireText(label, source, '@xenosystem/acp');
   requireText(label, source, 'Windows');
   requireText(label, source, 'Linux');
   requireText(label, source, 'macOS');
