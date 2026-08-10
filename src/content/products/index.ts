@@ -1,6 +1,7 @@
-import type { ProductContent } from './_types';
+﻿import type { ProductContent } from './_types';
 import comms from './comms';
 import agentCli from './agent-cli';
+import agent from './agent';
 import pixel from './pixel';
 import post from './post';
 import canvas from './canvas';
@@ -29,7 +30,7 @@ import shell from './shell';
  * the full ProductLanding; any product NOT here falls back to the lean
  * ProductPage (PRODUCT-LANDING-SPEC L3). Add a product = author its module and
  * import it here. */
-const MODULES: ProductContent[] = [comms, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk, docs, sheets, notes, slides, use, engine, rt, architect, sound, browser, threeD, photo, anima, shell];
+const MODULES: ProductContent[] = [comms, agent, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk, docs, sheets, notes, slides, use, engine, rt, architect, sound, browser, threeD, photo, anima, shell];
 
 const BY_SLUG = new Map(MODULES.map((m) => [m.slug, m]));
 
