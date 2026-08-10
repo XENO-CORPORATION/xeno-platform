@@ -13,7 +13,7 @@
  * from src/lib/productCatalog.ts (compiled on the fly with esbuild).
  */
 import { build } from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
@@ -293,21 +293,33 @@ async function main() {
   writePage('products', renderPage(template, null, indexHead));
   pages++;
 
-  // sitemap.xml
-  const today = new Date().toISOString().slice(0, 10);
-  const sitemap =
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-    [`/`, ...urls].map((u) => `  <url><loc>${SITE}${u}</loc><lastmod>${today}</lastmod></url>`).join('\n') +
-    `\n</urlset>\n`;
-  writeFileSync(join(DIST, 'sitemap.xml'), sitemap);
+  // sitemap.xml — DISABLED 2026-08-11 while the site is being de-indexed.
+  //
+  // A sitemap is an active invitation: it hands Google a list of every URL and a
+  // fresh <lastmod> that says "recrawl me". Emitting one while asking to be
+  // removed from the index works directly against the noindex header set in
+  // nginx/default.conf. The URL list is still computed above, so re-enabling is
+  // uncommenting this block — nothing else has to be reconstructed.
+  //
+  // TO REVERSE: restore the three lines below, restore the `Sitemap:` line in
+  // public/robots.txt, deploy, then re-submit the sitemap in Search Console.
+  //
+  //   const today = new Date().toISOString().slice(0, 10);
+  //   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset ...>\n` +
+  //     [`/`, ...urls].map((u) => `  <url><loc>${SITE}${u}</loc><lastmod>${today}</lastmod></url>`).join('\n') +
+  //     `\n</urlset>\n`;
+  //   writeFileSync(join(DIST, 'sitemap.xml'), sitemap);
+  //
+  // Any sitemap.xml left in dist/ from an earlier build is removed, so a stale
+  // one cannot survive in the image and keep advertising the old 268 URLs.
+  const staleSitemap = join(DIST, 'sitemap.xml');
+  if (existsSync(staleSitemap)) rmSync(staleSitemap);
 
-  // robots.txt — keep existing rules if present, ensure a Sitemap line.
-  const robotsPath = join(DIST, 'robots.txt');
-  let robots = existsSync(robotsPath) ? readFileSync(robotsPath, 'utf8') : 'User-agent: *\nAllow: /\n';
-  if (!/Sitemap:/i.test(robots)) robots += `\nSitemap: ${SITE}/sitemap.xml\n`;
-  writeFileSync(robotsPath, robots);
+  // robots.txt ships from public/ as-authored. The prerender no longer appends a
+  // `Sitemap:` line (there is no sitemap), and must not rewrite the file — the
+  // authored copy explains WHY crawling stays allowed while noindex does the work.
 
-  console.log(`prerender: wrote ${pages} product pages + sitemap.xml (${urls.length + 1} urls) + robots.txt`);
+  console.log(`prerender: wrote ${pages} product pages (sitemap disabled — de-index in effect; ${urls.length + 1} routes not advertised)`);
 }
 
 main().catch((e) => { console.error('prerender failed:', e); process.exit(1); });
