@@ -24,6 +24,29 @@ frontend deploy** run from **xeno-platform**.
 ## 1. Identify
 - Product `<slug>`; `delivery` from `xeno-platform/src/lib/productCatalog.ts`. The version being released vs the currently-published version (`releases.json`/npm).
 
+## 1b. 🔴 A TOOL is not an independent product — it ships inside a Hub release
+
+If invoked from `xeno-tools/`, or asked to "release a tool": **stop looking for a slug, an R2
+feed, a product page or a `release-guide/` here — a tool has none.** Verified 2026-08-09
+(xeno-hub `2a48e17`): Hub mounts tools via `src/renderer/src/tools/externalTools.tsx`, which
+**statically imports** each package, so tools are bundled into Hub's renderer at BUILD time.
+There is no runtime loader and no tools feed. That is Phase 3 of `xeno-tools/ROADMAP.md`.
+
+Procedure: in `xeno-tools` bump the tool's `package.json` AND `tool.manifest.ts` together, get
+`typecheck && test && build` green (**`dist/` is what Hub consumes** — an unrebuilt tool changed
+nothing), verify it inside Hub rather than only the dev harness, then **release XENO HUB
+normally**. Hub's notes carry the tool's changes, because that is where users meet it.
+
+Two tool-specific traps: **Tailwind does not extract classes from mounted tool bundles**
+(known, unresolved — check the emitted CSS for a class only that tool uses before calling it
+good), and **never delete a Hub-native original** until the tool passes
+`xeno-tools/docs/HUB-INTEGRATION.md` §5 in a real Hub dev session.
+
+"A tool release Hub picks up on its own, with no Hub release" is **Phase 4 and does not exist**.
+Say so. It needs an R2 tools feed, runtime loading instead of static imports, Ed25519 signing +
+trust tiers (a bundle fetched and executed is remote code execution — `XENO MARKETPLACE - SPEC.md`
+already mandates this), and a shared-vs-per-tool runtime decision. Propose it as its own project.
+
 ## 2. Understand what changed  (do this yourself — do not just ask the user)
 Read the actual release delta before deciding anything:
 - `git log <last-release-tag>..HEAD` and `git diff` in the **product repo** — new/changed/removed features, commands, flags, config, env vars, UI, breaking changes.
