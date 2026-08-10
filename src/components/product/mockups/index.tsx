@@ -3,6 +3,7 @@ import CommsChat from './CommsChat';
 import CommsAgentActions from './CommsAgentActions';
 import CommsMobile from './CommsMobile';
 import AgentCliTerminal from './AgentCliTerminal';
+import AgentWorkspace from './AgentWorkspace';
 import PixelEditor from './PixelEditor';
 import PhotoDevelop from './PhotoDevelop';
 import CanvasEditor from './CanvasEditor';
@@ -44,6 +45,7 @@ const MOCKUPS: Record<string, React.ComponentType> = {
   'comms-agent-actions': CommsAgentActions,
   'comms-mobile': CommsMobile,
   'agent-cli-terminal': AgentCliTerminal,
+  'agent-hero': AgentWorkspace,
   'pixel-hero': PixelEditor,
   'photo-hero': PhotoDevelop,
   'canvas-hero': CanvasEditor,

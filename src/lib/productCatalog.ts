@@ -209,6 +209,19 @@ export const PRODUCTS: Product[] = [
   // frozen at 0.4.45. Both resolve — which is exactly why the stale command was
   // dangerous rather than obviously broken: it silently installed an older CLI.
   { slug: 'agent-cli', name: 'XENO Agent CLI', tagline: 'Code, automate and control your workspace from the terminal.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install -g @xenosystem/agent-cli', repo: 'xeno-agent-cli' },
+  // XENO Agent — the DESKTOP sibling of agent-cli, first published 2026-08-10
+  // (feed apps/agent/, v0.1.0). Distinct product, distinct repo: the CLI is
+  // xeno-agent-cli, this is xeno-agent-interface, which also owns the shared
+  // Agent interface Hub mounts.
+  // `maturity` and `signing` are OMITTED ON PURPOSE. Both fail safe — omitted
+  // maturity resolves to `experimental`, and artifactSigning() resolves an
+  // installer to `unsigned` — so experimentalNotice() generates the label, the
+  // SmartScreen paragraph and the More info → Run anyway steps by itself. Never
+  // set `signing` to silence a warning, and never hand-write that copy into the
+  // product content module: it would say the same thing twice and leave a stale
+  // copy behind on the day a certificate lands. The app carries a matching
+  // UNSIGNED BUILD badge, so the binary discloses it independently of this page.
+  { slug: 'agent', name: 'XENO Agent', tagline: 'The agent-native workspace for building software.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-agent-interface' },
   // Migrated 2026-08-09, in ONE pass as the previous note here required: this
   // install command, every sample in src/content/docs/sdk.ts, and the product
   // page all name @xenosystem/agent-sdk together. npm `latest` is 0.9.0;
