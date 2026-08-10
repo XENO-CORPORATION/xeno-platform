@@ -40,10 +40,10 @@ Procedure: in `xeno-tools` bump the tool's `package.json` AND `tool.manifest.ts`
 nothing), verify it inside Hub rather than only the dev harness, then **release XENO HUB
 normally**. Hub's notes carry the tool's changes, because that is where users meet it.
 
-Two tool-specific traps: **Tailwind does not extract classes from mounted tool bundles**
-(known, unresolved — check the emitted CSS for a class only that tool uses before calling it
-good), and **never delete a Hub-native original** until the tool passes
-`xeno-tools/docs/HUB-INTEGRATION.md` §5 in a real Hub dev session.
+Two tool-specific traps: **a tool ships its own `dist/index.css`** (the host cannot scan a
+compiled bundle) so verify it built and imported — checking the emitted CSS with a LOOSE match,
+since escaped arbitrary values defeat hand-written patterns — and **never delete a Hub-native
+original** until the tool passes `xeno-tools/docs/HUB-INTEGRATION.md` §5 in a real Hub dev session.
 
 "A tool release Hub picks up on its own, with no Hub release" is **Phase 4 and does not exist**.
 Say so. It needs an R2 tools feed, runtime loading instead of static imports, Ed25519 signing +
