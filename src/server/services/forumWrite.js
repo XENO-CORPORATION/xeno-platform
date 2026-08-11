@@ -64,9 +64,38 @@ function requireText(value, field, max) {
   return text;
 }
 
-/** Actor kind, read off the account. Defaults human; v0.3 fills this from users.kind. */
+/**
+ * Actor kind, as resolved by the platform's `resolvePrincipal`.
+ *
+ * ⚠️ This used to be `user?.kind === 'agent' ? 'agent' : 'human'`, which mapped
+ * everything-not-an-agent to HUMAN — including `service` accounts. That made a
+ * machine satisfy "only a human may accept an answer" (D6), which is precisely
+ * what the rule exists to prevent. Return the real kind and let callers decide.
+ */
 export function actorKind(user) {
-  return user?.kind === 'agent' ? 'agent' : 'human';
+  const kind = user?.kind;
+  return kind === 'agent' || kind === 'service' ? kind : 'human';
+}
+
+/** D6's ratifier test. A HUMAN, not merely "not an agent". */
+export function isHuman(user) {
+  return actorKind(user) === 'human';
+}
+
+/**
+ * Service accounts are infrastructure — no owner, therefore nobody to hold
+ * accountable for what they write. They authenticate for machine work; they do
+ * not participate. Refused at the door rather than badged, because there is no
+ * honest badge for "posted by the gateway".
+ */
+function assertNotService(user) {
+  if (actorKind(user) === 'service') {
+    throw new ForumError(
+      'Service accounts cannot post in the forum',
+      'service_cannot_participate',
+      403,
+    );
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -239,6 +268,7 @@ export async function findDuplicates(db, title, limit = 5) {
 // --------------------------------------------------------------------------
 
 export async function createThread(db, user, { space, title, body, tags }) {
+  assertNotService(user);
   await assertCan(db, user, 'post');
   await assertWithinRateLimit(db, user, 'threads');
 
@@ -306,6 +336,7 @@ export async function createThread(db, user, { space, title, body, tags }) {
 }
 
 export async function createPost(db, user, shortId, { body }) {
+  assertNotService(user);
   await assertCan(db, user, 'post');
   await assertWithinRateLimit(db, user, 'posts');
 
@@ -351,7 +382,7 @@ export async function createPost(db, user, shortId, { body }) {
  * decides. Permitted to the thread author or a moderator.
  */
 export async function acceptAnswer(db, user, postId) {
-  if (actorKind(user) === 'agent') {
+  if (!isHuman(user)) {
     throw new ForumError(
       'Only a human can accept an answer',
       'human_required',
@@ -411,7 +442,7 @@ export async function acceptAnswer(db, user, postId) {
 
 /** Undo an acceptance — the thread reopens and reputation is recomputed. */
 export async function unacceptAnswer(db, user, postId) {
-  if (actorKind(user) === 'agent') {
+  if (!isHuman(user)) {
     throw new ForumError('Only a human can change an acceptance', 'human_required', 403);
   }
   const { rows } = await db.query(
@@ -448,6 +479,7 @@ export async function unacceptAnswer(db, user, postId) {
  * decide one.
  */
 export async function castVote(db, user, { targetType, targetId, value }) {
+  assertNotService(user);
   await assertCan(db, user, 'vote');
   if (![1, -1].includes(Number(value))) {
     throw new ForumError('Vote must be +1 or -1', 'invalid_vote', 400);
@@ -469,7 +501,7 @@ export async function castVote(db, user, { targetType, targetId, value }) {
   }
 
   const kind = actorKind(user);
-  const isBinding = kind === 'human';
+  const isBinding = kind === 'human'; // D6 — only a human vote carries standing
   const weight = isBinding ? await voteWeightFor(db, user.id, target.thread_id) : 0;
 
   await db.query(
@@ -502,6 +534,7 @@ export async function retallyVotes(db, targetType, targetId) {
 
 /** Raise a flag. Never removes anything — it only creates work for a human (§7.2). */
 export async function raiseFlag(db, user, { targetType, targetId, reason, detail }) {
+  assertNotService(user);
   await assertCan(db, user, 'flag');
   if (!['thread', 'post'].includes(targetType)) {
     throw new ForumError('Invalid flag target', 'invalid_target', 400);

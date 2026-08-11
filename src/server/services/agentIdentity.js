@@ -36,6 +36,49 @@ import { normalizeHandle, validateHandleSyntax } from '../routes/handleRoutes.js
 /** Default cap per human owner. Raised for orgs later; a cap must exist from day one. */
 export const DEFAULT_AGENT_CAP = 5;
 
+/**
+ * ── THE TWO AXES ─────────────────────────────────────────────────────────────
+ *
+ * KIND — what a principal IS. Derived, never stored as a flag:
+ *   human    a person
+ *   agent    a machine WITH an owner        → accountable to that human
+ *   service  a machine WITHOUT an owner     → infrastructure, accountable to the operator
+ *
+ * ROLE — what a principal MAY do. Stored in `users.role`, orthogonal to kind:
+ *   user < moderator < admin
+ *
+ * ⚠️ `service` lives in `users.role` today (one live account,
+ * `xeno_gateway_regression`), which CONFLATES a kind with a role. Rather than
+ * migrate a live column — forbidden by `XENO IDENTITY - Migration & Versioning
+ * Plan` §3/R3 — the conflation is resolved on READ: role `service` projects to
+ * kind `service`, and its authorization role is treated as `user`.
+ *
+ * Why this matters concretely: before this, anything that was not an agent was
+ * reported as `human`. A service account therefore counted as a human and could
+ * have satisfied "only a human may accept an answer" (Forum D6). A machine
+ * ratifying a machine is exactly what that rule exists to prevent.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const ROLE_RANK = { user: 0, moderator: 1, admin: 2 };
+
+export function roleRank(role) {
+  return ROLE_RANK[String(role || 'user').toLowerCase()] ?? 0;
+}
+
+/**
+ * An agent's effective role is CAPPED BY ITS OWNER'S.
+ *
+ * `XENO ACCOUNT - ARCHITECTURE.md` §3: "AGENT inherits a scoped subset of its
+ * owner's grants." A subset can never be larger than the set, so an agent owned
+ * by a plain user cannot be an admin no matter what its own row says. This makes
+ * privilege escalation by editing one row impossible: you would have to promote
+ * the human too, which is a visible act.
+ */
+export function effectiveRole(ownRole, ownerRole) {
+  if (ownerRole === undefined || ownerRole === null) return ownRole;
+  return roleRank(ownRole) <= roleRank(ownerRole) ? ownRole : ownerRole;
+}
+
 export class AgentIdentityError extends Error {
   constructor(message, code, statusCode = 400) {
     super(message);
@@ -50,8 +93,12 @@ export class AgentIdentityError extends Error {
  * reading `users` directly, because this is where the owner-cascade lives.
  *
  * @returns {Promise<null | {
- *   id, handle, displayName, role, kind: 'human'|'agent', usable: boolean,
- *   unusableReason: string|null, agentRole: string|null, agentOrigin: string|null,
+ *   id, handle, displayName,
+ *   role,      // EFFECTIVE role — capped by the owner for agents. Authorize on this.
+ *   rawRole,   // the stored column, for display/debugging only. Never authorize on this.
+ *   kind: 'human'|'agent'|'service',
+ *   usable: boolean, unusableReason: string|null,
+ *   agentRole: string|null, agentOrigin: string|null,
  *   owner: null | { id, handle, displayName }
  * }>}
  */
@@ -60,7 +107,8 @@ export async function resolvePrincipal(db, userId) {
     `SELECT u.id, u.username, u.display_name, u.role, u.is_active, u.status,
             a.owner_user_id, a.agent_role, a.agent_origin, a.status AS agent_status,
             o.username AS owner_handle, o.display_name AS owner_display_name,
-            o.is_active AS owner_is_active, o.status AS owner_status
+            o.is_active AS owner_is_active, o.status AS owner_status,
+            o.role AS owner_role
        FROM users u
        LEFT JOIN agent_identities a ON a.user_id = u.id
        LEFT JOIN users o ON o.id = a.owner_user_id
@@ -71,6 +119,8 @@ export async function resolvePrincipal(db, userId) {
   if (!row) return null;
 
   const isAgent = Boolean(row.owner_user_id);
+  // A machine with no owner is a SERVICE, not a human. See "THE TWO AXES".
+  const isService = !isAgent && String(row.role || '').toLowerCase() === 'service';
   const selfSuspended = row.is_active === false || String(row.status || '').toLowerCase() === 'suspended';
 
   // The cascade. Read the order carefully: the agent's OWN state is checked
@@ -84,12 +134,18 @@ export async function resolvePrincipal(db, userId) {
     unusableReason = `agent_${row.agent_status}`;
   }
 
+  // `service` is a kind, so it must not also act as an authorization role.
+  const ownRole = isService ? 'user' : row.role;
+
   return {
     id: row.id,
     handle: row.username,
     displayName: row.display_name,
-    role: row.role,
-    kind: isAgent ? 'agent' : 'human',
+    // Capped by the owner for agents (see effectiveRole). This is the value every
+    // authorization check must read — never the raw column.
+    role: isAgent ? effectiveRole(ownRole, row.owner_role) : ownRole,
+    rawRole: row.role,
+    kind: isAgent ? 'agent' : (isService ? 'service' : 'human'),
     usable: unusableReason === null,
     unusableReason,
     agentRole: isAgent ? row.agent_role : null,
