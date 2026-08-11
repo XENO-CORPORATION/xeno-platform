@@ -236,10 +236,10 @@ const Forum: React.FC = () => {
               to="/forum/new"
               className="inline-flex h-9 items-center rounded-md border border-white/20 px-4 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]"
             >
-              Ask a question
+              New post
             </Link>
             <span className="text-[12px] text-white/35">
-              Reading never needs an account. Posting does.
+              Ask, discuss, report, or show what you built. Reading never needs an account.
             </span>
           </div>
         </div>

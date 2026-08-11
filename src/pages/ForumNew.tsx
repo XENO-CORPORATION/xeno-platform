@@ -17,6 +17,84 @@ import * as api from '../components/forum/api';
  * the Post button is pressed.
  */
 
+/**
+ * Per-space compose copy.
+ *
+ * "Ask a question" described exactly ONE of five space kinds. Someone who wants
+ * to show what they built, propose an architecture, or report a bug was being
+ * asked to phrase it as a question — which is what makes forums feel
+ * bureaucratic, and is the opposite of the blend this product is going for.
+ *
+ * The objective (resolution over attention) is enforced in the ranker and in the
+ * accept mechanics, never in a button label. So the verb simply describes what
+ * you are actually doing.
+ */
+const COMPOSE_COPY: Record<string, {
+  heading: string; verb: string; titleLabel: string; titlePlaceholder: string;
+  bodyLabel: string; bodyPlaceholder: string; guidanceTitle: string; guidance: string[];
+}> = {
+  qa: {
+    heading: 'Ask the forum',
+    verb: 'Post question',
+    titleLabel: 'Question',
+    titlePlaceholder: "What actually happens — the way you'd describe it out loud",
+    bodyLabel: 'Details',
+    bodyPlaceholder: 'What you did, what happened, what you expected.\n\nInclude the product and version, and paste the exact error text — that is what makes this findable for the next person.',
+    guidanceTitle: 'How to get answered',
+    guidance: [
+      'Title it the way you would say it out loud — that is what the next person searches for.',
+      'Paste the exact error text. Exact strings are what make a thread findable.',
+      'Say which product and version, and what you already tried.',
+      'Tag it. An untagged thread reaches nobody in particular.',
+    ],
+  },
+  discussion: {
+    heading: 'Start a discussion',
+    verb: 'Post',
+    titleLabel: 'Topic',
+    titlePlaceholder: 'The idea, in one line',
+    bodyLabel: 'What you are thinking',
+    bodyPlaceholder: 'Lay out the idea and where you are unsure.\n\nDiscussions have no accepted answer — the point is the thinking, not a verdict.',
+    guidanceTitle: 'What makes a good thread',
+    guidance: [
+      'Say what you actually believe, not just what is safe.',
+      'Name the trade-off you are stuck on — that is where people can help.',
+      'Link the code or spec you are talking about.',
+      'Tag it so the people who care find it.',
+    ],
+  },
+  showcase: {
+    heading: 'Show what you built',
+    verb: 'Post',
+    titleLabel: 'What you made',
+    titlePlaceholder: 'What it is, in one line',
+    bodyLabel: 'Tell us about it',
+    bodyPlaceholder: 'What it does, what you used, and anything you had to fight.\n\nScreenshots and links welcome.',
+    guidanceTitle: 'Worth including',
+    guidance: [
+      'Which XENO tools you used, and how.',
+      'Anything that was harder than it should have been — that is useful to us.',
+      'A link people can actually look at.',
+    ],
+  },
+  feedback: {
+    heading: 'Send feedback',
+    verb: 'Post',
+    titleLabel: 'Summary',
+    titlePlaceholder: 'What is wrong, or what is missing',
+    bodyLabel: 'Details',
+    bodyPlaceholder: 'What you expected, what happened instead, and how to reproduce it.\n\nFor a request: what you are trying to do and why the current way does not work.',
+    guidanceTitle: 'How this gets acted on',
+    guidance: [
+      'Feedback is ranked by how many DIFFERENT people hit it — never by how loud a thread gets.',
+      'If someone already reported it, add to that thread instead of opening a new one.',
+      'Steps to reproduce beat adjectives.',
+      'Tag the product and version.',
+    ],
+  },
+};
+const DEFAULT_COPY = COMPOSE_COPY.discussion;
+
 interface Space {
   slug: string;
   name: string;
@@ -81,6 +159,7 @@ const ForumNew: React.FC = () => {
   };
 
   const activeSpace = spaces.find((s) => s.slug === space);
+  const copy = (activeSpace && COMPOSE_COPY[activeSpace.kind]) || DEFAULT_COPY;
 
   return (
     <div className="min-h-screen bg-[#060606] text-white">
@@ -92,7 +171,7 @@ const ForumNew: React.FC = () => {
           Forum
         </Link>
 
-        <h1 className="mt-6 text-[26px] font-semibold tracking-tight">Ask the forum</h1>
+        <h1 className="mt-6 text-[26px] font-semibold tracking-tight">{copy.heading}</h1>
 
         {!signedIn ? (
           <div className="mt-8 rounded-xl border border-white/[0.08] bg-white/[0.02] p-6">
@@ -128,12 +207,12 @@ const ForumNew: React.FC = () => {
             {/* Title */}
             <div>
               <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
-                Title
+                {copy.titleLabel}
               </label>
               <input
                 value={title}
                 onChange={(e) => { setTitle(e.target.value); runDedup(e.target.value); }}
-                placeholder="What actually happens — the way you'd describe it out loud"
+                placeholder={copy.titlePlaceholder}
                 maxLength={300}
                 className="w-full rounded-lg border border-white/[0.09] bg-white/[0.02] px-3.5 py-2.5 text-[14px] text-white/85 outline-none transition-colors placeholder:text-white/25 focus:border-white/20"
               />
@@ -179,13 +258,13 @@ const ForumNew: React.FC = () => {
             {/* Body */}
             <div>
               <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
-                Details
+                {copy.bodyLabel}
               </label>
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 rows={12}
-                placeholder={"What you did, what happened, what you expected.\n\nInclude the product and version, and paste the exact error text — that is what makes this findable for the next person."}
+                placeholder={copy.bodyPlaceholder}
                 className="w-full resize-y rounded-lg border border-white/[0.09] bg-white/[0.02] px-3.5 py-3 font-mono text-[13px] leading-relaxed text-white/85 outline-none transition-colors placeholder:text-white/25 focus:border-white/20"
               />
               <p className="mt-2 text-[11.5px] text-white/30">Markdown supported. HTML is escaped, not rendered.</p>
@@ -227,7 +306,7 @@ const ForumNew: React.FC = () => {
                 className="inline-flex h-10 items-center gap-2 rounded-md border border-white/20 px-5 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                Post
+                {copy.verb}
               </button>
               <Link to="/forum" className="text-[13px] text-white/40 transition-colors hover:text-white/70">Cancel</Link>
             </div>
@@ -236,18 +315,16 @@ const ForumNew: React.FC = () => {
             <aside className="space-y-4 lg:pt-7">
               <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
                 <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
-                  How to get answered
+                  {copy.guidanceTitle}
                 </h2>
                 <ul className="mt-3 space-y-2.5 text-[12px] leading-relaxed text-white/45">
-                  <li>Title it the way you would say it out loud — that is what the next person searches for.</li>
-                  <li>Paste the exact error text. Exact strings are what make a thread findable.</li>
-                  <li>Say which product and version, and what you already tried.</li>
-                  <li>Tag it. An untagged thread reaches nobody in particular.</li>
+                  {copy.guidance.map((g) => <li key={g}>{g}</li>)}
                 </ul>
               </div>
               <p className="px-1 text-[11.5px] leading-relaxed text-white/25">
-                Answers can be accepted, so a good question keeps paying out long
-                after you have moved on.
+                {activeSpace?.kind === 'qa'
+                  ? 'Answers can be accepted, so a good question keeps paying out long after you have moved on.'
+                  : 'Everything here is permanent and searchable — written once, found for years.'}
               </p>
             </aside>
           </form>
