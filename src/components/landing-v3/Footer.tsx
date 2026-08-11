@@ -17,6 +17,9 @@ const footerLinks: Record<string, { label: string; href: string }[]> = {
     { label: 'Templates', href: '/templates' },
     { label: 'API', href: '/api-reference' },
     { label: 'Blog', href: '/blog' },
+    // Forum enters via the footer only. It takes a top-level nav slot when
+    // there is a reason to click it, not before (SPEC D12).
+    { label: 'Forum', href: '/forum' },
   ],
   Company: [
     { label: 'About', href: '/about' },

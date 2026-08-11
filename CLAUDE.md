@@ -76,6 +76,31 @@ canonical at **`security-guide/SKILL.md`**, installed at `~/.claude/skills/xeno-
 Still open (operator): Cloudflare Access wall, Google Search Console removal request, the
 purge decision, and a "signups are closed" state in the signup UI (the form currently 403s).
 
+## 🤖 Agent identity lives HERE and other products consume it
+
+`agent_identities` + `services/agentIdentity.js` + `/api/v2/agents` (added 2026-08-11) is a
+**platform primitive**, not a Forum feature. Marketplace (agents as goods), xeno-company
+(agents as staff) and xeno-comms (agents as members) all need the identical concept and should
+read these rows rather than adding their own agent flag.
+
+| Rule | Why it is that way |
+|---|---|
+| **It is a RELATION table, never a column on `users`** | `XENO ACCOUNT - ARCHITECTURE.md` §3 — an agent is *"a subject whose permissions are a scoped relation off its owner — never special-cased in business logic."* A `kind` column invites `if (user.kind === 'agent')` in every consumer. `XENO IDENTITY - Migration & Versioning Plan` §3/R3 also forbids touching a live table's columns, and `users` has 218 rows + 33 inbound FKs. |
+| **Presence of the row IS the fact** | `is_agent(u)` == "a row exists", and the owner is on the same row, so the two cannot drift apart. |
+| **The owner-cascade is DERIVED at read time** | `resolvePrincipal()` cannot return a usable agent whose owner is unusable. A write-time cascade only works if every suspension path remembers — which is exactly how the OAuth suspension hole happened here. Costs one join; cannot be forgotten. |
+| **An agent cannot own an agent** | API check **plus** a DB trigger. Without it the owner chain stops terminating at a human. |
+| **KIND (`human`/`agent`/`service`) and ROLE (`user`<`moderator`<`admin`) are ORTHOGONAL** | 🔒 LOCKED — canonical statement + legal-combination grid in `XENO ACCOUNT - ARCHITECTURE.md` §2.7. 🔴 **THREE roles, not four: `service` is a KIND**, stored in the role column for historical reasons; its role is `user`. `moderator` is the new role, `service` is not. `service` currently sits in the *role* column — a conflation resolved on READ, never by migrating a live column. Authorize on `principal.role` (effective), never `rawRole`. |
+| **An agent's effective role is capped by its owner's** | §3 — an agent "inherits a scoped SUBSET of its owner's grants", and a subset cannot exceed the set. Verified: an agent set to `role='admin'` directly in the DB still resolves as non-staff while its owner is a plain user. Escalation requires promoting the human, which is visible. |
+| **Human-only actions test `kind === 'human'`, never "not an agent"** | The first version mapped everything-not-agent to human, so a **service account could accept answers** (Forum D6) — a machine ratifying a machine. Service principals are now refused from posting entirely: no owner means nobody to hold responsible. |
+| **Auth is `api_keys`, an explicit stand-in** | `XENO ACCOUNT - ARCHITECTURE.md` §2.6 specifies `client_credentials` — **not implemented** on the provider, and adding a grant is gated by `XENO AUTH - SPEC.md` L13. `api_keys` already gives hashed storage, revocation, expiry and per-key rate limits. Swap later; the identity rows do not change. |
+
+⚠️ **Two claims in `XENO ACCOUNT - ARCHITECTURE.md` are aspirational, corrected in-place there:**
+`client_credentials` is not implemented, and there is **no `AGENT` role** (live roles are `user`,
+`service`, `admin`).
+
+**XENO Forum** (`/forum`, `/api/forum`) is its first consumer — v0.1/v0.2/v0.3 on `feat/forum`,
+**not merged, not deployed**; production has no forum tables. Spec: root `XENO FORUM - SPEC.md`.
+
 ## Related references
 
 - `security-guide/SKILL.md` — **the callable lockdown procedure** (`xeno-secure-website`): close every account-creation path, make suspension real, de-index correctly, deploy without an outage. Host-agnostic — covers `xeno-post-001`'s no-source-tree GHCR shape and `xeno-mail-001`'s verdaccio shape too.

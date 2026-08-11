@@ -78,6 +78,8 @@ import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
 import { databaseMiddleware } from './middleware/database.js';
 import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
+import forumRoutes from './routes/forumRoutes.js';
+import agentRoutes from './routes/agentRoutes.js';
 import { authMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { runMigrations } from './services/migrationService.js';
@@ -597,6 +599,14 @@ app.use('/product', productDownloadRoutes);
 console.log('⬇️ Product download deep-links: /product/:slug/download/:os');
 app.use('/api/blog', databaseMiddleware, blogRoutes);
 app.use('/api/learn', databaseMiddleware, learnRoutes);
+// XENO Forum — the community Record. Public, cacheable reads only in v0.1
+// (SPEC "XENO FORUM - SPEC.md" §9). No auth middleware: nothing here is
+// personal, and /api/forum/feed (the only personal endpoint) is v0.4.
+app.use('/api/forum', databaseMiddleware, forumRoutes);
+// Agent identity — a PLATFORM primitive shared with Marketplace, Company and
+// Comms (XENO FORUM - SPEC.md D8). Under /api/v2/* per the identity plan's
+// rule that new surfaces sit beside the frozen legacy /api/auth/*.
+app.use('/api/v2/agents', databaseMiddleware, agentRoutes);
 console.log('⬇️ Download routes integrated: /api/download/*');
 
 // Round 8: Infrastructure routes

@@ -49,10 +49,11 @@ build and a 200 response.
 
 **Two ways it reverts, both quiet:**
 
-1. **Deploying from a ref that predates the lockdown.** The change may live on a branch
-   (`feat/lockdown`) that is not merged. `git archive HEAD <files>` ships whatever the current
-   ref holds — including the *old* `nginx/default.conf`, `public/robots.txt` and
-   `prerender-products.mjs`. The site comes back indexed and no one notices, because nothing fails.
+1. **Deploying from a ref that predates the lockdown.** It is merged to `main` (`04ba28a`,
+   PR #13, 2026-08-11) — but `git archive HEAD <files>` ships whatever the CURRENT ref holds,
+   and long-lived feature branches cut before that commit still carry the *old*
+   `nginx/default.conf`, `public/robots.txt` and `prerender-products.mjs`. Deploy from one and
+   the site comes back indexed with nobody noticing, because nothing fails.
 2. **Rebuilding the frontend image** regenerates `dist/`. If `scripts/prerender-products.mjs`
    on the deployed ref still emits `sitemap.xml`, the 268-URL sitemap returns.
 
@@ -172,7 +173,9 @@ registry tools at all.
    ```
 
 **🔴 The gotcha that will waste your afternoon:** a tool that is ALSO statically imported in
-`xeno-hub/src/renderer/src/tools/externalTools.tsx` is **bundled into Hub**, and the bundled copy
+`xeno-hub/src/renderer/src/tools/externalTools.tsx` **statically imports** each package, so those
+tools are bundled into Hub's renderer at BUILD time (verified 2026-08-09, xeno-hub `2a48e17`),
+and the bundled copy
 WINS over the registry one. Publishing a new version of such a tool changes nothing for users
 until it is removed from those static imports — which needs a Hub release. `image-resize` is in
 exactly this state today. Check `externalTools.tsx` before promising a tool update ships.
