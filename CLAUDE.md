@@ -40,7 +40,7 @@ in `nginx/default.conf`, `public/robots.txt`, `scripts/prerender-products.mjs` o
 
 | What | Where | Reverting it by accident looks like |
 |---|---|---|
-| **Signup closed on all 3 paths** | `src/server/middleware/registrationGate.js` — one choke point for `POST /register`, `POST /register-with-handle`, **and the OAuth auto-create** in `findOrCreateOAuthUser` | Signups quietly resume. **Closed unless `REGISTRATION_OPEN` is exactly `'true'`** — the env var is deliberately *absent* on the box. Pinned by `scripts/registration-gate.test.mjs` (15 tests, in `npm test`) |
+| **Signup gated on all 3 paths** | `src/server/middleware/registrationGate.js` — one choke point for `POST /register`, `POST /register-with-handle`, **and the OAuth auto-create** in `findOrCreateOAuthUser` | ⚠️ **TEMPORARILY OPEN until 2026-08-28** for the YC review window — `REGISTRATION_OPEN_UNTIL=2026-08-28` is set in the **box's** `docker-compose.yml` (not the repo's). It **closes itself** on the 29th with no action needed; unset/malformed/past all resolve CLOSED. Pinned by `scripts/registration-gate.test.mjs` |
 | **Suspension actually enforced** | `assertAccountUsable()` on every OAuth branch | Password login always checked `is_active`; **OAuth never did**. Removing those calls makes a suspension unenforced for the 162 OAuth accounts |
 | **`X-Robots-Tag: noindex, nofollow, noarchive`** | `nginx/default.conf` — server level **and** the 3 `location` blocks that set their own headers | nginx drops **all** inherited `add_header` in any block that declares one. Delete a copy and the header vanishes on static assets — and Google indexes images independently of their page |
 | **No sitemap** | `scripts/prerender-products.mjs` (generation commented out, stale `dist/sitemap.xml` removed) | Restoring it re-advertises 268 URLs with a fresh `<lastmod>` |
@@ -50,8 +50,22 @@ in `nginx/default.conf`, `public/robots.txt`, `scripts/prerender-products.mjs` o
 sign-in for every shipped product. `updates.xenostudio.ai` (R2) and `api.xenostudio.ai` are
 **different hosts**, so the site can be locked hard without breaking installed apps.
 
+⚠️ **De-indexed ≠ inaccessible, and that distinction is deliberate.** Every page still returns
+200 to anyone with the URL — a YC reviewer clicking the link in the application sees the full
+site. `noindex` is a note to crawlers only. **Do not put up the Cloudflare Access wall while
+the YC application is live** (decision made 2026-08-11); that is the one control that would
+actually block a reviewer.
+
+**Client IP capture was broken and is fixed (`src/server/utils/clientIp.js`).** `req.ip` plus
+`app.set('trust proxy', 1)` still recorded the Docker bridge gateway for all 408 historical
+sessions — the hop count does not match the real visitor→Cloudflare→nginx→backend chain. Read
+`CF-Connecting-IP`. Verified live: a real signup now records a routable public address.
+**Historical session/security rows before 2026-08-11 have worthless IPs** — do not treat them
+as audit data.
+
 **216 of 218 accounts are suspended** (`is_active = false`); only the admin and one `service`
-account remain active. Backup before the lockdown, with a proven restore:
+account remain active. Reopening signup did **not** unsuspend them — that is intentional and
+independent. Backup before the lockdown, with a proven restore:
 `_backups/2026-08-11-xenostudio-preblock/` in the workspace root (outside any repo — it holds
 password hashes).
 

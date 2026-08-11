@@ -177,6 +177,27 @@ response header is the lower-risk equivalent and avoids the inheritance trap ent
 
 ---
 
+## 5b. Reopening — time-box it, never trust a boolean
+
+A lockdown is often temporary ("open it again until the 28th, we have investors looking").
+**Do not flip a boolean you have to remember to flip back.** Use a deadline the code enforces:
+
+    REGISTRATION_OPEN_UNTIL=2026-08-28   # end of that day, UTC, inclusive
+
+It closes itself, and every failure mode still resolves CLOSED — unset, unparseable, or past.
+An unparseable date resolving to *open-forever* is the exact bug this shape prevents.
+
+🔴 **Set it on the BOX's compose, not the repo's.** These boxes carry env vars that exist
+nowhere else (`LEDGER_V2_ENABLED`, `LEDGER_SERVICE_TOKEN` on xeno-platform-001, found only
+after they were nearly wiped). Shipping the repo's `docker-compose.yml` silently deletes them.
+Back it up, insert one line against a unique anchor, diff to prove exactly one line changed,
+and run `docker compose config` before recreating.
+
+⚠️ **De-indexed ≠ inaccessible — know which one was actually asked for.** `noindex` removes a
+site from search results; every page still answers 200 to anyone holding the URL. If the user
+is fundraising, applying to an accelerator, or sharing links, that is exactly what they want
+and **the Cloudflare Access wall (§6) is the thing that would break it.** Ask before walling.
+
 ## 6. The hard wall — only if asked, and never over `/api/`
 
 Cloudflare Access / Basic Auth in front of the HTML surface deindexes fastest (Google sees
