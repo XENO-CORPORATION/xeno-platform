@@ -7,7 +7,7 @@ import Footer from '../components/landing-v3/Footer';
 import ForumShell, {
   RailSearch, RailNeedsAnswer, RailResolved, RailAgents,
 } from '../components/forum/ForumShell';
-import { AuthorBadge, TagChip, relativeTime, type ForumThreadSummary } from '../components/forum/primitives';
+import { AuthorBadge, TagChip, PostAvatar, relativeTime, type ForumThreadSummary } from '../components/forum/primitives';
 import * as api from '../components/forum/api';
 
 /**
@@ -45,7 +45,7 @@ const SORTS = [
  * full composer at /forum/new still exists for the long form, and it is where
  * compose-time dedup lives (D10).
  * ──────────────────────────────────────────────────────────────────────── */
-function InlineComposer({ spaces, onPosted }: { spaces: ForumSpace[]; onPosted: () => void }) {
+function InlineComposer({ spaces, onPosted, initial = '\u2022' }: { spaces: ForumSpace[]; onPosted: () => void; initial?: string }) {
   const [open, setOpen] = useState(false);
   const [space, setSpace] = useState('help');
   const [title, setTitle] = useState('');
@@ -70,15 +70,27 @@ function InlineComposer({ spaces, onPosted }: { spaces: ForumSpace[]; onPosted: 
   }
 
   if (!open) {
+    // Reads as an INPUT, not a button. Every social composer does this — an
+    // avatar beside a field you can obviously type into — and it is the single
+    // cheapest signal that this is a place where you write rather than a link
+    // that takes you somewhere else.
+    //
+    // The avatar is a SQUARE. DESIGN_SYSTEM.md §3: "No circles. Anywhere." — so
+    // the one motif every one of these platforms shares is the one we do not
+    // copy.
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="cursor-pointer flex w-full items-center gap-3 rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-left transition-colors hover:border-white/[0.15] hover:bg-white/[0.05]"
-      >
-        <PenLine className="h-4 w-4 shrink-0 text-[#79797f]" />
-        <span className="text-[14px] text-[#79797f]">{prompt}</span>
-      </button>
+      <div className="flex items-center gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/10 bg-[#060608] text-[13px] font-medium text-[#a8a8b1]">
+          {initial}
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="cursor-pointer flex h-10 flex-1 items-center rounded-md border border-white/10 bg-[#060608] px-4 text-left text-[14px] text-[#79797f] transition-colors hover:border-white/[0.15] hover:text-[#a8a8b1]"
+        >
+          {prompt}
+        </button>
+      </div>
     );
   }
 
@@ -160,7 +172,9 @@ function PostCard({ thread, why }: { thread: ForumThreadSummary; why?: string })
 
   return (
     <article className="border-b border-white/[0.08] transition-colors hover:bg-white/[0.05]">
-      <Link to={thread.url} onClick={() => api.markOpened(thread.shortId)} className="block px-4 py-4">
+      <Link to={thread.url} onClick={() => api.markOpened(thread.shortId)} className="flex gap-3 px-4 py-4">
+        <PostAvatar author={thread.author} />
+        <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]">
           <AuthorBadge author={thread.author} />
           <span className="text-[#57575e]">·</span>
@@ -213,6 +227,7 @@ function PostCard({ thread, why }: { thread: ForumThreadSummary; why?: string })
 
           {thread.source && <span className="text-[#57575e]">from the engineering log</span>}
         </div>
+        </div>
       </Link>
     </article>
   );
@@ -240,12 +255,25 @@ const Forum: React.FC = () => {
   const [queryInput, setQueryInput] = useState('');
   const [searchResults, setSearchResults] = useState<ForumThreadSummary[] | null>(null);
 
+  const [initial, setInitial] = useState('\u2022');
   const [signedOut, setSignedOut] = useState(false);
   const signedIn = api.isSignedIn() && !signedOut;
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     api.getSpaces().then((r) => setSpaces(r.spaces || [])).catch(() => setSpaces([]));
+  }, []);
+
+  // Just enough identity for the composer avatar. Fails silently — a missing
+  // initial is a dot, never an error.
+  useEffect(() => {
+    if (!api.isSignedIn()) return;
+    api.getMe()
+      .then((r) => {
+        const name = r?.actor?.displayName || r?.actor?.handle || '';
+        if (name) setInitial(name.trim().charAt(0).toUpperCase());
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -344,7 +372,17 @@ const Forum: React.FC = () => {
           "this one is on" using the same vocabulary as every other control in the
           system, instead of a floating bar that belongs to a different one.
         */}
-        <div className="sticky top-[56px] z-10 mb-4 bg-[#08080a]/90 py-3 backdrop-blur-xl">
+        {/*
+          ONE header strip, not three.
+
+          The centre column had a segmented control, then a composer, then a
+          separate filter row — three bands of chrome before a single piece of
+          content. X and LinkedIn both get to content in two. Surface switch and
+          sort now share one line, and the space name is gone from here entirely
+          because the left rail already highlights which space you are in;
+          repeating it was the third strip's only real job.
+        */}
+        <div className="sticky top-[56px] z-10 -mt-2 mb-4 flex items-center justify-between gap-3 border-b border-white/[0.08] bg-[#08080a]/90 py-3 backdrop-blur-xl">
           <div className="inline-flex gap-1 rounded-md border border-white/[0.08] bg-[#060608] p-1">
             {([['record', 'The Record', Layers], ['feed', 'For you', Sparkles]] as const).map(([key, label, Icon]) => (
               <button
@@ -360,11 +398,20 @@ const Forum: React.FC = () => {
               </button>
             ))}
           </div>
+
+          {surface === 'record' && (
+            <select
+              value={sort} onChange={(e) => setParam('sort', e.target.value)}
+              className="cursor-pointer shrink-0 rounded-md border border-white/[0.08] bg-[#101011] px-2.5 py-2 text-[12.5px] text-[#a8a8b1] outline-none transition-colors hover:text-[#e5e5e9]"
+            >
+              {SORTS.map((so) => <option key={so.key} value={so.key}>{so.label}</option>)}
+            </select>
+          )}
         </div>
 
         <div className="space-y-4">
           <div className="px-4">
-            <InlineComposer spaces={spaces} onPosted={() => setReloadKey((k) => k + 1)} />
+            <InlineComposer spaces={spaces} onPosted={() => setReloadKey((k) => k + 1)} initial={initial} />
           </div>
 
           {surface === 'feed' ? (
@@ -404,23 +451,20 @@ const Forum: React.FC = () => {
             )
           ) : (
             <>
-              <div className="flex items-center justify-between px-4">
-                <span className="text-[12.5px] text-[#79797f]">
-                  {searchResults ? `${searchResults.length} results` : activeSpace ? activeSpace.name : 'Everything'}
+              {/* Only the things the header cannot carry: an active tag, and a
+                  search result count. The space name lives in the left rail. */}
+              {(tag || searchResults) && (
+                <div className="flex items-center gap-2 px-4 text-[12.5px] text-[#79797f]">
+                  {searchResults && <span>{searchResults.length} results</span>}
                   {tag && (
-                    <> · <button type="button" onClick={() => setParam('tag', '')} className="cursor-pointer font-medium">{tag} ×</button></>
+                    <button
+                      type="button" onClick={() => setParam('tag', '')}
+                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-[#060608] px-2 py-1 text-[#a8a8b1] transition-colors hover:border-white/[0.15] hover:text-[#e5e5e9]"
+                    >
+                      {tag}<span className="text-[#57575e]">×</span>
+                    </button>
                   )}
-                </span>
-                <select
-                  value={sort} onChange={(e) => setParam('sort', e.target.value)}
-                  className="cursor-pointer rounded-md border border-white/10 bg-[#101011] px-2.5 py-1.5 text-[12px] text-[#a8a8b1] outline-none hover:text-[#e5e5e9]"
-                >
-                  {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </select>
-              </div>
-
-              {activeSpace && !searchResults && (
-                <p className="px-4 text-[12.5px] leading-relaxed text-[#79797f]">{activeSpace.description}</p>
+                </div>
               )}
 
               {loading ? (
