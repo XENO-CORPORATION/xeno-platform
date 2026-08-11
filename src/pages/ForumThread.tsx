@@ -166,7 +166,7 @@ const ForumThread: React.FC = () => {
     <div className="min-h-screen bg-[#060606] text-white">
       <Header onGetStarted={() => { window.location.href = '/auth'; }} />
 
-      <main className="mx-auto max-w-[860px] px-6 pb-24 pt-32">
+      <main className="page-gutter w-full pb-20 pt-28">
         <Link to="/forum" className="inline-flex items-center gap-2 text-[13px] text-white/40 transition-colors hover:text-white/70">
           <ArrowLeft className="h-3.5 w-3.5" />
           Forum
@@ -186,7 +186,14 @@ const ForumThread: React.FC = () => {
         {state === 'error' && <div className="py-24 text-center text-[13px] text-white/40">Could not load this thread.</div>}
 
         {state === 'ready' && thread && (
-          <>
+          <div className="mt-2 grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+            {/*
+              The window is used for STRUCTURE, not for stretching prose. Text
+              keeps a comfortable measure (72ch) because a 3000px line is
+              objectively harder to read — the extra width goes to the metadata
+              rail instead of to line length.
+            */}
+            <div className="min-w-0 max-w-[72ch]">
             <header className="mt-6 border-b border-white/[0.07] pb-6">
               <div className="flex flex-wrap items-center gap-2 text-[12px] text-white/40">
                 {thread.space && (
@@ -337,7 +344,56 @@ const ForumThread: React.FC = () => {
                 </div>
               )}
             </div>
-          </>
+            </div>
+
+            {/* Metadata rail — the width earns its keep instead of sitting empty. */}
+            <aside className="space-y-6 lg:pt-6">
+              <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Thread</h2>
+                <dl className="mt-3 space-y-2 text-[12px]">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-white/35">Status</dt>
+                    <dd className={thread.isResolved ? 'text-emerald-400/80' : 'text-white/60'}>
+                      {thread.isResolved ? 'Resolved' : 'Open'}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-white/35">Replies</dt>
+                    <dd className="text-white/60">{Math.max(0, thread.postCount - 1)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-white/35">Asked</dt>
+                    <dd className="text-white/60">{relativeTime(thread.createdAt)} ago</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-white/35">Space</dt>
+                    <dd className="truncate text-white/60">{thread.space?.name}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              {thread.tags.length > 0 && (
+                <div>
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Tags</h2>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {thread.tags.map((t) => (
+                      <Link key={t} to={`/forum?tag=${encodeURIComponent(t)}`}><TagChip tag={t} interactive /></Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Cite this</h2>
+                <p className="mt-2 text-[11.5px] leading-relaxed text-white/35">
+                  The id is permanent. Retitling never breaks it.
+                </p>
+                <code className="mt-2 block break-all rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white/50">
+                  /forum/t/{thread.shortId}
+                </code>
+              </div>
+            </aside>
+          </div>
         )}
       </main>
 

@@ -217,7 +217,7 @@ const Forum: React.FC = () => {
     <div className="min-h-screen bg-[#060606] text-white">
       <Header onGetStarted={() => { window.location.href = '/auth'; }} />
 
-      <main className="mx-auto max-w-[1180px] px-6 pb-24 pt-32">
+      <main className="page-gutter w-full pb-20 pt-28">
         {/* ── Masthead ─────────────────────────────────────────── */}
         <div className="border-b border-white/[0.07] pb-8">
           <h1 className="text-[34px] font-semibold tracking-tight">Forum</h1>
@@ -277,7 +277,36 @@ const Forum: React.FC = () => {
           )}
         </div>
 
-        <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_240px]">
+        <div className="mt-8 grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_260px] xl:grid-cols-[210px_minmax(0,1fr)_280px]">
+          {/* ── Left rail: spaces ──────────────────────────────── */}
+          <aside className="hidden xl:block">
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Spaces</h2>
+            <nav className="mt-3 space-y-0.5">
+              <button
+                type="button"
+                onClick={() => setParam('space', '')}
+                className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors ${
+                  !space ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'
+                }`}
+              >
+                All
+              </button>
+              {spaces.map((sp) => (
+                <button
+                  key={sp.slug}
+                  type="button"
+                  onClick={() => setParam('space', sp.slug)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors ${
+                    space === sp.slug ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'
+                  }`}
+                >
+                  <span className="truncate">{sp.name}</span>
+                  <span className="shrink-0 text-white/25">{sp.threadCount}</span>
+                </button>
+              ))}
+            </nav>
+          </aside>
+
           {/* ── Threads ────────────────────────────────────────── */}
           <div className="min-w-0">
             {/* ── Record vs Feed (D2) ──────────────────────────────── */}
@@ -299,42 +328,20 @@ const Forum: React.FC = () => {
               </button>
             </div>
 
-            {/* Space filter */}
-            <div className={`flex flex-wrap items-center gap-2 border-b border-white/[0.07] pb-4 ${surface === 'feed' ? 'hidden' : ''}`}>
-              <button
-                type="button"
-                onClick={() => setParam('space', '')}
-                className={`rounded-md px-2.5 py-1.5 text-[12.5px] transition-colors ${
-                  !space ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'
-                }`}
+            {/* Sort — the spaces themselves live in the left rail now. */}
+            <div className={`flex items-center justify-between border-b border-white/[0.07] pb-4 ${surface === 'feed' ? 'hidden' : ''}`}>
+              <span className="text-[12.5px] text-white/40">
+                {activeSpace ? activeSpace.name : 'All spaces'}
+              </span>
+              <select
+                value={sort}
+                onChange={(e) => setParam('sort', e.target.value)}
+                className="cursor-pointer rounded-md border border-white/[0.09] bg-[#0f0f0f] px-2.5 py-1.5 text-[12px] text-white/60 outline-none transition-colors hover:text-white/85"
               >
-                All
-              </button>
-              {spaces.map((s) => (
-                <button
-                  key={s.slug}
-                  type="button"
-                  onClick={() => setParam('space', s.slug)}
-                  className={`rounded-md px-2.5 py-1.5 text-[12.5px] transition-colors ${
-                    space === s.slug ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'
-                  }`}
-                >
-                  {s.name}
-                  <span className="ml-1.5 text-white/25">{s.threadCount}</span>
-                </button>
-              ))}
-
-              <div className="ml-auto">
-                <select
-                  value={sort}
-                  onChange={(e) => setParam('sort', e.target.value)}
-                  className="cursor-pointer rounded-md border border-white/[0.09] bg-[#0f0f0f] px-2.5 py-1.5 text-[12px] text-white/60 outline-none transition-colors hover:text-white/85"
-                >
-                  {SORTS.map((s) => (
-                    <option key={s.key} value={s.key}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
+                {SORTS.map((s) => (
+                  <option key={s.key} value={s.key}>{s.label}</option>
+                ))}
+              </select>
             </div>
 
             {activeSpace && (
