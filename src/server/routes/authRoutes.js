@@ -15,6 +15,14 @@ import { siteOrigin, siteUrl, mailDomain } from '../config/hosts.js';
 import { addGrant, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail } from '../services/emailService.js';
+import { clientIp } from '../utils/clientIp.js';
+import {
+  requireRegistrationOpen,
+  assertRegistrationAllowed,
+  assertAccountUsable,
+  AccountCreationBlockedError,
+  AccountSuspendedError,
+} from '../middleware/registrationGate.js';
 
 // Free-tier starter credits granted on signup so new users can try premium generation.
 const FREE_SIGNUP_CREDITS = Number(process.env.FREE_SIGNUP_CREDITS || 50);
@@ -142,7 +150,7 @@ async function consumeOAuthState(state) {
 }
 
 // Find or create user from OAuth profile
-async function findOrCreateOAuthUser(db, provider, profile) {
+async function findOrCreateOAuthUser(db, provider, profile, req = null) {
   const { id: providerId, email, name, avatar, username } = profile;
 
   // First, check if this OAuth account is already linked
@@ -161,6 +169,12 @@ async function findOrCreateOAuthUser(db, provider, profile) {
     );
 
     if (userResult.rows.length > 0) {
+      // Suspended accounts must be refused HERE. Password login has always
+      // checked is_active, but this path did not — it went straight to
+      // issueSessionToken, so an is_active=false suspension was unenforced for
+      // every OAuth account. Assert before touching last_login: a refused
+      // attempt is not a login and must not be recorded as one.
+      assertAccountUsable(userResult.rows[0]);
       // Update last login
       await db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [userResult.rows[0].id]);
       return { user: userResult.rows[0], isNew: false };
@@ -178,6 +192,10 @@ async function findOrCreateOAuthUser(db, provider, profile) {
     );
 
     if (emailResult.rows.length > 0) {
+      // Same guard on the email-match branch: an OAuth sign-in that resolves to
+      // an existing suspended account by email must be refused too, or the
+      // suspension is bypassable by linking a provider.
+      assertAccountUsable(emailResult.rows[0]);
       user = emailResult.rows[0];
     }
   }
@@ -185,6 +203,12 @@ async function findOrCreateOAuthUser(db, provider, profile) {
   // Create new user if doesn't exist
   let isNew = false;
   if (!user) {
+    // The third account-creation path. A one-click "Sign in with Google" creates
+    // a fully verified account here with no form and no friction — it is how 160
+    // of 218 accounts arrived. Gating only the two /register endpoints would
+    // leave this wide open.
+    assertRegistrationAllowed(email);
+
     const userId = uuidv4();
     const generatedUsername = username || email?.split('@')[0] || `user_${providerId.substring(0, 8)}`;
 
@@ -229,15 +253,30 @@ async function findOrCreateOAuthUser(db, provider, profile) {
   // Log security event
   try {
     await db.query(
-      `INSERT INTO security_events (user_id, event_type, metadata, created_at)
-       VALUES ($1, $2, $3, NOW())`,
-      [user.id, isNew ? 'oauth_signup' : 'oauth_login', JSON.stringify({ provider, providerId })]
+      `INSERT INTO security_events (user_id, event_type, metadata, ip_address, user_agent, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [
+        user.id,
+        isNew ? 'oauth_signup' : 'oauth_login',
+        JSON.stringify({ provider, providerId }),
+        // These columns existed and were never written, so 160 oauth_signup rows
+        // carry no address and no client. A signup record that cannot say where it
+        // came from is not an audit trail.
+        req ? clientIp(req) : null,
+        req ? req.get('User-Agent') : null,
+      ]
     );
   } catch (e) {
     console.log('Could not log security event:', e.message);
   }
 
   return { user, isNew };
+}
+
+// Thin wrapper: guarantees `req` reaches findOrCreateOAuthUser so the signup's
+// IP and user-agent are recorded. Every OAuth callback must go through this.
+async function findOrCreateOAuthUserWithReq(req, provider, profile) {
+  return findOrCreateOAuthUser(req.db, provider, profile, req);
 }
 
 // JWT secret key (in production, use environment variable)
@@ -295,7 +334,9 @@ async function issueSessionToken(db, user, req) {
     await db.query(
       `INSERT INTO user_sessions (id, user_id, token_hash, expires_at, ip_address, user_agent)
        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)`,
-      [sid, user.id, hashToken(token), req.ip, req.get('User-Agent')]
+      // clientIp(req), not req.ip: `trust proxy` is set and req.ip STILL resolved to
+      // the Docker bridge gateway for every real session ever recorded here.
+      [sid, user.id, hashToken(token), clientIp(req), req.get('User-Agent')]
     );
     return token;
   } catch (sessionError) {
@@ -432,7 +473,7 @@ router.post('/init', async (req, res) => {
 });
 
 // POST /api/auth/register - Register new user
-router.post('/register', async (req, res) => {
+router.post('/register', requireRegistrationOpen, async (req, res) => {
   try {
     const { username, email, password, display_name } = req.body;
 
@@ -1664,7 +1705,7 @@ router.get('/google/callback', async (req, res) => {
     }
 
     // Find or create user
-    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'google', {
+    const { user, isNew } = await findOrCreateOAuthUserWithReq(req, 'google', {
       id: googleUser.id,
       email: googleUser.email,
       name: googleUser.name,
@@ -1681,6 +1722,13 @@ router.get('/google/callback', async (req, res) => {
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
   } catch (error) {
+    // A closed registration or a suspended account is a DECISION, not a failure.
+    // Reporting either as callback_failed would send a refused user into a retry
+    // loop against a door that is never going to open.
+    if (error instanceof AccountCreationBlockedError || error instanceof AccountSuspendedError) {
+      console.warn('Google OAuth refused:', error.code);
+      return res.redirect(`${FRONTEND_URL}/auth?error=${error.code}`);
+    }
     console.error('Google OAuth callback error:', error);
     res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
   }
@@ -1793,7 +1841,7 @@ router.get('/github/callback', async (req, res) => {
     }
 
     // Find or create user
-    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'github', {
+    const { user, isNew } = await findOrCreateOAuthUserWithReq(req, 'github', {
       id: String(githubUser.id),
       email: email,
       name: githubUser.name || githubUser.login,
@@ -1809,6 +1857,10 @@ router.get('/github/callback', async (req, res) => {
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
   } catch (error) {
+    if (error instanceof AccountCreationBlockedError || error instanceof AccountSuspendedError) {
+      console.warn('GitHub OAuth refused:', error.code);
+      return res.redirect(`${FRONTEND_URL}/auth?error=${error.code}`);
+    }
     console.error('GitHub OAuth callback error:', error);
     res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
   }
@@ -1913,7 +1965,7 @@ router.get('/twitter/callback', async (req, res) => {
     }
 
     // Find or create user (Twitter doesn't provide email in v2 API by default)
-    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'twitter', {
+    const { user, isNew } = await findOrCreateOAuthUserWithReq(req, 'twitter', {
       id: twitterUser.id,
       email: null, // Twitter v2 API doesn't provide email without elevated access
       name: twitterUser.name,
@@ -1929,6 +1981,10 @@ router.get('/twitter/callback', async (req, res) => {
     handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
 
   } catch (error) {
+    if (error instanceof AccountCreationBlockedError || error instanceof AccountSuspendedError) {
+      console.warn('Twitter OAuth refused:', error.code);
+      return res.redirect(`${FRONTEND_URL}/auth?error=${error.code}`);
+    }
     console.error('Twitter OAuth callback error:', error);
     res.redirect(`${FRONTEND_URL}/auth?error=callback_failed`);
   }
@@ -2064,7 +2120,7 @@ router.get('/handle-available', async (req, res) => {
 });
 
 // Create the account FROM a handle (email-first signup).
-router.post('/register-with-handle', async (req, res) => {
+router.post('/register-with-handle', requireRegistrationOpen, async (req, res) => {
   try {
     const { handle: rawHandle, password, recoveryEmail } = req.body || {};
     const handle = String(rawHandle || '').trim().toLowerCase();

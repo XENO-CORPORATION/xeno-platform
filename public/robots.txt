@@ -1,7 +1,21 @@
+# xenostudio.ai is not meant to be publicly discoverable yet (2026-08-11).
+#
+# Crawling is deliberately STILL ALLOWED. De-indexing is done with the
+# `X-Robots-Tag: noindex, nofollow, noarchive` response header set in
+# nginx/default.conf — and a crawler can only obey a header it is permitted to
+# fetch. Adding `Disallow: /` here would block crawling, Googlebot would never
+# see the noindex, and the ~268 URLs already in the index would persist as bare
+# links with no snippet. That is the opposite of the intent.
+#
+# Once Google has recrawled and dropped the pages, a `Disallow: /` may be added
+# to stop the crawl traffic. Not before.
+#
+# No `Sitemap:` line: the sitemap is no longer generated (see
+# scripts/prerender-products.mjs). Advertising 268 URLs while asking to be
+# removed from the index would be working against ourselves.
+
 User-agent: *
 Allow: /
 Disallow: /api/
 Disallow: /auth
 Disallow: /ws
-
-Sitemap: https://xenostudio.ai/sitemap.xml
