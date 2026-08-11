@@ -56,7 +56,7 @@ const markdownComponents = {
   strong: (p: any) => <strong className="font-semibold text-white" {...p} />,
   ul: (p: any) => <ul className="my-3 list-disc space-y-1.5 pl-5 text-[14px] leading-[1.7] text-[#a8a8b1]" {...p} />,
   ol: (p: any) => <ol className="my-3 list-decimal space-y-1.5 pl-5 text-[14px] leading-[1.7] text-[#a8a8b1]" {...p} />,
-  a: (p: any) => <a className="text-[#e5e5e9] underline underline-offset-2 transition-colors hover:text-white" {...p} />,
+  a: (p: any) => <a className="text-[#e5e5e9] font-medium transition-colors hover:text-white" {...p} />,
   blockquote: (p: any) => <blockquote className="my-4 border-l-2 border-white/15 pl-4 text-[#a8a8b1]" {...p} />,
   code: ({ inline, children, ...rest }: any) =>
     inline
@@ -341,7 +341,7 @@ const ForumThread: React.FC = () => {
                 </form>
               ) : (
                 <div className="rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[12.5px] text-[#79797f]">
-                  <a href="/auth" className="text-[#e5e5e9] underline underline-offset-2 hover:text-white">Sign in</a>{' '}
+                  <a href="/auth" className="text-[#e5e5e9] font-medium hover:text-white">Sign in</a>{' '}
                   to answer. Reading never requires an account.
                 </div>
               )}

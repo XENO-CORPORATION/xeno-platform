@@ -63,7 +63,7 @@ function InlineComposer({ spaces, onPosted }: { spaces: ForumSpace[]; onPosted: 
   if (!api.isSignedIn()) {
     return (
       <div className="rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[13px] text-[#a8a8b1]">
-        <a href="/auth" className="text-[#e5e5e9] underline underline-offset-2 hover:text-white">Sign in</a>{' '}
+        <a href="/auth" className="text-[#e5e5e9] font-medium hover:text-white">Sign in</a>{' '}
         to post. Reading never needs an account.
       </div>
     );
@@ -334,18 +334,29 @@ const Forum: React.FC = () => {
         onSelectSurface={setSurface}
         rightRail={rightRail}
       >
-        {/* Sticky surface switcher — the tab bar every social shell has */}
-        <div className="sticky top-[56px] z-10 -mx-4 mb-4 border-b border-white/[0.08] bg-[#08080a]/85 px-4 backdrop-blur-xl">
-          <div className="flex">
+        {/*
+          Segmented control, not an underlined tab bar.
+
+          The underline is an X/Twitter convention and it came in with the rest of
+          that borrow. DESIGN_SYSTEM.md has no underlined tab: the selected state
+          is `white/0.15` with `borderStrong`, and the shape language is
+          rectangles with a small radius. A segment that fills when active says
+          "this one is on" using the same vocabulary as every other control in the
+          system, instead of a floating bar that belongs to a different one.
+        */}
+        <div className="sticky top-[56px] z-10 mb-4 bg-[#08080a]/90 py-3 backdrop-blur-xl">
+          <div className="inline-flex gap-1 rounded-md border border-white/[0.08] bg-[#060608] p-1">
             {([['record', 'The Record', Layers], ['feed', 'For you', Sparkles]] as const).map(([key, label, Icon]) => (
               <button
                 key={key} type="button" onClick={() => setSurface(key as any)}
-                className={`cursor-pointer relative flex-1 px-4 py-3.5 text-[14px] transition-colors ${
-                  surface === key ? 'font-semibold text-white' : 'text-[#a8a8b1] hover:bg-white/[0.05] hover:text-[#e5e5e9]'
+                className={`cursor-pointer inline-flex items-center gap-2 rounded-md px-4 py-2 text-[13.5px] transition-colors ${
+                  surface === key
+                    ? 'border border-white/[0.15] bg-white/[0.15] font-medium text-white'
+                    : 'border border-transparent text-[#a8a8b1] hover:bg-white/[0.05] hover:text-[#e5e5e9]'
                 }`}
               >
-                <span className="inline-flex items-center gap-2"><Icon className="h-4 w-4" />{label}</span>
-                {surface === key && <span className="absolute inset-x-6 bottom-0 h-[3px] rounded-md bg-white" />}
+                <Icon className="h-4 w-4" />
+                {label}
               </button>
             ))}
           </div>
@@ -359,7 +370,7 @@ const Forum: React.FC = () => {
           {surface === 'feed' ? (
             !signedIn ? (
               <div className="mx-4 rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[13px] text-[#a8a8b1]">
-                <a href="/auth" className="text-[#e5e5e9] underline underline-offset-2 hover:text-white">Sign in</a>{' '}
+                <a href="/auth" className="text-[#e5e5e9] font-medium hover:text-white">Sign in</a>{' '}
                 for a personal feed. The Record is readable by anyone.
               </div>
             ) : (
@@ -397,7 +408,7 @@ const Forum: React.FC = () => {
                 <span className="text-[12.5px] text-[#79797f]">
                   {searchResults ? `${searchResults.length} results` : activeSpace ? activeSpace.name : 'Everything'}
                   {tag && (
-                    <> · <button type="button" onClick={() => setParam('tag', '')} className="cursor-pointer underline underline-offset-2">{tag} ×</button></>
+                    <> · <button type="button" onClick={() => setParam('tag', '')} className="cursor-pointer font-medium">{tag} ×</button></>
                   )}
                 </span>
                 <select
