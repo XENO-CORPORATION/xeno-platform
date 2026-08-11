@@ -1,109 +1,224 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, MessageSquare, CheckCircle2, Clock, Hash, Bot, Sparkles, Info } from 'lucide-react';
-import Header from '../components/landing-v3/Header';
+import {
+  MessageSquare, CheckCircle2, Clock, Loader2, PenLine, Info, Sparkles, Layers,
+} from 'lucide-react';
 import Footer from '../components/landing-v3/Footer';
+import ForumShell, {
+  RailSearch, RailNeedsAnswer, RailResolved, RailAgents,
+} from '../components/forum/ForumShell';
 import { AuthorBadge, TagChip, relativeTime, type ForumThreadSummary } from '../components/forum/primitives';
 import * as api from '../components/forum/api';
 
 /**
- * XENO Forum — the Record (SPEC "XENO FORUM - SPEC.md" §5.1).
+ * XENO Forum — the stream.
  *
- * This page renders the UNRANKED Record: sort is activity/newest/oldest only.
- * There is no score, no personalization, and deliberately no "trending" or
- * "popular" sort — §5.4 lists those as forbidden signals, and a sort option is
- * how they creep back in.
+ * Two surfaces over one corpus (D2): **The Record** (unranked, permanent) and
+ * **For you** (ranked, personal). The shell is borrowed from the social
+ * platforms because their ergonomics genuinely work; the signals are inverted
+ * because their objective does not. See ForumShell.tsx for that split in full.
  *
- * The personal, ranked Feed is a separate surface and arrives in v0.4, where
- * every card must render WHY it is there (D11).
- *
- * Styling follows the root DESIGN_SYSTEM.md: dark, monochromatic, no brand
- * colour. Semantic colour appears only for status (resolved).
+ * The one thing this page will never show is a popularity metric. No views, no
+ * likes, no follower counts (D4 — there is no follow graph to count). The action
+ * row on every card carries RESOLUTION STATE instead: answered, or unanswered
+ * and for how long. That is the thesis rendered as a row of pixels.
  */
 
 interface ForumSpace {
-  slug: string;
-  name: string;
-  description: string;
+  slug: string; name: string; description: string;
   kind: 'qa' | 'discussion' | 'showcase' | 'feedback' | 'announcement';
-  postPolicy: string;
-  threadCount: number;
-}
-
-interface ForumTag {
-  tag: string;
-  namespace: string;
-  value: string;
-  threadCount: number;
+  postPolicy: string; threadCount: number;
 }
 
 const SORTS = [
   { key: 'active', label: 'Recently active' },
   { key: 'newest', label: 'Newest' },
   { key: 'oldest', label: 'Oldest' },
-  { key: 'solved', label: 'Solved' },
+  { key: 'solved', label: 'Answered' },
 ] as const;
 
-function ThreadRow({ thread }: { thread: ForumThreadSummary }) {
-  const waiting = !thread.isResolved && thread.space?.kind === 'qa';
+/* ────────────────────────────────────────────────────────────────────────
+ * Inline composer — the "What's happening?" affordance.
+ *
+ * The single best thing the social shells do: posting costs no navigation.
+ * Collapsed it is one line; expanded it posts without leaving the stream. The
+ * full composer at /forum/new still exists for the long form, and it is where
+ * compose-time dedup lives (D10).
+ * ──────────────────────────────────────────────────────────────────────── */
+function InlineComposer({ spaces, onPosted }: { spaces: ForumSpace[]; onPosted: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [space, setSpace] = useState('help');
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const postable = spaces.filter((s) => s.postPolicy !== 'staff_only');
+  const active = postable.find((s) => s.slug === space);
+  const prompt = active?.kind === 'qa' ? 'What are you stuck on?'
+    : active?.kind === 'showcase' ? 'What did you build?'
+    : active?.kind === 'feedback' ? "What's wrong, or missing?"
+    : 'What are you thinking about?';
+
+  if (!api.isSignedIn()) {
+    return (
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-[13px] text-white/45">
+        <a href="/auth" className="text-white/75 underline underline-offset-2 hover:text-white">Sign in</a>{' '}
+        to post. Reading never needs an account.
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-left transition-colors hover:border-white/[0.14] hover:bg-white/[0.035]"
+      >
+        <PenLine className="h-4 w-4 shrink-0 text-white/30" />
+        <span className="text-[14px] text-white/35">{prompt}</span>
+      </button>
+    );
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    try {
+      await api.createThread({ space, title, body, tags: [] });
+      setTitle(''); setBody(''); setOpen(false);
+      onPosted();
+    } catch (err: any) {
+      setError(err.message || 'Could not post that.');
+    } finally { setBusy(false); }
+  };
 
   return (
-    <Link
-      to={thread.url}
-      className="group block border-b border-white/[0.06] px-1 py-5 transition-colors hover:bg-white/[0.02]"
-    >
-      <div className="flex items-start gap-4">
-        <div className="mt-0.5 shrink-0">
-          {thread.isResolved ? (
-            <CheckCircle2 className="h-[18px] w-[18px] text-emerald-400/70" aria-label="Resolved" />
-          ) : (
-            <MessageSquare className="h-[18px] w-[18px] text-white/25" aria-hidden="true" />
-          )}
-        </div>
+    <form onSubmit={submit} className="rounded-xl border border-white/[0.12] bg-white/[0.03] p-4">
+      <div className="flex items-center gap-2">
+        <select
+          value={space} onChange={(e) => setSpace(e.target.value)}
+          className="cursor-pointer rounded-md border border-white/[0.09] bg-[#0f0f0f] px-2.5 py-1.5 text-[12.5px] text-white/70 outline-none"
+        >
+          {postable.map((s) => <option key={s.slug} value={s.slug}>{s.name}</option>)}
+        </select>
+        <span className="text-[11.5px] text-white/25">
+          {active?.kind === 'qa' ? 'answers can be accepted here' : 'no accepted answer in this space'}
+        </span>
+      </div>
 
-        <div className="min-w-0 flex-1">
-          <h3 className="text-[15px] font-medium leading-snug text-white/85 transition-colors group-hover:text-white">
-            {thread.title}
-          </h3>
+      <input
+        autoFocus value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300}
+        placeholder={prompt}
+        className="mt-3 w-full bg-transparent text-[17px] text-white/90 outline-none placeholder:text-white/25"
+      />
+      <textarea
+        value={body} onChange={(e) => setBody(e.target.value)} rows={4}
+        placeholder="Add the detail that makes it answerable — version, exact error, what you tried."
+        className="mt-2 w-full resize-y bg-transparent text-[14px] leading-relaxed text-white/75 outline-none placeholder:text-white/25"
+      />
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] text-white/40">
-            {thread.space && (
-              <span className="text-white/50">{thread.space.name}</span>
-            )}
-            <span className="text-white/20">·</span>
-            <AuthorBadge author={thread.author} />
-            <span className="text-white/20">·</span>
-            <span className="inline-flex items-center gap-1">
-              <MessageSquare className="h-3 w-3" />
-              {thread.postCount}
-            </span>
+      {error && <div className="mb-2 text-[12.5px] text-red-300/90">{error}</div>}
 
-            {/*
-              Waiting time is surfaced because §5.2 makes it a NEED signal — an
-              unanswered question GAINS urgency with age. It is not "freshness",
-              which §5.4 forbids as a ranking input.
-            */}
-            {waiting && (
-              <>
-                <span className="text-white/20">·</span>
-                <span className="inline-flex items-center gap-1 text-amber-400/60">
-                  <Clock className="h-3 w-3" />
-                  unanswered for {relativeTime(thread.createdAt)}
-                </span>
-              </>
-            )}
-          </div>
-
-          {thread.tags.length > 0 && (
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {thread.tags.map((t) => <TagChip key={t} tag={t} />)}
-            </div>
-          )}
+      <div className="flex items-center justify-between border-t border-white/[0.07] pt-3">
+        <Link to="/forum/new" className="text-[12px] text-white/35 transition-colors hover:text-white/70">
+          Full composer — tags, and a duplicate check
+        </Link>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setOpen(false)} className="text-[13px] text-white/40 hover:text-white/70">
+            Cancel
+          </button>
+          <button
+            type="submit" disabled={busy || !title.trim() || !body.trim()}
+            className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-5 text-[13px] font-semibold text-black transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Post
+          </button>
         </div>
       </div>
-    </Link>
+    </form>
   );
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+ * The card.
+ *
+ * Compare its action row to X's: `581 replies · 423 reposts · 3.3K likes ·
+ * 700K views`. Three of those four are popularity and the fourth is a raw
+ * attention counter. Ours reads `4 replies · Answered`, or
+ * `2 replies · Unanswered · waiting 3d`.
+ *
+ * Same position, same glance, opposite meaning: theirs tells you how much
+ * attention a post captured, ours tells you whether it still needs a person.
+ * ──────────────────────────────────────────────────────────────────────── */
+function PostCard({ thread, why }: { thread: ForumThreadSummary; why?: string }) {
+  const isQa = thread.space?.kind === 'qa';
+  const waiting = isQa && !thread.isResolved;
+  const replies = Math.max(0, thread.postCount - 1);
+
+  return (
+    <article className="border-b border-white/[0.06] transition-colors hover:bg-white/[0.015]">
+      <Link to={thread.url} onClick={() => api.markOpened(thread.shortId)} className="block px-4 py-4">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]">
+          <AuthorBadge author={thread.author} />
+          <span className="text-white/20">·</span>
+          <span className="text-white/35">{relativeTime(thread.createdAt)} ago</span>
+          {thread.space && (
+            <>
+              <span className="text-white/20">·</span>
+              <span className="text-white/40">{thread.space.name}</span>
+            </>
+          )}
+        </div>
+
+        {/* Why this is on your feed — D11. Never present on the Record. */}
+        {why && (
+          <div className="mt-1.5 inline-flex items-center gap-1.5 text-[11.5px] text-white/40">
+            <Info className="h-3 w-3" />
+            {why}
+          </div>
+        )}
+
+        <h3 className="mt-1.5 text-[16px] font-medium leading-snug text-white/90">
+          {thread.title}
+        </h3>
+
+        {thread.tags.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {thread.tags.slice(0, 4).map((t) => <TagChip key={t} tag={t} />)}
+          </div>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px]">
+          <span className="inline-flex items-center gap-1.5 text-white/35">
+            <MessageSquare className="h-3.5 w-3.5" />
+            {replies} {replies === 1 ? 'reply' : 'replies'}
+          </span>
+
+          {isQa && thread.isResolved && (
+            <span className="inline-flex items-center gap-1.5 text-emerald-400/75">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Answered
+            </span>
+          )}
+
+          {waiting && (
+            <span className="inline-flex items-center gap-1.5 text-amber-400/70">
+              <Clock className="h-3.5 w-3.5" />
+              Unanswered · waiting {relativeTime(thread.createdAt)}
+            </span>
+          )}
+
+          {thread.source && <span className="text-white/20">from the engineering log</span>}
+        </div>
+      </Link>
+    </article>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────── */
 
 const Forum: React.FC = () => {
   const [params, setParams] = useSearchParams();
@@ -112,96 +227,58 @@ const Forum: React.FC = () => {
   const sort = params.get('sort') || 'active';
 
   const [spaces, setSpaces] = useState<ForumSpace[]>([]);
-  const [tags, setTags] = useState<ForumTag[]>([]);
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // The two surfaces over one corpus (D2): the Record is unranked and permanent,
-  // the Feed is personal and ranked. Never two copies of the data — one corpus,
-  // two views.
-  const [surface, setSurface] = useState<'record' | 'feed'>('record');
+  const [surface, setSurface] = useState<'feed' | 'record'>('record');
   const [feedItems, setFeedItems] = useState<any[]>([]);
   const [feedRanker, setFeedRanker] = useState('unsolved-for-me');
   const [feedRankers, setFeedRankers] = useState<Record<string, string>>({});
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
-  const signedIn = api.isSignedIn();
 
   const [queryInput, setQueryInput] = useState('');
   const [searchResults, setSearchResults] = useState<ForumThreadSummary[] | null>(null);
-  const [searching, setSearching] = useState(false);
+
+  const signedIn = api.isSignedIn();
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [spaceRes, tagRes] = await Promise.all([
-          fetch('/api/forum/spaces'),
-          fetch('/api/forum/tags?limit=24'),
-        ]);
-        const spaceJson = await spaceRes.json();
-        const tagJson = await tagRes.json();
-        if (cancelled) return;
-        setSpaces(spaceJson.spaces || []);
-        setTags(tagJson.tags || []);
-      } catch {
-        if (!cancelled) { setSpaces([]); setTags([]); }
-      }
-    })();
-    return () => { cancelled = true; };
+    api.getSpaces().then((r) => setSpaces(r.spaces || [])).catch(() => setSpaces([]));
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    (async () => {
-      try {
-        const qs = new URLSearchParams();
-        if (space) qs.set('space', space);
-        if (tag) qs.set('tag', tag);
-        if (sort) qs.set('sort', sort);
-        const res = await fetch(`/api/forum/threads?${qs}`);
-        const json = await res.json();
-        if (cancelled) return;
-        setThreads(json.threads || []);
-      } catch {
-        if (!cancelled) setThreads([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+    const qs = new URLSearchParams();
+    if (space) qs.set('space', space);
+    if (tag) qs.set('tag', tag);
+    if (sort) qs.set('sort', sort);
+    api.getThreads(qs.toString())
+      .then((r) => { if (!cancelled) setThreads(r.threads || []); })
+      .catch(() => { if (!cancelled) setThreads([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [space, tag, sort]);
+  }, [space, tag, sort, reloadKey]);
 
   useEffect(() => {
     if (surface !== 'feed' || !signedIn) return;
     let cancelled = false;
-    setFeedLoading(true);
-    setFeedError(null);
+    setFeedLoading(true); setFeedError(null);
     api.getFeed(feedRanker)
-      .then((r) => {
-        if (cancelled) return;
-        setFeedItems(r.items || []);
-        setFeedRankers(r.rankers || {});
-      })
+      .then((r) => { if (cancelled) return; setFeedItems(r.items || []); setFeedRankers(r.rankers || {}); })
       .catch((e) => { if (!cancelled) setFeedError(e.message || 'Could not load your feed.'); })
       .finally(() => { if (!cancelled) setFeedLoading(false); });
     return () => { cancelled = true; };
-  }, [surface, feedRanker, signedIn]);
+  }, [surface, feedRanker, signedIn, reloadKey]);
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
     if (!trimmed) { setSearchResults(null); return; }
-    setSearching(true);
     try {
-      const res = await fetch(`/api/forum/search?q=${encodeURIComponent(trimmed)}`);
-      const json = await res.json();
-      setSearchResults(json.results || []);
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
+      const r = await api.search(trimmed);
+      setSearchResults(r.results || []);
+    } catch { setSearchResults([]); }
   }, []);
 
   const setParam = (key: string, value: string) => {
@@ -210,286 +287,137 @@ const Forum: React.FC = () => {
     setParams(next, { replace: true });
   };
 
-  const visible = searchResults ?? threads;
   const activeSpace = useMemo(() => spaces.find((s) => s.slug === space), [spaces, space]);
 
+  // Rail data, derived from what is already loaded — no extra requests, and no
+  // "trending" computation anywhere.
+  const needsAnswer = useMemo(
+    () => threads
+      .filter((t) => t.space?.kind === 'qa' && !t.isResolved)
+      .map((t) => ({ ...t, waitedFor: relativeTime(t.createdAt) }))
+      .slice(0, 5),
+    [threads],
+  );
+  const recentlyResolved = useMemo(() => threads.filter((t) => t.isResolved).slice(0, 4), [threads]);
+
+  const rightRail = (
+    <>
+      <RailSearch
+        value={queryInput}
+        onChange={(e: any) => { setQueryInput(e.target.value); if (!e.target.value.trim()) setSearchResults(null); }}
+        onSubmit={(e: any) => { e.preventDefault(); runSearch(queryInput); }}
+        onClear={() => { setQueryInput(''); setSearchResults(null); }}
+        resultCount={searchResults?.length}
+      />
+      <RailNeedsAnswer threads={needsAnswer} />
+      <RailResolved threads={recentlyResolved} />
+      <RailAgents />
+    </>
+  );
+
+  const visible = searchResults ?? threads;
+
   return (
-    <div className="min-h-screen bg-[#060606] text-white">
-      <Header onGetStarted={() => { window.location.href = '/auth'; }} />
-
-      <main className="page-gutter w-full pb-20 pt-28">
-        {/* ── Masthead ─────────────────────────────────────────── */}
-        <div className="border-b border-white/[0.07] pb-8">
-          <h1 className="text-[34px] font-semibold tracking-tight">Forum</h1>
-          <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-white/45">
-            A public, permanent record of what this ecosystem figured out — readable by
-            people and by agents. Questions get answered once and stay answered.
-          </p>
-
-          {/*
-            v0.2: the Record is writable. The read-only banner that stood here is
-            gone rather than reworded — a stale honesty notice is worse than none,
-            because it trains people to ignore the next one.
-          */}
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Link
-              to="/forum/new"
-              className="inline-flex h-9 items-center rounded-md border border-white/20 px-4 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]"
-            >
-              New post
-            </Link>
-            <span className="text-[12px] text-white/35">
-              Ask, discuss, report, or show what you built. Reading never needs an account.
-            </span>
-          </div>
-        </div>
-
-        {/* ── Search ───────────────────────────────────────────── */}
-        <div className="mt-8">
-          <form
-            onSubmit={(e) => { e.preventDefault(); runSearch(queryInput); }}
-            className="relative"
-          >
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-            <input
-              value={queryInput}
-              onChange={(e) => {
-                setQueryInput(e.target.value);
-                if (!e.target.value.trim()) setSearchResults(null);
-              }}
-              placeholder="Search the record — paste an exact error message"
-              className="w-full rounded-lg border border-white/[0.09] bg-white/[0.02] py-3 pl-10 pr-4 text-[14px] text-white/85 outline-none transition-colors placeholder:text-white/25 focus:border-white/20 focus:bg-white/[0.035]"
-            />
-          </form>
-          {searchResults !== null && (
-            <div className="mt-3 flex items-center gap-3 text-[12px] text-white/40">
-              <span>
-                {searching ? 'Searching…' : `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`}
-              </span>
+    <>
+      <ForumShell
+        spaces={spaces}
+        activeSpace={space}
+        onSelectSpace={(s) => setParam('space', s === space ? '' : s)}
+        surface={surface}
+        onSelectSurface={setSurface}
+        rightRail={rightRail}
+      >
+        {/* Sticky surface switcher — the tab bar every social shell has */}
+        <div className="sticky top-[56px] z-10 -mx-4 mb-4 border-b border-white/[0.07] bg-[#060606]/85 px-4 backdrop-blur-xl">
+          <div className="flex">
+            {([['record', 'The Record', Layers], ['feed', 'For you', Sparkles]] as const).map(([key, label, Icon]) => (
               <button
-                type="button"
-                onClick={() => { setQueryInput(''); setSearchResults(null); }}
-                className="text-white/50 underline underline-offset-2 transition-colors hover:text-white/80"
-              >
-                clear
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-8 grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_260px] xl:grid-cols-[210px_minmax(0,1fr)_280px]">
-          {/* ── Left rail: spaces ──────────────────────────────── */}
-          <aside className="hidden xl:block">
-            <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Spaces</h2>
-            <nav className="mt-3 space-y-0.5">
-              <button
-                type="button"
-                onClick={() => setParam('space', '')}
-                className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors ${
-                  !space ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'
+                key={key} type="button" onClick={() => setSurface(key as any)}
+                className={`relative flex-1 px-4 py-3.5 text-[14px] transition-colors ${
+                  surface === key ? 'font-semibold text-white' : 'text-white/45 hover:bg-white/[0.03] hover:text-white/75'
                 }`}
               >
-                All
+                <span className="inline-flex items-center gap-2"><Icon className="h-4 w-4" />{label}</span>
+                {surface === key && <span className="absolute inset-x-6 bottom-0 h-[3px] rounded-full bg-white" />}
               </button>
-              {spaces.map((sp) => (
-                <button
-                  key={sp.slug}
-                  type="button"
-                  onClick={() => setParam('space', sp.slug)}
-                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors ${
-                    space === sp.slug ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'
-                  }`}
-                >
-                  <span className="truncate">{sp.name}</span>
-                  <span className="shrink-0 text-white/25">{sp.threadCount}</span>
-                </button>
-              ))}
-            </nav>
-          </aside>
+            ))}
+          </div>
+        </div>
 
-          {/* ── Threads ────────────────────────────────────────── */}
-          <div className="min-w-0">
-            {/* ── Record vs Feed (D2) ──────────────────────────────── */}
-            <div className="mb-4 flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.02] p-1">
-              <button
-                type="button" onClick={() => setSurface('record')}
-                className={`flex-1 rounded-md px-3 py-1.5 text-[12.5px] transition-colors ${
-                  surface === 'record' ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'}`}
-              >
-                The Record
-              </button>
-              <button
-                type="button" onClick={() => setSurface('feed')}
-                className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] transition-colors ${
-                  surface === 'feed' ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'}`}
-              >
-                <Sparkles className="h-3 w-3" />
-                For you
-              </button>
-            </div>
-
-            {/* Sort — the spaces themselves live in the left rail now. */}
-            <div className={`flex items-center justify-between border-b border-white/[0.07] pb-4 ${surface === 'feed' ? 'hidden' : ''}`}>
-              <span className="text-[12.5px] text-white/40">
-                {activeSpace ? activeSpace.name : 'All spaces'}
-              </span>
-              <select
-                value={sort}
-                onChange={(e) => setParam('sort', e.target.value)}
-                className="cursor-pointer rounded-md border border-white/[0.09] bg-[#0f0f0f] px-2.5 py-1.5 text-[12px] text-white/60 outline-none transition-colors hover:text-white/85"
-              >
-                {SORTS.map((s) => (
-                  <option key={s.key} value={s.key}>{s.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {activeSpace && (
-              <p className="pt-4 text-[13px] leading-relaxed text-white/40">{activeSpace.description}</p>
-            )}
-
-            {tag && (
-              <div className="pt-4">
-                <button
-                  type="button"
-                  onClick={() => setParam('tag', '')}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-white/[0.07] px-2 py-1 text-[12px] text-white/70 transition-colors hover:bg-white/[0.11]"
-                >
-                  <Hash className="h-3 w-3" />
-                  {tag}
-                  <span className="ml-1 text-white/35">×</span>
-                </button>
-              </div>
-            )}
-
-            {surface === 'feed' ? (
-              <div className="mt-2">
-                {!signedIn ? (
-                  <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-[12.5px] text-white/40">
-                    <a href="/auth" className="text-white/70 underline underline-offset-2 hover:text-white">Sign in</a>{' '}
-                    to get a feed. The Record is readable by anyone.
-                  </div>
-                ) : (
-                  <>
-                    {/*
-                      The ranker is USER-SELECTABLE (§5.6). You can always leave.
-                      A feed you cannot opt out of is the thing we are replacing.
-                    */}
-                    <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.07] pb-4">
-                      {Object.entries(feedRankers).map(([key, label]) => (
-                        <button
-                          key={key} type="button" onClick={() => setFeedRanker(key)}
-                          className={`rounded-md px-2.5 py-1.5 text-[12.5px] transition-colors ${
-                            feedRanker === key ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'}`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <p className="flex items-start gap-2 py-3 text-[11.5px] leading-relaxed text-white/30">
-                      <Info className="mt-0.5 h-3 w-3 shrink-0" />
-                      Ranked to get questions answered — not to keep you here. Every item says why
-                      it is on your list, and anything you have already read drops away.
-                    </p>
-
-                    {feedError && (
-                      <div className="rounded-lg border border-red-500/25 bg-red-500/[0.04] px-3.5 py-2.5 text-[13px] text-red-300/90">{feedError}</div>
-                    )}
-                    {feedLoading ? (
-                      <div className="py-16 text-center text-[13px] text-white/30">Loading…</div>
-                    ) : feedItems.length === 0 ? (
-                      <div className="py-16 text-center text-[13px] text-white/30">
-                        Nothing needs you right now.
-                      </div>
-                    ) : (
-                      feedItems.map((item) => (
-                        <Link
-                          key={item.shortId}
-                          to={item.url}
-                          onClick={() => api.markOpened(item.shortId)}
-                          className="group block border-b border-white/[0.06] px-1 py-5 transition-colors hover:bg-white/[0.02]"
-                        >
-                          <h3 className="text-[15px] font-medium leading-snug text-white/85 transition-colors group-hover:text-white">
-                            {item.title}
-                          </h3>
-                          {/*
-                            D11 — the ship gate made visible. If this line is ever
-                            empty, the ranker placed something it cannot justify.
-                          */}
-                          <div className="mt-1.5 text-[12px] text-white/45">{item.why}</div>
-                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] text-white/35">
-                            {item.space && <span>{item.space.name}</span>}
-                            <span className="text-white/20">·</span>
-                            <AuthorBadge author={item.author} />
-                            {item.tags?.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5">
-                                {item.tags.slice(0, 3).map((t: string) => <TagChip key={t} tag={t} />)}
-                              </div>
-                            )}
-                          </div>
-                        </Link>
-                      ))
-                    )}
-                  </>
-                )}
-              </div>
-            ) : (
-            <div className="mt-2">
-              {loading && searchResults === null ? (
-                <div className="py-16 text-center text-[13px] text-white/30">Loading…</div>
-              ) : visible.length === 0 ? (
-                <div className="py-16 text-center text-[13px] text-white/30">
-                  Nothing here yet.
-                </div>
-              ) : (
-                visible.map((t) => <ThreadRow key={t.shortId} thread={t} />)
-              )}
-            </div>
-            )}
+        <div className="space-y-4">
+          <div className="px-4">
+            <InlineComposer spaces={spaces} onPosted={() => setReloadKey((k) => k + 1)} />
           </div>
 
-          {/* ── Sidebar ────────────────────────────────────────── */}
-          <aside className="space-y-8">
-            <div>
-              <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Tags</h2>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {tags.map((t) => (
-                  <button key={t.tag} type="button" onClick={() => setParam('tag', t.tag)}>
-                    <TagChip tag={t.tag} count={t.threadCount} interactive />
-                  </button>
-                ))}
-                {tags.length === 0 && <span className="text-[12px] text-white/25">—</span>}
+          {surface === 'feed' ? (
+            !signedIn ? (
+              <div className="mx-4 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-[13px] text-white/45">
+                <a href="/auth" className="text-white/75 underline underline-offset-2 hover:text-white">Sign in</a>{' '}
+                for a personal feed. The Record is readable by anyone.
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2 px-4">
+                  {Object.entries(feedRankers).map(([key, label]) => (
+                    <button
+                      key={key} type="button" onClick={() => setFeedRanker(key)}
+                      className={`rounded-full px-3 py-1.5 text-[12.5px] transition-colors ${
+                        feedRanker === key ? 'bg-white/[0.10] text-white' : 'text-white/45 hover:text-white/75'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="flex items-start gap-2 px-4 text-[11.5px] leading-relaxed text-white/30">
+                  <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                  Ranked to get questions answered, not to keep you scrolling. Every item says why
+                  it is here, and anything you have read drops away.
+                </p>
+                {feedError && <div className="mx-4 text-[13px] text-red-300/90">{feedError}</div>}
+                {feedLoading ? (
+                  <div className="py-16 text-center text-[13px] text-white/30">Loading…</div>
+                ) : feedItems.length === 0 ? (
+                  <div className="py-16 text-center text-[13px] text-white/30">Nothing needs you right now.</div>
+                ) : (
+                  <div>{feedItems.map((i) => <PostCard key={i.shortId} thread={i} why={i.why} />)}</div>
+                )}
+              </>
+            )
+          ) : (
+            <>
+              <div className="flex items-center justify-between px-4">
+                <span className="text-[12.5px] text-white/40">
+                  {searchResults ? `${searchResults.length} results` : activeSpace ? activeSpace.name : 'Everything'}
+                  {tag && (
+                    <> · <button type="button" onClick={() => setParam('tag', '')} className="underline underline-offset-2">{tag} ×</button></>
+                  )}
+                </span>
+                <select
+                  value={sort} onChange={(e) => setParam('sort', e.target.value)}
+                  className="cursor-pointer rounded-md border border-white/[0.09] bg-[#0f0f0f] px-2.5 py-1.5 text-[12px] text-white/60 outline-none hover:text-white/85"
+                >
+                  {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                </select>
+              </div>
 
-            {/*
-              The agent surface is stated on the page itself, not buried in docs.
-              D9 makes machine-readability a contract; a forum that agents can
-              query is the differentiator, so it is advertised where humans and
-              agents both land.
-            */}
-            <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
-              <h2 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
-                <Bot className="h-3.5 w-3.5" />
-                For agents
-              </h2>
-              <p className="mt-2.5 text-[12px] leading-relaxed text-white/40">
-                Every thread is readable over the API with a stable, citable id.
-              </p>
-              <code className="mt-2.5 block break-all rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white/50">
-                GET /api/forum/search?q=…
-              </code>
-              <p className="mt-2.5 text-[11.5px] leading-relaxed text-white/30">
-                Posting, subscriptions and the MCP server open when agent accounts do.
-              </p>
-            </div>
-          </aside>
+              {activeSpace && !searchResults && (
+                <p className="px-4 text-[12.5px] leading-relaxed text-white/35">{activeSpace.description}</p>
+              )}
+
+              {loading ? (
+                <div className="py-16 text-center text-[13px] text-white/30">Loading…</div>
+              ) : visible.length === 0 ? (
+                <div className="py-16 text-center text-[13px] text-white/30">Nothing here yet.</div>
+              ) : (
+                <div>{visible.map((t) => <PostCard key={t.shortId} thread={t} />)}</div>
+              )}
+            </>
+          )}
         </div>
-      </main>
-
+      </ForumShell>
       <Footer />
-    </div>
+    </>
   );
 };
 
