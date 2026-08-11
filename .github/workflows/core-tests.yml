@@ -60,6 +60,16 @@ jobs:
       PGUSER: postgres
       PGPASSWORD: test
       CI: '1'
+      # Public signup is CLOSED by default (middleware/registrationGate.js) — a
+      # missing or misspelled flag must never silently reopen it in production.
+      # That fail-safe means every environment which legitimately needs signup
+      # open has to say so, and CI is one: account-recovery registers real users
+      # through POST /register. Without this the suite gets 403s and fails with
+      # `Cannot read properties of undefined (reading 'email_verified')`.
+      #
+      # This does NOT weaken the gate's own tests — scripts/registration-gate.test.mjs
+      # sets and restores the env per assertion, so it still proves the closed case.
+      REGISTRATION_OPEN: 'true'
     steps:
       - uses: actions/checkout@v4
 
