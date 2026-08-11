@@ -316,13 +316,15 @@ const ForumThread: React.FC = () => {
               {signedIn ? (
                 <form onSubmit={submitReply}>
                   <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
-                    Your answer
+                    {thread.space?.kind === 'qa' ? 'Your answer' : 'Your reply'}
                   </label>
                   <textarea
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
                     rows={6}
-                    placeholder="Answer the question. If you're guessing, say so."
+                    placeholder={thread.space?.kind === 'qa'
+                      ? "Answer the question. If you're guessing, say so."
+                      : 'Add to the thread.'}
                     className="w-full resize-y rounded-lg border border-white/[0.09] bg-white/[0.02] px-3.5 py-3 font-mono text-[13px] leading-relaxed text-white/85 outline-none transition-colors placeholder:text-white/25 focus:border-white/20"
                   />
                   <div className="mt-3 flex items-center gap-3">
@@ -332,7 +334,7 @@ const ForumThread: React.FC = () => {
                       className="inline-flex h-9 items-center gap-2 rounded-md border border-white/20 px-4 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {posting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      Post answer
+                      {thread.space?.kind === 'qa' ? 'Post answer' : 'Reply'}
                     </button>
                     <span className="text-[11.5px] text-white/30">Markdown supported. HTML is escaped.</span>
                   </div>
