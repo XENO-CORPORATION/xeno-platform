@@ -31,8 +31,40 @@ skill** (available in every project): Claude Code `~/.claude/skills/`, XENO Agen
 (`SKILL.md` = open Agent Skills for Claude Code + Codex; `xeno-product-release.md` =
 XENO Agent CLI). Install steps: `release-guide/README.md`. Spec: `PRODUCT-RELEASE-SKILL-SPEC.md`.
 
+## 🔒 The site is DELIBERATELY locked down (2026-08-11) — do not "fix" this
+
+**xenostudio.ai is not meant to be publicly discoverable yet, and public signup is closed.**
+Both are a deployed state that a routine deploy can silently undo. Before changing anything
+in `nginx/default.conf`, `public/robots.txt`, `scripts/prerender-products.mjs` or
+`src/server/routes/authRoutes.js`, read this.
+
+| What | Where | Reverting it by accident looks like |
+|---|---|---|
+| **Signup closed on all 3 paths** | `src/server/middleware/registrationGate.js` — one choke point for `POST /register`, `POST /register-with-handle`, **and the OAuth auto-create** in `findOrCreateOAuthUser` | Signups quietly resume. **Closed unless `REGISTRATION_OPEN` is exactly `'true'`** — the env var is deliberately *absent* on the box. Pinned by `scripts/registration-gate.test.mjs` (15 tests, in `npm test`) |
+| **Suspension actually enforced** | `assertAccountUsable()` on every OAuth branch | Password login always checked `is_active`; **OAuth never did**. Removing those calls makes a suspension unenforced for the 162 OAuth accounts |
+| **`X-Robots-Tag: noindex, nofollow, noarchive`** | `nginx/default.conf` — server level **and** the 3 `location` blocks that set their own headers | nginx drops **all** inherited `add_header` in any block that declares one. Delete a copy and the header vanishes on static assets — and Google indexes images independently of their page |
+| **No sitemap** | `scripts/prerender-products.mjs` (generation commented out, stale `dist/sitemap.xml` removed) | Restoring it re-advertises 268 URLs with a fresh `<lastmod>` |
+| **robots.txt still ALLOWS crawling** | `public/robots.txt` | 🔴 **Do not add `Disallow: /`.** It blocks crawling, so Googlebot can never see the `noindex`, and already-indexed URLs strand as bare links. Header first; `Disallow` only after Google has dropped the pages |
+
+⚠️ **Never wall `/api/`** — the OIDC provider is at `/api/oauth2/*` and blocking it breaks
+sign-in for every shipped product. `updates.xenostudio.ai` (R2) and `api.xenostudio.ai` are
+**different hosts**, so the site can be locked hard without breaking installed apps.
+
+**216 of 218 accounts are suspended** (`is_active = false`); only the admin and one `service`
+account remain active. Backup before the lockdown, with a proven restore:
+`_backups/2026-08-11-xenostudio-preblock/` in the workspace root (outside any repo — it holds
+password hashes).
+
+**Procedure for this, and for any other host:** the **`xeno-secure-website`** skill —
+canonical at **`security-guide/SKILL.md`**, installed at `~/.claude/skills/xeno-secure-website/`.
+`release-guide/skill/SKILL.md` §0.5 carries the matching pre/post-deploy gate.
+
+Still open (operator): Cloudflare Access wall, Google Search Console removal request, the
+purge decision, and a "signups are closed" state in the signup UI (the form currently 403s).
+
 ## Related references
 
+- `security-guide/SKILL.md` — **the callable lockdown procedure** (`xeno-secure-website`): close every account-creation path, make suspension real, de-index correctly, deploy without an outage. Host-agnostic — covers `xeno-post-001`'s no-source-tree GHCR shape and `xeno-mail-001`'s verdaccio shape too.
 - `PRODUCT-LANDING-SPEC.md` — the product landing-page + docs authoring contract (the 4-layer model, the docs system).
 - `PRODUCT-PAGES-SPEC.md` — URLs, `releases.json` schema, download redirects, prerender.
 - `RELEASE-TO-WEBSITE.md` — legacy release note (superseded by `release-guide/`).
