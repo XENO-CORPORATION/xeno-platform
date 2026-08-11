@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, MessageSquare, CheckCircle2, Clock, Hash, Bot } from 'lucide-react';
+import { Search, MessageSquare, CheckCircle2, Clock, Hash, Bot, Sparkles, Info } from 'lucide-react';
 import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
 import { AuthorBadge, TagChip, relativeTime, type ForumThreadSummary } from '../components/forum/primitives';
+import * as api from '../components/forum/api';
 
 /**
  * XENO Forum — the Record (SPEC "XENO FORUM - SPEC.md" §5.1).
@@ -115,6 +116,17 @@ const Forum: React.FC = () => {
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // The two surfaces over one corpus (D2): the Record is unranked and permanent,
+  // the Feed is personal and ranked. Never two copies of the data — one corpus,
+  // two views.
+  const [surface, setSurface] = useState<'record' | 'feed'>('record');
+  const [feedItems, setFeedItems] = useState<any[]>([]);
+  const [feedRanker, setFeedRanker] = useState('unsolved-for-me');
+  const [feedRankers, setFeedRankers] = useState<Record<string, string>>({});
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const signedIn = api.isSignedIn();
+
   const [queryInput, setQueryInput] = useState('');
   const [searchResults, setSearchResults] = useState<ForumThreadSummary[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -160,6 +172,22 @@ const Forum: React.FC = () => {
     })();
     return () => { cancelled = true; };
   }, [space, tag, sort]);
+
+  useEffect(() => {
+    if (surface !== 'feed' || !signedIn) return;
+    let cancelled = false;
+    setFeedLoading(true);
+    setFeedError(null);
+    api.getFeed(feedRanker)
+      .then((r) => {
+        if (cancelled) return;
+        setFeedItems(r.items || []);
+        setFeedRankers(r.rankers || {});
+      })
+      .catch((e) => { if (!cancelled) setFeedError(e.message || 'Could not load your feed.'); })
+      .finally(() => { if (!cancelled) setFeedLoading(false); });
+    return () => { cancelled = true; };
+  }, [surface, feedRanker, signedIn]);
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -252,8 +280,27 @@ const Forum: React.FC = () => {
         <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_240px]">
           {/* ── Threads ────────────────────────────────────────── */}
           <div className="min-w-0">
+            {/* ── Record vs Feed (D2) ──────────────────────────────── */}
+            <div className="mb-4 flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.02] p-1">
+              <button
+                type="button" onClick={() => setSurface('record')}
+                className={`flex-1 rounded-md px-3 py-1.5 text-[12.5px] transition-colors ${
+                  surface === 'record' ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'}`}
+              >
+                The Record
+              </button>
+              <button
+                type="button" onClick={() => setSurface('feed')}
+                className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] transition-colors ${
+                  surface === 'feed' ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'}`}
+              >
+                <Sparkles className="h-3 w-3" />
+                For you
+              </button>
+            </div>
+
             {/* Space filter */}
-            <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.07] pb-4">
+            <div className={`flex flex-wrap items-center gap-2 border-b border-white/[0.07] pb-4 ${surface === 'feed' ? 'hidden' : ''}`}>
               <button
                 type="button"
                 onClick={() => setParam('space', '')}
@@ -308,6 +355,79 @@ const Forum: React.FC = () => {
               </div>
             )}
 
+            {surface === 'feed' ? (
+              <div className="mt-2">
+                {!signedIn ? (
+                  <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-[12.5px] text-white/40">
+                    <a href="/auth" className="text-white/70 underline underline-offset-2 hover:text-white">Sign in</a>{' '}
+                    to get a feed. The Record is readable by anyone.
+                  </div>
+                ) : (
+                  <>
+                    {/*
+                      The ranker is USER-SELECTABLE (§5.6). You can always leave.
+                      A feed you cannot opt out of is the thing we are replacing.
+                    */}
+                    <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.07] pb-4">
+                      {Object.entries(feedRankers).map(([key, label]) => (
+                        <button
+                          key={key} type="button" onClick={() => setFeedRanker(key)}
+                          className={`rounded-md px-2.5 py-1.5 text-[12.5px] transition-colors ${
+                            feedRanker === key ? 'bg-white/[0.09] text-white' : 'text-white/45 hover:text-white/75'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <p className="flex items-start gap-2 py-3 text-[11.5px] leading-relaxed text-white/30">
+                      <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                      Ranked to get questions answered — not to keep you here. Every item says why
+                      it is on your list, and anything you have already read drops away.
+                    </p>
+
+                    {feedError && (
+                      <div className="rounded-lg border border-red-500/25 bg-red-500/[0.04] px-3.5 py-2.5 text-[13px] text-red-300/90">{feedError}</div>
+                    )}
+                    {feedLoading ? (
+                      <div className="py-16 text-center text-[13px] text-white/30">Loading…</div>
+                    ) : feedItems.length === 0 ? (
+                      <div className="py-16 text-center text-[13px] text-white/30">
+                        Nothing needs you right now.
+                      </div>
+                    ) : (
+                      feedItems.map((item) => (
+                        <Link
+                          key={item.shortId}
+                          to={item.url}
+                          onClick={() => api.markOpened(item.shortId)}
+                          className="group block border-b border-white/[0.06] px-1 py-5 transition-colors hover:bg-white/[0.02]"
+                        >
+                          <h3 className="text-[15px] font-medium leading-snug text-white/85 transition-colors group-hover:text-white">
+                            {item.title}
+                          </h3>
+                          {/*
+                            D11 — the ship gate made visible. If this line is ever
+                            empty, the ranker placed something it cannot justify.
+                          */}
+                          <div className="mt-1.5 text-[12px] text-white/45">{item.why}</div>
+                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] text-white/35">
+                            {item.space && <span>{item.space.name}</span>}
+                            <span className="text-white/20">·</span>
+                            <AuthorBadge author={item.author} />
+                            {item.tags?.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {item.tags.slice(0, 3).map((t: string) => <TagChip key={t} tag={t} />)}
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                      ))
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
             <div className="mt-2">
               {loading && searchResults === null ? (
                 <div className="py-16 text-center text-[13px] text-white/30">Loading…</div>
@@ -319,6 +439,7 @@ const Forum: React.FC = () => {
                 visible.map((t) => <ThreadRow key={t.shortId} thread={t} />)
               )}
             </div>
+            )}
           </div>
 
           {/* ── Sidebar ────────────────────────────────────────── */}

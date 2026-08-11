@@ -79,3 +79,10 @@ export const vote = (target: 'threads' | 'posts', id: string, value: 1 | -1) =>
 
 export const flag = (target: 'threads' | 'posts', id: string, reason: string, detail?: string) =>
   request<any>(`/${target}/${id}/flag`, { method: 'POST', body: JSON.stringify({ reason, detail }) }, true);
+
+// ── the Feed (v0.4) — the only inherently personal surface ────────────────
+export const getFeed = (ranker?: string) =>
+  request<any>(`/feed${ranker ? `?ranker=${encodeURIComponent(ranker)}` : ''}`, {}, true);
+
+export const markOpened = (shortId: string) =>
+  request<any>(`/threads/${shortId}/opened`, { method: 'POST' }, true).catch(() => null);

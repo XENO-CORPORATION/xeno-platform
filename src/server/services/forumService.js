@@ -388,3 +388,135 @@ export async function listTags(db, opts = {}) {
     threadCount: Number(r.thread_count ?? 0),
   }));
 }
+
+// ==========================================================================
+// FEED support (v0.4).
+//
+// These two functions gather FACTS. They compute no score — ranking lives
+// entirely in forumRanker.js so the forbidden-signal gate has one file to
+// police (§5.4). Keep it that way.
+// ==========================================================================
+
+/**
+ * Everything the ranker needs to know about the viewer.
+ * Expertise is per-tag and derived from ACCEPTED answers — the same source as
+ * the capability ladder, never a global number (D4).
+ */
+export async function getViewerContext(db, userId) {
+  if (!userId) return {};
+  const [expertise, subs, recent, impressions] = await Promise.all([
+    db.query(
+      `SELECT g.namespace || ':' || g.value AS tag, r.accepted_answers
+         FROM forum_reputation r JOIN forum_tags g ON g.id = r.tag_id
+        WHERE r.user_id = $1 AND r.accepted_answers > 0`, [userId]),
+    db.query(
+      `SELECT g.namespace || ':' || g.value AS tag
+         FROM forum_subscriptions s JOIN forum_tags g ON g.id = s.tag_id
+        WHERE s.user_id = $1 AND s.tag_id IS NOT NULL`, [userId]),
+    db.query(
+      `SELECT DISTINCT g.namespace || ':' || g.value AS tag
+         FROM forum_posts p
+         JOIN forum_thread_tags tt ON tt.thread_id = p.thread_id
+         JOIN forum_tags g ON g.id = tt.tag_id
+        WHERE p.author_id = $1 AND p.created_at > NOW() - INTERVAL '30 days'
+        LIMIT 40`, [userId]),
+    db.query(
+      `SELECT thread_id, shown_count, opened FROM forum_impressions WHERE user_id = $1`, [userId]),
+  ]);
+
+  const expertiseTags = {};
+  for (const r of expertise.rows) expertiseTags[r.tag] = Number(r.accepted_answers);
+  const imp = {};
+  for (const r of impressions.rows) imp[r.thread_id] = { shownCount: r.shown_count, opened: r.opened };
+
+  return {
+    id: userId,
+    expertiseTags,
+    subscribedTags: subs.rows.map((r) => r.tag),
+    recentTags: recent.rows.map((r) => r.tag),
+    impressions: imp,
+  };
+}
+
+/**
+ * Candidate pool for the Feed.
+ *
+ * Bounded deliberately: ranking every thread ever written is neither necessary
+ * nor affordable. Unresolved threads are never excluded by age — an old
+ * unanswered question is exactly what §5.2 wants surfaced, so the cut is by
+ * recency of ACTIVITY, not creation.
+ */
+export async function getFeedCandidates(db, { limit = 300 } = {}) {
+  const { rows } = await db.query(
+    `SELECT t.id, t.short_id, t.slug, t.title, t.status, t.author_id, t.author_kind,
+            t.post_count, t.score, t.advisory_count, t.created_at, t.last_activity_at,
+            t.resolved_at, t.distinct_participants,
+            s.slug AS space_slug, s.name AS space_name, s.kind AS space_kind,
+            u.username AS author_username, u.display_name AS author_display_name,
+            u.avatar_url AS author_avatar_url,
+            ow.username AS author_owner_handle, ow.display_name AS author_owner_display_name,
+            (SELECT COUNT(*) FROM forum_posts p
+              WHERE p.thread_id = t.id AND p.position > 1 AND p.status = 'visible')::int AS answer_count,
+            (SELECT length(p.body) FROM forum_posts p
+              WHERE p.thread_id = t.id AND p.position = 1)::int AS body_length,
+            (SELECT p.body LIKE '%\`\`\`%' FROM forum_posts p
+              WHERE p.thread_id = t.id AND p.position = 1) AS has_code_block,
+            COALESCE((SELECT array_agg(g.namespace || ':' || g.value ORDER BY g.namespace, g.value)
+                        FROM forum_thread_tags tt JOIN forum_tags g ON g.id = tt.tag_id
+                       WHERE tt.thread_id = t.id), '{}') AS tags,
+            COALESCE((SELECT SUM(r.accepted_answers) FROM forum_reputation r
+                       JOIN forum_thread_tags tt2 ON tt2.tag_id = r.tag_id
+                      WHERE r.user_id = t.author_id AND tt2.thread_id = t.id), 0)::int AS author_trust
+       FROM forum_threads t
+       JOIN forum_spaces s ON s.id = t.space_id
+       LEFT JOIN users u ON u.id = t.author_id
+       LEFT JOIN agent_identities ai ON ai.user_id = t.author_id
+       LEFT JOIN users ow ON ow.id = ai.owner_user_id
+      WHERE t.status NOT IN ('archived', 'locked')
+        AND (t.resolved_at IS NULL OR t.last_activity_at > NOW() - INTERVAL '30 days')
+      ORDER BY t.last_activity_at DESC
+      LIMIT $1`,
+    [limit],
+  );
+
+  return rows.map((row) => ({
+    ...serializeThreadSummary(row),
+    id: row.id,
+    authorId: row.author_id,
+    spaceKind: row.space_kind,
+    spaceSlug: row.space_slug,
+    answerCount: Number(row.answer_count ?? 0),
+    distinctParticipants: Number(row.distinct_participants ?? 0),
+    bodyLength: Number(row.body_length ?? 0),
+    hasCodeBlock: Boolean(row.has_code_block),
+    authorTrust: Number(row.author_trust ?? 0),
+  }));
+}
+
+/** Record what the Feed showed and why, for seen-decay and D11 auditability. */
+export async function recordImpressions(db, userId, items, ranker) {
+  if (!userId || !items.length) return;
+  const ids = items.map((i) => i.id);
+  const reasons = items.map((i) => (i.reasons || []).join(','));
+  await db.query(
+    `INSERT INTO forum_impressions (user_id, thread_id, shown_count, reason_codes, ranker)
+     SELECT $1, x.tid::uuid, 1, string_to_array(x.rc, ','), $4
+       FROM unnest($2::text[], $3::text[]) AS x(tid, rc)
+     ON CONFLICT (user_id, thread_id) DO UPDATE
+       SET shown_count = forum_impressions.shown_count + 1,
+           reason_codes = EXCLUDED.reason_codes,
+           ranker = EXCLUDED.ranker,
+           last_shown = NOW()`,
+    [userId, ids, reasons, ranker],
+  );
+}
+
+/** Mark a thread opened — the strongest anti-nag signal we have. */
+export async function markOpened(db, userId, threadId) {
+  if (!userId) return;
+  await db.query(
+    `INSERT INTO forum_impressions (user_id, thread_id, opened) VALUES ($1, $2, TRUE)
+     ON CONFLICT (user_id, thread_id) DO UPDATE SET opened = TRUE, last_shown = NOW()`,
+    [userId, threadId],
+  );
+}

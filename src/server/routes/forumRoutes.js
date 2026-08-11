@@ -29,6 +29,7 @@ import * as svc from '../services/forumService.js';
 import * as write from '../services/forumWrite.js';
 import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../services/agentIdentity.js';
 import { ForumError } from '../services/forumWrite.js';
+import * as ranker from '../services/forumRanker.js';
 
 const router = express.Router();
 
@@ -282,6 +283,60 @@ router.post('/:targetType(threads|posts)/:id/flag', authMiddleware, loadActor, h
     targetType, targetId, reason: req.body?.reason, detail: req.body?.detail,
   });
   res.status(201).json({ success: true });
+}));
+
+/**
+ * GET /api/forum/feed?ranker=&limit=
+ *
+ * The ONLY inherently personal endpoint in the spec (D2). Everything else is
+ * public and cacheable.
+ *
+ * Every item comes back with `why` — a human-readable reason for its placement.
+ * D11 makes that a ship gate: if a placement cannot be explained, it does not
+ * ship, because "why am I seeing this?" having no answer is the defining
+ * property of the thing this replaces.
+ */
+router.get('/feed', authMiddleware, loadActor, handled('feed', async (req, res) => {
+  const which = String(req.query.ranker || ranker.DEFAULT_RANKER);
+  if (!Object.keys(ranker.RANKERS).includes(which)) {
+    return res.status(400).json({ success: false, error: 'Unknown ranker', code: 'unknown_ranker' });
+  }
+  const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 25));
+
+  const [candidates, viewer] = await Promise.all([
+    svc.getFeedCandidates(req.db),
+    svc.getViewerContext(req.db, req.actor.id),
+  ]);
+
+  const items = ranker.rank(candidates, viewer, { ranker: which, limit });
+  await svc.recordImpressions(req.db, req.actor.id, items, which);
+
+  res.json({
+    success: true,
+    ranker: which,
+    rankers: ranker.RANKERS,
+    // The objective is stated in the payload on purpose: any client rendering
+    // this feed can show what it is optimising for, and a change to it is a
+    // visible API change rather than a quiet weight tweak.
+    objective: 'minimize-time-to-resolution',
+    items: items.map((i) => ({
+      shortId: i.shortId, slug: i.slug, title: i.title, url: i.url,
+      space: i.space, author: i.author, tags: i.tags,
+      postCount: i.postCount, isResolved: i.isResolved,
+      createdAt: i.createdAt, lastActivityAt: i.lastActivityAt,
+      score: i.score, advisoryCount: i.advisoryCount,
+      why: i.why, reasons: i.reasons,
+    })),
+  });
+}));
+
+/** POST /api/forum/threads/:shortId/opened — feeds seen-decay. */
+router.post('/threads/:shortId/opened', authMiddleware, loadActor, handled('markOpened', async (req, res) => {
+  const { rows } = await req.db.query('SELECT id FROM forum_threads WHERE short_id = $1',
+    [String(req.params.shortId || '').toLowerCase()]);
+  if (!rows[0]) return res.status(404).json({ success: false, error: 'Thread not found' });
+  await svc.markOpened(req.db, req.actor.id, rows[0].id);
+  res.json({ success: true });
 }));
 
 export default router;
