@@ -1149,3 +1149,18 @@ dialog select,
   from { transform: translateX(0) scale(1); opacity: 1; }
   to   { transform: translateX(72px) scale(0.85); opacity: 0; }
 }
+
+/* Every interactive element declares a cursor.
+   DESIGN_SYSTEM.md §3.1: native <button> renders with the default ARROW cursor and
+   Tailwind Preflight does not change it, so relying on defaults leaves every button,
+   tab and modal action looking unresponsive even though the handlers work. The system
+   calls this "a recurring, easy-to-miss bug" — which is exactly why this is one rule
+   rather than a class that the next button forgets. */
+button:not(:disabled):not([aria-disabled="true"]),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}

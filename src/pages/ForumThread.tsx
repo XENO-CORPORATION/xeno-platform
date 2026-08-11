@@ -49,23 +49,23 @@ interface ForumThreadDetail extends ForumThreadSummary {
 }
 
 const markdownComponents = {
-  h1: (p: any) => <h2 className="mt-6 mb-2 text-[17px] font-semibold text-white/90" {...p} />,
-  h2: (p: any) => <h3 className="mt-6 mb-2 text-[15px] font-semibold text-white/85" {...p} />,
-  h3: (p: any) => <h4 className="mt-5 mb-2 text-[14px] font-semibold text-white/80" {...p} />,
-  p: (p: any) => <p className="my-3 text-[14px] leading-[1.75] text-white/65" {...p} />,
-  strong: (p: any) => <strong className="font-semibold text-white/90" {...p} />,
-  ul: (p: any) => <ul className="my-3 list-disc space-y-1.5 pl-5 text-[14px] leading-[1.7] text-white/65" {...p} />,
-  ol: (p: any) => <ol className="my-3 list-decimal space-y-1.5 pl-5 text-[14px] leading-[1.7] text-white/65" {...p} />,
-  a: (p: any) => <a className="text-white/80 underline underline-offset-2 transition-colors hover:text-white" {...p} />,
-  blockquote: (p: any) => <blockquote className="my-4 border-l-2 border-white/15 pl-4 text-white/50" {...p} />,
+  h1: (p: any) => <h2 className="mt-6 mb-2 text-[17px] font-semibold text-white" {...p} />,
+  h2: (p: any) => <h3 className="mt-6 mb-2 text-[15px] font-semibold text-[#e5e5e9]" {...p} />,
+  h3: (p: any) => <h4 className="mt-5 mb-2 text-[14px] font-semibold text-[#e5e5e9]" {...p} />,
+  p: (p: any) => <p className="my-3 text-[14px] leading-[1.75] text-[#a8a8b1]" {...p} />,
+  strong: (p: any) => <strong className="font-semibold text-white" {...p} />,
+  ul: (p: any) => <ul className="my-3 list-disc space-y-1.5 pl-5 text-[14px] leading-[1.7] text-[#a8a8b1]" {...p} />,
+  ol: (p: any) => <ol className="my-3 list-decimal space-y-1.5 pl-5 text-[14px] leading-[1.7] text-[#a8a8b1]" {...p} />,
+  a: (p: any) => <a className="text-[#e5e5e9] underline underline-offset-2 transition-colors hover:text-white" {...p} />,
+  blockquote: (p: any) => <blockquote className="my-4 border-l-2 border-white/15 pl-4 text-[#a8a8b1]" {...p} />,
   code: ({ inline, children, ...rest }: any) =>
     inline
-      ? <code className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-[12.5px] text-white/80" {...rest}>{children}</code>
-      : <code className="font-mono text-[12.5px] leading-relaxed text-white/75" {...rest}>{children}</code>,
-  pre: (p: any) => <pre className="my-4 overflow-x-auto rounded-lg border border-white/[0.08] bg-black/50 p-4" {...p} />,
+      ? <code className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-[12.5px] text-[#e5e5e9]" {...rest}>{children}</code>
+      : <code className="font-mono text-[12.5px] leading-relaxed text-[#e5e5e9]" {...rest}>{children}</code>,
+  pre: (p: any) => <pre className="my-4 overflow-x-auto rounded-md border border-white/[0.08] bg-black/50 p-4" {...p} />,
   table: (p: any) => <div className="my-4 overflow-x-auto"><table className="w-full border-collapse text-[13px]" {...p} /></div>,
-  th: (p: any) => <th className="border-b border-white/[0.12] px-3 py-2 text-left font-medium text-white/70" {...p} />,
-  td: (p: any) => <td className="border-b border-white/[0.06] px-3 py-2 text-white/55" {...p} />,
+  th: (p: any) => <th className="border-b border-white/[0.12] px-3 py-2 text-left font-medium text-[#e5e5e9]" {...p} />,
+  td: (p: any) => <td className="border-b border-white/[0.08] px-3 py-2 text-[#a8a8b1]" {...p} />,
 };
 
 /** Vote control. Renders the advisory agent signal SEPARATELY — never summed. */
@@ -76,14 +76,14 @@ function VoteBox({ score, advisory, onVote, disabled }: {
     <div className="flex w-9 shrink-0 flex-col items-center gap-0.5 pt-0.5">
       <button
         type="button" onClick={() => onVote(1)} disabled={disabled} aria-label="Helpful"
-        className="rounded p-0.5 text-white/30 transition-colors hover:text-white/80 disabled:cursor-not-allowed disabled:hover:text-white/30"
+        className="rounded p-0.5 text-[#79797f] transition-colors hover:text-[#e5e5e9] disabled:cursor-not-allowed disabled:hover:text-[#79797f]"
       >
         <ChevronUp className="h-4 w-4" />
       </button>
-      <span className="font-mono text-[12px] tabular-nums text-white/60">{Math.round(score)}</span>
+      <span className="font-mono text-[12px] tabular-nums text-[#a8a8b1]">{Math.round(score)}</span>
       <button
         type="button" onClick={() => onVote(-1)} disabled={disabled} aria-label="Not helpful"
-        className="rounded p-0.5 text-white/30 transition-colors hover:text-white/80 disabled:cursor-not-allowed disabled:hover:text-white/30"
+        className="rounded p-0.5 text-[#79797f] transition-colors hover:text-[#e5e5e9] disabled:cursor-not-allowed disabled:hover:text-[#79797f]"
       >
         <ChevronDown className="h-4 w-4" />
       </button>
@@ -94,7 +94,7 @@ function VoteBox({ score, advisory, onVote, disabled }: {
       {advisory > 0 && (
         <span
           title={`${advisory} agent${advisory === 1 ? '' : 's'} flagged this relevant — advisory only, not counted`}
-          className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-white/25"
+          className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-[#57575e]"
         >
           <Bot className="h-2.5 w-2.5" />{advisory}
         </span>
@@ -163,27 +163,27 @@ const ForumThread: React.FC = () => {
   const canAccept = Boolean(me && (isThreadAuthor || me.actor?.isStaff) && thread?.space?.kind === 'qa');
 
   return (
-    <div className="min-h-screen bg-[#060606] text-white">
+    <div className="min-h-screen bg-[#08080a] text-white">
       <Header onGetStarted={() => { window.location.href = '/auth'; }} />
 
       <main className="page-gutter w-full pb-20 pt-28">
-        <Link to="/forum" className="inline-flex items-center gap-2 text-[13px] text-white/40 transition-colors hover:text-white/70">
+        <Link to="/forum" className="inline-flex items-center gap-2 text-[13px] text-[#79797f] transition-colors hover:text-[#e5e5e9]">
           <ArrowLeft className="h-3.5 w-3.5" />
           Forum
         </Link>
 
-        {state === 'loading' && <div className="py-24 text-center text-[13px] text-white/30">Loading…</div>}
+        {state === 'loading' && <div className="py-24 text-center text-[13px] text-[#79797f]">Loading…</div>}
 
         {state === 'missing' && (
           <div className="py-24 text-center">
-            <h1 className="text-[20px] font-medium text-white/80">Thread not found</h1>
-            <p className="mt-2 text-[13px] text-white/40">
+            <h1 className="text-[20px] font-medium text-[#e5e5e9]">Thread not found</h1>
+            <p className="mt-2 text-[13px] text-[#79797f]">
               This id does not resolve. Thread ids are permanent, so it was never created.
             </p>
           </div>
         )}
 
-        {state === 'error' && <div className="py-24 text-center text-[13px] text-white/40">Could not load this thread.</div>}
+        {state === 'error' && <div className="py-24 text-center text-[13px] text-[#79797f]">Could not load this thread.</div>}
 
         {state === 'ready' && thread && (
           <div className="mt-2 grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -194,16 +194,16 @@ const ForumThread: React.FC = () => {
               rail instead of to line length.
             */}
             <div className="min-w-0 max-w-[72ch]">
-            <header className="mt-6 border-b border-white/[0.07] pb-6">
-              <div className="flex flex-wrap items-center gap-2 text-[12px] text-white/40">
+            <header className="mt-6 border-b border-white/[0.08] pb-6">
+              <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#79797f]">
                 {thread.space && (
-                  <Link to={`/forum?space=${thread.space.slug}`} className="transition-colors hover:text-white/70">
+                  <Link to={`/forum?space=${thread.space.slug}`} className="transition-colors hover:text-[#e5e5e9]">
                     {thread.space.name}
                   </Link>
                 )}
                 {thread.isResolved && (
                   <>
-                    <span className="text-white/20">·</span>
+                    <span className="text-[#57575e]">·</span>
                     <span className="inline-flex items-center gap-1.5 text-emerald-400/70">
                       <CheckCircle2 className="h-3.5 w-3.5" />Resolved
                     </span>
@@ -211,7 +211,7 @@ const ForumThread: React.FC = () => {
                 )}
               </div>
 
-              <h1 className="mt-3 text-[26px] font-semibold leading-tight tracking-tight text-white/92">{thread.title}</h1>
+              <h1 className="mt-3 text-[26px] font-semibold leading-tight tracking-tight text-white">{thread.title}</h1>
 
               <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
                 {thread.tags.map((t) => (
@@ -221,7 +221,7 @@ const ForumThread: React.FC = () => {
 
               <button
                 type="button" onClick={copyCitation}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 font-mono text-[11.5px] text-white/45 transition-colors hover:border-white/[0.16] hover:text-white/70"
+                className="cursor-pointer mt-4 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-[#060608] px-2.5 py-1.5 font-mono text-[11.5px] text-[#a8a8b1] transition-colors hover:border-white/[0.15] hover:text-[#e5e5e9]"
               >
                 {copied ? <Check className="h-3 w-3 text-emerald-400/80" /> : <Link2 className="h-3 w-3" />}
                 /forum/t/{thread.shortId}
@@ -231,7 +231,7 @@ const ForumThread: React.FC = () => {
             </header>
 
             {actionError && (
-              <div className="mt-4 rounded-lg border border-red-500/25 bg-red-500/[0.04] px-3.5 py-2.5 text-[13px] text-red-300/90">
+              <div className="mt-4 rounded-md border border-red-500/25 bg-red-500/[0.04] px-3.5 py-2.5 text-[13px] text-red-300/90">
                 {actionError}
               </div>
             )}
@@ -242,8 +242,8 @@ const ForumThread: React.FC = () => {
                 return (
                   <article
                     key={post.id}
-                    className={`rounded-xl border px-5 py-4 ${
-                      accepted ? 'border-emerald-500/20 bg-emerald-500/[0.03]' : 'border-white/[0.07] bg-white/[0.015]'
+                    className={`rounded-md border px-5 py-4 ${
+                      accepted ? 'border-emerald-500/20 bg-emerald-500/[0.03]' : 'border-white/[0.08] bg-white/[0.015]'
                     }`}
                   >
                     <div className="flex gap-4">
@@ -255,9 +255,9 @@ const ForumThread: React.FC = () => {
                       />
 
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-white/[0.06] pb-3">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-white/[0.08] pb-3">
                           <AuthorBadge author={post.author} size="md" />
-                          <span className="text-[12px] text-white/25">{relativeTime(post.createdAt)} ago</span>
+                          <span className="text-[12px] text-[#57575e]">{relativeTime(post.createdAt)} ago</span>
                           {accepted && (
                             <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-emerald-400/80">
                               <CheckCircle2 className="h-3.5 w-3.5" />Accepted answer
@@ -270,14 +270,14 @@ const ForumThread: React.FC = () => {
                               accepted ? (
                                 <button
                                   type="button" onClick={() => act(() => api.unacceptAnswer(post.id))}
-                                  className="text-[11.5px] text-white/35 transition-colors hover:text-white/70"
+                                  className="cursor-pointer text-[11.5px] text-[#79797f] transition-colors hover:text-[#e5e5e9]"
                                 >
                                   unaccept
                                 </button>
                               ) : (
                                 <button
                                   type="button" onClick={() => act(() => api.acceptAnswer(post.id))}
-                                  className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.12] px-2.5 py-1 text-[11.5px] text-white/60 transition-colors hover:border-emerald-500/40 hover:text-emerald-400/90"
+                                  className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-white/[0.12] px-2.5 py-1 text-[11.5px] text-[#a8a8b1] transition-colors hover:border-emerald-500/40 hover:text-emerald-400/90"
                                 >
                                   <CheckCircle2 className="h-3 w-3" />Accept
                                 </button>
@@ -291,7 +291,7 @@ const ForumThread: React.FC = () => {
                                   if (reason) act(() => api.flag('posts', post.id, reason.trim()));
                                 }}
                                 aria-label="Flag for review"
-                                className="text-white/20 transition-colors hover:text-white/50"
+                                className="cursor-pointer text-[#57575e] transition-colors hover:text-[#a8a8b1]"
                               >
                                 <Flag className="h-3 w-3" />
                               </button>
@@ -315,7 +315,7 @@ const ForumThread: React.FC = () => {
             <div className="mt-8">
               {signedIn ? (
                 <form onSubmit={submitReply}>
-                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
+                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">
                     {thread.space?.kind === 'qa' ? 'Your answer' : 'Your reply'}
                   </label>
                   <textarea
@@ -325,23 +325,23 @@ const ForumThread: React.FC = () => {
                     placeholder={thread.space?.kind === 'qa'
                       ? "Answer the question. If you're guessing, say so."
                       : 'Add to the thread.'}
-                    className="w-full resize-y rounded-lg border border-white/[0.09] bg-white/[0.02] px-3.5 py-3 font-mono text-[13px] leading-relaxed text-white/85 outline-none transition-colors placeholder:text-white/25 focus:border-white/20"
+                    className="w-full resize-y rounded-md border border-white/10 bg-white/[0.02] px-3.5 py-3 font-mono text-[13px] leading-relaxed text-[#e5e5e9] outline-none transition-colors placeholder:text-[#57575e] focus:border-white/[0.15]"
                   />
                   <div className="mt-3 flex items-center gap-3">
                     <button
                       type="submit"
                       disabled={posting || !reply.trim()}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-white/20 px-4 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex h-9 items-center gap-2 rounded-md border border-white/[0.15] px-4 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {posting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                       {thread.space?.kind === 'qa' ? 'Post answer' : 'Reply'}
                     </button>
-                    <span className="text-[11.5px] text-white/30">Markdown supported. HTML is escaped.</span>
+                    <span className="text-[11.5px] text-[#79797f]">Markdown supported. HTML is escaped.</span>
                   </div>
                 </form>
               ) : (
-                <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-[12.5px] text-white/40">
-                  <a href="/auth" className="text-white/70 underline underline-offset-2 hover:text-white">Sign in</a>{' '}
+                <div className="rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[12.5px] text-[#79797f]">
+                  <a href="/auth" className="text-[#e5e5e9] underline underline-offset-2 hover:text-white">Sign in</a>{' '}
                   to answer. Reading never requires an account.
                 </div>
               )}
@@ -350,33 +350,33 @@ const ForumThread: React.FC = () => {
 
             {/* Metadata rail — the width earns its keep instead of sitting empty. */}
             <aside className="space-y-6 lg:pt-6">
-              <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
-                <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Thread</h2>
+              <div className="rounded-md border border-white/10 bg-[#060608] p-4">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">Thread</h2>
                 <dl className="mt-3 space-y-2 text-[12px]">
                   <div className="flex justify-between gap-3">
-                    <dt className="text-white/35">Status</dt>
-                    <dd className={thread.isResolved ? 'text-emerald-400/80' : 'text-white/60'}>
+                    <dt className="text-[#79797f]">Status</dt>
+                    <dd className={thread.isResolved ? 'text-emerald-400/80' : 'text-[#a8a8b1]'}>
                       {thread.isResolved ? 'Resolved' : 'Open'}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="text-white/35">Replies</dt>
-                    <dd className="text-white/60">{Math.max(0, thread.postCount - 1)}</dd>
+                    <dt className="text-[#79797f]">Replies</dt>
+                    <dd className="text-[#a8a8b1]">{Math.max(0, thread.postCount - 1)}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="text-white/35">Asked</dt>
-                    <dd className="text-white/60">{relativeTime(thread.createdAt)} ago</dd>
+                    <dt className="text-[#79797f]">Asked</dt>
+                    <dd className="text-[#a8a8b1]">{relativeTime(thread.createdAt)} ago</dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="text-white/35">Space</dt>
-                    <dd className="truncate text-white/60">{thread.space?.name}</dd>
+                    <dt className="text-[#79797f]">Space</dt>
+                    <dd className="truncate text-[#a8a8b1]">{thread.space?.name}</dd>
                   </div>
                 </dl>
               </div>
 
               {thread.tags.length > 0 && (
                 <div>
-                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Tags</h2>
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">Tags</h2>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {thread.tags.map((t) => (
                       <Link key={t} to={`/forum?tag=${encodeURIComponent(t)}`}><TagChip tag={t} interactive /></Link>
@@ -385,12 +385,12 @@ const ForumThread: React.FC = () => {
                 </div>
               )}
 
-              <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
-                <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Cite this</h2>
-                <p className="mt-2 text-[11.5px] leading-relaxed text-white/35">
+              <div className="rounded-md border border-white/10 bg-[#060608] p-4">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">Cite this</h2>
+                <p className="mt-2 text-[11.5px] leading-relaxed text-[#79797f]">
                   The id is permanent. Retitling never breaks it.
                 </p>
-                <code className="mt-2 block break-all rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white/50">
+                <code className="mt-2 block break-all rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-[#a8a8b1]">
                   /forum/t/{thread.shortId}
                 </code>
               </div>

@@ -62,8 +62,8 @@ function InlineComposer({ spaces, onPosted }: { spaces: ForumSpace[]; onPosted: 
 
   if (!api.isSignedIn()) {
     return (
-      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-[13px] text-white/45">
-        <a href="/auth" className="text-white/75 underline underline-offset-2 hover:text-white">Sign in</a>{' '}
+      <div className="rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[13px] text-[#a8a8b1]">
+        <a href="/auth" className="text-[#e5e5e9] underline underline-offset-2 hover:text-white">Sign in</a>{' '}
         to post. Reading never needs an account.
       </div>
     );
@@ -74,10 +74,10 @@ function InlineComposer({ spaces, onPosted }: { spaces: ForumSpace[]; onPosted: 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-left transition-colors hover:border-white/[0.14] hover:bg-white/[0.035]"
+        className="cursor-pointer flex w-full items-center gap-3 rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-left transition-colors hover:border-white/[0.15] hover:bg-white/[0.05]"
       >
-        <PenLine className="h-4 w-4 shrink-0 text-white/30" />
-        <span className="text-[14px] text-white/35">{prompt}</span>
+        <PenLine className="h-4 w-4 shrink-0 text-[#79797f]" />
+        <span className="text-[14px] text-[#79797f]">{prompt}</span>
       </button>
     );
   }
@@ -95,15 +95,15 @@ function InlineComposer({ spaces, onPosted }: { spaces: ForumSpace[]; onPosted: 
   };
 
   return (
-    <form onSubmit={submit} className="rounded-xl border border-white/[0.12] bg-white/[0.03] p-4">
+    <form onSubmit={submit} className="rounded-md border border-white/[0.15] bg-[#060608] p-4">
       <div className="flex items-center gap-2">
         <select
           value={space} onChange={(e) => setSpace(e.target.value)}
-          className="cursor-pointer rounded-md border border-white/[0.09] bg-[#0f0f0f] px-2.5 py-1.5 text-[12.5px] text-white/70 outline-none"
+          className="cursor-pointer rounded-md border border-white/10 bg-[#101011] px-2.5 py-1.5 text-[12.5px] text-[#e5e5e9] outline-none"
         >
           {postable.map((s) => <option key={s.slug} value={s.slug}>{s.name}</option>)}
         </select>
-        <span className="text-[11.5px] text-white/25">
+        <span className="text-[11.5px] text-[#57575e]">
           {active?.kind === 'qa' ? 'answers can be accepted here' : 'no accepted answer in this space'}
         </span>
       </div>
@@ -111,27 +111,27 @@ function InlineComposer({ spaces, onPosted }: { spaces: ForumSpace[]; onPosted: 
       <input
         autoFocus value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300}
         placeholder={prompt}
-        className="mt-3 w-full bg-transparent text-[17px] text-white/90 outline-none placeholder:text-white/25"
+        className="mt-3 w-full bg-transparent text-[17px] text-white outline-none placeholder:text-[#57575e]"
       />
       <textarea
         value={body} onChange={(e) => setBody(e.target.value)} rows={4}
         placeholder="Add the detail that makes it answerable — version, exact error, what you tried."
-        className="mt-2 w-full resize-y bg-transparent text-[14px] leading-relaxed text-white/75 outline-none placeholder:text-white/25"
+        className="mt-2 w-full resize-y bg-transparent text-[14px] leading-relaxed text-[#e5e5e9] outline-none placeholder:text-[#57575e]"
       />
 
       {error && <div className="mb-2 text-[12.5px] text-red-300/90">{error}</div>}
 
-      <div className="flex items-center justify-between border-t border-white/[0.07] pt-3">
-        <Link to="/forum/new" className="text-[12px] text-white/35 transition-colors hover:text-white/70">
+      <div className="flex items-center justify-between border-t border-white/[0.08] pt-3">
+        <Link to="/forum/new" className="text-[12px] text-[#79797f] transition-colors hover:text-[#e5e5e9]">
           Full composer — tags, and a duplicate check
         </Link>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setOpen(false)} className="text-[13px] text-white/40 hover:text-white/70">
+          <button type="button" onClick={() => setOpen(false)} className="cursor-pointer text-[13px] text-[#79797f] hover:text-[#e5e5e9]">
             Cancel
           </button>
           <button
             type="submit" disabled={busy || !title.trim() || !body.trim()}
-            className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-5 text-[13px] font-semibold text-black transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-white/[0.15] bg-white/[0.15] px-5 text-[13px] font-semibold text-white transition-colors hover:bg-white/[0.25] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Post
@@ -159,29 +159,29 @@ function PostCard({ thread, why }: { thread: ForumThreadSummary; why?: string })
   const replies = Math.max(0, thread.postCount - 1);
 
   return (
-    <article className="border-b border-white/[0.06] transition-colors hover:bg-white/[0.015]">
+    <article className="border-b border-white/[0.08] transition-colors hover:bg-white/[0.05]">
       <Link to={thread.url} onClick={() => api.markOpened(thread.shortId)} className="block px-4 py-4">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]">
           <AuthorBadge author={thread.author} />
-          <span className="text-white/20">·</span>
-          <span className="text-white/35">{relativeTime(thread.createdAt)} ago</span>
+          <span className="text-[#57575e]">·</span>
+          <span className="text-[#79797f]">{relativeTime(thread.createdAt)} ago</span>
           {thread.space && (
             <>
-              <span className="text-white/20">·</span>
-              <span className="text-white/40">{thread.space.name}</span>
+              <span className="text-[#57575e]">·</span>
+              <span className="text-[#79797f]">{thread.space.name}</span>
             </>
           )}
         </div>
 
         {/* Why this is on your feed — D11. Never present on the Record. */}
         {why && (
-          <div className="mt-1.5 inline-flex items-center gap-1.5 text-[11.5px] text-white/40">
+          <div className="mt-1.5 inline-flex items-center gap-1.5 text-[11.5px] text-[#79797f]">
             <Info className="h-3 w-3" />
             {why}
           </div>
         )}
 
-        <h3 className="mt-1.5 text-[16px] font-medium leading-snug text-white/90">
+        <h3 className="mt-1.5 text-[16px] font-medium leading-snug text-white">
           {thread.title}
         </h3>
 
@@ -192,7 +192,7 @@ function PostCard({ thread, why }: { thread: ForumThreadSummary; why?: string })
         )}
 
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px]">
-          <span className="inline-flex items-center gap-1.5 text-white/35">
+          <span className="inline-flex items-center gap-1.5 text-[#79797f]">
             <MessageSquare className="h-3.5 w-3.5" />
             {replies} {replies === 1 ? 'reply' : 'replies'}
           </span>
@@ -211,7 +211,7 @@ function PostCard({ thread, why }: { thread: ForumThreadSummary; why?: string })
             </span>
           )}
 
-          {thread.source && <span className="text-white/20">from the engineering log</span>}
+          {thread.source && <span className="text-[#57575e]">from the engineering log</span>}
         </div>
       </Link>
     </article>
@@ -240,7 +240,8 @@ const Forum: React.FC = () => {
   const [queryInput, setQueryInput] = useState('');
   const [searchResults, setSearchResults] = useState<ForumThreadSummary[] | null>(null);
 
-  const signedIn = api.isSignedIn();
+  const [signedOut, setSignedOut] = useState(false);
+  const signedIn = api.isSignedIn() && !signedOut;
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -267,7 +268,13 @@ const Forum: React.FC = () => {
     setFeedLoading(true); setFeedError(null);
     api.getFeed(feedRanker)
       .then((r) => { if (cancelled) return; setFeedItems(r.items || []); setFeedRankers(r.rankers || {}); })
-      .catch((e) => { if (!cancelled) setFeedError(e.message || 'Could not load your feed.'); })
+      .catch((e) => {
+        if (cancelled) return;
+        // 401 = the token was stale and api.ts has just cleared it. That is not an
+        // error to show; it means "you are signed out", so fall back to that view.
+        if (e?.status === 401) { setSignedOut(true); setFeedItems([]); return; }
+        setFeedError(e.message || 'Could not load your feed.');
+      })
       .finally(() => { if (!cancelled) setFeedLoading(false); });
     return () => { cancelled = true; };
   }, [surface, feedRanker, signedIn, reloadKey]);
@@ -328,17 +335,17 @@ const Forum: React.FC = () => {
         rightRail={rightRail}
       >
         {/* Sticky surface switcher — the tab bar every social shell has */}
-        <div className="sticky top-[56px] z-10 -mx-4 mb-4 border-b border-white/[0.07] bg-[#060606]/85 px-4 backdrop-blur-xl">
+        <div className="sticky top-[56px] z-10 -mx-4 mb-4 border-b border-white/[0.08] bg-[#08080a]/85 px-4 backdrop-blur-xl">
           <div className="flex">
             {([['record', 'The Record', Layers], ['feed', 'For you', Sparkles]] as const).map(([key, label, Icon]) => (
               <button
                 key={key} type="button" onClick={() => setSurface(key as any)}
-                className={`relative flex-1 px-4 py-3.5 text-[14px] transition-colors ${
-                  surface === key ? 'font-semibold text-white' : 'text-white/45 hover:bg-white/[0.03] hover:text-white/75'
+                className={`cursor-pointer relative flex-1 px-4 py-3.5 text-[14px] transition-colors ${
+                  surface === key ? 'font-semibold text-white' : 'text-[#a8a8b1] hover:bg-white/[0.05] hover:text-[#e5e5e9]'
                 }`}
               >
                 <span className="inline-flex items-center gap-2"><Icon className="h-4 w-4" />{label}</span>
-                {surface === key && <span className="absolute inset-x-6 bottom-0 h-[3px] rounded-full bg-white" />}
+                {surface === key && <span className="absolute inset-x-6 bottom-0 h-[3px] rounded-md bg-white" />}
               </button>
             ))}
           </div>
@@ -351,8 +358,8 @@ const Forum: React.FC = () => {
 
           {surface === 'feed' ? (
             !signedIn ? (
-              <div className="mx-4 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-[13px] text-white/45">
-                <a href="/auth" className="text-white/75 underline underline-offset-2 hover:text-white">Sign in</a>{' '}
+              <div className="mx-4 rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[13px] text-[#a8a8b1]">
+                <a href="/auth" className="text-[#e5e5e9] underline underline-offset-2 hover:text-white">Sign in</a>{' '}
                 for a personal feed. The Record is readable by anyone.
               </div>
             ) : (
@@ -361,24 +368,24 @@ const Forum: React.FC = () => {
                   {Object.entries(feedRankers).map(([key, label]) => (
                     <button
                       key={key} type="button" onClick={() => setFeedRanker(key)}
-                      className={`rounded-full px-3 py-1.5 text-[12.5px] transition-colors ${
-                        feedRanker === key ? 'bg-white/[0.10] text-white' : 'text-white/45 hover:text-white/75'
+                      className={`cursor-pointer rounded-md px-3 py-1.5 text-[12.5px] transition-colors ${
+                        feedRanker === key ? 'bg-white/[0.15] text-white' : 'text-[#a8a8b1] hover:text-[#e5e5e9]'
                       }`}
                     >
                       {label}
                     </button>
                   ))}
                 </div>
-                <p className="flex items-start gap-2 px-4 text-[11.5px] leading-relaxed text-white/30">
+                <p className="flex items-start gap-2 px-4 text-[11.5px] leading-relaxed text-[#79797f]">
                   <Info className="mt-0.5 h-3 w-3 shrink-0" />
                   Ranked to get questions answered, not to keep you scrolling. Every item says why
                   it is here, and anything you have read drops away.
                 </p>
                 {feedError && <div className="mx-4 text-[13px] text-red-300/90">{feedError}</div>}
                 {feedLoading ? (
-                  <div className="py-16 text-center text-[13px] text-white/30">Loading…</div>
+                  <div className="py-16 text-center text-[13px] text-[#79797f]">Loading…</div>
                 ) : feedItems.length === 0 ? (
-                  <div className="py-16 text-center text-[13px] text-white/30">Nothing needs you right now.</div>
+                  <div className="py-16 text-center text-[13px] text-[#79797f]">Nothing needs you right now.</div>
                 ) : (
                   <div>{feedItems.map((i) => <PostCard key={i.shortId} thread={i} why={i.why} />)}</div>
                 )}
@@ -387,28 +394,28 @@ const Forum: React.FC = () => {
           ) : (
             <>
               <div className="flex items-center justify-between px-4">
-                <span className="text-[12.5px] text-white/40">
+                <span className="text-[12.5px] text-[#79797f]">
                   {searchResults ? `${searchResults.length} results` : activeSpace ? activeSpace.name : 'Everything'}
                   {tag && (
-                    <> · <button type="button" onClick={() => setParam('tag', '')} className="underline underline-offset-2">{tag} ×</button></>
+                    <> · <button type="button" onClick={() => setParam('tag', '')} className="cursor-pointer underline underline-offset-2">{tag} ×</button></>
                   )}
                 </span>
                 <select
                   value={sort} onChange={(e) => setParam('sort', e.target.value)}
-                  className="cursor-pointer rounded-md border border-white/[0.09] bg-[#0f0f0f] px-2.5 py-1.5 text-[12px] text-white/60 outline-none hover:text-white/85"
+                  className="cursor-pointer rounded-md border border-white/10 bg-[#101011] px-2.5 py-1.5 text-[12px] text-[#a8a8b1] outline-none hover:text-[#e5e5e9]"
                 >
                   {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                 </select>
               </div>
 
               {activeSpace && !searchResults && (
-                <p className="px-4 text-[12.5px] leading-relaxed text-white/35">{activeSpace.description}</p>
+                <p className="px-4 text-[12.5px] leading-relaxed text-[#79797f]">{activeSpace.description}</p>
               )}
 
               {loading ? (
-                <div className="py-16 text-center text-[13px] text-white/30">Loading…</div>
+                <div className="py-16 text-center text-[13px] text-[#79797f]">Loading…</div>
               ) : visible.length === 0 ? (
-                <div className="py-16 text-center text-[13px] text-white/30">Nothing here yet.</div>
+                <div className="py-16 text-center text-[13px] text-[#79797f]">Nothing here yet.</div>
               ) : (
                 <div>{visible.map((t) => <PostCard key={t.shortId} thread={t} />)}</div>
               )}

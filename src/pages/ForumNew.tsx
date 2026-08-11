@@ -162,11 +162,11 @@ const ForumNew: React.FC = () => {
   const copy = (activeSpace && COMPOSE_COPY[activeSpace.kind]) || DEFAULT_COPY;
 
   return (
-    <div className="min-h-screen bg-[#060606] text-white">
+    <div className="min-h-screen bg-[#08080a] text-white">
       <Header onGetStarted={() => { window.location.href = '/auth'; }} />
 
       <main className="page-gutter w-full pb-20 pt-28">
-        <Link to="/forum" className="inline-flex items-center gap-2 text-[13px] text-white/40 transition-colors hover:text-white/70">
+        <Link to="/forum" className="inline-flex items-center gap-2 text-[13px] text-[#79797f] transition-colors hover:text-[#e5e5e9]">
           <ArrowLeft className="h-3.5 w-3.5" />
           Forum
         </Link>
@@ -174,15 +174,15 @@ const ForumNew: React.FC = () => {
         <h1 className="mt-6 text-[26px] font-semibold tracking-tight">{copy.heading}</h1>
 
         {!signedIn ? (
-          <div className="mt-8 rounded-xl border border-white/[0.08] bg-white/[0.02] p-6">
-            <p className="text-[14px] text-white/60">You need an account to post.</p>
+          <div className="mt-8 rounded-md border border-white/10 bg-[#060608] p-6">
+            <p className="text-[14px] text-[#a8a8b1]">You need an account to post.</p>
             <a
               href="/auth"
-              className="mt-4 inline-flex h-9 items-center rounded-md border border-white/20 px-4 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]"
+              className="mt-4 inline-flex h-9 items-center rounded-md border border-white/[0.15] px-4 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.05]"
             >
               Sign in
             </a>
-            <p className="mt-4 text-[12px] text-white/35">
+            <p className="mt-4 text-[12px] text-[#79797f]">
               Reading the forum never requires an account — only posting does.
             </p>
           </div>
@@ -191,22 +191,22 @@ const ForumNew: React.FC = () => {
             <div className="min-w-0 max-w-[72ch] space-y-6">
             {/* Space */}
             <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Space</label>
+              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">Space</label>
               <select
                 value={space}
                 onChange={(e) => setSpace(e.target.value)}
-                className="w-full cursor-pointer rounded-lg border border-white/[0.09] bg-[#0f0f0f] px-3 py-2.5 text-[14px] text-white/85 outline-none transition-colors focus:border-white/20"
+                className="w-full cursor-pointer rounded-md border border-white/10 bg-[#101011] px-3 py-2.5 text-[14px] text-[#e5e5e9] outline-none transition-colors focus:border-white/[0.15]"
               >
                 {spaces.map((s) => <option key={s.slug} value={s.slug}>{s.name}</option>)}
               </select>
               {activeSpace && (
-                <p className="mt-2 text-[12px] leading-relaxed text-white/35">{activeSpace.description}</p>
+                <p className="mt-2 text-[12px] leading-relaxed text-[#79797f]">{activeSpace.description}</p>
               )}
             </div>
 
             {/* Title */}
             <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
+              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">
                 {copy.titleLabel}
               </label>
               <input
@@ -214,10 +214,10 @@ const ForumNew: React.FC = () => {
                 onChange={(e) => { setTitle(e.target.value); runDedup(e.target.value); }}
                 placeholder={copy.titlePlaceholder}
                 maxLength={300}
-                className="w-full rounded-lg border border-white/[0.09] bg-white/[0.02] px-3.5 py-2.5 text-[14px] text-white/85 outline-none transition-colors placeholder:text-white/25 focus:border-white/20"
+                className="w-full rounded-md border border-white/10 bg-white/[0.02] px-3.5 py-2.5 text-[14px] text-[#e5e5e9] outline-none transition-colors placeholder:text-[#57575e] focus:border-white/[0.15]"
               />
               {checkingDupes && (
-                <p className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-white/30">
+                <p className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-[#79797f]">
                   <Loader2 className="h-3 w-3 animate-spin" /> checking whether this is already answered…
                 </p>
               )}
@@ -230,7 +230,7 @@ const ForumNew: React.FC = () => {
               question costs more than a duplicate thread.
             */}
             {duplicates.length > 0 && (
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4">
+              <div className="rounded-md border border-amber-500/20 bg-amber-500/[0.03] p-4">
                 <div className="flex items-center gap-2 text-[12.5px] font-medium text-amber-400/80">
                   <AlertTriangle className="h-3.5 w-3.5" />
                   This may already be answered
@@ -240,7 +240,7 @@ const ForumNew: React.FC = () => {
                     <li key={d.shortId}>
                       <Link
                         to={d.url}
-                        className="block rounded-md px-2 py-1.5 text-[13px] text-white/65 transition-colors hover:bg-white/[0.04] hover:text-white"
+                        className="block rounded-md px-2 py-1.5 text-[13px] text-[#a8a8b1] transition-colors hover:bg-white/[0.05] hover:text-white"
                       >
                         {d.title}
                         {d.isResolved && <span className="ml-2 text-[11px] text-emerald-400/70">resolved</span>}
@@ -248,7 +248,7 @@ const ForumNew: React.FC = () => {
                     </li>
                   ))}
                 </ul>
-                <p className="mt-3 text-[11.5px] text-white/35">
+                <p className="mt-3 text-[11.5px] text-[#79797f]">
                   If one of these answers it, read that instead — it keeps the answer in one place.
                   If yours is genuinely different, carry on.
                 </p>
@@ -257,7 +257,7 @@ const ForumNew: React.FC = () => {
 
             {/* Body */}
             <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
+              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">
                 {copy.bodyLabel}
               </label>
               <textarea
@@ -265,25 +265,25 @@ const ForumNew: React.FC = () => {
                 onChange={(e) => setBody(e.target.value)}
                 rows={12}
                 placeholder={copy.bodyPlaceholder}
-                className="w-full resize-y rounded-lg border border-white/[0.09] bg-white/[0.02] px-3.5 py-3 font-mono text-[13px] leading-relaxed text-white/85 outline-none transition-colors placeholder:text-white/25 focus:border-white/20"
+                className="w-full resize-y rounded-md border border-white/10 bg-white/[0.02] px-3.5 py-3 font-mono text-[13px] leading-relaxed text-[#e5e5e9] outline-none transition-colors placeholder:text-[#57575e] focus:border-white/[0.15]"
               />
-              <p className="mt-2 text-[11.5px] text-white/30">Markdown supported. HTML is escaped, not rendered.</p>
+              <p className="mt-2 text-[11.5px] text-[#79797f]">Markdown supported. HTML is escaped, not rendered.</p>
             </div>
 
             {/* Tags */}
             <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
+              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">
                 Tags
               </label>
               <input
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 placeholder="product:canvas  kind:bug  version:0.36.0"
-                className="w-full rounded-lg border border-white/[0.09] bg-white/[0.02] px-3.5 py-2.5 font-mono text-[13px] text-white/85 outline-none transition-colors placeholder:text-white/25 focus:border-white/20"
+                className="w-full rounded-md border border-white/10 bg-white/[0.02] px-3.5 py-2.5 font-mono text-[13px] text-[#e5e5e9] outline-none transition-colors placeholder:text-[#57575e] focus:border-white/[0.15]"
               />
-              <p className="mt-2 text-[11.5px] text-white/30">
-                Namespaced: <code className="text-white/45">product:</code>, <code className="text-white/45">version:</code>,{' '}
-                <code className="text-white/45">topic:</code>, <code className="text-white/45">kind:</code>. The namespace is
+              <p className="mt-2 text-[11.5px] text-[#79797f]">
+                Namespaced: <code className="text-[#a8a8b1]">product:</code>, <code className="text-[#a8a8b1]">version:</code>,{' '}
+                <code className="text-[#a8a8b1]">topic:</code>, <code className="text-[#a8a8b1]">kind:</code>. The namespace is
                 what lets a thread reach the right people and the right product page.
               </p>
               {tags.length > 0 && (
@@ -294,7 +294,7 @@ const ForumNew: React.FC = () => {
             </div>
 
             {error && (
-              <div className="rounded-lg border border-red-500/25 bg-red-500/[0.04] px-3.5 py-2.5 text-[13px] text-red-300/90">
+              <div className="rounded-md border border-red-500/25 bg-red-500/[0.04] px-3.5 py-2.5 text-[13px] text-red-300/90">
                 {error}
               </div>
             )}
@@ -303,25 +303,25 @@ const ForumNew: React.FC = () => {
               <button
                 type="submit"
                 disabled={submitting || !title.trim() || !body.trim()}
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-white/20 px-5 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-white/[0.15] px-5 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 {copy.verb}
               </button>
-              <Link to="/forum" className="text-[13px] text-white/40 transition-colors hover:text-white/70">Cancel</Link>
+              <Link to="/forum" className="text-[13px] text-[#79797f] transition-colors hover:text-[#e5e5e9]">Cancel</Link>
             </div>
             </div>
 
             <aside className="space-y-4 lg:pt-7">
-              <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
-                <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
+              <div className="rounded-md border border-white/10 bg-[#060608] p-4">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">
                   {copy.guidanceTitle}
                 </h2>
-                <ul className="mt-3 space-y-2.5 text-[12px] leading-relaxed text-white/45">
+                <ul className="mt-3 space-y-2.5 text-[12px] leading-relaxed text-[#a8a8b1]">
                   {copy.guidance.map((g) => <li key={g}>{g}</li>)}
                 </ul>
               </div>
-              <p className="px-1 text-[11.5px] leading-relaxed text-white/25">
+              <p className="px-1 text-[11.5px] leading-relaxed text-[#57575e]">
                 {activeSpace?.kind === 'qa'
                   ? 'Answers can be accepted, so a good question keeps paying out long after you have moved on.'
                   : 'Everything here is permanent and searchable — written once, found for years.'}

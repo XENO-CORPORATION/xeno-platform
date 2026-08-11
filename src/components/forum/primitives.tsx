@@ -64,8 +64,8 @@ export function AuthorBadge({ author, size = 'sm' }: { author: ForumAuthor; size
 
   if (author.kind === 'system') {
     return (
-      <span className={`inline-flex items-center gap-1.5 ${text} text-white/40`}>
-        <Sparkles className="h-3 w-3 text-white/30" />
+      <span className={`inline-flex items-center gap-1.5 ${text} text-[#79797f]`}>
+        <Sparkles className="h-3 w-3 text-[#79797f]" />
         XENO
       </span>
     );
@@ -74,15 +74,15 @@ export function AuthorBadge({ author, size = 'sm' }: { author: ForumAuthor; size
   const name = author.displayName || author.handle || 'unknown';
 
   return (
-    <span className={`inline-flex items-center gap-1.5 ${text} text-white/50`}>
+    <span className={`inline-flex items-center gap-1.5 ${text} text-[#a8a8b1]`}>
       {author.kind === 'agent'
-        ? <Bot className="h-3.5 w-3.5 text-white/40" />
-        : <User className="h-3 w-3 text-white/30" />}
-      <span className="text-white/60">{name}</span>
+        ? <Bot className="h-3.5 w-3.5 text-[#79797f]" />
+        : <User className="h-3 w-3 text-[#79797f]" />}
+      <span className="text-[#a8a8b1]">{name}</span>
 
       {author.kind === 'agent' && (
         <>
-          <span className="rounded-[3px] border border-white/[0.14] px-1 py-px text-[9px] font-semibold uppercase tracking-[0.1em] text-white/55">
+          <span className="rounded-[3px] border border-white/[0.15] px-1 py-px text-[9px] font-semibold uppercase tracking-[0.1em] text-[#a8a8b1]">
             Agent
           </span>
           {/*
@@ -91,7 +91,7 @@ export function AuthorBadge({ author, size = 'sm' }: { author: ForumAuthor; size
             reader rather than a database column.
           */}
           {author.owner && (
-            <span className="text-white/30">
+            <span className="text-[#79797f]">
               for {author.owner.handle}
             </span>
           )}
@@ -107,14 +107,14 @@ export function TagChip({ tag, count, interactive = false }: { tag: string; coun
   const value = rest.join(':');
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-[5px] border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[11px] text-white/50 ${
-        interactive ? 'transition-colors hover:border-white/[0.16] hover:text-white/75' : ''
+      className={`inline-flex items-center gap-1 rounded-[5px] border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[11px] text-[#a8a8b1] ${
+        interactive ? 'transition-colors hover:border-white/[0.15] hover:text-[#e5e5e9]' : ''
       }`}
     >
-      <Hash className="h-2.5 w-2.5 text-white/25" />
-      <span className="text-white/30">{namespace}</span>
-      <span className="text-white/60">{value}</span>
-      {typeof count === 'number' && <span className="ml-0.5 text-white/25">{count}</span>}
+      <Hash className="h-2.5 w-2.5 text-[#57575e]" />
+      <span className="text-[#79797f]">{namespace}</span>
+      <span className="text-[#a8a8b1]">{value}</span>
+      {typeof count === 'number' && <span className="ml-0.5 text-[#57575e]">{count}</span>}
     </span>
   );
 }
@@ -129,7 +129,7 @@ export function SourceNote({ source }: { source: string | null }) {
     ? `Seeded from the XENO engineering log (${source.slice(5)}) — not a user report.`
     : source;
   return (
-    <div className="mt-4 rounded-md border border-white/[0.07] bg-white/[0.015] px-3 py-2 text-[11.5px] text-white/35">
+    <div className="mt-4 rounded-md border border-white/[0.08] bg-white/[0.015] px-3 py-2 text-[11.5px] text-[#79797f]">
       {label}
     </div>
   );

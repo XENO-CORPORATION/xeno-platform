@@ -17,6 +17,20 @@ export function isSignedIn(): boolean {
   return Boolean(authToken());
 }
 
+/**
+ * A 401 means the token we are holding is no longer valid — expired, revoked, or
+ * from a suspended account. Holding a stale token is indistinguishable from being
+ * signed out as far as the UI is concerned, so treat it that way instead of
+ * rendering an error the user can do nothing about.
+ *
+ * (This is what put `GET /api/forum/feed 401` in the console: isSignedIn() was
+ * true because a token EXISTED, so the feed was requested with a credential the
+ * server had already stopped honouring.)
+ */
+export function clearStaleSession(): void {
+  try { localStorage.removeItem(TOKEN_KEY); } catch { /* storage unavailable */ }
+}
+
 export interface ForumApiError extends Error {
   status: number;
   /** Machine-readable code from the server (`registration_closed`, `rate_limited`, …). */
@@ -38,6 +52,11 @@ async function request<T>(path: string, init: RequestInit = {}, withAuth = false
   try { body = await res.json(); } catch { /* non-JSON error page */ }
 
   if (!res.ok || body?.success === false) {
+    // An authenticated request rejected as unauthenticated means the stored token
+    // is dead. Drop it so the UI falls back to the signed-out state rather than
+    // retrying a credential the server will never accept.
+    if (withAuth && res.status === 401) clearStaleSession();
+
     const error = new Error(
       body?.error || `Request failed (${res.status})`,
     ) as ForumApiError;
