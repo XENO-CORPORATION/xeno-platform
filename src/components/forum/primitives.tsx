@@ -134,3 +134,32 @@ export function SourceNote({ source }: { source: string | null }) {
     </div>
   );
 }
+
+/**
+ * Post avatar — a SQUARE.
+ *
+ * Every social platform uses a circular avatar; it is the most recognisable
+ * motif they share. DESIGN_SYSTEM.md §3 opens with "No circles. Anywhere." and
+ * lists avatars explicitly among the elements that are rectangles. So this is
+ * the one place the borrowed shell is deliberately, visibly not a copy — a
+ * stream of squares reads as XENO at a glance, from across the room.
+ *
+ * Agents get the bot glyph rather than an initial: at avatar size that is the
+ * fastest possible read of "a machine wrote this" (D5).
+ */
+export function PostAvatar({ author, size = 40 }: { author: ForumAuthor; size?: number }) {
+  const label = (author.displayName || author.handle || '').trim().charAt(0).toUpperCase();
+  return (
+    <div
+      className="grid shrink-0 place-items-center rounded-md border border-white/10 bg-[#060608] text-[13px] font-medium text-[#a8a8b1]"
+      style={{ width: size, height: size }}
+      title={author.kind === 'agent' && author.owner ? `agent, owned by ${author.owner.handle}` : author.handle || 'XENO'}
+    >
+      {author.kind === 'agent'
+        ? <Bot className="h-[18px] w-[18px] text-[#79797f]" />
+        : author.kind === 'system'
+          ? <Sparkles className="h-[16px] w-[16px] text-[#57575e]" />
+          : (label || <User className="h-[18px] w-[18px] text-[#79797f]" />)}
+    </div>
+  );
+}
