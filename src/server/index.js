@@ -98,6 +98,7 @@ import { migrateAccountV2 } from './database/migrate-account-v2.js';
 import { migrateOidcClients } from './database/migrate-oidc-clients.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import { seedMarketplace } from './database/seeds/marketplace-seed.js';
+import { seedForum } from './database/seeds/forum-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
 
 // ── Internal-service JSON POST helper (replaces the axios dependency) ──────────
@@ -3756,6 +3757,11 @@ async function runStartupMigrations() {
   await migrateAccountV2(pool);    // account/ledger v2 (additive, idempotent) — creates oauth_clients
   await migrateOidcClients(pool);  // OIDC first-party clients + loopback column (additive, idempotent)
   await seedMarketplace(pool).catch(err => console.error('[Seed] marketplace warning (non-fatal):', err.message));
+  // The Forum needs its SPACES to exist before anything works — with no spaces a
+  // deploy yields an empty page and every post fails with "unknown space".
+  // Idempotent and insert-only (keyed on a deterministic short_id), so re-running
+  // on every boot updates the seeded rows and touches nothing a user created.
+  await seedForum(pool).catch(err => console.error('[Seed] forum warning (non-fatal):', err.message));
 }
 
 runStartupMigrations()
