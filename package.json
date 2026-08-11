@@ -6,7 +6,7 @@
   "scripts": {
     "start": "vite --host 0.0.0.0 --port 5183",
     "test": "npm run test:release-guard && npm run test:product-pages && npm run test:registration-gate",
-    "test:registration-gate": "node --test scripts/registration-gate.test.mjs",
+    "test:registration-gate": "node --test scripts/registration-gate.test.mjs scripts/client-ip.test.mjs",
     "test:release-guard": "node --test scripts/secret-box.test.mjs scripts/xeno-release.latest-yml.test.mjs scripts/release-guard.test.mjs scripts/publish-cli-releases.test.mjs scripts/amend-release-entry.test.mjs",
     "test:product-pages": "node --test scripts/experimental-notice.test.mjs scripts/product-privacy.test.mjs",
     "server": "powershell -Command \"cd src/server; npm run dev\"",

@@ -15,6 +15,7 @@ import { siteOrigin, siteUrl, mailDomain } from '../config/hosts.js';
 import { addGrant, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail } from '../services/emailService.js';
+import { clientIp } from '../utils/clientIp.js';
 import {
   requireRegistrationOpen,
   assertRegistrationAllowed,
@@ -149,7 +150,7 @@ async function consumeOAuthState(state) {
 }
 
 // Find or create user from OAuth profile
-async function findOrCreateOAuthUser(db, provider, profile) {
+async function findOrCreateOAuthUser(db, provider, profile, req = null) {
   const { id: providerId, email, name, avatar, username } = profile;
 
   // First, check if this OAuth account is already linked
@@ -252,15 +253,30 @@ async function findOrCreateOAuthUser(db, provider, profile) {
   // Log security event
   try {
     await db.query(
-      `INSERT INTO security_events (user_id, event_type, metadata, created_at)
-       VALUES ($1, $2, $3, NOW())`,
-      [user.id, isNew ? 'oauth_signup' : 'oauth_login', JSON.stringify({ provider, providerId })]
+      `INSERT INTO security_events (user_id, event_type, metadata, ip_address, user_agent, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [
+        user.id,
+        isNew ? 'oauth_signup' : 'oauth_login',
+        JSON.stringify({ provider, providerId }),
+        // These columns existed and were never written, so 160 oauth_signup rows
+        // carry no address and no client. A signup record that cannot say where it
+        // came from is not an audit trail.
+        req ? clientIp(req) : null,
+        req ? req.get('User-Agent') : null,
+      ]
     );
   } catch (e) {
     console.log('Could not log security event:', e.message);
   }
 
   return { user, isNew };
+}
+
+// Thin wrapper: guarantees `req` reaches findOrCreateOAuthUser so the signup's
+// IP and user-agent are recorded. Every OAuth callback must go through this.
+async function findOrCreateOAuthUserWithReq(req, provider, profile) {
+  return findOrCreateOAuthUser(req.db, provider, profile, req);
 }
 
 // JWT secret key (in production, use environment variable)
@@ -318,7 +334,9 @@ async function issueSessionToken(db, user, req) {
     await db.query(
       `INSERT INTO user_sessions (id, user_id, token_hash, expires_at, ip_address, user_agent)
        VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)`,
-      [sid, user.id, hashToken(token), req.ip, req.get('User-Agent')]
+      // clientIp(req), not req.ip: `trust proxy` is set and req.ip STILL resolved to
+      // the Docker bridge gateway for every real session ever recorded here.
+      [sid, user.id, hashToken(token), clientIp(req), req.get('User-Agent')]
     );
     return token;
   } catch (sessionError) {
@@ -1687,7 +1705,7 @@ router.get('/google/callback', async (req, res) => {
     }
 
     // Find or create user
-    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'google', {
+    const { user, isNew } = await findOrCreateOAuthUserWithReq(req, 'google', {
       id: googleUser.id,
       email: googleUser.email,
       name: googleUser.name,
@@ -1823,7 +1841,7 @@ router.get('/github/callback', async (req, res) => {
     }
 
     // Find or create user
-    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'github', {
+    const { user, isNew } = await findOrCreateOAuthUserWithReq(req, 'github', {
       id: String(githubUser.id),
       email: email,
       name: githubUser.name || githubUser.login,
@@ -1947,7 +1965,7 @@ router.get('/twitter/callback', async (req, res) => {
     }
 
     // Find or create user (Twitter doesn't provide email in v2 API by default)
-    const { user, isNew } = await findOrCreateOAuthUser(req.db, 'twitter', {
+    const { user, isNew } = await findOrCreateOAuthUserWithReq(req, 'twitter', {
       id: twitterUser.id,
       email: null, // Twitter v2 API doesn't provide email without elevated access
       name: twitterUser.name,

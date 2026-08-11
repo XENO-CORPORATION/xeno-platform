@@ -166,3 +166,51 @@ test('middleware survives a missing body (no email supplied)', () => {
     assert.equal(r.nextCalled, false);
   });
 });
+
+// --- the time-boxed window (REGISTRATION_OPEN_UNTIL) ------------------------
+//
+// This is the "reopen it until the 28th" mechanism. The whole point is that it
+// closes ITSELF, so these tests care most about the expiry and the malformed
+// cases resolving CLOSED rather than open-forever.
+
+test('window OPEN before the deadline', () => {
+  withEnv({ REGISTRATION_OPEN: undefined, REGISTRATION_OPEN_UNTIL: '2026-08-28' }, () => {
+    assert.equal(isRegistrationOpen(new Date('2026-08-11T12:00:00Z')), true);
+  });
+});
+
+test('a bare date is INCLUSIVE of that whole day (UTC)', () => {
+  withEnv({ REGISTRATION_OPEN: undefined, REGISTRATION_OPEN_UNTIL: '2026-08-28' }, () => {
+    assert.equal(isRegistrationOpen(new Date('2026-08-28T23:59:00Z')), true, 'still open on the day itself');
+    assert.equal(isRegistrationOpen(new Date('2026-08-29T00:00:01Z')), false, 'closed the next day');
+  });
+});
+
+test('window CLOSES ITSELF after the deadline — no human action required', () => {
+  withEnv({ REGISTRATION_OPEN: undefined, REGISTRATION_OPEN_UNTIL: '2026-08-28' }, () => {
+    assert.equal(isRegistrationOpen(new Date('2026-09-01T00:00:00Z')), false);
+    assert.equal(isRegistrationOpen(new Date('2027-01-01T00:00:00Z')), false);
+  });
+});
+
+test('a MALFORMED deadline is CLOSED, never open-forever', () => {
+  for (const bad of ['soon', '28-08-2026', 'August 28', '2026-13-45', '', '   ']) {
+    withEnv({ REGISTRATION_OPEN: undefined, REGISTRATION_OPEN_UNTIL: bad }, () => {
+      assert.equal(isRegistrationOpen(new Date('2026-08-11T12:00:00Z')), false,
+        `"${bad}" must not open registration`);
+    });
+  }
+});
+
+test('the window still respects an explicit REGISTRATION_OPEN=true', () => {
+  withEnv({ REGISTRATION_OPEN: 'true', REGISTRATION_OPEN_UNTIL: '2020-01-01' }, () => {
+    assert.equal(isRegistrationOpen(new Date('2026-08-11T12:00:00Z')), true,
+      'an explicit true wins over an expired window');
+  });
+});
+
+test('an expired window refuses account creation through the throwing path too', () => {
+  withEnv({ REGISTRATION_OPEN: undefined, REGISTRATION_OPEN_UNTIL: '2020-01-01', REGISTRATION_ALLOWLIST: undefined }, () => {
+    assert.throws(() => assertRegistrationAllowed('late@gmail.com'), AccountCreationBlockedError);
+  });
+});

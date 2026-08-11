@@ -46,9 +46,28 @@ export class AccountSuspendedError extends Error {
   }
 }
 
-/** Signups are open ONLY on an explicit, exact 'true'. Everything else is closed. */
-export function isRegistrationOpen() {
-  return String(process.env.REGISTRATION_OPEN || '').trim().toLowerCase() === 'true';
+/**
+ * Signups are open ONLY on an explicit, exact 'true', or inside an explicit
+ * time window that has not yet expired.
+ *
+ * REGISTRATION_OPEN_UNTIL exists because "reopen it for a couple of weeks" is a
+ * promise someone has to remember to keep. A boolean stays true forever; a
+ * deadline closes itself. Every failure mode resolves to CLOSED:
+ *   - unset            → closed
+ *   - unparseable date → closed (NOT "open forever")
+ *   - date in the past → closed
+ * A bare YYYY-MM-DD means end of that day UTC, so the stated day is inclusive.
+ */
+export function isRegistrationOpen(now = new Date()) {
+  if (String(process.env.REGISTRATION_OPEN || '').trim().toLowerCase() === 'true') return true;
+
+  const until = String(process.env.REGISTRATION_OPEN_UNTIL || '').trim();
+  if (!until) return false;
+
+  const deadline = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(until) ? `${until}T23:59:59.999Z` : until);
+  if (!Number.isFinite(deadline)) return false;
+
+  return now.getTime() <= deadline;
 }
 
 function allowlist() {
