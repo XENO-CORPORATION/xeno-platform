@@ -16,7 +16,6 @@
     "test:remote-status": "node tests/remote-status.test.js"
   },
   "dependencies": {
-    "@xeno-corporation/xeno-agent-cli": "^0.4.22",
     "bcryptjs": "^2.4.3",
     "bull": "^4.12.0",
     "cheerio": "^1.0.0",
