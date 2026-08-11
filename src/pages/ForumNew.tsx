@@ -86,7 +86,7 @@ const ForumNew: React.FC = () => {
     <div className="min-h-screen bg-[#060606] text-white">
       <Header onGetStarted={() => { window.location.href = '/auth'; }} />
 
-      <main className="mx-auto max-w-[760px] px-6 pb-24 pt-32">
+      <main className="page-gutter w-full pb-20 pt-28">
         <Link to="/forum" className="inline-flex items-center gap-2 text-[13px] text-white/40 transition-colors hover:text-white/70">
           <ArrowLeft className="h-3.5 w-3.5" />
           Forum
@@ -108,7 +108,8 @@ const ForumNew: React.FC = () => {
             </p>
           </div>
         ) : (
-          <form onSubmit={submit} className="mt-8 space-y-6">
+          <form onSubmit={submit} className="mt-8 grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="min-w-0 max-w-[72ch] space-y-6">
             {/* Space */}
             <div>
               <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Space</label>
@@ -230,6 +231,25 @@ const ForumNew: React.FC = () => {
               </button>
               <Link to="/forum" className="text-[13px] text-white/40 transition-colors hover:text-white/70">Cancel</Link>
             </div>
+            </div>
+
+            <aside className="space-y-4 lg:pt-7">
+              <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
+                  How to get answered
+                </h2>
+                <ul className="mt-3 space-y-2.5 text-[12px] leading-relaxed text-white/45">
+                  <li>Title it the way you would say it out loud — that is what the next person searches for.</li>
+                  <li>Paste the exact error text. Exact strings are what make a thread findable.</li>
+                  <li>Say which product and version, and what you already tried.</li>
+                  <li>Tag it. An untagged thread reaches nobody in particular.</li>
+                </ul>
+              </div>
+              <p className="px-1 text-[11.5px] leading-relaxed text-white/25">
+                Answers can be accepted, so a good question keeps paying out long
+                after you have moved on.
+              </p>
+            </aside>
           </form>
         )}
       </main>
