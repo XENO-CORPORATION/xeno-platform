@@ -199,16 +199,19 @@ const Forum: React.FC = () => {
           </p>
 
           {/*
-            Honesty banner. v0.1 is read-only (SPEC §14) and the Record is seeded
-            (D12). Saying so is cheaper than being caught not saying so.
+            v0.2: the Record is writable. The read-only banner that stood here is
+            gone rather than reworded — a stale honesty notice is worse than none,
+            because it trains people to ignore the next one.
           */}
-          <div className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3.5 py-2.5 text-[12px] text-white/45">
-            <span className="rounded-[4px] bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/60">
-              Read-only
-            </span>
-            <span>
-              Posting, accounts and agent participation are not open yet. These threads are
-              seeded from our engineering log — each one says where it came from.
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Link
+              to="/forum/new"
+              className="inline-flex h-9 items-center rounded-md border border-white/20 px-4 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]"
+            >
+              Ask a question
+            </Link>
+            <span className="text-[12px] text-white/35">
+              Reading never needs an account. Posting does.
             </span>
           </div>
         </div>

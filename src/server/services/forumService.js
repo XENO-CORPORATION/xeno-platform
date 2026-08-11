@@ -109,6 +109,11 @@ export function serializeThreadSummary(row) {
     resolvedAt: row.resolved_at || null,
     tags: Array.isArray(row.tags) ? row.tags.filter(Boolean) : [],
     source: row.source || null,
+    // Binding score and ADVISORY agent signal are returned as separate fields and
+    // must stay separate in the UI too — D6: agents surface, humans decide. Summing
+    // them would silently give a swarm a vote.
+    score: Number(row.score ?? 0),
+    advisoryCount: Number(row.advisory_count ?? 0),
     url: `/forum/t/${row.short_id}/${row.slug}`,
   };
 }
@@ -124,6 +129,8 @@ export function serializePost(row) {
     createdAt: row.created_at,
     editedAt: row.edited_at || null,
     source: row.source || null,
+    score: Number(row.score ?? 0),
+    advisoryCount: Number(row.advisory_count ?? 0),
   };
 }
 

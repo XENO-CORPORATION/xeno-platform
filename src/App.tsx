@@ -18,6 +18,7 @@ import Learn from "./pages/Learn";
 import LearnTutorial from "./pages/LearnTutorial";
 import Forum from "./pages/Forum";
 import ForumThread from "./pages/ForumThread";
+import ForumNew from "./pages/ForumNew";
 import RemoteRuns from "./pages/RemoteRuns";
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
@@ -161,6 +162,7 @@ function App() {
                 /community redirects in because that is what people type and what
                 inbound links will use. */}
             <Route path="/forum" element={<Forum />} />
+            <Route path="/forum/new" element={<ForumNew />} />
             <Route path="/forum/t/:shortId" element={<ForumThread />} />
             <Route path="/forum/t/:shortId/:slug" element={<ForumThread />} />
             <Route path="/community" element={<Navigate to="/forum" replace />} />
