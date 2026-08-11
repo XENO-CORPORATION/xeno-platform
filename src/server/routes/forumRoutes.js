@@ -1,17 +1,21 @@
 /**
  * XENO Forum API — /api/forum
  *
- * SPEC: "XENO FORUM - SPEC.md" §9. v0.1 implements the READ side of the Record
- * only (SPEC §14 milestones): spaces, threads, thread detail, lexical search,
- * tags. Every route here is public and cacheable — `/api/forum/feed` is the
- * only endpoint in the whole spec that is inherently personal, and it does not
- * exist until v0.4.
+ * SPEC: "XENO FORUM - SPEC.md" §9.
  *
- * Write routes (POST threads/posts/accept/vote/flag) are deliberately ABSENT
- * rather than stubbed. They arrive in v0.2 together with the rules that make
- * them safe: per-kind rate limits, the owner-cascade sanction, and D6 —
- * agents propose, humans ratify. Shipping the verbs before the guards would
- * invert that order.
+ * Reads are public and cacheable. Writes are authenticated and resolve the
+ * caller through the platform's agent-identity service, so a human and an agent
+ * come through the same door and the differences between them are enforced in
+ * one place rather than sprinkled through handlers.
+ *
+ * `/api/forum/feed` — the only inherently personal endpoint in the spec — does
+ * not exist until v0.4, deliberately: a ranker with nothing to rank cannot be
+ * evaluated, and an unevaluated ranker is how objective functions drift.
+ *
+ * Agent MANAGEMENT (create/list/retire) is NOT here. It lives at
+ * /api/v2/agents because agent identity is a platform primitive shared with
+ * Marketplace, Company and Comms (SPEC D8) — the Forum is its first consumer,
+ * not its owner.
  *
  * Patterns reused (verified against the codebase):
  *   - express.Router(), default export (marketplaceRoutes.js, blogRoutes.js)
@@ -23,6 +27,7 @@ import express from 'express';
 import authMiddleware, { optionalAuthMiddleware } from '../middleware/auth.js';
 import * as svc from '../services/forumService.js';
 import * as write from '../services/forumWrite.js';
+import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../services/agentIdentity.js';
 import { ForumError } from '../services/forumWrite.js';
 
 const router = express.Router();
@@ -53,33 +58,34 @@ function handled(context, fn) {
 }
 
 /**
- * `authMiddleware` resolves the account but does NOT select `role` or `kind`
- * (marketplaceRoutes.js documents the same gap). Every capability decision here
- * needs both, so load them once per write request rather than letting each
- * handler guess. `kind` does not exist until the platform identity primitive
- * lands (SPEC D8) — COALESCE keeps this forward-compatible without depending on
- * a column that is not there yet.
+ * Resolve the caller as a PRINCIPAL — human or agent — via the platform's
+ * agent-identity service.
+ *
+ * v0.2 read `kind` with a COALESCE against a column that did not exist yet. That
+ * placeholder is gone: `resolvePrincipal` is the canonical lookup, and crucially
+ * it derives the OWNER-CASCADE, so an agent whose owner is suspended cannot act
+ * here even though the agent's own row still says active. No code path in this
+ * file has to remember that rule, which is the entire reason it is derived.
  */
 async function loadActor(req, res, next) {
   try {
-    const { rows } = await req.db.query(
-      `SELECT id, username, display_name, role, is_active, status,
-              COALESCE(to_jsonb(u) ->> 'kind', 'human') AS kind
-         FROM users u WHERE id = $1`,
-      [req.user.id],
-    );
-    const actor = rows[0];
-    if (!actor) return res.status(401).json({ success: false, error: 'Unknown account' });
-    if (actor.is_active === false || String(actor.status).toLowerCase() === 'suspended') {
-      // A suspended account must not be able to write. Login already refuses
-      // them, but a still-valid token issued before the suspension would not.
-      return res.status(403).json({
-        success: false, error: 'This account has been suspended', code: 'account_suspended',
-      });
-    }
-    req.actor = actor;
+    const principal = await resolvePrincipal(req.db, req.user.id);
+    assertPrincipalUsable(principal);
+    req.actor = {
+      id: principal.id,
+      username: principal.handle,
+      display_name: principal.displayName,
+      role: principal.role,
+      kind: principal.kind,
+      owner: principal.owner,
+    };
     next();
   } catch (error) {
+    if (error instanceof AgentIdentityError) {
+      return res.status(error.statusCode).json({
+        success: false, error: error.message, code: error.code,
+      });
+    }
     return serverError(res, error, 'loadActor');
   }
 }

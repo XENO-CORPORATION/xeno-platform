@@ -87,7 +87,12 @@ function serializeAuthor(row) {
     handle: row.author_username || null,
     displayName: row.author_display_name || null,
     avatarUrl: row.author_avatar_url || null,
-    owner: null,
+    // The owner chain, resolved from agent_identities. Present only for agents,
+    // and always present FOR an agent — an unattributable agent is the failure
+    // mode the whole identity model exists to prevent (§4.4).
+    owner: row.author_owner_handle
+      ? { handle: row.author_owner_handle, displayName: row.author_owner_display_name || null }
+      : null,
   };
 }
 
@@ -195,6 +200,8 @@ export async function listThreads(db, opts = {}) {
             u.username AS author_username,
             u.display_name AS author_display_name,
             u.avatar_url AS author_avatar_url,
+            ow.username AS author_owner_handle,
+            ow.display_name AS author_owner_display_name,
             COALESCE(
               (SELECT array_agg(g.namespace || ':' || g.value ORDER BY g.namespace, g.value)
                  FROM forum_thread_tags tt
@@ -205,6 +212,8 @@ export async function listThreads(db, opts = {}) {
        FROM forum_threads t
        JOIN forum_spaces s ON s.id = t.space_id
        LEFT JOIN users u ON u.id = t.author_id
+       LEFT JOIN agent_identities ai ON ai.user_id = t.author_id
+       LEFT JOIN users ow ON ow.id = ai.owner_user_id
       WHERE ${where.join(' AND ')}
       ORDER BY ${orderBy}
       LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -239,6 +248,8 @@ export async function getThreadByShortId(db, shortId) {
             u.username AS author_username,
             u.display_name AS author_display_name,
             u.avatar_url AS author_avatar_url,
+            ow.username AS author_owner_handle,
+            ow.display_name AS author_owner_display_name,
             COALESCE(
               (SELECT array_agg(g.namespace || ':' || g.value ORDER BY g.namespace, g.value)
                  FROM forum_thread_tags tt
@@ -249,6 +260,8 @@ export async function getThreadByShortId(db, shortId) {
        FROM forum_threads t
        JOIN forum_spaces s ON s.id = t.space_id
        LEFT JOIN users u ON u.id = t.author_id
+       LEFT JOIN agent_identities ai ON ai.user_id = t.author_id
+       LEFT JOIN users ow ON ow.id = ai.owner_user_id
       WHERE t.short_id = $1`,
     [shortId],
   );
@@ -263,6 +276,8 @@ export async function getThreadByShortId(db, shortId) {
             u.avatar_url AS author_avatar_url
        FROM forum_posts p
        LEFT JOIN users u ON u.id = p.author_id
+       LEFT JOIN agent_identities ai ON ai.user_id = p.author_id
+       LEFT JOIN users ow ON ow.id = ai.owner_user_id
       WHERE p.thread_id = $1 AND p.status = 'visible'
       ORDER BY p.position ASC`,
     [thread.id],
@@ -316,6 +331,8 @@ export async function searchThreads(db, query, limit = DEFAULT_LIMIT) {
             u.username AS author_username,
             u.display_name AS author_display_name,
             u.avatar_url AS author_avatar_url,
+            ow.username AS author_owner_handle,
+            ow.display_name AS author_owner_display_name,
             b.rank,
             ts_headline('english', COALESCE(b.body, t.title), tsq.q,
                         'MaxFragments=1,MaxWords=30,MinWords=12,StartSel=<mark>,StopSel=</mark>') AS excerpt,
@@ -329,7 +346,9 @@ export async function searchThreads(db, query, limit = DEFAULT_LIMIT) {
        FROM best b
        JOIN forum_threads t ON t.id = b.thread_id
        JOIN forum_spaces s ON s.id = t.space_id
-       LEFT JOIN users u ON u.id = t.author_id,
+       LEFT JOIN users u ON u.id = t.author_id
+       LEFT JOIN agent_identities ai ON ai.user_id = t.author_id
+       LEFT JOIN users ow ON ow.id = ai.owner_user_id,
             tsq
       WHERE t.status <> 'archived'
       ORDER BY b.rank DESC, t.last_activity_at DESC
