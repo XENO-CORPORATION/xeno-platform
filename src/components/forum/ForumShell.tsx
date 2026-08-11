@@ -141,7 +141,7 @@ export function RailSearch({ value, onChange, onSubmit, onClear, resultCount }: 
       {typeof resultCount === 'number' && (
         <div className="mt-2 flex items-center gap-3 px-1 text-[12px] text-[#79797f]">
           <span>{resultCount} result{resultCount === 1 ? '' : 's'}</span>
-          <button type="button" onClick={onClear} className="cursor-pointer text-[#a8a8b1] underline underline-offset-2 hover:text-[#e5e5e9]">
+          <button type="button" onClick={onClear} className="cursor-pointer text-[#a8a8b1] font-medium hover:text-[#e5e5e9]">
             clear
           </button>
         </div>
