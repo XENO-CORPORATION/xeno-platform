@@ -468,7 +468,16 @@ class AuthService {
 // Create and export singleton instance
 export const authService = new AuthService();
 
-// Initialize database on service creation
-authService.initializeDatabase();
+// NOTE: authService.initializeDatabase() used to run HERE, at module load — so
+// every visitor's browser POSTed /api/auth/init on every page view. That endpoint
+// is an ADMIN BOOTSTRAP: it creates the users table and the default admin account.
+// Only its setup-token check stopped it, which is why the console showed a 403 and
+// "Database initialization may have issues" for every anonymous visitor.
+//
+// It was also redundant: the server runs runStartupMigrations() on boot
+// (src/server/index.js), which applies the versioned *.sql migrations and seeds.
+// A client has no business initialising a database, so the call is gone. The
+// method is kept for a deliberate self-host/dev setup flow, but nothing calls it
+// automatically.
 
 export default authService;

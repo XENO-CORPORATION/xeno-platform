@@ -42,14 +42,14 @@ interface ForumShellProps {
 }
 
 function NavItem({ icon: Icon, label, active, onClick, to, count }: any) {
-  const cls = `group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[14px] transition-colors ${
-    active ? 'bg-white/[0.08] text-white' : 'text-white/50 hover:bg-white/[0.03] hover:text-white/85'
+  const cls = `group flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-[14px] transition-colors ${
+    active ? 'bg-white/[0.15] text-white' : 'text-[#a8a8b1] hover:bg-white/[0.05] hover:text-[#e5e5e9]'
   }`;
   const inner = (
     <>
       <Icon className="h-[18px] w-[18px] shrink-0" />
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {typeof count === 'number' && <span className="shrink-0 text-[12px] text-white/25">{count}</span>}
+      {typeof count === 'number' && <span className="shrink-0 text-[12px] text-[#57575e]">{count}</span>}
     </>
   );
   if (to) return <Link to={to} className={cls}>{inner}</Link>;
@@ -63,7 +63,7 @@ const ForumShell: React.FC<ForumShellProps> = ({
   const onIndex = pathname === '/forum';
 
   return (
-    <div className="min-h-screen bg-[#060606] text-white">
+    <div className="min-h-screen bg-[#08080a] text-white">
       <Header onGetStarted={() => { window.location.href = '/auth'; }} />
 
       <div className="page-gutter w-full pb-16 pt-24">
@@ -85,7 +85,7 @@ const ForumShell: React.FC<ForumShellProps> = ({
 
               {spaces.length > 0 && (
                 <div>
-                  <h2 className="px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/30">
+                  <h2 className="px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">
                     Spaces
                   </h2>
                   <nav className="mt-2 space-y-0.5">
@@ -106,7 +106,7 @@ const ForumShell: React.FC<ForumShellProps> = ({
               */}
               <Link
                 to="/forum/new"
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-white text-[14px] font-semibold text-black transition-colors hover:bg-white/90"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-white/[0.15] bg-white/[0.15] text-[14px] font-semibold text-white transition-colors hover:bg-white/[0.25]"
               >
                 <PenLine className="h-4 w-4" />
                 New post
@@ -131,17 +131,17 @@ const ForumShell: React.FC<ForumShellProps> = ({
 export function RailSearch({ value, onChange, onSubmit, onClear, resultCount }: any) {
   return (
     <form onSubmit={onSubmit} className="relative">
-      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#79797f]" />
       <input
         value={value}
         onChange={onChange}
         placeholder="Search the record"
-        className="w-full rounded-full border border-white/[0.09] bg-white/[0.03] py-2.5 pl-10 pr-4 text-[13.5px] text-white/85 outline-none transition-colors placeholder:text-white/25 focus:border-white/20 focus:bg-white/[0.05]"
+        className="w-full rounded-md border border-white/10 bg-white/[0.03] py-2.5 pl-10 pr-4 text-[13.5px] text-[#e5e5e9] outline-none transition-colors placeholder:text-[#57575e] focus:border-white/[0.15] focus:bg-white/[0.05]"
       />
       {typeof resultCount === 'number' && (
-        <div className="mt-2 flex items-center gap-3 px-1 text-[12px] text-white/40">
+        <div className="mt-2 flex items-center gap-3 px-1 text-[12px] text-[#79797f]">
           <span>{resultCount} result{resultCount === 1 ? '' : 's'}</span>
-          <button type="button" onClick={onClear} className="text-white/50 underline underline-offset-2 hover:text-white/80">
+          <button type="button" onClick={onClear} className="cursor-pointer text-[#a8a8b1] underline underline-offset-2 hover:text-[#e5e5e9]">
             clear
           </button>
         </div>
@@ -161,8 +161,8 @@ export function RailSearch({ value, onChange, onSubmit, onClear, resultCount }: 
 export function RailNeedsAnswer({ threads = [] }: { threads: any[] }) {
   if (!threads.length) return null;
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-      <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-white/80">
+    <div className="rounded-md border border-white/10 bg-[#060608] p-4">
+      <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-[#e5e5e9]">
         <Clock className="h-3.5 w-3.5 text-amber-400/70" />
         Needs an answer
       </h2>
@@ -170,10 +170,10 @@ export function RailNeedsAnswer({ threads = [] }: { threads: any[] }) {
         {threads.slice(0, 5).map((t) => (
           <li key={t.shortId}>
             <Link to={t.url} className="group block">
-              <span className="line-clamp-2 text-[13px] leading-snug text-white/65 transition-colors group-hover:text-white">
+              <span className="line-clamp-2 text-[13px] leading-snug text-[#a8a8b1] transition-colors group-hover:text-white">
                 {t.title}
               </span>
-              <span className="mt-1 block text-[11.5px] text-white/30">
+              <span className="mt-1 block text-[11.5px] text-[#79797f]">
                 waiting {t.waitedFor}
               </span>
             </Link>
@@ -188,15 +188,15 @@ export function RailNeedsAnswer({ threads = [] }: { threads: any[] }) {
 export function RailResolved({ threads = [] }: { threads: any[] }) {
   if (!threads.length) return null;
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-      <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-white/80">
+    <div className="rounded-md border border-white/10 bg-[#060608] p-4">
+      <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-[#e5e5e9]">
         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/70" />
         Recently answered
       </h2>
       <ul className="mt-3 space-y-2.5">
         {threads.slice(0, 4).map((t) => (
           <li key={t.shortId}>
-            <Link to={t.url} className="line-clamp-2 block text-[13px] leading-snug text-white/55 transition-colors hover:text-white/85">
+            <Link to={t.url} className="line-clamp-2 block text-[13px] leading-snug text-[#a8a8b1] transition-colors hover:text-[#e5e5e9]">
               {t.title}
             </Link>
           </li>
@@ -209,16 +209,16 @@ export function RailResolved({ threads = [] }: { threads: any[] }) {
 /** The agent surface, advertised where the competition advertises Premium. */
 export function RailAgents() {
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-      <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-white/80">
-        <Bot className="h-3.5 w-3.5 text-white/50" />
+    <div className="rounded-md border border-white/10 bg-[#060608] p-4">
+      <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-[#e5e5e9]">
+        <Bot className="h-3.5 w-3.5 text-[#a8a8b1]" />
         Readable by agents
       </h2>
-      <p className="mt-2 text-[12px] leading-relaxed text-white/40">
+      <p className="mt-2 text-[12px] leading-relaxed text-[#79797f]">
         Every thread has a permanent, citable id and is reachable over the API —
         so an agent can search this and quote it back with a link.
       </p>
-      <code className="mt-2.5 block break-all rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white/45">
+      <code className="mt-2.5 block break-all rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-[#a8a8b1]">
         GET /api/forum/search?q=…
       </code>
     </div>
