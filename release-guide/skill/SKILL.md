@@ -1,6 +1,6 @@
 ---
 name: xeno-product-release
-description: "Run a complete, product-grade release of a XENO product to Cloudflare R2 + xenostudio.ai + XENO Hub. Use when the user wants to publish a new version (desktop installer or CLI/npm), cut a patch or hotfix, deploy landing/docs changes, or do a full release. Also covers being invoked from xeno-tools or asked to release a TOOL: since Hub 0.8.0 a tool is signed and published to the XENO tool registry and reaches users WITHOUT a Hub release (see §2z). Starts from the current session's context — what you and the agent just built, and why — recaps it for confirmation, then verifies every user-facing claim against the repo. Gates on a hard pre-flight (releasable ref, real gates, artifact contents verified in the asar, packaged smoke) before anything is published. Ships as an EXPERIMENTAL, unsigned release when no signing config is present — the sanctioned XENO path — enforcing the two disclosure halves first. Decides which surfaces (release notes, docs, landing) the change requires updating, ships them, verifies the whole surface, and tags — following the repo's release-guide/. Not for local package publishability checks."
+description: "Run a complete, product-grade release of a XENO product to Cloudflare R2 + xenostudio.ai + XENO Hub. Use when the user wants to publish a new version (desktop installer or CLI/npm), cut a patch or hotfix, deploy landing/docs changes, or do a full release. Also covers being invoked from xeno-tools or asked to release a TOOL: since Hub 0.9.0 a tool is signed and published to the XENO tool registry and reaches users WITHOUT a Hub release (see §2z). Starts from the current session's context — what you and the agent just built, and why — recaps it for confirmation, then verifies every user-facing claim against the repo. Gates on a hard pre-flight (releasable ref, real gates, artifact contents verified in the asar, packaged smoke) before anything is published. Ships as an EXPERIMENTAL, unsigned release when no signing config is present — the sanctioned XENO path — enforcing the two disclosure halves first. Decides which surfaces (release notes, docs, landing) the change requires updating, ships them, verifies the whole surface, and tags — following the repo's release-guide/. Not for local package publishability checks."
 ---
 
 # XENO Product Release
@@ -129,15 +129,20 @@ user and backed by the repo.
 - Product `<slug>`; `delivery` from `xeno-platform/src/lib/productCatalog.ts`. The version being released vs the currently-published version (`releases.json`/npm).
 - **Signing posture** — decides §4. Run the repo's own check if it has one (`npm run signing:check`), else look for a resolved signing route / `CSC_LINK` / the six-to-seven Azure vars.
 
-### 2z. Releasing a TOOL (xeno-tools) — independent of Hub since Hub 0.8.0
+### 2z. Releasing a TOOL (xeno-tools) — independent of Hub since Hub 0.9.0
 
 **A tool IS independently releasable.** It is signed, published to the XENO tool registry on R2,
 and Hub installs or updates it with no Hub release. If you were invoked from `xeno-tools/`, or
 asked to release a tool, this section replaces the installer flow — a tool has no product page,
 no `version.json`, and no `release-guide/` of its own.
 
-⚠️ Requires **Hub >= 0.8.0** on the user's machine. Older Hubs have no loader and will not see
-registry tools at all.
+⚠️ Requires **Hub >= 0.9.0**. 0.8.0 shipped the loader, the registry and the verifier — and
+still could not deliver: nothing in the app ever called install, and the bundled copy won
+unconditionally. Publishing against a 0.8.0 Hub is a silent no-op.
+
+🔴 **Bump the version or nothing happens.** Precedence is highest-version-wins with Hub's
+bundled copy as a FLOOR, so a package at or below the baseline is fetched and correctly ignored.
+When a shipped change "did nothing", check the version before anything else.
 
 **The procedure:**
 
@@ -172,13 +177,11 @@ registry tools at all.
    curl -sI https://updates.xenostudio.ai/apps/tools/<id>/<version>/index.js
    ```
 
-**🔴 The gotcha that will waste your afternoon:** a tool that is ALSO statically imported in
-`xeno-hub/src/renderer/src/tools/externalTools.tsx` **statically imports** each package, so those
-tools are bundled into Hub's renderer at BUILD time (verified 2026-08-09, xeno-hub `2a48e17`),
-and the bundled copy
-WINS over the registry one. Publishing a new version of such a tool changes nothing for users
-until it is removed from those static imports — which needs a Hub release. `image-resize` is in
-exactly this state today. Check `externalTools.tsx` before promising a tool update ships.
+**🔴 The shadowing gotcha:** a tool ALSO statically imported in
+`xeno-hub/src/renderer/src/tools/externalTools.tsx` ships inside Hub as a bundled baseline. Since
+0.9.0 that is harmless *provided you bump* — at EQUAL versions the bundled copy wins by design
+(no reason to run downloaded bytes when identical bytes are compiled in). `image-resize` is
+bundled at 0.1.0 and published at 0.1.0, so republishing 0.1.0 changes nothing. Ship 0.1.1+.
 
 **Other invariants:**
 - The trust list in `publish-tool-packages.mjs` must match `xeno-hub`'s `toolPackageVerifier.ts`.
