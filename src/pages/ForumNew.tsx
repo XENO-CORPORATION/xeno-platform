@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react';
-import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
+import ForumShell from '../components/forum/ForumShell';
 import { TagChip } from '../components/forum/primitives';
 import * as api from '../components/forum/api';
 
@@ -161,11 +161,14 @@ const ForumNew: React.FC = () => {
   const activeSpace = spaces.find((s) => s.slug === space);
   const copy = (activeSpace && COMPOSE_COPY[activeSpace.kind]) || DEFAULT_COPY;
 
+  // The compose page sits in the SAME shell as the stream and the thread. The
+  // left nav does not vanish and the column widths do not shift — the container
+  // changing under you between pages is what makes a site feel like a set of
+  // documents rather than one application.
   return (
-    <div className="min-h-screen bg-[#08080a] text-white">
-      <Header onGetStarted={() => { window.location.href = '/auth'; }} />
-
-      <main className="page-gutter w-full pb-20 pt-28">
+    <>
+      <ForumShell spaces={spaces}>
+        <div className="pt-3">
         <Link to="/forum" className="inline-flex items-center gap-2 text-[13px] text-[#79797f] transition-colors hover:text-[#e5e5e9]">
           <ArrowLeft className="h-3.5 w-3.5" />
           Forum
@@ -329,10 +332,10 @@ const ForumNew: React.FC = () => {
             </aside>
           </form>
         )}
-      </main>
-
+        </div>
+      </ForumShell>
       <Footer />
-    </div>
+    </>
   );
 };
 
