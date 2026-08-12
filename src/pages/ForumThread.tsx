@@ -283,8 +283,7 @@ const ForumThread: React.FC = () => {
   );
 
   return (
-    <>
-      <ForumShell spaces={spaces} rightRail={rightRail}>
+    <ForumShell spaces={spaces} rightRail={rightRail}>
         <div className="pt-3">
           <Link
             to="/forum"
@@ -404,8 +403,7 @@ const ForumThread: React.FC = () => {
             </div>
           )}
         </div>
-      </ForumShell>
-    </>
+    </ForumShell>
   );
 };
 

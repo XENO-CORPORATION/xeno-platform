@@ -352,8 +352,7 @@ const Forum: React.FC = () => {
   const visible = searchResults ?? threads;
 
   return (
-    <>
-      <ForumShell
+    <ForumShell
         spaces={spaces}
         activeSpace={space}
         onSelectSpace={(s) => setParam('space', s === space ? '' : s)}
@@ -381,7 +380,7 @@ const Forum: React.FC = () => {
           because the left rail already highlights which space you are in;
           repeating it was the third strip's only real job.
         */}
-        <div className="sticky top-[56px] z-10 -mt-2 mb-4 flex items-center justify-between gap-3 border-b border-white/[0.08] bg-[#08080a]/90 py-3 backdrop-blur-xl">
+        <div className="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 border-b border-white/[0.08] bg-[#08080a]/90 py-3 backdrop-blur-xl">
           <div className="inline-flex gap-1 rounded-md border border-white/[0.08] bg-[#060608] p-1">
             {([['record', 'The Record', Layers], ['feed', 'For you', Sparkles]] as const).map(([key, label, Icon]) => (
               <button
@@ -408,7 +407,7 @@ const Forum: React.FC = () => {
           )}
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 pb-16">
           <div className="px-4">
             <InlineComposer spaces={spaces} onPosted={() => setReloadKey((k) => k + 1)} initial={initial} />
           </div>
@@ -476,8 +475,7 @@ const Forum: React.FC = () => {
             </>
           )}
         </div>
-      </ForumShell>
-    </>
+    </ForumShell>
   );
 };
 
