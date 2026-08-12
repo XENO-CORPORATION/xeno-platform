@@ -48,7 +48,7 @@ const socialLinks = [
 const Footer: React.FC = () => {
   return (
     <footer className="relative border-t border-white/[0.08] bg-[#060606]">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(167,96,255,0.45),transparent)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.18),transparent)]" />
 
       <div className="page-gutter mx-auto w-full pb-[clamp(16px,2vh,26px)] pt-[clamp(28px,3.4vh,48px)]">
         {/* ── Top: brand + link columns ─────────────────────────── */}

@@ -6,7 +6,6 @@ import {
   ArrowLeft, CheckCircle2, Link2, Check, ChevronUp, ChevronDown,
   Flag, Loader2, Bot, MessageSquare,
 } from 'lucide-react';
-import Footer from '../components/landing-v3/Footer';
 import ForumShell from '../components/forum/ForumShell';
 import {
   AuthorBadge, TagChip, PostAvatar, SourceNote, relativeTime,
@@ -406,7 +405,6 @@ const ForumThread: React.FC = () => {
           )}
         </div>
       </ForumShell>
-      <Footer />
     </>
   );
 };

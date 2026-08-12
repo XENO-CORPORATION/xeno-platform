@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react';
-import Footer from '../components/landing-v3/Footer';
 import ForumShell from '../components/forum/ForumShell';
 import { TagChip } from '../components/forum/primitives';
 import * as api from '../components/forum/api';
@@ -334,7 +333,6 @@ const ForumNew: React.FC = () => {
         )}
         </div>
       </ForumShell>
-      <Footer />
     </>
   );
 };

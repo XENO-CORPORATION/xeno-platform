@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   MessageSquare, CheckCircle2, Clock, Loader2, PenLine, Info, Sparkles, Layers,
 } from 'lucide-react';
-import Footer from '../components/landing-v3/Footer';
 import ForumShell, {
   RailSearch, RailNeedsAnswer, RailResolved, RailAgents,
 } from '../components/forum/ForumShell';
@@ -478,7 +477,6 @@ const Forum: React.FC = () => {
           )}
         </div>
       </ForumShell>
-      <Footer />
     </>
   );
 };

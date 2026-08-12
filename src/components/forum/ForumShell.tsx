@@ -4,6 +4,7 @@ import {
   Home, Layers, Hash, Search, PenLine, Bot, CheckCircle2, Clock,
 } from 'lucide-react';
 import Header from '../landing-v3/Header';
+import Footer from '../landing-v3/Footer';
 
 /**
  * The forum application shell.
@@ -63,15 +64,31 @@ const ForumShell: React.FC<ForumShellProps> = ({
   const onIndex = pathname === '/forum';
 
   return (
-    <div className="min-h-screen bg-[#08080a] text-white">
+    // flex-col + flex-1 on the body: the footer is pushed to the bottom on a
+    // short page and simply follows the content on a long one. It is rendered
+    // HERE rather than by each page, so no page can forget it or place it
+    // somewhere it can collide with the grid.
+    <div className="flex min-h-screen flex-col bg-[#08080a] text-white">
       <Header onGetStarted={() => { window.location.href = '/auth'; }} />
 
-      <div className="page-gutter w-full pb-16 pt-24">
+      <div className="page-gutter w-full flex-1 pb-16 pt-24">
         <div className="grid gap-x-8 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[236px_minmax(0,1fr)_340px]">
 
           {/* ── Left nav — persistent, the way every social shell does it ── */}
           <aside className="hidden xl:block">
-            <div className="sticky top-24 space-y-6">
+            {/*
+              A sticky rail MUST be bounded by the viewport.
+
+              Unbounded, a rail taller than the screen stays pinned at top-24
+              while you scroll — so its lower half is still being painted at the
+              moment the footer scrolls into that same space, which is exactly
+              the "footer overlaps the content" bug. It also makes the bottom of
+              the rail unreachable, because it never scrolls.
+
+              max-h + overflow-y-auto is what every three-column app does, and it
+              fixes both symptoms at once.
+            */}
+            <div className="sticky top-24 max-h-[calc(100vh-7rem)] space-y-6 overflow-y-auto pb-4">
               <nav className="space-y-0.5">
                 <NavItem
                   icon={Home} label="For you" active={onIndex && surface === 'feed'}
@@ -119,10 +136,12 @@ const ForumShell: React.FC<ForumShellProps> = ({
 
           {/* ── Right rail ─────────────────────────────────────────── */}
           <aside className="hidden lg:block">
-            <div className="sticky top-24 space-y-5">{rightRail}</div>
+            <div className="sticky top-24 max-h-[calc(100vh-7rem)] space-y-5 overflow-y-auto pb-4">{rightRail}</div>
           </aside>
         </div>
       </div>
+
+      <Footer />
     </div>
   );
 };
