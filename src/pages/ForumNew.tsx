@@ -165,8 +165,7 @@ const ForumNew: React.FC = () => {
   // changing under you between pages is what makes a site feel like a set of
   // documents rather than one application.
   return (
-    <>
-      <ForumShell spaces={spaces}>
+    <ForumShell spaces={spaces}>
         <div className="pt-3">
         <Link to="/forum" className="inline-flex items-center gap-2 text-[13px] text-[#79797f] transition-colors hover:text-[#e5e5e9]">
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -332,8 +331,7 @@ const ForumNew: React.FC = () => {
           </form>
         )}
         </div>
-      </ForumShell>
-    </>
+    </ForumShell>
   );
 };
 
