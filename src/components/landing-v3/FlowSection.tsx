@@ -36,7 +36,7 @@ const FlowSection: React.FC = () => {
 
               {i < steps.length - 1 && (
                 <li aria-hidden="true" className="hidden flex-1 self-start md:block" style={{ marginTop: 'clamp(25px,2vw,34px)' }}>
-                  <div className={cx('xeno-flow-line w-full')} />
+                  <div className={cx('flow-line w-full')} />
                 </li>
               )}
             </React.Fragment>

@@ -152,35 +152,15 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
   return (
     // Use a Fragment to return multiple top-level elements
     <>
-      {/* Inline Styles for Scrollbar - Scoped via unique class */}
-      <style>
-        {`
-          .code-block-syntax-highlighter pre::-webkit-scrollbar {
-            width: 8px; 
-            height: 8px;
-          }
+      {/* The scrollbar is XENO Elements' now, applied document-wide from `scrollbar.css`: nothing at
+          rest, a hairline rail with the thumb on it once the pointer is in the region.
 
-          .code-block-syntax-highlighter pre::-webkit-scrollbar-track {
-            background: transparent;
-            border-radius: 4px;
-          }
-
-          .code-block-syntax-highlighter pre::-webkit-scrollbar-thumb {
-            background: var(--chat-border);
-            border-radius: 4px;
-          }
-
-          .code-block-syntax-highlighter pre::-webkit-scrollbar-thumb:hover {
-            background: var(--chat-muted);
-          }
-
-          /* Optional: Firefox scrollbar styling */
-          .code-block-syntax-highlighter pre {
-            scrollbar-width: thin;
-            scrollbar-color: var(--chat-border) transparent;
-          }
-        `}
-      </style>
+          A local one used to be declared here — an 8px webkit bar plus a `scrollbar-width: thin`
+          labelled "Optional: Firefox scrollbar styling". That label had it backwards. Since Chrome 121
+          an element with `scrollbar-width` set has its `::-webkit-scrollbar` rules IGNORED, so the line
+          meant for Firefox was switching the good version off everywhere else, and this panel had been
+          showing the browser's default bar rather than the four rules above it. No error, and the rules
+          still listed as applied in DevTools. */}
 
       {/* Code Block Container - Add the unique class.
           `overflow: clip` rather than `hidden`: both round off the corners, but `hidden`

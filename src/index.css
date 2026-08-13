@@ -36,9 +36,9 @@
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
 }
-.xeno-caret { animation: xenoCaretBlink 1s step-end infinite; }
+.chat-caret { animation: xenoCaretBlink 1s step-end infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .xeno-caret { animation: none; opacity: 1; }
+  .chat-caret { animation: none; opacity: 1; }
 }
 
 /* Hover-triggered panel demos (applied via group-hover/panel) */
@@ -81,7 +81,7 @@
 
 /* Flow pipeline connector — dotted line that flows toward the next step */
 @keyframes xenoFlowDash { to { background-position: 7px center; } }
-.xeno-flow-line {
+.flow-line {
   height: 2px;
   background-image: radial-gradient(circle, rgba(255,255,255,0.32) 1px, transparent 1.5px);
   background-size: 7px 2px;
@@ -89,7 +89,7 @@
   background-position: 0 center;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .xeno-flow-line { animation: xenoFlowDash 0.7s linear infinite; }
+  .flow-line { animation: xenoFlowDash 0.7s linear infinite; }
 }
 
 /* Shared horizontal page gutter for all below-hero marketing sections.
@@ -164,15 +164,14 @@ html, body, #root, #app {
   overflow-x: hidden; /* Prevent horizontal scrolling but allow vertical */
 }
 
-/* Hide scrollbar globally */
-::-webkit-scrollbar {
-  display: none;
-}
-
-* {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
-}
+/* Scrollbars come from XENO Elements now (`scrollbar.css`) — absent at rest, a rail with the thumb on
+   it once the pointer is in the region.
+   What used to be here hid them everywhere: `::-webkit-scrollbar { display: none }` plus a universal
+   `* { scrollbar-width: none }`. The second one was the real problem. Since Chrome 121, setting
+   `scrollbar-width` on an element makes the `::-webkit-scrollbar` pseudo-elements be IGNORED on it —
+   and on `*` that is every element on the page, so no styled scrollbar could ever have appeared,
+   anywhere, with no error to say why. `.hide-scrollbar` (below) is still available where a specific
+   surface genuinely wants no scrollbar. */
 
 /* Fix for iOS Safari viewport height issues */
 @supports (-webkit-touch-callout: none) {
@@ -363,25 +362,10 @@ input::-webkit-outer-spin-button {
   }
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--secondary-bg);
-  border-radius: 8px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--accent-transparent);
-  border-radius: 8px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
+/* (A "Custom Scrollbar" block used to sit here — 6px track and thumb, rounded to 8px. It never drew
+   anything: the global `display: none` above it hid every scrollbar, and the universal
+   `scrollbar-width: none` disabled the pseudo-elements outright. Dead code, removed with the rules
+   that were suppressing it. The scrollbar is XENO's now.) */
 
 /* Performance optimizations */
 .will-change-transform {
@@ -875,10 +859,17 @@ textarea::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-/* Firefox scrollbar compatibility */
-textarea {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(160, 160, 170, 0.5) transparent;
+/* Firefox scrollbar compatibility.
+   Scoped to Firefox on purpose — this is the SAME trap the global rule fell into. `scrollbar-width` and
+   `::-webkit-scrollbar` are mutually exclusive: since Chrome 121, setting the standard property on an
+   element makes the pseudo-elements be ignored on it, so declaring both here meant every
+   `textarea::-webkit-scrollbar` rule above was silently discarded in Chrome and the browser drew its
+   default bar. `@supports not selector(...)` is true only where the pseudo-elements do not exist. */
+@supports not selector(::-webkit-scrollbar) {
+  textarea {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(160, 160, 170, 0.5) transparent;
+  }
 }
 
 /* Ensure textareas have proper padding for scrollbar visibility */

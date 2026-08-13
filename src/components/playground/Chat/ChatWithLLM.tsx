@@ -12207,7 +12207,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           }
 
           /* Blinking caret shown at the end of the answer while it types out. */
-          .xeno-caret {
+          .chat-caret {
             display: inline-block;
             width: 2px;
             height: 1.05em;
@@ -12215,9 +12215,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             vertical-align: text-bottom;
             background: currentColor;
             opacity: 0.75;
-            animation: xeno-caret-blink 1s steps(2, start) infinite;
+            animation: chat-caret-blink 1s steps(2, start) infinite;
           }
-          @keyframes xeno-caret-blink {
+          @keyframes chat-caret-blink {
             50% { opacity: 0; }
           }
 
