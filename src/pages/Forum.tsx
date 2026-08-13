@@ -255,6 +255,7 @@ const Forum: React.FC = () => {
   const [searchResults, setSearchResults] = useState<ForumThreadSummary[] | null>(null);
 
   const [initial, setInitial] = useState('\u2022');
+  const [viewer, setViewer] = useState<any>(null);
   const [signedOut, setSignedOut] = useState(false);
   const signedIn = api.isSignedIn() && !signedOut;
   const [reloadKey, setReloadKey] = useState(0);
@@ -263,12 +264,13 @@ const Forum: React.FC = () => {
     api.getSpaces().then((r) => setSpaces(r.spaces || [])).catch(() => setSpaces([]));
   }, []);
 
-  // Just enough identity for the composer avatar. Fails silently — a missing
-  // initial is a dot, never an error.
+  // Just enough identity for the composer avatar and the header. Fails
+  // silently — a missing initial is a dot, never an error.
   useEffect(() => {
     if (!api.isSignedIn()) return;
     api.getMe()
       .then((r) => {
+        if (r?.actor) setViewer(r.actor);
         const name = r?.actor?.displayName || r?.actor?.handle || '';
         if (name) setInitial(name.trim().charAt(0).toUpperCase());
       })
@@ -359,6 +361,7 @@ const Forum: React.FC = () => {
         surface={surface}
         onSelectSurface={setSurface}
         rightRail={rightRail}
+        viewer={viewer}
       >
         {/*
           Segmented control, not an underlined tab bar.

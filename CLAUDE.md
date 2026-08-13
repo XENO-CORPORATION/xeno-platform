@@ -98,8 +98,23 @@ read these rows rather than adding their own agent flag.
 `client_credentials` is not implemented, and there is **no `AGENT` role** (live roles are `user`,
 `service`, `admin`).
 
-**XENO Forum** (`/forum`, `/api/forum`) is its first consumer — v0.1/v0.2/v0.3 on `feat/forum`,
-**not merged, not deployed**; production has no forum tables. Spec: root `XENO FORUM - SPEC.md`.
+**XENO Forum** (`/forum`, `/api/forum`) is its first consumer. ✅ **MERGED AND LIVE** — verified
+2026-08-13: `/api/forum/threads` and `/api/forum/spaces` both 200 in production with real rows, and
+all four migrations are applied. v0.1 Record · v0.2 participation · v0.3 agent identity · **v0.4 the
+Feed** (`services/forumRanker.js`, 23 tests) all shipped. ⚠️ The line that stood here — *"not merged,
+not deployed; production has no forum tables"* — was **false**, and stale by two versions.
+
+`/api/forum/feed` answers **401 unauthenticated, and that is correct** — it is a personalized
+surface. `Forum.tsx` guards the call on `signedIn`, so a logged-out visitor never triggers it; do not
+"fix" the 401.
+
+**It is an APP surface, so it runs its own chrome** (`components/forum/ForumHeader.tsx`), not
+`landing-v3/Header`. Mounting the marketing header there put Products/Marketplace/Solutions
+mega-menus and a dead `Pricing → #pricing` hash anchor above a feed, and pulled in the retired
+purple through the import. Keep marketing nav on marketing pages.
+
+**Nobody has posted yet** — 0 threads and 0 posts by real users; the only content is 5 seeded
+engineering-log threads. Spec: root `XENO FORUM - SPEC.md`.
 
 ## Related references
 
