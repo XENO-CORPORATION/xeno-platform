@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Home, Layers, Hash, Search, PenLine, Bot, CheckCircle2, Clock,
 } from 'lucide-react';
-import Header from '../landing-v3/Header';
+import ForumHeader from './ForumHeader';
 
 /**
  * The forum application shell.
@@ -52,6 +52,9 @@ interface ForumShellProps {
   onSelectSpace?: (slug: string) => void;
   surface?: 'feed' | 'record';
   onSelectSurface?: (s: 'feed' | 'record') => void;
+  /** Whoever is signed in, when the page already knows. Optional on purpose:
+   *  the header falls back to a local token check so it never blocks on /me. */
+  viewer?: { handle?: string | null; displayName?: string | null; kind?: string | null; isStaff?: boolean } | null;
 }
 
 function NavItem({ icon: Icon, label, active, onClick, to, count }: any) {
@@ -70,14 +73,14 @@ function NavItem({ icon: Icon, label, active, onClick, to, count }: any) {
 }
 
 const ForumShell: React.FC<ForumShellProps> = ({
-  children, rightRail, spaces = [], activeSpace = '', onSelectSpace, surface = 'record', onSelectSurface,
+  children, rightRail, spaces = [], activeSpace = '', onSelectSpace, surface = 'record', onSelectSurface, viewer,
 }) => (
   // h-screen + overflow-hidden: the PAGE never scrolls. pt-14 clears the fixed
   // 56px site header. min-h-0 on the body is what actually lets the children
   // overflow — without it a grid/flex child refuses to shrink below its content
   // and the inner scrollbars silently never appear.
   <div className="flex h-screen flex-col overflow-hidden bg-[#08080a] pt-14 text-white">
-    <Header onGetStarted={() => { window.location.href = '/auth'; }} />
+    <ForumHeader viewer={viewer} />
 
     <div className="page-gutter grid min-h-0 w-full flex-1 gap-x-8 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[236px_minmax(0,1fr)_340px]">
 
