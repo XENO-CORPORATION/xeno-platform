@@ -556,3 +556,106 @@ export async function raiseFlag(db, user, { targetType, targetId, reason, detail
   );
   return { ok: true };
 }
+
+// --------------------------------------------------------------------------
+// Subscriptions — the fit signal the ranker was already scoring
+// --------------------------------------------------------------------------
+
+/**
+ * 🔴 These exist because the read side shipped without them.
+ *
+ * `forum_subscriptions` was created by the v0.4 migration, `getViewerContext`
+ * JOINed it on every feed request, and the ranker awarded +0.5 fit for
+ * `you_follow_this_topic` — but NOTHING in the application could ever write a
+ * row. So the JOIN could only ever return zero, the reason string could never
+ * fire, and `my-topics` ("Topics you follow") was offered in the UI and
+ * returned an empty list for every user, permanently.
+ *
+ * The unit suite was green throughout because it hands the ranker a
+ * `viewer.subscribedTags` fixture directly — a value the running application
+ * had no way to produce. That is the same shape as xeno-workflow's 76 node
+ * types (defined, barrel-exported, fully unit-tested, reachable from nothing)
+ * and xeno-tools' `install` IPC that no code path ever called. Unit coverage
+ * says the pieces are correct; it never says they are connected.
+ *
+ * Only TAG subscriptions are implemented. The table also carries space_id,
+ * thread_id and predicate, but the ranker consumes only tags — building the
+ * other three now would add three more unreachable paths while fixing one.
+ */
+
+/**
+ * Following a tag must NOT create it.
+ *
+ * `resolveTags` deliberately upserts, which is right when authoring a thread:
+ * you are asserting the tag applies. Following is the opposite — it is a
+ * statement about an existing conversation. If follow could create, anyone
+ * could mint arbitrary rows in `forum_tags` (and pollute the tag namespace
+ * every composer autocompletes against) simply by following things that do not
+ * exist. So this looks up, and refuses when there is nothing to follow.
+ */
+async function findTagId(db, raw) {
+  const tag = String(raw || '').trim().toLowerCase();
+  if (!TAG_RE.test(tag)) {
+    throw new ForumError(
+      `Invalid tag "${raw}". Tags are namespaced: product:, version:, topic: or kind:`,
+      'invalid_tag',
+      400,
+    );
+  }
+  const [namespace, ...rest] = tag.split(':');
+  const { rows } = await db.query(
+    'SELECT id FROM forum_tags WHERE namespace = $1 AND value = $2',
+    [namespace, rest.join(':')],
+  );
+  if (!rows.length) {
+    throw new ForumError(`No such tag "${tag}".`, 'unknown_tag', 404);
+  }
+  return rows[0].id;
+}
+
+/** Tags this user follows, as `namespace:value` — the shape the ranker reads. */
+export async function listSubscriptions(db, userId) {
+  const { rows } = await db.query(
+    `SELECT g.namespace || ':' || g.value AS tag
+       FROM forum_subscriptions s JOIN forum_tags g ON g.id = s.tag_id
+      WHERE s.user_id = $1 AND s.tag_id IS NOT NULL
+      ORDER BY tag`,
+    [userId],
+  );
+  return rows.map((r) => r.tag);
+}
+
+/**
+ * Follow a tag. Idempotent — following twice is not an error, it is the same
+ * intent expressed twice, and the partial unique index enforces that at the
+ * database rather than in a read-then-write race.
+ *
+ * Agents may subscribe. The migration says so in as many words: "agents
+ * subscribe rather than scroll", which is the whole reason the table carries a
+ * `predicate` column. Service principals may not — same rule as posting: no
+ * owner means nobody to hold responsible.
+ *
+ * No capability gate. Following is a private preference, not a public act; it
+ * changes only what YOU are shown, so there is nothing to earn first.
+ */
+export async function subscribeTag(db, user, tag) {
+  assertNotService(user);
+  const tagId = await findTagId(db, tag);
+  await db.query(
+    `INSERT INTO forum_subscriptions (user_id, tag_id) VALUES ($1, $2)
+     ON CONFLICT (user_id, tag_id) WHERE tag_id IS NOT NULL DO NOTHING`,
+    [user.id, tagId],
+  );
+  return { ok: true, following: true };
+}
+
+/** Unfollow. Also idempotent — unfollowing what you do not follow is a no-op. */
+export async function unsubscribeTag(db, user, tag) {
+  assertNotService(user);
+  const tagId = await findTagId(db, tag);
+  await db.query(
+    'DELETE FROM forum_subscriptions WHERE user_id = $1 AND tag_id = $2',
+    [user.id, tagId],
+  );
+  return { ok: true, following: false };
+}

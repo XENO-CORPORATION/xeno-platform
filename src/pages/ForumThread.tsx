@@ -126,6 +126,44 @@ const ForumThread: React.FC = () => {
   useEffect(() => { api.getSpaces().then((r) => setSpaces(r.spaces || [])).catch(() => setSpaces([])); }, []);
   useEffect(() => { if (signedIn) api.getMe().then(setMe).catch(() => setMe(null)); }, [signedIn]);
 
+  // Which tags this reader already follows. Fails silently to "none followed" —
+  // an unreachable subscriptions endpoint should cost you the toggle state, not
+  // the thread you came here to read.
+  const [following, setFollowing] = useState<Set<string>>(new Set());
+  const [pendingTag, setPendingTag] = useState<string | null>(null);
+  useEffect(() => {
+    if (!signedIn) { setFollowing(new Set()); return; }
+    api.getSubscriptions()
+      .then((r) => setFollowing(new Set<string>(r?.tags || [])))
+      .catch(() => {});
+  }, [signedIn]);
+
+  const toggleFollow = useCallback(async (tag: string) => {
+    if (!signedIn || pendingTag) return;
+    const wasFollowing = following.has(tag);
+    setPendingTag(tag);
+    // Optimistic: following is a preference, and making someone wait on a round
+    // trip to express one is how the control ends up feeling broken. Reverted
+    // on failure so the button never lies about server state.
+    setFollowing((prev) => {
+      const next = new Set(prev);
+      if (wasFollowing) next.delete(tag); else next.add(tag);
+      return next;
+    });
+    try {
+      if (wasFollowing) await api.unsubscribeTag(tag); else await api.subscribeTag(tag);
+    } catch (e: any) {
+      setFollowing((prev) => {
+        const next = new Set(prev);
+        if (wasFollowing) next.add(tag); else next.delete(tag);
+        return next;
+      });
+      setActionError(e?.message || 'Could not update what you follow.');
+    } finally {
+      setPendingTag(null);
+    }
+  }, [signedIn, pendingTag, following]);
+
   const act = async (fn: () => Promise<any>) => {
     setActionError(null);
     try { await fn(); await load(); }
@@ -194,10 +232,43 @@ const ForumThread: React.FC = () => {
       {thread.tags.length > 0 && (
         <div>
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">Tags</h2>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {thread.tags.map((t) => (
-              <Link key={t} to={`/forum?tag=${encodeURIComponent(t)}`}><TagChip tag={t} interactive /></Link>
-            ))}
+          {/*
+            Tag + follow, on one row each.
+
+            This is where following belongs: you have just read the thread, so
+            "more like this" is a judgement you are actually equipped to make.
+            Offering it on a feed card would be asking before you know.
+
+            Signed-out readers see the tags and no toggle — not a toggle that
+            bounces them to /auth. A control that cannot do its job should not
+            be drawn.
+          */}
+          <div className="mt-3 space-y-1.5">
+            {thread.tags.map((t) => {
+              const isFollowing = following.has(t);
+              return (
+                <div key={t} className="flex items-center justify-between gap-2">
+                  <Link to={`/forum?tag=${encodeURIComponent(t)}`} className="min-w-0">
+                    <TagChip tag={t} interactive />
+                  </Link>
+                  {signedIn && (
+                    <button
+                      type="button"
+                      onClick={() => toggleFollow(t)}
+                      disabled={pendingTag === t}
+                      title={isFollowing ? `Stop following ${t}` : `Follow ${t} — it will weigh your "For you" feed`}
+                      className={`shrink-0 cursor-pointer rounded-[5px] border px-2 py-0.5 text-[10.5px] font-medium transition-colors disabled:opacity-50 ${
+                        isFollowing
+                          ? 'border-white/[0.15] bg-white/[0.10] text-[#e5e5e9] hover:bg-white/[0.16]'
+                          : 'border-white/[0.08] text-[#79797f] hover:border-white/[0.15] hover:text-[#e5e5e9]'
+                      }`}
+                    >
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

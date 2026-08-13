@@ -244,3 +244,87 @@ test('explain() falls back rather than returning empty for an unknown reason', (
   assert.ok(explain(['something_unmapped'], {}).length > 0);
   assert.ok(explain([], {}).length > 0);
 });
+
+// ── 5. reachability: every signal the ranker scores must be WRITABLE ────────
+//
+// 🔴 This gate exists because the thing it tests actually shipped broken.
+//
+// v0.4 created `forum_subscriptions`, `getViewerContext` JOINed it, and the
+// ranker awarded +0.5 fit for `you_follow_this_topic`. Nothing in the running
+// application could write a row. So the JOIN always returned zero, the reason
+// could never fire, and the `my-topics` ranker — offered in the UI as "Topics
+// you follow" — returned an empty list for every user, permanently.
+//
+// Every test in this file passed throughout, because they hand the ranker a
+// `viewer.subscribedTags` fixture directly. That is the whole lesson: a unit
+// test proves a function is correct, never that the application can reach it.
+// Same shape as xeno-workflow's 76 node types (defined, barrel-exported, fully
+// unit-tested, registered nowhere) and xeno-tools' `install` IPC that no code
+// path ever called.
+//
+// So this asserts against SOURCE, not behaviour: if the ranker consumes a
+// viewer signal, some route must be able to produce it.
+
+const ROUTES_SRC = join(__dirname, '..', 'src', 'server', 'routes', 'forumRoutes.js');
+const WRITE_SRC = join(__dirname, '..', 'src', 'server', 'services', 'forumWrite.js');
+
+test('a subscription can actually be created by the application', () => {
+  const write = readFileSync(WRITE_SRC, 'utf8');
+  assert.match(
+    codeOnly(write),
+    /INSERT\s+INTO\s+forum_subscriptions/i,
+    'forumWrite.js has no INSERT into forum_subscriptions. The ranker scores ' +
+    '"you_follow_this_topic" and the my-topics ranker filters on subscribed ' +
+    'tags — with no write path both are dead code and my-topics is empty for ' +
+    'every user, forever.',
+  );
+});
+
+test('...and the write path is REACHABLE over HTTP, not just defined', () => {
+  // The defect was never a missing function — it was a function nobody called.
+  // Defining subscribeTag and forgetting to route it reproduces the bug exactly.
+  const routes = codeOnly(readFileSync(ROUTES_SRC, 'utf8'));
+  assert.match(
+    routes, /router\.post\(\s*['"]\/subscriptions['"]/,
+    'no POST /subscriptions route — the write path exists but nothing can call it.',
+  );
+  assert.match(
+    routes, /router\.delete\(\s*['"]\/subscriptions['"]/,
+    'no DELETE /subscriptions route — following would be one-way.',
+  );
+  assert.match(
+    routes, /write\.subscribeTag/,
+    'the /subscriptions route does not call write.subscribeTag.',
+  );
+});
+
+test('every ranker that FILTERS on a viewer signal has a way to populate it', () => {
+  // my-topics narrows the pool to subscribed tags. A ranker that filters on an
+  // unpopulatable signal does not return "fewer results" — it returns NOTHING,
+  // which is indistinguishable from a broken feed.
+  const rankerCode = codeOnly(readFileSync(RANKER_SRC, 'utf8'));
+  const write = codeOnly(readFileSync(WRITE_SRC, 'utf8'));
+
+  if (/subscribedTags/.test(rankerCode)) {
+    assert.match(
+      write, /forum_subscriptions/,
+      'the ranker reads viewer.subscribedTags but forumWrite.js never touches ' +
+      'forum_subscriptions.',
+    );
+  }
+});
+
+test('my-topics is empty without subscriptions — and NOT empty with them', () => {
+  // Proves the filter is real in both directions. Before the fix the first half
+  // passed and the second was unreachable in production.
+  const threads = [
+    { id: 'a', shortId: 'a', title: 'A', tags: ['product:pixel'], status: 'open', createdAt: Date.now(), lastActivityAt: Date.now(), postCount: 0 },
+    { id: 'b', shortId: 'b', title: 'B', tags: ['product:motion'], status: 'open', createdAt: Date.now(), lastActivityAt: Date.now(), postCount: 0 },
+  ];
+  const none = rank(threads, { subscribedTags: [] }, { ranker: 'my-topics', limit: 10 });
+  assert.equal(none.length, 0, 'my-topics with no subscriptions should be empty');
+
+  const some = rank(threads, { subscribedTags: ['product:pixel'] }, { ranker: 'my-topics', limit: 10 });
+  assert.equal(some.length, 1, 'my-topics should return the subscribed thread');
+  assert.equal(some[0].shortId, 'a');
+});
