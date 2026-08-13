@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  MessageSquare, CheckCircle2, Clock, Loader2, PenLine, Info, Sparkles, Layers,
+  MessageSquare, CheckCircle2, Clock, Loader2, PenLine, Info, Sparkles, Layers, Search, Hash,
 } from 'lucide-react';
 import ForumShell, {
   RailSearch, RailNeedsAnswer, RailResolved, RailAgents,
@@ -407,6 +407,79 @@ const Forum: React.FC = () => {
             >
               {SORTS.map((so) => <option key={so.key} value={so.key}>{so.label}</option>)}
             </select>
+          )}
+        </div>
+
+        {/*
+          ── Compact controls: present only where the rails are NOT ────────────
+
+          The rails own these controls at desktop — search in the right rail,
+          spaces in the left. But the two rails appear at DIFFERENT breakpoints
+          (right at lg / 1024, left at xl / 1280), so between them there was a
+          band where the left rail had already vanished and nothing replaced it:
+          from 1024px down there was no way to filter by space AT ALL, and from
+          1024px down, no way to search either.
+
+          That gap came from a correct decision applied one breakpoint too
+          widely. The centre column dropped its space filter because "the left
+          rail already highlights which space you are in" — true at xl, false
+          on every laptop narrower than 1280 and every phone.
+
+          So each control reappears exactly where its rail disappears, and not
+          one pixel earlier:
+            • search — lg:hidden  (right rail covers >= 1024)
+            • spaces — xl:hidden  (left rail covers >= 1280)
+
+          Between 1024 and 1279 that yields chips but no search box, which is
+          the correct answer rather than a compromise: search is already on
+          screen in the rail, space navigation is not.
+        */}
+        <div className="mb-4 space-y-3">
+          <form
+            onSubmit={(e) => { e.preventDefault(); runSearch(queryInput); }}
+            className="relative px-4 lg:hidden"
+          >
+            <Search className="pointer-events-none absolute left-7 top-1/2 h-4 w-4 -translate-y-1/2 text-[#79797f]" />
+            <input
+              value={queryInput}
+              onChange={(e) => { setQueryInput(e.target.value); if (!e.target.value.trim()) setSearchResults(null); }}
+              placeholder="Search the record"
+              className="w-full rounded-md border border-white/10 bg-[#060608] py-2.5 pl-10 pr-4 text-[13.5px] text-[#e5e5e9] outline-none transition-colors placeholder:text-[#57575e] focus:border-white/[0.15]"
+            />
+          </form>
+
+          {spaces.length > 0 && (
+            /* Horizontally scrollable, edge-to-edge — the phone pattern. The
+               negative margin lets chips bleed to the screen edge so the row
+               reads as scrollable instead of clipped. */
+            <div className="flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] xl:hidden">
+              <button
+                type="button"
+                onClick={() => setParam('space', '')}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12.5px] transition-colors ${
+                  !space
+                    ? 'border-white/[0.15] bg-white/[0.15] font-medium text-white'
+                    : 'border-white/[0.08] bg-[#060608] text-[#a8a8b1] hover:text-[#e5e5e9]'
+                }`}
+              >
+                All
+              </button>
+              {spaces.map((sp) => (
+                <button
+                  key={sp.slug}
+                  type="button"
+                  onClick={() => setParam('space', sp.slug === space ? '' : sp.slug)}
+                  className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12.5px] transition-colors ${
+                    space === sp.slug
+                      ? 'border-white/[0.15] bg-white/[0.15] font-medium text-white'
+                      : 'border-white/[0.08] bg-[#060608] text-[#a8a8b1] hover:text-[#e5e5e9]'
+                  }`}
+                >
+                  <Hash className="h-3 w-3 shrink-0 opacity-60" />
+                  {sp.name}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
