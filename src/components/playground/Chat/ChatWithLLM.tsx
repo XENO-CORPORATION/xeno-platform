@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
 import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
-import ChatEmptyState, { type ChatEmptyStateTool } from './ChatEmptyState';
+import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import ChatShareModal from './ChatShareModal';
 import ChatArtifactsPage from './ChatArtifactsPage';
@@ -33,7 +33,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchResponse, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Compass, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Lightbulb, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Square, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar } from 'lucide-react';
+import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Compass, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Square, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -312,6 +312,264 @@ interface Conversation {
     projectId?: string | null;
 }
 // --- END NEW ---
+
+// ---------------------------------------------------------------------------
+// DEV-only demo conversation — seeded on first load so the full render path
+// (a real multi-turn thread with every message element) is visible with no
+// backend. Disable with: localStorage.setItem('xeno_chat_demo', 'off') + reload.
+// ---------------------------------------------------------------------------
+// Web-source favicon fallback (offline / no metadata): a brand-ish coloured
+// tile with the domain's initials — matches the lab's coloured source favicons.
+// Exact brand codes + colours from the lab, matched by domain.
+const SOURCE_BRANDS: Array<{ m: string; i: string; c: string }> = [
+  { m: 'arxiv', i: 'AR', c: '#b31b1b' },
+  { m: 'aclanthology', i: 'AC', c: '#ed1c24' },
+  { m: 'semanticscholar', i: 'SS', c: '#1857b6' },
+  { m: 'springer', i: 'SP', c: '#164f9e' },
+  { m: 'openreview', i: 'OR', c: '#8c1b13' },
+  { m: 'langchain', i: 'LC', c: '#12856f' },
+  { m: 'medium', i: 'MD', c: '#111111' },
+  { m: 'github', i: 'GH', c: '#24292f' },
+  { m: 'openai', i: 'OA', c: '#0b8f6a' },
+  { m: 'eval', i: 'EV', c: '#5a5f66' },
+];
+const findSourceBrand = (url: string) => {
+  const host = (url || '').replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase();
+  return SOURCE_BRANDS.find((b) => host.includes(b.m)) || null;
+};
+const sourceBadgeInitials = (url: string): string => {
+  const brand = findSourceBrand(url);
+  if (brand) return brand.i;
+  const host = (url || '').replace(/^https?:\/\//, '').replace(/^www\./, '');
+  return (host.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2) || '?').toUpperCase();
+};
+const sourceBadgeColor = (url: string): string => {
+  const brand = findSourceBrand(url);
+  if (brand) return brand.c;
+  let h = 0;
+  for (let i = 0; i < (url || '').length; i++) h = url.charCodeAt(i) + ((h << 5) - h);
+  return `hsl(${Math.abs(h) % 360} 50% 42%)`;
+};
+
+const CHAT_DEMO_ENABLED = (() => {
+  try {
+    return import.meta.env.DEV && localStorage.getItem('xeno_chat_demo') !== 'off';
+  } catch {
+    return false;
+  }
+})();
+
+const DEMO_DIAGRAM_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="560" height="132">' +
+  '<rect width="560" height="132" rx="12" fill="#16181d"/>' +
+  '<g font-family="ui-monospace, monospace" font-size="15" fill="#e6e4df">' +
+  '<rect x="26" y="47" width="128" height="38" rx="8" fill="#101216" stroke="#2a2f3a"/><text x="52" y="71">Extract</text>' +
+  '<rect x="216" y="47" width="128" height="38" rx="8" fill="#101216" stroke="#2a2f3a"/><text x="236" y="71">Compress</text>' +
+  '<rect x="406" y="47" width="128" height="38" rx="8" fill="#101216" stroke="#2a2f3a"/><text x="436" y="71">Render</text>' +
+  '</g><g stroke="#6da7ec" stroke-width="2" fill="none"><path d="M160 66h48"/><path d="M350 66h48"/></g></svg>';
+const DEMO_DIAGRAM_IMG =
+  typeof btoa !== 'undefined'
+    ? `data:image/svg+xml;base64,${btoa(DEMO_DIAGRAM_SVG)}`
+    : `data:image/svg+xml,${encodeURIComponent(DEMO_DIAGRAM_SVG)}`;
+
+const DEMO_CHART_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200">' +
+  '<rect width="320" height="200" rx="8" fill="#16181d"/>' +
+  '<rect width="320" height="34" fill="#1f2229"/>' +
+  '<circle cx="18" cy="17" r="5" fill="#e9603f"/><circle cx="36" cy="17" r="5" fill="#e7b64a"/><circle cx="54" cy="17" r="5" fill="#4caf6a"/>' +
+  '<g fill="#3b6ea5"><rect x="30" y="150" width="30" height="26"/><rect x="75" y="120" width="30" height="56"/><rect x="120" y="100" width="30" height="76"/><rect x="165" y="130" width="30" height="46"/><rect x="210" y="84" width="30" height="92"/><rect x="255" y="112" width="30" height="64"/></g>' +
+  '<polyline points="45,140 90,116 135,96 180,124 225,80 270,104" fill="none" stroke="#e9603f" stroke-width="3"/></svg>';
+const DEMO_CHART_B64 = typeof btoa !== 'undefined' ? btoa(DEMO_CHART_SVG) : '';
+
+const DEMO_ANSWER_1 = [
+  '# Structuring a transcript summariser',
+  '',
+  'Keep it to **three stages**, each with one job. Extract the key turns, compress them into claims, then render. Store the transcript separately so you can *re-summarise* as models improve.',
+  '',
+  '## The three stages',
+  '',
+  '- **Extract** — pull decisions, open questions, action items',
+  '  - keep the speaker where it matters',
+  '  - drop filler turns',
+  '- **Compress** — one-line claim per idea',
+  '- **Render** — group by theme, emit clean `markdown`',
+  '',
+  '## At a glance',
+  '',
+  `![Pipeline: Extract → Compress → Render](${DEMO_DIAGRAM_IMG})`,
+  '',
+  '| Stage | Input | Output |',
+  '| --- | --- | --- |',
+  '| Extract | Transcript | Salient turns |',
+  '| Compress | Salient turns | Claims |',
+  '| Render | Claims | Markdown |',
+  '',
+  '```ts',
+  'export function summarise(turns: Turn[]): Summary {',
+  '  const claims = turns',
+  '    .filter((t) => t.salient)',
+  '    .map((t) => `${t.speaker}: ${compress(t.text)}`);',
+  '  return { claims, groupedBy: "theme" };',
+  '}',
+  '```',
+  '',
+  '> Re-summarise on demand — never overwrite the transcript. The summary is a view, not the source of truth.',
+  '',
+  '### Rollout',
+  '',
+  '- [x] Split the pipeline into three stages',
+  '- [x] Add dedupe-by-theme',
+  '- [ ] Shadow-run last week’s transcripts',
+  '- [ ] Compare side-by-side, then ship behind a flag',
+].join('\n');
+
+const DEMO_THINKING_1 = [
+  'Let me work through this.',
+  '',
+  '- The user wants a clean structure for a transcript summariser.',
+  '- Three stages keep each responsibility isolated and testable.',
+  '- Keep the raw transcript immutable so summaries can be regenerated.',
+  '',
+  'Proceeding to write the answer with a diagram, a table and a code sketch.',
+].join('\n');
+
+const DEMO_ANSWER_2 = [
+  'Because **Compress** emits one claim per *turn* instead of per *idea*, adjacent turns on the same topic repeat. Fix it in three moves:',
+  '',
+  '1. Group salient turns by **theme** before compressing.',
+  '2. Dedupe near-duplicate claims — keep the strongest phrasing.',
+  '3. Cap each theme to its top-*k* claims by salience.',
+  '',
+  'Rank turns with a simple salience score, then drop redundancy:',
+  '',
+  '```python',
+  'def salience(t):',
+  '    return w * rel(t) + b * pos(t) - lam * redund(t)',
+  '```',
+  '',
+  '| Symptom | Fix |',
+  '| --- | --- |',
+  '| Same point twice | Dedupe on theme key |',
+  '| Filler turns | Raise the salience threshold |',
+].join('\n');
+
+const DEMO_THINKING_2 = [
+  'Diagnosing the repetition.',
+  '',
+  '- Searched for extractive-summarisation redundancy control.',
+  '- The standard fix is theme clustering plus a redundancy penalty.',
+  '',
+  'Writing a concise diagnosis with the salience formula and a fix table.',
+].join('\n');
+
+const DEMO_SOURCES = [
+  { uri: 'https://arxiv.org/abs/2312.06648', title: 'Neural Extractive Summarization with Redundancy Control' },
+  { uri: 'https://aclanthology.org/2023.acl-long.155/', title: 'Ranking Sentences for Extractive Summarization' },
+  { uri: 'https://langchain.dev/docs/use_cases/summarization', title: 'Grouping and de-duplicating retrieved claims' },
+];
+
+// The one-pager answer — custom XENO elements (cover image, diagram, artifact
+// card, follow-up chips) as inline-styled HTML so they render 1:1 like the lab
+// (inline styles override prose; --chat-* tokens keep them theme-aware).
+const DEMO_ANSWER_3 = `<p style="margin:0 0 14px;">Done — here's the whole thing as a shareable one-pager. A cover image, the pipeline at a glance, the editable document, and a short rollout checklist.</p>
+<div style="position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--chat-border);margin:14px 0;">
+<svg viewBox="0 0 600 220" preserveAspectRatio="none" style="display:block;width:100%;height:auto;">
+<defs><linearGradient id="dsky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#20242e"/><stop offset="1" stop-color="#12131a"/></linearGradient><linearGradient id="dwarm" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#cf7f5c"/><stop offset="1" stop-color="#8a5a7f"/></linearGradient></defs>
+<rect width="600" height="220" fill="url(#dsky)"/><circle cx="470" cy="66" r="44" fill="url(#dwarm)" opacity="0.85"/>
+<path d="M0 165 Q150 115 300 155 T600 142 V220 H0 Z" fill="#171a22"/><path d="M0 185 Q160 145 330 178 T600 168 V220 H0 Z" fill="#0e1016"/></svg>
+<span style="position:absolute;left:10px;bottom:10px;font-size:11px;font-family:ui-monospace,monospace;color:#fff;background:rgba(0,0,0,.42);padding:3px 9px;border-radius:7px;">✦ Generated cover image</span>
+</div>
+<div style="display:flex;align-items:center;padding:14px;border:1px solid var(--chat-border);border-radius:12px;background:var(--chat-surface);overflow-x:auto;margin:14px 0;">
+<span style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid var(--chat-border);border-radius:8px;font-size:12.5px;font-weight:600;background:var(--chat-canvas);color:var(--chat-text);white-space:nowrap;"><i style="width:9px;height:9px;border-radius:2px;margin-right:9px;background:#6ea8d8;display:inline-block;"></i>Extract</span>
+<span style="color:var(--chat-muted);margin:0 10px;flex:none;">→</span>
+<span style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid var(--chat-border);border-radius:8px;font-size:12.5px;font-weight:600;background:var(--chat-canvas);color:var(--chat-text);white-space:nowrap;"><i style="width:9px;height:9px;border-radius:2px;margin-right:9px;background:#d8ad5f;display:inline-block;"></i>Compress</span>
+<span style="color:var(--chat-muted);margin:0 10px;flex:none;">→</span>
+<span style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid var(--chat-border);border-radius:8px;font-size:12.5px;font-weight:600;background:var(--chat-canvas);color:var(--chat-text);white-space:nowrap;"><i style="width:9px;height:9px;border-radius:2px;margin-right:9px;background:#7fc7a6;display:inline-block;"></i>Render</span>
+</div>
+<div style="display:flex;align-items:center;gap:13px;padding:13px 15px;border:1px solid var(--chat-border);border-radius:12px;background:var(--chat-surface);margin:14px 0;">
+<span style="width:42px;height:42px;border-radius:10px;display:grid;place-items:center;background:var(--chat-hover);color:var(--chat-muted);flex:none;">
+<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></span>
+<span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:650;color:var(--chat-text);">Summariser — Team One-Pager</span>
+<span style="display:block;font-size:12px;color:var(--chat-muted);margin-top:3px;"><span style="font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--chat-muted);background:var(--chat-hover);padding:1px 7px;border-radius:5px;">Document</span> &nbsp;updated just now · 1 min read</span></span>
+<span style="color:var(--chat-muted);font-size:12px;white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Open</span>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+<span style="font-size:12.5px;color:var(--chat-muted);border:1px solid var(--chat-border);border-radius:9px;padding:7px 13px;display:inline-flex;align-items:center;gap:7px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Tweak the tone for execs</span>
+<span style="font-size:12.5px;color:var(--chat-muted);border:1px solid var(--chat-border);border-radius:9px;padding:7px 13px;display:inline-flex;align-items:center;gap:7px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8"/><path d="M12 3v13M7 8l5-5 5 5"/></svg>Export as PDF</span>
+</div>`;
+
+const DEMO_NOW = Date.now();
+const buildDemoConversation = (): ChatMessage[] => [
+  {
+    id: 'demo-u1',
+    sender: 'user',
+    text: 'How should I structure a transcript summariser? Here’s the spec.',
+    timestamp: DEMO_NOW - 600_000,
+    userFileAttachment: {
+      name: 'summariser-spec.txt',
+      type: 'text/plain',
+      encoding: 'text',
+      content:
+        'Transcript Summariser — Spec\n\nThree stages: Extract, Compress, Render.\nKeep the raw transcript immutable.\nRe-summarise on demand as models improve.\n',
+    },
+  },
+  {
+    id: 'demo-a1',
+    sender: 'ai',
+    text: DEMO_ANSWER_1,
+    parsedAnswer: DEMO_ANSWER_1,
+    parsedThinking: DEMO_THINKING_1,
+    hasThinking: true,
+    thinkingContent: DEMO_THINKING_1,
+    thinkingDuration: 4,
+    modelIdUsed: 'openai/gpt-5.6-terra',
+    timestamp: DEMO_NOW - 594_000,
+  },
+  {
+    id: 'demo-u2',
+    sender: 'user',
+    text: 'This is what the current output looks like. Why does it feel repetitive?',
+    timestamp: DEMO_NOW - 300_000,
+    userImageAttachments: DEMO_CHART_B64
+      ? [{ name: 'current-output.svg', type: 'image/svg+xml', base64Data: DEMO_CHART_B64 }]
+      : undefined,
+  },
+  {
+    id: 'demo-a2',
+    sender: 'ai',
+    text: DEMO_ANSWER_2,
+    parsedAnswer: DEMO_ANSWER_2,
+    parsedThinking: DEMO_THINKING_2,
+    hasThinking: true,
+    thinkingContent: DEMO_THINKING_2,
+    thinkingDuration: 5,
+    modelIdUsed: 'openai/gpt-5.6-terra',
+    timestamp: DEMO_NOW - 294_000,
+    searchInfo: {
+      queries: ['extractive summarization salience redundancy'],
+      sources: DEMO_SOURCES,
+    },
+    uniqueSourcesUsed: DEMO_SOURCES.map((s, i) => ({ index: i + 1, uri: s.uri, title: s.title })),
+  },
+  {
+    id: 'demo-u3',
+    sender: 'user',
+    text: 'Perfect — now put it all together as a shareable one-pager, with a cover image and a diagram.',
+    timestamp: DEMO_NOW - 120_000,
+  },
+  {
+    id: 'demo-a3',
+    sender: 'ai',
+    text: DEMO_ANSWER_3,
+    parsedAnswer: DEMO_ANSWER_3,
+    parsedThinking: 'Put a decision log first, then the stage diagram and a rollout checklist. Ship it as a document artifact.',
+    hasThinking: true,
+    thinkingContent: 'Put a decision log first, then the stage diagram and a rollout checklist. Ship it as a document artifact.',
+    thinkingDuration: 3,
+    modelIdUsed: 'openai/gpt-5.6-terra',
+    timestamp: DEMO_NOW - 114_000,
+  },
+];
 
 const formatConversationListDate = (timestamp: number): string => {
   const date = new Date(timestamp);
@@ -879,25 +1137,46 @@ const sourceHighlightStyles = `
   }
 
   /* Context Panel Styles - Matching Word Interface */
-  .context-panel {
+  /* Centered pop-up window (modal) with a backdrop — not a right-side drawer. */
+  .context-panel-overlay {
     position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #0a0a0b;
-    border-left: 1px solid #2a2a2d;
-    display: flex;
-    flex-direction: column;
-    /* Above Projects list (45) and project workspace (46). */
+    inset: 0;
     z-index: 50;
-    transition: transform 0.3s ease-in-out;
-    transform: translateX(100%);
-    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5vh 24px;
+    background: color-mix(in srgb, #000 46%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+  .context-panel-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
   }
 
-  .context-panel.visible {
-    transform: translateX(0);
+  .context-panel {
+    position: relative;
+    width: min(760px, 100%);
+    max-height: 100%;
+    background-color: var(--chat-canvas);
+    border: 1px solid var(--chat-border);
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+    transform: translateY(10px) scale(0.98);
+    opacity: 0;
+    transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease;
   }
+  .context-panel-overlay.visible .context-panel {
+    transform: none;
+    opacity: 1;
+  }
+
+  .context-panel-drag-handle { display: none; }
 
   .context-panel-drag-handle {
     position: absolute;
@@ -911,7 +1190,7 @@ const sourceHighlightStyles = `
   }
 
   .context-panel-drag-handle:hover {
-    background-color: rgba(59, 130, 246, 0.2);
+    background-color: var(--chat-border);
   }
 
   .main-content-transition {
@@ -922,24 +1201,25 @@ const sourceHighlightStyles = `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px;
-    background-color: #0a0a0b;
-    border-bottom: 1px solid #2a2a2d;
+    padding: 11px 12px;
+    background-color: var(--chat-canvas);
+    border-bottom: 1px solid var(--chat-border);
     flex-shrink: 0;
-    gap: 12px;
+    gap: 10px;
   }
 
   .context-panel-title {
     font-size: 13px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.8);
+    font-weight: 600;
+    color: var(--chat-text);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     overflow: hidden;
     flex: 1;
     min-width: 0;
   }
+  .context-panel-title svg { opacity: 1 !important; color: var(--chat-muted); }
 
   .context-panel-actions {
     display: flex;
@@ -952,106 +1232,106 @@ const sourceHighlightStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: #0e0e10;
-    border: 1px solid #1e1e21;
+    background-color: transparent;
+    border: 1px solid var(--chat-border);
     border-radius: 8px;
-    padding: 0 10px;
-    height: 32px;
-    color: rgba(255, 255, 255, 0.6);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    font-size: 13px;
+    padding: 0 11px;
+    height: 30px;
+    color: var(--chat-muted);
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+    font-size: 12.5px;
+    font-weight: 500;
     cursor: pointer;
     user-select: none;
   }
 
   .context-panel-btn:hover {
-    border-color: #6b7280;
-    color: rgba(255, 255, 255, 0.9);
-    background-color: #141416;
+    border-color: var(--chat-border);
+    color: var(--chat-text);
+    background-color: var(--chat-hover);
   }
 
   .context-panel-btn:active {
     transform: scale(0.95);
-    background-color: #2a2a2d;
-    border-color: #555;
+    background-color: var(--chat-hover);
+    border-color: var(--chat-border);
   }
 
   .context-panel-btn.active {
-    border-color: #6b7280;
-    color: rgba(255, 255, 255, 0.9);
-    background-color: #141416;
+    border-color: var(--chat-border);
+    color: var(--chat-text);
+    background-color: var(--chat-hover);
   }
 
   .context-panel-btn.success {
-    border-color: #22c55e;
-    color: #22c55e;
-    background-color: rgba(34, 197, 94, 0.1);
+    border-color: var(--chat-border);
+    color: var(--chat-text);
+    background-color: var(--chat-hover);
   }
 
   .context-panel-btn-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: #0e0e10;
-    border: 1px solid #1e1e21;
+    background-color: transparent;
+    border: 0;
     border-radius: 8px;
-    width: 32px;
-    height: 32px;
-    color: rgba(255, 255, 255, 0.6);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 30px;
+    height: 30px;
+    color: var(--chat-muted);
+    transition: background-color 0.15s, color 0.15s;
     cursor: pointer;
     user-select: none;
   }
 
   .context-panel-btn-icon:hover {
-    border-color: #6b7280;
-    color: rgba(255, 255, 255, 0.9);
-    background-color: #141416;
+    border-color: var(--chat-border);
+    color: var(--chat-text);
+    background-color: var(--chat-hover);
   }
 
   .context-panel-btn-icon:active {
     transform: scale(0.9);
-    background-color: #2a2a2d;
-    border-color: #555;
+    background-color: var(--chat-hover);
+    border-color: var(--chat-border);
   }
 
   .context-panel-btn-icon.active {
-    border-color: #6b7280;
-    color: rgba(255, 255, 255, 0.9);
-    background-color: #141416;
+    border-color: var(--chat-border);
+    color: var(--chat-text);
+    background-color: var(--chat-hover);
   }
 
   .context-panel-btn-icon.success {
-    border-color: #22c55e;
-    color: #22c55e;
-    background-color: rgba(34, 197, 94, 0.1);
+    border-color: var(--chat-border);
+    color: var(--chat-text);
+    background-color: var(--chat-hover);
   }
 
   .context-panel-btn-icon.close:hover {
-    border-color: #ef4444;
-    color: #ef4444;
-    background-color: rgba(239, 68, 68, 0.1);
+    color: var(--chat-text);
+    background-color: var(--chat-hover);
   }
 
   .context-panel-content {
     flex: 1;
     overflow-y: auto;
     padding: 0;
-    background-color: #0e0e10;
+    background-color: var(--chat-canvas);
   }
 
   .context-panel-content pre {
     background-color: transparent;
-    padding: 16px;
+    padding: 16px 18px;
     margin: 0;
     overflow-x: auto;
   }
 
   .context-panel-content pre code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 13px;
-    line-height: 1.6;
-    color: #d4d4d4;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--chat-text);
     background-color: transparent;
     padding: 0;
   }
@@ -1059,8 +1339,8 @@ const sourceHighlightStyles = `
   .context-panel-edit-area {
     width: 100%;
     height: 100%;
-    background-color: #0e0e10;
-    color: #d4d4d4;
+    background-color: var(--chat-canvas);
+    color: var(--chat-text);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 13px;
     line-height: 1.6;
@@ -1079,19 +1359,19 @@ const sourceHighlightStyles = `
     width: 8px;
   }
   .context-panel-content::-webkit-scrollbar-track {
-    background: #0e0e10;
-    border-radius: 4px;
+    background: transparent;
   }
   .context-panel-content::-webkit-scrollbar-thumb {
-    background: #1e1e21;
-    border-radius: 4px;
+    background: var(--chat-border);
+    border-radius: 5px;
+    border: 2px solid var(--chat-canvas);
   }
   .context-panel-content::-webkit-scrollbar-thumb:hover {
-    background: #555;
+    background: var(--chat-muted);
   }
   .context-panel-content {
     scrollbar-width: thin;
-    scrollbar-color: #1e1e21 #0e0e10;
+    scrollbar-color: var(--chat-border) transparent;
   }
 
   /* Global Focus Indicators for Accessibility */
@@ -2344,9 +2624,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       '--chat-composer-border': canvasIsLight
         ? 'rgba(0, 0, 0, 0.14)'
         : 'rgba(255, 255, 255, 0.12)',
-      '--chat-composer-shadow': canvasIsLight
-        ? '0 10px 24px -8px rgba(0, 0, 0, 0.12)'
-        : '0 12px 28px -10px rgba(0, 0, 0, 0.55)',
+      // No drop shadow on the composer: it would paint a hard edge straight across the
+      // liquid neck the gooey reveal grows out of the box. The stroke carries the shape.
+      '--chat-composer-shadow': 'none',
       '--chat-tool-rail-stroke': railIsLight ? 'rgba(24, 24, 27, 0.72)' : 'rgba(245, 245, 245, 0.78)',
       '--chat-top-bar-btn-active': canvasIsLight
         ? tokens.control
@@ -2589,7 +2869,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     { id: 'lawyer', label: 'Lawyer', prompt: 'You are an experienced legal professional. Provide legal information, help draft documents, explain legal concepts, and offer guidance on legal matters. Note: This is not legal advice.' },
     { id: 'copywriter', label: 'Copywriter', prompt: 'You are a skilled copywriter and content creator. Help craft compelling copy, marketing content, blog posts, and creative writing with engaging tone and clear messaging.' },
   ];
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    CHAT_DEMO_ENABLED ? buildDemoConversation() : [],
+  );
 
   // Swap top-bar chrome: New chat ↔ open conversation.
   useEffect(() => {
@@ -10147,27 +10429,13 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       const reader = new FileReader();
       reader.onload = (e) => {
         if (e.target?.result) {
-          let language = 'plaintext';
-          if (file.name.endsWith('.html') || file.name.endsWith('.htm')) language = 'html';
-          else if (file.name.endsWith('.js')) language = 'javascript';
-          else if (file.name.endsWith('.jsx')) language = 'jsx';
-          else if (file.name.endsWith('.ts')) language = 'typescript';
-          else if (file.name.endsWith('.tsx')) language = 'tsx';
-          else if (file.name.endsWith('.css')) language = 'css';
-          else if (file.name.endsWith('.json')) language = 'json';
-          else if (file.name.endsWith('.py')) language = 'python';
-          else if (file.name.endsWith('.md')) language = 'markdown';
-          // Add more language detections as needed
-
-          console.log('[Context Panel] Setting content for file:', file.name, 'Language:', language);
-          setContextPanelContent({
-            type: 'file',
-            title: file.name,
+          // Open the same file-preview window used by Projects.
+          openProjectFilePreview({
+            name: file.name,
             content: e.target.result as string,
-            language
+            encoding: 'text',
+            type: file.type,
           });
-          setIsContextPanelOpen(true);
-          console.log('[Context Panel] Panel should now be open');
         } else {
           console.error('[Context Panel] FileReader result is empty');
         }
@@ -10179,43 +10447,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       
       reader.readAsText(file.fileObject);
     } else {
-      // Handling serialized file data from history
-      console.log('[Context Panel] Processing serialized file data');
+      // Handling serialized file data from history — open the same window Projects uses.
       const serializedFile = fileData as { name: string, type: string, content: string, encoding: 'base64' | 'text' };
-      let displayContent = `File: ${serializedFile.name}\nType: ${serializedFile.type}\n\n`;
-      let language = 'plaintext';
-
-      if (serializedFile.encoding === 'text') {
-        displayContent = serializedFile.content;
-        // Determine language for syntax highlighting from name/type
-        if (serializedFile.name.endsWith('.html') || serializedFile.name.endsWith('.htm')) language = 'html';
-        else if (serializedFile.name.endsWith('.js')) language = 'javascript';
-        else if (serializedFile.name.endsWith('.jsx')) language = 'jsx';
-        else if (serializedFile.name.endsWith('.ts')) language = 'typescript';
-        else if (serializedFile.name.endsWith('.tsx')) language = 'tsx';
-        else if (serializedFile.name.endsWith('.css')) language = 'css';
-        else if (serializedFile.name.endsWith('.json')) language = 'json';
-        else if (serializedFile.name.endsWith('.py')) language = 'python';
-        else if (serializedFile.name.endsWith('.md')) language = 'markdown';
-        // Add more language detections as needed
-
-      } else if (serializedFile.encoding === 'base64') {
-        if (serializedFile.type === 'application/pdf') {
-          displayContent += 'This is a PDF file. Content preview is not available for historic PDFs in the context panel.';
-        } else {
-          displayContent += 'Content is stored in binary (base64) format and cannot be directly previewed as text here.';
-        }
-      }
-
-      console.log('[Context Panel] Setting content for serialized file:', serializedFile.name, 'Language:', language);
-      setContextPanelContent({
-        type: 'file',
-        title: serializedFile.name,
-        content: displayContent,
-        language: language
+      openProjectFilePreview({
+        name: serializedFile.name,
+        content: serializedFile.content,
+        encoding: serializedFile.encoding,
+        type: serializedFile.type,
       });
-      setIsContextPanelOpen(true);
-      console.log('[Context Panel] Panel should now be open');
     }
   };
 
@@ -10264,9 +10503,13 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
     return (
       <div
-        className={`context-panel ${isContextPanelOpen ? 'visible' : ''}`}
-        style={{ width: `${contextPanelWidth}px` }}
+        className={`context-panel-overlay ${isContextPanelOpen ? 'visible' : ''}`}
+        onClick={() => {
+          setIsContextPanelOpen(false);
+          setIsEditingContextPanel(false);
+        }}
       >
+        <div className="context-panel" onClick={(e) => e.stopPropagation()}>
         <div className="context-panel-drag-handle" onMouseDown={handleMouseDownOnDragHandle} />
 
         {/* Header */}
@@ -10353,11 +10596,12 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 <code style={codeStyle}>{contextPanelContent.content}</code>
               </pre>
             ) : (
-              <div className="text-sm text-gray-300 p-4" style={codeStyle}>
+              <div className="text-sm text-[var(--chat-text)] p-4" style={codeStyle}>
                 {contextPanelContent.content}
               </div>
             )
           )}
+        </div>
         </div>
       </div>
     );
@@ -10901,9 +11145,35 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     !activeProjectId &&
     !isChatsCatalogOpen;
 
+  /**
+   * The scroll-to-bottom pill, for the composer to host inside its floating mode row.
+   * Same button, same handler — it just needs a home that the row does not cover.
+   */
+  const composerScrollAffordance = showScrollToBottom && messages.length > 0 ? (
+    <button
+      type="button"
+      data-chat-scroll-in-row
+      onClick={scrollToBottom}
+      className={`group inline-flex h-7 items-center justify-center rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-muted)] transition-colors duration-150 hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus:outline-none ${(isLoading || messages.some((m) => m.isStreaming)) ? 'w-[82px]' : 'w-7'}`}
+      aria-label={(isLoading || messages.some((m) => m.isStreaming)) ? 'Generating — scroll to latest' : 'Scroll to bottom'}
+    >
+      {(isLoading || messages.some((m) => m.isStreaming)) ? (
+        <>
+          <span className="group-hover:hidden"><span className="xeno-gen-dots" aria-hidden="true"><i /><i /><i /></span></span>
+          <span className="hidden whitespace-nowrap text-[11px] font-medium group-hover:inline">
+            {messages.some((m) => m.isDotPlaceholder) ? 'Thinking…' : 'Generating…'}
+          </span>
+        </>
+      ) : (
+        <ChevronDown size={18} className="xeno-chevron-bounce" />
+      )}
+    </button>
+  ) : null;
+
   const renderPrimaryComposer = (options?: { forceCompact?: boolean }) => (
           <div className="relative z-10">
           <ChatEmptyState
+            scrollAffordance={composerScrollAffordance}
             isActive={options?.forceCompact ? false : messages.length === 0}
             isCompact={isMultiInterface}
             hideToolRail={options?.forceCompact}
@@ -10986,7 +11256,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           {/* Input Box Area — inner bordered field inside the composer shell (empty + conversation). */}
           <div
             data-empty-composer-input="true"
-            className={`chat-input-container relative rounded-2xl border border-white/[0.10] bg-transparent shadow-none ${
+            /* One stroke only: the shell carries it now (it is the box the gooey skin is
+               moulded onto), so this inner field must not draw a second border. */
+            className={`chat-input-container relative rounded-2xl border border-transparent bg-transparent shadow-none ${
               messages.length === 0 ? 'p-3' : 'p-2'
             }`}
           >
@@ -11021,7 +11293,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             e.stopPropagation();
                                             handleRemoveAttachedFile(file.id);
                                         }}
-                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[#0e0e10] border border-[#1e1e21] text-gray-400 hover:text-white hover:border-red-500 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
+                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[var(--chat-elevated)] border border-[var(--chat-border)] text-[var(--chat-muted)] hover:text-[var(--chat-text)] hover:border-[var(--chat-border)] hover:bg-[var(--chat-hover)] opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
                                         aria-label="Remove file"
                                     >
                                         <X size={10} />
@@ -11048,7 +11320,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             e.stopPropagation();
                                             handleRemoveAttachedFile(file.id);
                                         }}
-                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[#0e0e10] border border-[#1e1e21] text-gray-400 hover:text-white hover:border-red-500 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
+                                        className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-[var(--chat-elevated)] border border-[var(--chat-border)] text-[var(--chat-muted)] hover:text-[var(--chat-text)] hover:border-[var(--chat-border)] hover:bg-[var(--chat-hover)] opacity-0 group-hover:opacity-100 absolute top-[-6px] right-[-6px] transition-all duration-200 ease-out active:scale-90"
                                         aria-label="Remove file"
                                     >
                                         <X size={10} />
@@ -11087,6 +11359,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             {/* Controls Row */}
             <div className={`chat-input-controls flex items-center justify-between gap-2 ${messages.length === 0 ? 'mt-1.5 md:mt-2' : 'mt-1'}`}>
               <div className="flex items-center gap-1 md:gap-2 relative">
+                  {/* "+" reveals the mode tabs / model chip above the box; Upload rides out with it. */}
+                  <ComposerRevealControls />
                   {/* Attach / Recent live on the hover tool rail (empty + conversation). */}
                   <div className="relative hidden">
                       <button
@@ -11132,7 +11406,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             className={`
                                 hide-scrollbar
                                 absolute bottom-full left-full z-30 mb-2 ml-2 origin-bottom-left
-                                max-h-[300px] w-72 overflow-y-auto rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
+                                max-h-[320px] w-72 overflow-y-auto rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
                                 transition-all duration-200 ease-out
                                 ${isRecentFilesOpen && isAttachMenuOpen 
                                     ? 'opacity-100 scale-100 visible' 
@@ -11141,7 +11415,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             `}
                             style={{ left: 'calc(16rem + 0.5rem)' }} // Adjust positioning if needed
                           >
-                                 <div className="space-y-1 p-2">
+                                 <div className="p-2">
+                                     {/* Header */}
+                                     <div className="mb-2 flex items-center justify-between px-1.5 pt-0.5">
+                                       <span className="select-none text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--chat-muted)]">Recent</span>
+                                       <button
+                                         type="button"
+                                         onClick={() => setIsRecentFilesOpen(false)}
+                                         aria-label="Close recent files"
+                                         className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                                       >
+                                         <X size={13} />
+                                       </button>
+                                     </div>
+                                     <div className="mx-1.5 mb-2 h-px bg-[var(--chat-border)]" />
                                      {/* Recent Files Search */}
                                      {recentFiles.length > 3 && (
                                        <div className="relative mb-2">
@@ -11151,7 +11438,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            placeholder="Search files..."
                                            value={recentFilesSearchQuery}
                                            onChange={(e) => setRecentFilesSearchQuery(e.target.value)}
-                                           className="w-full rounded-md border border-[var(--chat-border)] bg-[var(--chat-canvas)] py-1.5 pl-7 pr-2 text-xs text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-accent)]"
+                                           className="w-full rounded-lg border border-[var(--chat-border)] bg-[var(--chat-canvas)] py-1.5 pl-7 pr-2 text-xs text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-muted)]"
                                          />
                                        </div>
                                      )}
@@ -11168,23 +11455,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            file.name.toLowerCase().includes(recentFilesSearchQuery.toLowerCase())
                                          )
                                          .map((file: typeof recentFiles[0]) => (
-                                         <div key={file.id} className="group flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-sm text-[var(--chat-text)] hover:bg-[var(--chat-hover)]">
+                                         <div key={file.id} className="group flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-2 text-sm text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]">
                                            <div 
                                              className="flex items-center gap-2 overflow-hidden flex-1" 
                                              onClick={() => handleReattachRecentFile(file)}
                                            >
-                                             {file.type.startsWith('image/') && file.preview ? (
-                                               <img src={file.preview} alt="Preview" className="w-6 h-6 rounded object-cover flex-shrink-0" />
-                                             ) : file.type === 'application/pdf' || file.name.endsWith('.pdf') ? (
-                                               <FileText size={16} className="text-red-400 flex-shrink-0" />
-                                             ) : file.type.startsWith('text/') || file.name.match(/\.(txt|md|json|csv|xml|html|css|js|ts|jsx|tsx|py|java|c|cpp|cs|php|rb|go|swift|kt|rs|toml|yaml|yml)$/i) ? (
-                                               <FileText size={16} className="text-blue-400 flex-shrink-0" />
-                                             ) : (
-                                               <FileText size={16} className="text-gray-400 flex-shrink-0" />
-                                             )}
+                                             <span className="flex w-7 flex-shrink-0 items-center justify-center">
+                                               {file.type.startsWith('image/') && file.preview ? (
+                                                 <img src={file.preview} alt="" className="h-7 w-7 rounded-md object-cover" />
+                                               ) : (
+                                                 <FileText size={17} className="text-[var(--chat-muted)]" />
+                                               )}
+                                             </span>
                                              <div className="flex flex-col overflow-hidden">
                                                 <span className="truncate" title={file.name}>{file.name}</span>
-                                               <span className="text-xs text-gray-500">
+                                               <span className="mt-0.5 font-mono text-[11px] text-[var(--chat-muted)]">
                                                  {(file.size / 1024).toFixed(1)} KB · {new Date(file.lastUsed).toLocaleDateString()}
                                                </span>
                                              </div>
@@ -11194,7 +11479,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                e.stopPropagation();
                                                handleRemoveRecentFile(file.id);
                                              }}
-                                             className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                             aria-label="Remove"
+                                             className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-[var(--chat-muted)] opacity-0 transition-all hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] group-hover:opacity-100"
                                            >
                                                  <X size={14} />
                                              </button>
@@ -11204,7 +11490,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           </div>
                         </div>
                       </div>
-                      {/* Token Context Window Display with Compress Button - Hidden on mobile (shown in header instead) */}
+                      {/* Context usage. The permanent "n / m tokens" readout is gone from the
+                          composer — the control row is meant to read as the designed one ("+",
+                          Upload | mic, Send). It only speaks up when it has something to offer:
+                          the Compress action, or a near/over-limit warning. */}
                       {!isMobile && (
                         <div data-token-context-counter className="flex shrink-0 items-center whitespace-nowrap">
                           {(() => {
@@ -11216,6 +11505,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             const canCompress = conversationUsagePercent > 0.9 && messages.length > 0;
                             const isNearLimit = totalUsagePercent > 0.9;
                             const isOverLimit = totalUsagePercent > 1;
+
+                            if (!canCompress && !isNearLimit) return null;
 
                             if (canCompress) {
                               // Show compress button only when CONVERSATION history is near limit
@@ -11420,7 +11711,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             /* Composer: dark fill (not washed lighter). Definition = inner border. */
             --chat-composer-fill: #141416;
             --chat-composer-border: rgba(255, 255, 255, 0.12);
-            --chat-composer-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.55);
+            --chat-composer-shadow: none;
             --chat-input-shadow: none;
             --chat-tool-rail-stroke: rgba(245, 245, 245, 0.78);
             --chat-tool-rail-stroke-soft: rgba(245, 245, 245, 0.58);
@@ -11449,7 +11740,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             --chat-danger-hover: #f87171;
             --chat-composer-fill: #1b1b1d;
             --chat-composer-border: rgba(255, 255, 255, 0.12);
-            --chat-composer-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.45);
+            --chat-composer-shadow: none;
             --chat-input-shadow: none;
             --chat-tool-rail-stroke: rgba(232, 232, 226, 0.72);
             --chat-tool-rail-stroke-soft: rgba(232, 232, 226, 0.52);
@@ -11477,7 +11768,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             --chat-danger-hover: #b91c1c;
             --chat-composer-fill: #ffffff;
             --chat-composer-border: rgba(0, 0, 0, 0.14);
-            --chat-composer-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.12);
+            --chat-composer-shadow: none;
             --chat-input-shadow: none;
             --chat-tool-rail-stroke: rgba(24, 24, 27, 0.72);
             --chat-tool-rail-stroke-soft: rgba(24, 24, 27, 0.48);
@@ -11596,40 +11887,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             border-color: var(--chat-composer-border, var(--chat-border)) !important;
             box-shadow: var(--chat-composer-shadow) !important;
           }
-          /* Conversation composer: shorter shell, same width as the message column. */
-          .chat-themed [data-composer-context="conversation"] {
-            border-radius: 0.9rem !important;
-          }
-          .chat-themed [data-composer-context="conversation"] [data-composer-column] {
-            gap: 0.45rem !important;
-            padding: 0.5rem !important;
-          }
-          .chat-themed [data-composer-context="conversation"] [data-empty-composer-input="true"] {
-            padding: 0.7rem 0.75rem !important;
-            border-radius: 0.9rem !important;
-          }
-          .chat-themed [data-composer-context="conversation"] .chat-mode-tab {
-            height: 1.65rem !important;
-            min-height: 1.65rem !important;
-            padding-left: 0.6rem !important;
-            padding-right: 0.6rem !important;
-            font-size: 11px !important;
-          }
-          .chat-themed [data-composer-context="conversation"] .chat-mode-surface {
-            padding: 0.18rem !important;
-            border-radius: 0.6rem !important;
-          }
+          /* Conversation composer: same width as the message column. It used to shrink the
+             box and the mode tabs too, but the composer now has ONE geometry across both
+             surfaces (see the composer-reveal metrics block in index.css) — a second set of
+             numbers here is what made the conversation composer read as a different design. */
           .chat-themed [data-composer-context="conversation"] .chat-input-controls {
-            margin-top: 0.45rem !important;
+            margin-top: 0.5rem !important;
           }
 
-          /* Empty nested input: keep its border/radius; drop only the inner shadow. */
+          /* Nested input: no border of its own. The shell is the single stroked box the
+             gooey skin is moulded onto — a second stroke inside it reads as two cards. */
           .chat-themed [data-chat-composer-shell] .chat-input-container,
           .chat-themed [data-chat-composer-shell] .chat-input-container[class*="bg-"],
           .chat-themed [data-chat-composer-shell] .chat-input-container[class*="shadow"] {
             background: transparent !important;
             background-color: transparent !important;
-            border-color: var(--chat-composer-border, var(--chat-border)) !important;
+            border-color: transparent !important;
             box-shadow: none !important;
             filter: none !important;
             --tw-shadow: 0 0 #0000 !important;
@@ -11966,55 +12239,163 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             to { opacity: 0; transform: translateY(6px) scale(0.96); }
           }
 
-          /* Xeno Sources Container Styles */
-          .xeno-sources-container {
-            background: linear-gradient(135deg, #111113 0%, #1f1f22 100%);
-            border: 1px solid #2a2a2d;
-            border-radius: 12px;
+          /* Gradual expand/collapse for Thoughts, sources, and other
+             "what went into the answer" panels — animates height via the grid
+             0fr→1fr trick (opens AND closes smoothly, no unmount). */
+          .chat-collapsible {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 520ms cubic-bezier(0.32, 0.72, 0, 1);
+          }
+          .chat-collapsible-open {
+            grid-template-rows: 1fr;
+          }
+          .chat-collapsible-inner {
             overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            min-height: 0;
+          }
+          /* The content itself fades + slides so the text visibly appears and
+             disappears (not just the row height changing). */
+          .chat-collapsible-content {
+            opacity: 0;
+            transform: translateY(-8px);
+            transition:
+              opacity 460ms ease,
+              transform 520ms cubic-bezier(0.32, 0.72, 0, 1);
+          }
+          .chat-collapsible-open .chat-collapsible-content {
+            opacity: 1;
+            transform: translateY(0);
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .chat-collapsible,
+            .chat-collapsible-content {
+              transition: none;
+            }
+          }
+
+          /* Markdown prose follows the chat theme (dark/dim/light), monochrome. */
+          .chat-themed .prose {
+            --tw-prose-body: var(--chat-text);
+            --tw-prose-headings: var(--chat-text);
+            --tw-prose-links: var(--chat-text);
+            --tw-prose-bold: var(--chat-text);
+            --tw-prose-counters: var(--chat-muted);
+            --tw-prose-bullets: var(--chat-muted);
+            --tw-prose-hr: var(--chat-border);
+            --tw-prose-quotes: var(--chat-muted);
+            --tw-prose-quote-borders: var(--chat-border);
+            --tw-prose-captions: var(--chat-muted);
+            --tw-prose-code: var(--chat-text);
+            --tw-prose-pre-code: var(--chat-text);
+            --tw-prose-pre-bg: transparent;
+            --tw-prose-th-borders: var(--chat-border);
+            --tw-prose-td-borders: var(--chat-border);
+            color: var(--chat-text);
+          }
+          .chat-themed .prose a { text-decoration-color: var(--chat-border); }
+          .chat-themed .prose blockquote {
+            color: var(--chat-muted);
+            border-left-color: var(--chat-border);
+            font-style: normal;
+          }
+          .chat-themed .prose table {
+            border: 1px solid var(--chat-border);
+            border-radius: 10px;
+            overflow: hidden;
+          }
+          .chat-themed .prose thead { border-bottom-color: var(--chat-border); }
+          .chat-themed .prose th {
+            background: var(--chat-surface);
+            color: var(--chat-text);
+            font-weight: 600;
+          }
+          .chat-themed .prose th,
+          .chat-themed .prose td { border-color: var(--chat-border); }
+
+          /* Generating indicator — three small XENO cubes (outline squares),
+             each with the same spin + breathe animation, staggered. */
+          .xeno-gen-dots { display: inline-flex; align-items: center; gap: 4px; }
+          .xeno-gen-dots i {
+            width: 9px; height: 9px; border-radius: 2px;
+            border: 1.5px solid currentColor; box-sizing: border-box; background: transparent;
+            animation: xeno-gen-cube 1.6s ease-in-out infinite;
+          }
+          .xeno-gen-dots i:nth-child(2) { animation-delay: 0.22s; }
+          .xeno-gen-dots i:nth-child(3) { animation-delay: 0.44s; }
+          @keyframes xeno-gen-cube {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(0.5); }
+            100% { transform: rotate(360deg) scale(1); }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .xeno-gen-dots i { animation: none; }
+          }
+
+          /* Scroll-to-latest chevron gently bounces up/down. */
+          .xeno-chevron-bounce { animation: xeno-chevron-bounce 1.3s ease-in-out infinite; }
+          @keyframes xeno-chevron-bounce {
+            0%, 100% { transform: translateY(-1px); }
+            50% { transform: translateY(2px); }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .xeno-chevron-bounce { animation: none; }
+          }
+
+          /* AI message-header cube — a small filled square that pops in ("fills")
+             when the answer appears (the spin happens earlier, in the placeholder). */
+          .xeno-model-cube {
+            width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0;
+            background: var(--chat-muted); box-sizing: border-box;
+            position: relative; top: 1px;
+            animation: xeno-model-cube-in 0.5s cubic-bezier(0.34, 1.4, 0.5, 1) both;
+          }
+          @keyframes xeno-model-cube-in {
+            0% { transform: scale(0.35); opacity: 0; }
+            60% { transform: scale(1.12); }
+            100% { transform: scale(1); opacity: 1; }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .xeno-model-cube { animation: none; }
+          }
+
+          /* Xeno Sources — bare / minimalist (lab style): no card, just a small
+             "Sources" label + inline links. Theme-aware. */
+          .xeno-sources-container {
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            overflow: visible;
+            box-shadow: none;
           }
 
           .xeno-sources-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 14px 16px;
+            padding: 2px 0 6px;
             cursor: pointer;
-            transition: background-color 0.2s ease;
-            border-bottom: 1px solid transparent;
+            transition: color 0.15s ease;
+            border-bottom: 0;
           }
 
-          .xeno-sources-header:hover {
-            background-color: rgba(255, 255, 255, 0.03);
-          }
+          .xeno-sources-header:hover .xeno-sources-title { color: var(--chat-text); }
 
-          .xeno-sources-container:has(.xeno-sources-list) .xeno-sources-header {
-            border-bottom-color: #2a2a2d;
-          }
-
-          .xeno-sources-icon {
-            width: 36px;
-            height: 36px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-          }
+          .xeno-sources-icon { display: none; }
 
           .xeno-sources-title {
-            font-size: 14px;
+            font-size: 11px;
             font-weight: 600;
-            color: #fff;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--chat-muted);
           }
 
           .xeno-sources-list {
-            padding: 12px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 4px;
             max-height: 280px;
             overflow-y: auto;
           }
@@ -12025,27 +12406,29 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             gap: 12px;
             padding: 10px 12px;
             border-radius: 8px;
-            background: rgba(255, 255, 255, 0.02);
+            background: transparent;
             border: 1px solid transparent;
-            transition: all 0.2s ease;
+            transition: background-color 0.15s ease, border-color 0.15s ease;
             text-decoration: none;
           }
 
           .xeno-source-item:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(255, 255, 255, 0.1);
+            background: var(--chat-hover);
+            border-color: var(--chat-border);
           }
 
           .xeno-source-favicon {
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
-            background: #111113;
+            width: 30px;
+            height: 30px;
+            border-radius: 7px;
+            background: var(--chat-elevated);
+            border: 1px solid var(--chat-border);
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
             overflow: hidden;
+            color: var(--chat-muted);
           }
 
           .xeno-source-number {
@@ -12054,8 +12437,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             justify-content: center;
             font-size: 11px;
             font-weight: 700;
-            background: rgba(255, 255, 255, 0.1);
-            color: #d1d5db;
+            background: var(--chat-hover);
+            color: var(--chat-muted);
             border-radius: 4px;
             padding: 2px 6px;
             min-width: 20px;
@@ -12212,7 +12595,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         className={`chat-themed chat-theme-${resolvedChatTheme} relative flex h-full flex-col overflow-hidden main-content-transition ${isMobile ? 'chat-mobile-container' : ''} ${isMobile && isHistoryOpen ? 'chat-sidebar-open' : ''}`}
         data-chat-theme-preference={chatTheme}
         style={{
-          paddingRight: isContextPanelOpen ? `${contextPanelWidth}px` : '0px',
+          paddingRight: '0px',
           backgroundColor: 'var(--chat-canvas)',
           color: 'var(--chat-text)',
           ...chatThemePreviewStyle,
@@ -14391,7 +14774,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             paddingLeft: !isMultiInterface && isHistoryOpen && !isMobile ? 260 : undefined,
           }}
         >
-                        <div className={`${isMultiInterface ? 'max-w-full px-2' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-[52rem]')} w-full space-y-2 overflow-hidden ${
+                        {/* `clip`, not `hidden`: it contains the same overflow, but `hidden`
+                            makes this column a scroll container, and a sticky descendant
+                            then resolves against THIS box instead of the message list that
+                            actually scrolls — which is why pinned code-block headers never
+                            pinned. `clip` is not a scroll container, so sticky passes through. */}
+                        <div className={`${isMultiInterface ? 'max-w-full px-2' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-[52rem]')} w-full space-y-1 [overflow:clip] ${
                           isMultiInterface ? 'mx-auto' : (
                             chatAlignment === 'left' ? 'ml-0 mr-auto' :
                             chatAlignment === 'right' ? 'ml-auto mr-0' :
@@ -14596,7 +14984,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                                            {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content) && (
                                             <div
-                                                     className="mb-1.5 ml-auto mr-0 flex max-w-[250px] cursor-pointer items-center gap-2 rounded-lg border border-[#1e1e21]/50 bg-[#2a2a2d]/50 p-2 transition-colors hover:bg-[#2a2a2d]"
+                                                     className="mb-1.5 ml-auto mr-0 flex max-w-[250px] cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 transition-colors hover:bg-[var(--chat-hover)]"
                                               onClick={() => {
                                                 if (message.userFileAttachment) {
                                                   if (message.userFileAttachment.file) {
@@ -14613,8 +15001,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                 }
                                               }}
                                             >
-                                                     <FileText size={18} className="flex-shrink-0 text-blue-400" />
-                                                     <span className="truncate text-sm text-gray-300" title={message.userFileAttachment.name}>
+                                                     <FileText size={17} className="flex-shrink-0 text-[var(--chat-muted)]" />
+                                                     <span className="truncate text-sm text-[var(--chat-text)]" title={message.userFileAttachment.name}>
                                                 {message.userFileAttachment.name}
                                               </span>
                                             </div>
@@ -14657,7 +15045,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                    )
                                ) : (
                                    // --- AI Message ---
-                                   <div data-message-id={message.id} className="group flex w-full flex-col items-start space-y-2">
+                                   <div data-message-id={message.id} className="group flex w-full flex-col items-start space-y-0.5">
 
                                       {/* Full message edit mode - transforms entire container into input box */}
                                       {editingAiMessageId === message.id ? (
@@ -14692,30 +15080,26 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         </div>
                                       ) : (
                                       <>
-                                      {/* 1. Thoughts (Expanded) */}
-                                      {message.hasThinking && showThinkingId === message.id && (
-                                          <div className="w-full pl-[1.125rem] mb-4">
-                                          <div className="flex flex-col w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg overflow-hidden">
-                                              {/* Header */}
-                                              <div
-                                                  onClick={() => setShowThinkingId(null)}
-                                                  className="flex items-center justify-between w-full px-4 py-2.5 cursor-pointer hover:bg-[#0e0e10]/50 transition-colors"
+                                      {/* 1. Thoughts — compact toggle + gradually expanding content */}
+                                      {message.hasThinking && (
+                                          <div className="w-full pl-[1.125rem]">
+                                              <button
+                                                  type="button"
+                                                  onClick={() => setShowThinkingId(showThinkingId === message.id ? null : message.id)}
+                                                  className="inline-flex items-center gap-2 py-0.5 text-[13px] transition-colors"
                                               >
-                                                  <div className="flex items-center gap-2">
-                                                      <Lightbulb size={16} className="text-gray-500" />
-                                                      <span className="text-sm text-gray-200">
-                                                          Thoughts
-                                                          {message.thinkingDuration !== undefined && message.thinkingDuration >= 0 && (
-                                                              <span className="text-gray-500 ml-2">{message.thinkingDuration}s</span>
-                                                          )}
-                                                      </span>
-                                                  </div>
-                                                  <ChevronUp size={16} className="text-gray-500" />
-                                              </div>
-
-                                              {/* Content */}
-                                              <div className="px-4 pb-4">
-                                                  <div className="pt-3 border-t border-[#1e1e21] w-full text-sm prose prose-sm prose-invert max-w-none text-gray-300 prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-gray-200 prose-headings:font-medium leading-relaxed"> 
+                                                  <span className="xeno-model-cube" aria-hidden="true" />
+                                                  <span className="font-semibold text-[var(--chat-text)]">
+                                                      {(message.modelIdUsed?.split('/').pop() || 'Model')}
+                                                      {message.thinkingDuration !== undefined && message.thinkingDuration >= 0 && (
+                                                          <span className="ml-1.5 font-medium text-[var(--chat-muted)]">· {message.thinkingDuration}s</span>
+                                                      )}
+                                                  </span>
+                                                  <ChevronDown size={14} className={`text-[var(--chat-muted)] transition-transform duration-200 ${showThinkingId === message.id ? 'rotate-180' : ''}`} />
+                                              </button>
+                                              <div className={`chat-collapsible ${showThinkingId === message.id ? 'chat-collapsible-open' : ''}`}>
+                                                <div className="chat-collapsible-inner">
+                                                  <div className="chat-collapsible-content mt-1.5 border-l-2 border-[#1e1e21] pl-3 text-sm prose prose-sm prose-invert max-w-none text-gray-400 prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-gray-200 prose-headings:font-medium leading-relaxed">
                                                 {message.thinkingContent ? (
                                                               <ReactMarkdown 
                                                                   remarkPlugins={[remarkGfm]}
@@ -14730,7 +15114,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                       const blockIndex = node?.position?.start?.line ?? (node?.index ?? Date.now());
                                                                       const codeBlockId = `${message.id}-thinking-code-${blockIndex}`;
                                                                       return <CodeBlockWithHeader
-                                                                                language={match ? match[1] : "plaintext"}
+                                                                                language={match ? match[1] : "plaintext"} theme={resolvedChatTheme === 'light' ? 'light' : 'dark'}
                                                                                 code={codeString}
                                                                                 runtimes={pistonRuntimes}
                                                                                 runtimesLoading={pistonRuntimesLoading}
@@ -14746,7 +15130,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                                 onCancelCodeEdit={handleCancelCodeEdit}
                                                                              />;
                                                                       } else { 
-                                                                          return <code className="bg-[#232021] rounded px-2 py-1 font-mono text-[15px] text-[#f6b98b] align-middle max-w-full">{codeString}</code>; 
+                                                                          return <code className="bg-[var(--chat-surface)] rounded px-2 py-1 font-mono text-[15px] text-[var(--chat-text)] align-middle max-w-full">{codeString}</code>; 
                                                                       } 
                                                                   } 
                                                                   return <code className={className} {...props}>{children}</code>; 
@@ -14765,38 +15149,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                           }
                                                       </p>
                                                   )}
-                                              </div>
-                                          </div>
-                                      </div>
-                                      </div>
-                                      )}
-
-                                      {/* 1. Thoughts (Collapsed Header) */}
-                                      {message.hasThinking && showThinkingId !== message.id && (
-                                          <div className="w-full pl-[1.125rem] mb-4">
-                                              <div
-                                                  onClick={() => setShowThinkingId(message.id)}
-                                                  className="flex items-center justify-between w-full bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-4 py-2.5 cursor-pointer hover:border-white/20 hover:bg-[var(--chat-hover)] transition-colors"
-                                              >
-                                                  <div className="flex items-center gap-2">
-                                                      <Lightbulb size={16} className="text-gray-500" />
-                                                      <span className="text-sm text-gray-200">
-                                                          Thoughts
-                                                          {message.thinkingDuration !== undefined && message.thinkingDuration >= 0 && (
-                                                              <span className="text-gray-500 ml-2">{message.thinkingDuration}s</span>
-                                                          )}
-                                                      </span>
                                                   </div>
-                                                  <ChevronDown size={16} className="text-gray-500" />
+                                                </div>
                                               </div>
-                                          </div>
+                                      </div>
                                       )}
  
                                       {/* 2. Grounding Info Box - Xeno Search Sources */}
                                       {/* Show Xeno Search Loading Animation or Results - Only when Xeno Search was actually used */}
                                       {((message.isLoading && message.searchInfo && isXenoSearchEnabled) ||
-                                        (message.searchInfo && (message.searchInfo.queries?.length > 0 || message.searchInfo.sources?.length > 0) &&
-                                         (isXenoSearchEnabled || isXenoSearching || xenoSearchResults))) ? (
+                                        (!message.isLoading && message.searchInfo &&
+                                         ((message.searchInfo.queries?.length ?? 0) > 0 || (message.searchInfo.sources?.length ?? 0) > 0))) ? (
                                           message.isLoading ? (
                                               <div className="w-full pl-[1.125rem]">
                                                   {message.isXenoDeepSearchContainer ? (
@@ -14835,11 +15198,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                             >
                                                                 <div className="flex items-center gap-3">
                                                                     <div className="xeno-sources-icon">
-                                                                        <Globe size={16} className="text-gray-300" />
+                                                                        <Globe size={16} className="text-[var(--chat-muted)]" />
                                                                     </div>
                                                                     <div>
                                                                         <div className="xeno-sources-title">Web Sources</div>
-                                                                        <div className="text-xs text-gray-400">{sourceCount} page{sourceCount !== 1 ? 's' : ''} found</div>
+                                                                        <div className="text-xs text-[var(--chat-muted)]">{sourceCount} page{sourceCount !== 1 ? 's' : ''} found</div>
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex items-center gap-3">
@@ -14849,22 +15212,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                             const actualUrl = extractActualUrl(source.uri);
                                                                             const favicon = sourceMetadataCache[actualUrl]?.favicon;
                                                                             return (
-                                                                                <div key={idx} className="w-6 h-6 rounded-full bg-[#2a2a2d] border-2 border-[#111113] flex items-center justify-center overflow-hidden shadow-sm">
+                                                                                <div key={idx} style={{ background: favicon ? 'var(--chat-hover)' : sourceBadgeColor(actualUrl) }} className="w-6 h-6 rounded-md border-2 border-[var(--chat-surface)] flex items-center justify-center overflow-hidden font-mono text-[8px] font-bold text-white">
                                                                                     {favicon ? (
-                                                                                        <img src={favicon} alt="" className="w-4 h-4 object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                                                                        <img src={favicon} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                                                                     ) : (
-                                                                                        <div className="w-3 h-3 bg-gray-500 rounded-full" />
+                                                                                        <span>{sourceBadgeInitials(actualUrl)}</span>
                                                                                     )}
                                                                                 </div>
                                                                             );
                                                                         })}
                                                                         {sourceCount > 4 && (
-                                                                            <div className="w-6 h-6 rounded-full bg-[#1e1e21] border-2 border-[#111113] flex items-center justify-center text-xs text-gray-300 font-medium shadow-sm">
+                                                                            <div className="w-6 h-6 rounded-md bg-[var(--chat-surface)] border-2 border-[var(--chat-surface)] flex items-center justify-center text-xs text-[var(--chat-muted)] font-medium">
                                                                                 +{sourceCount - 4}
                                                                             </div>
                                                                         )}
                                                                     </div>
-                                                                    <ChevronDown size={16} className={`text-gray-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                                                                    <ChevronDown size={16} className={`text-[var(--chat-muted)] transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                                                                 </div>
                                                             </div>
 
@@ -14886,11 +15249,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                                 className="xeno-source-item group"
                                                                                 onClick={(e) => e.stopPropagation()}
                                                                             >
-                                                                                <div className="xeno-source-favicon">
+                                                                                <div className="xeno-source-favicon" style={favicon ? undefined : { background: sourceBadgeColor(domain || source.uri), borderColor: 'transparent', color: '#fff' }}>
                                                                                     {favicon ? (
-                                                                                        <img src={favicon} alt="" className="w-4 h-4 object-cover rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                                                                        <img src={favicon} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                                                                     ) : (
-                                                                                        <Globe size={14} className="text-gray-500" />
+                                                                                        <span className="font-mono text-[10px] font-bold">{sourceBadgeInitials(domain || source.uri)}</span>
                                                                                     )}
                                                                                 </div>
                                                                                 <div className="flex-1 min-w-0">
@@ -14898,16 +15261,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                                         <span className="xeno-source-number">
                                                                                             {idx + 1}
                                                                                         </span>
-                                                                                        <span className="text-sm font-medium text-gray-100 truncate group-hover:text-white transition-colors">
+                                                                                        <span className="text-sm font-medium text-[var(--chat-text)] truncate transition-colors">
                                                                                             {source.title || domain}
                                                                                         </span>
                                                                                     </div>
-                                                                                    <div className="text-xs text-gray-500 mt-0.5 truncate flex items-center gap-1">
-                                                                                        <ExternalLink size={10} className="text-gray-600" />
+                                                                                    <div className="text-xs text-[var(--chat-muted)] mt-0.5 truncate flex items-center gap-1">
+                                                                                        <ExternalLink size={10} className="text-[var(--chat-muted)]" />
                                                                                         {domain}
                                                                                     </div>
                                                                                 </div>
-                                                                                <ExternalLink size={14} className="text-gray-600 group-hover:text-white transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100" />
+                                                                                <ExternalLink size={14} className="text-[var(--chat-muted)] transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100" />
                                                                             </a>
                                                                         );
                                                                     })}
@@ -14955,7 +15318,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           {!message.isError && (message.parsedAnswer || message.isStreaming) && (
                                                   /* Do not put prose-pre:bg-* / child bg utilities on this wrapper:
                                                      theme CSS uses [class*="bg-…"] and would paint the whole answer. */
-                                                  <div className="prose prose-sm max-w-none dark:!prose-invert text-white prose-strong:text-white prose-strong:font-bold prose-code:text-[#f6b98b] prose-code:px-2 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-[15px] prose-code:font-normal prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-lg prose-pre:border prose-pre:border-[#232021] prose-pre:p-4 prose-pre:font-mono prose-pre:text-white prose-pre:text-[15px] prose-pre:overflow-x-auto">
+                                                  <div className="prose prose-sm max-w-none prose-strong:font-bold prose-code:px-2 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-[15px] prose-code:font-normal prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-lg prose-pre:border prose-pre:border-[var(--chat-border)] prose-pre:p-4 prose-pre:font-mono prose-pre:text-[15px] prose-pre:overflow-x-auto">
                                                    <ReactMarkdown
   remarkPlugins={[remarkGfm]}
   rehypePlugins={[rehypeRaw]}
@@ -14970,7 +15333,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                               const codeBlockId = `${message.id}-code-${blockIndex}`;
 
                                                               return <CodeBlockWithHeader
-                                                                        language={match ? match[1] : "plaintext"}
+                                                                        language={match ? match[1] : "plaintext"} theme={resolvedChatTheme === 'light' ? 'light' : 'dark'}
                                                                         code={codeString}
                                                                         runtimes={pistonRuntimes}
                                                                         runtimesLoading={pistonRuntimesLoading}
@@ -14986,7 +15349,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                         onCancelCodeEdit={handleCancelCodeEdit}
                                                                      />;
         } else {
-                                                                      return <code className="bg-[#232021] rounded px-2 py-1 font-mono text-[15px] text-[#f6b98b] align-middle max-w-full">{codeString}</code>;
+                                                                      return <code className="bg-[var(--chat-surface)] rounded px-2 py-1 font-mono text-[15px] text-[var(--chat-text)] align-middle max-w-full">{codeString}</code>;
                                                                   }
                                                               }
                                                               return <code className={className} {...props}>{children}</code>;
@@ -14995,7 +15358,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 >
   {message.parsedAnswer}
 </ReactMarkdown>
-                                               {message.isStreaming && <span className="xeno-caret" aria-hidden="true" />}
+                                               {/* Streaming caret removed to match the XENO model (no vertical caret). */}
                                                </div>
                                           )}
                                       </div>
@@ -15113,29 +15476,42 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px',
              }}
         >
-          {/* Mask message text that would otherwise sit under the floating composer. */}
+          {/* Subtle mask so message text fades gently before it reaches the floating composer. */}
           {messages.length > 0 && (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 bottom-0 top-0 -z-10 bg-[var(--chat-canvas,#0a0a0a)]"
+              className="pointer-events-none absolute inset-x-0 bottom-0 top-6 -z-10 bg-[var(--chat-canvas,#0a0a0a)]"
               style={{
-                maskImage: 'linear-gradient(to bottom, transparent 0%, black 28%)',
-                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 28%)',
+                maskImage: 'linear-gradient(to bottom, transparent 0px, black 16px)',
+                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0px, black 16px)',
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
               }}
             />
           )}
-          {/* Scroll to bottom — centered above the prompt input container */}
+          {/* Scroll to bottom — centered above the prompt input container. While the
+              composer's floating mode row is up it moves INTO that row instead (see
+              `scrollAffordance`), because the row is out of flow and lands right here. */}
           {showScrollToBottom && messages.length > 0 && (
-            <div className="pointer-events-none relative z-20 mb-2 flex justify-center">
+            <div data-chat-scroll-to-bottom className="pointer-events-none relative z-20 mb-2 flex justify-center">
               <button
                 type="button"
                 onClick={scrollToBottom}
-                className="pointer-events-auto rounded-full bg-[#0e0e10]/80 p-2 text-gray-400 shadow-lg transition-colors hover:bg-[#2a2a2d] hover:text-white focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
-                aria-label="Scroll to bottom"
+                className={`group pointer-events-auto inline-flex items-center justify-center rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-muted)] shadow-md transition-colors duration-150 hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus:outline-none ${(isLoading || messages.some((m) => m.isStreaming)) ? 'h-7 w-[82px]' : 'h-7 w-7'}`}
+                aria-label={(isLoading || messages.some((m) => m.isStreaming)) ? 'Generating — scroll to latest' : 'Scroll to bottom'}
               >
-                <ChevronDown size={20} />
+                {(isLoading || messages.some((m) => m.isStreaming)) ? (
+                  <>
+                    <span className="group-hover:hidden"><span className="xeno-gen-dots" aria-hidden="true"><i /><i /><i /></span></span>
+                    <span className="hidden whitespace-nowrap text-[11px] font-medium group-hover:inline">
+                      {messages.some((m) => m.isDotPlaceholder) ? 'Thinking…' : 'Generating…'}
+                    </span>
+                  </>
+                ) : (
+                  <ChevronDown size={18} className="xeno-chevron-bounce" />
+                )}
               </button>
-                </div>
+            </div>
           )}
           {/* Only mount the primary composer here when NOT inside a project workspace — the
               workspace renders its own instance and they share refs, so only one may exist. */}
@@ -15195,7 +15571,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="project-file-preview-title"
-                className="flex h-[min(40rem,80vh)] w-full max-w-[48rem] flex-col overflow-hidden rounded-2xl border"
+                className="flex h-[min(52rem,90vh)] w-full max-w-[64rem] flex-col overflow-hidden rounded-2xl border"
                 style={{
                   backgroundColor: 'var(--chat-elevated)',
                   borderColor: 'var(--chat-border)',

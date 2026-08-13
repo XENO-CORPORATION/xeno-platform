@@ -1302,3 +1302,332 @@ dialog select,
     transform: translateX(0) scale(1);
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Composer gooey reveal
+   The mode tabs, the agent actions and the inline model chips all emerge from the
+   composer as liquid: one SVG-filtered layer ("the skin") holds the box plus a blob
+   per button, so the metaball filter can melt them together and grow a neck while a
+   button pulls away. See composerGooey.ts for the mechanics.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+[data-composer-reveal] {
+  position: relative;
+}
+
+.chat-gooey-skin {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Room for the floating row that sits above the box. */
+  top: -4.25rem;
+  /* Above the scrim (0), below the box (10) and the row (20). */
+  z-index: 1;
+  pointer-events: none;
+  filter: url(#chat-composer-gooey-filter);
+}
+
+/* Fades the conversation out behind the floating row, so the chips read against a clean
+   band instead of landing on top of body text. Bottom of the gradient is solid canvas —
+   it meets the composer — and it thins out upward. */
+[data-composer-reveal-scrim] {
+  position: absolute;
+  /* Bleeds well past the composer on purpose. The message column is wider than the box,
+     and the chat panel wider still, so a scrim the width of the composer left a hard
+     vertical cut with unfaded content beside it. The panel itself clips (overflow:hidden),
+     which is exactly the edge this should stop at. */
+  left: -50vw;
+  right: -50vw;
+  /* Runs from the fade band above the row all the way down PAST the box. Stopping at the
+     box's top edge left the conversation showing in the strips either side of it — the box
+     is narrower than the panel — which read as the scrim being cut off at the bottom. */
+  top: -5rem;
+  bottom: -1rem;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 240ms ease;
+  /* Two layers: the gradient is pinned to the top band and does the actual fading; below
+     it sits flat canvas, which the box covers and which fills the strips beside it.
+     Solid up to 62% — the top of the chips, which sit 50px above the box — then an EASED
+     falloff over the rest. A plain two-stop ramp leaves a knee where solid meets gradient,
+     and on the darker themes, where the canvas contrasts hard with the conversation
+     behind it, that knee reads as a straight line cutting across the content. These stops
+     approximate an ease-out curve so the alpha never changes abruptly. */
+  background:
+    linear-gradient(
+      to top,
+      var(--chat-canvas, #0a0a0b) 0%,
+      var(--chat-canvas, #0a0a0b) 62%,
+      color-mix(in srgb, var(--chat-canvas, #0a0a0b) 96%, transparent) 68%,
+      color-mix(in srgb, var(--chat-canvas, #0a0a0b) 90%, transparent) 74%,
+      color-mix(in srgb, var(--chat-canvas, #0a0a0b) 81%, transparent) 79%,
+      color-mix(in srgb, var(--chat-canvas, #0a0a0b) 70%, transparent) 83%,
+      color-mix(in srgb, var(--chat-canvas, #0a0a0b) 57%, transparent) 88%,
+      color-mix(in srgb, var(--chat-canvas, #0a0a0b) 44%, transparent) 91%,
+      color-mix(in srgb, var(--chat-canvas, #0a0a0b) 30%, transparent) 95%,
+      color-mix(in srgb, var(--chat-canvas, #0a0a0b) 17%, transparent) 97%,
+      color-mix(in srgb, var(--chat-canvas, #0a0a0b) 7%, transparent) 99%,
+      transparent 100%
+    ) left top / 100% 5rem no-repeat,
+    linear-gradient(var(--chat-canvas, #0a0a0b), var(--chat-canvas, #0a0a0b))
+      left bottom / 100% calc(100% - 5rem) no-repeat;
+}
+
+[data-composer-reveal][data-reveal-open="true"] [data-composer-reveal-scrim] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-composer-reveal-scrim] {
+    transition: none;
+  }
+}
+
+/* Stands in for the composer box itself. Its top edge is exactly where the box starts,
+   so no JS measuring is needed — the skin spans the same width as the shell. */
+.chat-gooey-body {
+  position: absolute;
+  inset: 4.25rem 0 0 0;
+  border-radius: 1rem;
+  background: var(--chat-composer-fill, var(--chat-elevated, #141416));
+}
+
+.chat-gooey-blob {
+  position: absolute;
+  border-radius: 0.625rem;
+  background: var(--chat-composer-fill, var(--chat-elevated, #141416));
+  opacity: 0;
+  transform-origin: center;
+  transform: translate(var(--gooey-tx, 0px), var(--gooey-ty, 0px)) scale(var(--gooey-sx, 1), var(--gooey-sy, 1));
+  transition:
+    transform var(--gooey-dur, 340ms) cubic-bezier(0.32, 1.34, 0.44, 1) var(--gooey-delay, 0ms),
+    opacity 160ms ease var(--gooey-delay, 0ms);
+}
+
+.chat-gooey-blob.chat-gooey-item--up {
+  opacity: 1;
+  transform: none;
+}
+
+.chat-gooey-blob.chat-gooey-blob--gone {
+  opacity: 0;
+  transition: opacity 260ms ease 60ms;
+}
+
+/* Retreat: stay opaque for the whole travel and go out only at the very end of it, as
+   the blob arrives back inside the chip it came from. The default fade is front-loaded —
+   right for the way in (it happens while the blob is still buried inside its parent) and
+   exactly wrong played backwards, where it made everything vanish before it had moved. */
+.chat-gooey-blob.chat-gooey-blob--hold {
+  transition:
+    transform var(--gooey-dur, 340ms) cubic-bezier(0.32, 1.34, 0.44, 1) var(--gooey-delay, 0ms),
+    opacity 140ms ease calc(var(--gooey-delay, 0ms) + var(--gooey-dur, 340ms) - 140ms);
+}
+
+/* ── The real buttons ─────────────────────────────────────────────────────────
+   They travel with the exact same transform as their blob (a drift between the two
+   makes the label spill outside the shape it is supposed to live in). */
+.chat-gooey-item {
+  transform-origin: center;
+  transform: translate(var(--gooey-tx, 0px), var(--gooey-ty, 0px)) scale(var(--gooey-sx, 1), var(--gooey-sy, 1));
+  transition: transform var(--gooey-dur, 340ms) cubic-bezier(0.32, 1.34, 0.44, 1) var(--gooey-delay, 0ms);
+  will-change: transform;
+}
+
+.chat-gooey-item.chat-gooey-item--up {
+  transform: none;
+}
+
+/* No chrome while the blob is acting as this button's body.
+   The extra ancestor is deliberate: the themed control styles are `!important` too, so
+   this has to out-specify `.chat-themed .chat-mode-tab:hover` to win. */
+[data-composer-reveal] .chat-gooey-item.chat-gooey-item--bare,
+[data-composer-reveal] .chat-gooey-item.chat-gooey-item--bare:hover,
+[data-composer-reveal] .chat-gooey-item.chat-gooey-item--bare[aria-current="true"],
+[data-composer-reveal] .chat-gooey-item.chat-gooey-item--bare[aria-selected="true"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Only for the measuring pass, so a resting rect can be read. */
+.chat-gooey-item.chat-gooey-item--measure {
+  transform: none !important;
+}
+
+/* Holds the start pose frozen until it has been flushed as a real computed value —
+   without this the browser goes straight from `none` to `none` and never animates.
+   It has to cover the label too: that has its own opacity transition, so without the
+   freeze it only creeps a few percent toward 0 before the flip and the whole reveal
+   then animates from ~0.97 instead of from nothing. */
+.chat-gooey-item--still,
+.chat-gooey-item--still > * {
+  transition: none !important;
+}
+
+/* ── Labels ───────────────────────────────────────────────────────────────────
+   The label is part of its button: no motion of its own, and it only lights up once
+   that button has pulled clear of whatever it came out of. A button with no gooey
+   classes at all (a fresh React node) shows its label normally. */
+/* Going out, a label leaves as ITS OWN chip starts moving — the delay makes the texts
+   cascade with the chips instead of all blinking off together at the first frame. */
+.chat-gooey-item:not(.chat-gooey-item--up) > * {
+  opacity: 0;
+  transition: opacity 140ms ease var(--gooey-delay, 0ms);
+}
+
+.chat-gooey-item.chat-gooey-item--up > * {
+  opacity: 1;
+  transition: opacity calc(var(--gooey-dur, 340ms) * 0.55) ease
+    calc(var(--gooey-delay, 0ms) + var(--gooey-dur, 340ms) * 0.6);
+}
+
+/* overflow-x:auto forces overflow-y to clip, which would cut the travel off. Open the
+   box up while chips are flying and stop the inflated padding from stealing clicks.
+   The two values MUST stay a matched pair: the padding pushes the content down, the
+   negative margin pulls the box back up by the same amount, so the chips do not move.
+   Override one without the other and the whole rail jumps by 56px. Nothing may force a
+   `height` on this element either — with border-box sizing the padding would then eat
+   the content box instead of growing it. */
+.chat-gooey-clip--open {
+  padding-block: 3.5rem;
+  margin-block: -3.5rem;
+  pointer-events: none;
+}
+
+/* ── The floating row above the box ───────────────────────────────────────────── */
+[data-composer-reveal-row] {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  /* Above the box: for the first stretch of the climb a button is physically over the
+     composer, and the box would otherwise paint on top of it. */
+  z-index: 20;
+  /* 16px is what breaks the liquid neck cleanly at rest — any tighter and a stub of the
+     bulge stays welded to the first chip. */
+  margin-bottom: 16px;
+  pointer-events: none;
+  /* Locked to the chip height. The row is anchored by its BOTTOM, so anything that made
+     it taller — the model rail's own vertical padding, for one — shoved the whole row,
+     model trigger included, upward by those few pixels. */
+  height: 34px;
+}
+
+[data-composer-reveal-row] > *,
+[data-composer-reveal] [data-inline-model-selector] {
+  height: 100%;
+}
+
+/* The scroll-to-bottom pill sits in normal flow just above the composer — exactly where
+   the floating mode row lands, and that row reserves no space because it is absolute.
+   While the row is up the pill is rendered INSIDE it instead (in the gap between the mode
+   tabs and the model chip), so this copy stands down. Two homes, one visible at a time. */
+div:has([data-composer-reveal][data-reveal-open="true"]) > [data-chat-scroll-to-bottom] {
+  display: none;
+}
+
+/* Its stand-in inside the row keeps the same pop it has above the composer. */
+[data-composer-reveal-affordance] {
+  animation: chat-scroll-affordance-in 220ms cubic-bezier(0.34, 1.4, 0.5, 1) both;
+}
+
+@keyframes chat-scroll-affordance-in {
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-composer-reveal-affordance] {
+    animation: none;
+  }
+}
+
+/* ── Composer metrics ─────────────────────────────────────────────────────────
+   The exact numbers the composer was designed at. They live here, stated once, and
+   with enough specificity to beat the themed `!important` control styles — otherwise
+   Tailwind's control sizes and the old per-surface overrides pull the box and the
+   chips to a handful of slightly different geometries. */
+[data-composer-reveal] [data-chat-composer-shell] {
+  border-radius: 18px !important;
+}
+
+[data-composer-reveal] .chat-gooey-body {
+  border-radius: 18px;
+}
+
+[data-composer-reveal] [data-chat-composer-shell] .chat-input-container {
+  padding: 14px 14px 10px !important;
+  border-radius: 18px !important;
+}
+
+[data-composer-reveal] [data-chat-composer-shell] [data-composer-column] {
+  gap: 0 !important;
+  padding: 0 !important;
+}
+
+/* Tabs, agent actions, model chips and the model trigger are one family of chips. */
+[data-composer-reveal] [data-composer-reveal-row] .chat-mode-tab,
+[data-composer-reveal] [data-composer-reveal-row] .chat-mode-action,
+[data-composer-reveal] [data-composer-reveal-row] .chat-model-trigger,
+[data-composer-reveal] [data-composer-reveal-row] [data-gooey-chip] {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 13px !important;
+  border-radius: 10px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+[data-composer-reveal] [data-composer-reveal-row] .chat-mode-tab[aria-selected="true"] {
+  font-weight: 600 !important;
+}
+
+/* Icon-only chips (the two Back arrows) stay square-ish rather than 13px-wide. */
+[data-composer-reveal] [data-composer-reveal-row] [data-gooey-chip][aria-label^="Back"] {
+  padding: 0 9px !important;
+}
+
+[data-composer-reveal] [data-composer-reveal-row] [role="tablist"],
+[data-composer-reveal] [data-composer-reveal-row] [role="toolbar"],
+[data-composer-reveal] [data-composer-reveal-row] [data-gooey-rail] {
+  gap: 11px !important;
+}
+
+[data-composer-reveal-row][data-reveal-state="closed"] {
+  visibility: hidden;
+}
+
+[data-composer-reveal-row][data-reveal-state="open"] {
+  pointer-events: auto;
+}
+
+/* The stroke is drawn by the filter, around the whole fused silhouette — so the box must
+   not draw a CSS border of its own on top of it, or the two disagree by a pixel and a
+   straight line ends up cutting the liquid neck in half. */
+[data-composer-reveal] [data-chat-composer-shell] {
+  border-color: transparent !important;
+}
+
+/* Ink for that outline. Set from CSS rather than as an SVG attribute so it follows the
+   active chat theme. */
+#chat-composer-gooey-filter feFlood {
+  flood-color: var(--chat-composer-border, var(--chat-border, rgba(255, 255, 255, 0.12)));
+  flood-opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-gooey-item,
+  .chat-gooey-item.chat-gooey-item--up,
+  .chat-gooey-blob {
+    transition: none !important;
+    transform: none !important;
+  }
+
+  .chat-gooey-item:not(.chat-gooey-item--up) > * {
+    opacity: 1;
+  }
+}

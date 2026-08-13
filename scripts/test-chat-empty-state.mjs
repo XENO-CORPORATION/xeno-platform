@@ -20,9 +20,13 @@ const vite = await createServer({
 let dom;
 
 try {
-  const { default: ChatEmptyState } = await vite.ssrLoadModule(
+  const { default: ChatEmptyState, ComposerRevealControls } = await vite.ssrLoadModule(
     '/src/components/playground/Chat/ChatEmptyState.tsx',
   );
+  const { CHAT_MODE_TABS } = await vite.ssrLoadModule(
+    '/src/components/playground/Chat/chatModeConfig.ts',
+  );
+  const CHAT_MODE_TAB_COUNT = CHAT_MODE_TABS.length;
   const { buildChatSystemPrompt, CODE_MODE_SYSTEM_INSTRUCTION, modeUsesXenoSearch } = await vite.ssrLoadModule(
     '/src/components/playground/Chat/chatModeConfig.ts',
   );
@@ -57,6 +61,7 @@ try {
     Event: dom.window.Event,
     MouseEvent: dom.window.MouseEvent,
     KeyboardEvent: dom.window.KeyboardEvent,
+    MutationObserver: dom.window.MutationObserver,
     IS_REACT_ACT_ENVIRONMENT: true,
   });
 
@@ -104,7 +109,14 @@ try {
             ),
             ...overrides,
           },
-          React.createElement('div', { 'data-testid': 'composer' }, 'Composer'),
+          // Mirrors the real composer: the control row (and with it the "+" reveal
+          // trigger) is rendered by the host as children.
+          React.createElement(
+            'div',
+            { 'data-testid': 'composer' },
+            React.createElement(ComposerRevealControls, null),
+            'Composer',
+          ),
         ),
       );
     });
@@ -148,14 +160,18 @@ try {
   await renderEmptyState({ activeMode: 'agents' });
   const modeControls = document.querySelector('[data-mode-controls]');
   const agentHub = document.querySelector('[aria-label="Agent actions"]');
-  const agentButtons = [...agentHub.querySelectorAll('button')];
+  // The strip leads with a Back arrow now that it replaces the tabs; the mock actions
+  // are the labelled ones after it.
+  const agentButtons = [...agentHub.querySelectorAll('button[data-mock-action]')];
   assert.ok(modeControls?.contains(agentHub), 'Agent actions should appear in the mode-controls row, beside the mode tabs.');
+  assert.equal(
+    document.querySelector('[aria-label="Chat mode"]'),
+    null,
+    'Agent actions REPLACE the mode tabs — the floating row is only as wide as the box, and tabs plus three actions overflow it.',
+  );
   assert.ok(
-    Boolean(
-      document.querySelector('[aria-label="Chat mode"]')
-      && document.querySelector('[aria-label="Chat mode"]')?.parentElement?.contains(agentHub),
-    ),
-    'Agent actions stay next to Chat / Research / Code / Agents — final position does not jump to the model selector slot.',
+    agentHub.querySelector('button[aria-label="Back to chat modes"]'),
+    'Replacing the tabs means the strip has to offer its own way back.',
   );
   assert.deepEqual(
     agentButtons.map((button) => button.textContent?.trim()),
@@ -165,35 +181,57 @@ try {
   assert.ok(agentButtons.every((button) => button.dataset.mockAction === 'true'), 'Every agent action should be marked as mock data.');
   assert.ok(agentButtons.every((button) => button.className.includes('h-8')), 'Agent actions should use the compact control height.');
   assert.equal(agentHub.dataset.agentActionsState, 'open', 'Agent actions should begin in their open state after entering.');
-  assert.ok(agentButtons.every((button) => button.className.includes('animate-agent-action-enter')), 'Agent actions should enter sliding out from behind the mode tabs.');
-  assert.deepEqual(agentButtons.map((button) => button.style.animationDelay), ['0ms', '55ms', '110ms'], 'Agent actions should enter left-to-right (from behind the mode tabs).');
+  assert.ok(
+    agentButtons.every((button) => 'gooeyChip' in button.dataset),
+    'Agent actions must be marked as gooey chips so the reveal can chain them out of the Agents tab.',
+  );
+  assert.equal(agentHub.dataset.gooeyRail, 'agents', 'The agent strip is a gooey rail.');
+  assert.equal(agentHub.dataset.gooeyDir, 'ltr', 'Agent actions chain left to right, one out of the previous.');
+  assert.equal(
+    agentHub.dataset.gooeyFrom,
+    "[data-chat-mode='agents']",
+    'The agent chain has to be born inside the tab that opened it.',
+  );
+  assert.ok(
+    agentButtons.every((button) => !button.className.includes('animate-agent-action-enter')),
+    'The entrance is the gooey chain now — the old slide keyframe must not double up on it.',
+  );
   assert.equal(document.querySelector('[data-testid="model-selector"]'), null, 'The model selector should be hidden while agent actions are open.');
   assert.ok(document.querySelector('[data-testid="composer"]'), 'The prompt composer should remain visible while the mock Agents actions are open.');
 
+  // The Agents tab is gone while the strip is up, so Back is the way out.
   await act(async () => {
-    document.querySelector('[data-chat-mode="agents"]').click();
+    agentHub.querySelector('button[aria-label="Back to chat modes"]').click();
   });
-  assert.equal(agentHub.dataset.agentActionsState, 'closing', 'Clicking Agents again should begin closing its contextual actions.');
-  assert.ok(agentButtons.every((button) => button.className.includes('animate-agent-action-exit')), 'Closing actions should use the reverse animation.');
-  assert.deepEqual(agentButtons.map((button) => button.style.animationDelay), ['110ms', '55ms', '0ms'], 'Agent actions should close right-to-left, sliding back behind the mode tabs.');
+  assert.equal(agentHub.dataset.agentActionsState, 'closing', 'Back should begin closing the contextual actions.');
+  // Closing is the gooey chain played backwards — same necks, reversed clock — driven
+  // from the reveal root off this `closing` flag, not by a keyframe on the chips.
+  assert.ok(
+    agentButtons.every((button) => !button.className.includes('animate-agent-action-exit')),
+    'The old slide-out keyframe must not run alongside the reverse chain.',
+  );
+  assert.ok(
+    agentButtons.every((button) => !button.style.animationDelay),
+    'Exit timing comes from the chain, not from per-button animation delays.',
+  );
 
   await act(async () => {
-    await new Promise((resolve) => window.setTimeout(resolve, 420));
+    await new Promise((resolve) => window.setTimeout(resolve, 1200));
   });
-  assert.equal(selectedModes.at(-1), 'chat', 'Closing Agent actions with the Agents tab should return the parent to Chat.');
+  assert.equal(selectedModes.at(-1), 'chat', 'Closing the Agent actions should return the parent to Chat.');
   assert.equal(document.querySelector('[aria-label="Agent actions"]'), null, 'The Agent action strip should unmount after its closing animation completes.');
 
   await renderEmptyState();
   await renderEmptyState({ activeMode: 'agents' });
   const reopenedAgentHub = document.querySelector('[aria-label="Agent actions"]');
-  const reopenedAgentButtons = [...reopenedAgentHub.querySelectorAll('button')];
+  const reopenedAgentButtons = [...reopenedAgentHub.querySelectorAll('button[data-mock-action]')];
   await act(async () => {
     reopenedAgentButtons[0].click();
   });
   assert.equal(reopenedAgentHub.dataset.agentActionsState, 'closing', 'Selecting a mock action should close the strip before notifying the parent.');
 
   await act(async () => {
-    await new Promise((resolve) => window.setTimeout(resolve, 500));
+    await new Promise((resolve) => window.setTimeout(resolve, 1300));
   });
   assert.deepEqual(selectedAgentActions, ['create-agent'], 'Selecting a mock action should notify the parent after the closing animation completes.');
 
@@ -201,122 +239,61 @@ try {
   assert.equal(document.querySelector('[aria-label="Agent actions"]'), null, 'The agent action strip should close after a mock action selection.');
   assert.ok(document.querySelector('[data-testid="model-selector"]'), 'Closing the agent action strip should restore the model selector.');
 
+  // ── The gooey reveal ────────────────────────────────────────────────────────
+  // The mode row no longer lives inside the box: it floats above it and is revealed by
+  // the '+' in the composer's own control row. The left hover tool rail it replaced is
+  // retired (Upload rides out with the '+' instead).
   await renderEmptyState();
-  const emptyStateSection = document.querySelector('section[aria-labelledby="chat-empty-state-title"]');
+  const emptyStateSection = document.querySelector('section[aria-labelledby=\"chat-empty-state-title\"]');
   const shell = document.querySelector('[data-chat-composer-shell]');
-  const railHandle = document.querySelector('[data-tool-rail-handle]');
-  const toolbarExtension = document.querySelector('[data-toolbar-extension]');
+  const revealRoot = document.querySelector('[data-composer-reveal]');
+  const revealRow = document.querySelector('[data-composer-reveal-row]');
   const innerColumn = document.querySelector('[data-composer-column]');
+
   assert.ok(emptyStateSection?.className.includes('[container-type:inline-size]'), 'The stable empty-state section should provide the composer width reference.');
-  assert.ok(innerColumn?.className.includes('md:pl-3'), 'Desktop composer spacing should be 12px on both the left and right.');
-  assert.ok(!innerColumn?.className.includes('md:pl-4'), 'The previous 16px desktop left padding should not remain.');
-  assert.equal(shell?.dataset.railOpen, 'false', 'The tool rail should begin collapsed.');
-  assert.ok(shell?.className.includes('w-full'), 'The actual outer container should begin at its base width.');
-  assert.ok(shell?.className.includes('transition-[width]'), 'Only the isolated outer container width should animate.');
-  assert.ok(railHandle?.className.includes('left-[-1.25rem]'), 'The collapsed trigger line should sit 8px farther outside the outer container.');
-  assert.ok(document.querySelector('[data-tool-rail-indicator]'), 'The collapsed trigger should expose a dedicated visual indicator for its motion hint.');
-  assert.equal(document.querySelectorAll('[data-tool-rail-echo]').length, 1, 'The collapsed trigger should render one smaller faded motion stroke beside the persistent main line.');
+  assert.ok(revealRoot?.contains(shell), 'The reveal root must wrap the box so the skin can reach above it.');
+  assert.ok(revealRoot?.contains(revealRow), 'The floating row belongs to the reveal root, not to the box.');
+  assert.ok(!shell?.contains(revealRow), 'The mode row must sit OUTSIDE the box, above it.');
+  assert.ok(document.querySelector('.chat-gooey-skin'), 'The gooey skin layer should render.');
+  assert.ok(document.querySelector('.chat-gooey-body'), 'The skin needs a body standing in for the box itself.');
+  assert.ok(document.querySelector('filter#chat-composer-gooey-filter'), 'The metaball filter should be defined once per composer.');
+  assert.equal(revealRow?.dataset.revealState, 'closed', 'The mode row starts hidden.');
+  assert.equal(revealRoot?.dataset.melting, 'false', 'Nothing is crossing the box edge at rest.');
+
+  assert.ok(shell?.className.includes('border'), 'The shell carries the single stroke.');
+  assert.ok(!innerColumn?.className.includes('p-3'), 'The inner field owns the padding — the column must not double it.');
+  assert.equal(document.querySelector('[data-tool-rail-handle]'), null, 'The left hover tool rail is retired.');
+
+  const modeTabButtons = [...document.querySelectorAll('[data-gooey-tab]')];
+  assert.ok(modeTabButtons.length >= CHAT_MODE_TAB_COUNT, 'Every mode tab must be marked so it can climb out of the box.');
+
+  // The '+' lives in the composer's control row, which the host renders as children.
+  const trigger = document.querySelector('[data-composer-reveal-trigger]');
+  assert.ok(trigger, 'The reveal trigger should render inside the composer children.');
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false', 'The trigger starts collapsed.');
 
   await act(async () => {
-    railHandle.click();
+    trigger.click();
   });
-  assert.equal(shell?.dataset.railOpen, 'true', 'Touch/click on the vertical handle should open the rail.');
-  assert.ok(shell?.className.includes('w-[calc(100%_+_3.25rem)]'), 'The actual outer container should expand toward the left.');
-  assert.ok(toolbarExtension?.className.includes('bg-transparent'), 'The toolbar must remain content inside the outer container, not draw a second surface.');
-  assert.ok(document.querySelector('[aria-label="Composer tools"] > div')?.className.includes('delay-100'), 'Toolbar icons should appear after the outer container starts expanding.');
-  assert.ok(innerColumn?.className.includes('[width:calc(100cqw_-_2px)]'), 'The inner composer should keep the stable section width while the outer container expands.');
-  assert.deepEqual(
-    [...document.querySelectorAll('[aria-label="Composer tools"] button')].map((button) => button.getAttribute('aria-label')),
-    ['Upload file', 'Conversation history', 'System Prompt'],
-    'The expanded rail should expose exactly the three confirmed tools.',
-  );
-
-  const conversationHistoryButton = document.querySelector('button[aria-label="Conversation history"]');
-  await act(async () => {
-    conversationHistoryButton.click();
-  });
-  assert.equal(conversationHistoryOpenRequests, 1, 'Conversation history should open the existing history sidebar.');
-  assert.equal(shell?.dataset.railOpen, 'false', 'Opening conversation history should close the rail.');
-  assert.ok(!shell?.dataset.activeTool, 'Conversation history must not open an in-shell tool panel.');
-
-  await act(async () => {
-    railHandle.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-  });
+  assert.equal(trigger.getAttribute('aria-expanded'), 'true', 'Clicking + should expand the reveal.');
   assert.equal(
-    shell?.dataset.railOpen,
-    'false',
-    'Hover must not reopen the rail immediately after Conversation history closes it under the pointer.',
+    document.querySelector('[data-composer-reveal-row]')?.dataset.revealState,
+    'open',
+    'The floating row becomes visible when the reveal opens.',
   );
 
+  const uploadButton = document.querySelector('[data-composer-upload]');
+  assert.ok(uploadButton, 'Upload should ride out of the + instead of the retired hover rail.');
   await act(async () => {
-    railHandle.click();
+    uploadButton.click();
   });
-  const systemPromptButton = document.querySelector('button[aria-label="System Prompt"]');
-  await act(async () => {
-    systemPromptButton.click();
-  });
-  assert.ok(document.querySelector('[data-testid="system-prompt-panel"]'), 'System Prompt should open inside the shell.');
-  assert.equal(shell?.dataset.activeTool, 'system-prompt', 'The shell should expand for the active panel.');
-  assert.ok(toolbarExtension?.className.includes('md:w-[15rem]'), 'The visual extension should provide the panel width outside the fixed shell.');
-  assert.ok(railHandle?.className.includes('opacity-0'), 'The collapsed line should disappear while tools are visible.');
-
-  await act(async () => {
-    document.querySelector('[data-testid="system-prompt-panel"] button').click();
-  });
-  assert.equal(shell?.dataset.railOpen, 'false', 'Closing the panel should collapse the rail.');
-
-  await act(async () => {
-    // Wait out the short hover-reopen suppress used after intentional tool closes.
-    await new Promise((resolve) => window.setTimeout(resolve, 400));
-  });
-
-  await act(async () => {
-    shell.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-  });
-  assert.equal(shell?.dataset.railOpen, 'false', 'Hovering the main shell must not reveal the toolbar.');
-
-  await act(async () => {
-    railHandle.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-  });
-  assert.equal(shell?.dataset.railOpen, 'true', 'Pointer hover on the collapsed line should reveal the toolbar.');
-
-  await act(async () => {
-    railHandle.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
-    await new Promise((resolve) => window.setTimeout(resolve, 150));
-  });
-  assert.equal(shell?.dataset.railOpen, 'true', 'The toolbar should remain open during the one-second pointer grace period.');
-
-  await act(async () => {
-    await new Promise((resolve) => window.setTimeout(resolve, 950));
-  });
-  assert.equal(shell?.dataset.railOpen, 'false', 'The toolbar should close after the pointer has remained outside for one second.');
-
-  await act(async () => {
-    railHandle.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    railHandle.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
-    await new Promise((resolve) => window.setTimeout(resolve, 150));
-    railHandle.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    await new Promise((resolve) => window.setTimeout(resolve, 950));
-  });
-  assert.equal(shell?.dataset.railOpen, 'true', 'Returning the pointer during the grace period should cancel the scheduled close.');
+  assert.equal(directUploadRequests, 1, 'Upload should call the existing upload action once.');
 
   await act(async () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   });
-  assert.equal(shell?.dataset.railOpen, 'false', 'Escape should close the rail.');
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false', 'Escape should close the reveal.');
 
-  await act(async () => {
-    railHandle.click();
-  });
-  const uploadFileButton = document.querySelector('button[aria-label="Upload file"]');
-  await act(async () => {
-    uploadFileButton.click();
-  });
-  assert.equal(directUploadRequests, 1, 'Upload file should call the existing upload action once.');
-  assert.equal(shell?.dataset.railOpen, 'false', 'A direct tool action should close the rail after selection.');
-
-  assert.ok(innerColumn?.className.includes('[width:calc(100cqw_-_2px)]'), 'The inner composer should use the same stable width before, during, and after toolbar closure.');
-  assert.ok(shell?.className.includes('duration-200'), 'Outer expansion and contraction should use the confirmed 200ms transition.');
 
   await renderEmptyState({
     updates: [{ id: 'update-one', title: 'Update one', description: 'First update' }],
@@ -331,8 +308,8 @@ try {
     'Product updates must sit under the composer out of flow so the centered block does not shift.',
   );
   assert.ok(
-    document.querySelector('[data-chat-composer-shell]')?.className.includes('z-20'),
-    'Composer shell must stack above the updates slot so voice/menus are not covered.',
+    document.querySelector('[data-composer-reveal]')?.className.includes('z-20'),
+    'The reveal root must stack above the updates slot so voice/menus are not covered.',
   );
   assert.ok(
     updateSlot?.className.includes('z-0'),
@@ -356,7 +333,12 @@ try {
           onModeChange: () => {},
           onAgentActionSelect: () => {},
         },
-        React.createElement('div', { 'data-testid': 'composer' }, 'Composer'),
+        React.createElement(
+          'div',
+          { 'data-testid': 'composer' },
+          React.createElement(ComposerRevealControls, null),
+          'Composer',
+        ),
       ),
     );
   });
@@ -364,8 +346,12 @@ try {
   assert.equal(document.querySelector('h1'), null, 'The empty state should disappear after chat begins.');
   assert.ok(document.querySelector('[data-testid="composer"]'), 'The composer should remain available after chat begins.');
   assert.ok(
-    document.querySelector('[data-tool-rail-handle]'),
-    'Conversation composer should keep the same hover tool rail as the empty state.',
+    document.querySelector('[data-composer-reveal-trigger]'),
+    'An existing conversation gets the same "+" reveal as a new chat.',
+  );
+  assert.ok(
+    document.querySelector('.chat-gooey-skin'),
+    'The gooey skin follows the composer into the conversation view.',
   );
   assert.ok(
     document.querySelector('[data-conversation-composer-frame]'),
@@ -375,10 +361,6 @@ try {
     document.querySelector('[data-chat-composer-shell]')?.dataset.composerContext,
     'conversation',
     'Inactive empty-state wrapper should mark the shell as conversation context.',
-  );
-  assert.ok(
-    document.querySelector('[data-chat-composer-shell]')?.className.includes('self-end'),
-    'Conversation shell must self-end so the open rail grows beside the prompt, not over it.',
   );
 
   await act(async () => {

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, memo } from 'react';
 import { Copy, Check, Rows, Minimize2, Maximize2, Play, Loader2, X, Pencil } from 'lucide-react';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 // Interface for Piston API Runtime (can remain here or be moved to a types file)
 interface PistonRuntime {
@@ -32,6 +32,7 @@ interface CodeBlockWithHeaderProps {
   onEditCodeChange?: (newCode: string) => void; // Callback when editing code changes
   onSaveCodeEdit?: () => void; // Callback to save code edit
   onCancelCodeEdit?: () => void; // Callback to cancel code edit
+  theme?: 'dark' | 'light'; // Chat theme — drives the syntax palette + surfaces
 }
 
 // List of languages considered runnable (adjust as needed based on Piston support)
@@ -52,7 +53,8 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
   editingCode = '',
   onEditCodeChange,
   onSaveCodeEdit,
-  onCancelCodeEdit
+  onCancelCodeEdit,
+  theme = 'dark'
 }) => {
   const [copied, setCopied] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -103,20 +105,20 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
   };
 
   // --- Style Definitions ---
-  const baseButtonClass = "p-1.5 rounded-md transition-all duration-150 ease-in-out flex items-center gap-1.5 text-gray-400 text-xs font-medium hover:text-white hover:bg-zinc-700/60";
-  const copiedButtonClass = "text-green-400 bg-green-900/40";
+  const baseButtonClass = "p-1.5 rounded-md transition-all duration-150 ease-in-out flex items-center gap-1.5 text-[var(--chat-muted)] text-xs font-medium hover:text-[var(--chat-text)] hover:bg-[var(--chat-hover)]";
+  const copiedButtonClass = "text-[var(--chat-text)] bg-[var(--chat-hover)]";
 
   // Customizations for the syntax highlighter style
   // We modify the theme directly here for padding and line height inside the <pre>
   const customSyntaxHighlighterStyle = useMemo(() => {
-    const style = { ...vscDarkPlus }; // Copy the theme
-    
+    const style = { ...(theme === 'light' ? oneLight : vscDarkPlus) }; // Palette follows chat theme
+
     // Style the main <pre> tag
     style['pre[class*="language-"]'] = {
         ...(style['pre[class*="language-"]'] || {}), // Keep existing pre styles
         margin: '0',                     // Remove outer margin
         padding: '1rem',                 // Add internal padding (adjust as needed)
-        backgroundColor: '#18171b',      // Match desired background if theme differs
+        backgroundColor: 'transparent',  // Show the token-themed container behind it
         lineHeight: '1.5',               // Standard line height for readability
         borderRadius: '0 0 0.5rem 0.5rem', // RE-ADD bottom rounding
     };
@@ -131,7 +133,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
      };
 
     return style;
-  }, []);
+  }, [theme]);
   
   // Style for line numbers
   const lineNumberStyle = useMemo(() => ({
@@ -139,7 +141,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
       paddingRight: '1em',
       marginRight: '0.5em', // Consistent margin for all lines
       textAlign: 'right' as const, // Right-align line numbers for consistent spacing
-      color: '#6a737d', // Dim color for line numbers
+      color: 'var(--chat-muted)', // Dim color for line numbers
       userSelect: 'none' as const,
       fontSize: '0.9em', // Slightly smaller line numbers
       display: 'inline-block', // Needed for proper alignment
@@ -159,35 +161,38 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
           }
 
           .code-block-syntax-highlighter pre::-webkit-scrollbar-track {
-            background: #18171b; 
+            background: transparent;
             border-radius: 4px;
           }
 
           .code-block-syntax-highlighter pre::-webkit-scrollbar-thumb {
-            background: #3a3a3d; // Or another suitable dark grey
+            background: var(--chat-border);
             border-radius: 4px;
-            border: 1px solid #18171b; // Creates slight separation from track
           }
 
           .code-block-syntax-highlighter pre::-webkit-scrollbar-thumb:hover {
-            background: #555; 
+            background: var(--chat-muted);
           }
-          
+
           /* Optional: Firefox scrollbar styling */
           .code-block-syntax-highlighter pre {
             scrollbar-width: thin;
-            scrollbar-color: #3a3a3d #18171b;
+            scrollbar-color: var(--chat-border) transparent;
           }
         `}
       </style>
 
-      {/* Code Block Container - Add the unique class */}
-      <div className="code-block-container code-block-syntax-highlighter rounded-lg border border-[#3a3a3d] bg-[#18171b] overflow-hidden shadow-md my-4">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 bg-[#1f1f20] border-b border-[#3a3a3d]">
+      {/* Code Block Container - Add the unique class.
+          `overflow: clip` rather than `hidden`: both round off the corners, but `hidden`
+          makes this a scroll container, and a sticky child can then only stick inside a
+          box that never scrolls — i.e. not at all. `clip` does not, so the header below
+          sticks against the conversation's scrollport, which is the one actually moving. */}
+      <div className="code-block-container code-block-syntax-highlighter rounded-lg border border-[var(--chat-border)] bg-[var(--chat-canvas)] [overflow:clip] shadow-none my-4">
+
+        {/* Header — pinned, so Copy / Edit stay reachable anywhere inside a long block. */}
+        <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-lg border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-4 py-2">
           {/* Language Name */}
-          <span className="text-xs font-medium text-gray-400 select-none uppercase tracking-wider">
+          <span className="text-xs font-medium text-[var(--chat-muted)] select-none uppercase tracking-wider">
             {cleanLanguage}
         </span>
           
@@ -268,7 +273,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
                 <textarea
                   value={editingCode}
                   onChange={(e) => onEditCodeChange?.(e.target.value)}
-                  className="w-full min-h-[200px] max-h-[500px] p-3 bg-[#0d0d0e] border border-[#3a3a3a] rounded-lg text-white font-mono text-sm resize-y focus:outline-none focus:border-[#5a5a5a] focus:ring-1 focus:ring-[#5a5a5a] leading-relaxed"
+                  className="w-full min-h-[200px] max-h-[500px] p-3 bg-[var(--chat-canvas)] border border-[var(--chat-border)] rounded-lg text-[var(--chat-text)] font-mono text-sm resize-y focus:outline-none focus:border-[var(--chat-muted)] focus:ring-1 focus:ring-[var(--chat-muted)] leading-relaxed"
                   placeholder="Edit code..."
                   autoFocus
                   spellCheck={false}
@@ -332,7 +337,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
       {/* --- Separate Execution Output Container (RESTORED) --- */}
       {(currentIsRunning || currentRunOutput || currentRunError) && (
           // Restore original styling for a separate panel, remove top margin/bottom margin
-          <div className="execution-output-container relative rounded-lg bg-[#1f1f20] border border-[#3a3a3d] px-4 py-2 text-xs shadow-md">
+          <div className="execution-output-container relative rounded-lg bg-[var(--chat-surface)] border border-[var(--chat-border)] px-4 py-2 text-xs shadow-none">
               {/* Close Button for Output - Conditionally Rendered */}
               {!currentIsRunning && (currentRunOutput || currentRunError) && (
                 <button 

@@ -66,7 +66,9 @@ try {
   let selectedModelId = null;
   const waitForInlineMotion = async () => {
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 350));
+            // The inline tray now closes by replaying the gooey chain backwards, which takes
+      // longer than the old slide-out keyframe it replaced.
+      await new Promise((resolve) => setTimeout(resolve, 1100));
     });
   };
 
