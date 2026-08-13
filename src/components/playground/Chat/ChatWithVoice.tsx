@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, MessageSquareText, Loader, Settings, StopCircle, Play, Pause, X, AlertTriangle, ChevronLeft, ChevronRight, KeyRound, SquarePen, Copy, Check, MessageSquare, ArrowLeft, Edit2, Paperclip, Clock, Trash } from 'lucide-react';
+import { Mic, MicOff, MessageSquareText, Loader, Settings, StopCircle, Play, Pause, X, AlertTriangle, ChevronLeft, ChevronRight, KeyRound, SquarePen, Copy, Check, MessageSquare, ArrowLeft, Edit2, Paperclip, Clock, Trash } from '@/lib/icons';
 import { GoogleGenAI, Modality } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';

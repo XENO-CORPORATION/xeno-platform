@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Search, Trash2 } from '@/lib/icons';
 import {
   addCatalogSkillToLibrary,
   addGlobalSkillToChat,

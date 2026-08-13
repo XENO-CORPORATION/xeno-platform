@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { X } from 'lucide-react';
+import { X } from '@/lib/icons';
 import ChatWithLLM from './ChatWithLLM';
 
 interface ChatInterface {

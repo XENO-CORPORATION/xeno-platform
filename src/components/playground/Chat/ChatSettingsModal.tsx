@@ -4,7 +4,7 @@ import {
   Plus,
   Settings,
   X,
-} from 'lucide-react';
+} from '@/lib/icons';
 import {
   getChatPersonaId,
   listPersonas,

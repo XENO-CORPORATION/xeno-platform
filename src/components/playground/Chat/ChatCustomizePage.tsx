@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Briefcase, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { Briefcase, ChevronLeft, ChevronRight, Search, X } from '@/lib/icons';
 import {
   listSkills,
   setSkillEnabled,

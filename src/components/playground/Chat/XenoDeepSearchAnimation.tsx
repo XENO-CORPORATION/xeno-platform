@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, Search, Link, FileText, Brain, CheckCircle, Clock, TrendingUp } from 'lucide-react';
+import { Globe, Search, Link, FileText, Brain, CheckCircle, Clock, TrendingUp } from '@/lib/icons';
 
 interface XenoDeepSearchAnimationProps {
   phase?: string;

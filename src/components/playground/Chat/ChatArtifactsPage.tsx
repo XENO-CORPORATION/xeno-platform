@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, Copy, File, FileImage, FileText, Search, Shapes } from 'lucide-react';
+import { Check, ChevronDown, Copy, File, FileImage, FileText, Search, Shapes } from '@/lib/icons';
 import {
   ARTIFACT_KIND_LABEL,
   deleteArtifact,

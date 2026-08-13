@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, memo } from 'react';
-import { Copy, Check, Rows, Minimize2, Maximize2, Play, Loader2, X, Pencil } from 'lucide-react';
+import { Copy, Check, Rows, Minimize2, Maximize2, Play, Loader2, X, Pencil } from '@/lib/icons';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 

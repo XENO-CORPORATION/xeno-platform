@@ -9,7 +9,7 @@ import {
   Plus,
   Search,
   Store,
-} from 'lucide-react';
+} from '@/lib/icons';
 import ChatUpdateCarousel, { type ChatUpdate } from './ChatUpdateCarousel';
 import {
   AGENT_HUB_MOCK_ACTIONS,

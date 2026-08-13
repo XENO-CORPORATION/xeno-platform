@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Check, ChevronDown, Clock, Pause, Play, Search, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Clock, Pause, Play, Search, Trash2 } from '@/lib/icons';
 import {
   SCHEDULED_STATUS_LABEL,
   createScheduledTask,

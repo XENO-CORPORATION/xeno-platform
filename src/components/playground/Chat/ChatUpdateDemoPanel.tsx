@@ -9,7 +9,7 @@ import {
   FileText,
   LayoutGrid,
   MessageSquare,
-} from 'lucide-react';
+} from '@/lib/icons';
 import type { ChatUpdateDemoBody, ChatUpdateDemoLayout } from './ChatUpdateCarousel';
 
 interface ChatUpdateDemoPanelProps {

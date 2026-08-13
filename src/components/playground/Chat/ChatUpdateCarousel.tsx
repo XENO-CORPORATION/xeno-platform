@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft, Sparkles } from '@/lib/icons';
 import ChatUpdateDemoPanel from './ChatUpdateDemoPanel';
 import { captureDissolvePlate, runPixelDissolve } from './pixelDissolve';
 

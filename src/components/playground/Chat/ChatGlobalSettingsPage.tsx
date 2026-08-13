@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Check, Search, Settings, Trash2 } from 'lucide-react';
+import { Check, Search, Settings, Trash2 } from '@/lib/icons';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 import {
   deleteMemoryEntry,

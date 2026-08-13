@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
+import { useGooPill } from '@xenosystem/elements-react';
 import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
@@ -33,7 +34,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchResponse, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Compass, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Square, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar } from 'lucide-react';
+import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Compass, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Square, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -358,6 +359,10 @@ const CHAT_DEMO_ENABLED = (() => {
     return false;
   }
 })();
+
+/* A fixed id, not a timestamp: the demo is registered in the history on every load, and a fresh id each
+   time would stack up a new copy of the same conversation on every reload. */
+const CHAT_DEMO_CONVERSATION_ID = 'convo-demo';
 
 const DEMO_DIAGRAM_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="560" height="132">' +
@@ -2217,21 +2222,18 @@ const VISUAL_CHAT_THEME_OPTIONS = [
 const THEME_WAVEFORM_BAR_COUNT = 21;
 const THEME_BRIGHTNESS_STEP = 5;
 
+/**
+ * The theme mark. Same idea as the hand-drawn half-circle it replaces — a shape with one half solid —
+ * but drawn from the element library, so it is a rounded SQUARE. The system has no circles in it, and
+ * this was the last one left in the menu chrome.
+ *
+ * Kept as a named component with the same signature rather than swapped at the four call sites: the
+ * name is what those sites mean, and the drawing behind it is now the library's problem. It also picks
+ * up the glyph's own motion — half a turn on hover, so the solid side changes places, which is what
+ * the control does.
+ */
 const ManualThemeIcon = ({ size = 16, ...props }: React.SVGProps<SVGSVGElement> & { size?: number }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.7"
-    aria-hidden="true"
-    focusable="false"
-    {...props}
-  >
-    <path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor" stroke="none" />
-    <circle cx="12" cy="12" r="8.5" />
-  </svg>
+  <Contrast size={size} aria-hidden="true" focusable="false" {...props} />
 );
 
 type ChatThemePreviewTokens = {
@@ -4814,6 +4816,38 @@ interface QueueState {
 
     loadHistory();
   }, [sharedInterfaceId]); // Load history once (sharedInterfaceId is constant)
+
+  // The DEV demo thread is seeded straight into `messages`, so it was a chat that existed on screen and
+  // nowhere else. Everything that acts on the OPEN conversation — Pin, Archive, Delete — looks it up in
+  // the history by id, found nothing, and sat disabled. That is why those three were the only rows in
+  // the ⋯ menu with no hover pill: the pill refuses a row you cannot click.
+  //
+  // Registering the demo makes it a conversation like any other. It waits for the load to settle because
+  // every load path REPLACES the history rather than merging into it, so seeding it as initial state
+  // would simply be overwritten a moment later.
+  //
+  // Dev-only, deliberately. In production a chat reaches the history through the send path, which creates
+  // the conversation in the DATABASE and uses the id it gets back; registering one locally first would
+  // take that branch away and quietly stop persisting the thread server-side. The window where the same
+  // rows are dead in production — between sending the first message and the answer arriving — is real but
+  // is a change to the send path, not to this.
+  useEffect(() => {
+    if (!CHAT_DEMO_ENABLED || isHistoryLoading) return;
+    if (activeConversationId || messages.length === 0) return;
+    const firstUserMessage = messages.find((message) => message.sender === 'user');
+    const demoConversation: Conversation = {
+      id: CHAT_DEMO_CONVERSATION_ID,
+      title: firstUserMessage?.text.substring(0, 40) || 'Demo conversation',
+      timestamp: Date.now(),
+      messages,
+    };
+    setConversationHistory((prevHistory) =>
+      prevHistory.some((convo) => convo.id === CHAT_DEMO_CONVERSATION_ID)
+        ? prevHistory
+        : [demoConversation, ...prevHistory],
+    );
+    setActiveConversationId(CHAT_DEMO_CONVERSATION_ID);
+  }, [isHistoryLoading, activeConversationId, messages]);
 
   // --- NEW: Load/Save User Settings from Database ---
   useEffect(() => {
@@ -11121,8 +11155,37 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [isChatFilesModalMounted, closeChatFilesModal]);
 
+  // `xeno-icon-hover` is the library's generic "this row is an icon host" hook. A glyph's animation is
+  // triggered by its HOST, not by the glyph — deliberately, since an icon that stirred on every stray
+  // hover would be noise in a table. The library ships a closed list of hosts it recognises (button,
+  // chip, tab, menu-item, sidebar-item…), and this row is none of them: it is Tailwind classes. The
+  // hook says "here is one" without the row having to adopt a XENO component.
+  // No `hover:bg` on the row any more: the travelling pill below IS the filled surface, and two of them
+  // read as two highlights.
+  //
   const moreMenuItemClass =
-    'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]';
+    'xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors';
+
+  // The ⋯ menu's hover highlight: one pill that TRAVELS to the row you point at, rather than each row
+  // painting its own background. A fill that appears on the new row and vanishes from the old one is two
+  // events with no journey between them, and it never says where it came from.
+  //
+  // The library owns the motion (`goo.css`); this menu is hand-rolled Tailwind rather than `<Menu>`, so
+  // it takes the behaviour through the hook instead of by adopting the component — which is the point of
+  // `useGooPill` existing separately from `<Menu>` at all.
+  const chatMoreGoo = useGooPill<HTMLDivElement>();
+  // One host per PANEL, not per menu-shaped thing: the pill is positioned against the element it lives
+  // in, so two panels cannot share one. The Recents filter and its submenu are open at the same time and
+  // each wants its own highlight, which is the case that settles it.
+  //
+  // The project kebab is the exception that still shares: its panel is rendered inside a `.map()`, but
+  // only one project's menu is open at a time, so only one host is ever mounted.
+  const catalogFilterGoo = useGooPill<HTMLDivElement>();
+  const projectsSortGoo = useGooPill<HTMLDivElement>();
+  const projectMenuGoo = useGooPill<HTMLDivElement>();
+  const historyRowGoo = useGooPill<HTMLDivElement>();
+  const recentsFilterGoo = useGooPill<HTMLDivElement>();
+  const recentsSubmenuGoo = useGooPill<HTMLDivElement>();
 
   const topBarBtnClass = (isActive: boolean, extra = '') =>
     `chat-top-bar-btn flex h-9 items-center justify-center rounded-lg border text-[var(--chat-muted)] transition-[background-color,border-color,color] active:scale-[0.98] ${
@@ -11835,6 +11898,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             box-shadow:
               0 1px 2px rgba(0, 0, 0, 0.06),
               0 2px 4px rgba(0, 0, 0, 0.04) !important;
+          }
+          /* The XENO travelling hover pill (goo.css) in chat ink. The library owns every frame of the
+             motion; a menu only has to say what colour its highlight is and how round its rows are.
+             The 4px inset the pill defaults to is exactly this panel's p-1, so it lines up already. */
+          .chat-goo {
+            --xeno-goo-fill: var(--chat-hover);
+            --xeno-goo-radius: 6px;
           }
           .chat-themed [class*="bg-[#0a0a0b]"] { background-color: var(--chat-canvas) !important; }
           .chat-themed [class*="bg-[#0e0e10]"],
@@ -12834,13 +12904,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         </button>
                         {isChatsCatalogFilterOpen && (
                           <div
+                            {...catalogFilterGoo.hostProps}
                             role="menu"
-                            className="chat-history-popover absolute left-0 top-full z-10 mt-1.5 w-[9.5rem] overflow-hidden rounded-xl border p-1"
+                            className={`${catalogFilterGoo.hostProps.className} chat-goo chat-history-popover absolute left-0 top-full z-10 mt-1.5 w-[9.5rem] overflow-hidden rounded-xl border p-1`}
                             style={{
                               backgroundColor: 'var(--chat-elevated)',
                               borderColor: 'var(--chat-border)',
                             }}
                           >
+                            {/* First child, so the pill paints behind the rows rather than over them. */}
+                            {catalogFilterGoo.pill}
                             {(
                               [
                                 ['all', 'All'],
@@ -12858,7 +12931,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                   setChatsCatalogFilter(value);
                                   setIsChatsCatalogFilterOpen(false);
                                 }}
-                                className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                                className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
                               >
                                 <span>{label}</span>
                                 {chatsCatalogFilter === value && (
@@ -13096,8 +13169,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </button>
                     {isProjectsSortOpen && (
                       <div
+                        {...projectsSortGoo.hostProps}
                         role="menu"
-                        className="chat-history-popover absolute left-0 top-full z-10 mt-1.5 min-w-full w-max overflow-hidden rounded-xl border p-1"
+                        className={`${projectsSortGoo.hostProps.className} chat-goo chat-history-popover absolute left-0 top-full z-10 mt-1.5 min-w-full w-max overflow-hidden rounded-xl border p-1`}
                         style={{
                           backgroundColor: 'var(--chat-elevated)',
                           borderColor: 'var(--chat-border)',
@@ -13105,6 +13179,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             '0 12px 28px -8px color-mix(in srgb, var(--chat-text) 18%, transparent)',
                         }}
                       >
+                        {/* First child, so the pill paints behind the rows rather than over them. */}
+                        {projectsSortGoo.pill}
                         {(
                           [
                             ['updated', 'Last updated'],
@@ -13120,7 +13196,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               setProjectsSort(value);
                               setIsProjectsSortOpen(false);
                             }}
-                            className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                            className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
                           >
                             <span>{label}</span>
                             {projectsSort === value && (
@@ -13302,8 +13378,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 </button>
                                 {openProjectMenuId === project.id && (
                                   <div
+                                    {...projectMenuGoo.hostProps}
                                     role="menu"
-                                    className="absolute right-0 top-full z-20 mt-1.5 w-[8.5rem] overflow-hidden rounded-xl border p-1"
+                                    className={`${projectMenuGoo.hostProps.className} chat-goo absolute right-0 top-full z-20 mt-1.5 w-[8.5rem] overflow-hidden rounded-xl border p-1`}
                                     style={{
                                       backgroundColor: 'var(--chat-elevated)',
                                       borderColor: 'var(--chat-border)',
@@ -13311,11 +13388,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         '0 12px 28px -8px color-mix(in srgb, var(--chat-text) 18%, transparent)',
                                     }}
                                   >
+                                    {/* First child, so the pill paints behind the rows rather than over them. */}
+                                    {projectMenuGoo.pill}
                                     <button
                                       type="button"
                                       role="menuitem"
                                       onClick={() => handleToggleProjectStar(project.id)}
-                                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                                      className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
                                     >
                                       <Star size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
                                       <span>{project.isStarred ? 'Unstar' : 'Star'}</span>
@@ -13324,7 +13403,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       type="button"
                                       role="menuitem"
                                       onClick={() => openProjectSettings(project, 'general')}
-                                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                                      className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
                                     >
                                       <Pencil size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
                                       <span>Project settings</span>
@@ -13334,7 +13413,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       type="button"
                                       role="menuitem"
                                       onClick={() => handleToggleProjectArchive(project.id)}
-                                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                                      className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
                                     >
                                       <Archive size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
                                       <span>{project.isArchived ? 'Unarchive' : 'Archive'}</span>
@@ -13343,7 +13422,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       type="button"
                                       role="menuitem"
                                       onClick={() => handleDeleteProject(project.id)}
-                                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-danger)] transition-colors hover:bg-[var(--chat-hover)]"
+                                      className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-danger)] transition-colors"
                                     >
                                       <Trash2 size={14} className="flex-shrink-0" aria-hidden="true" />
                                       <span>Delete</span>
@@ -14370,10 +14449,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <>
                 <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
                 <div
+                  {...chatMoreGoo.hostProps}
                   key={isChatMoreMenuShown ? 'chat-more-menu-in' : 'chat-more-menu-out'}
                   role="menu"
                   aria-hidden={!isChatMoreMenuOpen}
-                  className="absolute right-0 top-full z-30 mt-2 w-[220px] rounded-xl border border-[#2a2a2d] bg-[#141416] p-1 shadow-xl"
+                  className={`${chatMoreGoo.hostProps.className} chat-goo absolute right-0 top-full z-30 mt-2 w-[220px] rounded-xl border border-[#2a2a2d] bg-[#141416] p-1 shadow-xl`}
                   style={{
                     backgroundColor: 'var(--chat-elevated)',
                     borderColor: 'var(--chat-border)',
@@ -14385,6 +14465,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     ),
                   }}
                 >
+                  {/* First child, so the pill paints behind the rows rather than over them. */}
+                  {chatMoreGoo.pill}
                     <button
                       type="button"
                     role="menuitem"
@@ -14428,7 +14510,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   <button
                     type="button"
                     role="menuitem"
-                    className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-red-400 transition-colors hover:bg-[var(--chat-hover)] disabled:opacity-40"
+                    className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-red-400 transition-colors disabled:opacity-40"
                     disabled={!activeHistoryConvo}
                     onClick={() => {
                       if (!activeHistoryConvo) return;
@@ -16641,17 +16723,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           // Use --chat-hover (not hover:bg-[#1e1e21]): theme CSS matches [class*="bg-[#1e1e21]"]
           // even on the hover: utility string, so every row would paint a permanent background.
           const menuItemClass =
-            'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]';
+            'xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-zinc-100 transition-colors';
           const shortcutClass = 'ml-auto text-[11px] text-zinc-500';
           return createPortal(
             <>
             <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
             <div
+              {...historyRowGoo.hostProps}
               key={isHistoryRowMenuShown ? 'history-row-menu-in' : 'history-row-menu-out'}
               data-history-row-menu=""
               role="menu"
               aria-hidden={!isHistoryRowMenuOpen}
-              className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[188px] rounded-xl border p-1`}
+              className={`${historyRowGoo.hostProps.className} chat-goo chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[188px] rounded-xl border p-1`}
               style={{
                 top: historyRowMenu.top,
                 left: historyRowMenu.left,
@@ -16668,6 +16751,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               }}
               onClick={(event) => event.stopPropagation()}
             >
+              {/* First child, so the pill paints behind the rows rather than over them. */}
+              {historyRowGoo.pill}
               <button
                 type="button"
                 role="menuitem"
@@ -16787,7 +16872,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     <button
                 type="button"
                 role="menuitem"
-                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-red-400 transition-colors hover:bg-[var(--chat-hover)]"
+                className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-red-400 transition-colors"
                 onClick={() => {
                   setDeleteConfirmationModal({
                     isOpen: true,
@@ -16827,7 +16912,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               status: 'Status',
             };
             const menuItemClass =
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]';
+              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-100 transition-colors';
             const openSubmenu = (
               key: Exclude<RecentsFilterSubmenu, null>,
               event: React.MouseEvent<HTMLButtonElement>,
@@ -16870,8 +16955,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             return (
               <div data-recents-filter-menu="" className="contents">
                 <div
+                  {...recentsFilterGoo.hostProps}
                   role="menu"
-                  className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[168px] rounded-xl border p-1`}
+                  className={`${recentsFilterGoo.hostProps.className} chat-goo chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[168px] rounded-xl border p-1`}
                   style={{
                     top: recentsFilterMenu.top,
                     left: recentsFilterMenu.left,
@@ -16882,6 +16968,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   }}
                   onClick={(event) => event.stopPropagation()}
                 >
+                  {/* First child, so the pill paints behind the rows rather than over them. */}
+                  {recentsFilterGoo.pill}
                   <button
                     type="button"
                     role="menuitem"
@@ -16939,8 +17027,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                 {recentsFilterSubmenu && submenuOptions.length > 0 && (
                   <div
+                    {...recentsSubmenuGoo.hostProps}
                     role="menu"
-                    className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1001] w-[104px] rounded-xl border p-1`}
+                    className={`${recentsSubmenuGoo.hostProps.className} chat-goo chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1001] w-[104px] rounded-xl border p-1`}
                     style={{
                       top: recentsFilterSubmenuTop,
                       left: Math.min(recentsFilterMenu.left + 172, window.innerWidth - 112),
@@ -16951,6 +17040,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     }}
                     onClick={(event) => event.stopPropagation()}
                   >
+                    {/* First child, so the pill paints behind the rows rather than over them. */}
+                    {recentsSubmenuGoo.pill}
                     {submenuOptions.map((option) => (
                       <React.Fragment key={String(option.value)}>
                         {'separatedBefore' in option && option.separatedBefore && (

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, ExternalLink } from 'lucide-react';
+import { X, ExternalLink } from '@/lib/icons';
 
 // Define XenoSource interface here to avoid circular dependencies
 interface XenoSource {

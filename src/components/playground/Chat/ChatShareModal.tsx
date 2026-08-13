@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Copy, X } from 'lucide-react';
+import { Check, Copy, X } from '@/lib/icons';
 import {
   VISIBILITY_OPTIONS,
   buildSocialShareUrl,

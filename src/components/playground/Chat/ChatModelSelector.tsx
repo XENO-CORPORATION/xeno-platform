@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ArrowLeft, Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight, Loader2 } from '@/lib/icons';
 import type { GroupedModels, Model } from '@/services/modelService';
 import { chainDurationMs, MODEL_CHAIN } from './composerGooey';
 
