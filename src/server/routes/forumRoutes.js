@@ -339,4 +339,34 @@ router.post('/threads/:shortId/opened', authMiddleware, loadActor, handled('mark
   res.json({ success: true });
 }));
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Subscriptions — the write half of a signal that shipped read-only
+ *
+ * The v0.4 migration created `forum_subscriptions`, `getViewerContext` JOINed
+ * it, and the ranker scored `you_follow_this_topic`. No route wrote it. So the
+ * "Topics you follow" ranker returned an empty list for every user, forever.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** GET /api/forum/subscriptions — tags you follow. */
+router.get('/subscriptions', authMiddleware, loadActor, handled('listSubscriptions', async (req, res) => {
+  res.json({ success: true, tags: await write.listSubscriptions(req.db, req.actor.id) });
+}));
+
+/** POST /api/forum/subscriptions { tag } — follow. Idempotent. */
+router.post('/subscriptions', authMiddleware, loadActor, handled('subscribeTag', async (req, res) => {
+  res.json({ success: true, ...(await write.subscribeTag(req.db, req.actor, req.body?.tag)) });
+}));
+
+/**
+ * DELETE /api/forum/subscriptions — unfollow. Idempotent.
+ *
+ * The tag travels in the BODY, not the path. A namespaced tag contains a colon
+ * (`product:pixel`), and putting one in a path segment means every client has
+ * to agree on encoding it — which is exactly the kind of detail that works in
+ * curl and breaks in one SDK. The body carries it verbatim.
+ */
+router.delete('/subscriptions', authMiddleware, loadActor, handled('unsubscribeTag', async (req, res) => {
+  res.json({ success: true, ...(await write.unsubscribeTag(req.db, req.actor, req.body?.tag)) });
+}));
+
 export default router;

@@ -105,3 +105,13 @@ export const getFeed = (ranker?: string) =>
 
 export const markOpened = (shortId: string) =>
   request<any>(`/threads/${shortId}/opened`, { method: 'POST' }, true).catch(() => null);
+
+// Subscriptions. The read side (`getViewerContext` -> ranker fit) shipped in
+// v0.4 with no way to write a row, so `my-topics` was permanently empty.
+export const getSubscriptions = () => request<any>('/subscriptions', {}, true);
+
+export const subscribeTag = (tag: string) =>
+  request<any>('/subscriptions', { method: 'POST', body: JSON.stringify({ tag }) }, true);
+
+export const unsubscribeTag = (tag: string) =>
+  request<any>('/subscriptions', { method: 'DELETE', body: JSON.stringify({ tag }) }, true);
