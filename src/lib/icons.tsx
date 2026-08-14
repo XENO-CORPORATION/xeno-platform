@@ -1,5 +1,5 @@
 import type { CSSProperties, SVGProps } from 'react';
-import type { ElementDeclaration } from '@xenosystem/elements/schema';
+import type { ElementDeclaration, ElementState } from '@xenosystem/elements/schema';
 import { XenoElement } from '@xenosystem/elements-react';
 
 import GAlert from '@xenosystem/elements/elements/alert';
@@ -52,6 +52,7 @@ import GFeather from '@xenosystem/elements/elements/feather';
 import GHand from '@xenosystem/elements/elements/hand';
 import GFileClock from '@xenosystem/elements/elements/file-clock';
 import GBuilding from '@xenosystem/elements/elements/building';
+import GNextDismiss from '@xenosystem/elements/elements/next-dismiss';
 import GCheck from '@xenosystem/elements/elements/check';
 import GChevronDown from '@xenosystem/elements/elements/chevron-down';
 import GChevronRight from '@xenosystem/elements/elements/chevron-right';
@@ -286,3 +287,24 @@ export const FileClock = /* @__PURE__ */ glyph(GFileClock);
 
 /* Drawn for the share dialog, which had been hand-writing an animated building of its own. */
 export const Building = /* @__PURE__ */ glyph(GBuilding);
+
+/* The one glyph here that takes a STATE rather than just a size.
+ *
+ * `glyph()` cannot carry it: the factory exists so a call site never has to know a name is XENO-backed,
+ * and a state prop is precisely the thing only a XENO-backed name can accept. So this is written out —
+ * the exception proves the factory is doing its job everywhere else.
+ *
+ * `selection: 'on'` is the last card, where Next becomes Dismiss. The arrow morphs into the cross;
+ * see the declaration for why the two are drawn from the same three strokes. */
+export const NextDismiss = ({
+  size = 24,
+  state,
+  ...rest
+}: IconProps & { readonly state?: Partial<ElementState> }) => (
+  <XenoElement
+    decl={GNextDismiss}
+    size={typeof size === 'string' ? Number.parseFloat(size) : size}
+    {...(state ? { state } : {})}
+    {...rest}
+  />
+);
