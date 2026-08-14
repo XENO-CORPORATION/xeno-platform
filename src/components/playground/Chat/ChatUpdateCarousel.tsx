@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ArrowLeft, Sparkles } from '@/lib/icons';
+import { ArrowLeft, NextDismiss, Sparkles } from '@/lib/icons';
 import ChatUpdateDemoPanel from './ChatUpdateDemoPanel';
 import { captureDissolvePlate, runPixelDissolve } from './pixelDissolve';
 
@@ -86,57 +86,17 @@ const resolveDemo = (update: ChatUpdate): ChatUpdateDemoLayout | undefined => {
   };
 };
 
-const MORPH_EASE = [0.22, 0.7, 0.2, 1] as const;
-
-/** Morphs the next-arrow strokes into an X on the final update. */
-const NextDismissMorphIcon: React.FC<{ isDismiss: boolean; reduceMotion: boolean }> = ({
-  isDismiss,
-  reduceMotion,
-}) => {
-  const transition = reduceMotion
-    ? { duration: 0 }
-    : { duration: 0.32, ease: MORPH_EASE };
-
-  return (
-    <svg
-      data-update-nav-morph={isDismiss ? 'dismiss' : 'next'}
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <motion.line
-        animate={
-          isDismiss
-            ? { x1: 6, y1: 6, x2: 18, y2: 18, opacity: 1 }
-            : { x1: 5, y1: 12, x2: 15, y2: 12, opacity: 1 }
-        }
-        transition={transition}
-      />
-      <motion.line
-        animate={
-          isDismiss
-            ? { x1: 18, y1: 6, x2: 6, y2: 18, opacity: 1 }
-            : { x1: 12, y1: 7, x2: 19, y2: 12, opacity: 1 }
-        }
-        transition={transition}
-      />
-      <motion.line
-        animate={
-          isDismiss
-            ? { x1: 12, y1: 12, x2: 12, y2: 12, opacity: 0 }
-            : { x1: 12, y1: 17, x2: 19, y2: 12, opacity: 1 }
-        }
-        transition={transition}
-      />
-    </svg>
-  );
-};
+/**
+ * The Next/Dismiss mark is `xeno.next-dismiss`, a glyph with a morphing variant.
+ *
+ * It used to be three `<motion.line>`s here, with framer-motion interpolating each endpoint by hand.
+ * The animation was right — the shaft turns into one arm of the cross, the upper barb into the other,
+ * the lower barb folds into the middle — so the glyph was drawn to keep exactly that, out of the same
+ * three strokes, and the interpolation moved into the library where the stylesheet does it.
+ *
+ * Reduced motion stops being this component's business too: the morph transition is already behind the
+ * media query.
+ */
 
 interface ChatUpdateCarouselProps {
   storageKey?: string;
@@ -589,9 +549,11 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
               {...(showDismissInNav ? { 'data-update-carousel-dismiss': true } : {})}
               className={`${navButtonClassName} disabled:pointer-events-none disabled:opacity-50`}
             >
-              <NextDismissMorphIcon
-                isDismiss={showDismissInNav}
-                reduceMotion={Boolean(prefersReducedMotion)}
+              <NextDismiss
+                size={14}
+                state={{ selection: showDismissInNav ? 'on' : 'off' }}
+                data-update-nav-morph={showDismissInNav ? 'dismiss' : 'next'}
+                aria-hidden="true"
               />
             </button>
           </div>
