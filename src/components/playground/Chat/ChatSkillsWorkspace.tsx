@@ -423,7 +423,13 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
           })}
         </div>
         {panel === 'library' && (
-          <label className="relative ml-auto block min-w-0 flex-1 max-w-[14rem]">
+          <label
+            // mr-1.5 keeps the field off the settings body's right edge. That body scrolls
+            // vertically, so it clips horizontally, and its edge landed exactly on this
+            // field — close enough that the global :focus-visible ring, which paints
+            // outside the border box, was sliced clean off whenever the field was focused.
+            className="relative ml-auto mr-1.5 block min-w-0 max-w-[14rem] flex-1"
+          >
             <span className="sr-only">Search skills</span>
             <Search
               size={14}
