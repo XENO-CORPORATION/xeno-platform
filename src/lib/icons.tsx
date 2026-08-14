@@ -29,6 +29,18 @@ import GFileOut from '@xenosystem/elements/elements/file-out';
 import GMessagePlus from '@xenosystem/elements/elements/message-plus';
 import GMessageX from '@xenosystem/elements/elements/message-x';
 import GFolderUp from '@xenosystem/elements/elements/folder-up';
+import GSave from '@xenosystem/elements/elements/save';
+import GQuote from '@xenosystem/elements/elements/quote';
+import GMonitor from '@xenosystem/elements/elements/monitor';
+import GAppWindow from '@xenosystem/elements/elements/app-window';
+import GZap from '@xenosystem/elements/elements/zap';
+import GWrapText from '@xenosystem/elements/elements/wrap-text';
+import GTrendingUp from '@xenosystem/elements/elements/trending-up';
+import GArrowLeftRight from '@xenosystem/elements/elements/arrow-left-right';
+import GArrowUpRight from '@xenosystem/elements/elements/arrow-up-right';
+import GCheckSquare from '@xenosystem/elements/elements/check-square';
+import GThumbsUp from '@xenosystem/elements/elements/thumbs-up';
+import GThumbsDown from '@xenosystem/elements/elements/thumbs-down';
 import GCheck from '@xenosystem/elements/elements/check';
 import GChevronDown from '@xenosystem/elements/elements/chevron-down';
 import GChevronRight from '@xenosystem/elements/elements/chevron-right';
@@ -215,3 +227,22 @@ export const FileOutput = /* @__PURE__ */ glyph(GFileOut);
 export const MessageSquarePlus = /* @__PURE__ */ glyph(GMessagePlus);
 export const MessageSquareX = /* @__PURE__ */ glyph(GMessageX);
 export const FolderUp = /* @__PURE__ */ glyph(GFolderUp);
+
+/* Standalone objects — the ones that compose from nothing already here and simply had to be drawn.
+
+   `CheckCircle` becomes a check in the shared rounded-square frame, the same translation `StopCircle`
+   took. That was a decision, not a shortcut: the grammar has no circles, and the ring never carried
+   meaning the frame does not. What the frame does carry is a relationship — it is the same square as
+   `Contrast` and the squared stop, so the three read as one family of enclosed marks. */
+export const Save = /* @__PURE__ */ glyph(GSave);
+export const Quote = /* @__PURE__ */ glyph(GQuote);
+export const Monitor = /* @__PURE__ */ glyph(GMonitor);
+export const AppWindow = /* @__PURE__ */ glyph(GAppWindow);
+export const Zap = /* @__PURE__ */ glyph(GZap);
+export const WrapText = /* @__PURE__ */ glyph(GWrapText);
+export const TrendingUp = /* @__PURE__ */ glyph(GTrendingUp);
+export const ArrowLeftRight = /* @__PURE__ */ glyph(GArrowLeftRight);
+export const ArrowUpRight = /* @__PURE__ */ glyph(GArrowUpRight);
+export const CheckCircle = /* @__PURE__ */ glyph(GCheckSquare);
+export const ThumbsUp = /* @__PURE__ */ glyph(GThumbsUp);
+export const ThumbsDown = /* @__PURE__ */ glyph(GThumbsDown);
