@@ -3036,6 +3036,18 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const isCreatingConversationRef = useRef(false);
   // Ref to prevent double conversation updates
   const isUpdatingConversationRef = useRef(false);
+  /**
+   * The active conversation id as it is RIGHT NOW, not as it was when the current render started.
+   *
+   * The conversation is created while a send is already in flight, and `fetchAiResponse` closed over
+   * `activeConversationId` before that happened — so by the time the answer lands, the state variable it
+   * can see is still `null` and it would create a second conversation for the same thread. A ref is the
+   * only thing that reads back what was just written.
+   */
+  const activeConversationIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
 
   // --- NEW: State for History Search --- 
   const [historySearchTerm, setHistorySearchTerm] = useState('');
@@ -5409,6 +5421,90 @@ interface QueueState {
     reveal(); // first words immediately — no empty flash
   }, [finishTypewriter]);
 
+  /**
+   * Put the open thread in the history and make it the active conversation. Returns its id.
+   *
+   * Extracted from the answer handler, which used to be the ONLY place a conversation was born — the
+   * thread existed on screen from the first keystroke but nowhere else until the model finished
+   * answering. Everything that acts on "this conversation" (Pin, Archive, Delete, moving it into a
+   * project) looks it up by id, so for those seconds the controls were live-looking and dead.
+   *
+   * The database branch is the reason this is a function rather than a line in the send path: when the
+   * user is authenticated the id has to come BACK from the server, and creating a local one first would
+   * take that branch away and quietly stop persisting the thread. The local id is the fallback, same as
+   * it always was.
+   *
+   * The ref is written before the state, because the send already in flight closed over the old value.
+   */
+  const createConversationForMessages = async (
+    conversationMessages: ChatMessage[],
+  ): Promise<string | null> => {
+    if (activeConversationIdRef.current || isCreatingConversationRef.current) return null;
+    if (conversationMessages.length === 0) return null;
+    isCreatingConversationRef.current = true;
+
+    const now = Date.now();
+    const firstUserMessage = conversationMessages.find((message) => message.sender === 'user');
+    const title = firstUserMessage?.text.substring(0, 40) || 'Untitled Chat';
+    const projectId = pendingChatProjectIdRef.current ?? undefined;
+
+    const register = (id: string): string => {
+      const newConversation: Conversation = {
+        id,
+        title,
+        timestamp: now,
+        messages: conversationMessages,
+        systemPrompt: savedSystemPrompt || undefined,
+        projectId,
+      };
+      activeConversationIdRef.current = id;
+      setConversationHistory((prevHistory) => [newConversation, ...prevHistory]);
+      setActiveConversationId(id);
+      void bindPendingChatSkills(id);
+      void bindPendingChatPersona(id);
+      // The pending project link (if any) has now been applied to the new conversation.
+      pendingChatProjectIdRef.current = null;
+      return id;
+    };
+
+    try {
+      if (isDbAuthenticated) {
+        try {
+          // Shared interface ID so every interface sees the same history.
+          const dbConversation = await chatService.createConversation({
+            title,
+            model_id: selectedModel.id,
+            system_prompt: savedSystemPrompt || undefined,
+            interface_id: sharedInterfaceId,
+          });
+          if (dbConversation) {
+            // For AI messages, save parsedAnswer (what is displayed) rather than the raw text.
+            await chatService.addMessagesBatch(
+              dbConversation.id,
+              conversationMessages.map((msg) => ({
+                role: msg.sender === 'ai' ? ('assistant' as const) : ('user' as const),
+                content: msg.sender === 'ai' ? msg.parsedAnswer || msg.text : msg.text,
+                model_id: msg.modelIdUsed || msg.modelId,
+                thinking: msg.thinkingContent,
+                has_thinking: !!msg.thinkingContent,
+              })),
+            );
+            return register(dbConversation.id);
+          }
+        } catch (error) {
+          console.error('Error creating conversation in database:', error);
+          // Fall through to the local id.
+        }
+      }
+      return register(`convo-${now}`);
+    } finally {
+      // Left long enough for the state write to land, same as the guard it replaces.
+      setTimeout(() => {
+        isCreatingConversationRef.current = false;
+      }, 100);
+    }
+  };
+
   // --- Reusable Function to Fetch AI Response ---
   // MODIFIED: Added explicit return type annotation and structural fixes
   const fetchAiResponse = async (
@@ -5972,8 +6068,11 @@ interface QueueState {
 
         // Then, update the conversation history separately to prevent double updates
         const now = Date.now();
+        // The ref, not the state: the send path creates the conversation while this call is in flight,
+        // so the value captured when it started is stale by the time the answer lands.
+        const conversationId = activeConversationIdRef.current ?? activeConversationId;
         // Use currentHistory (the parameter) instead of messages (stale state)
-        if (activeConversationId) {
+        if (conversationId) {
             if (!isUpdatingConversationRef.current) {
                 isUpdatingConversationRef.current = true;
                 const updatedMessages = [...currentHistory.filter(msg => msg.id !== localPlaceholderId), updatedMessage];
@@ -5981,7 +6080,7 @@ interface QueueState {
                 // Update local state
                 setConversationHistory(prevHistory =>
                     prevHistory.map(convo =>
-                        convo.id === activeConversationId
+                        convo.id === conversationId
                             ? {
                                 ...convo,
                                 messages: updatedMessages,
@@ -5996,7 +6095,7 @@ interface QueueState {
                 if (isDbAuthenticated) {
                     // Add the AI response message to the database
                     // Save parsedAnswer (the displayed content) as content, not raw text
-                    chatService.addMessage(activeConversationId, {
+                    chatService.addMessage(conversationId, {
                         role: 'assistant',
                         content: updatedMessage.parsedAnswer || updatedMessage.text,
                         model_id: updatedMessage.modelIdUsed || updatedMessage.modelId,
@@ -6007,99 +6106,21 @@ interface QueueState {
                     });
                 }
 
-                // console.log("Updated conversation in history:", activeConversationId);
+                // console.log("Updated conversation in history:", conversationId);
                 // Reset guard after state update
                 setTimeout(() => {
                     isUpdatingConversationRef.current = false;
                 }, 100);
             }
         } else {
-            // Use currentHistory (the parameter) instead of messages (stale state)
-            if (currentHistory.length >= 1 && !isCreatingConversationRef.current) {
-                isCreatingConversationRef.current = true;
-                const firstUserMessage = currentHistory.find(m => m.sender === 'user');
-                const title = firstUserMessage?.text.substring(0, 40) || "Untitled Chat";
-                const conversationMessages = [...currentHistory.filter(msg => msg.id !== localPlaceholderId), updatedMessage];
-
-                if (isDbAuthenticated) {
-                    // Create in database - use shared interface ID so all interfaces share history
-                    try {
-                        const dbConversation = await chatService.createConversation({
-                            title,
-                            model_id: selectedModel.id,
-                            system_prompt: savedSystemPrompt || undefined,
-                            interface_id: sharedInterfaceId,
-                        });
-
-                        if (dbConversation) {
-                            // Add messages to the conversation
-                            // For AI messages, save parsedAnswer (displayed content) instead of raw text
-                            const messagesToSync = conversationMessages.map(msg => ({
-                                role: msg.sender === 'ai' ? 'assistant' as const : 'user' as const,
-                                content: msg.sender === 'ai' ? (msg.parsedAnswer || msg.text) : msg.text,
-                                model_id: msg.modelIdUsed || msg.modelId,
-                                thinking: msg.thinkingContent,
-                                has_thinking: !!msg.thinkingContent,
-                            }));
-                            await chatService.addMessagesBatch(dbConversation.id, messagesToSync);
-
-                            const newConversation: Conversation = {
-                                id: dbConversation.id,
-                                title: title,
-                                timestamp: now,
-                                messages: conversationMessages,
-                                systemPrompt: savedSystemPrompt || undefined,
-                                projectId: pendingChatProjectIdRef.current ?? undefined,
-                            };
-
-                            setConversationHistory(prevHistory => [newConversation, ...prevHistory]);
-                            setActiveConversationId(dbConversation.id);
-                            void bindPendingChatSkills(dbConversation.id);
-                            void bindPendingChatPersona(dbConversation.id);
-                            console.log("Created new conversation in database:", dbConversation.id);
-                        }
-                    } catch (error) {
-                        console.error("Error creating conversation in database:", error);
-                        // Fallback to local-only
-                        const newConvoId = `convo-${now}`;
-                        const newConversation: Conversation = {
-                            id: newConvoId,
-                            title: title,
-                            timestamp: now,
-                            messages: conversationMessages,
-                            systemPrompt: savedSystemPrompt || undefined,
-                            projectId: pendingChatProjectIdRef.current ?? undefined,
-                        };
-                        setConversationHistory(prevHistory => [newConversation, ...prevHistory]);
-                        setActiveConversationId(newConvoId);
-                        void bindPendingChatSkills(newConvoId);
-                        void bindPendingChatPersona(newConvoId);
-                    }
-                } else {
-                    // Not authenticated, use local storage
-                    const newConvoId = `convo-${now}`;
-                    const newConversation: Conversation = {
-                        id: newConvoId,
-                        title: title,
-                        timestamp: now,
-                        messages: conversationMessages,
-                        systemPrompt: savedSystemPrompt || undefined,
-                        projectId: pendingChatProjectIdRef.current ?? undefined,
-                    };
-
-                    setConversationHistory(prevHistory => [newConversation, ...prevHistory]);
-                    setActiveConversationId(newConvoId);
-                    void bindPendingChatSkills(newConvoId);
-                    void bindPendingChatPersona(newConvoId);
-                    // console.log("Created new conversation in history:", newConvoId);
-                }
-                // The pending project link (if any) has now been applied to the new conversation.
-                pendingChatProjectIdRef.current = null;
-                // Reset guard
-                setTimeout(() => {
-                    isCreatingConversationRef.current = false;
-                }, 100);
-            }
+            // A fallback now, not the normal path: the send handler registers the conversation as soon as
+            // the user's message exists, so by here there is almost always an id. This still catches the
+            // cases that never went through a send — a thread restored or replayed straight into
+            // `messages` — and it is the same creation, not a second copy of it.
+            await createConversationForMessages([
+                ...currentHistory.filter(msg => msg.id !== localPlaceholderId),
+                updatedMessage,
+            ]);
         }
 
         setThinkingPlaceholderId(null); // Clear placeholder ID state
@@ -6447,9 +6468,20 @@ interface QueueState {
     let currentMessageHistory: ChatMessage[] = [...messages, newUserMessage];
     setMessages(currentMessageHistory);
 
-    // Save user message to database if authenticated and there's an active conversation
-    if (isDbAuthenticated && activeConversationId) {
-      chatService.addMessage(activeConversationId, {
+    // The thread becomes a conversation HERE, at the first message — not when the answer arrives.
+    //
+    // Until now it was born in the answer handler, so between hitting send and the model finishing there
+    // was no conversation to act on: Pin, Archive, Delete and "move to project" all look it up by id, and
+    // for those seconds they looked live and did nothing. Awaited rather than fired off, because the id
+    // has to exist before `fetchAiResponse` runs or that call would create a second one for the same
+    // thread.
+    //
+    // Creation batches the user's message in, so the `addMessage` below is for conversations that already
+    // existed — sending it in both places would post the message twice.
+    if (!activeConversationIdRef.current) {
+      await createConversationForMessages(currentMessageHistory);
+    } else if (isDbAuthenticated) {
+      chatService.addMessage(activeConversationIdRef.current, {
         role: 'user',
         content: newUserMessage.text,
       }).catch(error => {
