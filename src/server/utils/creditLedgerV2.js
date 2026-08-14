@@ -304,16 +304,33 @@ export async function setSpendCap(pool, userId, { windowSec, limitMicro }) {
   return { ok: true };
 }
 
-/** Throw SPEND_CAP_EXCEEDED if posting costMicro now would breach any window cap. */
+/**
+ * Throw SPEND_CAP_EXCEEDED if committing costMicro now would breach any window cap.
+ *
+ * "Spent" is settled debits in the window PLUS everything currently reserved by a
+ * live hold. Counting only settled debits was a real hole: a hold reserves money for
+ * up to its expiry (default 15 min) and is invisible to a debit sum until it settles,
+ * so N concurrent holds could each pass a cap they jointly blew through. Money that
+ * is reserved is money that is going to be spent.
+ *
+ * The settle transition is clean — settleHoldV2 flips state 'held'→'settled' and
+ * inserts the debit row in ONE transaction, so an amount is counted by the hold term
+ * or the debit term, never both and never neither.
+ *
+ * Callers must invoke this BEFORE inserting their own hold row, so the amount under
+ * test is not also present in the reserved term.
+ */
 async function assertWithinCaps(client, userId, costMicro) {
   const caps = await client.query('SELECT window_sec, limit_micro FROM spend_caps WHERE user_id=$1', [userId]);
+  if (caps.rows.length === 0) return; // no cap configured → nothing to enforce
+  const heldMicro = await activeHoldsMicro(client, userId);
   for (const cap of caps.rows) {
     const spent = await client.query(
       `SELECT COALESCE(SUM(-amount),0)::bigint s FROM credit_transactions
         WHERE user_id=$1 AND type='debit' AND created_at > now() - ($2 || ' seconds')::interval`,
       [userId, cap.window_sec],
     );
-    if (BigInt(spent.rows[0].s) + costMicro > BigInt(cap.limit_micro)) {
+    if (BigInt(spent.rows[0].s) + heldMicro + costMicro > BigInt(cap.limit_micro)) {
       const e = new Error(`spend cap exceeded (${cap.window_sec}s window)`);
       e.code = 'SPEND_CAP_EXCEEDED';
       throw e;
@@ -536,6 +553,16 @@ export async function holdV2(pool, userId, req) {
         err.code = acct.is_frozen ? 'ACCOUNT_FROZEN' : 'INSUFFICIENT_CREDITS';
         throw err;
       }
+      // Spend-cap invariant (§4.6), enforced at HOLD time — the only point where
+      // refusing means anything. Refusing at settle would be theatre: the compute has
+      // already run and the provider has already billed us, so the choice there is
+      // "charge the customer" or "eat the cost", never "don't spend". Gate the
+      // reservation and every settle that follows is in-budget by construction.
+      //
+      // This ran nowhere before: recordUsageV2 checked caps, holdV2 and settleHoldV2
+      // did not — so the hold path, which is how hosted agent runs bill, ignored caps
+      // entirely even when one was set.
+      await assertWithinCaps(client, userId, amountMicro);
       const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
       const row = await client.query(
         `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at)
