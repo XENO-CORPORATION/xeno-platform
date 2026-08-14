@@ -11218,6 +11218,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   const historyRowGoo = useGooPill<HTMLDivElement>();
   const recentsFilterGoo = useGooPill<HTMLDivElement>();
   const recentsSubmenuGoo = useGooPill<HTMLDivElement>();
+  // The history sidebar: its top nav, and the list under it (chats, archived, projects — one scroller,
+  // so one host). Rows are marked with `data-goo-row` rather than matched by class: these lists are
+  // hand-rolled Tailwind and a selector written against utility classes would break the first time
+  // someone changed the padding.
+  const historyNavGoo = useGooPill<HTMLDivElement>({ rowSelector: '[data-goo-row]' });
+  const historyListGoo = useGooPill<HTMLDivElement>({ rowSelector: '[data-goo-row]' });
 
   const topBarBtnClass = (isActive: boolean, extra = '') =>
     `chat-top-bar-btn flex h-9 items-center justify-center rounded-lg border text-[var(--chat-muted)] transition-[background-color,border-color,color] active:scale-[0.98] ${
@@ -11937,6 +11943,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           .chat-goo {
             --xeno-goo-fill: var(--chat-hover);
             --xeno-goo-radius: 6px;
+          }
+          /* The sidebar's rows are rounded-lg inside a px-1.5 gutter, not rounded-md inside p-1. */
+          .chat-goo-sidebar {
+            --xeno-goo-inset: 6px;
+            --xeno-goo-radius: 8px;
+          }
+          /* The list host is a wrapper INSIDE the scroller's gutter, so it has none of its own. */
+          .chat-goo-list {
+            --xeno-goo-inset: 0px;
+            --xeno-goo-radius: 8px;
           }
           .chat-themed [class*="bg-[#0a0a0b]"] { background-color: var(--chat-canvas) !important; }
           .chat-themed [class*="bg-[#0e0e10]"],
@@ -17310,7 +17326,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     } ${
                       isActive
                         ? 'bg-[var(--chat-control)] text-zinc-100'
-                        : 'text-zinc-100 hover:bg-[var(--chat-hover)]'
+                        : 'text-zinc-100'
                     }`;
 
                   const pinnedDragFromIndex = historyDragId
@@ -17364,6 +17380,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     return (
                       <div
                         key={convo.id}
+                        data-goo-row=""
                         data-history-pinned-row={isPinnedRow ? convo.id : undefined}
                         data-history-drag-shiftable={isPinnedRow ? 'true' : undefined}
                         data-pin-dragging={isDragging ? 'true' : undefined}
@@ -17390,7 +17407,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             ? 'cursor-grabbing text-zinc-500'
                             : isActive
                               ? 'cursor-pointer bg-[var(--chat-control)] text-zinc-100'
-                              : `cursor-pointer text-zinc-500 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} hover:bg-[var(--chat-hover)] hover:text-zinc-200`
+                              : `cursor-pointer text-zinc-500 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} hover:text-zinc-200`
                         } ${
                           !isListDragging
                             ? 'transition-[color,padding,background-color] duration-150 ease-out'
@@ -17506,10 +17523,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               return (
                     <>
                       {/* Top nav — separate from Pinned / Recents */}
-                      <div className="flex-shrink-0 space-y-0.5 border-b border-[#1e1e21] px-1.5 py-2">
+                      <div
+                        {...historyNavGoo.hostProps}
+                        className={`${historyNavGoo.hostProps.className} chat-goo chat-goo-sidebar flex-shrink-0 space-y-0.5 border-b border-[#1e1e21] px-1.5 py-2`}
+                      >
+                        {historyNavGoo.pill}
                                 <button
                           type="button"
-                          className={historyNavItemClass(false)}
+                          data-goo-row="" className={historyNavItemClass(false)}
                           onClick={() => {
                             handleNewChat();
                           }}
@@ -17519,7 +17540,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 </button>
                         <button
                           type="button"
-                          className={historyNavItemClass(historyNavView === 'chats' && !isProjectsPageOpen)}
+                          data-goo-row="" className={historyNavItemClass(historyNavView === 'chats' && !isProjectsPageOpen)}
                           onClick={() => {
                             setHistoryNavView('chats');
                             dismissChatOverlays();
@@ -17531,7 +17552,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         {hasArchivedConversations && (
                           <button
                             type="button"
-                            className={historyNavItemClass(historyNavView === 'archived')}
+                            data-goo-row="" className={historyNavItemClass(historyNavView === 'archived')}
                             onClick={() => {
                               dismissChatOverlays();
                               setHistoryNavView('archived');
@@ -17543,7 +17564,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         )}
                         <button
                           type="button"
-                          className={historyNavItemClass(historyNavView === 'projects' || isProjectsPageOpen)}
+                          data-goo-row="" className={historyNavItemClass(historyNavView === 'projects' || isProjectsPageOpen)}
                           onClick={openProjectsPage}
                         >
                           <Folder size={16} className="flex-shrink-0" />
@@ -17551,7 +17572,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         </button>
                       <button
                           type="button"
-                          className={historyNavItemClass(historyNavView === 'artifacts' || isArtifactsPageOpen)}
+                          data-goo-row="" className={historyNavItemClass(historyNavView === 'artifacts' || isArtifactsPageOpen)}
                           onClick={openArtifactsPage}
                         >
                           <Shapes size={16} className="flex-shrink-0" />
@@ -17559,7 +17580,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       </button>
                       <button
                           type="button"
-                          className={historyNavItemClass(historyNavView === 'global_settings' || isGlobalSettingsPageOpen)}
+                          data-goo-row="" className={historyNavItemClass(historyNavView === 'global_settings' || isGlobalSettingsPageOpen)}
                           onClick={openGlobalSettingsPage}
                         >
                           <Settings size={16} className="flex-shrink-0" />
@@ -17567,7 +17588,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       </button>
                       <button
                           type="button"
-                          className={historyNavItemClass(historyNavView === 'scheduled' || isScheduledPageOpen)}
+                          data-goo-row="" className={historyNavItemClass(historyNavView === 'scheduled' || isScheduledPageOpen)}
                           onClick={openScheduledPage}
                         >
                           <Clock size={16} className="flex-shrink-0" />
@@ -17575,8 +17596,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       </button>
                       </div>
 
-                      {/* Content under the top nav */}
+                      {/* Content under the top nav.
+
+                          The goo host is a wrapper INSIDE the scroller rather than the scroller itself.
+                          For a `position: relative; overflow: auto` element, the containing block for an
+                          absolutely positioned child is its PADDING BOX — which does not move when the
+                          element scrolls, so a pill parented there is pinned to the viewport while the
+                          rows slide underneath it. A wheel over the list happens to hide that (the row
+                          under the cursor changes, which re-places the pill anyway) and it stops hiding
+                          it the moment the list is scrolled by anything else. Parented to the content,
+                          the pill travels with the row it marks and none of that arises. */}
                       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2 hide-scrollbar">
+                        <div
+                          {...historyListGoo.hostProps}
+                          className={`${historyListGoo.hostProps.className} chat-goo chat-goo-list`}
+                        >
+                        {historyListGoo.pill}
                         {historyNavView === 'chats' && (
                           conversationHistory.filter((c) => !c.isArchived).length === 0 && !searchTermLower ? (
                             <div className="px-2 py-8 text-center">
@@ -17740,8 +17775,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <div className="space-y-2">
                       <button
                         type="button"
+                              data-goo-row=""
                               onClick={() => openCreateProjectModal()}
-                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]"
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-zinc-100 transition-colors"
                             >
                               <Plus size={15} />
                               <span>New project</span>
@@ -17757,6 +17793,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     <button
                                       key={project.id}
                                       type="button"
+                                      data-goo-row=""
                                       title={project.name}
                                       onClick={() => {
                                         // Keep the projects flow open so ← back returns to the list,
@@ -17769,7 +17806,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         }
                                         openProject(project.id);
                                       }}
-                                      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-[var(--chat-hover)] ${
+                                      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors ${
                                         isActiveProject
                                           ? 'bg-[var(--chat-hover)] text-[var(--chat-text)]'
                                           : 'text-zinc-100'
@@ -17822,6 +17859,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             </p>
                           </div>
                         )}
+                        </div>
                       </div>
                     </>
                   );
