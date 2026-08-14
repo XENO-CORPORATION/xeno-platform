@@ -21,6 +21,14 @@ import GPanelRightClose from '@xenosystem/elements/elements/panel-right-close';
 import GMaximize from '@xenosystem/elements/elements/maximize';
 import GMinimize from '@xenosystem/elements/elements/minimize';
 import GCalendar from '@xenosystem/elements/elements/calendar';
+import GEyeOff from '@xenosystem/elements/elements/eye-off';
+import GMicOff from '@xenosystem/elements/elements/mic-off';
+import GTimerOff from '@xenosystem/elements/elements/timer-off';
+import GFileX from '@xenosystem/elements/elements/file-x';
+import GFileOut from '@xenosystem/elements/elements/file-out';
+import GMessagePlus from '@xenosystem/elements/elements/message-plus';
+import GMessageX from '@xenosystem/elements/elements/message-x';
+import GFolderUp from '@xenosystem/elements/elements/folder-up';
 import GCheck from '@xenosystem/elements/elements/check';
 import GChevronDown from '@xenosystem/elements/elements/chevron-down';
 import GChevronRight from '@xenosystem/elements/elements/chevron-right';
@@ -188,3 +196,22 @@ export const PanelRightClose = /* @__PURE__ */ glyph(GPanelRightClose);
 export const Maximize2 = /* @__PURE__ */ glyph(GMaximize);
 export const Minimize2 = /* @__PURE__ */ glyph(GMinimize);
 export const Calendar = /* @__PURE__ */ glyph(GCalendar);
+
+/* Compounds: an object this library already draws, plus a mark.
+
+   Both halves are copied from the existing glyph rather than redrawn — the eye in `eye-off` is `eye`'s
+   own coordinates. An "off" glyph is the "on" one plus a denial, and if the object underneath shifted
+   even half a unit the pair would flicker every time a control toggled between them.
+
+   `FileClock` is NOT here, and it was meant to be. A clock face small enough to sit inside a file, in
+   this grammar, comes out around 7 units across — and at 7 units the corner radius and the stroke
+   weight compete for the same pixels, so the face renders as a blob rather than a clock. It stays on
+   lucide until it can be drawn at a size the set can carry. */
+export const EyeOff = /* @__PURE__ */ glyph(GEyeOff);
+export const MicOff = /* @__PURE__ */ glyph(GMicOff);
+export const TimerOff = /* @__PURE__ */ glyph(GTimerOff);
+export const FileX = /* @__PURE__ */ glyph(GFileX);
+export const FileOutput = /* @__PURE__ */ glyph(GFileOut);
+export const MessageSquarePlus = /* @__PURE__ */ glyph(GMessagePlus);
+export const MessageSquareX = /* @__PURE__ */ glyph(GMessageX);
+export const FolderUp = /* @__PURE__ */ glyph(GFolderUp);
