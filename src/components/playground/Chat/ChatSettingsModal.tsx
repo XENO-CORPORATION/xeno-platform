@@ -11,6 +11,7 @@ import {
   setChatPersonaId,
   type ChatPersona,
 } from './chatCustomize';
+import { useDialog } from '@xenosystem/elements-react';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 
 export type ChatFontSize = 'small' | 'medium' | 'large';
@@ -87,13 +88,10 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
     })();
   }, [conversationId]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  /* Escape was the only part of being a dialog this one did. `useDialog` adds the rest — focus in on
+     open, Tab kept inside, focus back to the opener on close. `lockScroll` is off because the app
+     already keeps the body unscrollable. */
+  const { panelProps } = useDialog<HTMLDivElement>({ open: true, onClose, lockScroll: false });
 
   const handleSelectChatPersona = async (persona: ChatPersona) => {
     const nextId = chatPersonaId === persona.id ? null : persona.id;
@@ -111,6 +109,7 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
 
   return (
     <div
+      {...panelProps}
       role="dialog"
       aria-modal="true"
       aria-label="Chat settings"

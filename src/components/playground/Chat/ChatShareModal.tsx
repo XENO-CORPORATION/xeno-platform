@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useDialog } from '@xenosystem/elements-react';
 import { Building, Check, Copy, Globe, Lock, X } from '@/lib/icons';
 import {
   VISIBILITY_OPTIONS,
@@ -143,13 +144,19 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
     return usable;
   }, [messages]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  /**
+   * The behaviour of a dialog, from the library — while the look stays here.
+   *
+   * This one already closed on Escape and did nothing else a dialog has to do: measured before the swap,
+   * focus stayed on `body` when it opened, Tab walked straight out into the page behind it, and closing
+   * it left focus nowhere at all. `useDialog` moves focus in, keeps Tab inside, hands focus back to
+   * whatever opened it, and locks the page scroll — none of which is visible, and all of which is what
+   * separates a dialog from a div that sits above the page.
+   *
+   * `lockScroll` is off: this app already keeps the body unscrollable, and the hook's refcount would
+   * capture and restore that state for no reason.
+   */
+  const { panelProps } = useDialog<HTMLDivElement>({ open: isOpen, onClose, lockScroll: false });
 
   useEffect(() => {
     if (!copied) return;
@@ -220,6 +227,7 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
     >
       <style>{SHARE_MODAL_KEYFRAMES}</style>
       <div
+        {...panelProps}
         role="dialog"
         aria-modal="true"
         aria-labelledby="chat-share-title"
