@@ -127,6 +127,46 @@ What each piece does:
 - `sudo docker compose build frontend` — builds the new image, which re-runs `npm run build` (Vite + prerender) inside the builder stage. **Build-before-swap:** the currently running `xenostudio-frontend` keeps serving throughout this build. If the build fails, nothing is swapped and the old container stays live.
 - `sudo docker compose up -d frontend` — swaps in the freshly built image only after a successful build.
 
+> ⚠️ **"Build-before-swap" protects the BUILD, not the SWAP.** `up -d frontend` also brings up
+> whatever `frontend` depends on, then waits for it to report healthy. If that wait times out,
+> compose aborts — **after the old frontend is already gone**. This happened on 2026-08-14: the
+> command restarted `backend`, gave up with `dependency failed to start: container
+> xenostudio-backend is unhealthy`, and left `xenostudio-frontend` in state `Created`. The site
+> served **502 for ~12 minutes**, and `docker ps` showed no frontend at all — you have to run
+> `docker ps -a` to even see it existed.
+>
+> The recovery is a plain re-run of `sudo docker compose up -d frontend` once the dependency is
+> healthy, which is exactly why it is easy to miss: nothing is broken, the deploy just stopped
+> half-way and the gap stays open until somebody looks.
+>
+> **So a deploy is not finished when the command exits 0.** Always finish with:
+>
+> ```bash
+> sudo docker ps --filter name=xenostudio-frontend --format '{{.Status}}'   # expect: Up …
+> curl -s -o /dev/null -w '%{http_code}\n' https://xenostudio.ai/           # expect: 200
+> ```
+>
+> This matters more when the build runs detached (see §3.5): the *launcher* exits 0 while the
+> real work continues, so its exit code says nothing at all about the outcome.
+
+### Step 3.5 — Long builds: run detached, then poll
+
+The Vite build on the box takes well over 10 minutes, which outruns some SSH/tool timeouts. If
+the connection dies mid-build the remote command dies with it, leaving the deploy half-applied.
+Run it detached and poll for a completion marker instead:
+
+```bash
+ssh xeno-platform-001 "cd /mnt/projects/xeno-platform && sudo rm -f /tmp/xeno-deploy.log && \
+  sudo setsid nohup bash -c 'docker compose build frontend && docker compose up -d frontend \
+  && echo XENO_DEPLOY_DONE' > /tmp/xeno-deploy.log 2>&1 < /dev/null & echo LAUNCHED"
+
+# then poll — and treat the ABSENCE of the marker as failure, not as "still going"
+ssh xeno-platform-001 "sudo grep -c XENO_DEPLOY_DONE /tmp/xeno-deploy.log; sudo tail -3 /tmp/xeno-deploy.log"
+```
+
+Then run the two verification commands above. The marker only proves the compose command
+finished; only the HTTP check proves the site is serving.
+
 ### Step 3.4 — Purging a stale `dist` (operator override)
 
 If a cached Docker layer is serving stale output (e.g. an asset changed but the build reused a cached `dist`), force a clean rebuild:
