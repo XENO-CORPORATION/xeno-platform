@@ -15,7 +15,9 @@ import { siteOrigin, siteUrl, mailDomain } from '../config/hosts.js';
 import { addGrant, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail, sendWelcomeEmail } from '../services/emailService.js';
+import { recordSecurityEvent, EVENTS } from '../services/securityEvents.js';
 import { clientIp } from '../utils/clientIp.js';
+import { describeClient } from '../utils/userAgent.js';
 import {
   requireRegistrationOpen,
   assertRegistrationAllowed,
@@ -334,12 +336,18 @@ async function issueSessionToken(db, user, req) {
   const sid = uuidv4();
   const token = generateToken(user, sid);
   try {
+    // device_type / browser / os are columns that have existed since the baseline
+    // and were NEVER written, so every session row in production is blank in all
+    // three and the "your devices" list cannot name a device. Derived here from the
+    // User-Agent we are already storing — no new data is collected.
+    const ua = req.get('User-Agent');
+    const client = describeClient(ua);
     await db.query(
-      `INSERT INTO user_sessions (id, user_id, token_hash, expires_at, ip_address, user_agent)
-       VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5)`,
+      `INSERT INTO user_sessions (id, user_id, token_hash, expires_at, ip_address, user_agent, device_type, browser, os)
+       VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4, $5, $6, $7, $8)`,
       // clientIp(req), not req.ip: `trust proxy` is set and req.ip STILL resolved to
       // the Docker bridge gateway for every real session ever recorded here.
-      [sid, user.id, hashToken(token), clientIp(req), req.get('User-Agent')]
+      [sid, user.id, hashToken(token), clientIp(req), ua, client.deviceType, client.browser, client.os]
     );
     return token;
   } catch (sessionError) {
@@ -623,6 +631,12 @@ router.post('/login', async (req, res) => {
     `, [emailCandidates, handleCandidate]);
 
     if (result.rows.length === 0) {
+      // userId stays null — we do not know who this was, and inventing an id to make
+      // the row look complete would be worse than an honest null. The address goes in
+      // metadata so a credential-stuffing run against many addresses is still visible.
+      await recordSecurityEvent(req.db, EVENTS.LOGIN_FAILED, {
+        req, metadata: { reason: 'unknown_account', attemptedEmail: normalizedEmail },
+      });
       return res.status(401).json({
         success: false,
         error: 'Invalid email or password'
@@ -633,6 +647,11 @@ router.post('/login', async (req, res) => {
 
     // Check if user is active
     if (!user.is_active) {
+      // Distinct from a wrong password: this is a suspended account being used, which
+      // is exactly the signal you want when reviewing a suspension.
+      await recordSecurityEvent(req.db, EVENTS.ACCOUNT_SUSPENDED_BLOCKED, {
+        userId: user.id, req, metadata: { method: 'password' },
+      });
       return res.status(401).json({
         success: false,
         error: 'Account is deactivated'
@@ -642,6 +661,9 @@ router.post('/login', async (req, res) => {
     // Verify password
     const passwordValid = await verifyPassword(password, user.password_hash);
     if (!passwordValid) {
+      await recordSecurityEvent(req.db, EVENTS.LOGIN_FAILED, {
+        userId: user.id, req, metadata: { reason: 'bad_password' },
+      });
       return res.status(401).json({
         success: false,
         error: 'Invalid email or password'
@@ -650,6 +672,7 @@ router.post('/login', async (req, res) => {
 
     // Update last login
     await req.db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+    await recordSecurityEvent(req.db, EVENTS.LOGIN, { userId: user.id, req, metadata: { method: 'password' } });
 
     // Session-backed token (sid claim + user_sessions row; plaintext JWT never stored).
     const token = await issueSessionToken(req.db, user, req);
@@ -929,6 +952,12 @@ router.post('/logout', async (req, res) => {
       } else {
         await req.db.query('DELETE FROM user_sessions WHERE token_hash = $1', [hashToken(token)]);
       }
+      // A logout is half of every session's story. Without it you can see sign-ins
+      // and never tell a session that ended from one still open — which is exactly
+      // the question asked when reviewing a compromise.
+      await recordSecurityEvent(req.db, EVENTS.LOGOUT, {
+        userId: decoded?.userId || null, req, metadata: { bySid: Boolean(decoded?.sid) },
+      });
     }
 
     res.json({

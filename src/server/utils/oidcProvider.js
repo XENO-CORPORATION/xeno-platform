@@ -16,6 +16,7 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { issuer, mailDomain } from '../config/hosts.js';
+import { recordSecurityEventAsync, EVENTS } from '../services/securityEvents.js';
 
 const ACCESS_TTL_SEC = 10 * 60; // 10 min
 const ID_TTL_SEC = 10 * 60;
@@ -312,9 +313,20 @@ export async function refreshTokenGrant(db, { refreshToken, clientId }) {
   if (row.rotated) {
     // REUSE DETECTED → revoke the whole family (RFC 9700 §2.2.2).
     await db.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE family_id = $1', [row.family_id]);
+    // This is the single most important event this provider can emit: a replayed
+    // refresh token means a token leaked, and it is the only signal that says so.
+    // It fires as the family is revoked so the record exists even though the caller
+    // is about to receive an error and may never report it.
+    recordSecurityEventAsync(db, EVENTS.TOKEN_REUSE_DETECTED, {
+      userId: row.user_id,
+      metadata: { clientId, familyId: row.family_id, sid: row.sid },
+    });
     throw oauthError('invalid_grant', 'refresh token reuse detected — family revoked');
   }
   await db.query('UPDATE oauth_refresh_tokens SET rotated = true WHERE id = $1', [row.id]);
+  recordSecurityEventAsync(db, EVENTS.TOKEN_REFRESHED, {
+    userId: row.user_id, metadata: { clientId, familyId: row.family_id },
+  });
   const user = await userClaims(db, row.user_id);
   if (!user) throw oauthError('invalid_grant', 'user not found');
   const key = await getSigningKey(db);
@@ -428,9 +440,12 @@ export async function revokeToken(db, { token, sid }) {
     return { revoked: true };
   }
   if (!token) return { revoked: true };
-  const r = await db.query('SELECT family_id FROM oauth_refresh_tokens WHERE token_hash = $1', [sha256(token)]);
+  const r = await db.query('SELECT family_id, user_id FROM oauth_refresh_tokens WHERE token_hash = $1', [sha256(token)]);
   if (r.rows[0]) {
     await db.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE family_id = $1', [r.rows[0].family_id]);
+    recordSecurityEventAsync(db, EVENTS.TOKEN_REVOKED, {
+      userId: r.rows[0].user_id, metadata: { familyId: r.rows[0].family_id, by: 'token' },
+    });
   }
   return { revoked: true };
 }

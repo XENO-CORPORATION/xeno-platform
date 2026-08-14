@@ -171,8 +171,30 @@ export async function resolveAuthedUser(req) {
   // account-deletion delete the row and the token dies instantly. Tokens WITHOUT
   // a sid (issued pre-deploy) keep the old stateless behavior and age out in <=7d.
   if (sid) {
+    // Validity check AND liveness touch in one round-trip.
+    //
+    // `last_active_at` had been DEAD since roughly January 2026: nothing in the
+    // codebase updated it, so every session created after 2026-04 carried
+    // last_active_at == created_at forever. 335 consecutive sessions recorded a
+    // "last active" that was really "created". Anything asking "is this session
+    // still in use?" — device lists, idle expiry, session review after a
+    // compromise — was reading a creation timestamp wearing an activity label.
+    //
+    // The CTE keeps the semantics exact: `s` is the validity gate and is what the
+    // caller sees, so a session that is valid but recently touched still returns a
+    // row. The UPDATE is throttled to once per 5 minutes per session, so this costs
+    // at most one extra write per session per five minutes rather than one per
+    // request.
     const sess = await req.db.query(
-      'SELECT 1 FROM user_sessions WHERE id = $1 AND user_id = $2 AND expires_at > NOW()',
+      `WITH s AS (
+         SELECT id FROM user_sessions
+          WHERE id = $1 AND user_id = $2 AND expires_at > NOW()
+       ), touched AS (
+         UPDATE user_sessions SET last_active_at = NOW()
+          WHERE id IN (SELECT id FROM s)
+            AND last_active_at < NOW() - INTERVAL '5 minutes'
+       )
+       SELECT 1 FROM s`,
       [sid, userId],
     );
     if (sess.rows.length === 0) return { status: 401, error: 'Session expired or revoked' };
