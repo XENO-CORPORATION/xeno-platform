@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { useGooPill } from '@xenosystem/elements-react';
+import { useDialog, useGooPill } from '@xenosystem/elements-react';
 import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
@@ -8246,6 +8246,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       >
         <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
         <div
+          {...createProjectDialog.panelProps}
           role="dialog"
           aria-modal="true"
           aria-labelledby="create-project-dialog-title"
@@ -8435,6 +8436,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       >
         <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
         <div
+          {...projectSettingsDialog.panelProps}
           role="dialog"
           aria-modal="true"
           aria-labelledby="project-settings-title"
@@ -8686,8 +8688,23 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     );
   };
 
-  // --- NEW: Delete Confirmation Modal Component --- 
-  const DeleteConfirmationModalComponent: React.FC = () => {
+  /**
+   * A render FUNCTION, not a component declared in render.
+   *
+   * It was `const DeleteConfirmationModalComponent: React.FC = () => …` and used as
+   * `<DeleteConfirmationModalComponent />`. A component defined inside another component is a NEW TYPE
+   * on every render, so React cannot match it against the previous tree: it unmounts the old subtree and
+   * mounts a fresh one, every time the parent renders. The dialog's DOM was thrown away and rebuilt
+   * continuously, and anything living in it went with it — focus first among them.
+   *
+   * That is how it was found. `useDialog` focuses the panel the moment it attaches, and the panel kept
+   * re-attaching, so focus landed and was destroyed again before it could be seen; the trap worked and
+   * `document.activeElement` was `body`.
+   *
+   * Calling it keeps the markup part of the parent's own tree, which is what the create-project modal
+   * beside it already does.
+   */
+  const renderDeleteConfirmationModal = (): React.ReactNode => {
     if (
       !isDeleteModalMounted ||
       !deleteConfirmationModal.conversationId ||
@@ -8720,6 +8737,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         >
             <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
             <div
+              {...deleteChatDialog.panelProps}
               role="dialog"
               aria-modal="true"
               aria-labelledby="delete-chat-dialog-title"
@@ -11223,6 +11241,60 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   const closeChatFilesModal = useCallback(() => {
     setIsChatFilesModalOpen(false);
   }, []);
+
+  /**
+   * The seven modal dialogs this file renders, each taking its behaviour from the library.
+   *
+   * They already looked finished — scrim, card, entrance, Escape on most of them — and none of them did
+   * the rest of what a dialog does. Measured on the two that were converted first: focus stayed on
+   * `body` when they opened, Tab walked straight out into the page behind, and closing left focus
+   * nowhere. `useDialog` moves focus in, keeps Tab inside, and hands focus back to whatever opened it.
+   *
+   * One hook per dialog, and they sit HERE rather than beside the state they belong to: each takes a
+   * close function, and those are `const` declarations further up — referencing one before its line runs
+   * is a temporal dead zone, not a hoisted function. So the calls go after the last of them.
+   *
+   * `open` is the `*Open` flag rather than `*Mounted`: mounted stays true through the exit animation, and
+   * focus should go back to the opener when the dialog is dismissed, not when its animation finishes.
+   *
+   * `lockScroll` is off throughout. This app already keeps the body unscrollable, and the hook's
+   * refcount would capture and restore that state for nothing.
+   */
+  const createProjectDialog = useDialog<HTMLDivElement>({
+    open: isCreateProjectModalOpen,
+    onClose: closeCreateProjectModal,
+    lockScroll: false,
+  });
+  const projectSettingsDialog = useDialog<HTMLDivElement>({
+    open: isProjectSettingsOpen,
+    onClose: closeProjectSettings,
+    lockScroll: false,
+  });
+  const deleteChatDialog = useDialog<HTMLDivElement>({
+    open: deleteConfirmationModal.isOpen,
+    onClose: handleCancelDelete,
+    lockScroll: false,
+  });
+  const projectFilePreviewDialog = useDialog<HTMLDivElement>({
+    open: isProjectFilePreviewOpen,
+    onClose: closeProjectFilePreview,
+    lockScroll: false,
+  });
+  const projectScheduledPreviewDialog = useDialog<HTMLDivElement>({
+    open: isProjectScheduledPreviewOpen,
+    onClose: closeProjectScheduledPreview,
+    lockScroll: false,
+  });
+  const projectScheduledCreateDialog = useDialog<HTMLDivElement>({
+    open: isProjectScheduledCreateOpen,
+    onClose: closeProjectScheduledCreate,
+    lockScroll: false,
+  });
+  const chatFilesDialog = useDialog<HTMLDivElement>({
+    open: isChatFilesModalOpen,
+    onClose: closeChatFilesModal,
+    lockScroll: false,
+  });
 
   const copyChatFilesPreview = useCallback(async () => {
     if (!chatFilesSelected) return;
@@ -15732,7 +15804,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {modelTooltipInfo && createPortal(<ModelInfoTooltip />, document.body)}
         {feedbackPopupInfo && createPortal(<FeedbackPopup />, document.body)}
         {dislikePopupInfo && createPortal(<DislikeFeedbackPopup />, document.body)}
-        {isDeleteModalMounted && createPortal(<DeleteConfirmationModalComponent />, document.body)}
+        {isDeleteModalMounted && createPortal(renderDeleteConfirmationModal(), document.body)}
         {isCreateProjectModalMounted && createPortal(renderCreateProjectModal(), document.body)}
         {isProjectSettingsMounted &&
           projectSettings &&
@@ -15755,6 +15827,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             >
               <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
               <div
+                {...projectFilePreviewDialog.panelProps}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="project-file-preview-title"
@@ -15836,6 +15909,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             >
               <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
               <div
+                {...projectScheduledPreviewDialog.panelProps}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="project-scheduled-preview-title"
@@ -15928,6 +16002,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             >
               <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
               <div
+                {...projectScheduledCreateDialog.panelProps}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="project-scheduled-create-title"
@@ -16669,6 +16744,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             >
               <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
               <div
+                {...chatFilesDialog.panelProps}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="chat-files-dialog-title"

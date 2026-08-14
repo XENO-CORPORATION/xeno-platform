@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { useDialog } from '@xenosystem/elements-react';
 import { Briefcase, ChevronLeft, ChevronRight, Search, X } from '@/lib/icons';
 import {
   listSkills,
@@ -93,6 +94,11 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
   isShown = true,
   motionFrom = { x: 0, y: 0 },
 }) => {
+  /* Focus in, Tab kept inside, focus back to the opener — but NOT Escape. This page owns a layered
+     Escape of its own: inside a category it goes back to the category list, and only closes from the
+     top level. Handing Escape to the hook would collapse both steps into one and drop someone out of
+     the page when they meant to leave a category. */
+  const { panelProps } = useDialog<HTMLDivElement>({ open: isOpen, lockScroll: false });
   const [skills, setSkills] = useState<ChatSkill[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -329,6 +335,7 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
         }}
       />
       <div
+        {...panelProps}
         role="dialog"
         aria-modal="true"
         aria-label="Customize"
