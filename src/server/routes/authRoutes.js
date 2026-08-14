@@ -14,7 +14,7 @@ import Redis from 'ioredis';
 import { siteOrigin, siteUrl, mailDomain } from '../config/hosts.js';
 import { addGrant, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
-import { sendEmail } from '../services/emailService.js';
+import { sendEmail, sendWelcomeEmail } from '../services/emailService.js';
 import { clientIp } from '../utils/clientIp.js';
 import {
   requireRegistrationOpen,
@@ -232,6 +232,9 @@ async function findOrCreateOAuthUser(db, provider, profile, req = null) {
 
     user = insertResult.rows[0];
     isNew = true;
+    // The OAuth path is the majority path — 160 of 221 accounts were created here —
+    // so an onboarding email wired only into /register would miss most new users.
+    sendWelcomeEmail(db, user);
   } else {
     // Update last login for existing user
     await db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
@@ -516,6 +519,7 @@ router.post('/register', requireRegistrationOpen, async (req, res) => {
     `, [userId, username.toLowerCase(), email.toLowerCase(), passwordHash, display_name, 0, false]);
 
     const user = result.rows[0];
+    sendWelcomeEmail(req.db, user);
 
     // Grant Free-tier starter credits (kind:'free' → drawn down before paid credits)
     // so a new user can actually try premium generation. Non-fatal on failure.
@@ -2154,6 +2158,11 @@ router.post('/register-with-handle', requireRegistrationOpen, async (req, res) =
       RETURNING id, username, email, display_name, avatar_url, created_at, email_verified, is_active, credits, bonus_credits_claimed
     `, [userId, handle, address, passwordHash, handle, recovery, 0, false]);
     const user = result.rows[0];
+    // This flow's `email` column holds the XENO ADDRESS, which is not necessarily a
+    // deliverable mailbox — the reachable address is `recovery_email`. Sending to
+    // user.email here would post the welcome into a void and log it as delivered.
+    // No recovery address means no welcome, which is correct: there is nowhere to send it.
+    if (recovery) sendWelcomeEmail(req.db, { ...user, email: recovery });
 
     // Free-tier starter credits (same as /register; non-fatal).
     if (FREE_SIGNUP_CREDITS > 0) {

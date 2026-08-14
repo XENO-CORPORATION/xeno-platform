@@ -59,6 +59,7 @@ import { resolveEntitlements, gateMeta } from './utils/entitlementGate.js';
 import { watermarkBuffer } from './utils/watermark.js';
 import youtubeRoutes, { youtubePublicRoutes } from './routes/youtubeRoutes.js';
 import collaborationRoutes from './routes/collaborationRoutes.js';
+import emailRoutes from './routes/emailRoutes.js';
 import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
 import productDownloadRoutes from './routes/productDownloadRoutes.js';
@@ -582,6 +583,10 @@ app.use('/api/youtube', databaseMiddleware, authMiddleware, youtubeRoutes);
 console.log('📺 YouTube routes integrated: /api/youtube/*');
 
 // Collaboration API routes (Figma-style real-time collaboration)
+// Public, unauthenticated ON PURPOSE — an unsubscribe link is clicked from an inbox
+// by someone who may not be signed in and may no longer have an account. Authority
+// comes from the HMAC token in the link, not from a session.
+app.use('/api/email', databaseMiddleware, emailRoutes);
 app.use('/api/collaboration', databaseMiddleware, collaborationRoutes);
 console.log('🤝 Collaboration routes integrated: /api/collaboration/*');
 
