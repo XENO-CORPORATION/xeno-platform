@@ -41,6 +41,16 @@ import GArrowUpRight from '@xenosystem/elements/elements/arrow-up-right';
 import GCheckSquare from '@xenosystem/elements/elements/check-square';
 import GThumbsUp from '@xenosystem/elements/elements/thumbs-up';
 import GThumbsDown from '@xenosystem/elements/elements/thumbs-down';
+import GLibrary from '@xenosystem/elements/elements/library';
+import GStore from '@xenosystem/elements/elements/store';
+import GNavigation from '@xenosystem/elements/elements/navigation';
+import GLightbulb from '@xenosystem/elements/elements/lightbulb';
+import GScanEye from '@xenosystem/elements/elements/scan-eye';
+import GShapes from '@xenosystem/elements/elements/shapes';
+import GWaves from '@xenosystem/elements/elements/waves';
+import GFeather from '@xenosystem/elements/elements/feather';
+import GHand from '@xenosystem/elements/elements/hand';
+import GFileClock from '@xenosystem/elements/elements/file-clock';
 import GCheck from '@xenosystem/elements/elements/check';
 import GChevronDown from '@xenosystem/elements/elements/chevron-down';
 import GChevronRight from '@xenosystem/elements/elements/chevron-right';
@@ -246,3 +256,24 @@ export const ArrowUpRight = /* @__PURE__ */ glyph(GArrowUpRight);
 export const CheckCircle = /* @__PURE__ */ glyph(GCheckSquare);
 export const ThumbsUp = /* @__PURE__ */ glyph(GThumbsUp);
 export const ThumbsDown = /* @__PURE__ */ glyph(GThumbsDown);
+
+/* The last of the drawable ones.
+
+   FileClock comes back. It was left on lucide because a clock face small enough to sit inside a file
+   rendered as a blob at 7 units — the fix was not to give up on it but to stop trying to tuck it into
+   the text area: at 9 units it reads, and it fits because the mark REPLACES the contents rather than
+   squeezing between them, which was the family rule all along.
+
+   ScanEye is composed rather than drawn: Maximize's four corner brackets with Eye's lens between them,
+   both at their own coordinates. The brackets already mean "a frame placed over something" and the lens
+   already means "looking", so the compound says what it says without inventing a shape. */
+export const Library = /* @__PURE__ */ glyph(GLibrary);
+export const Store = /* @__PURE__ */ glyph(GStore);
+export const Navigation = /* @__PURE__ */ glyph(GNavigation);
+export const Lightbulb = /* @__PURE__ */ glyph(GLightbulb);
+export const ScanEye = /* @__PURE__ */ glyph(GScanEye);
+export const Shapes = /* @__PURE__ */ glyph(GShapes);
+export const Waves = /* @__PURE__ */ glyph(GWaves);
+export const Feather = /* @__PURE__ */ glyph(GFeather);
+export const Hand = /* @__PURE__ */ glyph(GHand);
+export const FileClock = /* @__PURE__ */ glyph(GFileClock);
