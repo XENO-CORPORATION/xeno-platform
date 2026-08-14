@@ -11,6 +11,16 @@ import GAttach from '@xenosystem/elements/elements/attach';
 import GBookmark from '@xenosystem/elements/elements/bookmark';
 import GBriefcase from '@xenosystem/elements/elements/briefcase';
 import GContrast from '@xenosystem/elements/elements/contrast';
+import GPlay from '@xenosystem/elements/elements/play';
+import GPause from '@xenosystem/elements/elements/pause';
+import GStop from '@xenosystem/elements/elements/stop';
+import GPanelLeft from '@xenosystem/elements/elements/panel-left';
+import GPanelLeftClose from '@xenosystem/elements/elements/panel-left-close';
+import GPanelRight from '@xenosystem/elements/elements/panel-right';
+import GPanelRightClose from '@xenosystem/elements/elements/panel-right-close';
+import GMaximize from '@xenosystem/elements/elements/maximize';
+import GMinimize from '@xenosystem/elements/elements/minimize';
+import GCalendar from '@xenosystem/elements/elements/calendar';
 import GCheck from '@xenosystem/elements/elements/check';
 import GChevronDown from '@xenosystem/elements/elements/chevron-down';
 import GChevronRight from '@xenosystem/elements/elements/chevron-right';
@@ -157,3 +167,24 @@ export const Archive = /* @__PURE__ */ glyph(GArchive);
 export const Briefcase = /* @__PURE__ */ glyph(GBriefcase);
 export const UserRoundX = /* @__PURE__ */ glyph(GUserX);
 export const Contrast = /* @__PURE__ */ glyph(GContrast);
+
+/* The transport controls, the panel pair, the resize pair, and a calendar.
+
+   Drawn as SETS rather than one at a time, because each of these is one control in several states —
+   play/pause/stop, open/close, bigger/smaller. Half a pair drawn in this system with its twin still
+   coming from lucide is worse than neither: two icons that mean the opposite of each other, in two
+   different hands, read as a mistake rather than a pair.
+
+   `StopCircle` becomes a squared stop. The ring is not missing by accident — the grammar has no
+   circles, and the ring never said anything the square does not. `Square` itself stays on lucide: the
+   one call site paints it solid (`fill` + `strokeWidth={0}`), which is a filled shape, not this glyph. */
+export const Play = /* @__PURE__ */ glyph(GPlay);
+export const Pause = /* @__PURE__ */ glyph(GPause);
+export const StopCircle = /* @__PURE__ */ glyph(GStop);
+export const PanelLeftOpen = /* @__PURE__ */ glyph(GPanelLeft);
+export const PanelLeftClose = /* @__PURE__ */ glyph(GPanelLeftClose);
+export const PanelRightOpen = /* @__PURE__ */ glyph(GPanelRight);
+export const PanelRightClose = /* @__PURE__ */ glyph(GPanelRightClose);
+export const Maximize2 = /* @__PURE__ */ glyph(GMaximize);
+export const Minimize2 = /* @__PURE__ */ glyph(GMinimize);
+export const Calendar = /* @__PURE__ */ glyph(GCalendar);
