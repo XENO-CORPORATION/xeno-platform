@@ -239,7 +239,11 @@ export const PRODUCTS: Product[] = [
   // Shell ships a PUBLIC unsigned Windows beta (apps/shell/v0.1.0-beta.1, beta
   // channel) — so it is beta/desktop, not coming-soon/soon. Tagline stays scoped
   // to what the build does: it is a host layer; no XENO app runs inside it yet.
-  { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop shell with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
+  // Linux shipped in 0.1.0-beta.2 (2026-08-14): apps/shell/ now carries an
+  // x86_64 AppImage alongside the Windows installer, both built from the same
+  // commit and both verified through the live auto-update chain. Leaving this
+  // as 'Windows' would hide a platform the feed actually serves.
+  { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop shell with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-shell' },
   // Anima SHIPS. All 8 packages are live on npm at 0.0.2 (verified against the
   // registry 2026-07-27), so 'coming-soon'/'soon' was telling visitors a product
   // they can install does not exist. It also suppressed an upgrade signal that
