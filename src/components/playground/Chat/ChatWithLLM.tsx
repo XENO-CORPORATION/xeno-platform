@@ -4637,9 +4637,66 @@ interface QueueState {
       }
     };
 
+    /**
+     * Escape closes the same family of surfaces the click-outside above closes.
+     *
+     * It lives here rather than in each popover because they were all opened by the same kind of gesture
+     * and dismissed by the same rule — and because that rule had exactly one half of it. Clicking away
+     * closed every one of these; Escape closed none. That is a gap you only notice from the keyboard, and
+     * a menu that ignores Escape leaves someone stuck with no visible way out.
+     *
+     * INNERMOST FIRST, and that ordering is the point rather than a detail: the theme submenu opens
+     * inside the ⋯ menu, so Escape has to peel one layer, not both. Closing them together would mean a
+     * user who opened a submenu by mistake loses the menu as well and has to start over.
+     */
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (isThemeMenuOpen) {
+        setIsThemeMenuOpen(false);
+        return;
+      }
+      if (isRecentFilesOpen) {
+        setIsRecentFilesOpen(false);
+        return;
+      }
+      if (isChatMoreMenuOpen) {
+        setIsChatMoreMenuOpen(false);
+        return;
+      }
+      if (isAttachMenuOpen) {
+        setIsAttachMenuOpen(false);
+        return;
+      }
+      if (isVoiceModeMenuOpen) {
+        setIsVoiceModeMenuOpen(false);
+        return;
+      }
+      if (isConversationSelectorOpen) {
+        setIsConversationSelectorOpen(false);
+        return;
+      }
+      if (isSystemPromptOpen) {
+        setIsSystemPromptOpen(false);
+        return;
+      }
+      if (modelTooltipInfo) {
+        setModelTooltipInfo(null);
+        return;
+      }
+      if (feedbackPopupInfo) {
+        setFeedbackPopupInfo(null);
+        return;
+      }
+      if (dislikePopupInfo) {
+        setDislikePopupInfo(null);
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
     };
   }, [isAttachMenuOpen, isRecentFilesOpen, isVoiceModeMenuOpen, isThemeMenuOpen, isChatMoreMenuOpen, isSystemPromptOpen, modelTooltipInfo, feedbackPopupInfo, dislikePopupInfo, isConversationSelectorOpen]);
 
