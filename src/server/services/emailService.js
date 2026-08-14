@@ -13,6 +13,18 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { isOptedOut, unsubscribeUrl } from './emailPreferences.js';
+
+/**
+ * Templates that are SECURITY / ACCOUNT-RECOVERY mail and are therefore never
+ * suppressed by the unsubscribe list.
+ *
+ * Someone who unsubscribes from onboarding mail has not asked to be locked out of
+ * their own account. A password reset that silently does not arrive is an
+ * account-recovery failure that presents to the user as a broken product, and to
+ * support as an unreproducible ticket.
+ */
+const ESSENTIAL_TEMPLATES = new Set(['password_reset', 'email_verification']);
 
 // --------------------------------------------------------------------------
 // XENO branded email wrapper
@@ -64,22 +76,62 @@ function wrapInLayout(title, bodyContent) {
 </html>`;
 }
 
+const SITE = 'https://xenostudio.ai';
+
+/**
+ * One checklist row.
+ *
+ * Built from a <table>, not flexbox or grid, because Outlook renders email through
+ * Word's HTML engine, which supports neither. Table-based layout is not legacy
+ * styling here — it is the only layout primitive that works everywhere.
+ */
+function checklistRow(title, subtitle, href) {
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 10px 0; border: 1px solid rgba(255,255,255,0.10); border-radius: 6px;">
+      <tr>
+        <td style="padding: 14px 16px;">
+          <a href="${escapeHtml(href)}" style="color: rgba(255,255,255,0.90); font-size: 14px; font-weight: 600; text-decoration: none;">${escapeHtml(title)}</a>
+          <div style="color: rgba(255,255,255,0.45); font-size: 13px; line-height: 1.5; margin-top: 4px;">${escapeHtml(subtitle)}</div>
+        </td>
+      </tr>
+    </table>`;
+}
+
 // --------------------------------------------------------------------------
 // Templates
 // --------------------------------------------------------------------------
 const templates = {
-  welcome: ({ displayName, loginUrl, credits }) => ({
-    subject: 'Welcome to XENO',
+  /**
+   * The onboarding email. Structure follows the pattern every good product welcome
+   * uses (a short promise, then a CHECKLIST of concrete first actions, then help
+   * resources) because "welcome, your account is created" gives the reader nothing
+   * to do, and a welcome email's only job is the first action.
+   *
+   * Every claim here must be something XENO actually ships today. Do not add a
+   * checklist row for a product that is not downloadable — an onboarding email that
+   * sends people to a dead end is worse than no onboarding email.
+   */
+  welcome: ({ displayName, loginUrl, unsubscribeUrl: unsubUrl }) => ({
+    subject: 'Welcome to XENO. Let\'s get you set up.',
     html: wrapInLayout('Welcome to XENO', `
-      <h1>Welcome, ${escapeHtml(displayName)}</h1>
-      <p>Your account has been created successfully.${credits ? ` You have <span class="highlight">${escapeHtml(String(credits))} credits</span> to get started.` : ''}</p>
-      <p>XENO is your creative studio — edit images, video, and audio with AI-powered tools.</p>
+      <h1>Welcome${displayName ? `, ${escapeHtml(displayName)}` : ''}</h1>
+      <p>XENO is the harness for agentic work: bring your own AI, drive it across creative,
+         technical and research tasks, in one workspace.</p>
+      <p style="color: rgba(255,255,255,0.90); font-size: 15px; font-weight: 600; margin-top: 28px;">Your set-up checklist</p>
+
+      ${checklistRow('Download XENO Hub', 'One launcher for every XENO app, with updates built in.', `${SITE}/product/hub/download`)}
+      ${checklistRow('Bring your own AI', 'Connect your own provider key and pay no markup — or run open models locally.', `${SITE}/docs`)}
+      ${checklistRow('Open a creative app', 'Canvas for design, Motion for video, Browser for the agent-native web.', `${SITE}/products`)}
+      ${checklistRow('Read the docs', 'Guides for every app, the API, and the agent tooling.', `${SITE}/docs`)}
+
       <hr class="divider">
       <p style="text-align: center;">
-        <a href="${loginUrl || 'https://xenostudio.ai'}" class="btn">Open XENO Studio</a>
+        <a href="${escapeHtml(loginUrl || SITE)}" class="btn">Open XENO</a>
       </p>
       <hr class="divider">
-      <p class="muted">Need help? Visit our docs at xenostudio.ai/docs</p>
+      <p class="muted">Didn't create this account? You can ignore this email — nothing else will happen.</p>
+      ${unsubUrl ? `<p class="muted">Don't want product emails? <a href="${escapeHtml(unsubUrl)}" style="color: rgba(255,255,255,0.45);">Unsubscribe</a>. We'll still send security emails like password resets.</p>` : ''}
+      <p class="muted"><a href="${SITE}/impressum" style="color: rgba(255,255,255,0.35);">Impressum</a> &middot; <a href="${SITE}/privacy" style="color: rgba(255,255,255,0.35);">Privacy</a></p>
     `),
   }),
 
@@ -177,7 +229,18 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
     throw new Error(`Unknown email template: ${template}`);
   }
 
-  const { subject, html } = templateFn(data);
+  // Honour the unsubscribe list — but NEVER for security/recovery mail.
+  const essential = ESSENTIAL_TEMPLATES.has(template);
+  if (!essential && await isOptedOut(db, toEmail)) {
+    console.log(`[Email] suppressed (opted out) — template: ${template}, to: ${toEmail}`);
+    return { success: false, suppressed: true, reason: 'opted_out' };
+  }
+
+  // Non-essential mail carries a working one-click unsubscribe. It is computed here
+  // rather than passed by each caller so a new template cannot ship without one.
+  const { subject, html } = templateFn(
+    essential ? data : { ...data, unsubscribeUrl: data?.unsubscribeUrl || unsubscribeUrl(toEmail) },
+  );
   const emailId = uuidv4();
 
   // Log to database
@@ -236,8 +299,21 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
 
       console.log(`[Email] Sent via SendGrid to ${toEmail}: ${subject}`);
     } else {
-      // Development: log to console
-      console.log(`[Email] DEV MODE — Template: ${template}, To: ${toEmail}, Subject: ${subject}`);
+      // No provider configured — the message goes to the console and NOWHERE ELSE.
+      //
+      // This branch used to fall through to `status = 'sent'`, so `email_logs` recorded
+      // a successful delivery for a message that was never transmitted. Production had
+      // exactly one row in that table, reading 'sent', for an email nobody received —
+      // an operator checking whether email worked would have concluded that it did.
+      // A no-op must never report success.
+      console.log(`[Email] NOT CONFIGURED — no RESEND_API_KEY/SENDGRID_API_KEY. Template: ${template}, To: ${toEmail}, Subject: ${subject}`);
+      if (db) {
+        await db.query(
+          'UPDATE email_logs SET status = $1, error = $2 WHERE id = $3',
+          ['skipped', 'no email provider configured', emailId]
+        );
+      }
+      return { success: false, skipped: true, reason: 'no_provider', emailId };
     }
 
     // Mark as sent
@@ -261,6 +337,30 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
     console.error(`[Email] Failed to send ${template} to ${toEmail}:`, error.message);
     return { success: false, error: error.message };
   }
+}
+
+/**
+ * Send the onboarding email for a newly created account.
+ *
+ * FIRE AND FORGET, DELIBERATELY. Signup must never fail because an email provider is
+ * slow, misconfigured or down — a person who successfully created an account and then
+ * saw a 500 would reasonably conclude they have no account, and try again. The send
+ * is awaited by nobody and every failure is swallowed to a log line.
+ *
+ * Called from all THREE account-creation paths in routes/authRoutes.js: /register,
+ * /register-with-handle, and findOrCreateOAuthUser. The OAuth one matters most —
+ * 160 of the platform's 221 accounts were created that way, so wiring only the
+ * password path would have missed nearly three quarters of new users.
+ */
+export function sendWelcomeEmail(db, user) {
+  if (!user?.email) return;
+  const displayName = user.display_name || user.displayName || user.username || '';
+  Promise.resolve()
+    .then(() => sendEmail(db, 'welcome', user.email, {
+      displayName,
+      loginUrl: 'https://xenostudio.ai',
+    }, user.id || null))
+    .catch((err) => console.error(`[Email] welcome send failed for ${user.email}:`, err?.message || err));
 }
 
 /**
