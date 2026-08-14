@@ -8229,7 +8229,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
     return (
       <div
-        className={`chat-themed chat-theme-${resolvedChatTheme} fixed top-0 right-0 bottom-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed top-0 right-0 bottom-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
         data-chat-theme-preference={chatTheme}
         data-create-project-dialog=""
         style={{
@@ -8422,7 +8422,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     };
     return (
       <div
-        className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
         data-chat-theme-preference={chatTheme}
         data-project-settings-dialog=""
         style={{
@@ -8723,7 +8723,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     // Portaled to document.body — re-apply chat theme tokens like the history sidebar.
     return (
         <div
-          className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+          className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
           data-chat-theme-preference={chatTheme}
           data-delete-chat-dialog=""
           style={{
@@ -10080,7 +10080,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       <div
         ref={indicatorPreviewRef}
         style={{ ...popupStyle, ...chatThemePreviewStyle }}
-        className={`indicator-preview-popup chat-themed chat-theme-${resolvedChatTheme}`}
+        className={`indicator-preview-popup chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme}`}
         onMouseEnter={handleIndicatorPopupMouseEnter}
         onMouseLeave={handleIndicatorPopupMouseLeave}
       >
@@ -10138,7 +10138,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     return (
       <div
         ref={modelTooltipRef}
-        className={`chat-themed chat-theme-${resolvedChatTheme}`}
+        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme}`}
         style={{ ...mainContainerStyle, ...chatThemePreviewStyle }}
       >
         <div style={individualContainerStyle}>Model: {modelName}</div>
@@ -10194,7 +10194,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     return (
       <div
         ref={feedbackPopupRef}
-        className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover`}
+        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover`}
         style={popupStyle}
       >
         <ul className="p-2 space-y-1">
@@ -10261,7 +10261,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     return (
       <div
         ref={dislikePopupRef}
-        className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-popover`}
+        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover`}
         style={popupStyle}
       >
         <ul className="p-2 space-y-1">
@@ -12839,7 +12839,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
       {/* Main container with conditional padding for context panel and history sidebar */}
       <div
         ref={chatContainerRef}
-        className={`chat-themed chat-theme-${resolvedChatTheme} relative flex h-full flex-col overflow-hidden main-content-transition ${isMobile ? 'chat-mobile-container' : ''} ${isMobile && isHistoryOpen ? 'chat-sidebar-open' : ''}`}
+        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} relative flex h-full flex-col overflow-hidden main-content-transition ${isMobile ? 'chat-mobile-container' : ''} ${isMobile && isHistoryOpen ? 'chat-sidebar-open' : ''}`}
         data-chat-theme-preference={chatTheme}
         style={{
           paddingRight: '0px',
@@ -13713,7 +13713,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {isSettingsModalMounted &&
           createPortal(
             <div
-              className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
               data-chat-theme-preference={chatTheme}
               data-chat-settings-dialog=""
               style={{
@@ -15817,7 +15817,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           projectFilePreview &&
           createPortal(
             <div
-              className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
               data-chat-theme-preference={chatTheme}
               data-project-file-preview=""
               style={{
@@ -15899,7 +15899,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           projectScheduledPreview &&
           createPortal(
             <div
-              className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
               data-chat-theme-preference={chatTheme}
               data-project-scheduled-preview=""
               style={{
@@ -15992,7 +15992,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {isProjectScheduledCreateMounted &&
           createPortal(
             <div
-              className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
               data-chat-theme-preference={chatTheme}
               data-project-scheduled-create=""
               style={{
@@ -16723,7 +16723,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 sender: message.sender,
                 text: message.parsedAnswer || message.text,
               }))}
-              themeClassName={`chat-themed chat-theme-${resolvedChatTheme}`}
+              themeClassName={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme}`}
               themeStyle={chatThemePreviewStyle}
               isOpen={isSharePreviewOpen}
               isShown={isSharePreviewShown}
@@ -16734,7 +16734,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {isChatFilesModalMounted &&
           createPortal(
             <div
-              className={`chat-themed chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
+              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed inset-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
               data-chat-theme-preference={chatTheme}
               data-chat-files-preview=""
               style={{
@@ -16879,7 +16879,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             <div
               ref={historyDragGhostElRef}
               aria-hidden="true"
-              className={`chat-themed chat-theme-${resolvedChatTheme} pointer-events-none fixed left-0 top-0 z-[1100] flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] will-change-transform`}
+              className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} pointer-events-none fixed left-0 top-0 z-[1100] flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] will-change-transform`}
               style={{
                 ...chatThemePreviewStyle,
                 backgroundColor: 'var(--chat-control)',
@@ -16919,7 +16919,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               data-history-row-menu=""
               role="menu"
               aria-hidden={!isHistoryRowMenuOpen}
-              className={`${historyRowGoo.hostProps.className} chat-goo chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[188px] rounded-xl border p-1`}
+              className={`${historyRowGoo.hostProps.className} chat-goo chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[188px] rounded-xl border p-1`}
               style={{
                 top: historyRowMenu.top,
                 left: historyRowMenu.left,
@@ -17142,7 +17142,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <div
                   {...recentsFilterGoo.hostProps}
                   role="menu"
-                  className={`${recentsFilterGoo.hostProps.className} chat-goo chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[168px] rounded-xl border p-1`}
+                  className={`${recentsFilterGoo.hostProps.className} chat-goo chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[168px] rounded-xl border p-1`}
                   style={{
                     top: recentsFilterMenu.top,
                     left: recentsFilterMenu.left,
@@ -17214,7 +17214,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   <div
                     {...recentsSubmenuGoo.hostProps}
                     role="menu"
-                    className={`${recentsSubmenuGoo.hostProps.className} chat-goo chat-themed chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1001] w-[104px] rounded-xl border p-1`}
+                    className={`${recentsSubmenuGoo.hostProps.className} chat-goo chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1001] w-[104px] rounded-xl border p-1`}
                     style={{
                       top: recentsFilterSubmenuTop,
                       left: Math.min(recentsFilterMenu.left + 172, window.innerWidth - 112),
@@ -18008,7 +18008,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             return (
               <div
                 ref={historySidebarRef}
-                className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-sidebar absolute z-[50] w-60 border rounded-lg overflow-hidden transition-all duration-300 ease-in-out`}
+                className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-sidebar absolute z-[50] w-60 border rounded-lg overflow-hidden transition-all duration-300 ease-in-out`}
                 data-chat-theme-preference={chatTheme}
                 style={{
                   top: '12px',
@@ -18029,7 +18029,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             return createPortal(
               <div
                 ref={historySidebarRef}
-                className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-sidebar fixed z-[50] w-[260px] border rounded-lg overflow-hidden transition-all duration-300 ease-in-out ${!isHistoryOpen ? 'chat-history-sidebar-closed' : ''}`}
+                className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-sidebar fixed z-[50] w-[260px] border rounded-lg overflow-hidden transition-all duration-300 ease-in-out ${!isHistoryOpen ? 'chat-history-sidebar-closed' : ''}`}
                 data-chat-theme-preference={chatTheme}
                 style={{
                   top: '12px',
@@ -18063,7 +18063,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               aria-hidden={!isHistoryOpen}
             >
               <div
-                className={`chat-themed chat-theme-${resolvedChatTheme} chat-history-sidebar h-full w-full overflow-hidden border-b border-r transition-transform duration-300 ease-in-out ${isTaskbarHidden ? 'border-l rounded-none' : 'border-l-0 rounded-none'}`}
+                className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-sidebar h-full w-full overflow-hidden border-b border-r transition-transform duration-300 ease-in-out ${isTaskbarHidden ? 'border-l rounded-none' : 'border-l-0 rounded-none'}`}
                 data-chat-theme-preference={chatTheme}
                 style={{
                   transform: isHistoryOpen ? 'translateX(0)' : 'translateX(-100%)',

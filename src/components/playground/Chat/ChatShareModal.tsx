@@ -83,7 +83,7 @@ export type ChatShareModalProps = {
   conversationTitle?: string;
   messages: SharePreviewMessage[];
   onClose: () => void;
-  /** Theme class pair already used by chat modals, e.g. `chat-themed chat-theme-dark`. */
+  /** Theme class pair already used by chat modals, e.g. `chat-themed xeno-icon-hosts chat-theme-dark`. */
   themeClassName?: string;
   themeStyle?: React.CSSProperties;
   /** Enter/exit card motion (grows from Share control, top-right). */
