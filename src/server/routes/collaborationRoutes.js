@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { authMiddleware } from '../middleware/auth.js';
 import { pool } from '../middleware/database.js';
+import { requireEntitlement } from '../middleware/requireEntitlement.js';
 
 const router = express.Router();
 
@@ -24,7 +25,13 @@ const PARTICIPANT_COLORS = [
  * POST /api/collaboration/sessions
  * Create a new collaborative session for a container
  */
-router.post('/sessions', authMiddleware, async (req, res) => {
+// Real-time collaboration is a TEAM lever (PLAN_ENTITLEMENTS.collaboration is true
+// only for team/internal). The gate is on CREATING a session — the HOST needs the
+// plan, guests do not. Gating /join too would make the feature unsellable: a Team
+// customer could not collaborate with anyone who is not also a Team customer, which
+// is not how any collaboration product prices (Figma, Zoom and Google Docs all bill
+// the host and let invitees in free).
+router.post('/sessions', authMiddleware, requireEntitlement('collaboration'), async (req, res) => {
   try {
     const userId = req.user.id;
     const { containerId, name, maxParticipants, permissions, expiresIn } = req.body;

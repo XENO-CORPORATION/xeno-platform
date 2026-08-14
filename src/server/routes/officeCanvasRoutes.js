@@ -1,6 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import { authMiddleware } from '../middleware/auth.js';
+import { requireEntitlement } from '../middleware/requireEntitlement.js';
 
 const router = express.Router();
 
@@ -44,7 +45,17 @@ router.get('/canvases', async (req, res) => {
 });
 
 // POST /api/office-canvas/canvases
-router.post('/canvases', async (req, res) => {
+//
+// A server-stored canvas IS a "private cloud project" — the Pro lever in
+// `XENO MONETIZATION - STRATEGY.md` §4. Free is the standalone local Tool: the app
+// works, full-res local export works, nothing is watermarked; what Pro buys is the
+// document living in the cloud across devices.
+//
+// Only CREATE is gated. Reading, updating and deleting an existing canvas stay open
+// so that a lapsed subscription degrades to read-and-export rather than holding the
+// customer's own documents hostage — the thing every "downgrade" horror story is
+// about, and the opposite of the trust posture in §9.
+router.post('/canvases', requireEntitlement('privateProjects'), async (req, res) => {
   try {
     const userId = req.user.id;
     const { name, canvasState } = req.body || {};
@@ -194,7 +205,10 @@ router.delete('/canvases/:canvasId', async (req, res) => {
 });
 
 // POST /api/office-canvas/canvases/:canvasId/share (owner only)
-router.post('/canvases/:canvasId/share', async (req, res) => {
+// Turning ON sharing is the collaboration lever (Team). Disabling it is NOT gated —
+// a user must always be able to revoke a share link, whatever their plan. A gate that
+// can trap a document in a shared state is a security bug wearing a billing costume.
+router.post('/canvases/:canvasId/share', requireEntitlement('collaboration'), async (req, res) => {
   try {
     const userId = req.user.id;
     const { canvasId } = req.params;

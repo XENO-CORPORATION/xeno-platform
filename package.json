@@ -5,7 +5,8 @@
   "description": "XENO Platform - Monorepo for xenostudio studio and core libraries",
   "scripts": {
     "start": "vite --host 0.0.0.0 --port 5183",
-    "test": "npm run test:release-guard && npm run test:product-pages && npm run test:registration-gate && npm run test:forum-ranker",
+    "test": "npm run test:release-guard && npm run test:product-pages && npm run test:registration-gate && npm run test:forum-ranker && npm run test:entitlements",
+    "test:entitlements": "node --test scripts/entitlement-enforcement.test.mjs",
     "test:registration-gate": "node --test scripts/registration-gate.test.mjs scripts/client-ip.test.mjs",
     "test:forum-ranker": "node --test scripts/forum-ranker.test.mjs",
     "test:release-guard": "node --test scripts/secret-box.test.mjs scripts/xeno-release.latest-yml.test.mjs scripts/release-guard.test.mjs scripts/publish-cli-releases.test.mjs scripts/amend-release-entry.test.mjs",
