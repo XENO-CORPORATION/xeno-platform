@@ -15632,10 +15632,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                 }`}
                                            >
                                               <div className="flex items-center gap-2">
-                                                  <button onClick={() => handleRegenerate(message.id)} className="p-1 text-gray-400 hover:text-gray-200 rounded-md" aria-label="Regenerate response"><RefreshCcw size={14} /></button>
+                                                  {/* `xeno-icon-hover` on every one of these: it is the library's generic "this element hosts
+                                                      the glyph inside it" hook, and a glyph's motion is triggered by its HOST rather than by
+                                                      itself. Without it the icons sat still — the animations were all there, with nothing to
+                                                      listen to. */}
+                                                  <button onClick={() => handleRegenerate(message.id)} className="xeno-icon-hover p-1 text-gray-400 hover:text-gray-200 rounded-md" aria-label="Regenerate response"><RefreshCcw size={14} /></button>
                                                   <button
                                                       onClick={() => handleCopy(message.parsedAnswer, message.id)}
-                                                      className="p-1 text-gray-400 hover:text-gray-200 rounded-md"
+                                                      className="xeno-icon-hover p-1 text-gray-400 hover:text-gray-200 rounded-md"
                                                       aria-label="Copy response"
                                                       disabled={copiedAiMessageId === message.id}
                                                   >
@@ -15647,7 +15651,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                    </button>
                                                   <button
                                                       onClick={() => handleEditAiMessage(message.id, message.parsedAnswer || message.text || '')}
-                                                      className="p-1 text-gray-400 hover:text-gray-200 rounded-md"
+                                                      className="xeno-icon-hover p-1 text-gray-400 hover:text-gray-200 rounded-md"
                                                       aria-label="Edit response"
                                                       disabled={editingAiMessageId !== null}
                                                   >
@@ -15655,7 +15659,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                    </button>
                                                   <button
                                                       onClick={(e) => handleOpenFeedbackPopup(e, message.id)}
-                                                      className={`p-1 rounded-md ${
+                                                      className={`xeno-icon-hover p-1 rounded-md ${
                                                           feedbackStatusMap[message.id] === 'liked'
                                                               ? 'text-green-500 hover:text-green-400'
                                                               : 'text-gray-400 hover:text-gray-200'
@@ -15666,7 +15670,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                    </button>
                                                   <button
                                                       onClick={(e) => handleOpenDislikePopup(e, message.id)}
-                                                      className={`p-1 rounded-md ${
+                                                      className={`xeno-icon-hover p-1 rounded-md ${
                                                           feedbackStatusMap[message.id] === 'disliked'
                                                               ? 'text-red-500 hover:text-red-400'
                                                               : 'text-gray-400 hover:text-gray-200'
@@ -15680,7 +15684,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                           onClick={() => setExpandedInfoMessageId(
                                                               expandedInfoMessageId === message.id ? null : message.id
                                                           )}
-                                                          className={`p-1 rounded-md ${
+                                                          className={`xeno-icon-hover p-1 rounded-md ${
                                                               expandedInfoMessageId === message.id
                                                                   ? 'text-gray-200'
                                                                   : 'text-gray-400 hover:text-gray-200'
