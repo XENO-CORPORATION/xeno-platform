@@ -199,7 +199,7 @@ export const PRODUCTS: Product[] = [
 
   // ── Build ─────────────────────────────────────────────────
   { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-engine' },
-  { slug: 'workflow', name: 'XENO Workflow', tagline: 'Visual node-based automation pipelines.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-workflow' },
+  { slug: 'workflow', name: 'XENO Workflow', tagline: 'Visual node-based automation pipelines.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-workflow' },
   { slug: 'use', name: 'XENO Use', tagline: "The agent's hands across every device.", category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-use' },
   { slug: 'apps', name: 'XENO Apps', tagline: 'No-code custom apps and internal tools.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-apps' },
 

@@ -2,8 +2,9 @@ import type { ProductContent } from './_types';
 
 /* XENO Workflow — sourced from ../xeno-workflow (README + the real Electron
  * renderer: Toolbar, NodePalette, WorkflowNode, NodeInspector, ExecutionLog,
- * node definitions). A `delivery: desktop` product: 0.2.0 is published and
- * downloadable (86.7 MB), so a visitor can check every claim here in a minute.
+ * node definitions). A `delivery: desktop` product: 0.4.0 is published and
+ * downloadable (94.6 MB Windows / 114 MB Linux AppImage), so a visitor can
+ * check every claim here in a minute.
  *
  * CORRECTED 2026-07-27. Four claim families on this page were false, and the
  * live installer made them trivially disprovable:
@@ -16,11 +17,19 @@ import type { ProductContent } from './_types';
  *     CANVAS viewport culling. It is real and it is loaded; it is simply not the
  *     execution engine. Describe it as canvas virtualization or not at all —
  *     never as "the engine".
- *  2. "22+ local AI models as nodes" — the nodes/xeno/ barrel is imported by
- *     NOTHING outside src/test/, and is absent from builtinNodeDefinitions; it
- *     gates on window.xenoLib, which preload never exposes (preload exposes only
- *     __xenoWorkflowSceneGraph and xenoWorkflow). Out of the box there is NO AI.
- *     Separately, the 6 registered creative-app nodes deliberately THROW
+ *  2. "22+ local AI models as nodes" — the nodes/xeno/ barrel WAS imported by
+ *     NOTHING outside src/test/, and absent from builtinNodeDefinitions.
+ *     FIXED in v0.3.0 (xeno-workflow b275afc): all 76 family nodes are now
+ *     registered and reachable, and src/test/nodes-reachable.test.ts gates it.
+ *     The underlying claim still needs care, though: the 54 creative-app nodes
+ *     gate on window.xenoPixel and its siblings, which preload STILL never
+ *     exposes (preload exposes only __xenoWorkflowSceneGraph and xenoWorkflow),
+ *     and the 16 LibAI nodes need a xeno-rt task server. So they are now
+ *     VISIBLE and configurable but still do not DO the work — reachable is not
+ *     the same as functional, and this page must not conflate them. The Agent
+ *     family (7) is the exception: it runs against xenoWorkflow's own main
+ *     process and works. Out of the box there is still NO bundled AI.
+ *     Separately, the 6 older registered creative-app nodes deliberately THROW
  *     "…is not available in this build" (engine/ecosystem/unavailable.ts).
  *  3. "100% local / runs fully offline / no keys" — the one registered AI node
  *     POSTs to a SEPARATELY INSTALLED xeno-rt on localhost:8080, and the Agent
@@ -31,15 +40,16 @@ import type { ProductContent } from './_types';
  *
  * What is real, and is what this page now sells: the desktop shell, the node
  * graph with type-checked ports, the palette, the inspector, the execution log,
- * and per-node checkpointing with replay. Windows only. */
+ * and per-node checkpointing with replay. Windows and Linux (x64 AppImage)
+ * as of v0.4.0; macOS still to come. */
 const workflow: ProductContent = {
   slug: 'workflow',
   hero: {
     headline: 'Automation you can watch run, and replay when it breaks.',
     sub: 'A visual, node-based automation studio: wire triggers, logic, files and APIs into a typed node graph, then watch the data move through it. A checkpoint is captured at every node, so when a run goes wrong you can step back, change the data, and replay from that point.',
     media: { type: 'mockup', src: 'workflow-hero', alt: 'XENO Workflow — a node graph wiring a file trigger through a transform to a save step, with the node palette, inspector and live execution log' },
-    badges: ['Windows desktop', 'Typed node graph', 'Replay from any checkpoint', 'Free beta'],
-    note: 'Beta (v0.2) · Windows. The node graph, palette, inspector, execution log and checkpoint replay work today. AI nodes are NOT included out of the box — they need a separately installed xeno-rt (see “Using AI with it”). macOS and Linux builds follow.',
+    badges: ['Windows + Linux', 'Typed node graph', 'Replay from any checkpoint', 'Free beta'],
+    note: 'Beta (v0.4) · Windows and Linux. The node graph, palette, inspector, execution log and checkpoint replay work today. AI nodes are NOT included out of the box — they need a separately installed xeno-rt (see “Using AI with it”). Linux ships as an x64 AppImage; a macOS build follows.',
   },
   trust: ['The graph executes on your machine — no cloud account needed to run a workflow', 'AI is not bundled: the AI node needs a separately installed xeno-rt', 'Part of the XENO platform — one sign-in'],
   highlights: [
@@ -72,7 +82,7 @@ const workflow: ProductContent = {
         'The AI node calls a xeno-rt server you run yourself at localhost:8080',
         'The Agent node uses your XENO account credentials — that call leaves the machine',
         'No models are bundled with the installer, and none are downloaded for you',
-        'Image and vision node types are in the codebase but not registered in this build',
+        'Image and vision node types became reachable in v0.3.0 — they still need a xeno-rt task server to actually run',
       ],
     },
     {
@@ -106,9 +116,11 @@ const workflow: ProductContent = {
       icon: 'Boxes',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(200,150,220,0.14), transparent 60%), linear-gradient(165deg,#170f18,#070707 74%)',
       title: 'Built to drive the XENO stack — as those APIs land',
-      desc: 'The general-purpose nodes — HTTP, database, S3, Slack, files, logic, transforms — work now. The creative-app nodes are scaffolded against apps that are still exposing their automation APIs, so treat them as direction rather than capability.',
+      desc: 'The general-purpose nodes — HTTP, database, S3, Slack, files, logic, transforms — work now. v0.3.0 made 76 fine-grained ecosystem nodes reachable in the palette, but the creative-app ones are still scaffolded against apps that are exposing their automation APIs, so treat them as direction rather than capability.',
       bullets: [
         'Working today: HTTP, SMTP email, Slack, Discord, GitHub issues, S3/R2, files, logic, transforms',
+        '146 node types in the palette as of v0.3.0 — 70 core plus 76 XENO ecosystem nodes',
+        'The 7 Agent nodes work today; agent-tool-call runs a real xeno-agent-sdk tool loop',
         'Pixel, Motion, Sound, 3D, Architect and Engine nodes place on the canvas but do not run yet',
         'They say so plainly when executed — "not available in this build", not a silent failure',
         'Database nodes (PostgreSQL, MySQL, Redis) are placeholders awaiting drivers',
@@ -134,7 +146,7 @@ const workflow: ProductContent = {
     { title: 'Debugging a flaky job', icon: 'Lock', desc: 'When step nine of a run fails, step back to step eight, edit the intermediate data, and replay from there instead of re-running the whole thing.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Download & open', desc: 'Get the Windows build and sign in with your XENO account.' },
+    { step: '1', title: 'Download & open', desc: 'Get the Windows installer or the Linux AppImage and sign in with your XENO account.' },
     { step: '2', title: 'Wire up a pipeline', desc: 'Drag triggers, logic, data and API nodes onto the canvas and connect their typed ports.' },
     { step: '3', title: 'Run it and replay it', desc: 'Execute it on your machine, watch data flow through the graph, and replay from any checkpoint when something breaks.' },
   ],
@@ -148,18 +160,18 @@ const workflow: ProductContent = {
       { feature: 'AI models included out of the box', xeno: false, them: 'Varies' },
       { feature: 'Creative-app nodes (Pixel / Motion / Sound / 3D)', xeno: 'Scaffolded', them: false },
       { feature: 'Mature ecosystem & prebuilt integrations', xeno: 'Growing', them: true },
-      { feature: 'Availability', xeno: 'Beta (Windows)', them: 'Available now' },
+      { feature: 'Availability', xeno: 'Beta (Windows, Linux)', them: 'Available now' },
     ],
   },
   specs: [
-    { label: 'Platform', value: 'Windows (x64) · Electron' },
+    { label: 'Platform', value: 'Windows (x64) · Linux (x64 AppImage) · Electron' },
     { label: 'Engine', value: 'TypeScript (WorkflowEngine)' },
     { label: 'AI', value: 'Not bundled · needs your own xeno-rt' },
     { label: 'Project format', value: '.xflow' },
-    { label: 'Status', value: 'v0.2 · beta' },
+    { label: 'Status', value: 'v0.4 · beta' },
   ],
   faq: [
-    { q: 'Is XENO Workflow available yet?', a: 'Yes — the 0.2 beta is downloadable now for Windows. The desktop shell, node graph, typed ports, palette, inspector, execution log and checkpoint replay all work. It’s an honest beta: several node categories, the AI integration and the always-on server mode are still being built, and macOS and Linux builds are still to come.' },
+    { q: 'Is XENO Workflow available yet?', a: 'Yes — the 0.4 beta is downloadable now for Windows and Linux (x64 AppImage). The desktop shell, node graph, typed ports, palette, inspector, execution log and checkpoint replay all work. It’s an honest beta: several node categories, the AI integration and the always-on server mode are still being built, and a macOS build is still to come.' },
     { q: 'What AI does it come with?', a: 'None — and we would rather say that here than let you find out after an 87 MB download. There is one registered AI node, and it calls a xeno-rt server on localhost:8080 that you install and run yourself; nothing is bundled and no model is fetched for you. There is also an Agent node, which signs in with your XENO account, so that one does make a network call. A larger local-model node set exists in the codebase but is not registered in this build.' },
     { q: 'Does it run in the cloud?', a: 'No — the app and its execution engine run on your own machine, and you can build and run a graph without any account. Two things reach the network if you use them: the Agent node (your XENO account) and any HTTP/database/S3/Slack node you wire up yourself. An always-on server execution mode (scheduled and webhook-triggered) is planned for later.' },
     { q: 'What is the engine written in?', a: 'TypeScript. Earlier copy on this page described a “Rust execution engine”; that was wrong and we have corrected it. The only Rust in the project is a spatial index for canvas virtualization — it is not the execution engine, and it is not what runs your workflow.' },
@@ -169,7 +181,7 @@ const workflow: ProductContent = {
   ],
   seo: {
     title: 'XENO Workflow — a visual automation studio you can replay',
-    description: 'A visual, node-based automation studio for Windows: typed node graph, live execution view, and a checkpoint at every node so you can step back and replay a run from any point. Runs on your machine. AI nodes require your own xeno-rt. Free beta.',
+    description: 'A visual, node-based automation studio for Windows and Linux: typed node graph, live execution view, and a checkpoint at every node so you can step back and replay a run from any point. Runs on your machine. AI nodes require your own xeno-rt. Free beta.',
   },
 };
 
