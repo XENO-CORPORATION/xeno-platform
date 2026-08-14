@@ -1,9 +1,17 @@
 import type { ProductContent } from './_types';
 
 /* XENO Shell — sourced from ../xeno-shell (README.md, CHANGELOG.md
- * v0.1.0-beta.1, PLAN.md §16, packages/ui + packages/core). Catalog: Develop,
- * status beta / delivery desktop (the Windows installer is public on R2 under
- * apps/shell/v0.1.0-beta.1, beta channel).
+ * v0.1.0-beta.2, PLAN.md §16, packages/ui + packages/core). Catalog: Develop,
+ * status beta / delivery desktop. BOTH platforms are public on R2 under
+ * apps/shell/v0.1.0-beta.2 (beta channel): the Windows installer and an x86_64
+ * AppImage, built from the same commit.
+ *
+ * ⚠️ Platform claims on this page are the ones that rot first. This module said
+ * "Windows only. macOS and Linux builds are not published" and answered the
+ * "macOS and Linux?" FAQ with "Not published" for the whole day after the Linux
+ * AppImage went live — because the release updated productCatalog.ts (the
+ * schema.org/OS field) and nobody re-read the human-readable copy, which lives
+ * here. When a product gains a platform, grep this file for the old one.
  *
  * HONESTY CONTRACT for this page — do not "improve" past it:
  *  · Shell today is a desktop WRAPPER with a real terminal (Fabric, node-pty)
@@ -36,12 +44,12 @@ const shell: ProductContent = {
     sub: 'XENO Shell wraps your monitors in a borderless desktop of its own — with Fabric, a genuine PTY terminal that speaks ssh://, and Files, a browser over folders you hand out one at a time. Apps never see a path on your disk, only a handle you can revoke mid-write.',
     media: { type: 'mockup', src: 'shell-hero', alt: 'XENO Shell — the per-display desktop running a Fabric ssh terminal and a mount-scoped Files window, with the shell-chrome consent sheet asking to grant a folder' },
     badges: ['Windows', 'Public beta', 'Unsigned build', 'Real PTY terminal', 'xmount:// broker'],
-    note: 'Beta channel · v0.1.0-beta.1 · UNSIGNED — Windows SmartScreen will show “Windows protected your PC”; choose More info → Run anyway, or wait for the signed build. No XENO app runs inside Shell yet — see “What it is today”.',
+    note: 'Beta channel · v0.1.0-beta.2 · UNSIGNED — on Windows SmartScreen will show “Windows protected your PC”; choose More info → Run anyway, or wait for the signed build. On Linux, chmod +x the AppImage and run it. No XENO app runs inside Shell yet — see “What it is today”.',
   },
   trust: [
-    '196 unit tests, plus 3 CDP end-to-end suites run against the packaged build',
+    '280 unit tests, plus 3 CDP end-to-end suites run against the packaged build on Windows and Linux',
     'Boot p50 661 ms on the reference Windows machine',
-    'Per-user install — no admin rights, no system-wide changes',
+    'No admin rights on either platform — a per-user installer on Windows, a single AppImage on Linux',
   ],
   highlights: [
     { value: 'Real PTY', label: 'ConPTY / forkpty — not an emulator' },
@@ -60,7 +68,7 @@ const shell: ProductContent = {
         'Real today: the per-display window host, the Fabric terminal, Mounts + the ACL broker',
         'Not yet: XENO apps running inside it — Hub and Comms are placeholders in this build',
         'The embed loader works, but the only app it loads today is the bundled demo',
-        'Windows only. macOS and Linux builds are not published',
+        'Windows and Linux ship; macOS is not built yet',
       ],
     },
     {
@@ -139,7 +147,7 @@ const shell: ProductContent = {
     { title: 'Build against the substrate early', icon: 'Layers', desc: 'The window, permission and mount contract is published and stable enough to develop an embed against — before the desktop around it is finished.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Install', desc: 'Run the per-user installer — no admin rights. It is unsigned, so SmartScreen warns once: More info → Run anyway.' },
+    { step: '1', title: 'Install', desc: 'Windows: run the per-user installer — no admin rights. It is unsigned, so SmartScreen warns once: More info → Run anyway. Linux: download the AppImage, chmod +x it and run it — nothing is installed. If your distribution has no FUSE 2, run it with --appimage-extract-and-run.' },
     { step: '2', title: 'Grant a folder', desc: 'First run asks, consent-first, what Shell may see. Nothing is mounted until you say so, and autostart stays off unless you turn it on.' },
     { step: '3', title: 'Open a terminal', desc: 'Launch Fabric on a local shell or an ssh:// target, arrange your displays and workspaces, and let session restore keep them.' },
   ],
@@ -157,25 +165,26 @@ const shell: ProductContent = {
     ],
   },
   specs: [
-    { label: 'Platform', value: 'Windows 10/11 x64 — per-user install' },
-    { label: 'Channel', value: 'Beta · v0.1.0-beta.1 · unsigned' },
+    { label: 'Platform', value: 'Windows 10/11 x64 (per-user install) · Linux x64 (AppImage)' },
+    { label: 'Channel', value: 'Beta · v0.1.0-beta.2 · unsigned' },
     { label: 'Terminal', value: 'node-pty (ConPTY) · ssh:// + local://' },
     { label: 'Status', value: 'Public beta — host layer only' },
   ],
   faq: [
-    { q: 'What is XENO Shell in one sentence?', a: 'A desktop shell for Windows: it takes over your displays with a borderless full-screen root each, and ships two working surfaces inside — Fabric, a real PTY terminal that speaks ssh://, and Files, a browser over folders you explicitly hand out.' },
+    { q: 'What is XENO Shell in one sentence?', a: 'A desktop shell for Windows and Linux: it takes over your displays with a borderless full-screen root each, and ships two working surfaces inside — Fabric, a real PTY terminal that speaks ssh://, and Files, a browser over folders you explicitly hand out.' },
     { q: 'Do XENO apps run inside it yet?', a: 'No. That is the roadmap, not this build. Hub and Comms appear in the shell as placeholders — the Hub view is a hand-built mock, not the real launcher — and the embed loader currently loads only the bundled demo app. Everything else on this page is real and running. We would rather you know that before you download it than after.' },
     { q: 'It is unsigned — what will Windows do?', a: 'SmartScreen will show “Windows protected your PC” when you run the installer. Choose More info → Run anyway to continue, or wait for the signed build if that is not acceptable for your machine. The app itself also carries a visible UNSIGNED DEV BUILD watermark in its chrome and in Settings → About, and that flag can only read “signed” when a real signing environment produced the build.' },
+    { q: 'How do updates work on Linux?', a: 'Keep the AppImage as an AppImage and it updates itself in place, exactly like the Windows build. If you extract it, or repackage it, self-update stops working — that is a limitation of the AppImage format, not a bug — and Shell will say so rather than pretend: the updater reports that updates are unavailable for this launch mode instead of retrying forever against something that cannot succeed. Download a new AppImage when you want to move forward.' },
     { q: 'Is this kiosk mode? Can I get out?', a: 'It is not kiosk. Full-OS mode is a borderless-fullscreen window per display, which is why F11 reliably toggles it and your keyboard shortcuts are not swallowed. Kiosk was rejected precisely because of its key-handling behaviour.' },
     { q: 'What is a Mount, and what is xmount://?', a: 'A Mount is a host folder you have granted to Shell. Apps do not get that path — they get an opaque xmount:// handle, and they additionally need their own per-app grant on that mount, consented in shell chrome. Paths are canonicalised twice before use, so “..”, junctions and alternate data streams are rejected rather than followed.' },
     { q: 'What happens if I revoke access while something is using it?', a: 'It dies immediately. Open handles fail with a typed XENO-FS[PermissionRevoked] error rather than silently reading stale data, and the revocation is written to the audit ring in Settings → Privacy alongside every allow and deny.' },
     { q: 'How do updates work, and can I go back?', a: 'Installed shells check the beta feed on startup and every 30 minutes, and roll out in stages by a deterministic machine bucket. A no-downgrade guard stops you sliding backwards accidentally; the only thing that overrides it is a deliberate rollback marker we publish if a build turns out bad. If the update server is unreachable, Shell retries quietly and boots as normal.' },
     { q: 'Is any data sent anywhere?', a: 'Crash minidumps and renderer errors spool to ~/.xeno/shell/crash/ on your own machine, scrubbed of paths, URIs, mount tokens and other identifiers — version and display topology only. Upload is off by default and doubly gated: it needs both your opt-in and a configured endpoint, and no endpoint ships in this build.' },
-    { q: 'macOS and Linux?', a: 'Not published. The codebase is cross-platform and the terminal uses forkpty on POSIX, but the only build released is Windows, and the packaged end-to-end evidence is Windows only.' },
+    { q: 'macOS and Linux?', a: 'Linux ships as of v0.1.0-beta.2 — an x86_64 AppImage built from the same commit as the Windows installer, with the same packaged end-to-end evidence: the full mounts acceptance flow, junction and .. escapes rejected, live revocation, and a verified self-update. macOS is not built yet. The codebase is cross-platform and the terminal uses forkpty on POSIX, so it is a packaging and evidence gap rather than a porting one.' },
   ],
   seo: {
     title: 'XENO Shell — a desktop shell with a real terminal and folder-level permissions',
-    description: 'XENO Shell is a Windows desktop shell: one borderless root per display, Fabric (a real node-pty terminal with ssh:// targets), and Mounts — per-app folder grants over opaque xmount:// handles with live revoke and an audit log. Public beta, v0.1.0-beta.1, unsigned. No XENO apps run inside it yet.',
+    description: 'XENO Shell is a desktop shell for Windows and Linux: one borderless root per display, Fabric (a real node-pty terminal with ssh:// targets), and Mounts — per-app folder grants over opaque xmount:// handles with live revoke and an audit log. Public beta, v0.1.0-beta.2, unsigned. No XENO apps run inside it yet.',
   },
 };
 
