@@ -221,7 +221,12 @@ export const PRODUCTS: Product[] = [
   // product content module: it would say the same thing twice and leave a stale
   // copy behind on the day a certificate lands. The app carries a matching
   // UNSIGNED BUILD badge, so the binary discloses it independently of this page.
-  { slug: 'agent', name: 'XENO Agent', tagline: 'The agent-native workspace for building software.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-agent-interface' },
+  // Linux since 0.2.0 (published 2026-08-14): apps/agent/ serves an x64 AppImage
+  // alongside the Windows installer, both built from the same commit and both
+  // verified end-to-end through the live auto-update chain. Leaving this as
+  // 'Windows' would hide a platform the feed actually serves — same reasoning as
+  // the XENO Shell entry below. macOS stays off until an artifact exists.
+  { slug: 'agent', name: 'XENO Agent', tagline: 'The agent-native workspace for building software.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-agent-interface' },
   // Migrated 2026-08-09, in ONE pass as the previous note here required: this
   // install command, every sample in src/content/docs/sdk.ts, and the product
   // page all name @xenosystem/agent-sdk together. npm `latest` is 0.9.0;

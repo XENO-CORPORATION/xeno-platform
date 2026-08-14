@@ -1,19 +1,26 @@
 import type { ProductContent } from './_types';
 
-/* XENO Agent — DRAFT, not yet registered. Sourced from ../xeno-agent-interface
- * (README.md, CLAUDE.md, docs/ARCHITECTURE.md, docs/PRODUCT_STATUS.md) and
- * verified against the repo at main 6288ec3 on 2026-08-08.
+/* XENO Agent — LIVE. Sourced from ../xeno-agent-interface (README.md,
+ * CLAUDE.md, docs/ARCHITECTURE.md, docs/PRODUCT_STATUS.md), first verified
+ * against main 6288ec3 on 2026-08-08 and re-verified against the published
+ * 0.2.0 release (tag agent-v0.2.0, main 3992f5e) on 2026-08-14.
  *
  * BEFORE THIS GOES LIVE, know what is and is not true:
- *  · The product has NEVER been released. apps/agent/version.json 404s, there is
- *    no GitHub release, and /product/agent currently returns the 4,311-byte SPA
- *    shell. This module is what turns that into a real page — it is not a
- *    description of something already shipped.
- *  · delivery: DESKTOP INSTALLER. `XENO Agent Setup 0.1.0.exe`, NSIS, per-user,
- *    x64. Built from main on 2026-08-08 and verified to launch (window title
- *    "XENO Agent", 3 renderer children). macOS dmg and Linux AppImage targets
- *    are CONFIGURED IN electron-builder.yml AND HAVE NEVER BEEN BUILT — do not
- *    advertise them, and do not add mac/linux badges until an artifact exists.
+ *  · The product IS released. 0.1.0 shipped 2026-08-10; 0.2.0 shipped 2026-08-14.
+ *    apps/agent/version.json serves 0.2.0 and /product/agent is a real page.
+ *    (The three bullets that used to sit here said the opposite — "NEVER been
+ *    released", "version.json 404s", "returns the SPA shell" — which was true
+ *    the day this module was written and false four days later. A status
+ *    assertion in a comment needs a date attached or it becomes a lie on a
+ *    timer.)
+ *  · delivery: DESKTOP INSTALLER on TWO platforms as of 0.2.0.
+ *    `XENO Agent Setup 0.2.0.exe` (NSIS, per-user, x64) and
+ *    `XENO-Agent-0.2.0.AppImage` (x64), both built from the same commit and
+ *    both verified end-to-end through the live auto-update chain. The AppImage
+ *    was launched as an ordinary non-root user before publishing.
+ *    The macOS dmg target is CONFIGURED IN electron-builder.yml AND HAS NEVER
+ *    BEEN BUILT — do not advertise it, and do not add a mac badge until an
+ *    artifact exists. That rule is why Linux is only being added now.
  *  · UNSIGNED, shipped as EXPERIMENTAL — the standing company posture, decided
  *    2026-08-08, same as XENO Hub 0.6.0 and XENO Shell 0.1.0-beta.1.
  *    electron-builder logged "no signing info identified, signing is skipped".
@@ -52,11 +59,11 @@ const agent: ProductContent = {
     headline: 'The agent-native workspace for building software.',
     sub: 'XENO Agent runs a real agent against a workspace you choose — it reads the code, proposes edits as diffs you approve, runs terminal commands, and keeps every session durable. Bring any provider. Nothing about the model is baked into the UI.',
     media: { type: 'mockup', src: 'agent-hero', alt: 'XENO Agent — conversation tabs, a diff review, and a terminal session in one workspace' },
-    badges: ['Windows', 'Free', 'Any provider'],
-    note: 'Free desktop app for Windows x64 · proprietary. macOS and Linux builds are not out yet.',
+    badges: ['Windows', 'Linux', 'Free', 'Any provider'],
+    note: 'Free desktop app for Windows and Linux x64 · proprietary. A macOS build is not out yet.',
   },
   trust: [
-    'Windows 10/11 x64 · macOS and Linux not yet built',
+    'Windows 10/11 x64 and Linux x64 (AppImage) · macOS not yet built',
     'Provider-neutral — the model catalog comes from the provider, not the UI',
     'Your workspace stays local; execution runs on your machine',
   ],
@@ -127,7 +134,7 @@ const agent: ProductContent = {
     { step: '3', title: 'Review before it lands', desc: 'Edits arrive as diffs. Accept a file, accept a hunk, or reject — then checkpoint and keep going.' },
   ],
   specs: [
-    { label: 'Platform', value: 'Windows 10/11 x64 (macOS and Linux not yet built)' },
+    { label: 'Platform', value: 'Windows 10/11 x64 · Linux x64 AppImage (macOS not yet built)' },
     { label: 'Install', value: 'NSIS installer, per-user, installation directory changeable' },
     { label: 'Download size', value: '≈ 87 MB' },
     { label: 'Auto-update', value: 'Yes — staged, with channel and rollback support' },
@@ -159,7 +166,7 @@ const agent: ProductContent = {
   ],
   seo: {
     title: 'XENO Agent — the agent-native workspace for building software',
-    description: 'Run a real coding agent against your own workspace. Diffs you approve, an integrated terminal, durable sessions, and any provider over ACP or XENO Cloud. Free preview for Windows.',
+    description: 'Run a real coding agent against your own workspace. Diffs you approve, an integrated terminal, durable sessions, and any provider over ACP or XENO Cloud. Free preview for Windows and Linux.',
   },
   // No statusLabel: the catalog `status: 'beta'` pill plus the derived
   // `experimentalNotice()` label ("Experimental · unsigned installer") already
