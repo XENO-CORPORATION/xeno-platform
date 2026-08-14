@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Copy, X } from '@/lib/icons';
+import { Building, Check, Copy, Globe, Lock, X } from '@/lib/icons';
 import {
   VISIBILITY_OPTIONS,
   buildSocialShareUrl,
@@ -12,141 +12,34 @@ import {
   type ShareVisibility,
   type SocialPlatform,
 } from './chatShare';
-import { PublicGlobeIcon } from './PublicGlobeIcon';
 
 type ShareStep = 'configure' | 'ready';
 
 const CHECK_EASE = [0.22, 0.7, 0.2, 1] as const;
 
-type IconMotionProps = {
-  selected: boolean;
-  reduceMotion: boolean;
-};
-
 /**
- * Private: secure "click" — body dips and settles; keyhole punches in.
- * Replaces the shackle-rotate, which read as broken geometry at 16px.
+ * The three visibility marks, from the library.
+ *
+ * They used to be hand-written SVGs with framer-motion driving each one: a lock whose keyhole punched
+ * in, a building whose windows lit in a stagger, a globe that spun. Good animations — and three glyphs
+ * drawn outside the system, at stroke-width 2 where the rest of the dialog is 1.75, which is why they
+ * always sat a shade heavier than every other icon on the screen.
+ *
+ * The motion did not have to be thrown away to fix that. It moved into the library, where selection is
+ * now a trigger alongside hover: a host carrying `data-selection="on"` plays its glyph's animation once,
+ * at the moment it becomes selected. The keyhole and the windows are declared parts of `lock` and
+ * `building`, so they still do what they did — they just do it from the declaration.
+ *
+ * One thing IS gone: clicking the already-selected public option used to re-spin the globe. That was a
+ * counter threaded through three components to force a replay. Selection plays the animation when the
+ * choice changes, which is when it means something; re-playing it on a click that changed nothing was
+ * motion without news.
  */
-const PrivateLockIcon: React.FC<IconMotionProps> = ({ selected, reduceMotion }) => (
-  <motion.span
-    className="inline-flex"
-    aria-hidden="true"
-    initial={false}
-    animate={
-      selected
-        ? { scale: [1, 0.86, 1.06, 1] }
-        : { scale: 1 }
-    }
-    transition={
-      reduceMotion
-        ? { duration: 0 }
-        : { duration: 0.38, ease: CHECK_EASE, times: [0, 0.35, 0.7, 1] }
-    }
-  >
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="5" y="11" width="14" height="10" rx="2" />
-      <path d="M7 11V8a5 5 0 0 1 10 0v3" />
-      <motion.circle
-        cx="12"
-        cy="16"
-        r="1.35"
-        stroke="none"
-        initial={false}
-        animate={{
-          fill: 'currentColor',
-          scale: selected ? 1 : 0.35,
-          opacity: selected ? 1 : 0.35,
-        }}
-        transition={
-          reduceMotion
-            ? { duration: 0 }
-            : { duration: 0.22, delay: selected ? 0.12 : 0, ease: CHECK_EASE }
-        }
-        style={{ transformOrigin: '12px 16px' }}
-      />
-    </svg>
-  </motion.span>
-);
-
-const BUILDING_WINDOWS = [
-  { x: 8, y: 8 },
-  { x: 12, y: 8 },
-  { x: 16, y: 8 },
-  { x: 8, y: 12 },
-  { x: 12, y: 12 },
-  { x: 16, y: 12 },
-] as const;
-
-/** Team: windows light up in a short stagger. */
-const TeamBuildingIcon: React.FC<IconMotionProps> = ({ selected, reduceMotion }) => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M4 21V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v16" />
-    <path d="M4 21h16" />
-    <path d="M10 21v-4h4v4" />
-    {BUILDING_WINDOWS.map((window, index) => (
-      <motion.rect
-        key={`${window.x}-${window.y}`}
-        x={window.x}
-        y={window.y}
-        width="2"
-        height="2"
-        rx="0.3"
-        stroke="none"
-        initial={false}
-        animate={{
-          fill: 'currentColor',
-          opacity: selected ? 1 : 0.22,
-        }}
-        transition={
-          reduceMotion
-            ? { duration: 0 }
-            : {
-                duration: 0.18,
-                delay: selected ? index * 0.045 : 0,
-                ease: CHECK_EASE,
-              }
-        }
-      />
-    ))}
-  </svg>
-);
-
-const VisibilityOptionIcon: React.FC<
-  IconMotionProps & { visibility: ShareVisibility; spinRequest?: number }
-> = ({ visibility, selected, reduceMotion, spinRequest }) => {
-  if (visibility === 'private') {
-    return <PrivateLockIcon selected={selected} reduceMotion={reduceMotion} />;
-  }
-  if (visibility === 'team') {
-    return <TeamBuildingIcon selected={selected} reduceMotion={reduceMotion} />;
-  }
-  return (
-    <PublicGlobeIcon
-      selected={selected}
-      reduceMotion={reduceMotion}
-      spinRequest={spinRequest}
-    />
-  );
-};
+const VISIBILITY_GLYPH = {
+  private: Lock,
+  team: Building,
+  public: Globe,
+} as const;
 
 /** White square pops in; the check stroke draws after — Instant when motion is reduced. */
 const DrawnCheckMark: React.FC<{ reduceMotion: boolean; optionId: string }> = ({
@@ -238,7 +131,6 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
   const [visibility, setVisibility] = useState<ShareVisibility>(
     existing?.visibility ?? 'private',
   );
-  const [globeSpinRequest, setGlobeSpinRequest] = useState(0);
   const [link, setLink] = useState<ShareLink | null>(existing);
   const [isCreating, setIsCreating] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -441,13 +333,9 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    onClick={() => {
-                      setVisibility(option.id);
-                      if (option.id === 'public') {
-                        setGlobeSpinRequest((n) => n + 1);
-                      }
-                    }}
-                    className={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-[var(--chat-hover)] ${
+                    onClick={() => setVisibility(option.id)}
+                    data-selection={selected ? 'on' : 'off'}
+                    className={`xeno-icon-hover flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-[var(--chat-hover)] ${
                       index > 0 ? 'border-t' : ''
                     }`}
                     style={{ borderColor: 'var(--chat-border)' }}
@@ -457,12 +345,10 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
                         selected ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'
                       }`}
                     >
-                      <VisibilityOptionIcon
-                        visibility={option.id}
-                        selected={selected}
-                        reduceMotion={prefersReducedMotion}
-                        spinRequest={option.id === 'public' ? globeSpinRequest : undefined}
-                      />
+                      {(() => {
+                        const Glyph = VISIBILITY_GLYPH[option.id];
+                        return <Glyph size={18} aria-hidden="true" />;
+                      })()}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium text-[var(--chat-text)]">

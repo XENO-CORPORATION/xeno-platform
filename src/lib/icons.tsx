@@ -51,6 +51,7 @@ import GWaves from '@xenosystem/elements/elements/waves';
 import GFeather from '@xenosystem/elements/elements/feather';
 import GHand from '@xenosystem/elements/elements/hand';
 import GFileClock from '@xenosystem/elements/elements/file-clock';
+import GBuilding from '@xenosystem/elements/elements/building';
 import GCheck from '@xenosystem/elements/elements/check';
 import GChevronDown from '@xenosystem/elements/elements/chevron-down';
 import GChevronRight from '@xenosystem/elements/elements/chevron-right';
@@ -179,6 +180,11 @@ export const MessageSquareText = /* @__PURE__ */ glyph(GMessage);
 export const Loader = /* @__PURE__ */ glyph(GRefresh);
 export const AlertTriangle = /* @__PURE__ */ glyph(GAlert);
 export const KeyRound = /* @__PURE__ */ glyph(GLock);
+/* `Lock` was reachable from lucide through the wildcard re-export, so nothing failed and nothing looked
+   obviously wrong — it just came back at stroke-width 2 next to a set drawn at 1.75. The wildcard is what
+   makes the facade painless to adopt and it is also what lets a name slip through unshadowed; the only
+   way to catch it is to look at what the page actually rendered. */
+export const Lock = /* @__PURE__ */ glyph(GLock);
 export const Edit2 = /* @__PURE__ */ glyph(GEdit);
 export const Rows = /* @__PURE__ */ glyph(GList);
 export const Link2 = /* @__PURE__ */ glyph(GLink);
@@ -277,3 +283,6 @@ export const Waves = /* @__PURE__ */ glyph(GWaves);
 export const Feather = /* @__PURE__ */ glyph(GFeather);
 export const Hand = /* @__PURE__ */ glyph(GHand);
 export const FileClock = /* @__PURE__ */ glyph(GFileClock);
+
+/* Drawn for the share dialog, which had been hand-writing an animated building of its own. */
+export const Building = /* @__PURE__ */ glyph(GBuilding);
