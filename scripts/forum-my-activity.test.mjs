@@ -70,3 +70,44 @@ test('the list is bounded', () => {
   assert.match(fn(), /LIMIT \$2/, 'an unbounded history query is a slow page waiting to happen.');
   assert.match(fn(), /Math\.min\(100/, 'and the caller must not be able to raise it freely.');
 });
+
+// ── the UI half ────────────────────────────────────────────────────────────
+
+const page = (p) => codeOnly(readFileSync(join(__dirname, '..', 'src', p), 'utf8'));
+const FORUM = page('pages/Forum.tsx');
+const SHELL = page('components/forum/ForumShell.tsx');
+const CLIENT = page('components/forum/api.ts');
+
+test('the page can actually fetch your activity', () => {
+  assert.match(CLIENT, /getMyActivity\s*=/, 'api.ts must expose it.');
+  assert.match(FORUM, /api\.getMyActivity\(/, 'Forum.tsx must call it.');
+});
+
+test('"Yours" only exists when there IS a you', () => {
+  // A tab that leads to a list which cannot exist for a signed-out reader is a
+  // promise the surface cannot keep.
+  assert.match(SHELL, /signedIn && \(\s*<NavItem icon=\{User\} label="Yours"/,
+    'the rail item must be gated on being signed in.');
+  assert.match(FORUM, /\.\.\.\(signedIn \? \[\['mine', 'Yours', User\]\] : \[\]\)/,
+    'the segmented control must be gated too — two different controls, one rule.');
+});
+
+test('it is fetched on SELECTION, not on mount', () => {
+  // Most visits never open it, and a history query is the most expensive read
+  // in the product.
+  const eff = FORUM.slice(FORUM.indexOf("if (surface !== 'mine'"));
+  assert.match(eff.slice(0, 200), /if \(surface !== 'mine' \|\| !signedIn\) return;/,
+    'the effect must bail unless the surface is selected and there is a viewer.');
+});
+
+test('each row shows whether you asked or answered', () => {
+  assert.match(FORUM, /t\.mine === 'asked'/,
+    'the list must distinguish the two — they are different memories.');
+  assert.match(FORUM, /You asked this/);
+  assert.match(FORUM, /You answered this/);
+});
+
+test('the empty state is honest', () => {
+  assert.match(FORUM, /Nothing yet\. Threads you ask or answer show up here\./,
+    'say what will fill it, not "no results".');
+});

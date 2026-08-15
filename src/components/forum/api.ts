@@ -141,3 +141,6 @@ export const editPost = (postId: string, body: string) =>
 
 export const deletePost = (postId: string) =>
   request<any>(`/posts/${postId}`, { method: 'DELETE' }, true);
+
+// What you have taken part in — asked AND answered (WP5).
+export const getMyActivity = () => request<any>('/me/activity', {}, true);

@@ -1,9 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Home, Layers, Hash, Search, PenLine, Bot, CheckCircle2, Clock,
+  Home, Layers, Hash, Search, PenLine, Bot, CheckCircle2, Clock, User,
 } from 'lucide-react';
 import ForumHeader from './ForumHeader';
+import * as api from './api';
 
 /**
  * The forum application shell.
@@ -50,8 +51,8 @@ interface ForumShellProps {
   spaces?: Array<{ slug: string; name: string; kind: string; threadCount: number }>;
   activeSpace?: string;
   onSelectSpace?: (slug: string) => void;
-  surface?: 'feed' | 'record';
-  onSelectSurface?: (s: 'feed' | 'record') => void;
+  surface?: 'feed' | 'record' | 'mine';
+  onSelectSurface?: (s: 'feed' | 'record' | 'mine') => void;
   /** Whoever is signed in, when the page already knows. Optional on purpose:
    *  the header falls back to a local token check so it never blocks on /me. */
   viewer?: { handle?: string | null; displayName?: string | null; kind?: string | null; isStaff?: boolean } | null;
@@ -74,7 +75,11 @@ function NavItem({ icon: Icon, label, active, onClick, to, count }: any) {
 
 const ForumShell: React.FC<ForumShellProps> = ({
   children, rightRail, spaces = [], activeSpace = '', onSelectSpace, surface = 'record', onSelectSurface, viewer,
-}) => (
+}) => {
+  // A local token check, like the header: the shell must not wait on /me to
+  // decide whether a nav item exists, or the rail visibly reflows on load.
+  const signedIn = api.isSignedIn();
+  return (
   // h-screen + overflow-hidden: the PAGE never scrolls. pt-14 clears the fixed
   // 56px site header. min-h-0 on the body is what actually lets the children
   // overflow — without it a grid/flex child refuses to shrink below its content
@@ -89,6 +94,11 @@ const ForumShell: React.FC<ForumShellProps> = ({
         <nav className="space-y-0.5">
           <NavItem icon={Home} label="For you" active={surface === 'feed'} onClick={() => onSelectSurface?.('feed')} />
           <NavItem icon={Layers} label="The Record" active={surface === 'record'} onClick={() => onSelectSurface?.('record')} />
+          {/* Only when there is a you. A 'Yours' tab for a signed-out reader is a
+              promise of a list that cannot exist. */}
+          {signedIn && (
+            <NavItem icon={User} label="Yours" active={surface === 'mine'} onClick={() => onSelectSurface?.('mine')} />
+          )}
         </nav>
 
         {spaces.length > 0 && (
@@ -138,7 +148,8 @@ const ForumShell: React.FC<ForumShellProps> = ({
       </aside>
     </div>
   </div>
-);
+  );
+};
 
 /** Search — the one thing X puts in the rail that we keep verbatim. */
 export function RailSearch({ value, onChange, onSubmit, onClear, resultCount }: any) {
