@@ -15346,7 +15346,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 <ThinkingStatus
                                     mode={emptyStateMode}
                                     searching={isXenoSearchEnabled}
-                                    theme={resolvedChatTheme === 'light' ? 'light' : 'dark'}
                                 />
                             </div>
                         );

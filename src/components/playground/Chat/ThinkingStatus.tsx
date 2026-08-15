@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import ThinkingCube, { type ThinkingPhase } from './ThinkingCube';
 import type { ChatMode } from './chatModeConfig';
+
+/**
+ * The phases the wait is scripted in. It used to live in `ThinkingCube`, which drew a small 3D cube
+ * for each of them; the mark is a flat square now — the chat draws no circles and no perspective —
+ * so the type outlived the component that owned it, and this is the only file that reads it.
+ */
+export type ThinkingPhase = 'thinking' | 'searching' | 'reading' | 'writing';
 
 interface Step {
   /** ms after start when this step becomes active. */
@@ -54,14 +60,13 @@ const microcopyFor = (ms: number): string | null => {
 interface ThinkingStatusProps {
   mode: ChatMode;
   searching: boolean;
-  theme: 'dark' | 'light';
 }
 
 /**
  * The "thinking" placeholder: a phase-reactive cube, a contextual status verb,
  * a live step timeline (for multi-step modes) and duration-adaptive microcopy.
  */
-const ThinkingStatus: React.FC<ThinkingStatusProps> = ({ mode, searching, theme }) => {
+const ThinkingStatus: React.FC<ThinkingStatusProps> = ({ mode, searching }) => {
   const steps = useMemo(() => scriptFor(mode, searching), [mode, searching]);
   const startRef = useRef<number>(performance.now());
   const [elapsed, setElapsed] = useState(0);
@@ -82,7 +87,9 @@ const ThinkingStatus: React.FC<ThinkingStatusProps> = ({ mode, searching, theme 
 
   return (
     <div className="flex items-start gap-2.5">
-      <ThinkingCube size={26} phase={current.key} theme={theme} />
+      {/* Draws in `currentColor`'s neighbour, `--chat-text`, so the theme reaches it through CSS —
+          there is nothing for a theme prop to do here. */}
+      <span className="thinking-cube" aria-hidden="true" />
       <div className="flex min-w-0 flex-col gap-1 pt-[3px] font-mono opacity-25">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-[var(--chat-text)]">
@@ -122,6 +129,24 @@ const ThinkingStatus: React.FC<ThinkingStatusProps> = ({ mode, searching, theme 
       </div>
 
       <style>{`
+        .thinking-cube {
+          width: 15px;
+          height: 15px;
+          flex-shrink: 0;
+          margin-top: 4px;
+          border-radius: 3px;
+          border: 1.6px solid var(--chat-text);
+          box-sizing: border-box;
+          animation: thinking-cube-life 1.6s ease-in-out infinite;
+        }
+        @keyframes thinking-cube-life {
+          0% { transform: rotate(0deg) scale(0.92); }
+          50% { transform: rotate(180deg) scale(0.55); }
+          100% { transform: rotate(360deg) scale(0.92); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .thinking-cube { animation: none; }
+        }
         .thinking-status-dots::after {
           content: '';
           animation: ts-dots 1.4s steps(4, end) infinite;
@@ -135,7 +160,7 @@ const ThinkingStatus: React.FC<ThinkingStatusProps> = ({ mode, searching, theme 
         .thinking-step-mark {
           width: 12px;
           height: 12px;
-          border-radius: 9999px;
+          border-radius: 3px;
           flex-shrink: 0;
           display: inline-flex;
           align-items: center;
@@ -151,7 +176,7 @@ const ThinkingStatus: React.FC<ThinkingStatusProps> = ({ mode, searching, theme 
           content: '';
           width: 4px;
           height: 4px;
-          border-radius: 9999px;
+          border-radius: 1px;
           background: var(--chat-canvas);
         }
         .thinking-step-active {
@@ -162,7 +187,7 @@ const ThinkingStatus: React.FC<ThinkingStatusProps> = ({ mode, searching, theme 
           content: '';
           width: 5px;
           height: 5px;
-          border-radius: 9999px;
+          border-radius: 1px;
           background: var(--chat-text);
         }
         @keyframes ts-pulse {
