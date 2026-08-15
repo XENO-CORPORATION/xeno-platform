@@ -12258,6 +12258,40 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               0 1px 2px rgba(0, 0, 0, 0.06),
               0 2px 4px rgba(0, 0, 0, 0.04) !important;
           }
+          /* ── The token bridge ──────────────────────────────────────────────────────────────────
+             (No backticks anywhere in this block — it lives inside a template literal, and one
+             would end it.)
+
+             The library's components read --xeno-*; this chat's three runtime themes drive
+             --chat-*. Both sets resolve on this element and they do NOT agree — --xeno-text is
+             #d8d8de where --chat-text is #fafafa — so any library component dropped into the chat
+             today would arrive in the library's palette rather than the theme the user picked.
+
+             The whole reconciliation is eleven lines, because the two vocabularies match name for
+             name: everything the library's stylesheets consume for colour has a --chat- twin. They
+             were designed to the same list and never wired together.
+
+             Direction matters. The chat is the source of truth — it owns the theme switcher and the
+             three palettes — so --xeno-* inherits from --chat-*, never the reverse.
+
+             This changes nothing today, deliberately: no library COMPONENT renders in the chat yet.
+             What renders is icons, which draw in currentColor, the goo pill, whose fill this file
+             already overrides below, and the scrollbar, which has its own --xeno-scroll-* family.
+             It is here so that the first component adopted arrives already wearing the right theme,
+             instead of the adoption also being a palette migration. */
+          .chat-themed {
+            --xeno-text: var(--chat-text);
+            --xeno-muted: var(--chat-muted);
+            --xeno-border: var(--chat-border);
+            --xeno-canvas: var(--chat-canvas);
+            --xeno-surface: var(--chat-surface);
+            --xeno-elevated: var(--chat-elevated);
+            --xeno-control: var(--chat-control);
+            --xeno-hover: var(--chat-hover);
+            --xeno-danger: var(--chat-danger);
+            --xeno-danger-hover: var(--chat-danger-hover);
+            --xeno-on-accent: var(--chat-on-accent);
+          }
           /* The XENO travelling hover pill (goo.css) in chat ink. The library owns every frame of the
              motion; a menu only has to say what colour its highlight is and how round its rows are.
              The 4px inset the pill defaults to is exactly this panel's p-1, so it lines up already. */
