@@ -217,6 +217,7 @@ const ChatUpdateDemoPanel: React.FC<ChatUpdateDemoPanelProps> = ({
           <button
             type="button"
             onClick={() => onCopy(demo.copyValue!)}
+            data-selection={copied ? 'on' : 'off'}
             aria-label={copied ? 'Copied' : demo.header}
             className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-zinc-500 transition-colors hover:bg-white/[0.05] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
           >

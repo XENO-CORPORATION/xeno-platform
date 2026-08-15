@@ -1912,9 +1912,9 @@ const ChatWithVoice: React.FC = () => {
                               <p className="text-sm leading-snug whitespace-pre-wrap">{msg.textContent}</p>
                             </div>
                             <div className="flex items-center justify-end gap-2 mt-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-150">
-                              <button onClick={() => handleCopyUserMessage(msg.textContent, msg.id)} className="p-1 text-gray-400 hover:text-gray-200 rounded-md" aria-label="Copy message">
+                              <button onClick={() => handleCopyUserMessage(msg.textContent, msg.id)} className="xeno-icon-hover p-1 text-gray-400 hover:text-gray-200 rounded-md" data-selection={copiedMessageId === msg.id ? 'on' : 'off'} aria-label="Copy message">
                                 {copiedMessageId === msg.id ? (
-                                  <Check size={14} className="text-green-400" />
+                                  <Check size={14} className="text-[var(--chat-text)]" />
                                 ) : (
                                   <Copy size={14} />
                                 )}
@@ -1954,8 +1954,8 @@ const ChatWithVoice: React.FC = () => {
                           {/* Action Buttons */}
                           {msg.textContent && (
                             <div className={`flex items-center gap-2 mt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-150`}>
-                              <button onClick={() => handleCopyAiMessage(msg.textContent, msg.id)} className="p-1 ml-4 text-gray-400 hover:text-gray-200 rounded-md" aria-label="Copy AI response">
-                                {copiedAiMessageId === msg.id ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                              <button onClick={() => handleCopyAiMessage(msg.textContent, msg.id)} className="xeno-icon-hover p-1 ml-4 text-gray-400 hover:text-gray-200 rounded-md" data-selection={copiedAiMessageId === msg.id ? 'on' : 'off'} aria-label="Copy AI response">
+                                {copiedAiMessageId === msg.id ? <Check size={14} className="text-[var(--chat-text)]" /> : <Copy size={14} />}
                               </button>
                               {msg.audioUrl && !msg.isGenerating && (
                                 <button

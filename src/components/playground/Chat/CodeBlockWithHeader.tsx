@@ -237,6 +237,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
           <button
                 className={`${baseButtonClass} ${copied ? copiedButtonClass : 'hover:bg-zinc-700/60'}`}
                 title={copied ? "Copied!" : "Copy code"}
+                data-selection={copied ? 'on' : 'off'}
             onClick={handleCopy}
                 disabled={copied || currentIsRunning || isEditing} // Disable while running, copied, or editing
           >

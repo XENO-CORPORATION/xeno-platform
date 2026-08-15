@@ -400,6 +400,7 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
                 <button
                   type="button"
                   onClick={() => void handleCopy()}
+                  data-selection={copied ? 'on' : 'off'}
                   className="flex flex-shrink-0 items-center gap-1.5 border-l px-3.5 text-sm font-medium text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                   style={{
                     borderColor: 'var(--chat-border)',
