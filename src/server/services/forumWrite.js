@@ -340,6 +340,17 @@ export async function createThread(db, user, { space, title, body, tags }) {
   // on — without a row there is nothing for "stop notifying me" to write to.
   await autoSubscribeThread(db, user.id, threadId).catch(() => {});
 
+  // A thread BODY can name people too — "@alice you hit this last week". There
+  // is no reply fan-out to dedup against here, because nobody is subscribed to
+  // a thread that did not exist a moment ago.
+  await notifyMentions(db, {
+    body: cleanBody,
+    threadId,
+    postId: null,
+    actor: { id: user.id, kind: actorKind(user) },
+    threadAuthorId: user.id,
+  }).catch(() => {});
+
   return { shortId, id: threadId };
 }
 
@@ -399,16 +410,32 @@ export async function createPost(db, user, shortId, { body }) {
     actor,
   }).catch(() => {});
 
-  // 2. Everyone else following the thread. The thread author is excluded in
+  // 2. Anyone named by @handle. Done BEFORE the reply fan-out so the people it
+  //    reached can be excluded from it — being mentioned by name in a thread you
+  //    also follow is one notification, not two, and the mention is the more
+  //    specific of the pair, so it wins.
+  const mentioned = await notifyMentions(db, {
+    body: cleanBody,
+    threadId: thread.id,
+    postId: postRows[0].id,
+    actor,
+    threadAuthorId: thread.author_id,
+  }).catch(() => []);
+
+  // 3. Everyone else following the thread. The thread author is excluded in
   //    SQL rather than deduped afterwards — they get the richer 'answer'
   //    notification and must not receive two rows for one post.
   await threadReplyRecipients(db, thread.id, {
     exceptUserId: user.id,
     threadAuthorId: thread.author_id,
   })
-    .then((ids) => Promise.all(ids.map((uid) => notify(db, {
-      userId: uid, kind: 'reply', threadId: thread.id, postId: postRows[0].id, actor,
-    }))))
+    .then((ids) => Promise.all(
+      ids
+        .filter((uid) => !mentioned.includes(uid))
+        .map((uid) => notify(db, {
+          userId: uid, kind: 'reply', threadId: thread.id, postId: postRows[0].id, actor,
+        })),
+    ))
     .catch(() => {});
 
   return { id: postRows[0].id, position: posRows[0].next };
@@ -811,4 +838,83 @@ export async function threadSubscriptionByShortId(db, userId, shortId) {
     [userId, shortId],
   );
   return { subscribed: rows.length ? !rows[0].muted : false };
+}
+
+// --------------------------------------------------------------------------
+// Mentions (WP1) — the last notification kind
+// --------------------------------------------------------------------------
+
+/** No thread can notify more than this many people by @-name. */
+export const MAX_MENTIONS = 10;
+
+/**
+ * Pull `@handle` mentions out of a markdown body.
+ *
+ * Pure and exported so it can be tested for real rather than by reading source.
+ * Matching is deliberately PERMISSIVE and validation happens against the
+ * database — a handle that matches nobody simply notifies nobody, which is a
+ * far better failure than a strict regex that silently drops a legitimate
+ * mention because of a dot.
+ *
+ * Three things it must not do, each of which is a bug someone ships:
+ *
+ *   1. **Match email addresses.** `ask foo@example.com` contains `@example`.
+ *      The lookbehind requires the `@` not follow a word character, which is
+ *      what an email guarantees it does.
+ *   2. **Match inside code.** A shell snippet full of `user@host`, or a docs
+ *      example using `@tag`, must not page real people. Fenced blocks and
+ *      inline code are stripped BEFORE matching — you cannot fix this with a
+ *      cleverer regex, because the text is legitimate everywhere else.
+ *   3. **Let one post notify everybody.** Capped, and deduped case-insensitively
+ *      so `@alice @Alice` is one person, not two notifications.
+ */
+export function parseMentions(body) {
+  const text = String(body || '')
+    .replace(/```[\s\S]*?```/g, ' ')   // fenced blocks
+    .replace(/~~~[\s\S]*?~~~/g, ' ')   // the other fence
+    .replace(/`[^`\n]*`/g, ' ');       // inline code
+
+  const found = new Map();             // lowercased handle -> original
+  const re = /(?<![\w@])@([a-z0-9][a-z0-9._-]{1,30}[a-z0-9])/gi;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const handle = m[1].toLowerCase();
+    if (!found.has(handle)) found.set(handle, handle);
+    if (found.size >= MAX_MENTIONS) break;
+  }
+  return [...found.keys()];
+}
+
+/**
+ * Resolve mentioned handles to real users and notify them.
+ *
+ * Returns the user ids notified, so the caller can exclude them from the reply
+ * fan-out. A person mentioned BY NAME in a post they also happen to follow must
+ * get one notification, not two — and the mention is the more specific of the
+ * pair, so it wins.
+ *
+ * Suppressed here rather than in notify(): the thread author is excluded because
+ * they already receive the richer 'answer'.
+ */
+export async function notifyMentions(db, { body, threadId, postId, actor, threadAuthorId }) {
+  const handles = parseMentions(body);
+  if (!handles.length) return [];
+
+  const { rows } = await db.query(
+    `SELECT id FROM users
+      WHERE lower(username) = ANY($1::text[])
+        AND is_active = TRUE
+        AND id <> COALESCE($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND id <> COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
+    [handles, actor?.id ?? null, threadAuthorId ?? null],
+  );
+
+  const notified = [];
+  for (const r of rows) {
+    const id = await notify(db, {
+      userId: r.id, kind: 'mention', threadId, postId, actor,
+    });
+    if (id) notified.push(r.id);
+  }
+  return notified;
 }

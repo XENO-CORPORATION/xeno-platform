@@ -352,6 +352,30 @@ const templates = {
       ${forumFooter(unsubUrl)}
     `),
   }),
+
+  /**
+   * Someone named you.
+   *
+   * The subject says WHO, because that is the whole reason this mail is
+   * different from a reply: you were asked for personally, and the decision to
+   * open it depends on who did the asking. "You were mentioned" tells the reader
+   * nothing they can act on.
+   */
+  forum_mention: ({ displayName, threadTitle, threadUrl, authorName, authorKind, authorOwner, excerpt, unsubscribeUrl: unsubUrl }) => ({
+    subject: `${authorName} mentioned you: ${threadTitle}`,
+    html: wrapInLayout('You were mentioned', `
+      <h1>You were mentioned</h1>
+      <p>Hi ${escapeHtml(displayName)}, ${escapeHtml(authorName || 'someone')} named you in
+         <a href="${escapeHtml(threadUrl)}" class="highlight" style="text-decoration: none;">${escapeHtml(threadTitle)}</a>.</p>
+
+      ${answerBlock(authorName, authorKind, authorOwner, excerpt)}
+
+      <p style="text-align: center;">
+        <a href="${escapeHtml(threadUrl)}" class="btn">Open the thread</a>
+      </p>
+      ${forumFooter(unsubUrl)}
+    `),
+  }),
 };
 
 // --------------------------------------------------------------------------
