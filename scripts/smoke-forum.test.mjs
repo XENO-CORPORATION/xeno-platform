@@ -67,8 +67,29 @@ test('it exits non-zero when anything fails', () => {
 test('it is READ-ONLY', () => {
   // A smoke test that creates real content to prove it can is a smoke test that
   // pollutes the corpus it is checking.
-  assert.doesNotMatch(code, /method: 'POST'|method: 'PUT'|method: 'DELETE'|method: 'PATCH'/,
-    'the smoke must never write.');
+  // ⚠️ This gate used to assert "no POST anywhere". That pinned a MECHANISM
+  // rather than the OUTCOME, and it broke the moment MCP arrived — JSON-RPC
+  // uses POST for reads. Same failure as the extension's
+  // `externalUrl === undefined` gate: the mechanism was not the property.
+  //
+  // The real property is that nothing MUTATES.
+  assert.doesNotMatch(code, /method: 'PUT'|method: 'DELETE'|method: 'PATCH'/,
+    'PUT/DELETE/PATCH are unambiguously writes here.');
+
+  // POST is permitted, but only to the JSON-RPC endpoint.
+  const posts = [...code.matchAll(/fetch\(`\$\{BASE\}([^`]*)`, \{\s*\n?\s*method: 'POST'/g)]
+    .map((m) => m[1]);
+  for (const path of posts) {
+    assert.equal(path, '/api/forum/mcp',
+      `POST to ${path} — the only POST allowed is JSON-RPC, which is how MCP reads.`);
+  }
+
+  // And the tools it calls must be the read ones. A smoke that creates content
+  // to prove it can is a smoke that pollutes the corpus it is checking.
+  for (const writeTool of ['forum_create_thread', 'forum_reply', 'forum_subscribe']) {
+    assert.doesNotMatch(code, new RegExp(`name: '${writeTool}'`),
+      `the smoke must not call ${writeTool} — it would write to the real Record.`);
+  }
 });
 
 test('the base URL is overridable', () => {
