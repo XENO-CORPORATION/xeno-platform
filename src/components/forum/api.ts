@@ -133,3 +133,11 @@ export const setThreadSubscription = (shortId: string, subscribed: boolean) =>
     method: 'PUT',
     body: JSON.stringify({ subscribed }),
   }, true);
+
+// Edit / delete your own post (WP2). Every edit is marked; delete tombstones
+// the row and blanks the body.
+export const editPost = (postId: string, body: string) =>
+  request<any>(`/posts/${postId}`, { method: 'PATCH', body: JSON.stringify({ body }) }, true);
+
+export const deletePost = (postId: string) =>
+  request<any>(`/posts/${postId}`, { method: 'DELETE' }, true);

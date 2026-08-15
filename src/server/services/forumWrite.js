@@ -918,3 +918,140 @@ export async function notifyMentions(db, { body, threadId, postId, actor, thread
   }
   return notified;
 }
+
+// --------------------------------------------------------------------------
+// Edit and delete (WP2) — the write side of columns that already existed
+// --------------------------------------------------------------------------
+//
+// `forum_posts.status IN ('visible','hidden','deleted')` and `edited_at` have
+// been in the schema since the first migration. `edited_at` is even serialized
+// by forumService and typed in ForumThread.tsx — the read side is complete top
+// to bottom, and nothing has ever written either column. Sixth instance of that
+// shape in this codebase.
+
+/**
+ * Edit your own post.
+ *
+ * 🔴 EVERY EDIT IS MARKED, WITH NO GRACE PERIOD. Discourse and friends hide
+ * edits made in the first few minutes, which is friendlier and wrong here: the
+ * Record is permanent and public (§5.1), and its value to the next reader — and
+ * to an agent citing it — rests on it not having been quietly rewritten.
+ *
+ * This matters most for an ACCEPTED answer. Without a visible marker, anyone
+ * could earn an acceptance and then replace the text with something else, and
+ * the archive would show a vouched-for answer nobody actually vouched for.
+ * `edited_at` already flowed to the client; it just never had a value.
+ *
+ * Moderators may edit too (§7.2). The row records WHO, so a moderator edit is
+ * never mistaken for the author changing their mind.
+ */
+export async function editPost(db, user, postId, { body }) {
+  assertNotService(user);
+  const cleanBody = requireText(body, 'body', MAX_BODY);
+
+  const { rows } = await db.query(
+    `SELECT p.id, p.author_id, p.status, p.thread_id, t.status AS thread_status
+       FROM forum_posts p JOIN forum_threads t ON t.id = p.thread_id
+      WHERE p.id = $1`,
+    [postId],
+  );
+  const post = rows[0];
+  if (!post || post.status === 'deleted') {
+    throw new ForumError('Post not found', 'post_not_found', 404);
+  }
+  if (post.thread_status === 'locked') {
+    throw new ForumError('This thread is locked', 'thread_locked', 403);
+  }
+
+  const isAuthor = String(post.author_id) === String(user.id);
+  const isStaff = ['admin', 'moderator'].includes(user.role);
+  if (!isAuthor && !isStaff) {
+    throw new ForumError('You can only edit your own posts', 'not_post_author', 403);
+  }
+
+  await db.query(
+    `UPDATE forum_posts
+        SET body = $2, edited_at = NOW(), edited_by = $3
+      WHERE id = $1`,
+    [postId, cleanBody, user.id],
+  );
+  return { ok: true, editedAt: new Date().toISOString() };
+}
+
+/**
+ * Delete your own post.
+ *
+ * SOFT delete — the row survives, the CONTENT does not.
+ *
+ * Both halves are deliberate. Removing the row outright would renumber
+ * positions and orphan the replies that quote it, so a thread reads as if the
+ * conversation never made sense. Keeping the body would mean "delete" leaves
+ * your words in the database, which is not what the word means to the person
+ * clicking it — and it is the difference between a soft delete and a lie.
+ *
+ * So: the row becomes a tombstone, the text is gone, and reads already filter
+ * `status = 'visible'` so it disappears everywhere without touching a query.
+ *
+ * ⚠️ Deleting the ACCEPTED answer REOPENS the thread. Leaving `answer_post_id`
+ * pointing at a tombstone would show a resolved question whose resolution is
+ * blank — worse than an open one, because it stops anyone answering it.
+ */
+export async function deletePost(db, user, postId) {
+  assertNotService(user);
+
+  const { rows } = await db.query(
+    `SELECT p.id, p.author_id, p.position, p.status, p.thread_id, p.is_answer
+       FROM forum_posts p WHERE p.id = $1`,
+    [postId],
+  );
+  const post = rows[0];
+  if (!post || post.status === 'deleted') {
+    throw new ForumError('Post not found', 'post_not_found', 404);
+  }
+
+  const isAuthor = String(post.author_id) === String(user.id);
+  const isStaff = ['admin', 'moderator'].includes(user.role);
+  if (!isAuthor && !isStaff) {
+    throw new ForumError('You can only delete your own posts', 'not_post_author', 403);
+  }
+
+  // Position 1 IS the question. Deleting it would leave a thread of answers to
+  // nothing. Refused explicitly rather than half-done — see the note in the
+  // release plan: thread deletion is its own change, and this is the honest
+  // boundary until it lands.
+  if (post.position === 1) {
+    throw new ForumError(
+      'This is the original post. Deleting it would remove the whole thread — that is not available yet.',
+      'cannot_delete_first_post',
+      400,
+    );
+  }
+
+  await db.query(
+    `UPDATE forum_posts
+        SET status = 'deleted', body = '', deleted_at = NOW(), deleted_by = $2,
+            is_answer = FALSE, accepted_at = NULL, accepted_by = NULL
+      WHERE id = $1`,
+    [postId, user.id],
+  );
+
+  if (post.is_answer) {
+    await db.query(
+      `UPDATE forum_threads
+          SET answer_post_id = NULL, status = 'open', resolved_at = NULL, resolved_by = NULL
+        WHERE id = $1`,
+      [post.thread_id],
+    );
+    await recomputeReputationForThread(db, post.thread_id);
+  }
+
+  await db.query(
+    `UPDATE forum_threads
+        SET post_count = (SELECT COUNT(*) FROM forum_posts WHERE thread_id = $1 AND status = 'visible'),
+            last_activity_at = NOW()
+      WHERE id = $1`,
+    [post.thread_id],
+  );
+
+  return { ok: true, deleted: true, reopenedThread: Boolean(post.is_answer) };
+}

@@ -126,6 +126,47 @@ const ForumThread: React.FC = () => {
   useEffect(() => { api.getSpaces().then((r) => setSpaces(r.spaces || [])).catch(() => setSpaces([])); }, []);
   useEffect(() => { if (signedIn) api.getMe().then(setMe).catch(() => setMe(null)); }, [signedIn]);
 
+  // Edit / delete your own post (WP2).
+  //
+  // Ownership is decided by HANDLE, and only when the handle is non-null:
+  // agents and system-seeded posts have `handle: null`, and `null === null`
+  // would make every reader the owner of every seeded post. That is the kind of
+  // comparison that looks obviously fine and is a privilege escalation.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [busyPost, setBusyPost] = useState<string | null>(null);
+
+  const ownsPost = useCallback((p: ForumPost) => {
+    const mine = me?.actor?.handle;
+    return Boolean(mine && p.author?.handle && p.author.handle === mine)
+      || Boolean(me?.actor?.isStaff);
+  }, [me]);
+
+  const saveEdit = useCallback(async (postId: string) => {
+    if (!draft.trim()) return;
+    setBusyPost(postId);
+    try {
+      await api.editPost(postId, draft);
+      setEditingId(null);
+      await load();
+    } catch (e: any) {
+      setActionError(e?.message || 'Could not save the edit.');
+    } finally { setBusyPost(null); }
+  }, [draft, load]);
+
+  const doDelete = useCallback(async (postId: string) => {
+    setBusyPost(postId);
+    try {
+      const r = await api.deletePost(postId);
+      setConfirmDelete(null);
+      if (r?.reopenedThread) setActionError('That was the accepted answer — the thread is open again.');
+      await load();
+    } catch (e: any) {
+      setActionError(e?.message || 'Could not delete the post.');
+    } finally { setBusyPost(null); }
+  }, [load]);
+
   // Thread follow state. Rides in on the thread payload rather than a second
   // request, so the button never renders in the wrong state for one paint —
   // which is indistinguishable from a broken toggle.
@@ -388,6 +429,35 @@ const ForumThread: React.FC = () => {
                   </button>
                 )
               )}
+              {ownsPost(post) && post.position !== 1 && editingId !== post.id && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingId(post.id); setDraft(post.body); setConfirmDelete(null); }}
+                    className="cursor-pointer text-[11.5px] text-[#79797f] transition-colors hover:text-[#e5e5e9]"
+                  >
+                    edit
+                  </button>
+                  {/*
+                    Two-step, not a native confirm(): the second click is the
+                    commitment, and it stays inside the page instead of handing
+                    the decision to a browser dialog nobody reads.
+                  */}
+                  <button
+                    type="button"
+                    disabled={busyPost === post.id}
+                    onClick={() => (confirmDelete === post.id ? doDelete(post.id) : setConfirmDelete(post.id))}
+                    onBlur={() => setConfirmDelete((c) => (c === post.id ? null : c))}
+                    className={`cursor-pointer text-[11.5px] transition-colors disabled:opacity-50 ${
+                      confirmDelete === post.id
+                        ? 'font-medium text-red-400/90'
+                        : 'text-[#79797f] hover:text-[#e5e5e9]'
+                    }`}
+                  >
+                    {confirmDelete === post.id ? 'really delete?' : 'delete'}
+                  </button>
+                </>
+              )}
               {signedIn && (
                 <button
                   type="button"
@@ -403,7 +473,47 @@ const ForumThread: React.FC = () => {
               )}
             </div>
           </div>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={md}>{post.body}</ReactMarkdown>
+          {editingId === post.id ? (
+            <div className="mt-3">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={Math.min(24, Math.max(6, draft.split('\n').length + 2))}
+                className="w-full resize-y rounded-md border border-white/10 bg-[#08080a] p-3 font-mono text-[13px] leading-relaxed text-[#e5e5e9] outline-none transition-colors focus:border-white/[0.15]"
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button" onClick={() => saveEdit(post.id)}
+                  disabled={busyPost === post.id || !draft.trim()}
+                  className="inline-flex h-8 cursor-pointer items-center rounded-md border border-white/[0.15] bg-white/[0.10] px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-white/[0.18] disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  type="button" onClick={() => setEditingId(null)}
+                  className="cursor-pointer text-[12px] text-[#79797f] transition-colors hover:text-[#e5e5e9]"
+                >
+                  cancel
+                </button>
+                <span className="ml-auto text-[11px] text-[#57575e]">Edits are shown publicly</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={md}>{post.body}</ReactMarkdown>
+              {/*
+                `editedAt` has been serialized by the API and typed here since
+                v0.2 with nothing ever writing it, so this never rendered. It is
+                not decoration: an unmarked edit on an accepted answer means the
+                archive shows something nobody actually vouched for.
+              */}
+              {post.editedAt && (
+                <p className="mt-2 text-[11.5px] text-[#57575e]">
+                  edited {relativeTime(post.editedAt)} ago
+                </p>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
