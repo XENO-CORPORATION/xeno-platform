@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useGooPill } from '@xenosystem/elements-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useGooPill, useMenu } from '@xenosystem/elements-react';
 import { Check, ChevronDown, Copy, File, FileImage, FileText, Search, Shapes } from '@/lib/icons';
 import {
   ARTIFACT_KIND_LABEL,
@@ -67,7 +67,15 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
      p-1, buttons with `menuitem` — and was the only one still painting its own hover background
      instead of letting the pill travel. `.chat-goo` is declared in the chat shell, which is this
      page's parent, so the class is already in scope. */
-  const sortGoo = useGooPill<HTMLDivElement>();
+  /* One ref for both: the pill measures the rows against this panel and the keyboard moves focus
+     inside it. See ChatWithLLM for the same pairing across nine menus. */
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
+  const sortGoo = useGooPill<HTMLDivElement>({ hostRef: sortMenuRef });
+  const sortMenuKbd = useMenu<HTMLDivElement>({
+    open: isSortOpen,
+    onClose: () => setIsSortOpen(false),
+    menuRef: sortMenuRef,
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -215,8 +223,8 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
             </button>
             {isSortOpen && (
               <div
-                {...sortGoo.hostProps}
-                role="menu"
+                {...(() => { const { ref: _g, className: _c, ...handlers } = sortGoo.hostProps; return handlers; })()}
+                {...sortMenuKbd.menuProps}
                 className={`${sortGoo.hostProps.className} chat-goo chat-history-popover absolute left-0 top-full z-10 mt-1.5 min-w-full w-max overflow-hidden rounded-xl border p-1`}
                 style={{
                   backgroundColor: 'var(--chat-elevated)',
