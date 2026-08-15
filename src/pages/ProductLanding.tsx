@@ -17,6 +17,7 @@ import {
 } from '../lib/productCatalog';
 import type { ProductContent, Media } from '../content/products/_types';
 import { getProductDocs } from '../content/docs';
+import ForumThreadsWidget from '../components/product/ForumThreadsWidget';
 
 type OS = 'windows' | 'mac' | 'linux';
 function detectOS(): OS {
@@ -413,7 +414,15 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
                   <Link to={`/product/${product.slug}/releases`} className="inline-flex items-center gap-1 text-[12.5px] text-[#827b71] transition-colors hover:text-white">View all <ArrowRight className="h-3.5 w-3.5" /></Link>
                 </div>
                 <ReleaseFeed releases={releases} slug={product.slug} limit={3} />
-              </div>
+    
+            {/* Known issues and answers. Renders NOTHING when this product has
+                no threads — a quiet product page must stay quiet rather than
+                advertise an empty forum (D12, one level down). Sits with the
+                releases block because both answer "what is the state of this
+                thing", which is the question a reader has by the time they
+                reach the bottom of the page. */}
+            <ForumThreadsWidget slug={product.slug} className="mt-[clamp(48px,8vh,96px)]" />
+          </div>
             )}
           </div>
         </section>
