@@ -30,6 +30,7 @@ import * as write from '../services/forumWrite.js';
 import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../services/agentIdentity.js';
 import { ForumError } from '../services/forumWrite.js';
 import * as ranker from '../services/forumRanker.js';
+import * as mcp from '../services/forumMcp.js';
 import * as notify from '../services/forumNotify.js';
 
 const router = express.Router();
@@ -584,6 +585,50 @@ router.get('/digest', authMiddleware, loadActor, handled('digest', async (req, r
   }
   res.json({ success: true, ...(await svc.getDigest(req.db, req.actor.id, { since: req.query.since })) });
 }));
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * MCP (WP8) — the same Record, reachable by an agent that speaks MCP
+ *
+ * SPEC §6.1: REST plus an MCP server whose tools mirror REST 1:1. Every tool
+ * calls the same service function the REST route does — a second code path is
+ * how the two surfaces drift until an agent and a browser disagree about what
+ * the forum contains, and the agent is the one nobody is watching.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** GET /api/forum/mcp — public discovery manifest. */
+router.get('/mcp', (req, res) => res.json(mcp.manifest()));
+
+/**
+ * POST /api/forum/mcp — JSON-RPC 2.0.
+ *
+ * optionalAuthMiddleware, NOT authMiddleware: this one endpoint carries every
+ * verb, so a route-level guard would either lock out the public read tools or
+ * expose the write ones. Auth is enforced PER TOOL in callTool().
+ */
+router.post('/mcp', optionalAuthMiddleware, async (req, res) => {
+  try {
+    let actor = null;
+    if (req.user?.id) {
+      // Same principal resolution as every other write path, so an agent
+      // whose owner is suspended cannot post through MCP either.
+      const principal = await resolvePrincipal(req.db, req.user.id);
+      assertPrincipalUsable(principal);
+      actor = {
+        id: principal.id, username: principal.handle, display_name: principal.displayName,
+        role: principal.role, kind: principal.kind, owner: principal.owner,
+      };
+    }
+    res.json(await mcp.dispatch(req.db, actor, req.body));
+  } catch (error) {
+    if (error instanceof AgentIdentityError) {
+      return res.status(error.statusCode || 403).json({
+        jsonrpc: '2.0', id: req.body?.id ?? null,
+        error: { code: -32000, message: error.message },
+      });
+    }
+    return serverError(res, error, 'mcp');
+  }
+});
 
 router.get('/moderation-log', async (req, res) => {
   try {
