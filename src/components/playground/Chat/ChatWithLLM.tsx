@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { IconButton, useDialog, useGooPill, useTabs } from '@xenosystem/elements-react';
+import { IconButton, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
 import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
@@ -11462,7 +11462,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   // The library owns the motion (`goo.css`); this menu is hand-rolled Tailwind rather than `<Menu>`, so
   // it takes the behaviour through the hook instead of by adopting the component — which is the point of
   // `useGooPill` existing separately from `<Menu>` at all.
-  const chatMoreGoo = useGooPill<HTMLDivElement>();
+  /* One ref, two hooks. `useGooPill` measures the rows against this element and `useMenu` moves focus
+     inside it — so the highlight and the keyboard are looking at the same panel rather than at two
+     elements that happen to overlap. The goo hook's own `ref` is dropped at the call site below; the
+     menu hook's callback is what attaches, because it is the one that has to focus the first row the
+     instant the panel exists. */
+  const chatMoreMenuPanelRef = useRef<HTMLDivElement | null>(null);
+  const chatMoreGoo = useGooPill<HTMLDivElement>({ hostRef: chatMoreMenuPanelRef });
+  const chatMoreMenu = useMenu<HTMLDivElement>({
+    open: isChatMoreMenuOpen,
+    onClose: () => setIsChatMoreMenuOpen(false),
+    menuRef: chatMoreMenuPanelRef,
+  });
   // One host per PANEL, not per menu-shaped thing: the pill is positioned against the element it lives
   // in, so two panels cannot share one. The Recents filter and its submenu are open at the same time and
   // each wants its own highlight, which is the case that settles it.
@@ -14843,9 +14854,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <>
                 <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
                 <div
-                  {...chatMoreGoo.hostProps}
+                  {...(() => { const { ref: _goo, className: _c, ...handlers } = chatMoreGoo.hostProps; return handlers; })()}
+                  {...(() => { const { ...menu } = chatMoreMenu.menuProps; return menu; })()}
                   key={isChatMoreMenuShown ? 'chat-more-menu-in' : 'chat-more-menu-out'}
-                  role="menu"
                   aria-hidden={!isChatMoreMenuOpen}
                   className={`${chatMoreGoo.hostProps.className} chat-goo absolute right-0 top-full z-30 mt-2 w-[220px] rounded-xl border border-[#2a2a2d] bg-[#141416] p-1 shadow-xl`}
                   style={{
