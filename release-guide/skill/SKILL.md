@@ -142,12 +142,25 @@ If you were invoked from `xeno-image/`, this section applies, **not §2z** — t
 product the wrong host.
 
 🔴 **BUMP ABOVE WHAT HUB BUNDLES OR NOTHING HAPPENS.** Precedence is highest-version-wins with
-Hub's compiled-in copy as a FLOOR. Hub 0.10.1 bundles `xeno-image@0.1.2`, so publishing 0.1.2
-again changes nothing for anyone. Check the floor before you start:
+Hub's compiled-in copy as a FLOOR, so republishing at or below it is fetched and correctly
+ignored — silently.
+
+⚠️ **Read the floor from the SHIPPED artifact, not the repo.** The obvious check is wrong on any
+dev machine:
 
 ```bash
+# ✗ WRONG — `node_modules/@xeno-image/ui` is a file: LINK to the working tree, so this reports
+#   the version you just bumped to, never what the installed Hub actually ships.
 node -e "console.log(require('../xeno-hub/node_modules/@xeno-image/ui/package.json').version)"
+
+# ✓ RIGHT — grep the installed app's asar for the build marker the package emits.
+node -e "const b=require('fs').readFileSync(process.argv[1]).toString('latin1');const m=b.match(/xeno-image@(\d+\.\d+\.\d+)/);console.log(m?m[1]:'no marker (build predates it)')"   "$LOCALAPPDATA/Programs/XENO-HUB/resources/app.asar"
 ```
+
+The package exports `BUILD_ID = 'xeno-image@<version>'` for exactly this: `VERSION` alone is
+minified into an anonymous string and cannot be recovered from a shipped artifact, so "what does
+this Hub bundle?" was unanswerable. Builds before 0.1.4 have no marker — for those, byte-compare
+the artifact against a known build instead.
 
 **The procedure:**
 
