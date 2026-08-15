@@ -464,6 +464,26 @@ router.put('/threads/:shortId/subscription', authMiddleware, loadActor, handled(
  * Carries actions TAKEN — never accusations made, never the reporter, never
  * the removed content. See listModerationLog for why each of those is out.
  */
+/**
+ * POST /api/forum/threads/:shortId/fixed  { version, note }
+ *
+ * Loop C. Marks the thread fixed by a shipped version, posts the release
+ * note, and NOTIFIES everyone who asked or followed — which is the entire
+ * point: a report that never comes back is worse than no report.
+ *
+ * Staff only, and by the platform rule that includes an agent whose OWNER is
+ * staff, so a release pipeline can close the loop without a second
+ * authorization model.
+ */
+router.post('/threads/:shortId/fixed', authMiddleware, loadActor, handled('markThreadFixed', async (req, res) => {
+  res.json({
+    success: true,
+    ...(await write.markThreadFixed(req.db, req.actor, req.params.shortId, {
+      version: req.body?.version, note: req.body?.note,
+    })),
+  });
+}));
+
 router.get('/moderation-log', async (req, res) => {
   try {
     res.json({ success: true, log: await svc.listModerationLog(req.db, { limit: req.query.limit }) });

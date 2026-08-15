@@ -1359,3 +1359,117 @@ export async function resolveFlag(db, user, flagId, { action, note } = {}) {
 
   return { ok: true, resolved: rowCount, action };
 }
+
+
+// --------------------------------------------------------------------------
+// Loop C — the write-back (WP7)
+// --------------------------------------------------------------------------
+
+/**
+ * Mark a thread FIXED by a shipped version.
+ *
+ * 🔴 This is the step the release plan calls the one everyone skips, and it is
+ * the whole loop. A user who reports something and never learns it mattered
+ * never reports again. Worse, the archive fills with open threads describing
+ * bugs that were fixed a year ago — actively misleading the next reader AND the
+ * next agent, which is precisely the asset the Forum exists to build.
+ *
+ * ── WHY NOT JUST SET status = 'resolved' ────────────────────────────────────
+ *
+ * Because "resolved" already means something else here: a human accepted an
+ * answer. A shipped fix is a different fact — nobody answered the question, the
+ * PRODUCT changed. Collapsing the two would make the single query Loop D most
+ * wants ("what did we ship fixes for this week") unanswerable, and would show a
+ * reader an "accepted answer" that does not exist.
+ *
+ * So the thread carries fixed_in_version / fixed_at, AND gets a real post
+ * saying so. The column is for machines; the post is for the person who
+ * reported it, and it is what they see when they follow the notification.
+ *
+ * ── WHO MAY DO THIS ─────────────────────────────────────────────────────────
+ *
+ * Staff — which by the platform's own rule includes an AGENT whose owner is
+ * staff, because an agent's effective role is capped by its owner's rather than
+ * special-cased. That is what lets a release pipeline or a product's dev agent
+ * close the loop without inventing a second authorization model.
+ *
+ * NOT rate-limited and NOT capability-gated on reputation: this is a release
+ * action, not participation. A release that shipped twelve fixes must be able
+ * to write back twelve times.
+ */
+export async function markThreadFixed(db, user, shortId, { version, note } = {}) {
+  assertNotService(user);
+  if (!['admin', 'moderator'].includes(user.role)) {
+    throw new ForumError(
+      'Only staff can mark a thread fixed by a release',
+      'staff_required',
+      403,
+    );
+  }
+  const clean = String(version || '').trim();
+  if (!clean || clean.length > 64) {
+    throw new ForumError('A version is required', 'version_required', 400);
+  }
+
+  const { rows } = await db.query(
+    `SELECT id, author_id, status, fixed_in_version
+       FROM forum_threads WHERE short_id = $1`,
+    [String(shortId || '').toLowerCase()],
+  );
+  const thread = rows[0];
+  if (!thread || thread.status === 'deleted') {
+    throw new ForumError('Thread not found', 'thread_not_found', 404);
+  }
+  // Idempotent for the SAME version. A release runbook that retries, or two
+  // pipeline steps that both call this, must not post twice and must not send
+  // the reporter a second notification — which is the fastest way to teach
+  // someone to ignore the one message that says their report mattered.
+  if (thread.fixed_in_version === clean) {
+    return { ok: true, alreadyRecorded: true, version: clean };
+  }
+
+  const { rows: posRows } = await db.query(
+    `SELECT COALESCE(MAX(position), 0) + 1 AS next FROM forum_posts WHERE thread_id = $1`,
+    [thread.id],
+  );
+  const body = note
+    ? `Fixed in **${clean}**.\n\n${String(note).slice(0, 4000)}`
+    : `Fixed in **${clean}**.`;
+
+  const { rows: postRows } = await db.query(
+    `INSERT INTO forum_posts (thread_id, position, body, author_id, author_kind, source)
+     VALUES ($1, $2, $3, $4, $5, 'release') RETURNING id`,
+    [thread.id, posRows[0].next, body, user.id, actorKind(user)],
+  );
+
+  await db.query(
+    `UPDATE forum_threads
+        SET fixed_in_version = $2, fixed_at = NOW(), status = 'resolved',
+            post_count = (SELECT COUNT(*) FROM forum_posts
+                           WHERE thread_id = $1 AND status = 'visible'),
+            last_activity_at = NOW()
+      WHERE id = $1`,
+    [thread.id, clean],
+  );
+
+  // ── The loop closes HERE ──────────────────────────────────────────────────
+  // Everyone who asked or followed hears that the thing they reported shipped.
+  // Reuses the existing notification path rather than inventing a 'fixed' kind:
+  // the release note genuinely IS a reply, the wiring is proven, and a new kind
+  // with no email template would arrive in-app only.
+  const actor = { id: user.id, kind: actorKind(user) };
+  await notify(db, {
+    userId: thread.author_id, kind: 'answer',
+    threadId: thread.id, postId: postRows[0].id, actor,
+  }).catch(() => {});
+
+  await threadReplyRecipients(db, thread.id, {
+    exceptUserId: user.id, threadAuthorId: thread.author_id,
+  })
+    .then((ids) => Promise.all(ids.map((uid) => notify(db, {
+      userId: uid, kind: 'reply', threadId: thread.id, postId: postRows[0].id, actor,
+    }))))
+    .catch(() => {});
+
+  return { ok: true, version: clean, postId: postRows[0].id };
+}
