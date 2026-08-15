@@ -10266,8 +10266,8 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             this is now one too — which also lets the rows carry `menuitem` and be found by the pill's
             default selector. */}
         <div
-          {...feedbackGoo.hostProps}
-          role="menu"
+          {...(() => { const { ref: _g, className: _c, ...handlers } = feedbackGoo.hostProps; return handlers; })()}
+          {...feedbackMenuKbd.menuProps}
           aria-label="Why was this helpful?"
           className={`${feedbackGoo.hostProps.className} chat-goo chat-goo-feedback p-2 [&>button+button]:mt-1`}
         >
@@ -10352,8 +10352,8 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           }}
         >
           <div
-            {...dislikeGoo.hostProps}
-            role="menu"
+            {...(() => { const { ref: _g, className: _c, ...handlers } = dislikeGoo.hostProps; return handlers; })()}
+            {...dislikeMenuKbd.menuProps}
             aria-label="What went wrong?"
             className={`${dislikeGoo.hostProps.className} chat-goo chat-goo-feedback p-2 [&>button+button]:mt-1`}
           >
@@ -11480,12 +11480,48 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   //
   // The project kebab is the exception that still shares: its panel is rendered inside a `.map()`, but
   // only one project's menu is open at a time, so only one host is ever mounted.
-  const catalogFilterGoo = useGooPill<HTMLDivElement>();
-  const projectsSortGoo = useGooPill<HTMLDivElement>();
-  const projectMenuGoo = useGooPill<HTMLDivElement>();
-  const historyRowGoo = useGooPill<HTMLDivElement>();
-  const recentsFilterGoo = useGooPill<HTMLDivElement>();
-  const recentsSubmenuGoo = useGooPill<HTMLDivElement>();
+  const catalogFilterMenuRef = useRef<HTMLDivElement | null>(null);
+  const catalogFilterGoo = useGooPill<HTMLDivElement>({ hostRef: catalogFilterMenuRef });
+  const catalogFilterMenuKbd = useMenu<HTMLDivElement>({
+    open: isChatsCatalogFilterOpen,
+    onClose: () => { setIsChatsCatalogFilterOpen(false); },
+    menuRef: catalogFilterMenuRef,
+  });
+  const projectsSortMenuRef = useRef<HTMLDivElement | null>(null);
+  const projectsSortGoo = useGooPill<HTMLDivElement>({ hostRef: projectsSortMenuRef });
+  const projectsSortMenuKbd = useMenu<HTMLDivElement>({
+    open: isProjectsSortOpen,
+    onClose: () => { setIsProjectsSortOpen(false); },
+    menuRef: projectsSortMenuRef,
+  });
+  const projectMenuPanelRef = useRef<HTMLDivElement | null>(null);
+  const projectMenuGoo = useGooPill<HTMLDivElement>({ hostRef: projectMenuPanelRef });
+  const projectMenuMenu = useMenu<HTMLDivElement>({
+    open: openProjectMenuId !== null,
+    onClose: () => { setOpenProjectMenuId(null); },
+    menuRef: projectMenuPanelRef,
+  });
+  const historyRowMenuPanelRef = useRef<HTMLDivElement | null>(null);
+  const historyRowGoo = useGooPill<HTMLDivElement>({ hostRef: historyRowMenuPanelRef });
+  const historyRowMenuKbd = useMenu<HTMLDivElement>({
+    open: isHistoryRowMenuOpen,
+    onClose: () => { closeHistoryRowMenu(); },
+    menuRef: historyRowMenuPanelRef,
+  });
+  const recentsFilterMenuRef = useRef<HTMLDivElement | null>(null);
+  const recentsFilterGoo = useGooPill<HTMLDivElement>({ hostRef: recentsFilterMenuRef });
+  const recentsFilterMenuKbd = useMenu<HTMLDivElement>({
+    open: Boolean(recentsFilterMenu),
+    onClose: () => { setRecentsFilterMenu(null); },
+    menuRef: recentsFilterMenuRef,
+  });
+  const recentsSubmenuRef = useRef<HTMLDivElement | null>(null);
+  const recentsSubmenuGoo = useGooPill<HTMLDivElement>({ hostRef: recentsSubmenuRef });
+  const recentsSubmenuMenu = useMenu<HTMLDivElement>({
+    open: Boolean(recentsFilterSubmenu),
+    onClose: () => { setRecentsFilterSubmenu(null); },
+    menuRef: recentsSubmenuRef,
+  });
   // The history sidebar: its top nav, and the list under it (chats, archived, projects — one scroller,
   // so one host). Rows are marked with `data-goo-row` rather than matched by class: these lists are
   // hand-rolled Tailwind and a selector written against utility classes would break the first time
@@ -11495,8 +11531,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
      where the highlight travels. They also had no menu semantics at all: a `<ul>` of `<li><button>`
      with no roles, which is why the pill's default row selector (`button[role^="menuitem"]`) had
      nothing to find even if it had been wired. Both are fixed by the same edit. */
-  const feedbackGoo = useGooPill<HTMLDivElement>();
-  const dislikeGoo = useGooPill<HTMLDivElement>();
+  const feedbackMenuRef = useRef<HTMLDivElement | null>(null);
+  const feedbackGoo = useGooPill<HTMLDivElement>({ hostRef: feedbackMenuRef });
+  const feedbackMenuKbd = useMenu<HTMLDivElement>({
+    open: Boolean(feedbackPopupInfo),
+    onClose: () => { setFeedbackPopupInfo(null); },
+    menuRef: feedbackMenuRef,
+  });
+  const dislikeMenuRef = useRef<HTMLDivElement | null>(null);
+  const dislikeGoo = useGooPill<HTMLDivElement>({ hostRef: dislikeMenuRef });
+  const dislikeMenuKbd = useMenu<HTMLDivElement>({
+    open: Boolean(dislikePopupInfo),
+    onClose: () => { setDislikePopupInfo(null); },
+    menuRef: dislikeMenuRef,
+  });
   const historyNavGoo = useGooPill<HTMLDivElement>({ rowSelector: '[data-goo-row]' });
   const historyListGoo = useGooPill<HTMLDivElement>({ rowSelector: '[data-goo-row]' });
 
@@ -13306,8 +13354,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         </button>
                         {isChatsCatalogFilterOpen && (
                           <div
-                            {...catalogFilterGoo.hostProps}
-                            role="menu"
+                            {...(() => { const { ref: _g, className: _c, ...handlers } = catalogFilterGoo.hostProps; return handlers; })()}
+                            {...catalogFilterMenuKbd.menuProps}
                             className={`${catalogFilterGoo.hostProps.className} chat-goo chat-history-popover absolute left-0 top-full z-10 mt-1.5 w-[9.5rem] overflow-hidden rounded-xl border p-1`}
                             style={{
                               backgroundColor: 'var(--chat-elevated)',
@@ -13571,8 +13619,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </button>
                     {isProjectsSortOpen && (
                       <div
-                        {...projectsSortGoo.hostProps}
-                        role="menu"
+                        {...(() => { const { ref: _g, className: _c, ...handlers } = projectsSortGoo.hostProps; return handlers; })()}
+                        {...projectsSortMenuKbd.menuProps}
                         className={`${projectsSortGoo.hostProps.className} chat-goo chat-history-popover absolute left-0 top-full z-10 mt-1.5 min-w-full w-max overflow-hidden rounded-xl border p-1`}
                         style={{
                           backgroundColor: 'var(--chat-elevated)',
@@ -13780,8 +13828,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 </button>
                                 {openProjectMenuId === project.id && (
                                   <div
-                                    {...projectMenuGoo.hostProps}
-                                    role="menu"
+                                    {...(() => { const { ref: _g, className: _c, ...handlers } = projectMenuGoo.hostProps; return handlers; })()}
+                                    {...projectMenuKbd.menuProps}
                                     className={`${projectMenuGoo.hostProps.className} chat-goo absolute right-0 top-full z-20 mt-1.5 w-[8.5rem] overflow-hidden rounded-xl border p-1`}
                                     style={{
                                       backgroundColor: 'var(--chat-elevated)',
@@ -17170,10 +17218,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             <>
             <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
             <div
-              {...historyRowGoo.hostProps}
+              {...(() => { const { ref: _g, className: _c, ...handlers } = historyRowGoo.hostProps; return handlers; })()}
+              {...historyRowMenuKbd.menuProps}
               key={isHistoryRowMenuShown ? 'history-row-menu-in' : 'history-row-menu-out'}
               data-history-row-menu=""
-              role="menu"
               aria-hidden={!isHistoryRowMenuOpen}
               // `rounded-lg`, the radius of the conversation row this menu belongs to. A menu that
               // drops out of a row and rounds harder than it reads as a different object.
@@ -17404,8 +17452,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             return (
               <div data-recents-filter-menu="" className="contents">
                 <div
-                  {...recentsFilterGoo.hostProps}
-                  role="menu"
+                  {...(() => { const { ref: _g, className: _c, ...handlers } = recentsFilterGoo.hostProps; return handlers; })()}
+                  {...recentsFilterMenuKbd.menuProps}
                   className={`${recentsFilterGoo.hostProps.className} chat-goo chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[168px] rounded-xl border p-1`}
                   style={{
                     top: recentsFilterMenu.top,
@@ -17476,8 +17524,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                 {recentsFilterSubmenu && submenuOptions.length > 0 && (
                   <div
-                    {...recentsSubmenuGoo.hostProps}
-                    role="menu"
+                    {...(() => { const { ref: _g, className: _c, ...handlers } = recentsSubmenuGoo.hostProps; return handlers; })()}
+                    {...recentsSubmenuKbd.menuProps}
                     className={`${recentsSubmenuGoo.hostProps.className} chat-goo chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1001] w-[104px] rounded-xl border p-1`}
                     style={{
                       top: recentsFilterSubmenuTop,
