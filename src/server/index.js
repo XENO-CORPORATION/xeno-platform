@@ -101,6 +101,7 @@ import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { seedForum } from './database/seeds/forum-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
+import { startNotificationEmailSweep } from './services/forumNotifyEmail.js';
 
 // ── Internal-service JSON POST helper (replaces the axios dependency) ──────────
 // Uses the module's existing `fetch` + an AbortController timeout. Returns
@@ -3793,6 +3794,12 @@ runStartupMigrations()
 initBackgroundJobs(pool).catch(err => {
   console.error('[BackgroundJobs] Init warning:', err.message);
 });
+
+// Forum notification email sweep (WP1). No-ops unless FORUM_NOTIFICATION_EMAILS
+// is exactly "true" — mailing real users is a switch somebody throws, never a
+// side effect of a deploy. This call is what makes the bridge REACHABLE; the
+// service being correct is not the same as it running.
+startNotificationEmailSweep(pool);
 
 // Start main server
 server.listen(PORT, () => {
