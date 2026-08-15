@@ -268,3 +268,87 @@ test('the Record stays readable signed-out', () => {
   assert.doesNotMatch(decl, /[^l]authMiddleware,/,
     'authMiddleware here would 401 the public archive for signed-out readers.');
 });
+
+// ── 7. mentions — real behaviour, not source reading ───────────────────────
+//
+// parseMentions is pure, so unlike the rest of this file these are actual
+// behavioural assertions. Each one is a bug someone ships.
+
+const { parseMentions, MAX_MENTIONS } = await import('../src/server/services/forumWrite.js');
+
+test('a plain mention is found', () => {
+  assert.deepEqual(parseMentions('thanks @alice, that worked'), ['alice']);
+});
+
+test('EMAIL ADDRESSES are not mentions', () => {
+  // "mail foo@example.com" contains @example. Getting this wrong pages a
+  // stranger every time somebody pastes a support address.
+  assert.deepEqual(parseMentions('mail foo@example.com for support'), []);
+  assert.deepEqual(parseMentions('me@my.co and @alice'), ['alice']);
+});
+
+test('mentions inside CODE do not notify anyone', () => {
+  // A shell snippet full of user@host, or a docs example using @tag, is
+  // legitimate text everywhere else — no regex fixes this, the code has to be
+  // stripped first.
+  assert.deepEqual(parseMentions('```\nssh @alice\n```'), []);
+  assert.deepEqual(parseMentions('~~~\n@alice\n~~~'), []);
+  assert.deepEqual(parseMentions('use `@alice` as the flag'), []);
+  assert.deepEqual(parseMentions('```\n@bob\n```\nbut @alice is real'), ['alice']);
+});
+
+test('the same person twice is one notification, case-insensitively', () => {
+  assert.deepEqual(parseMentions('@alice @Alice @ALICE'), ['alice']);
+});
+
+test('one post cannot notify everybody', () => {
+  const many = Array.from({ length: 40 }, (_, i) => `@user${i}`).join(' ');
+  assert.equal(parseMentions(many).length, MAX_MENTIONS);
+});
+
+test('trailing punctuation is not part of the handle', () => {
+  assert.deepEqual(parseMentions('cc @alice.'), ['alice']);
+  assert.deepEqual(parseMentions('(@alice)'), ['alice']);
+  assert.deepEqual(parseMentions('@alice, @bob!'), ['alice', 'bob']);
+});
+
+test('handles containing dots, dashes and underscores survive', () => {
+  assert.deepEqual(parseMentions('@a.b @c-d @e_f'), ['a.b', 'c-d', 'e_f']);
+});
+
+test('an empty or absent body is not an error', () => {
+  assert.deepEqual(parseMentions(''), []);
+  assert.deepEqual(parseMentions(null), []);
+  assert.deepEqual(parseMentions(undefined), []);
+});
+
+test('mentions are WIRED into both write paths', () => {
+  for (const fnName of ['createThread', 'createPost']) {
+    const fn = WRITE.slice(WRITE.indexOf(`export async function ${fnName}`));
+    const body = fn.slice(0, fn.indexOf('\nexport '));
+    assert.match(body, /notifyMentions\(/,
+      `${fnName} does not call notifyMentions — @handle would parse correctly and `
+      + 'notify nobody.');
+  }
+});
+
+test('being mentioned in a thread you follow is ONE notification, not two', () => {
+  // The mention is the more specific of the pair, so it wins and the reply
+  // fan-out excludes whoever it already reached.
+  const fn = WRITE.slice(WRITE.indexOf('export async function createPost'));
+  const body = fn.slice(0, fn.indexOf('\nexport '));
+  assert.match(body, /filter\(\(uid\) => !mentioned\.includes\(uid\)\)/,
+    'the reply fan-out must exclude people the mention already notified.');
+  assert.ok(body.indexOf('notifyMentions(') < body.indexOf('threadReplyRecipients('),
+    'mentions must be resolved BEFORE the fan-out, or there is nothing to exclude.');
+});
+
+test('mention has a template — it is no longer skipped by the mailer', () => {
+  const bridge = codeOnly(readFileSync(src('services', 'forumNotifyEmail.js'), 'utf8'));
+  assert.match(bridge, /mention:\s*'forum_mention'/,
+    'the bridge must map mention to its template.');
+  const email = readFileSync(src('services', 'emailService.js'), 'utf8');
+  assert.match(email, /forum_mention:\s*\(/,
+    'forum_mention template missing — the bridge would map to a template that '
+    + 'does not exist and sendEmail throws "Unknown email template".');
+});

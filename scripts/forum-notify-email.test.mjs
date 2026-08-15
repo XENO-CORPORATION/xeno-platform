@@ -122,20 +122,23 @@ test('a send failure does NOT un-claim the row', async () => {
 test('sends the right template per kind, and never guesses at an unknown kind', async () => {
   const sentTemplates = [];
   const db = fakeDb([
-    { rows: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }] },
+    { rows: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }, { id: 'e' }] },
     { rows: [
       row({ id: 'a', kind: 'answer', email: 'a@x.com' }),
       row({ id: 'b', kind: 'accepted', email: 'b@x.com' }),
       row({ id: 'c', kind: 'reply', email: 'c@x.com' }),
       row({ id: 'd', kind: 'mention', email: 'd@x.com' }),
+      row({ id: 'e', kind: 'bogus-kind', email: 'e@x.com' }),
     ] },
   ]);
   const r = await sendPendingNotificationEmails(db, {
     env: ON, send: async (_db, template) => { sentTemplates.push(template); },
   });
-  assert.deepEqual(sentTemplates, ['forum_answer', 'forum_accepted', 'forum_reply']);
-  assert.equal(r.sent, 3);
-  // 'mention' has no template yet. Skipped, not sent as something else.
+  assert.deepEqual(sentTemplates,
+    ['forum_answer', 'forum_accepted', 'forum_reply', 'forum_mention']);
+  assert.equal(r.sent, 4);
+  // An UNKNOWN kind is skipped, never sent as the nearest template. 'mention'
+  // was in this position until it got one of its own.
   assert.equal(r.skipped, 1);
 });
 

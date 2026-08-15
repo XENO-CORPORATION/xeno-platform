@@ -49,6 +49,7 @@ const TEMPLATE_FOR_KIND = {
   answer: 'forum_answer',
   reply: 'forum_reply',
   accepted: 'forum_accepted',
+  mention: 'forum_mention',
 };
 
 const EXCERPT_CHARS = 600;
