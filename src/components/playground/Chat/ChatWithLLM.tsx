@@ -32,21 +32,16 @@ import { chatService } from '@/services/chatService';
 import { chatComplete } from '@/services/aiService';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
 import { userDataService } from '@/services/userDataService';
-import { xenoSearchService, type XenoSearchResponse, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
+import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 // import SourcePreview from './SourcePreview'; // This line should be removed
-import XenoSourcePreview from './XenoSourcePreview';
-import { Disclosure } from '@headlessui/react'
-import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DropdownMenu , DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Checkbox } from '@/components/ui/checkbox'; // Using Checkbox for simplicity
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 // Attach the web-session bearer token (same 'xenoos_auth_token' key the rest of the
@@ -10096,106 +10091,6 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     }
   };
 
-  // Component to render Xeno Search results - COMMENTED OUT
-  /*
-  const XenoSearchResultsDisplay: React.FC<{results: XenoSearchResultsData}> = ({ results }) => {
-    if (!results || (results.error && !results.sources && !results.summary)) return null;
-
-    const hasValidSources = results.sources && results.sources.length > 0;
-    const sourceCount = hasValidSources ? results.sources!.length : 0;
-    const displayedSources = isXenoResultsExpanded ? 
-      (results.sources || []) : 
-      (results.sources?.slice(0, 2) || []);
-
-    return (
-      <div className="xeno-search-results w-full p-4 my-3 rounded-lg transition-all duration-300 ease-in-out">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center text-[var(--chat-accent)] font-medium">
-            <div className="flex-shrink-0 w-6 h-6 bg-[var(--chat-accent-soft)] mr-2 rounded-full flex items-center justify-center">
-              <Globe size={14} className="text-[var(--chat-accent)]" />
-            </div>
-            <span>Xeno Web Search</span>
-            {sourceCount > 0 && (
-              <span className="ml-2 px-1.5 py-0.5 bg-[var(--chat-accent-soft)] text-[var(--chat-accent)] text-xs rounded-full">
-                {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}
-              </span>
-            )}
-          </div>
-          <button 
-            onClick={() => setIsXenoResultsExpanded(!isXenoResultsExpanded)}
-            className="p-1 text-gray-400 hover:text-white transition-colors"
-            aria-label={isXenoResultsExpanded ? "Collapse search results" : "Expand search results"}
-          >
-            {isXenoResultsExpanded ? (
-              <ChevronUp size={16} />
-            ) : (
-              <ChevronDown size={16} />
-            )}
-          </button>
-        </div>
-        
-        {results.summary && isXenoResultsExpanded && (
-          <div className="mb-3 px-3 py-2 bg-[#111113] rounded-md border border-[#1e1e21]">
-            <p className="text-xs text-gray-300 italic">{results.summary}</p>
-          </div>
-        )}
-        
-        {hasValidSources && (
-          <div>
-            {!isXenoResultsExpanded && (
-              <div className="text-xs font-medium mb-2 text-gray-400 flex items-center justify-between">
-                <span>Web Sources:</span>
-                {sourceCount > 2 && (
-                  <span className="text-gray-500 text-xs">
-                    +{sourceCount - 2} more
-                  </span>
-                )}
-              </div>
-            )}
-            <div className="space-y-2">
-              {displayedSources.map((source, index) => (
-                <div key={index}>
-                  <XenoSourcePreview 
-                    source={source} 
-                    index={index} 
-                    isExpanded={isXenoResultsExpanded} 
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {results.error && !results.sources && !results.summary && (
-          <div className="px-4 py-3 bg-[var(--chat-danger)]/12 rounded-md border border-[var(--chat-danger)]/30">
-            <p className="text-xs text-[var(--chat-danger)] flex items-center">
-              <X size={12} className="mr-1 flex-shrink-0" />
-              Error: {results.error}
-            </p>
-          </div>
-        )}
-
-        {hasValidSources && sourceCount > 2 && !isXenoResultsExpanded && (
-          <button
-            onClick={() => setIsXenoResultsExpanded(true)}
-            className="w-full mt-3 text-center py-1.5 text-xs text-gray-400 hover:text-white hover:bg-[#1e1e21] rounded-md transition-colors border border-gray-700/30"
-          >
-            Show all {sourceCount} sources
-          </button>
-        )}
-        
-        {isXenoResultsExpanded && (
-          <button
-            onClick={() => setIsXenoResultsExpanded(false)}
-            className="w-full mt-3 text-center py-1.5 text-xs text-gray-400 hover:text-white hover:bg-[#1e1e21] rounded-md transition-colors border border-gray-700/30"
-          >
-            Show less
-          </button>
-        )}
-      </div>
-    );
-  };
-  */
   
   const IndicatorPreviewPopup = () => {
     if (!hoveredIndicatorInfo) return null;
@@ -17230,7 +17125,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               data-history-row-menu=""
               role="menu"
               aria-hidden={!isHistoryRowMenuOpen}
-              className={`${historyRowGoo.hostProps.className} chat-goo chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[188px] rounded-xl border p-1`}
+              // `rounded-lg`, the radius of the conversation row this menu belongs to. A menu that
+              // drops out of a row and rounds harder than it reads as a different object.
+              className={`${historyRowGoo.hostProps.className} chat-goo chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[188px] rounded-lg border p-1`}
               style={{
                 top: historyRowMenu.top,
                 left: historyRowMenu.left,
@@ -17292,7 +17189,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 </button>
                 {historyProjectSubmenuOpen && (
                   <div
-                    className="chat-history-popover absolute left-full top-0 z-[1001] ml-1 w-[180px] rounded-xl border border-[#1e1e21] bg-[#141416] p-1"
+                    // Follows its parent menu's radius — a submenu is the same object, continued.
+                    className="chat-history-popover absolute left-full top-0 z-[1001] ml-1 w-[180px] rounded-lg border border-[#1e1e21] bg-[#141416] p-1"
                     style={{
                       backgroundColor: 'var(--chat-elevated)',
                       borderColor: 'var(--chat-border)',
@@ -17941,9 +17839,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                              onClick={(e) => {
                                                e.stopPropagation();
                               const rect = e.currentTarget.getBoundingClientRect();
+                              // Right edge of the ROW, not of the ⋯ button. The button is inset by
+                              // `right-1`, so aligning to it left the menu 4px shy of the row it
+                              // belongs to — close enough to read as a mistake rather than a choice.
+                              const rowRight =
+                                e.currentTarget.closest('[data-goo-row]')?.getBoundingClientRect().right
+                                ?? rect.right;
                               const menuWidth = 188;
                               const left = Math.min(
-                                Math.max(8, rect.right - menuWidth),
+                                Math.max(8, rowRight - menuWidth),
                                 window.innerWidth - menuWidth - 8,
                               );
                               toggleHistoryRowMenu(convo.id, rect.bottom + 4, left);

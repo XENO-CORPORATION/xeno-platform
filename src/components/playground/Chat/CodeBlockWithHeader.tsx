@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, memo } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { Copy, Check, Rows, Minimize2, Maximize2, Play, Loader2, X, Pencil } from '@/lib/icons';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -283,35 +283,6 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
           )}
         </div>
 
-        {/* MOVED & RESTYLED Execution Status & Output -- becomes part of the main container (REVERTING THIS) */}
-        {/* 
-      {(isRunning || runOutput || runError) && (
-          <div className="relative px-4 py-2 text-xs border-t border-[#3a3a3d]"> 
-              {!isRunning && (runOutput || runError) && (
-                <button 
-                  onClick={handleCloseOutput}
-                  className="absolute top-1 right-1 p-1 text-gray-500 hover:text-gray-300 hover:bg-zinc-700/50 rounded-full transition-colors"
-                  aria-label="Close output"
-                >
-                  <X size={14} />
-                </button>
-              )}
-              {isRunning && (
-                  <div className="flex items-center gap-2 text-gray-400 text-xs">
-                      <Loader2 size={14} className="animate-spin"/> 
-                      <span>Running...</span>
-      </div>
-              )}
-              {runOutput && !isRunning && (
-                  <pre className="whitespace-pre-wrap font-mono text-gray-300 text-xs leading-relaxed">{runOutput}</pre> 
-              )}
-              {runError && !isRunning && (
-                  <pre className="whitespace-pre-wrap font-mono text-[var(--chat-danger)] text-xs leading-relaxed">{runError}</pre>
-              )}
-            </div>
-        )}
-        */}
-        {/* End Moved Output Section (REVERTED) */}
         
       </div> {/* End Code Block Container */} 
 
