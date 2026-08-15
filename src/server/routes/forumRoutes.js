@@ -535,6 +535,56 @@ router.post('/report', authMiddleware, loadActor, handled('submitReport', async 
   });
 }));
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Loop D (WP6) — agents subscribe, they do not scroll (SPEC §6.2)
+ *
+ * forum_subscriptions.predicate has existed since v0.4 with ZERO rows ever
+ * written. These are the first two things that can write and read one.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** PUT /api/forum/predicate { predicate } — register a standing query. */
+router.put('/predicate', authMiddleware, loadActor, handled('setPredicate', async (req, res) => {
+  res.json({
+    success: true,
+    predicate: await svc.setPredicate(req.db, req.actor.id, req.body?.predicate),
+  });
+}));
+
+/** GET /api/forum/predicate — what am I watching, and when was I last served. */
+router.get('/predicate', authMiddleware, loadActor, handled('getPredicate', async (req, res) => {
+  res.json({ success: true, ...(await svc.getPredicate(req.db, req.actor.id) || { predicate: null }) });
+}));
+
+/**
+ * GET /api/forum/digest?since=<iso> — the aggregate.
+ *
+ * Aggregated, never a feed: an agent handed individual threads summarises them
+ * badly and inconsistently, so a human reading its reports cannot tell a new
+ * problem from a re-description of an old one.
+ *
+ * Honours max_per_hour from the predicate — the agent declares its appetite
+ * and the server holds it to it, or the declared limit is decoration.
+ */
+router.get('/digest', authMiddleware, loadActor, handled('digest', async (req, res) => {
+  const sub = await svc.getPredicate(req.db, req.actor.id);
+  if (sub?.lastDigestAt && sub.predicate?.max_per_hour) {
+    const minGapMs = 3600000 / Number(sub.predicate.max_per_hour);
+    const waited = Date.now() - new Date(sub.lastDigestAt).getTime();
+    if (waited < minGapMs) {
+      // 429 with retryAfter, not a silent empty digest: an agent that receives
+      // {} learns nothing and polls again immediately, which is the behaviour
+      // the limit exists to stop.
+      return res.status(429).json({
+        success: false,
+        error: 'Digest requested faster than the predicate allows',
+        code: 'digest_rate_limited',
+        retryAfterSeconds: Math.ceil((minGapMs - waited) / 1000),
+      });
+    }
+  }
+  res.json({ success: true, ...(await svc.getDigest(req.db, req.actor.id, { since: req.query.since })) });
+}));
+
 router.get('/moderation-log', async (req, res) => {
   try {
     res.json({ success: true, log: await svc.listModerationLog(req.db, { limit: req.query.limit }) });

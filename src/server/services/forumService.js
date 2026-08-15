@@ -644,3 +644,185 @@ export async function listModerationLog(db, { limit = 50 } = {}) {
   }
   return out;
 }
+
+// --------------------------------------------------------------------------
+// Loop D — the digest (WP6)
+// --------------------------------------------------------------------------
+
+/**
+ * What an agent is allowed to declare.
+ *
+ * Narrow on purpose. A predicate that can express anything is a query language,
+ * and a query language on a polling endpoint is a way to make the database do
+ * arbitrary work on request. These four fields answer the question SPEC §6.2
+ * poses — "what do you care about, and how much do you want" — and nothing else.
+ */
+export function normalizePredicate(input) {
+  const p = input && typeof input === 'object' ? input : {};
+  const out = {};
+
+  const space = String(p.space || '').trim().toLowerCase();
+  if (space && /^[a-z][a-z0-9-]{0,31}$/.test(space)) out.space = space;
+
+  const tags = Array.isArray(p.tags) ? p.tags : [];
+  const clean = tags
+    .map((t) => String(t || '').trim().toLowerCase())
+    .filter((t) => /^(product|version|topic|kind):[a-z0-9][a-z0-9._-]{0,79}$/.test(t))
+    .slice(0, 8);
+  if (clean.length) out.tags = clean;
+
+  if (['unanswered', 'any'].includes(p.status)) out.status = p.status;
+
+  // CLAMPED, not merely validated. An agent asking for 10000 an hour is either
+  // confused or hostile, and either way the server should answer the sane
+  // version of the question rather than refuse and leave it unsubscribed.
+  const n = Number(p.max_per_hour);
+  out.max_per_hour = Number.isFinite(n) ? Math.min(60, Math.max(1, Math.floor(n))) : 4;
+
+  return out;
+}
+
+/**
+ * Register (or replace) a standing query.
+ *
+ * SPEC §6.2 — "agents subscribe; they do not scroll." ONE row per subscriber:
+ * three overlapping predicates would deliver the same thread three times with
+ * no way for the agent to notice it had.
+ */
+export async function setPredicate(db, userId, predicate) {
+  const p = normalizePredicate(predicate);
+  await db.query(
+    `INSERT INTO forum_subscriptions (user_id, predicate) VALUES ($1, $2::jsonb)
+     ON CONFLICT (user_id) WHERE predicate IS NOT NULL
+     DO UPDATE SET predicate = EXCLUDED.predicate`,
+    [userId, JSON.stringify(p)],
+  );
+  return p;
+}
+
+export async function getPredicate(db, userId) {
+  const { rows } = await db.query(
+    'SELECT predicate, last_digest_at FROM forum_subscriptions WHERE user_id = $1 AND predicate IS NOT NULL',
+    [userId],
+  );
+  return rows[0] ? { predicate: rows[0].predicate, lastDigestAt: rows[0].last_digest_at } : null;
+}
+
+/**
+ * The digest.
+ *
+ * 🔴 AGGREGATED, NOT A FEED. An agent handed a stream of individual threads
+ * summarises them badly and repeatedly — and worse, summarises the SAME thread
+ * differently on two consecutive runs, so a human reading its reports cannot
+ * tell a new problem from a re-description of an old one. The digest is
+ * pre-grouped and pre-ranked so the agent's job is to ACT on a finding, never
+ * to decide what the findings are.
+ *
+ * Three sections, each answering a question a product session actually asks:
+ *
+ *   rising   what are people hitting, by DISTINCT REPORTERS, and is it getting
+ *            worse? The delta is the point — "7 people, up from 2" is a
+ *            decision; "7 people" is a number.
+ *   waiting  what has gone unanswered too long — the queue a dev agent can
+ *            actually clear.
+ *   shipped  what was marked fixed since last time, from Loop C's write-back.
+ *            Without it an agent re-reports things the team already fixed,
+ *            which is exactly how a digest destroys its own credibility.
+ */
+export async function getDigest(db, userId, { since } = {}) {
+  const sub = await getPredicate(db, userId);
+  if (!sub) return { subscribed: false, sections: null };
+
+  const p = sub.predicate || {};
+  const tags = Array.isArray(p.tags) ? p.tags : [];
+  const space = p.space || null;
+
+  const parsed = since ? new Date(since) : null;
+  const valid = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  // Clamped to 30 days. A digest is a "what changed" report; a window wide
+  // enough to include everything is just the corpus again, and an agent asking
+  // for five years of history on a poll endpoint is asking the database to do
+  // arbitrary work.
+  const windowStart = valid && (Date.now() - valid.getTime()) < 30 * 864e5
+    ? valid
+    : new Date(Date.now() - 7 * 864e5);
+
+  const params = [windowStart.toISOString(), tags.length ? tags : null, space];
+
+  const tagFilter = `(
+      $2::text[] IS NULL OR EXISTS (
+        SELECT 1 FROM forum_thread_tags tt JOIN forum_tags g ON g.id = tt.tag_id
+         WHERE tt.thread_id = t.id AND (g.namespace || ':' || g.value) = ANY($2::text[])
+      ))`;
+  const spaceFilter = '($3::text IS NULL OR s.slug = $3::text)';
+  const alive = "t.status NOT IN ('archived', 'deleted')";
+
+  const [rising, waiting, shipped] = await Promise.all([
+    // DISTINCT REPORTERS, never reply count — breadth of impact, not volume of
+    // argument (§5.2). The prior-window count is what makes it a trend.
+    db.query(
+      `SELECT t.short_id, t.title, t.slug,
+              COUNT(DISTINCT p.author_id) FILTER (WHERE p.created_at >= $1) AS reporters_now,
+              COUNT(DISTINCT p.author_id) FILTER (WHERE p.created_at <  $1) AS reporters_before
+         FROM forum_threads t
+         JOIN forum_spaces s ON s.id = t.space_id
+         LEFT JOIN forum_posts p ON p.thread_id = t.id AND p.status = 'visible'
+        WHERE ${alive} AND s.kind = 'feedback' AND ${tagFilter} AND ${spaceFilter}
+        GROUP BY t.id, t.short_id, t.title, t.slug
+       HAVING COUNT(DISTINCT p.author_id) FILTER (WHERE p.created_at >= $1) > 0
+        ORDER BY 4 DESC, 5 DESC LIMIT 10`,
+      params,
+    ),
+    db.query(
+      `SELECT t.short_id, t.title, t.slug, t.created_at,
+              EXTRACT(EPOCH FROM (NOW() - t.last_activity_at))/3600 AS hours_quiet
+         FROM forum_threads t
+         JOIN forum_spaces s ON s.id = t.space_id
+        WHERE ${alive} AND t.status = 'open' AND t.answer_post_id IS NULL
+          AND t.fixed_in_version IS NULL
+          AND ${tagFilter} AND ${spaceFilter}
+        ORDER BY t.last_activity_at ASC LIMIT 10`,
+      params,
+    ),
+    db.query(
+      `SELECT t.short_id, t.title, t.slug, t.fixed_in_version, t.fixed_at
+         FROM forum_threads t
+         JOIN forum_spaces s ON s.id = t.space_id
+        WHERE ${alive} AND t.fixed_at >= $1 AND ${tagFilter} AND ${spaceFilter}
+        ORDER BY t.fixed_at DESC LIMIT 10`,
+      params,
+    ),
+  ]);
+
+  const url = (r) => `/forum/t/${r.short_id}/${r.slug}`;
+
+  await db.query(
+    'UPDATE forum_subscriptions SET last_digest_at = NOW() WHERE user_id = $1 AND predicate IS NOT NULL',
+    [userId],
+  );
+
+  return {
+    subscribed: true,
+    predicate: p,
+    since: windowStart.toISOString(),
+    sections: {
+      rising: rising.rows.map((r) => ({
+        shortId: r.short_id, title: r.title, url: url(r),
+        reporters: Number(r.reporters_now),
+        wasReporters: Number(r.reporters_before),
+        // STATED, not left for the reader to subtract. An agent that has to
+        // compute the delta will sometimes compute it wrong, and a wrong trend
+        // is worse than no trend.
+        rising: Number(r.reporters_now) > Number(r.reporters_before),
+      })),
+      waiting: waiting.rows.map((r) => ({
+        shortId: r.short_id, title: r.title, url: url(r),
+        hoursQuiet: Math.round(Number(r.hours_quiet)),
+      })),
+      shipped: shipped.rows.map((r) => ({
+        shortId: r.short_id, title: r.title, url: url(r),
+        fixedIn: r.fixed_in_version, fixedAt: r.fixed_at,
+      })),
+    },
+  };
+}
