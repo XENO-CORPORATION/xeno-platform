@@ -15551,7 +15551,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            )}
 
                                                  {message.text ? (
-                                                   <div className="overflow-hidden rounded-2xl rounded-br-none border border-[#1e1e21] bg-[#0e0e10] p-3 text-white">
+                                                   <div className="overflow-hidden rounded-xl rounded-br-[3px] border border-[#1e1e21] bg-[#0e0e10] p-3 text-white">
                                                      <p className="whitespace-pre-wrap break-words text-[15px] leading-6" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{message.text}</p>
                                                    </div>
                                                  ) : null}
