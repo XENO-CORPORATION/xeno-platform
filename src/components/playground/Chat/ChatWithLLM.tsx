@@ -5,6 +5,7 @@ import './chatMock'; // DEV-only offline mock backend (self-installs a fetch int
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
 import ChatShareModal from './ChatShareModal';
+import { isOutlineDebugOn, OUTLINE_DEBUG_CSS } from './outlineDebug';
 import ChatArtifactsPage from './ChatArtifactsPage';
 import ChatScheduledPage from './ChatScheduledPage';
 import ChatGlobalSettingsPage from './ChatGlobalSettingsPage';
@@ -12064,6 +12065,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   return (
     <>
       {/* Add source preview styles */}
+      {isOutlineDebugOn() && <style>{OUTLINE_DEBUG_CSS}</style>}
       <style>
         {`
           .hide-scrollbar::-webkit-scrollbar {
