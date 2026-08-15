@@ -918,3 +918,214 @@ export async function notifyMentions(db, { body, threadId, postId, actor, thread
   }
   return notified;
 }
+
+// --------------------------------------------------------------------------
+// Edit and delete (WP2) — the write side of columns that already existed
+// --------------------------------------------------------------------------
+//
+// `forum_posts.status IN ('visible','hidden','deleted')` and `edited_at` have
+// been in the schema since the first migration. `edited_at` is even serialized
+// by forumService and typed in ForumThread.tsx — the read side is complete top
+// to bottom, and nothing has ever written either column. Sixth instance of that
+// shape in this codebase.
+
+/**
+ * Edit your own post.
+ *
+ * 🔴 EVERY EDIT IS MARKED, WITH NO GRACE PERIOD. Discourse and friends hide
+ * edits made in the first few minutes, which is friendlier and wrong here: the
+ * Record is permanent and public (§5.1), and its value to the next reader — and
+ * to an agent citing it — rests on it not having been quietly rewritten.
+ *
+ * This matters most for an ACCEPTED answer. Without a visible marker, anyone
+ * could earn an acceptance and then replace the text with something else, and
+ * the archive would show a vouched-for answer nobody actually vouched for.
+ * `edited_at` already flowed to the client; it just never had a value.
+ *
+ * Moderators may edit too (§7.2). The row records WHO, so a moderator edit is
+ * never mistaken for the author changing their mind.
+ */
+export async function editPost(db, user, postId, { body }) {
+  assertNotService(user);
+  const cleanBody = requireText(body, 'body', MAX_BODY);
+
+  const { rows } = await db.query(
+    `SELECT p.id, p.author_id, p.status, p.thread_id, t.status AS thread_status
+       FROM forum_posts p JOIN forum_threads t ON t.id = p.thread_id
+      WHERE p.id = $1`,
+    [postId],
+  );
+  const post = rows[0];
+  if (!post || post.status === 'deleted') {
+    throw new ForumError('Post not found', 'post_not_found', 404);
+  }
+  if (post.thread_status === 'locked') {
+    throw new ForumError('This thread is locked', 'thread_locked', 403);
+  }
+
+  const isAuthor = String(post.author_id) === String(user.id);
+  const isStaff = ['admin', 'moderator'].includes(user.role);
+  if (!isAuthor && !isStaff) {
+    throw new ForumError('You can only edit your own posts', 'not_post_author', 403);
+  }
+
+  await db.query(
+    `UPDATE forum_posts
+        SET body = $2, edited_at = NOW(), edited_by = $3
+      WHERE id = $1`,
+    [postId, cleanBody, user.id],
+  );
+  return { ok: true, editedAt: new Date().toISOString() };
+}
+
+/**
+ * Delete your own post.
+ *
+ * SOFT delete — the row survives, the CONTENT does not.
+ *
+ * Both halves are deliberate. Removing the row outright would renumber
+ * positions and orphan the replies that quote it, so a thread reads as if the
+ * conversation never made sense. Keeping the body would mean "delete" leaves
+ * your words in the database, which is not what the word means to the person
+ * clicking it — and it is the difference between a soft delete and a lie.
+ *
+ * So: the row becomes a tombstone, the text is gone, and reads already filter
+ * `status = 'visible'` so it disappears everywhere without touching a query.
+ *
+ * ⚠️ Deleting the ACCEPTED answer REOPENS the thread. Leaving `answer_post_id`
+ * pointing at a tombstone would show a resolved question whose resolution is
+ * blank — worse than an open one, because it stops anyone answering it.
+ */
+export async function deletePost(db, user, postId) {
+  assertNotService(user);
+
+  const { rows } = await db.query(
+    `SELECT p.id, p.author_id, p.position, p.status, p.thread_id, p.is_answer
+       FROM forum_posts p WHERE p.id = $1`,
+    [postId],
+  );
+  const post = rows[0];
+  if (!post || post.status === 'deleted') {
+    throw new ForumError('Post not found', 'post_not_found', 404);
+  }
+
+  const isAuthor = String(post.author_id) === String(user.id);
+  const isStaff = ['admin', 'moderator'].includes(user.role);
+  if (!isAuthor && !isStaff) {
+    throw new ForumError('You can only delete your own posts', 'not_post_author', 403);
+  }
+
+  // Position 1 IS the question. Deleting it would leave a thread of answers to
+  // nothing. Refused explicitly rather than half-done — see the note in the
+  // release plan: thread deletion is its own change, and this is the honest
+  // boundary until it lands.
+  if (post.position === 1) {
+    throw new ForumError(
+      'This is the original post. Deleting it would remove the whole thread — that is not available yet.',
+      'cannot_delete_first_post',
+      400,
+    );
+  }
+
+  await db.query(
+    `UPDATE forum_posts
+        SET status = 'deleted', body = '', deleted_at = NOW(), deleted_by = $2,
+            is_answer = FALSE, accepted_at = NULL, accepted_by = NULL
+      WHERE id = $1`,
+    [postId, user.id],
+  );
+
+  if (post.is_answer) {
+    await db.query(
+      `UPDATE forum_threads
+          SET answer_post_id = NULL, status = 'open', resolved_at = NULL, resolved_by = NULL
+        WHERE id = $1`,
+      [post.thread_id],
+    );
+    await recomputeReputationForThread(db, post.thread_id);
+  }
+
+  await db.query(
+    `UPDATE forum_threads
+        SET post_count = (SELECT COUNT(*) FROM forum_posts WHERE thread_id = $1 AND status = 'visible'),
+            last_activity_at = NOW()
+      WHERE id = $1`,
+    [post.thread_id],
+  );
+
+  return { ok: true, deleted: true, reopenedThread: Boolean(post.is_answer) };
+}
+
+// --------------------------------------------------------------------------
+// GDPR erasure — the forum's half (WP2)
+// --------------------------------------------------------------------------
+
+/**
+ * Remove a subject's authored forum CONTENT.
+ *
+ * `utils/gdprErasure.js` already tombstones the identity: it scrubs the `users`
+ * row to an id-derived sentinel and kills every session and token. What it
+ * cannot know about is the free text — a post body is authored by the subject
+ * and routinely contains their own personal data ("I'm at Acme, mail me at
+ * …"). Anonymising the byline while leaving the sentence "my number is …"
+ * published is not erasure.
+ *
+ * ⚠️ It is also why erasure could not simply DELETE the user row and lean on
+ * the `SET NULL` foreign keys: SET NULL removes the LINK, never the TEXT. The
+ * FK design is right — it protects other people's threads from collapsing when
+ * one participant leaves — but it is not an erasure mechanism.
+ *
+ * ── WHAT IS DELIBERATELY KEPT ───────────────────────────────────────────────
+ *
+ * Other people's posts, including the answers to a question this subject asked.
+ * Those are third-party content, and erasing them on one person's request would
+ * destroy data belonging to people who did not ask for anything. So a thread
+ * whose question is erased becomes a tombstone that still carries its answers:
+ * the asker is gone, the knowledge stays.
+ *
+ * Takes a CLIENT, not a pool — it must run inside the erasure transaction, so a
+ * failure here rolls back the identity tombstone too rather than reporting a
+ * half-erased subject as erased.
+ */
+export async function eraseForumContent(client, userId) {
+  // Bodies first. status='deleted' + body='' is exactly what deletePost does,
+  // and because search_vector is GENERATED ALWAYS from body, this drops every
+  // one of them out of the full-text index with no separate reindex.
+  const posts = await client.query(
+    `UPDATE forum_posts
+        SET status = 'deleted', body = '', deleted_at = NOW(),
+            is_answer = FALSE, accepted_at = NULL, accepted_by = NULL
+      WHERE author_id = $1 AND status <> 'deleted'`,
+    [userId],
+  );
+
+  // Titles are free text too, and a title is the most-indexed sentence in the
+  // product — it is what search matches and what every card shows.
+  const threads = await client.query(
+    `UPDATE forum_threads
+        SET title = '[removed]'
+      WHERE author_id = $1 AND title <> '[removed]'`,
+    [userId],
+  );
+
+  // A thread whose accepted answer was written by the subject must not keep
+  // pointing at a blanked post; it reopens, exactly as deletePost does.
+  await client.query(
+    `UPDATE forum_threads t
+        SET answer_post_id = NULL, status = 'open', resolved_at = NULL, resolved_by = NULL
+      WHERE t.answer_post_id IN (SELECT id FROM forum_posts WHERE author_id = $1)`,
+    [userId],
+  );
+
+  // Counts are recomputed from what is still visible, or every thread the
+  // subject replied to keeps claiming replies that are no longer there.
+  await client.query(
+    `UPDATE forum_threads t
+        SET post_count = (SELECT COUNT(*) FROM forum_posts p
+                           WHERE p.thread_id = t.id AND p.status = 'visible')
+      WHERE t.id IN (SELECT DISTINCT thread_id FROM forum_posts WHERE author_id = $1)`,
+    [userId],
+  );
+
+  return { postsErased: posts.rowCount, threadsErased: threads.rowCount };
+}

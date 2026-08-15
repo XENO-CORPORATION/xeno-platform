@@ -9,6 +9,8 @@
  * facts. Equivalent guarantee, no per-field key management, because the immutable
  * data has no PII to shred in the first place.)
  */
+import { eraseForumContent } from '../services/forumWrite.js';
+
 export async function eraseSubject(pool, userId) {
   const client = await pool.connect();
   try {
@@ -38,8 +40,20 @@ export async function eraseSubject(pool, userId) {
     await client.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
     // 4. credit_transactions + credit_grants are KEPT — no PII, just opaque ids +
     //    amounts; the §5 hash chain remains valid after erasure.
+    // 5. Authored forum CONTENT. Step 1 tombstones the byline, which is not the
+    //    same thing: a post body is free text written by the subject and
+    //    routinely contains their own personal data. Anonymising the author
+    //    while leaving "my number is …" published is not erasure.
+    //    Other people's posts are KEPT — erasing them on one person's request
+    //    would destroy third-party data. Inside this transaction on purpose: a
+    //    failure must roll back the identity tombstone rather than report a
+    //    half-erased subject as erased.
+    const forum = await eraseForumContent(client, userId);
     await client.query('COMMIT');
-    return { erased: true, userId, linksRemoved: links.rowCount, ledgerPreserved: true };
+    return {
+      erased: true, userId, linksRemoved: links.rowCount, ledgerPreserved: true,
+      ...forum,
+    };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     throw e;

@@ -398,6 +398,23 @@ router.post('/notifications/read', authMiddleware, loadActor, handled('markRead'
  * "Topics you follow" ranker returned an empty list for every user, forever.
  * ────────────────────────────────────────────────────────────────────────── */
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Edit and delete (WP2)
+ *
+ * `status='deleted'`, `edited_at` and `edited_by` have been in the schema since
+ * the first migration with nothing writing them. These are the write side.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** PATCH /api/forum/posts/:id — edit your own post. Always marked as edited. */
+router.patch('/posts/:id', authMiddleware, loadActor, handled('editPost', async (req, res) => {
+  res.json({ success: true, ...(await write.editPost(req.db, req.actor, req.params.id, { body: req.body?.body })) });
+}));
+
+/** DELETE /api/forum/posts/:id — tombstone the post and blank its body. */
+router.delete('/posts/:id', authMiddleware, loadActor, handled('deletePost', async (req, res) => {
+  res.json({ success: true, ...(await write.deletePost(req.db, req.actor, req.params.id)) });
+}));
+
 /**
  * PUT /api/forum/threads/:shortId/subscription  { subscribed: bool }
  *
