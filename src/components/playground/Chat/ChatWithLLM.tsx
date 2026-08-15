@@ -10234,7 +10234,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     };
 
     const dislikeOptions = [
-      { label: 'Wanted something else', icon: ThumbsDown, type: 'wanted-else' },
+      // Two words, like every other row: "Wanted something else" was the only label that
+      // wrapped, and a wrapped first row makes the menu look like it starts with a
+      // paragraph. It also lands in the family the rest of the list already speaks —
+      // "Incorrect answer", "Biased answer" — as the generic member of it.
+      { label: 'Different answer', icon: ThumbsDown, type: 'wanted-else' },
       { label: 'Incorrect answer', icon: MessageSquareX, type: 'incorrect' }, 
       { label: 'Biased answer', icon: Quote, type: 'biased' }, 
       { label: 'Wanted image', icon: Image, type: 'wanted-image' },
