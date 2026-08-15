@@ -1473,3 +1473,143 @@ export async function markThreadFixed(db, user, shortId, { version, note } = {})
 
   return { ok: true, version: clean, postId: postRows[0].id };
 }
+
+
+// --------------------------------------------------------------------------
+// WP12 — structured report intake (the platform half of the in-app client)
+// --------------------------------------------------------------------------
+
+/** A report must name the product it is about; everything else is optional. */
+const REPORT_PRODUCTS = /^[a-z0-9][a-z0-9-]{0,31}$/;
+
+/**
+ * Turn an in-app report into a Forum thread — or into a "me too" on the thread
+ * that already describes it.
+ *
+ * ── WHY THIS IS NOT JUST createThread ───────────────────────────────────────
+ *
+ * Because the STRUCTURE is the whole point. A hand-typed forum post has no
+ * version, no OS, no build id, so the best Loop D can ever say is "users are
+ * unhappy". An in-app report carries all of it, which is what lets a digest say
+ * "only on 0.5.0, only on Windows, seven distinct people" — and that difference
+ * is the entire reason WP12 exists.
+ *
+ * So the context is turned into real TAGS (product:pixel, version:0.5.0) rather
+ * than prose in the body. Tags are what the ranker scores, what subscriptions
+ * match, and what an aggregate can group by; a version buried in a paragraph is
+ * invisible to every one of those.
+ *
+ * ── DEDUP FIRST, AND JOINING IS THE POINT ───────────────────────────────────
+ *
+ * 🔴 `joinShortId` adds the reporter to an EXISTING thread instead of creating
+ * the fourth copy. Two reasons, and the second is the one people miss:
+ *   1. without it the feedback space becomes a landfill of near-identical
+ *      reports, and
+ *   2. WITH it the distinct-reporter count becomes real — which is exactly the
+ *      signal the ranker scores and Loop D aggregates. This single behaviour is
+ *      what turns "lots of complaints" into "seven distinct people, up from two".
+ *
+ * A join is a post, not a vote, because a second person's detail ("also on
+ * Linux, only with 4K") is usually what makes a report actionable.
+ *
+ * ── WHAT THIS DELIBERATELY DOES NOT DO ──────────────────────────────────────
+ *
+ * It does not redact. Redaction happens in the CLIENT, before send, because
+ * that is the only place the raw logs exist and the only place the user can be
+ * shown what is about to leave their machine. A server-side scrub would arrive
+ * after the secret had already crossed the wire.
+ */
+export async function submitReport(db, user, {
+  product, version, os, title, body, joinShortId,
+} = {}) {
+  assertNotService(user);
+
+  const prod = String(product || '').trim().toLowerCase();
+  if (!REPORT_PRODUCTS.test(prod)) {
+    throw new ForumError(
+      'A report must name the product it is about',
+      'product_required',
+      400,
+    );
+  }
+
+  // Joining an existing thread: the reporter's own detail lands as a reply, and
+  // createPost does the rest — rate limits, subscription, notifications.
+  if (joinShortId) {
+    const detail = String(body || '').trim();
+    const post = await createPost(db, user, String(joinShortId).toLowerCase(), {
+      body: detail || `Also seeing this on ${prod}${version ? ` ${version}` : ''}${os ? ` (${os})` : ''}.`,
+    });
+    return { ok: true, joined: true, shortId: String(joinShortId).toLowerCase(), postId: post.id };
+  }
+
+  const cleanTitle = requireText(title, 'title', MAX_TITLE);
+
+  // Context becomes TAGS. Version is namespaced separately from product because
+  // "everything broken in 0.5.0" and "everything broken in Pixel" are different
+  // questions and a digest needs to ask both.
+  const tags = [`product:${prod}`];
+  const ver = String(version || '').trim().toLowerCase();
+  if (ver && /^[a-z0-9][a-z0-9._-]{0,30}$/.test(ver)) tags.push(`version:${ver}`);
+  tags.push('kind:bug');
+
+  // The environment block is appended rather than merged into the user's words:
+  // it is machine-written, and a reader should be able to tell which sentences
+  // are the reporter's.
+  const env = [
+    `- product: ${prod}`,
+    ver ? `- version: ${ver}` : null,
+    os ? `- os: ${String(os).slice(0, 120)}` : null,
+  ].filter(Boolean).join('\n');
+
+  const composed = `${String(body || '').trim()}\n\n---\n\n**Reported from the app**\n${env}`;
+
+  const thread = await createThread(db, user, {
+    space: 'feedback',
+    title: cleanTitle,
+    body: composed,
+    tags,
+  });
+  return { ok: true, joined: false, shortId: thread.shortId };
+}
+
+/**
+ * What this report might duplicate — called BEFORE creating anything.
+ *
+ * Separate from submitReport on purpose: the client has to be able to show the
+ * candidates and let the person decide, and an endpoint that both searched and
+ * created would make "just check" impossible without a side effect.
+ */
+export async function reportPreflight(db, { title, product, limit = 5 }) {
+  const text = String(title || '').trim();
+  if (text.length < 8) return [];
+
+  // 🔴 NOT findDuplicates. That helper filters to `isResolved || postCount > 1`,
+  // which is right for a QUESTION ("show me threads that already have an
+  // answer") and exactly wrong for a REPORT: the most common duplicate of a bug
+  // report is a recent, unanswered report of the same bug — postCount 1,
+  // unresolved — and that filter drops precisely those.
+  //
+  // Dropping them is not a cosmetic miss. Joining an open report is what makes
+  // the distinct-reporter count real, and the count is the signal the ranker
+  // scores and Loop D aggregates. A preflight that cannot see open reports
+  // guarantees the landfill it exists to prevent.
+  const results = await searchThreads(db, text, Math.min(10, Math.max(1, Number(limit) || 5)));
+  const prod = String(product || '').trim().toLowerCase();
+
+  return results
+    .map((c) => ({
+      shortId: c.shortId,
+      title: c.title,
+      url: c.url,
+      status: c.status,
+      postCount: c.postCount,
+      // Same product is the strongest join signal a client can show: "3 people
+      // reported this in Pixel" is actionable, the same words about a different
+      // product usually are not.
+      sameProduct: prod ? (c.tags || []).includes(`product:${prod}`) : null,
+    }))
+    // Same-product candidates first — a client that shows five results will
+    // have the relevant one below the fold otherwise.
+    .sort((a, b) => Number(b.sameProduct === true) - Number(a.sameProduct === true));
+}

@@ -484,6 +484,57 @@ router.post('/threads/:shortId/fixed', authMiddleware, loadActor, handled('markT
   });
 }));
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * WP12 — in-app report intake
+ *
+ * The contract every XENO app calls. The keybinding and the dialog are
+ * per-app; the payload shape, the dedup check and the tagging are here, once,
+ * because twelve hand-rolled dialogs mean twelve payload shapes and Loop D
+ * cannot aggregate across inconsistent fields.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * POST /api/forum/report/preflight  { title, product }
+ *
+ * What this might duplicate. Deliberately separate from the submit call: the
+ * client has to show the candidates and let the person choose, and an endpoint
+ * that both searched and created would make "just check" impossible without a
+ * side effect.
+ */
+router.post('/report/preflight', authMiddleware, loadActor, handled('reportPreflight', async (req, res) => {
+  res.json({
+    success: true,
+    candidates: await write.reportPreflight(req.db, {
+      title: req.body?.title, product: req.body?.product,
+    }),
+  });
+}));
+
+/**
+ * POST /api/forum/report  { product, version, os, title, body, joinShortId? }
+ *
+ * `joinShortId` adds this reporter to an EXISTING thread rather than creating
+ * the fourth copy — which is what makes the distinct-reporter count real, and
+ * that count is the signal the ranker scores and Loop D aggregates.
+ *
+ * Redaction is NOT done here. It happens in the client, before send, because
+ * that is the only place the raw logs exist and the only place the user can be
+ * shown what is about to leave their machine.
+ */
+router.post('/report', authMiddleware, loadActor, handled('submitReport', async (req, res) => {
+  res.json({
+    success: true,
+    ...(await write.submitReport(req.db, req.actor, {
+      product: req.body?.product,
+      version: req.body?.version,
+      os: req.body?.os,
+      title: req.body?.title,
+      body: req.body?.body,
+      joinShortId: req.body?.joinShortId,
+    })),
+  });
+}));
+
 router.get('/moderation-log', async (req, res) => {
   try {
     res.json({ success: true, log: await svc.listModerationLog(req.db, { limit: req.query.limit }) });
