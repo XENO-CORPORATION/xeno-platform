@@ -35,7 +35,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -11496,7 +11496,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   });
   const projectMenuPanelRef = useRef<HTMLDivElement | null>(null);
   const projectMenuGoo = useGooPill<HTMLDivElement>({ hostRef: projectMenuPanelRef });
-  const projectMenuMenu = useMenu<HTMLDivElement>({
+  const projectMenuKbd = useMenu<HTMLDivElement>({
     open: openProjectMenuId !== null,
     onClose: () => { setOpenProjectMenuId(null); },
     menuRef: projectMenuPanelRef,
@@ -11517,7 +11517,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   });
   const recentsSubmenuRef = useRef<HTMLDivElement | null>(null);
   const recentsSubmenuGoo = useGooPill<HTMLDivElement>({ hostRef: recentsSubmenuRef });
-  const recentsSubmenuMenu = useMenu<HTMLDivElement>({
+  const recentsSubmenuKbd = useMenu<HTMLDivElement>({
     open: Boolean(recentsFilterSubmenu),
     onClose: () => { setRecentsFilterSubmenu(null); },
     menuRef: recentsSubmenuRef,
@@ -13373,21 +13373,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 ['archived', 'Archived'],
                               ] as const
                             ).map(([value, label]) => (
-                              <button
+                              <MenuItem
                                 key={value}
-                                type="button"
-                                role="menuitem"
-                                onClick={() => {
+                                selected={chatsCatalogFilter === value}
+                                onSelect={() => {
                                   setChatsCatalogFilter(value);
                                   setIsChatsCatalogFilterOpen(false);
                                 }}
-                                className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
                               >
-                                <span>{label}</span>
-                                {chatsCatalogFilter === value && (
-                                  <Check size={13} className="ml-auto text-[var(--chat-accent)]" aria-hidden="true" />
-                                )}
-                              </button>
+                                {label}
+                              </MenuItem>
                             ))}
                           </div>
                         )}
@@ -13638,25 +13633,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             ['name', 'Name'],
                           ] as const
                         ).map(([value, label]) => (
-                          <button
+                          <MenuItem
                             key={value}
-                            type="button"
-                            role="menuitem"
-                            onClick={() => {
+                            selected={projectsSort === value}
+                            onSelect={() => {
                               setProjectsSort(value);
                               setIsProjectsSortOpen(false);
                             }}
-                            className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
                           >
-                            <span>{label}</span>
-                            {projectsSort === value && (
-                              <Check
-                                size={13}
-                                className="ml-auto text-[var(--chat-accent)]"
-                                aria-hidden="true"
-                              />
-                            )}
-                          </button>
+                            {label}
+                          </MenuItem>
                         ))}
                       </div>
                     )}
@@ -13840,43 +13826,34 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                   >
                                     {/* First child, so the pill paints behind the rows rather than over them. */}
                                     {projectMenuGoo.pill}
-                                    <button
-                                      type="button"
-                                      role="menuitem"
-                                      onClick={() => handleToggleProjectStar(project.id)}
-                                      className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
+                                    <MenuItem
+                                      onSelect={() => handleToggleProjectStar(project.id)}
+                                      leadingIcon={StarDecl}
+                                      iconState={{ selection: project.isStarred ? 'on' : 'off' }}
                                     >
-                                      <Star size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
-                                      <span>{project.isStarred ? 'Unstar' : 'Star'}</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      role="menuitem"
-                                      onClick={() => openProjectSettings(project, 'general')}
-                                      className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
+                                      {project.isStarred ? 'Unstar' : 'Star'}
+                                    </MenuItem>
+                                    <MenuItem
+                                      onSelect={() => openProjectSettings(project, 'general')}
+                                      leadingIcon={EditDecl}
                                     >
-                                      <Pencil size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
-                                      <span>Project settings</span>
-                                    </button>
+                                      Project settings
+                                    </MenuItem>
                                     <div className="my-1 border-t" style={{ borderColor: 'var(--chat-border)' }} />
-                                    <button
-                                      type="button"
-                                      role="menuitem"
-                                      onClick={() => handleToggleProjectArchive(project.id)}
-                                      className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
+                                    <MenuItem
+                                      onSelect={() => handleToggleProjectArchive(project.id)}
+                                      leadingIcon={ArchiveDecl}
+                                      iconState={{ selection: project.isArchived ? 'on' : 'off' }}
                                     >
-                                      <Archive size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
-                                      <span>{project.isArchived ? 'Unarchive' : 'Archive'}</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      role="menuitem"
-                                      onClick={() => handleDeleteProject(project.id)}
-                                      className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-danger)] transition-colors"
+                                      {project.isArchived ? 'Unarchive' : 'Archive'}
+                                    </MenuItem>
+                                    <MenuItem
+                                      onSelect={() => handleDeleteProject(project.id)}
+                                      leadingIcon={TrashDecl}
+                                      variant="danger"
                                     >
-                                      <Trash2 size={14} className="flex-shrink-0" aria-hidden="true" />
-                                      <span>Delete</span>
-                                    </button>
+                                      Delete
+                                    </MenuItem>
                                   </div>
                                 )}
                               </div>
@@ -14944,20 +14921,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   >
                     {activeHistoryConvo?.isPinned ? 'Unpin chat' : 'Pin chat'}
                   </MenuItem>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={moreMenuItemClass}
+                  <MenuItem
                     disabled={!activeHistoryConvo}
-                    onClick={() => {
+                    onSelect={() => {
                       if (!activeHistoryConvo) return;
                       void handleArchiveConversation(activeHistoryConvo.id, !activeHistoryConvo.isArchived);
                       setIsChatMoreMenuOpen(false);
                     }}
+                    leadingIcon={ArchiveDecl}
+                    iconState={{ selection: activeHistoryConvo?.isArchived ? 'on' : 'off' }}
                   >
-                    <Archive size={14} className="flex-shrink-0 text-zinc-500" />
-                    <span>{activeHistoryConvo?.isArchived ? 'Unarchive' : 'Archive'}</span>
-                  </button>
+                    {activeHistoryConvo?.isArchived ? 'Unarchive' : 'Archive'}
+                  </MenuItem>
                   <MenuItem
                     disabled={!activeHistoryConvo}
                     onSelect={() => {
@@ -17232,47 +17207,39 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             >
               {/* First child, so the pill paints behind the rows rather than over them. */}
               {historyRowGoo.pill}
-              <button
-                type="button"
-                role="menuitem"
-                className={menuItemClass}
-                onClick={() => {
+              <MenuItem
+                onSelect={() => {
                   handleTogglePinConversation(menuConvo.id);
                   closeHistoryRowMenu();
                 }}
+                leadingIcon={BookmarkDecl}
+                iconState={{ selection: isPinned ? 'on' : 'off' }}
+                shortcut="P"
               >
-                <Pin size={14} className={`flex-shrink-0 ${isPinned ? 'fill-current text-zinc-100' : 'text-zinc-500'}`} />
-                <span>{isPinned ? 'Unpin' : 'Pin'}</span>
-                <span className={shortcutClass}>P</span>
-                </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={menuItemClass}
-                onClick={() => {
+                {isPinned ? 'Unpin' : 'Pin'}
+              </MenuItem>
+              <MenuItem
+                onSelect={() => {
                   setEditingConversationId(menuConvo.id);
                   setEditTitleText(menuConvo.title);
                   closeHistoryRowMenu();
                   setIsChatsCatalogOpen(false);
                   setTimeout(() => document.getElementById(`edit-title-${menuConvo.id}-${interfaceId}`)?.focus(), 50);
                 }}
+                leadingIcon={EditDecl}
+                shortcut="R"
               >
-                <Pencil size={14} className="flex-shrink-0 text-zinc-500" />
-                <span>Rename</span>
-                <span className={shortcutClass}>R</span>
-              </button>
+                Rename
+              </MenuItem>
 
               <div className="relative">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={menuItemClass}
-                  onClick={() => setHistoryProjectSubmenuOpen((open) => !open)}
+                <MenuItem
+                  onSelect={() => setHistoryProjectSubmenuOpen((open) => !open)}
+                  leadingIcon={LayersDecl}
+                  submenu
                 >
-                  <Layers size={14} className="flex-shrink-0 text-zinc-500" />
-                  <span>Add to project</span>
-                  <ChevronRight size={14} className="ml-auto text-zinc-500" />
-                </button>
+                  Add to project
+                </MenuItem>
                 {historyProjectSubmenuOpen && (
                   <div
                     // Follows its parent menu's radius — a submenu is the same object, continued.
@@ -17286,22 +17253,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <p className="px-2.5 py-1.5 text-[11px] text-zinc-500">No projects yet</p>
                     ) : (
                       chatProjects.map((project) => (
-                        <button
+                        <MenuItem
                           key={project.id}
-                          type="button"
-                          role="menuitem"
-                          className={menuItemClass}
-                          onClick={() => {
+                          // The chosen project takes the check, and the leading slot stays reserved on
+                          // the others so the names line up. The folder glyph that used to lead every
+                          // row said nothing — this submenu is titled "Add to project" and every row
+                          // in it is one, so the same mark on all of them only competed with the check.
+                          selected={menuConvo.projectId === project.id}
+                          onSelect={() => {
                             handleAssignConversationToProject(menuConvo.id, project.id);
                             closeHistoryRowMenu();
                           }}
                         >
-                          <Folder size={13} className="flex-shrink-0 text-zinc-500" />
-                          <span className="min-w-0 truncate">{project.name}</span>
-                          {menuConvo.projectId === project.id && (
-                            <Check size={12} className="ml-auto flex-shrink-0 text-zinc-100" />
-                          )}
-                        </button>
+                          {project.name}
+                        </MenuItem>
                       ))
                     )}
                     <div className="my-1 border-t border-[#1e1e21]" />
@@ -17309,48 +17274,40 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         onSelect={() => {
                         closeHistoryRowMenu();
                         openCreateProjectModal({ assignConversationId: menuConvo.id });
-                      }}
+                        }}
                         leadingIcon={PlusDecl}
                       >
                         New project
                       </MenuItem>
                     {menuConvo.projectId && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className={menuItemClass}
-                        onClick={() => {
+                      <MenuItem
+                        onSelect={() => {
                           handleAssignConversationToProject(menuConvo.id, null);
                           closeHistoryRowMenu();
                         }}
                       >
-                        <span>Remove from project</span>
-                      </button>
-              )}
+                        Remove from project
+                      </MenuItem>
+                    )}
             </div>
           )}
               </div>
 
               <div className="my-1 border-t border-[#1e1e21]" />
 
-              <button
-                type="button"
-                role="menuitem"
-                className={menuItemClass}
-                                        onClick={() => {
+              <MenuItem
+                onSelect={() => {
                   void handleArchiveConversation(menuConvo.id, !isArchived);
                   closeHistoryRowMenu();
                 }}
+                leadingIcon={ArchiveDecl}
+                iconState={{ selection: isArchived ? 'on' : 'off' }}
+                shortcut="A"
               >
-                <Archive size={14} className="flex-shrink-0 text-zinc-500" />
-                <span>{isArchived ? 'Unarchive' : 'Archive'}</span>
-                <span className={shortcutClass}>A</span>
-              </button>
-                                    <button
-                type="button"
-                role="menuitem"
-                className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-danger)] transition-colors"
-                onClick={() => {
+                {isArchived ? 'Unarchive' : 'Archive'}
+              </MenuItem>
+              <MenuItem
+                onSelect={() => {
                   setDeleteConfirmationModal({
                     isOpen: true,
                     conversationId: menuConvo.id,
@@ -17359,11 +17316,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   });
                   closeHistoryRowMenu();
                 }}
+                leadingIcon={TrashDecl}
+                variant="danger"
+                shortcut="D"
               >
-                <Trash2 size={14} className="flex-shrink-0" />
-                <span>Delete</span>
-                <span className="ml-auto text-[11px] text-[var(--chat-danger)]/70">D</span>
-              </button>
+                Delete
+              </MenuItem>
             </div>
             </>,
             document.body,
@@ -17434,7 +17392,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <div
                   {...(() => { const { ref: _g, className: _c, ...handlers } = recentsFilterGoo.hostProps; return handlers; })()}
                   {...recentsFilterMenuKbd.menuProps}
-                  className={`${recentsFilterGoo.hostProps.className} chat-goo chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[168px] rounded-xl border p-1`}
+                  className={`${recentsFilterGoo.hostProps.className} chat-goo chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1000] w-[196px] rounded-xl border p-1`}
                   style={{
                     top: recentsFilterMenu.top,
                     left: recentsFilterMenu.left,
@@ -17447,60 +17405,40 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 >
                   {/* First child, so the pill paints behind the rows rather than over them. */}
                   {recentsFilterGoo.pill}
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={menuItemClass}
+                  <MenuItem
                     onMouseEnter={(event) => openSubmenu('type', event)}
                     onClick={(event) => openSubmenu('type', event)}
+                    submenu
+                    value={typeLabel[recentsFilterType]}
                   >
-                    <span>Type</span>
-                    <span className="ml-auto flex items-center gap-1 text-zinc-500">
-                      <span>{typeLabel[recentsFilterType]}</span>
-                      <ChevronRight size={13} />
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={menuItemClass}
+                    Type
+                  </MenuItem>
+                  <MenuItem
                     onMouseEnter={(event) => openSubmenu('status', event)}
                     onClick={(event) => openSubmenu('status', event)}
+                    submenu
+                    value={statusLabel[recentsFilterStatus]}
                   >
-                    <span>Status</span>
-                    <span className="ml-auto flex items-center gap-1 text-zinc-500">
-                      <span>{statusLabel[recentsFilterStatus]}</span>
-                      <ChevronRight size={13} />
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={menuItemClass}
+                    Status
+                  </MenuItem>
+                  <MenuItem
                     onMouseEnter={(event) => openSubmenu('activity', event)}
                     onClick={(event) => openSubmenu('activity', event)}
+                    submenu
+                    value={activityLabel[recentsFilterActivity]}
                   >
-                    <span>Last activity</span>
-                    <span className="ml-auto flex items-center gap-1 text-zinc-500">
-                      <span>{activityLabel[recentsFilterActivity]}</span>
-                      <ChevronRight size={13} />
-                    </span>
-                  </button>
+                    Last activity
+                  </MenuItem>
                   <div className="my-1 border-t border-[#1e1e21]" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={menuItemClass}
+                  <MenuItem
                     onMouseEnter={(event) => openSubmenu('group', event)}
                     onClick={(event) => openSubmenu('group', event)}
+                    submenu
+                    value={groupLabel[recentsGroupBy]}
                   >
-                    <span>Group by</span>
-                    <span className="ml-auto flex items-center gap-1 text-zinc-500">
-                      <span>{groupLabel[recentsGroupBy]}</span>
-                      <ChevronRight size={13} />
-                    </span>
-                                    </button>
-                                </div>
+                    Group by
+                  </MenuItem>
+                </div>
 
                 {recentsFilterSubmenu && submenuOptions.length > 0 && (
                   <div
@@ -17509,7 +17447,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className={`${recentsSubmenuGoo.hostProps.className} chat-goo chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover fixed z-[1001] w-[104px] rounded-xl border p-1`}
                     style={{
                       top: recentsFilterSubmenuTop,
-                      left: Math.min(recentsFilterMenu.left + 172, window.innerWidth - 112),
+                      // 196 is the parent menu's own width, + 4 for the gap — keep the two in step,
+                      // or the submenu opens on top of the chevrons it was summoned by.
+                      left: Math.min(recentsFilterMenu.left + 200, window.innerWidth - 112),
                       backgroundColor: 'var(--chat-elevated)',
                       borderColor: 'var(--chat-border)',
                       color: 'var(--chat-text)',
@@ -17524,20 +17464,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         {'separatedBefore' in option && option.separatedBefore && (
                           <div className="my-1 border-t border-[#1e1e21]" />
                         )}
-                                    <button
-                          type="button"
-                          role="menuitem"
-                          className={menuItemClass}
-                          onClick={() => {
+                        <MenuItem
+                          selected={option.selected}
+                          onSelect={() => {
                             option.onSelect();
                             closeRecentsFilterMenu();
                           }}
                         >
-                          <span>{option.label}</span>
-                          {option.selected && (
-                            <Check size={14} className="ml-auto flex-shrink-0 text-[var(--chat-accent)]" aria-hidden="true" />
-                          )}
-                                    </button>
+                          {option.label}
+                        </MenuItem>
                       </React.Fragment>
                     ))}
                                 </div>

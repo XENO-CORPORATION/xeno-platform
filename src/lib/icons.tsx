@@ -217,6 +217,9 @@ export {
   GGear as GearDecl,
   GPlus as PlusDecl,
   GBookmark as BookmarkDecl,
+  GArchive as ArchiveDecl,
+  GLayers as LayersDecl,
+  GStar as StarDecl,
 };
 
 /* Different name, same meaning. */
