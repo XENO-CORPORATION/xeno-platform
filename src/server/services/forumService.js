@@ -162,7 +162,7 @@ export async function listSpaces(db) {
  * @param {string} [opts.sort]    active | newest | oldest | solved
  */
 export async function listThreads(db, opts = {}) {
-  const where = [`t.status <> 'archived'`];
+  const where = [`t.status NOT IN ('archived', 'deleted')`];
   const params = [];
 
   if (opts.space) {
@@ -224,7 +224,7 @@ export async function listThreads(db, opts = {}) {
 }
 
 export async function countThreads(db, opts = {}) {
-  const where = [`t.status <> 'archived'`];
+  const where = [`t.status NOT IN ('archived', 'deleted')`];
   const params = [];
   if (opts.space) {
     params.push(opts.space);
@@ -350,7 +350,7 @@ export async function searchThreads(db, query, limit = DEFAULT_LIMIT) {
        LEFT JOIN agent_identities ai ON ai.user_id = t.author_id
        LEFT JOIN users ow ON ow.id = ai.owner_user_id,
             tsq
-      WHERE t.status <> 'archived'
+      WHERE t.status NOT IN ('archived', 'deleted')
       ORDER BY b.rank DESC, t.last_activity_at DESC
       LIMIT $2`,
     [q, clampLimit(limit)],
@@ -472,7 +472,7 @@ export async function getFeedCandidates(db, { limit = 300 } = {}) {
        LEFT JOIN users u ON u.id = t.author_id
        LEFT JOIN agent_identities ai ON ai.user_id = t.author_id
        LEFT JOIN users ow ON ow.id = ai.owner_user_id
-      WHERE t.status NOT IN ('archived', 'locked')
+      WHERE t.status NOT IN ('archived', 'locked', 'deleted')
         AND (t.resolved_at IS NULL OR t.last_activity_at > NOW() - INTERVAL '30 days')
       ORDER BY t.last_activity_at DESC
       LIMIT $1`,

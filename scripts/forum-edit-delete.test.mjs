@@ -246,3 +246,59 @@ test('erasure takes a CLIENT, not a pool', () => {
     'taking a pool would open a second connection outside the transaction, so a '
     + 'failure would leave the identity erased and the content published.');
 });
+
+// ── thread deletion, and the read-side leak it could have caused ───────────
+
+const SERVICE = codeOnly(readFileSync(src('services', 'forumService.js'), 'utf8'));
+
+test('🔴 NO read path still uses the bare `<> archived` filter', () => {
+  // This is the gate that matters in this change. Every thread read filtered
+  // `t.status <> 'archived'` — a blocklist of exactly ONE value, in four
+  // separate places. Adding 'deleted' to the CHECK without updating all four
+  // produces deleted threads that are still listed everywhere, on a feature
+  // whose entire purpose is that they are not.
+  //
+  // "Remember to update the other three" is not a mechanism. This is.
+  assert.doesNotMatch(SERVICE, /status\s*<>\s*'archived'/,
+    "a read path still filters only 'archived'. Deleted threads leak through it.");
+  const filters = SERVICE.match(/status NOT IN \([^)]*\)/g) || [];
+  assert.ok(filters.length >= 4, `expected 4+ status filters, found ${filters.length}`);
+  for (const f of filters) {
+    assert.match(f, /'deleted'/, `a status filter does not exclude deleted: ${f}`);
+  }
+});
+
+test('deleting a thread is reachable', () => {
+  assert.match(ROUTES, /router\.delete\(\s*['"]\/threads\/:shortId['"]/,
+    'no DELETE /threads/:shortId.');
+  assert.match(ROUTES, /write\.deleteThread/, 'the route must call the service.');
+});
+
+test('a thread nobody answered goes; one with answers becomes a tombstone', () => {
+  // A thread stops being only yours the moment somebody answers it. Their
+  // answer is their work, and usually the reason the thread has value at all.
+  const body = fn('deleteThread');
+  assert.match(body, /author_id IS DISTINCT FROM/,
+    'must count posts by OTHER authors — IS DISTINCT FROM, because author_id is '
+    + 'nullable and `<> NULL` is never true, which would report every thread as '
+    + 'having other voices and make full deletion unreachable.');
+  assert.match(body, /position > 1/, "the author's own question does not count as another voice.");
+  assert.match(body, /status = 'visible'/,
+    'a reply the author already deleted must not keep their thread alive forever.');
+  assert.match(body, /CASE WHEN \$3::boolean THEN status ELSE 'deleted' END/,
+    'with other voices the thread KEEPS its status; without them it is deleted.');
+});
+
+test("the author's own content goes either way", () => {
+  const body = fn('deleteThread');
+  assert.match(body, /SET body = '', status = 'deleted'[\s\S]*?position = 1/,
+    'the question body must be blanked in both branches.');
+  assert.match(body, /title = '\[removed\]'/, 'the title is free text too.');
+});
+
+test('only the author or staff may delete a thread', () => {
+  const body = fn('deleteThread');
+  assert.match(body, /String\(thread\.author_id\) === String\(user\.id\)/);
+  assert.match(body, /\['admin', 'moderator'\]\.includes\(user\.role\)/);
+  assert.match(body, /assertNotService\(user\)/);
+});
