@@ -30,6 +30,7 @@ import * as write from '../services/forumWrite.js';
 import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../services/agentIdentity.js';
 import { ForumError } from '../services/forumWrite.js';
 import * as ranker from '../services/forumRanker.js';
+import * as notify from '../services/forumNotify.js';
 
 const router = express.Router();
 
@@ -337,6 +338,37 @@ router.post('/threads/:shortId/opened', authMiddleware, loadActor, handled('mark
   if (!rows[0]) return res.status(404).json({ success: false, error: 'Thread not found' });
   await svc.markOpened(req.db, req.actor.id, rows[0].id);
   res.json({ success: true });
+}));
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Notifications (WP1) — the return path
+ *
+ * Loop A cannot close without these: you ask, someone answers, and until now
+ * you were never told.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** GET /api/forum/notifications?unread=1 — the list, plus the badge count. */
+router.get('/notifications', authMiddleware, loadActor, handled('notifications', async (req, res) => {
+  const unreadOnly = req.query.unread === '1' || req.query.unread === 'true';
+  const [items, unread] = await Promise.all([
+    notify.listNotifications(req.db, req.actor.id, { unreadOnly, limit: req.query.limit }),
+    notify.unreadCount(req.db, req.actor.id),
+  ]);
+  res.json({ success: true, notifications: items, unread });
+}));
+
+/**
+ * POST /api/forum/notifications/read — mark read.
+ *
+ * Body `{ ids: [...] }` marks those; an omitted body marks ALL, which is what
+ * "mark all read" calls. Scoping is enforced in the service by `user_id` in the
+ * WHERE clause, never by id alone — otherwise anyone could clear anyone's
+ * notifications by guessing a uuid, and it would look like it worked.
+ */
+router.post('/notifications/read', authMiddleware, loadActor, handled('markRead', async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : null;
+  const result = await notify.markRead(req.db, req.actor.id, ids);
+  res.json({ success: true, ...result, unread: await notify.unreadCount(req.db, req.actor.id) });
 }));
 
 /* ──────────────────────────────────────────────────────────────────────────

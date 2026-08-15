@@ -20,6 +20,9 @@
  */
 
 import { newShortId, slugifyTitle, searchThreads } from './forumService.js';
+// WP1 — the return path. Every notification in the product is created through
+// this one function; see the choke-point note in forumNotify.js.
+import { notify } from './forumNotify.js';
 
 // --------------------------------------------------------------------------
 // Capabilities — the ladder from §7.1.
@@ -343,7 +346,7 @@ export async function createPost(db, user, shortId, { body }) {
   const cleanBody = requireText(body, 'body', MAX_BODY);
 
   const { rows } = await db.query(
-    `SELECT t.id, t.status, s.post_policy
+    `SELECT t.id, t.status, t.author_id, s.post_policy
        FROM forum_threads t JOIN forum_spaces s ON s.id = t.space_id
       WHERE t.short_id = $1`,
     [shortId],
@@ -372,6 +375,20 @@ export async function createPost(db, user, shortId, { body }) {
     [thread.id],
   );
 
+  // ── The return path (WP1) ────────────────────────────────────────────────
+  // Tell the person who asked. `notify` suppresses self-notification, so
+  // answering your own thread is silently a no-op and needs no check here.
+  //
+  // Deliberately NOT awaited-and-thrown: a notification that fails must never
+  // lose the post. The post is the user's work; the notification is ours.
+  await notify(db, {
+    userId: thread.author_id,
+    kind: 'answer',
+    threadId: thread.id,
+    postId: postRows[0].id,
+    actor: { id: user.id, kind: actorKind(user) },
+  }).catch(() => {});
+
   return { id: postRows[0].id, position: posRows[0].next };
 }
 
@@ -391,7 +408,8 @@ export async function acceptAnswer(db, user, postId) {
   }
 
   const { rows } = await db.query(
-    `SELECT p.id, p.thread_id, p.position, t.author_id AS thread_author, t.short_id, s.kind AS space_kind
+    `SELECT p.id, p.thread_id, p.position, p.author_id AS answer_author,
+            t.author_id AS thread_author, t.short_id, s.kind AS space_kind
        FROM forum_posts p
        JOIN forum_threads t ON t.id = p.thread_id
        JOIN forum_spaces s ON s.id = t.space_id
@@ -437,6 +455,22 @@ export async function acceptAnswer(db, user, postId) {
   );
 
   await recomputeReputationForThread(db, post.thread_id);
+
+  // ── The return path (WP1) ────────────────────────────────────────────────
+  // Tell whoever wrote the answer. This is the single most motivating message
+  // the product can send — it is the only one that says the work was USED.
+  //
+  // The partial unique index makes it once-only: accept → unaccept → re-accept
+  // does not re-notify. A notification you can farm is a notification people
+  // learn to ignore.
+  await notify(db, {
+    userId: post.answer_author,
+    kind: 'accepted',
+    threadId: post.thread_id,
+    postId,
+    actor: { id: user.id, kind: actorKind(user) },
+  }).catch(() => {});
+
   return { shortId: post.short_id };
 }
 
