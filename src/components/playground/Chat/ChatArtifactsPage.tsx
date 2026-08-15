@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useGooPill, useMenu } from '@xenosystem/elements-react';
+import { MenuItem, useGooPill, useMenu } from '@xenosystem/elements-react';
 import { Check, ChevronDown, Copy, File, FileImage, FileText, Search, Shapes } from '@/lib/icons';
 import {
   ARTIFACT_KIND_LABEL,
@@ -236,25 +236,18 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
                 {/* First child, so the pill paints behind the rows rather than over them. */}
                 {sortGoo.pill}
                 {(Object.keys(SORT_LABELS) as ArtifactsSort[]).map((value) => (
-                  <button
+                  /* `selected` makes the row a `menuitemcheckbox` and draws the check itself, in the
+                     LEADING slot — the component reserves that slot for every sibling so the labels of
+                     checked and unchecked rows stay on one line. The hand-written version put the tick
+                     at the far right with `ml-auto`, which reads as a trailing badge rather than as the
+                     mark on the chosen row. */
+                  <MenuItem
                     key={value}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setSort(value);
-                      setIsSortOpen(false);
-                    }}
-                    className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors"
+                    selected={sort === value}
+                    onSelect={() => setSort(value)}
                   >
-                    <span>{SORT_LABELS[value]}</span>
-                    {sort === value && (
-                      <Check
-                        size={13}
-                        className="ml-auto text-[var(--chat-accent)]"
-                        aria-hidden="true"
-                      />
-                    )}
-                  </button>
+                    {SORT_LABELS[value]}
+                  </MenuItem>
                 ))}
               </div>
             )}

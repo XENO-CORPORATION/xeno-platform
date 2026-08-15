@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { useGooPill, useMenu } from '@xenosystem/elements-react';
+import { MenuItem, useGooPill, useMenu } from '@xenosystem/elements-react';
 import { Check, ChevronDown, Clock, Pause, Play, Search, Trash2 } from '@/lib/icons';
 import {
   SCHEDULED_STATUS_LABEL,
@@ -239,25 +239,13 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
                 {/* First child, so the pill paints behind the rows rather than over them. */}
                 {sortGoo.pill}
                 {(Object.keys(SORT_LABELS) as ScheduledSort[]).map((value) => (
-                  <button
+                  <MenuItem
                     key={value}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setSort(value);
-                      setIsSortOpen(false);
-                    }}
-                    className={`flex w-full items-center ${RADIUS} px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors`}
+                    selected={sort === value}
+                    onSelect={() => setSort(value)}
                   >
-                    <span>{SORT_LABELS[value]}</span>
-                    {sort === value && (
-                      <Check
-                        size={13}
-                        className="ml-auto text-[var(--chat-accent)]"
-                        aria-hidden="true"
-                      />
-                    )}
-                  </button>
+                    {SORT_LABELS[value]}
+                  </MenuItem>
                 ))}
               </div>
             )}
