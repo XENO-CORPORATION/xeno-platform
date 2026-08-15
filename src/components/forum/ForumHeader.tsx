@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { PenLine } from 'lucide-react';
 import * as api from './api';
+import NotificationBell from './NotificationBell';
 
 /**
  * The forum's own header.
@@ -29,13 +30,17 @@ import * as api from './api';
  *
  * ── WHAT IS DELIBERATELY NOT HERE ───────────────────────────────────────────
  *
- *   • no search — it lives in the right rail (lg+). Below lg the rail is hidden
- *     and search is unreachable; that gap predates this file and is NOT fixed
- *     here, because fixing it properly means lifting search state out of
- *     Forum.tsx rather than bolting a second search box on.
- *   • no notification bell — there is nothing to notify about yet. An empty
- *     bell is a promise the product cannot keep.
+ *   • no search — it lives in the right rail at lg+, and below lg it reappears
+ *     in the CENTRE COLUMN, next to the space chips. Each control returns
+ *     exactly where its own rail disappears; putting a second search box up here
+ *     as well would mean two of them on a 1024px screen.
  *   • no reputation number anywhere near the avatar — D4.
+ *
+ * The BELL was on this list until WP1 landed, on the grounds that "an empty bell
+ * is a promise the product cannot keep". That was right, and it is now spent:
+ * `forum_notifications` exists and `createPost` / `acceptAnswer` write to it, so
+ * there is a real thing to show. A comment that outlives its condition is how a
+ * file starts arguing with itself.
  */
 
 interface Viewer {
@@ -86,6 +91,9 @@ const ForumHeader: React.FC<{ viewer?: Viewer | null }> = ({ viewer }) => {
             <PenLine className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">New post</span>
           </Link>
+
+          {/* Renders nothing when signed out — see NotificationBell. */}
+          <NotificationBell />
 
           {signedIn ? (
             <Link

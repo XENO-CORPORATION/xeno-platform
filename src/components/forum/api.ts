@@ -115,3 +115,13 @@ export const subscribeTag = (tag: string) =>
 
 export const unsubscribeTag = (tag: string) =>
   request<any>('/subscriptions', { method: 'DELETE', body: JSON.stringify({ tag }) }, true);
+
+// Notifications (WP1). The return path: you ask, someone answers, you find out.
+export const getNotifications = (unreadOnly = false) =>
+  request<any>(`/notifications${unreadOnly ? '?unread=1' : ''}`, {}, true);
+
+export const markNotificationsRead = (ids?: string[]) =>
+  request<any>('/notifications/read', {
+    method: 'POST',
+    body: JSON.stringify(ids ? { ids } : {}),
+  }, true);
