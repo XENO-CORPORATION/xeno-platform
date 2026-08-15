@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { IconButton, MenuItem, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
+import { IconButton, MenuItem, MessageBubble, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
 import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
@@ -12321,6 +12321,33 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             --xeno-danger-hover: var(--chat-danger-hover);
             --xeno-on-accent: var(--chat-on-accent);
           }
+          /* The user turn is the library's MessageBubble, and these are the two things this chat wants
+             said differently.
+
+             The width is a knob the component publishes rather than a prop, because the answer here is
+             a breakpoint: 75 percent of a desktop column reads well, and 75 percent of a phone is a
+             ribbon. The media queries further down move the same variable.
+
+             The timestamp fades with the buttons. The component keeps it steady on the grounds that a
+             meta row which never empties never shifts the layout — true, and this chat still prefers a
+             transcript with no clock under every line until you go looking. Its row holds its height
+             either way, so nothing moves. */
+          .chat-message-bubble {
+            --xeno-message-max: 75%;
+          }
+          .chat-message-bubble .xeno-message-time {
+            opacity: 0;
+            transition: opacity 0.18s var(--xeno-ease);
+          }
+          .chat-message-bubble:hover .xeno-message-time,
+          .chat-message-bubble:focus-within .xeno-message-time {
+            opacity: 1;
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .chat-message-bubble .xeno-message-time {
+              transition: none;
+            }
+          }
           /* The XENO travelling hover pill (goo.css) in chat ink. The library owns every frame of the
              motion; a menu only has to say what colour its highlight is and how round its rows are.
              The 4px inset the pill defaults to is exactly this panel's p-1, so it lines up already. */
@@ -13049,6 +13076,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               display: none !important;
             }
             .chat-message-bubble {
+              --xeno-message-max: 90%;
+            }
+            .chat-message-editor {
               max-width: 90% !important;
             }
             .chat-input-container {
@@ -13086,6 +13116,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               margin-left: 0 !important;
             }
             .chat-message-bubble {
+              --xeno-message-max: 95%;
+            }
+            .chat-message-editor {
               max-width: 95% !important;
             }
             .chat-top-bar {
@@ -15373,7 +15406,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                            {isUser ? (
                                editingMessageId === message.id ? (
                                      <div
-                                         className="chat-message-bubble flex w-full max-w-[90%] flex-col gap-2 rounded-xl border border-[#1e1e21] bg-[#0e0e10] p-2 text-white md:max-w-[75%]"
+                                         className="chat-message-editor flex w-full max-w-[90%] flex-col gap-2 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-[var(--chat-text)] md:max-w-[75%]"
                                      >
                                          <div className="rounded-lg border border-[var(--chat-accent)]/70 bg-[#0a0a0b]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-accent)] focus-within:ring-1 focus-within:ring-blue-500/25">
                                          <textarea
@@ -15410,8 +15443,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            </div>
                                        </div>
                                   ) : (
-                                     <div data-message-id={message.id} className="chat-message-bubble group flex max-w-[90%] min-w-0 flex-col items-end md:max-w-[75%]">
-                                           {(() => {
+                                     (() => {
                                              const imageAttachments = (
                                                message.userImageAttachments?.length
                                                  ? message.userImageAttachments
@@ -15435,10 +15467,26 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                       setViewerShowsDownloadButton(true);
                                              };
 
+                                             const hasAttachments =
+                                               imageAttachments.length > 0 ||
+                                               Boolean(
+                                                 message.userFileAttachment &&
+                                                   (message.userFileAttachment.file || message.userFileAttachment.content),
+                                               );
+
                                              return (
-                                               <>
+                                               <MessageBubble
+                                                 role="user"
+                                                 data-message-id={message.id}
+                                                 // No `group` any more: it existed so `group-hover:` could
+                                                 // reveal the action bar, and the component reveals its own
+                                                 // on `:hover`/`:focus-within` of the turn.
+                                                 className="chat-message-bubble"
+                                                 timestamp={message.timestamp ? formatMessageTime(message.timestamp) : undefined}
+                                                 attachments={hasAttachments ? (
+                                                   <>
                                                  {imageAttachments.length > 0 && (
-                                                   <div className="mb-1.5 flex max-w-full flex-row flex-wrap items-end justify-end gap-1.5">
+                                                   <div className="flex max-w-full flex-row flex-wrap items-end justify-end gap-1.5">
                                                      {imageAttachments.map((img, imageIndex) => {
                                                        const src = img.base64Data
                                                          ? `data:${img.type};base64,${img.base64Data}`
@@ -15467,7 +15515,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                                            {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content) && (
                                             <div
-                                                     className="mb-1.5 ml-auto mr-0 flex max-w-[250px] cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 transition-colors hover:bg-[var(--chat-hover)]"
+                                                     className="ml-auto mr-0 flex max-w-[250px] cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 transition-colors hover:bg-[var(--chat-hover)]"
                                               onClick={() => {
                                                 if (message.userFileAttachment) {
                                                   if (message.userFileAttachment.file) {
@@ -15491,18 +15539,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             </div>
                                            )}
 
-                                                 {message.text ? (
-                                                   <div className="overflow-hidden rounded-xl rounded-br-[3px] border border-[#1e1e21] bg-[#0e0e10] p-3 text-white">
-                                                     <p className="whitespace-pre-wrap break-words text-[15px] leading-6" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{message.text}</p>
-                                                   </div>
-                                                 ) : null}
-                                               </>
-                                             );
-                                           })()}
-                                           <div className="mt-1 flex items-center justify-end gap-2 opacity-0 invisible transition-opacity duration-150 group-hover:visible group-hover:opacity-100">
-                                               {message.timestamp && (
-                                                   <span className="mr-1 text-[11px] text-gray-600">{formatMessageTime(message.timestamp)}</span>
-                                               )}
+                                                   </>
+                                                 ) : undefined}
+                                                 actions={
+                                                   <>
                                                <IconButton
                                                    icon={RefreshDecl}
                                                    size="sm"
@@ -15536,8 +15576,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                  data-selection={copiedMessageId === message.id ? 'on' : 'off'}
                                                  aria-label="Copy message"
                                                />
-                                           </div>
-                                       </div>
+                                                   </>
+                                                 }
+                                               >
+                                                 {message.text || undefined}
+                                               </MessageBubble>
+                                             );
+                                           })()
                                    )
                                ) : (
                                    // --- AI Message ---
@@ -15868,7 +15913,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                   : 'opacity-0 group-hover:opacity-100 invisible group-hover:visible transition-opacity duration-150'
                                                 }`}
                                            >
-                                              <div className="flex items-center gap-2">
+                                              {/* gap-0.5 = 2px, the gap the library's own message action bar
+                                                  uses. The user turn is that component now, so an 8px bar on
+                                                  this side and a 2px bar on the other put two rhythms in one
+                                                  transcript. 2 is the system's answer: the buttons are 28px
+                                                  boxes around 14px glyphs, so most of the air is already
+                                                  inside them and adding 8 more reads as a toolbar. */}
+                                              <div className="flex items-center gap-0.5">
                                                   {/* `xeno-icon-hover` on every one of these: it is the library's generic "this element hosts
                                                       the glyph inside it" hook, and a glyph's motion is triggered by its HOST rather than by
                                                       itself. Without it the icons sat still — the animations were all there, with nothing to
