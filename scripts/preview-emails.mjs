@@ -22,6 +22,14 @@ import emailService from '../src/server/services/emailService.js';
 const { templates } = emailService;
 const OUT = process.argv[2] || 'email-preview.html';
 
+/**
+ * Optional filter: `node scripts/preview-emails.mjs out.html welcome` renders
+ * only the samples whose label matches, at full height. Reviewing one mail
+ * closely and scanning all of them are different jobs, and a 600px window is
+ * the wrong size for the first.
+ */
+const ONLY = (process.argv[3] || '').toLowerCase();
+
 const THREAD = 'ONNX runtime crashes the Electron app on startup';
 const URL = 'https://xenostudio.ai/forum/t/fc9f7bb6/onnx-runtime-crashes-the-electron-app-on-startup';
 const UNSUB = 'https://xenostudio.ai/email/unsubscribe?e=you%40example.com&t=sample&category=forum';
@@ -146,7 +154,14 @@ function forSrcdoc(html) {
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-const cards = SAMPLES.map(({ label, note, render }, i) => {
+const SHOWN = ONLY ? SAMPLES.filter((s) => s.label.toLowerCase().includes(ONLY)) : SAMPLES;
+if (!SHOWN.length) {
+  console.error(`No sample matches "${ONLY}". Labels:\n  ${SAMPLES.map((s) => s.label).join('\n  ')}`);
+  process.exit(1);
+}
+const FOCUS = SHOWN.length === 1;
+
+const cards = SHOWN.map(({ label, note, render }, i) => {
   const { subject, html } = render();
   return `
     <section class="panel">
@@ -207,7 +222,7 @@ writeFileSync(OUT, `<title>XENO Outbound Mail</title>
     background: var(--page); color: var(--t-body);
     font: 13px/1.55 var(--ui); -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 940px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  .wrap { max-width: ${FOCUS ? 820 : 940}px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 
   header { display: flex; flex-direction: column; gap: 8px; }
   h1 { margin: 0; font-size: 19px; font-weight: 600; color: var(--t-primary);
@@ -259,10 +274,10 @@ writeFileSync(OUT, `<title>XENO Outbound Mail</title>
 
   .frame { border: 1px solid var(--b-subtle); border-radius: var(--r-sm);
            overflow: hidden; background: var(--page); }
-  iframe { width: 100%; height: 600px; border: 0; display: block; }
+  iframe { width: 100%; height: ${FOCUS ? 880 : 600}px; border: 0; display: block; }
 
   footer { color: var(--t-dim); border-top: 1px solid var(--b-subtle); padding-top: 14px; }
-  @media (max-width: 620px) { .k { flex-basis: 44px; } iframe { height: 520px; } }
+  @media (max-width: 620px) { .k { flex-basis: 44px; } iframe { height: ${FOCUS ? 880 : 520}px; } }
 </style>
 
 <div class="wrap">
@@ -283,4 +298,4 @@ writeFileSync(OUT, `<title>XENO Outbound Mail</title>
     clipping, and an injection attempt. Only the first is wired to send.</footer>
 </div>`);
 
-console.log(`Wrote ${SAMPLES.length} rendered emails to ${OUT} — nothing was sent.`);
+console.log(`Wrote ${SHOWN.length} rendered email${SHOWN.length === 1 ? "" : "s"} to ${OUT}${ONLY ? ` (filtered by "${ONLY}")` : ""} — nothing was sent.`);

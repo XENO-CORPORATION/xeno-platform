@@ -79,6 +79,163 @@ function wrapInLayout(title, bodyContent) {
 const SITE = 'https://xenostudio.ai';
 
 /**
+ * The onboarding shell — a second layout, used only by `welcome`.
+ *
+ * Why not reuse wrapInLayout: the welcome mail is the one email whose job is a
+ * first impression, and it carries a structure no other template has (a display
+ * headline, a numbered sequence, two competing CTAs, a help block). Bending the
+ * shared layout to fit it would drag those decisions into password resets.
+ *
+ * ── WHAT SURVIVES A REAL MAIL CLIENT ───────────────────────────────────────
+ *
+ * Outlook renders through WORD's HTML engine. That single fact removes most of
+ * what a designer would reach for:
+ *
+ *   • NO flexbox, NO grid — tables are the only layout primitive that works
+ *     everywhere. Not legacy styling; the only thing that renders.
+ *   • NO SVG — Outlook will not draw it and Gmail strips it. The reference
+ *     mock's circular diagram is therefore NOT reproduced as vector art.
+ *   • NO webfonts — blocked, stripped, or silently substituted. The display
+ *     face is GEORGIA, which ships on Windows, macOS, iOS and Android, with a
+ *     Times fallback. It is a real high-contrast serif, so the editorial
+ *     feeling survives without a single downloaded byte.
+ *   • Style blocks are stripped by some clients (Gmail's clipping, older
+ *     Outlook), so every rule that MATTERS is inline. The <style> block only
+ *     carries progressive enhancement.
+ *
+ * ⚠️ And no hero IMAGE. Most clients block remote images by default, so an
+ * identity that lives in a PNG is an identity a large share of readers never
+ * see — they get an alt-text box where the brand should be. The wordmark is
+ * letter-spaced type and the ornament is table borders; both always render.
+ */
+function wrapWelcome(title, bodyContent) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="supported-color-schemes" content="dark">
+  <title>${title}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#060608;">
+  <!-- Preheader: the grey line an inbox shows after the subject. Left empty it
+       fills with whatever text comes first, which is usually the wordmark. -->
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0;">Your account is ready — three steps to get moving.</div>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#060608;">
+    <tr>
+      <td align="center" style="padding:24px 14px 40px;">
+
+        <!-- ── THE SHELL ──────────────────────────────────────────────
+             Copied from xeno-motion's dialog anatomy, which is the
+             DESIGN_SYSTEM §3.1 pattern in shipped form:
+
+               outer   #08080a, 6px radius, 6px padding
+               blocks  #1a1a1a header / #111111 body / #1a1a1a footer,
+                       4px radius each, separated by a 2px gap
+
+             The gap is why the header reads as a TAB above its body
+             rather than a stripe inside a card. Email has no CSS gap, so
+             the 2px is a spacer row — same result, older mechanism. -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px; max-width:600px; background-color:#08080a; border:1px solid rgba(255,255,255,0.05); border-radius:6px;">
+          <tr><td style="padding:6px;">
+
+            <!-- HEADER BAR -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#1a1a1a; border-radius:4px;">
+              <tr>
+                <td style="padding:9px 12px;" align="center">
+                  <a href="${SITE}" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11px; font-weight:700; letter-spacing:0.34em; color:#d8d8de; text-decoration:none;">XENO</a>
+                </td>
+              </tr>
+            </table>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td height="2" style="height:2px; font-size:0; line-height:0;">&nbsp;</td></tr></table>
+
+            <!-- BODY -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#111111; border-radius:4px;">
+              <tr><td style="padding:26px 24px 24px;">
+                ${bodyContent}
+              </td></tr>
+            </table>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td height="2" style="height:2px; font-size:0; line-height:0;">&nbsp;</td></tr></table>
+
+            <!-- FOOTER BAR — same species as the header, so the shell closes
+                 the way it opened. -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#1a1a1a; border-radius:4px;">
+              <tr>
+                <td align="center" style="padding:10px 14px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:10px; line-height:1.75; color:#5d5d63;">
+                  <a href="${SITE}/impressum" style="color:#7f7f86; text-decoration:none;">Impressum</a>
+                  &nbsp;<span style="color:#3a3a3f;">&middot;</span>&nbsp;
+                  <a href="${SITE}/privacy" style="color:#7f7f86; text-decoration:none;">Privacy</a>
+                  &nbsp;<span style="color:#3a3a3f;">&middot;</span>&nbsp;
+                  <a href="${SITE}/terms" style="color:#7f7f86; text-decoration:none;">Terms</a>
+                  <br>XENO Studio &middot; sent because you created an account at xenostudio.ai
+                </td>
+              </tr>
+            </table>
+
+          </td></tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/** A hairline rule. The diamond ornament is gone — Motion's chrome has no
+ *  decorative glyphs, and a centred diamond is exactly the flourish a dense
+ *  technical surface does not use. */
+function hairline(top = 0, bottom = 0) {
+  return `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0;">
+    <tr><td style="padding:${top}px 0 ${bottom}px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr><td style="border-top:1px solid rgba(255,255,255,0.06); font-size:0; line-height:0;">&nbsp;</td></tr>
+      </table>
+    </td></tr>
+  </table>`;
+}
+
+/**
+ * One numbered step.
+ *
+ * The number is the visual anchor rather than an icon, because icons in email
+ * mean images, and images are blocked by default in most clients — the mock's
+ * three line-icons would be three empty boxes for a large share of readers.
+ * The numeral carries the same weight and always renders.
+ *
+ * And numbering is not decoration here: these three are a genuine SEQUENCE —
+ * confirm the address, try it with nothing installed, then install. Numbering a
+ * set that had no order would be the templated tic this avoids.
+ */
+function stepRow(n, title, body, href, cta) {
+  return `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 4px; background-color:#1a1a1a; border-radius:4px;">
+    <tr>
+      <td width="46" align="center" valign="top" style="padding:12px 0 12px 12px;">
+        <!-- 3px on the numeral chip: DESIGN_SYSTEM's small radius is for the
+             element, medium is for outermost containers only. A step marker is
+             about as small as an element gets. -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="28" style="width:28px; height:28px; background-color:#2b2b2b; border-radius:3px;">
+          <tr>
+            <td align="center" valign="middle" style="height:28px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11px; font-weight:600; color:#acacb4;">${n}</td>
+          </tr>
+        </table>
+      </td>
+      <td valign="top" style="padding:12px 14px 12px 10px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <div style="font-size:12.5px; font-weight:600; color:#d8d8de; letter-spacing:0.01em;">${escapeHtml(title)}</div>
+        <div style="font-size:11.5px; line-height:1.55; color:#7f7f86; margin-top:3px;">${escapeHtml(body)}</div>
+        <a href="${escapeHtml(href)}" style="display:inline-block; margin-top:7px; font-size:10.5px; font-weight:500; color:#acacb4; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:1px;">${escapeHtml(cta)} &rarr;</a>
+      </td>
+    </tr>
+  </table>`;
+}
+
+/**
  * One checklist row.
  *
  * Built from a <table>, not flexbox or grid, because Outlook renders email through
@@ -169,26 +326,103 @@ const templates = {
    * sends people to a dead end is worse than no onboarding email.
    */
   welcome: ({ displayName, loginUrl, unsubscribeUrl: unsubUrl }) => ({
-    subject: 'Welcome to XENO. Let\'s get you set up.',
-    html: wrapInLayout('Welcome to XENO', `
-      <h1>Welcome${displayName ? `, ${escapeHtml(displayName)}` : ''}</h1>
-      <p>XENO is the harness for agentic work: bring your own AI, drive it across creative,
-         technical and research tasks, in one workspace.</p>
-      <p style="color: rgba(255,255,255,0.90); font-size: 15px; font-weight: 600; margin-top: 28px;">Your set-up checklist</p>
+    // The subject promises the shape of the mail, not a greeting. "Welcome to
+    // XENO" alone tells the reader nothing they did not already know from
+    // having just signed up.
+    subject: 'Welcome to XENO — three steps to get moving',
+    html: wrapWelcome('Welcome to XENO', `
 
-      ${checklistRow('Download XENO Hub', 'One launcher for every XENO app, with updates built in.', `${SITE}/product/hub/download`)}
-      ${checklistRow('Bring your own AI', 'Connect your own provider key and pay no markup — or run open models locally.', `${SITE}/docs`)}
-      ${checklistRow('Open a creative app', 'Canvas for design, Motion for video, Browser for the agent-native web.', `${SITE}/products`)}
-      ${checklistRow('Read the docs', 'Guides for every app, the API, and the agent tooling.', `${SITE}/docs`)}
+      <!-- CENTRED, and the name sits on the SAME LINE, to the right of the
+           greeting — one phrase read left to right, not a stacked display
+           block. Georgia keeps the editorial weight; at 28px it can sit in a
+           dense panel without shouting over it. -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr><td align="center" style="padding:0 0 0;">
+          <div style="font-family:Georgia,'Times New Roman',serif; font-size:28px; line-height:1.2; color:#e8e8ee; letter-spacing:-0.01em;">
+            Welcome${displayName ? `, ${escapeHtml(displayName)}` : ''}
+          </div>
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:1.62; color:#7f7f86; margin-top:9px; max-width:420px;">
+            Your account's ready. The agent-native workspace for creation, code, media
+            and automation &mdash; you bring the intent, agents do the work.
+          </div>
+        </td></tr>
+      </table>
 
-      <hr class="divider">
-      <p style="text-align: center;">
-        <a href="${escapeHtml(loginUrl || SITE)}" class="btn">Open XENO</a>
-      </p>
-      <hr class="divider">
-      <p class="muted">Didn't create this account? You can ignore this email — nothing else will happen.</p>
-      ${unsubUrl ? `<p class="muted">Don't want product emails? <a href="${escapeHtml(unsubUrl)}" style="color: rgba(255,255,255,0.45);">Unsubscribe</a>. We'll still send security emails like password resets.</p>` : ''}
-      <p class="muted"><a href="${SITE}/impressum" style="color: rgba(255,255,255,0.35);">Impressum</a> &middot; <a href="${SITE}/privacy" style="color: rgba(255,255,255,0.35);">Privacy</a></p>
+      ${hairline(20, 14)}
+
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr><td style="padding:0 0 8px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:9.5px; font-weight:600; letter-spacing:0.2em; text-transform:uppercase; color:#5d5d63;">
+          Start here
+        </td></tr>
+      </table>
+
+      ${stepRow('01', 'Confirm your email',
+        'Takes one click, and it is what keeps account recovery working if you ever lose your password.',
+        `${SITE}/verify-email`, 'Confirm')}
+
+      ${stepRow('02', 'Open the workspace',
+        'Nothing to install. Start a conversation with a model in the browser and work from there.',
+        `${SITE}/overview`, 'Open it')}
+
+      ${stepRow('03', 'Install XENO Hub',
+        'One launcher for every app, with updates built in. Windows and Linux today.',
+        `${SITE}/product/hub/download`, 'Download')}
+
+      <!-- Two CTAs, deliberately unequal. The primary is the one that produces
+           VALUE; confirming an address is hygiene, and making hygiene the loud
+           button trains people to treat the loud button as a chore.
+           4px radius and #2b2b2b on the secondary — Motion's control species. -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr><td style="padding:12px 0 0;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td width="50%" style="padding-right:2px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#e8e8ee; border-radius:4px;">
+                  <tr><td align="center">
+                    <a href="${escapeHtml(loginUrl || `${SITE}/overview`)}" style="display:block; padding:10px 14px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11.5px; font-weight:600; color:#111111; text-decoration:none;">Open the workspace</a>
+                  </td></tr>
+                </table>
+              </td>
+              <td width="50%" style="padding-left:2px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#2b2b2b; border-radius:4px;">
+                  <tr><td align="center">
+                    <a href="${SITE}/verify-email" style="display:block; padding:10px 14px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11.5px; font-weight:500; color:#d8d8de; text-decoration:none;">Confirm email</a>
+                  </td></tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+      </table>
+
+      ${hairline(18, 12)}
+
+      <!-- Help + the closer. The one-person line is the boilerplate's own
+           "screenshot-able proof" (voice rule 5) and it is literally true, so
+           it earns the space a generic "built to help teams do more" — which
+           describes every product ever shipped — would waste. -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#1a1a1a; border-radius:4px;">
+        <tr>
+          <td style="padding:12px 14px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <div style="font-size:11.5px; font-weight:600; color:#d8d8de;">Stuck on any of it?</div>
+            <div style="font-size:11px; line-height:1.6; color:#7f7f86; margin-top:3px;">
+              The <a href="${SITE}/docs" style="color:#acacb4; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.15);">docs</a>
+              cover every app and the agent tooling, and you can
+              <a href="${SITE}/contact" style="color:#acacb4; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.15);">write to us</a>
+              directly. Real reply, not a ticket number.
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr><td style="padding:12px 0 0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:10.5px; line-height:1.65; color:#5d5d63;">
+          Built by one person working alongside AI agents &mdash; using the same tools you're about to.
+          <br><br>
+          Didn't create this account? Ignore this email &mdash; nothing else happens.${unsubUrl ? `
+          Don't want product email? <a href="${escapeHtml(unsubUrl)}" style="color:#7f7f86;">Unsubscribe</a>; security email still reaches you.` : ''}
+        </td></tr>
+      </table>
     `),
   }),
 
