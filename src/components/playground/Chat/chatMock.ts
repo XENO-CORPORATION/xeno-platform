@@ -74,6 +74,50 @@ const MOCK_MODELS: ModelsResponse = {
 };
 
 // ---------------------------------------------------------------------------
+// POST /api/v2/engine/{google,brave}-search  → web sources
+//
+// Not reached by Research mode as it stands. Measured with the network watched: turning on
+// Research and sending produces no request to either endpoint, because that flow goes through
+// `xenoSearchService` over its WebSocket instead. What does call them is `performProviderSearch`
+// in ChatWithLLM, on the Google/Brave branch — so this is the fixture waiting for that path, and
+// the shape it expects (`{ results: [...] }`), not a dead block someone forgot.
+// ---------------------------------------------------------------------------
+const MOCK_SEARCH_RESULTS = [
+  {
+    url: 'https://arxiv.org/abs/2312.06648',
+    title: 'Neural Extractive Summarization with Redundancy Control',
+    snippet:
+      'A salience model with an explicit redundancy penalty — the standard baseline for de-duplicated summaries.',
+    description:
+      'Introduces a redundancy-aware objective so extractive summaries reward coverage per idea rather than per line.',
+  },
+  {
+    url: 'https://aclanthology.org/2023.acl-long.155/',
+    title: 'Ranking Sentences for Extractive Summarization',
+    snippet: 'Salience estimation over long transcripts with a learned relevance + position score.',
+    description: 'A ranking approach that scores each turn by relevance, position, and novelty.',
+  },
+  {
+    url: 'https://www.semanticscholar.org/paper/redundancy-aware-summarizer',
+    title: 'A Redundancy-Aware Neural Summarizer',
+    snippet: 'Clusters claims by theme before compression to avoid repeating the same point.',
+    description: 'Theme clustering as a pre-step to compression reduces duplicate claims.',
+  },
+  {
+    url: 'https://langchain.dev/docs/use_cases/summarization',
+    title: 'Grouping and de-duplicating retrieved claims',
+    snippet: 'Practical guidance for collapsing near-duplicate claims in a summarisation chain.',
+    description: 'How to group and dedupe retrieved claims before rendering the final summary.',
+  },
+  {
+    url: 'https://eval.blog/summary-metrics',
+    title: 'Human vs automatic summary evaluation',
+    snippet: 'Why ROUGE under-rewards de-duplicated summaries and how human raters differ.',
+    description: 'A comparison of ROUGE against human judgement for de-duplicated summaries.',
+  },
+];
+
+// ---------------------------------------------------------------------------
 // POST /api/chat/generate
 // ---------------------------------------------------------------------------
 type GeneratePart = { type: string; text?: string };
@@ -103,28 +147,116 @@ const lastUserText = (messages: GenerateMessage[] = []): string => {
 };
 
 const buildMockAnswer = (userText: string): string => {
-  const echo = userText.length > 160 ? `${userText.slice(0, 160)}…` : userText;
+  const echo = userText.length > 120 ? `${userText.slice(0, 120)}…` : userText;
+
+  // A tiny inline SVG (data URI) so the image element renders offline.
+  const diagramSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="560" height="132">' +
+    '<rect width="560" height="132" rx="12" fill="#16181d"/>' +
+    '<g font-family="ui-monospace, monospace" font-size="15" fill="#e6e4df">' +
+    '<rect x="26" y="47" width="128" height="38" rx="8" fill="#101216" stroke="#2a2f3a"/><text x="52" y="71">Extract</text>' +
+    '<rect x="216" y="47" width="128" height="38" rx="8" fill="#101216" stroke="#2a2f3a"/><text x="236" y="71">Compress</text>' +
+    '<rect x="406" y="47" width="128" height="38" rx="8" fill="#101216" stroke="#2a2f3a"/><text x="436" y="71">Render</text>' +
+    '</g><g stroke="#6da7ec" stroke-width="2" fill="none"><path d="M160 66h48"/><path d="M350 66h48"/></g></svg>';
+  const diagramImg =
+    typeof btoa !== 'undefined'
+      ? `data:image/svg+xml;base64,${btoa(diagramSvg)}`
+      : `data:image/svg+xml,${encodeURIComponent(diagramSvg)}`;
+
   return [
-    '### Mock response',
+    '# Everything a chat message can render',
     '',
-    echo ? `You said: **“${echo}”**` : 'This is a simulated assistant reply.',
+    echo
+      ? `You asked: **“${echo}”** — here's a full-fidelity reply that exercises every element.`
+      : "Here's a full-fidelity reply that exercises every render element.",
     '',
-    'This reply is generated locally so you can build the chat frontend with no backend. It exercises the full render path:',
+    'It carries **bold**, *italic*, ~~strikethrough~~, `inline code`, and a [link](https://xenostudio.ai).',
     '',
-    '- Markdown — headings, lists, **bold**, `inline code`',
-    '- Fenced code blocks (with the Run / Copy header)',
-    '- The “Thinking” placeholder + timer during the artificial delay',
+    '## Lists',
+    '',
+    'Unordered, with nesting:',
+    '',
+    '- Extract the key turns',
+    '  - decisions',
+    '  - open questions',
+    '- Compress each into a one-line claim',
+    '- Render, grouped by theme',
+    '',
+    'Ordered steps:',
+    '',
+    '1. Split the pipeline into three stages',
+    '2. Dedupe claims by theme',
+    '3. Ship behind a flag',
+    '',
+    'A checklist:',
+    '',
+    '- [x] Split the pipeline',
+    '- [x] Add dedupe-by-theme',
+    '- [ ] Shadow-run last week’s transcripts',
+    '- [ ] Compare summaries side-by-side',
+    '',
+    '## A quote',
+    '',
+    '> A summary is a compression, not a transcript — reward coverage per idea, not per line.',
+    '',
+    '## A table',
+    '',
+    '| Stage | Input | Output |',
+    '| --- | --- | --- |',
+    '| Extract | Transcript | Salient turns |',
+    '| Compress | Salient turns | Claims |',
+    '| Render | Claims | Markdown |',
+    '',
+    '## Code',
     '',
     '```ts',
-    'function greet(name: string): string {',
-    '  return `Hello, ${name}!`;',
+    'export function summarise(turns: Turn[]): Summary {',
+    '  const claims = turns',
+    '    .filter((t) => t.salient)',
+    '    .map((t) => `${t.speaker}: ${compress(t.text)}`);',
+    '  return { claims, groupedBy: "theme" }; // render later',
     '}',
-    "console.log(greet('XENO'));",
     '```',
     '',
-    '> Generated by `chatMock.ts`. Swap it for the real `/api/chat/generate`',
-    "> backend by running `localStorage.setItem('xeno_chat_mock','off')`.",
+    '```python',
+    'def greet(name: str) -> str:',
+    '    return f"Hello, {name}!"',
+    '```',
+    '',
+    '```bash',
+    'npm run start   # dev server on :5183',
+    '```',
+    '',
+    '## An inline diagram',
+    '',
+    `![Pipeline: Extract → Compress → Render](${diagramImg})`,
+    '',
+    '---',
+    '',
+    '### Wrapping up',
+    '',
+    'That covered headings, **inline formatting**, nested lists, a task list, a blockquote, a table, three code blocks, an image, and a divider — the full render path. Toggle **Research** and re-send to add a multi-step thinking trace and web sources.',
   ].join('\n');
+};
+
+const buildMockThinking = (userText: string, searching?: boolean): string => {
+  const q = userText.length > 120 ? `${userText.slice(0, 120)}…` : userText || 'the request';
+  const lines = [
+    'Let me work through this carefully.',
+    '',
+    `- The user asked: "${q}".`,
+    `- Goal: a clear, well-structured answer${searching ? ', grounded in current sources' : ''}.`,
+  ];
+  if (searching) {
+    lines.push('- Plan: search, skim the strongest results, cross-check, then synthesize.');
+    lines.push('- Ran a few queries and compared a couple of sources so the answer holds up.');
+  } else {
+    lines.push('- Plan: outline the key points, then write them concisely with examples.');
+  }
+  lines.push('- Shape: a short intro, the main points, a table, and a small code example.');
+  lines.push('');
+  lines.push('Proceeding to write the final answer.');
+  return lines.join('\n');
 };
 
 const mockGenerate = (body: GenerateBody): unknown => {
@@ -141,10 +273,14 @@ const mockGenerate = (body: GenerateBody): unknown => {
     };
   }
 
+  // Return separate thinking + answer so the collapsible "Thoughts" section
+  // renders above the reply (reasoningProcessed drives the frontend path).
+  const userText = lastUserText(body.messages);
   return {
-    text: buildMockAnswer(lastUserText(body.messages)),
+    reasoningProcessed: true,
+    thinking: buildMockThinking(userText, body.useSearchTool),
+    answer: buildMockAnswer(userText),
     modelIdUsed,
-    reasoningProcessed: false,
   };
 };
 
@@ -156,63 +292,82 @@ const matchesPath = (url: string, path: string): boolean => {
   return clean === path || clean.endsWith(path);
 };
 
+type MockRoute = (url: string, init: RequestInit | undefined) => Promise<Response> | null;
+
+/**
+ * The routing table. Reassigned on every module eval so HMR edits to the mock
+ * apply WITHOUT a full page reload — the fetch wrapper is installed once and
+ * always calls the latest route via a window reference. Returns null when the
+ * request is not mocked (the wrapper then falls through to the real fetch).
+ */
+const route: MockRoute = (url, init) => {
+  try {
+    if (matchesPath(url, '/api/chat/generate') && (init?.method ?? 'GET').toUpperCase() === 'POST') {
+      const body: GenerateBody = init?.body ? JSON.parse(init.body as string) : {};
+      // Longer when "searching" so the multi-step thinking timeline plays out;
+      // shorter for a plain chat answer.
+      const delay = body.useSearchTool
+        ? 4200 + Math.floor(Math.random() * 1200)
+        : 1800 + Math.floor(Math.random() * 1200);
+      return jsonResponse(mockGenerate(body), delay);
+    }
+    if (matchesPath(url, '/api/models')) {
+      return jsonResponse(MOCK_MODELS, 150);
+    }
+    if (
+      matchesPath(url, '/api/v2/engine/google-search') ||
+      matchesPath(url, '/api/v2/engine/brave-search')
+    ) {
+      // Web sources for Research mode — enough for the "Web Sources" block to render.
+      return jsonResponse({ results: MOCK_SEARCH_RESULTS }, 700);
+    }
+    if (matchesPath(url, '/api/tokenize/messages')) {
+      // Local ~4-chars-per-token estimate, in the shape the service expects.
+      // Mainly here to stop the offline 500 retry flood from the tokenizer.
+      const body = init?.body ? JSON.parse(init.body as string) : {};
+      const msgs: Array<{ content?: string; text?: string }> = body.messages ?? [];
+      const messageTokens = msgs.map((m) => Math.ceil(((m.content ?? m.text ?? '').length) / 4));
+      const systemTokens = Math.ceil(((body.systemPrompt ?? '') as string).length / 4);
+      const overhead = msgs.length * 4 + (body.systemPrompt ? 4 : 0);
+      const total = messageTokens.reduce((a: number, b: number) => a + b, 0) + systemTokens + overhead;
+      return jsonResponse({ success: true, messageTokens, systemTokens, total, overhead });
+    }
+  } catch {
+    // fall through to the real fetch
+  }
+  return null;
+};
+
+interface MockWindow {
+  __xenoChatMockInstalled?: boolean;
+  __xenoChatMockRoute?: MockRoute;
+}
+
 export const installChatMock = (): void => {
   if (!MOCK_ENABLED) return;
-  const w = window as unknown as { __xenoChatMockInstalled?: boolean };
-  if (w.__xenoChatMockInstalled) return;
+  const w = window as unknown as MockWindow;
+  w.__xenoChatMockRoute = route; // always refresh so HMR edits apply
+  if (w.__xenoChatMockInstalled) return; // wrap window.fetch only once
   w.__xenoChatMockInstalled = true;
 
   const realFetch = window.fetch.bind(window);
-
-  window.fetch = async (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> => {
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input.url;
-
-    try {
-      if (matchesPath(url, '/api/chat/generate') && (init?.method ?? 'GET').toUpperCase() === 'POST') {
-        const body: GenerateBody = init?.body ? JSON.parse(init.body as string) : {};
-        // Longer when "searching" so the multi-step thinking timeline plays out;
-        // shorter for a plain chat answer.
-        const delay = body.useSearchTool
-          ? 4200 + Math.floor(Math.random() * 1200)
-          : 1800 + Math.floor(Math.random() * 1200);
-        return await jsonResponse(mockGenerate(body), delay);
-      }
-      if (matchesPath(url, '/api/models')) {
-        return await jsonResponse(MOCK_MODELS, 150);
-      }
-      if (matchesPath(url, '/api/tokenize/messages')) {
-        // Local ~4-chars-per-token estimate, in the shape the service expects.
-        // Mainly here to stop the offline 500 retry flood from the tokenizer.
-        const body = init?.body ? JSON.parse(init.body as string) : {};
-        const msgs: Array<{ content?: string; text?: string }> = body.messages ?? [];
-        const messageTokens = msgs.map((m) => Math.ceil(((m.content ?? m.text ?? '').length) / 4));
-        const systemTokens = Math.ceil(((body.systemPrompt ?? '') as string).length / 4);
-        const overhead = msgs.length * 4 + (body.systemPrompt ? 4 : 0);
-        const total = messageTokens.reduce((a: number, b: number) => a + b, 0) + systemTokens + overhead;
-        return await jsonResponse({ success: true, messageTokens, systemTokens, total, overhead });
-      }
-    } catch {
-      // If anything goes wrong building the mock, fall through to the real fetch.
-    }
-
-    return realFetch(input as RequestInfo, init);
+      typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const handled = w.__xenoChatMockRoute?.(url, init) ?? null;
+    return handled ?? realFetch(input, init);
   };
 
   // eslint-disable-next-line no-console
   console.info(
-    '[chatMock] Offline mock backend active: /api/chat/generate, /api/models. ' +
+    '[chatMock] Offline mock backend active: /api/chat/generate, /api/models, /api/tokenize. ' +
       "Disable with localStorage.setItem('xeno_chat_mock','off') then reload.",
   );
 };
 
-// Self-install on import (guarded + idempotent), so it is active before the
-// component's first fetch. No-op in production or when toggled off.
+// Self-install on import, then re-run on HMR so mock edits apply without a
+// full page reload.
 installChatMock();
+if (import.meta.hot) {
+  import.meta.hot.accept();
+}
