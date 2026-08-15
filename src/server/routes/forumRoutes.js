@@ -447,6 +447,38 @@ router.put('/threads/:shortId/subscription', authMiddleware, loadActor, handled(
  * will never contain the question you helped somebody else with, which is
  * usually the one you are trying to find again.
  */
+/* ──────────────────────────────────────────────────────────────────────────
+ * Flag review (WP3)
+ *
+ * forum_flags carried status / resolved_by / resolved_at / resolution and
+ * nothing in the application could read a flag or resolve one. "Report" was a
+ * button whose report went into a table with no reader.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** GET /api/forum/flags?status=open — the review queue. Needs review_flags. */
+router.get('/flags', authMiddleware, loadActor, handled('listFlags', async (req, res) => {
+  res.json({
+    success: true,
+    flags: await write.listFlags(req.db, req.actor, { status: req.query.status, limit: req.query.limit }),
+  });
+}));
+
+/**
+ * POST /api/forum/flags/:id/resolve  { action: 'dismiss' | 'action', note }
+ *
+ * `action` hides the target as part of the same resolution. A queue whose only
+ * outcome is a status column is theatre — the reporter would see their report
+ * marked handled while the thing they reported is still on the page.
+ */
+router.post('/flags/:id/resolve', authMiddleware, loadActor, handled('resolveFlag', async (req, res) => {
+  res.json({
+    success: true,
+    ...(await write.resolveFlag(req.db, req.actor, req.params.id, {
+      action: req.body?.action, note: req.body?.note,
+    })),
+  });
+}));
+
 router.get('/me/activity', authMiddleware, loadActor, handled('myActivity', async (req, res) => {
   res.json({ success: true, threads: await svc.listMyActivity(req.db, req.actor.id, { limit: req.query.limit }) });
 }));
