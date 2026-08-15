@@ -1692,21 +1692,21 @@ const ChatWithVoice: React.FC = () => {
           stateClasses = `bg-neutral-600/30 border-neutral-500/40 hover:border-neutral-400/50 focus:ring-neutral-300/50`;
         }
       } else if (selectedProvider === 'google') {
-        stateClasses = `bg-blue-600/30 border-blue-500/40 hover:border-blue-400/50 focus:ring-blue-300/50 google-listening-pulse`;
+        stateClasses = `bg-[var(--accent-color)]/30 border-[var(--accent-color)]/40 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50 google-listening-pulse`;
       } else {
         // Default/other providers
-        stateClasses = `bg-purple-600/30 border-purple-500/40 hover:border-purple-400/50 focus:ring-purple-300/50`;
+        stateClasses = `bg-[var(--accent-color)]/30 border-[var(--accent-color)]/40 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50`;
       }
     } else if (microphoneStatus === 'processing_audio' || assistantStatus === 'thinking') {
       stateClasses = `bg-[var(--accent-color)]/20 border-[var(--accent-color)]/30 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50 cursor-wait`;
     } else if (assistantStatus === 'speaking') {
       // Provider-specific speaking states
       if (selectedProvider === 'google') {
-        stateClasses = `bg-blue-500/20 border-blue-400/30 hover:border-blue-300/50 focus:ring-blue-200/50`;
+        stateClasses = `bg-[var(--accent-color)]/20 border-[var(--accent-color)]/30 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50`;
       } else if (selectedProvider === 'openai') {
         stateClasses = `bg-[var(--accent-color)]/20 border-[var(--accent-color)]/30 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50`;
       } else {
-        stateClasses = `bg-purple-500/20 border-purple-400/30 hover:border-purple-300/50 focus:ring-purple-200/50`;
+        stateClasses = `bg-[var(--accent-color)]/20 border-[var(--accent-color)]/30 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50`;
       }
     } else if (microphoneStatus === 'permission_denied' || assistantStatus === 'error' || lastError || microphoneStatus === 'no_device') {
       stateClasses = `bg-neutral-700/30 border-neutral-600/40 hover:border-neutral-500/50 focus:ring-neutral-400/50`;
