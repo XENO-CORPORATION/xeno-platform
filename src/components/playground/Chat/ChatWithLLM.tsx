@@ -15521,19 +15521,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                {message.timestamp && (
                                                    <span className="mr-1 text-[11px] text-gray-600">{formatMessageTime(message.timestamp)}</span>
                                                )}
-                                               <button
-                                                   type="button"
+                                               <IconButton
+                                                   icon={RefreshDecl}
+                                                   size="sm"
+                                                   iconSize={14}
                                                    onClick={() => void handleRetryFromUserMessage(message.id)}
                                                    disabled={isLoading}
-                                                   className="rounded-md p-1 text-gray-400 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
                                                    aria-label="Retry from this message"
                                                    title="Retry"
-                                               >
-                                                   <RefreshCcw size={14} />
-                                               </button>
-                                               <button onClick={() => handleEditUserMessage(message.id, message.text)} className="rounded-md p-1 text-gray-400 hover:text-gray-200" aria-label="Edit message">
-                                                   <SquarePen size={14} />
-                                               </button>
+                                               />
+                                               <IconButton
+                                                   icon={EditDecl}
+                                                   size="sm"
+                                                   iconSize={14}
+                                                   onClick={() => handleEditUserMessage(message.id, message.text)}
+                                                   aria-label="Edit message"
+                                               />
                                                {/* `data-selection` is what makes the check DRAW rather than
                                                    appear. The stroke only animates while a trigger matches,
                                                    and hover is not one you can rely on here: click and move
@@ -15543,18 +15546,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                    And the tick is the text colour, not green. A confirmation
                                                    that introduces a hue the theme does not own reads as a
                                                    status badge; what happened is that a button did its job. */}
-                                               <button
+                                               <IconButton
+                                                 icon={copiedMessageId === message.id ? CheckDecl : CopyDecl}
+                                                 size="sm"
+                                                 iconSize={14}
                                                  onClick={() => handleCopyUserMessage(message.text, message.id)}
-                                                 className="rounded-md p-1 text-gray-400 hover:text-gray-200"
                                                  data-selection={copiedMessageId === message.id ? 'on' : 'off'}
                                                  aria-label="Copy message"
-                                               >
-                                                    {copiedMessageId === message.id ? (
-                                                         <Check size={14} className="text-[var(--chat-text)]" />
-                                                     ) : (
-                                                         <Copy size={14} />
-                                                     )}
-                                               </button>
+                                               />
                                            </div>
                                        </div>
                                    )
