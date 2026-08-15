@@ -493,14 +493,14 @@ const DEMO_ANSWER_3 = `<p style="margin:0 0 14px;">Done — here's the whole thi
 </div>
 <div style="display:flex;align-items:center;gap:13px;padding:13px 15px;border:1px solid var(--chat-border);border-radius:12px;background:var(--chat-surface);margin:14px 0;">
 <span style="width:42px;height:42px;border-radius:10px;display:grid;place-items:center;background:var(--chat-hover);color:var(--chat-muted);flex:none;">
-<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></span>
+<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="butt" stroke-linejoin="round"><path d="M13 3H7a1.4 1.4 0 0 0-1.4 1.4v15.2A1.4 1.4 0 0 0 7 21h10a1.4 1.4 0 0 0 1.4-1.4V9z"/><path d="M13 3v6h6"/><path d="M8 12h8"/><path d="M8 14.6h8"/><path d="M8 17.2h5"/></svg></span>
 <span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:650;color:var(--chat-text);">Summariser — Team One-Pager</span>
 <span style="display:block;font-size:12px;color:var(--chat-muted);margin-top:3px;"><span style="font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--chat-muted);background:var(--chat-hover);padding:1px 7px;border-radius:5px;">Document</span> &nbsp;updated just now · 1 min read</span></span>
-<span style="color:var(--chat-muted);font-size:12px;white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Open</span>
+<span style="color:var(--chat-muted);font-size:12px;white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="butt" stroke-linejoin="round"><path d="M6.5 17.5 17.5 6.5"/><path d="M9 6.5h8.5V15"/></svg>Open</span>
 </div>
 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
-<span style="font-size:12.5px;color:var(--chat-muted);border:1px solid var(--chat-border);border-radius:9px;padding:7px 13px;display:inline-flex;align-items:center;gap:7px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Tweak the tone for execs</span>
-<span style="font-size:12.5px;color:var(--chat-muted);border:1px solid var(--chat-border);border-radius:9px;padding:7px 13px;display:inline-flex;align-items:center;gap:7px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8"/><path d="M12 3v13M7 8l5-5 5 5"/></svg>Export as PDF</span>
+<span style="font-size:12.5px;color:var(--chat-muted);border:1px solid var(--chat-border);border-radius:9px;padding:7px 13px;display:inline-flex;align-items:center;gap:7px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="butt" stroke-linejoin="round"><path d="M13.5 6.5 17.5 10.5 7.5 20.5 3.5 21.5 4.5 17.5Z"/><path d="M11.5 8.5 15.5 12.5"/><path d="M4.6 21.9H12.1"/></svg>Tweak the tone for execs</span>
+<span style="font-size:12.5px;color:var(--chat-muted);border:1px solid var(--chat-border);border-radius:9px;padding:7px 13px;display:inline-flex;align-items:center;gap:7px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="butt" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 15v3.5A1 1 0 0 0 6 19.5H18A1 1 0 0 0 19 18.5V15"/></svg>Export as PDF</span>
 </div>`;
 
 const DEMO_NOW = Date.now();
@@ -950,14 +950,14 @@ const highlightTextWithSources = (
 // Add to the bottom of the file or where other styles are defined
 const sourceHighlightStyle = `
   .source-highlight {
-    background-color: rgba(59, 130, 246, 0.1);
+    background-color: var(--chat-accent-soft);
     border-radius: 0.25rem; /* Added from inline style */
     padding: 0 0.25rem; /* Added from inline style */
   }
   
   .inline-source-citation {
     font-size: 0.75rem;
-    color: #3b82f6;
+    color: var(--chat-accent);
     font-weight: 500;
     cursor: pointer;
     vertical-align: super;
@@ -968,7 +968,7 @@ const sourceHighlightStyle = `
 // CSS styles for source highlighting
 const sourceHighlightStyles = `
   .source-highlight {
-    background-color: rgba(59, 130, 246, 0.2); /* Slightly more opaque background */
+    background-color: var(--chat-accent-soft);
     border-radius: 0.25rem;
     padding: 0 0.25rem;
     cursor: pointer;
@@ -978,7 +978,7 @@ const sourceHighlightStyles = `
   .source-highlight a,
   .source-highlight a:hover,
   .source-highlight a:visited { /* Ensure visited links are also styled correctly */
-    color: #93c5fd; /* text-blue-300 for links */
+    color: var(--chat-accent);
     text-decoration: underline; /* Explicitly underline links within highlights */
   }
   
@@ -1114,7 +1114,7 @@ const sourceHighlightStyles = `
     height: 40px;
     border: 4px solid rgba(255, 255, 255, 0.1);
     border-radius: 50%;
-    border-top-color: #3b82f6;
+    border-top-color: var(--chat-accent);
     animation: spin 1s ease-in-out infinite;
   }
 
@@ -1532,7 +1532,7 @@ const SourcePreviewComponent: React.FC<{
           </div>
           {sourcePreviewData.url && (
             <div className="source-preview-footer">
-              <a href={sourcePreviewData.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', color: '#93c5fd' }}>
+              <a href={sourcePreviewData.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', color: 'var(--chat-accent)', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
                 {sourcePreviewData.url}
               </a>
             </div>
@@ -1622,7 +1622,7 @@ const XenoDeepSearchAnimationInline: React.FC<{
     <div className="xeno-search-loading">
       <div className="w-full space-y-3">
         <div className="flex items-center gap-3">
-          <div className="flex-shrink-0 w-10 h-10 text-blue-400 bg-blue-900/30 rounded-full flex items-center justify-center">
+          <div className="flex-shrink-0 w-10 h-10 text-[var(--chat-accent)] bg-[var(--chat-accent-soft)] rounded-full flex items-center justify-center">
             <PhaseIcon size={20} className="animate-pulse" />
           </div>
           <div className="flex-1">
@@ -1630,7 +1630,7 @@ const XenoDeepSearchAnimationInline: React.FC<{
               <h4 className="text-sm font-semibold text-white">
                 🔍 Xeno Deep Search
               </h4>
-              <span className="text-xs font-medium text-blue-400">
+              <span className="text-xs font-medium text-[var(--chat-accent)]">
                 {Math.round(progress)}%
               </span>
             </div>
@@ -1639,7 +1639,7 @@ const XenoDeepSearchAnimationInline: React.FC<{
             </p>
             <div className="w-full bg-gray-700 rounded-full h-1.5">
               <div 
-                className="bg-gradient-to-r from-blue-500 to-blue-600 h-1.5 rounded-full transition-all duration-500 ease-out"
+                className="bg-[var(--chat-accent)] h-1.5 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -10110,13 +10110,13 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     return (
       <div className="xeno-search-results w-full p-4 my-3 rounded-lg transition-all duration-300 ease-in-out">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center text-blue-400 font-medium">
-            <div className="flex-shrink-0 w-6 h-6 bg-blue-500/10 mr-2 rounded-full flex items-center justify-center">
-              <Globe size={14} className="text-blue-400" />
+          <div className="flex items-center text-[var(--chat-accent)] font-medium">
+            <div className="flex-shrink-0 w-6 h-6 bg-[var(--chat-accent-soft)] mr-2 rounded-full flex items-center justify-center">
+              <Globe size={14} className="text-[var(--chat-accent)]" />
             </div>
             <span>Xeno Web Search</span>
             {sourceCount > 0 && (
-              <span className="ml-2 px-1.5 py-0.5 bg-blue-900/20 text-blue-400 text-xs rounded-full">
+              <span className="ml-2 px-1.5 py-0.5 bg-[var(--chat-accent-soft)] text-[var(--chat-accent)] text-xs rounded-full">
                 {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}
               </span>
             )}
@@ -10167,8 +10167,8 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         )}
         
         {results.error && !results.sources && !results.summary && (
-          <div className="px-4 py-3 bg-red-900/20 rounded-md border border-red-800/30">
-            <p className="text-xs text-red-400 flex items-center">
+          <div className="px-4 py-3 bg-[var(--chat-danger)]/12 rounded-md border border-[var(--chat-danger)]/30">
+            <p className="text-xs text-[var(--chat-danger)] flex items-center">
               <X size={12} className="mr-1 flex-shrink-0" />
               Error: {results.error}
             </p>
@@ -10240,7 +10240,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 href={source.uri}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 hover:underline"
+                className="text-[var(--chat-accent)] underline decoration-[var(--chat-border)] underline-offset-2 transition-colors hover:decoration-[var(--chat-accent)]"
                 title={source.uri}
                 style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
               >
@@ -11710,7 +11710,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       </div>
                       <button
                         onClick={() => removeFromQueue(queuedMessage.id)}
-                        className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-900/30 rounded transition-colors"
+                        className="p-1 text-gray-400 hover:text-[var(--chat-danger)] hover:bg-[var(--chat-danger)]/15 rounded transition-colors"
                       >
                         <X size={14} />
                       </button>
@@ -11731,7 +11731,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             }`}
           >
             {isContextLimitReached && (
-              <div className="mb-3 p-2.5 border border-red-600/70 bg-red-900/30 rounded-lg text-red-400 text-xs shadow-md">
+              <div className="mb-3 p-2.5 border border-[var(--chat-danger)]/70 bg-[var(--chat-danger)]/15 rounded-lg text-[var(--chat-danger)] text-xs shadow-md">
                 {contextLimitWarning}
               </div>
             )}
@@ -11982,7 +11982,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 <button
                                   onClick={() => compactConversation(selectedModel)}
                                   disabled={isLoading}
-                                  className="group text-xs text-orange-400 transition-all hover:text-orange-300 disabled:cursor-not-allowed disabled:opacity-50 tabular-nums"
+                                  className="group text-xs text-[var(--chat-muted)] transition-all hover:text-[var(--chat-text)] disabled:cursor-not-allowed disabled:opacity-50 tabular-nums"
                                 >
                                   <span className="group-hover:hidden">
                                     {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
@@ -11994,7 +11994,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               );
                             }
                             return (
-                              <span className={`text-xs tabular-nums ${isOverLimit ? 'text-red-400' : isNearLimit ? 'text-orange-400' : 'text-gray-400'}`}>
+                              <span className={`text-xs tabular-nums ${isOverLimit ? 'text-[var(--chat-danger)]' : isNearLimit ? 'text-[var(--chat-text)]' : 'text-gray-400'}`}>
                                 {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
                               </span>
                             );
@@ -12078,10 +12078,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         >
                           {isVoiceInputActive && (
                             <span className="absolute inset-0 flex items-center justify-center">
-                              <span className="animate-ping h-3.5 w-3.5 rounded-full bg-red-500 opacity-75"></span>
+                              <span className="animate-ping h-3.5 w-3.5 rounded-full bg-[var(--chat-danger)] opacity-75"></span>
                             </span>
                           )}
-                          <Mic size={16} className={`relative ${isVoiceInputActive ? 'text-red-500' : 'text-gray-400'}`} />
+                          <Mic size={16} className={`relative ${isVoiceInputActive ? 'text-[var(--chat-danger)]' : 'text-gray-400'}`} />
                         </button>
                         {(isVoiceModeMenuOpen || isVoiceMenuClosing) && (
                           <div
@@ -12563,7 +12563,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           .inline-source-citation {
             display: inline-flex;
             font-size: 0.75rem; /* text-xs */
-            color: #60a5fa; /* text-blue-400 */
+            color: var(--chat-accent);
             font-weight: 500; /* font-medium */
             margin-left: 0.25rem; /* ml-1 */
           }
@@ -12571,7 +12571,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           /* Style for highlighted source text segments */
           .source-highlight {
             position: relative;
-            background-color: rgba(59, 130, 246, 0.1); /* bg-blue-500/10 */
+            background-color: var(--chat-accent-soft);
             border-radius: 0.25rem; /* rounded */
             padding: 0 0.25rem; /* px-1 */
           }
@@ -14567,7 +14567,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 const isNearLimit = totalUsagePercent > 0.9;
                 const isOverLimit = totalUsagePercent > 1;
                 return (
-                  <span className={`text-xs tabular-nums ${isOverLimit ? 'text-red-400' : isNearLimit ? 'text-orange-400' : 'text-gray-400'}`}>
+                  <span className={`text-xs tabular-nums ${isOverLimit ? 'text-[var(--chat-danger)]' : isNearLimit ? 'text-[var(--chat-text)]' : 'text-gray-400'}`}>
                     {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()}
                   </span>
                 );
@@ -14970,7 +14970,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   <button
                     type="button"
                     role="menuitem"
-                    className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-red-400 transition-colors disabled:opacity-40"
+                    className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-danger)] transition-colors disabled:opacity-40"
                     disabled={!activeHistoryConvo}
                     onClick={() => {
                       if (!activeHistoryConvo) return;
@@ -15434,7 +15434,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           {dateSeparatorElement}
                           <div
                             className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'} ${firstMessageTopMargin} ${
-                              messageMatchesSearch ? 'bg-yellow-500/5 border-l-2 border-yellow-500/50 -ml-0.5 pl-0.5' : ''
+                              messageMatchesSearch ? 'bg-[var(--chat-accent-soft)] border-l-2 border-[var(--chat-accent)] -ml-0.5 pl-0.5' : ''
                             }`}
                           >
                            {isUser ? (
@@ -15442,7 +15442,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                      <div
                                          className="chat-message-bubble flex w-full max-w-[90%] flex-col gap-2 rounded-xl border border-[#1e1e21] bg-[#0e0e10] p-2 text-white md:max-w-[75%]"
                                      >
-                                         <div className="rounded-lg border border-blue-500/70 bg-[#0a0a0b]/40 px-2.5 py-2 transition-colors focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/25">
+                                         <div className="rounded-lg border border-[var(--chat-accent)]/70 bg-[#0a0a0b]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-accent)] focus-within:ring-1 focus-within:ring-blue-500/25">
                                          <textarea
                                              ref={editInputRef}
                                              value={editText}
@@ -15583,9 +15583,23 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                <button onClick={() => handleEditUserMessage(message.id, message.text)} className="rounded-md p-1 text-gray-400 hover:text-gray-200" aria-label="Edit message">
                                                    <SquarePen size={14} />
                                                </button>
-                                               <button onClick={() => handleCopyUserMessage(message.text, message.id)} className="rounded-md p-1 text-gray-400 hover:text-gray-200" aria-label="Copy message">
+                                               {/* `data-selection` is what makes the check DRAW rather than
+                                                   appear. The stroke only animates while a trigger matches,
+                                                   and hover is not one you can rely on here: click and move
+                                                   the mouse away, as people do, and the tick was simply
+                                                   there, already finished. Selection needs no pointer.
+
+                                                   And the tick is the text colour, not green. A confirmation
+                                                   that introduces a hue the theme does not own reads as a
+                                                   status badge; what happened is that a button did its job. */}
+                                               <button
+                                                 onClick={() => handleCopyUserMessage(message.text, message.id)}
+                                                 className="rounded-md p-1 text-gray-400 hover:text-gray-200"
+                                                 data-selection={copiedMessageId === message.id ? 'on' : 'off'}
+                                                 aria-label="Copy message"
+                                               >
                                                     {copiedMessageId === message.id ? (
-                                                         <Check size={14} className="text-green-400" />
+                                                         <Check size={14} className="text-[var(--chat-text)]" />
                                                      ) : (
                                                          <Copy size={14} />
                                                      )}
@@ -15856,7 +15870,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           )}
 
                                           {message.isError && message.text && (
-                                              <div className={`prose prose-sm prose-invert max-w-none text-red-400 prose-strong:text-red-300 prose-p:my-1.5 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5`}>
+                                              <div className={`prose prose-sm prose-invert max-w-none text-[var(--chat-danger)] prose-strong:text-[var(--chat-danger)] prose-p:my-1.5 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5`}>
                                                   <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{message.text}</ReactMarkdown> 
                                               </div>
                                           )}
@@ -15932,10 +15946,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                       onClick={() => handleCopy(message.parsedAnswer, message.id)}
                                                       className="xeno-icon-hover p-1 text-gray-400 hover:text-gray-200 rounded-md"
                                                       aria-label="Copy response"
+                                                      data-selection={copiedAiMessageId === message.id ? 'on' : 'off'}
                                                       disabled={copiedAiMessageId === message.id}
                                                   >
                                                       {copiedAiMessageId === message.id ? (
-                                                          <Check size={14} className="text-green-400" />
+                                                          <Check size={14} className="text-[var(--chat-text)]" />
                                                       ) : (
                                                        <Copy size={14} />
                                                       )}
@@ -15952,7 +15967,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                       onClick={(e) => handleOpenFeedbackPopup(e, message.id)}
                                                       className={`xeno-icon-hover p-1 rounded-md ${
                                                           feedbackStatusMap[message.id] === 'liked'
-                                                              ? 'text-green-500 hover:text-green-400'
+                                                              ? 'text-[var(--chat-text)]'
                                                               : 'text-gray-400 hover:text-gray-200'
                                                       }`}
                                                       aria-label="Like response"
@@ -15963,7 +15978,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                       onClick={(e) => handleOpenDislikePopup(e, message.id)}
                                                       className={`xeno-icon-hover p-1 rounded-md ${
                                                           feedbackStatusMap[message.id] === 'disliked'
-                                                              ? 'text-red-500 hover:text-red-400'
+                                                              ? 'text-[var(--chat-text)]'
                                                               : 'text-gray-400 hover:text-gray-200'
                                                       }`}
                                                       aria-label="Dislike response"
@@ -17353,7 +17368,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     <button
                 type="button"
                 role="menuitem"
-                className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-red-400 transition-colors"
+                className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-danger)] transition-colors"
                 onClick={() => {
                   setDeleteConfirmationModal({
                     isOpen: true,
@@ -17366,7 +17381,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               >
                 <Trash2 size={14} className="flex-shrink-0" />
                 <span>Delete</span>
-                <span className="ml-auto text-[11px] text-red-400/70">D</span>
+                <span className="ml-auto text-[11px] text-[var(--chat-danger)]/70">D</span>
               </button>
             </div>
             </>,
