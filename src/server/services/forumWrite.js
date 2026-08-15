@@ -1129,3 +1129,68 @@ export async function eraseForumContent(client, userId) {
 
   return { postsErased: posts.rowCount, threadsErased: threads.rowCount };
 }
+
+/**
+ * Delete a thread you started.
+ *
+ * ── THE SHAPE DEPENDS ON WHETHER ANYONE ELSE SPOKE ──────────────────────────
+ *
+ * A thread is not only yours the moment somebody answers it. Their answer is
+ * their work, and it is usually the reason the thread has any value to the next
+ * reader. So:
+ *
+ *   nobody else posted  ->  the thread goes. Nothing is lost but your own words.
+ *   somebody answered   ->  the thread REMAINS as a tombstone: title '[removed]',
+ *                           your question blanked, their answers untouched.
+ *
+ * The second branch is the one that matters. "Delete" that also erases three
+ * other people's answers is a deletion of their data on your request, and it is
+ * how an archive gets quietly hollowed out by whoever happens to have asked.
+ *
+ * This is the same rule eraseForumContent follows, and deliberately so — one
+ * idea, applied in both places, rather than two policies that drift.
+ */
+export async function deleteThread(db, user, shortId) {
+  assertNotService(user);
+
+  const { rows } = await db.query(
+    `SELECT id, author_id, status FROM forum_threads WHERE short_id = $1`,
+    [String(shortId || '').toLowerCase()],
+  );
+  const thread = rows[0];
+  if (!thread || thread.status === 'deleted') {
+    throw new ForumError('Thread not found', 'thread_not_found', 404);
+  }
+
+  const isAuthor = String(thread.author_id) === String(user.id);
+  const isStaff = ['admin', 'moderator'].includes(user.role);
+  if (!isAuthor && !isStaff) {
+    throw new ForumError('You can only delete your own threads', 'not_thread_author', 403);
+  }
+
+  // "Anyone else" means a VISIBLE post by a different author. A reply the author
+  // already deleted must not keep their thread alive as a tombstone forever.
+  const { rows: others } = await db.query(
+    `SELECT COUNT(*)::int AS n FROM forum_posts
+      WHERE thread_id = $1 AND status = 'visible' AND position > 1
+        AND author_id IS DISTINCT FROM $2`,
+    [thread.id, thread.author_id],
+  );
+  const hasOtherVoices = Number(others[0]?.n ?? 0) > 0;
+
+  // The author's own content goes either way: the question body and the title.
+  await db.query(
+    `UPDATE forum_posts SET body = '', status = 'deleted', deleted_at = NOW(), deleted_by = $2
+      WHERE thread_id = $1 AND position = 1`,
+    [thread.id, user.id],
+  );
+  await db.query(
+    `UPDATE forum_threads
+        SET title = '[removed]', deleted_at = NOW(), deleted_by = $2,
+            status = CASE WHEN $3::boolean THEN status ELSE 'deleted' END
+      WHERE id = $1`,
+    [thread.id, user.id, hasOtherVoices],
+  );
+
+  return { ok: true, deleted: true, keptForAnswers: hasOtherVoices };
+}

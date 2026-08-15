@@ -410,6 +410,17 @@ router.patch('/posts/:id', authMiddleware, loadActor, handled('editPost', async 
   res.json({ success: true, ...(await write.editPost(req.db, req.actor, req.params.id, { body: req.body?.body })) });
 }));
 
+/**
+ * DELETE /api/forum/threads/:shortId — delete a thread you started.
+ *
+ * If anyone else has answered, the thread REMAINS as a tombstone carrying their
+ * answers; only the title and your question go. Deleting their work on your
+ * request is a deletion of their data, not yours.
+ */
+router.delete('/threads/:shortId', authMiddleware, loadActor, handled('deleteThread', async (req, res) => {
+  res.json({ success: true, ...(await write.deleteThread(req.db, req.actor, req.params.shortId)) });
+}));
+
 /** DELETE /api/forum/posts/:id — tombstone the post and blank its body. */
 router.delete('/posts/:id', authMiddleware, loadActor, handled('deletePost', async (req, res) => {
   res.json({ success: true, ...(await write.deletePost(req.db, req.actor, req.params.id)) });
