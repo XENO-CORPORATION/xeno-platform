@@ -35,7 +35,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -10220,11 +10220,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     };
 
     const feedbackOptions = [
-      { label: 'Helpful answer', icon: ThumbsUp, type: 'helpful' },
-      { label: 'Well-written response', icon: Feather, type: 'well-written' },
-      { label: 'Accurate information', icon: Target, type: 'accurate' },
-      { label: 'Funny response', icon: Smile, type: 'funny' },
-      { label: 'Good use of memory', icon: BrainCircuit, type: 'memory' },
+      { label: 'Helpful answer', icon: ThumbsUpDecl, type: 'helpful' },
+      { label: 'Well-written response', icon: FeatherDecl, type: 'well-written' },
+      { label: 'Accurate information', icon: TargetDecl, type: 'accurate' },
+      { label: 'Funny response', icon: SmileDecl, type: 'funny' },
+      { label: 'Good use of memory', icon: BrainCircuitDecl, type: 'memory' },
     ];
 
     return (
@@ -10274,16 +10274,13 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           {/* First child, so the pill paints behind the rows rather than over them. */}
           {feedbackGoo.pill}
           {feedbackOptions.map((option) => (
-            <button
+            <MenuItem
               key={option.type}
-              type="button"
-              role="menuitem"
-              onClick={() => handleFeedbackSubmit(option.type)}
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] transition-colors"
+              onSelect={() => handleFeedbackSubmit(option.type)}
+              leadingIcon={option.icon}
             >
-              <option.icon size={16} className="text-[var(--chat-muted)]" />
-              <span>{option.label}</span>
-            </button>
+              {option.label}
+            </MenuItem>
           ))}
         </div>
       </div>
@@ -10318,13 +10315,13 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       // wrapped, and a wrapped first row makes the menu look like it starts with a
       // paragraph. It also lands in the family the rest of the list already speaks —
       // "Incorrect answer", "Biased answer" — as the generic member of it.
-      { label: 'Different answer', icon: ThumbsDown, type: 'wanted-else' },
-      { label: 'Incorrect answer', icon: MessageSquareX, type: 'incorrect' }, 
-      { label: 'Biased answer', icon: Quote, type: 'biased' }, 
-      { label: 'Wanted image', icon: Image, type: 'wanted-image' },
-      { label: 'Bad style / tone', icon: WandSparkles, type: 'bad-style' }, 
-      { label: 'Wanted to search', icon: Search, type: 'wanted-search' },
-      { label: 'Incorrect memory', icon: FileX, type: 'incorrect-memory' }, 
+      { label: 'Different answer', icon: ThumbsDownDecl, type: 'wanted-else' },
+      { label: 'Incorrect answer', icon: MessageSquareXDecl, type: 'incorrect' }, 
+      { label: 'Biased answer', icon: QuoteDecl, type: 'biased' }, 
+      { label: 'Wanted image', icon: ImageDecl, type: 'wanted-image' },
+      { label: 'Bad style / tone', icon: WandSparklesDecl, type: 'bad-style' }, 
+      { label: 'Wanted to search', icon: SearchDecl, type: 'wanted-search' },
+      { label: 'Incorrect memory', icon: FileXDecl, type: 'incorrect-memory' }, 
     ];
 
     return (
@@ -10359,16 +10356,13 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           >
             {dislikeGoo.pill}
             {dislikeOptions.map((option) => (
-              <button
+              <MenuItem
                 key={option.type}
-                type="button"
-                role="menuitem"
-                onClick={() => handleDislikeFeedbackSubmit(option.type)}
-                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] transition-colors"
+                onSelect={() => handleDislikeFeedbackSubmit(option.type)}
+                leadingIcon={option.icon}
               >
-                <option.icon size={16} className="text-[var(--chat-muted)]" />
-                <span>{option.label}</span>
-              </button>
+                {option.label}
+              </MenuItem>
             ))}
           </div>
         </div>
@@ -11444,17 +11438,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [isChatFilesModalMounted, closeChatFilesModal]);
 
-  // `xeno-icon-hover` is the library's generic "this row is an icon host" hook. A glyph's animation is
-  // triggered by its HOST, not by the glyph — deliberately, since an icon that stirred on every stray
-  // hover would be noise in a table. The library ships a closed list of hosts it recognises (button,
-  // chip, tab, menu-item, sidebar-item…), and this row is none of them: it is Tailwind classes. The
-  // hook says "here is one" without the row having to adopt a XENO component.
-  // No `hover:bg` on the row any more: the travelling pill below IS the filled surface, and two of them
-  // read as two highlights.
+  // These rows used to need `xeno-icon-hover` — the library's "treat this as an icon host" hook — because
+  // they were Tailwind classes, and a glyph animates from its HOST, off a closed list the library
+  // recognises. They are `<MenuItem>` now, which is ON that list, so the hook is gone with the class it
+  // rode on.
   //
-  const moreMenuItemClass =
-    'xeno-icon-hover flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[14px] text-[var(--chat-text)] transition-colors';
-
   // The ⋯ menu's hover highlight: one pill that TRAVELS to the row you point at, rather than each row
   // painting its own background. A fill that appears on the new row and vanishes from the old one is two
   // events with no journey between them, and it never says where it came from.
@@ -14953,23 +14941,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   <div className="my-1 border-t border-[#1e1e21]" />
 
                   <div ref={themeMenuRef}>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={moreMenuItemClass}
-                      aria-expanded={isThemeMenuOpen}
+                    {/* A disclosure, not a submenu — it grows the ⋯ menu rather than opening a
+                        second one beside it, and `expanded` is the component's word for that: the
+                        same chevron, quarter-turned, and `aria-expanded` instead of a popup promise
+                        this row does not keep. */}
+                    <MenuItem
+                      expanded={isThemeMenuOpen}
                       aria-controls="chat-theme-menu-inline"
-                      onClick={() => setIsThemeMenuOpen((open) => !open)}
+                      onSelect={() => setIsThemeMenuOpen((open) => !open)}
+                      leadingIcon={ContrastDecl}
                     >
-                      <ThemeTriggerIcon size={14} className="flex-shrink-0 text-zinc-500" />
-                      <span>Theme</span>
-                      <ChevronRight
-                        size={14}
-                        className={`ml-auto text-zinc-500 transition-transform duration-200 ${
-                          isThemeMenuOpen ? 'rotate-90' : ''
-                        }`}
-                      />
-                    </button>
+                      Theme
+                    </MenuItem>
                     {/* Inline accordion — grows the ⋯ menu instead of a floating popover. */}
                     <div
                       id="chat-theme-menu-inline"
@@ -15103,17 +15086,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </div>
                   </div>
 
-              <button
-                    type="button"
-                    role="menuitem"
-                    className={moreMenuItemClass}
-                    aria-pressed={isTemporaryChat}
-                    onClick={() => setIsTemporaryChat((current) => !current)}
+                  {/* `selected`, not `aria-pressed`: this is a checkable row in a menu, and the
+                      component says so in the role (`menuitemcheckbox`) as well as the mark. The
+                      check takes the leading slot from the glyph, which is the grammar — one slot,
+                      one answer to "is this on". */}
+                  <MenuItem
+                    selected={isTemporaryChat}
+                    onSelect={() => setIsTemporaryChat((current) => !current)}
+                    leadingIcon={UserRoundXDecl}
                   >
-                    <UserRoundX size={14} className="flex-shrink-0 text-zinc-500" />
-                    <span>Temporary chat</span>
-                    {isTemporaryChat && <Check size={13} className="ml-auto flex-shrink-0 text-zinc-100" />}
-                  </button>
+                    Temporary chat
+                  </MenuItem>
 
                   <div className="my-1 border-t border-[#1e1e21]" />
 
@@ -17167,11 +17150,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           if (!menuConvo) return null;
           const isPinned = Boolean(menuConvo.isPinned);
           const isArchived = Boolean(menuConvo.isArchived);
-          // Use --chat-hover (not hover:bg-[#1e1e21]): theme CSS matches [class*="bg-[#1e1e21]"]
-          // even on the hover: utility string, so every row would paint a permanent background.
-          const menuItemClass =
-            'xeno-icon-hover flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[14px] text-zinc-100 transition-colors';
-          const shortcutClass = 'ml-auto text-[11px] text-zinc-500';
           return createPortal(
             <>
             <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
@@ -17346,8 +17324,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               unread: 'Unread',
               status: 'Status',
             };
-            const menuItemClass =
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-100 transition-colors';
             const openSubmenu = (
               key: Exclude<RecentsFilterSubmenu, null>,
               event: React.MouseEvent<HTMLButtonElement>,

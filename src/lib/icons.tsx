@@ -220,6 +220,17 @@ export {
   GArchive as ArchiveDecl,
   GLayers as LayersDecl,
   GStar as StarDecl,
+  GFeather as FeatherDecl,
+  GTarget as TargetDecl,
+  GSmile as SmileDecl,
+  GBrainCircuit as BrainCircuitDecl,
+  GMessageX as MessageSquareXDecl,
+  GQuote as QuoteDecl,
+  GImage as ImageDecl,
+  GWandSparkles as WandSparklesDecl,
+  GFileX as FileXDecl,
+  GContrast as ContrastDecl,
+  GUserX as UserRoundXDecl,
 };
 
 /* Different name, same meaning. */
