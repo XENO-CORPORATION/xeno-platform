@@ -520,3 +520,50 @@ export async function markOpened(db, userId, threadId) {
     [userId, threadId],
   );
 }
+
+/**
+ * Everything a person has taken part in (WP5).
+ *
+ * Not "threads you authored" — that is the easy query and the wrong one. If you
+ * answered a question three weeks ago and want to find it again, it was never
+ * yours to begin with, and a list of what you STARTED will never contain it.
+ * So this unions threads you authored with threads you posted in, and says
+ * which it was.
+ *
+ * Deleted content is excluded on both sides: a tombstone you can still find in
+ * your own history is a delete that did not take.
+ */
+export async function listMyActivity(db, userId, { limit = 40 } = {}) {
+  const capped = Math.min(100, Math.max(1, Number(limit) || 40));
+  const { rows } = await db.query(
+    `SELECT t.*, s.slug AS space_slug, s.name AS space_name, s.kind AS space_kind,
+            (t.author_id = $1) AS authored,
+            (SELECT COUNT(*) FROM forum_posts p
+              WHERE p.thread_id = t.id AND p.author_id = $1 AND p.status = 'visible'
+                AND p.position > 1) AS my_replies,
+            (SELECT array_agg(g.namespace || ':' || g.value ORDER BY g.namespace, g.value)
+               FROM forum_thread_tags tt JOIN forum_tags g ON g.id = tt.tag_id
+              WHERE tt.thread_id = t.id) AS tags
+       FROM forum_threads t
+       JOIN forum_spaces s ON s.id = t.space_id
+      WHERE t.status NOT IN ('archived', 'deleted')
+        AND (
+          t.author_id = $1
+          OR EXISTS (SELECT 1 FROM forum_posts p
+                      WHERE p.thread_id = t.id AND p.author_id = $1
+                        AND p.status = 'visible' AND p.position > 1)
+        )
+      ORDER BY t.last_activity_at DESC
+      LIMIT $2`,
+    [userId, capped],
+  );
+
+  return rows.map((r) => ({
+    ...serializeThreadSummary(r),
+    // Why it is in YOUR list — the same explain-yourself rule the Feed follows
+    // (D11). "You asked this" and "you answered this" are different memories,
+    // and a list that flattens them is harder to scan than one that does not.
+    mine: r.authored ? 'asked' : 'answered',
+    myReplies: Number(r.my_replies || 0),
+  }));
+}

@@ -440,6 +440,17 @@ router.put('/threads/:shortId/subscription', authMiddleware, loadActor, handled(
   res.json({ success: true, ...(await write.setThreadSubscription(req.db, req.actor, shortId, subscribed)) });
 }));
 
+/**
+ * GET /api/forum/me/activity — what you have taken part in (WP5).
+ *
+ * Threads you asked AND threads you answered. A list of only what you started
+ * will never contain the question you helped somebody else with, which is
+ * usually the one you are trying to find again.
+ */
+router.get('/me/activity', authMiddleware, loadActor, handled('myActivity', async (req, res) => {
+  res.json({ success: true, threads: await svc.listMyActivity(req.db, req.actor.id, { limit: req.query.limit }) });
+}));
+
 /** GET /api/forum/subscriptions — tags you follow. */
 router.get('/subscriptions', authMiddleware, loadActor, handled('listSubscriptions', async (req, res) => {
   res.json({ success: true, tags: await write.listSubscriptions(req.db, req.actor.id) });
