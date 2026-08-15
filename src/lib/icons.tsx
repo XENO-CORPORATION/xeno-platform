@@ -211,6 +211,11 @@ export {
   GSearch as SearchDecl,
   GPanelLeftClose as PanelLeftCloseDecl,
   GArrowUpRight as ArrowUpRightDecl,
+  GFolder as FolderDecl,
+  GTrash as TrashDecl,
+  GBriefcase as BriefcaseDecl,
+  GGear as GearDecl,
+  GPlus as PlusDecl,
 };
 
 /* Different name, same meaning. */

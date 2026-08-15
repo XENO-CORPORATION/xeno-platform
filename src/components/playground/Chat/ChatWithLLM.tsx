@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { IconButton, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
+import { IconButton, MenuItem, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
 import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
@@ -35,7 +35,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -11453,7 +11453,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   // read as two highlights.
   //
   const moreMenuItemClass =
-    'xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors';
+    'xeno-icon-hover flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[14px] text-[var(--chat-text)] transition-colors';
 
   // The ⋯ menu's hover highlight: one pill that TRAVELS to the row you point at, rather than each row
   // painting its own background. A fill that appears on the new row and vanishes from the old one is two
@@ -14920,18 +14920,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 >
                   {/* First child, so the pill paints behind the rows rather than over them. */}
                   {chatMoreGoo.pill}
-                    <button
-                      type="button"
-                    role="menuitem"
-                    className={moreMenuItemClass}
-                    onClick={() => {
+                    <MenuItem
+                      onSelect={() => {
                       openChatFilesPanel();
                       setIsChatMoreMenuOpen(false);
                     }}
-                  >
-                    <Folder size={14} className="flex-shrink-0 text-zinc-500" />
-                    <span>View files in chat</span>
-                  </button>
+                      leadingIcon={FolderDecl}
+                    >
+                      View files in chat
+                    </MenuItem>
                   <button
                     type="button"
                     role="menuitem"
@@ -14960,12 +14957,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     <Archive size={14} className="flex-shrink-0 text-zinc-500" />
                     <span>{activeHistoryConvo?.isArchived ? 'Unarchive' : 'Archive'}</span>
                   </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-danger)] transition-colors disabled:opacity-40"
+                  <MenuItem
                     disabled={!activeHistoryConvo}
-                    onClick={() => {
+                    onSelect={() => {
                       if (!activeHistoryConvo) return;
                       setDeleteConfirmationModal({
                         isOpen: true,
@@ -14975,10 +14969,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       });
                       setIsChatMoreMenuOpen(false);
                     }}
+                    leadingIcon={TrashDecl}
                   >
-                    <Trash2 size={14} className="flex-shrink-0" />
-                    <span>Delete</span>
-                  </button>
+                    Delete
+                  </MenuItem>
 
                   <div className="my-1 border-t border-[#1e1e21]" />
 
@@ -15147,54 +15141,42 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                   <div className="my-1 border-t border-[#1e1e21]" />
 
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={moreMenuItemClass}
-                    onClick={(event) => {
+                  <MenuItem
+                    onSelect={(event) => {
                       openCustomizePage(event.currentTarget);
                       setIsChatMoreMenuOpen(false);
                     }}
+                    leadingIcon={BriefcaseDecl}
                   >
-                    <Briefcase size={14} className="flex-shrink-0 text-zinc-500" />
-                    <span>Customize</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={moreMenuItemClass}
-                onClick={() => {
+                    Customize
+                  </MenuItem>
+                  <MenuItem
+                    onSelect={() => {
                       setIsMessageSearchOpen(true);
                       setIsChatMoreMenuOpen(false);
                 }}
-              >
-                    <Search size={14} className="flex-shrink-0 text-zinc-500" />
-                    <span>Search messages</span>
-              </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={moreMenuItemClass}
-                    onClick={() => {
+                    leadingIcon={SearchDecl}
+                  >
+                    Search messages
+                  </MenuItem>
+                  <MenuItem
+                    onSelect={() => {
                       openChatSettings();
                       setIsChatMoreMenuOpen(false);
                     }}
+                    leadingIcon={GearDecl}
                   >
-                    <Settings size={14} className="flex-shrink-0 text-zinc-500" />
-                    <span>Settings</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={moreMenuItemClass}
-                    onClick={() => {
+                    Settings
+                  </MenuItem>
+                  <MenuItem
+                    onSelect={() => {
                       handleNewChat();
                       setIsChatMoreMenuOpen(false);
                     }}
+                    leadingIcon={EditDecl}
                   >
-                    <SquarePen size={14} className="flex-shrink-0 text-zinc-500" />
-                    <span>New chat</span>
-                  </button>
+                    New chat
+                  </MenuItem>
                 </div>
                 </>
                 )}
@@ -17212,7 +17194,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           // Use --chat-hover (not hover:bg-[#1e1e21]): theme CSS matches [class*="bg-[#1e1e21]"]
           // even on the hover: utility string, so every row would paint a permanent background.
           const menuItemClass =
-            'xeno-icon-hover flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-zinc-100 transition-colors';
+            'xeno-icon-hover flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[14px] text-zinc-100 transition-colors';
           const shortcutClass = 'ml-auto text-[11px] text-zinc-500';
           return createPortal(
             <>
@@ -17322,18 +17304,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       ))
                     )}
                     <div className="my-1 border-t border-[#1e1e21]" />
-                      <button
-                      type="button"
-                      role="menuitem"
-                      className={menuItemClass}
-                      onClick={() => {
+                      <MenuItem
+                        onSelect={() => {
                         closeHistoryRowMenu();
                         openCreateProjectModal({ assignConversationId: menuConvo.id });
                       }}
-                    >
-                      <Plus size={13} className="flex-shrink-0 text-zinc-500" />
-                      <span>New project</span>
-                      </button>
+                        leadingIcon={PlusDecl}
+                      >
+                        New project
+                      </MenuItem>
                     {menuConvo.projectId && (
                       <button
                         type="button"
