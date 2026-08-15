@@ -231,6 +231,8 @@ export {
   GFileX as FileXDecl,
   GContrast as ContrastDecl,
   GUserX as UserRoundXDecl,
+  GShare as ShareDecl,
+  GMore as MoreVerticalDecl,
 };
 
 /* Different name, same meaning. */

@@ -35,7 +35,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -11536,6 +11536,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   const historyNavGoo = useGooPill<HTMLDivElement>({ rowSelector: '[data-goo-row]' });
   const historyListGoo = useGooPill<HTMLDivElement>({ rowSelector: '[data-goo-row]' });
 
+  // Two callers left, and they are the two that are not square: Temporary (glyph + label) and Theme
+  // (glyph + a chevron that turns). The four icon-only ones are `<IconButton variant="quiet">` now,
+  // pixel-identical to what this produced.
+  //
+  // These two stay together on purpose. Temporary would fit `<Button variant="quiet" size="lg">`, but
+  // every metric it has was picked by eye and differs from the scale — padding 10 against 14, font 13
+  // against 14, glyph 15 against 18 — so adopting it is a resize, not a swap. Theme cannot follow it:
+  // its trailing chevron rotates, and neither Button nor its trailing slot has a word for that. One of
+  // the pair on the system's scale and the other on the old one, side by side, is worse than both
+  // waiting.
   const topBarBtnClass = (isActive: boolean, extra = '') =>
     `chat-top-bar-btn flex h-9 items-center justify-center rounded-lg border text-[var(--chat-muted)] transition-[background-color,border-color,color] active:scale-[0.98] ${
       isActive
@@ -12234,10 +12244,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             border-color: var(--chat-border) !important;
             color: var(--chat-text) !important;
           }
-          .chat-themed .chat-top-bar-btn[data-active="true"] {
+          /* One property, where there used to be three. The quiet variant already drops its border
+             and brightens its ink when a button is on — the fill is the only part this chat says
+             differently, and only because it wants an INSET on the dark themes: a canvas mixed 55%
+             toward black, so the pressed button reads as sunk below the surface rather than raised
+             above it. On light it is the plain control fill, which is what the variant would have
+             given it anyway. */
+          .chat-themed .chat-top-bar-btn[data-selection="on"] {
             background-color: var(--chat-top-bar-btn-active) !important;
-            border-color: transparent !important;
-            color: var(--chat-text) !important;
           }
           /* History edge: use theme border only. Never mix --chat-text into shadow —
              on Dark/Dim that text is near-white and paints a "white glow" (esp. when closed). */
@@ -14859,8 +14873,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               {/* Main chat: Share + ⋯ */}
               {!isMultiInterface && messages.length > 0 && (
               <div className="relative flex-shrink-0">
-                <button
-                  type="button"
+                <IconButton
+                  icon={ShareDecl}
+                  variant="quiet"
+                  size="lg"
+                  iconSize={16}
+                  className="chat-top-bar-btn"
                   onClick={() => {
                     setIsSharePreviewOpen(true);
                     setIsChatMoreMenuOpen(false);
@@ -14869,19 +14887,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   aria-haspopup="dialog"
                   aria-label="Share conversation"
                   title="Share conversation"
-                  data-active={isSharePreviewOpen ? 'true' : undefined}
-                  className={topBarBtnClass(isSharePreviewOpen, 'w-9')}
-                >
-                  <Share2 size={16} />
-                </button>
+                  data-selection={isSharePreviewOpen ? 'on' : 'off'}
+                />
               </div>
               )}
 
               {/* ⋯ only in an open conversation (Share sibling). Theme / Temporary / Settings stay on New chat. */}
               {!isMultiInterface && messages.length > 0 && (
               <div ref={chatMoreMenuRef} className="relative flex-shrink-0">
-                <button
-                  type="button"
+                <IconButton
+                  icon={MoreVerticalDecl}
+                  variant="quiet"
+                  size="lg"
+                  iconSize={16}
+                  className="chat-top-bar-btn"
                   onClick={() => {
                     setIsChatMoreMenuOpen((open) => !open);
                     setIsSharePreviewOpen(false);
@@ -14891,11 +14910,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   aria-haspopup="menu"
                   aria-label="More chat options"
                   title="More"
-                  data-active={isChatMoreMenuOpen ? 'true' : undefined}
-                  className={topBarBtnClass(isChatMoreMenuOpen, 'w-9')}
-                >
-                  <MoreVertical size={16} />
-                </button>
+                  data-selection={isChatMoreMenuOpen ? 'on' : 'off'}
+                />
                 {isChatMoreMenuMounted && (
                 <>
                 <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
@@ -15178,9 +15194,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             <div className="relative flex-shrink-0">
               {(isMultiInterface || messages.length === 0) ? (
               <div className="flex items-center gap-1.5">
-              <button
+              <IconButton
                   ref={customizeButtonRef}
-                  type="button"
+                  icon={BriefcaseDecl}
+                  variant="quiet"
+                  size="lg"
+                  iconSize={16}
+                  className="chat-top-bar-btn"
                   onClick={(event) => {
                     openCustomizePage(event.currentTarget);
                     setIsSettingsModalOpen(false);
@@ -15188,16 +15208,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     setIsSharePreviewOpen(false);
                     setIsThemeMenuOpen(false);
                   }}
-                  data-active={isCustomizePageOpen ? 'true' : undefined}
-                  className={topBarBtnClass(isCustomizePageOpen, 'w-9')}
+                  data-selection={isCustomizePageOpen ? 'on' : 'off'}
                   aria-label="Customize"
                   title="Customize"
-              >
-                  <Briefcase size={16} />
-              </button>
-              <button
+              />
+              <IconButton
                   ref={settingsButtonRef}
-                  type="button"
+                  icon={GearDecl}
+                  variant="quiet"
+                  size="lg"
+                  iconSize={16}
+                  className="chat-top-bar-btn"
                   onClick={() => {
                     if (isSettingsModalOpen) {
                       closeChatSettings();
@@ -15208,13 +15229,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     setIsSharePreviewOpen(false);
                     setIsThemeMenuOpen(false);
                   }}
-                  data-active={isSettingsModalOpen ? 'true' : undefined}
-                  className={topBarBtnClass(isSettingsModalOpen, 'w-9')}
+                  data-selection={isSettingsModalOpen ? 'on' : 'off'}
                   aria-label="Chat settings"
                   title="Chat settings"
-              >
-                  <Settings size={16} />
-              </button>
+              />
               </div>
               ) : (
               <button
