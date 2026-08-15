@@ -2073,7 +2073,9 @@ const themeMenuPanelMotionStyle = (
  * than a panel of controls. The direction follows the placement: a menu that opened downward has to
  * collapse back up into its button, and one that opened upward, back down.
  */
-const FEEDBACK_POPUP_MS = 200;
+const MENU_POP_MS = 200;
+/** The feedback popovers were the first users of it; the name is kept where they read it. */
+const FEEDBACK_POPUP_MS = MENU_POP_MS;
 
 type FeedbackPopupPlacement = 'below' | 'above';
 
@@ -2110,30 +2112,47 @@ const FEEDBACK_POPUP_PANEL_STYLE: React.CSSProperties = {
   overflow: 'hidden',
 };
 
+/**
+ * The motion every dropdown in the chat shares: a short lift and a 6% scale, out of the corner
+ * nearest the control that opened it.
+ *
+ * It is deliberately not the card-modal motion — `translate(18%, -12%) scale(0.42)`, which exists so
+ * a full modal can grow out of a corner of the SCREEN. A 188px menu given that travel arrives from
+ * somewhere else entirely: the conversation ⋯ menu appeared to slide out of the history sidebar and
+ * back into it, as though it belonged to the sidebar rather than to the row it was opened from.
+ *
+ * `origin` is the corner it grows from and `dy` the direction it lifts, both decided by the caller
+ * from where the menu was placed. Everything else is common, which is the point.
+ */
+const menuPopMotionStyle = (
+  transformOrigin: string,
+  dy: string,
+  shown: boolean,
+  open: boolean,
+): React.CSSProperties => ({
+  transformOrigin,
+  // Read by both keyframes, so every placement shares one pair rather than owning its own.
+  ['--chat-menu-pop-dy' as string]: dy,
+  willChange: 'transform, opacity',
+  ...(shown
+    ? { animation: `chat-menu-pop-in ${MENU_POP_MS}ms ${SCHEDULE_DATE_EASE} forwards` }
+    : !open
+      ? { animation: `chat-menu-pop-out ${MENU_POP_MS}ms ${SCHEDULE_DATE_EASE} forwards` }
+      : { opacity: 0, transform: `translateY(${dy}) scale(0.94)` }),
+});
+
 const feedbackPopupMotionStyle = (
   placement: FeedbackPopupPlacement,
   shown: boolean,
   open: boolean,
 ): React.CSSProperties => {
   const above = placement === 'above';
-  return {
-    transformOrigin: above ? 'bottom left' : 'top left',
-    // Read by both keyframes, so the two placements share one pair rather than owning four.
-    ['--chat-feedback-popup-dy' as string]: above ? '8px' : '-8px',
-    willChange: 'transform, opacity',
-    ...(shown
-      ? {
-          animation: `chat-feedback-popup-in ${FEEDBACK_POPUP_MS}ms ${SCHEDULE_DATE_EASE} forwards`,
-        }
-      : !open
-        ? {
-            animation: `chat-feedback-popup-out ${FEEDBACK_POPUP_MS}ms ${SCHEDULE_DATE_EASE} forwards`,
-          }
-        : {
-            opacity: 0,
-            transform: `translateY(${above ? '8px' : '-8px'}) scale(0.94)`,
-          }),
-  };
+  return menuPopMotionStyle(
+    above ? 'bottom left' : 'top left',
+    above ? '8px' : '-8px',
+    shown,
+    open,
+  );
 };
 
 /**
@@ -7638,7 +7657,9 @@ Please provide a well-structured response using this search context and any mult
       setIsHistoryRowMenuMounted(false);
       setHistoryRowMenu(null);
       setHistoryProjectSubmenuOpen(false);
-    }, SCHEDULE_CREATE_MODAL_MS);
+      // Matches the exit it now plays. On the card-modal timing it stayed mounted, invisible and
+      // inert, for another 220ms after the menu had finished leaving.
+    }, MENU_POP_MS);
     return () => window.clearTimeout(timer);
   }, [isHistoryRowMenuOpen, isHistoryRowMenuMounted, historyRowMenu]);
 
@@ -12063,23 +12084,25 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             to { opacity: 0; transform: translateY(-8px) scale(0.92); }
           }
 
-          /* 👍 / 👎 feedback popovers. One pair for both placements: the sign of the travel comes
-             from --chat-feedback-popup-dy, which the popover sets from where it opened, so the menu
-             always collapses back toward its own button. */
-          @keyframes chat-feedback-popup-in {
-            from { opacity: 0; transform: translateY(var(--chat-feedback-popup-dy, -8px)) scale(0.94); }
+          /* The dropdown motion — 👍 / 👎 feedback popovers, the conversation ⋯ menu. One pair for
+             every placement: the direction of the travel comes from --chat-menu-pop-dy and the
+             corner from transform-origin, both set by the menu from where it was placed, so it
+             always collapses back toward the control it came out of.
+             (No backticks in this block — it is a template literal, and one would end it.) */
+          @keyframes chat-menu-pop-in {
+            from { opacity: 0; transform: translateY(var(--chat-menu-pop-dy, -8px)) scale(0.94); }
             to { opacity: 1; transform: translateY(0) scale(1); }
           }
-          @keyframes chat-feedback-popup-out {
+          @keyframes chat-menu-pop-out {
             from { opacity: 1; transform: translateY(0) scale(1); }
-            to { opacity: 0; transform: translateY(var(--chat-feedback-popup-dy, -8px)) scale(0.94); }
+            to { opacity: 0; transform: translateY(var(--chat-menu-pop-dy, -8px)) scale(0.94); }
           }
           @media (prefers-reduced-motion: reduce) {
-            @keyframes chat-feedback-popup-in {
+            @keyframes chat-menu-pop-in {
               from { opacity: 0; transform: none; }
               to { opacity: 1; transform: none; }
             }
-            @keyframes chat-feedback-popup-out {
+            @keyframes chat-menu-pop-out {
               from { opacity: 1; transform: none; }
               to { opacity: 0; transform: none; }
             }
@@ -17135,8 +17158,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 borderColor: 'var(--chat-border)',
                 color: 'var(--chat-text)',
                 pointerEvents: isHistoryRowMenuShown ? 'auto' : 'none',
-                ...chatModalCardMotionStyle(
-                  'top-right',
+                // Out of its own top-right corner — the ⋯ it was opened from, and the edge it is
+                // aligned to. It used to borrow the card-modal motion, which travels 18% of its own
+                // width sideways from a screen corner; on a menu this size that read as the menu
+                // sliding out of the history sidebar and back into it.
+                ...menuPopMotionStyle(
+                  'top right',
+                  '-8px',
                   isHistoryRowMenuShown,
                   isHistoryRowMenuOpen,
                 ),
