@@ -1893,7 +1893,7 @@ const ChatWithVoice: React.FC = () => {
                               ref={editInputRef}
                               value={editText}
                               onChange={(e) => setEditText(e.target.value)}
-                              className="w-full bg-transparent text-sm leading-snug text-white outline-none resize-none focus:ring-0 border-none focus:outline-none focus:shadow-none whitespace-pre-wrap scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent focus:outline-none"
+                              className="w-full bg-transparent text-sm leading-snug text-white outline-none resize-none focus:ring-0 border-none focus:outline-none focus:shadow-none whitespace-pre-wrap focus:outline-none"
                               rows={1}
                               style={{ overflowY: 'hidden' }}
                             />
@@ -2036,10 +2036,6 @@ styleTag.textContent = `
     from { opacity: 0; transform: translateY(8px) scale(0.99); }
     to { opacity: 1; transform: translateY(0px) scale(1); }
   }
-  .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-  .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); border-radius: 10px; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 10px; }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.12); }
 
   .bar {
     background: var(--text-secondary); 

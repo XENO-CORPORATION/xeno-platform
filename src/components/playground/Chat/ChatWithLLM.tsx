@@ -1355,25 +1355,6 @@ const sourceHighlightStyles = `
     outline: none;
   }
 
-  /* Custom Scrollbar for Context Panel */
-  .context-panel-content::-webkit-scrollbar {
-    width: 8px;
-  }
-  .context-panel-content::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .context-panel-content::-webkit-scrollbar-thumb {
-    background: var(--chat-border);
-    border-radius: 5px;
-    border: 2px solid var(--chat-canvas);
-  }
-  .context-panel-content::-webkit-scrollbar-thumb:hover {
-    background: var(--chat-muted);
-  }
-  .context-panel-content {
-    scrollbar-width: thin;
-    scrollbar-color: var(--chat-border) transparent;
-  }
 
   /* Global Focus Indicators for Accessibility */
   button:focus-visible,
@@ -8720,7 +8701,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
               for `aria-controls` to name, no label. The wide tablist owns it; the narrow one points at
               the same id through `panelId`. */}
           <div
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-5 scrollbar-thin scrollbar-thumb-zinc-500/40 scrollbar-track-transparent"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-5"
             {...projectTabsWide.panelProps}
           >
             {activeSection === 'general' && (
@@ -8782,7 +8763,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   value={instructionsDraft}
                   onChange={(event) => setInstructionsDraft(event.target.value)}
                   placeholder="e.g. Think step by step and show your reasoning for complex problems. Prefer concrete examples."
-                  className={`${fieldClassName} min-h-[12rem] flex-1 resize-y leading-relaxed scrollbar-thin scrollbar-thumb-zinc-500/40 scrollbar-track-transparent sm:min-h-[14rem]`}
+                  className={`${fieldClassName} min-h-[12rem] flex-1 resize-y leading-relaxed sm:min-h-[14rem]`}
                   style={fieldStyle}
                   onFocus={focusField}
                   onBlur={blurField}
@@ -11735,7 +11716,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   // Shift+Enter adds a new line (default behavior)
                 }}
                 rows={messages.length === 0 ? 2 : 2}
-                className={`w-full resize-none border-none bg-transparent px-1 text-[15px] leading-6 text-zinc-100 outline-none placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:shadow-none scrollbar-thin scrollbar-track-transparent scrollbar-thumb-zinc-700 ${messages.length === 0 ? 'min-h-[3.25rem] pb-2 pt-0.5' : 'min-h-[3rem] max-h-[7.5rem] pb-1 pt-0.5'}`}
+                className={`w-full resize-none border-none bg-transparent px-1 text-[15px] leading-6 text-zinc-100 outline-none placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:shadow-none ${messages.length === 0 ? 'min-h-[3.25rem] pb-2 pt-0.5' : 'min-h-[3rem] max-h-[7.5rem] pb-1 pt-0.5'}`}
                 style={{ maxHeight: messages.length === 0 ? '120px' : '120px' }}
               />
             </div>
@@ -13849,7 +13830,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               }}
                             >
                               <div
-                                className="absolute inset-0 overflow-y-auto pb-3 pl-3.5 pr-1 pt-2.5 scrollbar-thin scrollbar-thumb-zinc-500/40 scrollbar-track-transparent"
+                                className="absolute inset-0 overflow-y-auto pb-3 pl-3.5 pr-1 pt-2.5"
                                 style={{
                                   maskImage:
                                     'linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%)',
@@ -15263,7 +15244,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         <div
           ref={chatAreaRef}
           translate="no"
-          className="hide-scrollbar flex-grow w-full overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent px-2 pt-16 pb-56 md:pb-60 main-content-transition notranslate"
+          className="hide-scrollbar flex-grow w-full overflow-y-auto px-2 pt-16 pb-56 md:pb-60 main-content-transition notranslate"
           style={{
             // Match composer clearance when history is open so the column stays centered.
             paddingLeft: !isMultiInterface && isHistoryOpen && !isMobile ? 260 : undefined,
@@ -15399,7 +15380,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                              ref={editInputRef}
                                              value={editText}
                                              onChange={(e) => setEditText(e.target.value)}
-                                             className="min-h-[2.75rem] w-full resize-y bg-transparent text-[15px] leading-6 text-white outline-none scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent"
+                                             className="min-h-[2.75rem] w-full resize-y bg-transparent text-[15px] leading-6 text-white outline-none"
                                                rows={1}
                                            />
                                          </div>
