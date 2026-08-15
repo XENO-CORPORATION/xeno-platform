@@ -239,3 +239,32 @@ test('the mute is REACHABLE over HTTP, in the same change as the fan-out', () =>
   assert.match(ROUTES, /write\.setThreadSubscription/,
     'the route must call the service.');
 });
+
+// ── 6. the follow toggle's state, and the bug that nearly shipped ──────────
+
+test('thread subscription is resolved by shortId, NOT by thread.id', () => {
+  // 🔴 The obvious version was wrong. serializeThreadSummary deliberately
+  // exposes only `shortId` — the citable public identifier (D9) — and never the
+  // internal uuid. `thread.id` in that route is undefined, so the lookup matches
+  // nothing and the follow button reads "not following" for EVERY user, forever,
+  // while every test passes and no error is logged.
+  const route = ROUTES.slice(ROUTES.indexOf("router.get('/threads/:shortId'"));
+  const body = route.slice(0, route.indexOf('\nrouter.'));
+  assert.match(body, /threadSubscriptionByShortId\(req\.db, req\.user\.id, shortId\)/,
+    'the subscription lookup must use shortId. Using thread.id yields undefined '
+    + 'and silently renders every thread as un-followed.');
+  assert.doesNotMatch(body, /threadSubscription\(req\.db, req\.user\.id, thread\.id\)/,
+    'thread.id does not exist on the serialized thread.');
+});
+
+test('the Record stays readable signed-out', () => {
+  // §5.1 — the Record is public. Gating the thread route behind authMiddleware to
+  // get the follow state would make every thread 401 for anonymous readers, which
+  // is the whole archive.
+  const route = ROUTES.slice(ROUTES.indexOf("router.get('/threads/:shortId'"));
+  const decl = route.slice(0, route.indexOf('\n'));
+  assert.match(decl, /optionalAuthMiddleware/,
+    'the thread route must use optionalAuthMiddleware.');
+  assert.doesNotMatch(decl, /[^l]authMiddleware,/,
+    'authMiddleware here would 401 the public archive for signed-out readers.');
+});

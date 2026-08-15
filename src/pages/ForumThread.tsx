@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   ArrowLeft, CheckCircle2, Link2, Check, ChevronUp, ChevronDown,
-  Flag, Loader2, Bot, MessageSquare,
+  Flag, Loader2, Bot, MessageSquare, Bell, BellOff,
 } from 'lucide-react';
 import ForumShell from '../components/forum/ForumShell';
 import {
@@ -126,6 +126,28 @@ const ForumThread: React.FC = () => {
   useEffect(() => { api.getSpaces().then((r) => setSpaces(r.spaces || [])).catch(() => setSpaces([])); }, []);
   useEffect(() => { if (signedIn) api.getMe().then(setMe).catch(() => setMe(null)); }, [signedIn]);
 
+  // Thread follow state. Rides in on the thread payload rather than a second
+  // request, so the button never renders in the wrong state for one paint —
+  // which is indistinguishable from a broken toggle.
+  const [threadFollowing, setThreadFollowing] = useState(false);
+  const [followPending, setFollowPending] = useState(false);
+  useEffect(() => { setThreadFollowing(Boolean((thread as any)?.subscribed)); }, [thread]);
+
+  const toggleThreadFollow = useCallback(async () => {
+    if (!thread || followPending) return;
+    const next = !threadFollowing;
+    setFollowPending(true);
+    setThreadFollowing(next);      // optimistic — a preference is not a transaction
+    try {
+      await api.setThreadSubscription(thread.shortId, next);
+    } catch (e: any) {
+      setThreadFollowing(!next);   // never lie about server state
+      setActionError(e?.message || 'Could not change notifications for this thread.');
+    } finally {
+      setFollowPending(false);
+    }
+  }, [thread, threadFollowing, followPending]);
+
   // Which tags this reader already follows. Fails silently to "none followed" —
   // an unreachable subscriptions endpoint should cost you the toggle state, not
   // the thread you came here to read.
@@ -228,6 +250,40 @@ const ForumThread: React.FC = () => {
           </div>
         </dl>
       </div>
+
+      {/*
+        Follow / mute.
+
+        This exists because reply fan-out shipped with an API-only off switch,
+        which is the same "built but unreachable" defect from the front end:
+        the route was live and nothing could call it.
+
+        Posting subscribes you automatically, so for most people the useful
+        action here is the OFF one — hence the label states the current state
+        ("Following") and the hover explains the consequence, rather than a bare
+        verb that leaves you guessing which way it will go.
+      */}
+      {signedIn && (
+        <div>
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#79797f]">Notifications</h2>
+          <button
+            type="button"
+            onClick={toggleThreadFollow}
+            disabled={followPending}
+            title={threadFollowing
+              ? 'Stop being notified about replies to this thread'
+              : 'Be notified when someone replies to this thread'}
+            className={`mt-3 inline-flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-md border text-[13px] font-medium transition-colors disabled:opacity-50 ${
+              threadFollowing
+                ? 'border-white/[0.15] bg-white/[0.10] text-white hover:bg-white/[0.16]'
+                : 'border-white/[0.08] text-[#a8a8b1] hover:border-white/[0.15] hover:text-[#e5e5e9]'
+            }`}
+          >
+            {threadFollowing ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
+            {threadFollowing ? 'Following' : 'Not following'}
+          </button>
+        </div>
+      )}
 
       {thread.tags.length > 0 && (
         <div>

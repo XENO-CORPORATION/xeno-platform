@@ -125,3 +125,11 @@ export const markNotificationsRead = (ids?: string[]) =>
     method: 'POST',
     body: JSON.stringify(ids ? { ids } : {}),
   }, true);
+
+// Follow / mute a thread. Posting subscribes you automatically; this is the way
+// back out, and it is why reply fan-out was safe to ship.
+export const setThreadSubscription = (shortId: string, subscribed: boolean) =>
+  request<any>(`/threads/${shortId}/subscription`, {
+    method: 'PUT',
+    body: JSON.stringify({ subscribed }),
+  }, true);
