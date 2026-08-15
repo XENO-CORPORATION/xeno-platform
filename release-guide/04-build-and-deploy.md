@@ -127,6 +127,43 @@ What each piece does:
 - `sudo docker compose build frontend` — builds the new image, which re-runs `npm run build` (Vite + prerender) inside the builder stage. **Build-before-swap:** the currently running `xenostudio-frontend` keeps serving throughout this build. If the build fails, nothing is swapped and the old container stays live.
 - `sudo docker compose up -d frontend` — swaps in the freshly built image only after a successful build.
 
+### 3.1 🔴 Then SMOKE IT — the deploy is not finished when the container starts
+
+A container that starts is not a deploy that worked. Build-before-swap protects you from a
+build that FAILS; it does nothing about a build that SUCCEEDS and ships broken code, which is
+the more common outcome because the compiler had no opinion about it.
+
+```bash
+npm run smoke:forum          # or the smoke for whatever surface you touched
+```
+
+**This is not optional and it is not a formality.** On 2026-08-16 a search change renamed a
+CTE column and updated every reference inside the block that was rewritten. One reference sat
+forty lines outside it. The build succeeded, the container started healthy, and every search
+on the site answered `column tsq.q does not exist` — live search went from finding 2 of 6
+realistic phrasings to finding 0. Nothing in the unit suite could have caught it: those gates
+read source for structure, and a stale column name is a RUNTIME error.
+
+Worse, the pre-deploy verification had passed. It ran the rewritten query as a **standalone
+fragment**, which never contained the projection that broke. **A fragment cannot fail on a
+reference it does not contain** — so a green pre-deploy check is not evidence the deployed
+thing works.
+
+What the smoke must assert, and why each half matters:
+
+| check | why "not 200" is not enough |
+|---|---|
+| a known query returns RESULTS | a broken query can parse, match nothing, and answer `200 []` — which looks perfectly healthy |
+| gated routes return **401 specifically** | 401 = mounted and refused; 500 = mounted and broken. Both are "not 200", and only one is correct |
+| the envelope, not just the status | this API answers some errors `200 {success:false}` |
+
+⚠️ **An SPA answers 200 for paths that do not exist**, so a status-code check against a
+frontend route proves nothing at all — verify by BODY. Already documented for the extension
+privacy page; it recurs because a 200 feels like an answer.
+
+If the smoke fails, the site is currently serving the broken build. There is no automatic
+rollback: fix forward or redeploy the previous commit, and do it before anything else.
+
 > ⚠️ **"Build-before-swap" protects the BUILD, not the SWAP.** `up -d frontend` also brings up
 > whatever `frontend` depends on, then waits for it to report healthy. If that wait times out,
 > compose aborts — **after the old frontend is already gone**. This happened on 2026-08-14: the
