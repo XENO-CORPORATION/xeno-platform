@@ -306,7 +306,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
                   <pre className="whitespace-pre-wrap font-mono text-gray-300 text-xs leading-relaxed">{runOutput}</pre> 
               )}
               {runError && !isRunning && (
-                  <pre className="whitespace-pre-wrap font-mono text-red-400 text-xs leading-relaxed">{runError}</pre>
+                  <pre className="whitespace-pre-wrap font-mono text-[var(--chat-danger)] text-xs leading-relaxed">{runError}</pre>
               )}
             </div>
         )}
@@ -340,7 +340,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
                   <div className="whitespace-pre-wrap font-mono text-gray-300 text-xs leading-relaxed">{currentRunOutput}</div> 
               )}
               {currentRunError && !currentIsRunning && (
-                  <div className="whitespace-pre-wrap font-mono text-red-400 text-xs leading-relaxed">{currentRunError}</div>
+                  <div className="whitespace-pre-wrap font-mono text-[var(--chat-danger)] text-xs leading-relaxed">{currentRunError}</div>
               )}
             </div>
       )}

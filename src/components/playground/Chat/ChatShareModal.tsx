@@ -456,7 +456,7 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
           )}
 
           {error ? (
-            <p className="mt-3 text-[12px] text-red-400" role="alert">
+            <p className="mt-3 text-[12px] text-[var(--chat-danger)]" role="alert">
               {error}
             </p>
           ) : null}
