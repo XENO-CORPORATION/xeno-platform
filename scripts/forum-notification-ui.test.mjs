@@ -107,3 +107,35 @@ test('the bell reports its unread count to assistive tech', () => {
   assert.match(BELL, /aria-label=\{unread \?/,
     'aria-label must carry the count, not just say "Notifications".');
 });
+
+// ── 5. the mute is reachable by a human, not just by curl ──────────────────
+
+const THREAD = codeOnly(readFileSync(join(__dirname, '..', 'src', 'pages', 'ForumThread.tsx'), 'utf8'));
+
+test('the thread page RENDERS a follow toggle that calls the API', () => {
+  // Reply fan-out shipped with an API-only off switch — the route was live and
+  // nothing in the product could call it. That is the same unreachable defect,
+  // seen from the front end.
+  assert.match(THREAD, /api\.setThreadSubscription\(/,
+    'ForumThread must call setThreadSubscription — otherwise the mute exists '
+    + 'only for people who use curl.');
+  assert.match(THREAD, /onClick=\{toggleThreadFollow\}/,
+    'the toggle must be wired to a rendered control.');
+  assert.match(API, /setThreadSubscription\s*=/, 'api.ts must expose it.');
+});
+
+test('the toggle states which way it is, not which way it will go', () => {
+  // "Follow" on a thread you already follow is ambiguous: is it the state or the
+  // action? Posting auto-subscribes you, so most readers arrive already
+  // following and the useful action is the OFF one.
+  assert.match(THREAD, /'Following' : 'Not following'/,
+    'the label should report current state; the title attribute carries the consequence.');
+});
+
+test('a failed follow reverts rather than lying about server state', () => {
+  const fn = THREAD.slice(THREAD.indexOf('const toggleThreadFollow'));
+  const body = fn.slice(0, fn.indexOf('}, ['));
+  assert.match(body, /setThreadFollowing\(!next\)/,
+    'an optimistic toggle that does not revert on failure shows a state the '
+    + 'server never accepted.');
+});

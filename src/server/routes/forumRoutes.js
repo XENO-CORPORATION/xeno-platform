@@ -169,7 +169,7 @@ router.get('/threads', async (req, res) => {
  * URL is decorative; only this resolves, so a retitled thread never 404s and
  * an agent's citation stays valid forever.
  */
-router.get('/threads/:shortId', async (req, res) => {
+router.get('/threads/:shortId', optionalAuthMiddleware, async (req, res) => {
   try {
     const shortId = String(req.params.shortId || '').trim().toLowerCase();
     if (!/^[a-z0-9]{4,12}$/.test(shortId)) {
@@ -179,7 +179,26 @@ router.get('/threads/:shortId', async (req, res) => {
     if (!thread) {
       return res.status(404).json({ success: false, error: 'Thread not found' });
     }
-    res.json({ success: true, thread });
+
+    // Whether THIS reader follows the thread rides along with the thread itself.
+    // A separate request would mean the follow button renders in the wrong state
+    // for one paint on every page load, which reads as a broken toggle.
+    //
+    // optionalAuthMiddleware, not authMiddleware: the Record is public (§5.1) and
+    // must stay readable signed-out. A signed-out reader simply gets `false`, and
+    // a failed lookup degrades to `false` rather than losing the thread — nobody
+    // should lose the page they came for because a toggle could not resolve.
+    //
+    // 🔴 By shortId, NOT thread.id. serializeThreadSummary exposes only the
+    // public short id (D9); `thread.id` here is undefined, which would make the
+    // toggle read "not following" for everyone while every test still passed.
+    let subscribed = false;
+    if (req.user?.id) {
+      subscribed = (await write.threadSubscriptionByShortId(req.db, req.user.id, shortId)
+        .catch(() => ({ subscribed: false }))).subscribed;
+    }
+
+    res.json({ success: true, thread: { ...thread, subscribed } });
   } catch (error) {
     return serverError(res, error, 'getThread');
   }

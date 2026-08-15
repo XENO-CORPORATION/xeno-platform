@@ -788,3 +788,27 @@ export async function threadReplyRecipients(db, threadId, { exceptUserId, thread
   );
   return rows.map((r) => r.user_id);
 }
+
+/**
+ * Subscription state by the PUBLIC id.
+ *
+ * ⚠️ Exists because the obvious version was wrong. The thread detail route has
+ * a serialized thread, and `serializeThreadSummary` deliberately exposes only
+ * `shortId` — the citable identifier (D9) — never the internal uuid. Reading
+ * `thread.id` there yields undefined, the lookup matches nothing, and the follow
+ * toggle renders "not following" for everyone, forever, while every test passes.
+ *
+ * One query rather than resolving the id first: a toggle is not worth two round
+ * trips, and the join is on an indexed unique column.
+ */
+export async function threadSubscriptionByShortId(db, userId, shortId) {
+  if (!userId || !shortId) return { subscribed: false };
+  const { rows } = await db.query(
+    `SELECT s.muted
+       FROM forum_subscriptions s
+       JOIN forum_threads t ON t.id = s.thread_id
+      WHERE s.user_id = $1 AND t.short_id = $2`,
+    [userId, shortId],
+  );
+  return { subscribed: rows.length ? !rows[0].muted : false };
+}
