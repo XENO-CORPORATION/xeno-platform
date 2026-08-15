@@ -379,6 +379,20 @@ router.post('/notifications/read', authMiddleware, loadActor, handled('markRead'
  * "Topics you follow" ranker returned an empty list for every user, forever.
  * ────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * PUT /api/forum/threads/:shortId/subscription  { subscribed: bool }
+ *
+ * Follow or MUTE a thread. Posting subscribes you automatically; this is the
+ * way back out, and it must exist in the same change that ships reply fan-out —
+ * a forum you can only be added to is one people mute at the mail client
+ * instead, and after that no notification works again.
+ */
+router.put('/threads/:shortId/subscription', authMiddleware, loadActor, handled('setThreadSubscription', async (req, res) => {
+  const shortId = String(req.params.shortId || '').toLowerCase();
+  const subscribed = req.body?.subscribed !== false;
+  res.json({ success: true, ...(await write.setThreadSubscription(req.db, req.actor, shortId, subscribed)) });
+}));
+
 /** GET /api/forum/subscriptions — tags you follow. */
 router.get('/subscriptions', authMiddleware, loadActor, handled('listSubscriptions', async (req, res) => {
   res.json({ success: true, tags: await write.listSubscriptions(req.db, req.actor.id) });

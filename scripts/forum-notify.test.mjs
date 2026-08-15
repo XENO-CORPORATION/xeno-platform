@@ -174,3 +174,68 @@ test('exports are actually named what the routes import', () => {
       `routes reference notify.${name} — keep the export name in step.`);
   }
 });
+
+// ── 5. reply fan-out, and the way out of it ────────────────────────────────
+//
+// "Someone replied" is the notification that turns a forum into noise. It is
+// only safe to ship alongside the mute, so these gates check both halves and
+// the exclusion rule between them.
+
+const MIGRATIONS = join(__dirname, '..', 'src', 'server', 'database', 'migrations');
+
+test('posting subscribes you to the thread — both write paths', () => {
+  for (const fnName of ['createThread', 'createPost']) {
+    const fn = WRITE.slice(WRITE.indexOf(`export async function ${fnName}`));
+    const body = fn.slice(0, fn.indexOf('\nexport '));
+    assert.match(body, /autoSubscribeThread\(/,
+      `${fnName} does not subscribe the author to the thread. Without a row there `
+      + 'is nothing for the mute toggle to write to, so "stop notifying me" has '
+      + 'nothing to act on.');
+  }
+});
+
+test('the auto-subscribe can never UN-MUTE an explicit mute', () => {
+  // The single most annoying bug this feature can have: you mute a thread, post
+  // in it once more, and it starts shouting at you again. ON CONFLICT DO NOTHING
+  // is what prevents it — DO UPDATE would silently reset muted.
+  const fn = WRITE.slice(WRITE.indexOf('export async function autoSubscribeThread'));
+  const body = fn.slice(0, fn.indexOf('\nexport '));
+  assert.match(body, /ON CONFLICT[\s\S]*?DO NOTHING/,
+    'autoSubscribeThread must DO NOTHING on conflict. DO UPDATE would un-mute '
+    + 'someone who explicitly asked to stop.');
+  assert.doesNotMatch(body, /DO UPDATE/,
+    'DO UPDATE in the auto path defeats the mute.');
+});
+
+test('mute is a FLAG, not a deleted row', () => {
+  const mig = readFileSync(join(MIGRATIONS, '20260815130000-forum-thread-subscriptions.sql'), 'utf8');
+  assert.match(mig, /ADD COLUMN IF NOT EXISTS muted BOOLEAN NOT NULL DEFAULT FALSE/,
+    'deleting the row on unsubscribe means the next post silently re-subscribes '
+    + 'you — the auto-subscribe cannot tell "never subscribed" from "asked to stop".');
+  assert.match(mig, /CREATE UNIQUE INDEX[\s\S]*?user_id, thread_id/,
+    'auto-subscribe is idempotent at the DB, not by a read-then-write race.');
+});
+
+test('the thread author never gets BOTH answer and reply for one post', () => {
+  // They get the richer 'answer'. Excluded in SQL rather than deduped after, so
+  // a long thread does not pull every subscriber into memory to discard them.
+  const fn = WRITE.slice(WRITE.indexOf('export async function threadReplyRecipients'));
+  assert.match(fn, /muted = FALSE/, 'muted subscribers must be filtered in SQL.');
+  assert.match(fn, /user_id <> /, 'the actor and thread author must be excluded in SQL.');
+
+  const post = WRITE.slice(WRITE.indexOf('export async function createPost'));
+  const body = post.slice(0, post.indexOf('\nexport '));
+  assert.match(body, /threadAuthorId:\s*thread\.author_id/,
+    'createPost must pass the thread author so the fan-out excludes them.');
+  assert.match(body, /exceptUserId:\s*user\.id/,
+    'you must not be notified about your own post.');
+});
+
+test('the mute is REACHABLE over HTTP, in the same change as the fan-out', () => {
+  assert.match(ROUTES, /router\.put\(\s*['"]\/threads\/:shortId\/subscription['"]/,
+    'reply fan-out shipped without a way to turn it off. A forum you can only be '
+    + 'added to is one people mute at the mail client — and after that, no '
+    + 'notification from this product works again.');
+  assert.match(ROUTES, /write\.setThreadSubscription/,
+    'the route must call the service.');
+});

@@ -335,6 +335,11 @@ export async function createThread(db, user, { space, title, body, tags }) {
     [spaceRow.id],
   );
 
+  // Asking a question subscribes you to it. The author would get the 'answer'
+  // notification regardless, but the subscription is what the mute toggle acts
+  // on — without a row there is nothing for "stop notifying me" to write to.
+  await autoSubscribeThread(db, user.id, threadId).catch(() => {});
+
   return { shortId, id: threadId };
 }
 
@@ -376,18 +381,35 @@ export async function createPost(db, user, shortId, { body }) {
   );
 
   // ── The return path (WP1) ────────────────────────────────────────────────
-  // Tell the person who asked. `notify` suppresses self-notification, so
-  // answering your own thread is silently a no-op and needs no check here.
   //
   // Deliberately NOT awaited-and-thrown: a notification that fails must never
   // lose the post. The post is the user's work; the notification is ours.
+  const actor = { id: user.id, kind: actorKind(user) };
+
+  // Posting subscribes you to the thread — but never un-mutes an explicit mute.
+  await autoSubscribeThread(db, user.id, thread.id).catch(() => {});
+
+  // 1. The person who asked. `notify` suppresses self-notification, so
+  //    answering your own thread is silently a no-op and needs no check here.
   await notify(db, {
     userId: thread.author_id,
     kind: 'answer',
     threadId: thread.id,
     postId: postRows[0].id,
-    actor: { id: user.id, kind: actorKind(user) },
+    actor,
   }).catch(() => {});
+
+  // 2. Everyone else following the thread. The thread author is excluded in
+  //    SQL rather than deduped afterwards — they get the richer 'answer'
+  //    notification and must not receive two rows for one post.
+  await threadReplyRecipients(db, thread.id, {
+    exceptUserId: user.id,
+    threadAuthorId: thread.author_id,
+  })
+    .then((ids) => Promise.all(ids.map((uid) => notify(db, {
+      userId: uid, kind: 'reply', threadId: thread.id, postId: postRows[0].id, actor,
+    }))))
+    .catch(() => {});
 
   return { id: postRows[0].id, position: posRows[0].next };
 }
@@ -692,4 +714,77 @@ export async function unsubscribeTag(db, user, tag) {
     [user.id, tagId],
   );
   return { ok: true, following: false };
+}
+
+// --------------------------------------------------------------------------
+// Thread subscriptions — who hears "someone replied" (WP1)
+// --------------------------------------------------------------------------
+
+/**
+ * Posting in a thread subscribes you to it.
+ *
+ * Idempotent at the DATABASE (partial unique index), not by a read-then-write
+ * check — two replies landing together would otherwise both see "not
+ * subscribed" and insert.
+ *
+ * 🔴 Critically, ON CONFLICT DO NOTHING means this can never UN-MUTE. Someone
+ * who explicitly muted a thread and then posts in it again stays muted. That is
+ * the whole reason mute is a flag rather than a deleted row: the auto-subscribe
+ * cannot distinguish "never subscribed" from "asked to stop", so the explicit
+ * choice has to be the one that persists.
+ */
+export async function autoSubscribeThread(db, userId, threadId) {
+  if (!userId || !threadId) return;
+  await db.query(
+    `INSERT INTO forum_subscriptions (user_id, thread_id) VALUES ($1, $2)
+     ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL DO NOTHING`,
+    [userId, threadId],
+  );
+}
+
+/** Explicit follow/mute from the UI. Upserts, so it can always un-mute. */
+export async function setThreadSubscription(db, user, shortId, subscribed) {
+  assertNotService(user);
+  const { rows } = await db.query('SELECT id FROM forum_threads WHERE short_id = $1', [shortId]);
+  if (!rows.length) throw new ForumError('Thread not found', 'thread_not_found', 404);
+
+  await db.query(
+    `INSERT INTO forum_subscriptions (user_id, thread_id, muted) VALUES ($1, $2, $3)
+     ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL
+     DO UPDATE SET muted = EXCLUDED.muted`,
+    [user.id, rows[0].id, !subscribed],
+  );
+  return { ok: true, subscribed: Boolean(subscribed) };
+}
+
+/** Is this reader following the thread? Drives the UI toggle. */
+export async function threadSubscription(db, userId, threadId) {
+  if (!userId) return { subscribed: false };
+  const { rows } = await db.query(
+    'SELECT muted FROM forum_subscriptions WHERE user_id = $1 AND thread_id = $2',
+    [userId, threadId],
+  );
+  return { subscribed: rows.length ? !rows[0].muted : false };
+}
+
+/**
+ * Everyone who should hear about a new post, EXCLUDING:
+ *   - the person who wrote it (you know what you just did), and
+ *   - the thread author, who gets the richer 'answer' notification instead and
+ *     must not receive both for one post.
+ *
+ * Muted rows are filtered in SQL rather than in JS, so a large thread does not
+ * pull every subscriber into memory to discard most of them.
+ */
+export async function threadReplyRecipients(db, threadId, { exceptUserId, threadAuthorId }) {
+  const { rows } = await db.query(
+    `SELECT s.user_id
+       FROM forum_subscriptions s
+      WHERE s.thread_id = $1
+        AND s.muted = FALSE
+        AND s.user_id <> COALESCE($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND s.user_id <> COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
+    [threadId, exceptUserId ?? null, threadAuthorId ?? null],
+  );
+  return rows.map((r) => r.user_id);
 }
