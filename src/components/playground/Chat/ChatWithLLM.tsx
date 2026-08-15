@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { useDialog, useGooPill, useTabs } from '@xenosystem/elements-react';
+import { IconButton, useDialog, useGooPill, useTabs } from '@xenosystem/elements-react';
 import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
@@ -34,7 +34,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -15892,64 +15892,66 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                       the glyph inside it" hook, and a glyph's motion is triggered by its HOST rather than by
                                                       itself. Without it the icons sat still — the animations were all there, with nothing to
                                                       listen to. */}
-                                                  <button onClick={() => handleRegenerate(message.id)} className="xeno-icon-hover p-1 text-gray-400 hover:text-gray-200 rounded-md" aria-label="Regenerate response"><RefreshCcw size={14} /></button>
-                                                  <button
+                                                  <IconButton
+                                                      icon={RefreshDecl}
+                                                      size="sm"
+                                                      iconSize={14}
+                                                      onClick={() => handleRegenerate(message.id)}
+                                                      aria-label="Regenerate response"
+                                                  />
+                                                  {/* The tick is the glyph SWAPPED, not a second element: one
+                                                      button, two declarations. `data-selection` still drives the
+                                                      draw, and `<IconButton>` forwards it untouched. */}
+                                                  <IconButton
+                                                      icon={copiedAiMessageId === message.id ? CheckDecl : CopyDecl}
+                                                      size="sm"
+                                                      iconSize={14}
                                                       onClick={() => handleCopy(message.parsedAnswer, message.id)}
-                                                      className="xeno-icon-hover p-1 text-gray-400 hover:text-gray-200 rounded-md"
                                                       aria-label="Copy response"
                                                       data-selection={copiedAiMessageId === message.id ? 'on' : 'off'}
                                                       disabled={copiedAiMessageId === message.id}
-                                                  >
-                                                      {copiedAiMessageId === message.id ? (
-                                                          <Check size={14} className="text-[var(--chat-text)]" />
-                                                      ) : (
-                                                       <Copy size={14} />
-                                                      )}
-                                                   </button>
-                                                  <button
+                                                  />
+                                                  <IconButton
+                                                      icon={EditDecl}
+                                                      size="sm"
+                                                      iconSize={14}
                                                       onClick={() => handleEditAiMessage(message.id, message.parsedAnswer || message.text || '')}
-                                                      className="xeno-icon-hover p-1 text-gray-400 hover:text-gray-200 rounded-md"
                                                       aria-label="Edit response"
                                                       disabled={editingAiMessageId !== null}
-                                                  >
-                                                      <Pencil size={14} />
-                                                   </button>
-                                                  <button
+                                                  />
+                                                  {/* Active reads as the text colour against the muted rest —
+                                                      brightness, not a hue. `className` rides on top of the
+                                                      button's own, so the variant keeps its hover. */}
+                                                  <IconButton
+                                                      icon={ThumbsUpDecl}
+                                                      size="sm"
+                                                      iconSize={14}
                                                       onClick={(e) => handleOpenFeedbackPopup(e, message.id)}
-                                                      className={`xeno-icon-hover p-1 rounded-md ${
-                                                          feedbackStatusMap[message.id] === 'liked'
-                                                              ? 'text-[var(--chat-text)]'
-                                                              : 'text-gray-400 hover:text-gray-200'
-                                                      }`}
+                                                      data-selection={feedbackStatusMap[message.id] === 'liked' ? 'on' : 'off'}
                                                       aria-label="Like response"
-                                                  >
-                                                       <ThumbsUp size={14} />
-                                                   </button>
-                                                  <button
+                                                  />
+                                                  {/* Active reads as the text colour against the muted rest —
+                                                      brightness, not a hue. `className` rides on top of the
+                                                      button's own, so the variant keeps its hover. */}
+                                                  <IconButton
+                                                      icon={ThumbsDownDecl}
+                                                      size="sm"
+                                                      iconSize={14}
                                                       onClick={(e) => handleOpenDislikePopup(e, message.id)}
-                                                      className={`xeno-icon-hover p-1 rounded-md ${
-                                                          feedbackStatusMap[message.id] === 'disliked'
-                                                              ? 'text-[var(--chat-text)]'
-                                                              : 'text-gray-400 hover:text-gray-200'
-                                                      }`}
+                                                      data-selection={feedbackStatusMap[message.id] === 'disliked' ? 'on' : 'off'}
                                                       aria-label="Dislike response"
-                                                  >
-                                                       <ThumbsDown size={14} />
-                                                   </button>
+                                                  />
                                                   {message.modelIdUsed && (
-                                                      <button
+                                                      <IconButton
+                                                          icon={InfoDecl}
+                                                          size="sm"
+                                                          iconSize={14}
                                                           onClick={() => setExpandedInfoMessageId(
                                                               expandedInfoMessageId === message.id ? null : message.id
                                                           )}
-                                                          className={`xeno-icon-hover p-1 rounded-md ${
-                                                              expandedInfoMessageId === message.id
-                                                                  ? 'text-gray-200'
-                                                                  : 'text-gray-400 hover:text-gray-200'
-                                                          }`}
+                                                          data-selection={expandedInfoMessageId === message.id ? 'on' : 'off'}
                                                           aria-label="Show model info"
-                                                      >
-                                                          <Info size={14} />
-                                                   </button>
+                                                      />
                                                   )}
                                               </div>
                                               {/* Inline Info Display */}

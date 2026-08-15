@@ -185,6 +185,30 @@ export const Image = /* @__PURE__ */ glyph(GImage);
 export const Star = /* @__PURE__ */ glyph(GStar);
 export const Trash = /* @__PURE__ */ glyph(GTrash);
 
+/**
+ * The DECLARATIONS, for the library's own controls.
+ *
+ * Everything above is a lucide-shaped component, because that is what a call site drawing an icon
+ * wants. `<IconButton>` wants the other thing: it takes the declaration and draws the glyph itself, so
+ * the button owns the size and the ink rather than each caller restating them.
+ *
+ * They are re-exported here rather than imported from `@xenosystem/elements/elements/*` at the call
+ * site, so the chat keeps ONE import path for icons. The whole argument for this file is that a
+ * component should not have to know where a glyph comes from; that does not stop being true because
+ * the consumer is a button.
+ *
+ * Suffixed `Decl` so `Copy` stays the component. Same glyph, two shapes, and the name says which.
+ */
+export {
+  GRefresh as RefreshDecl,
+  GCopy as CopyDecl,
+  GCheck as CheckDecl,
+  GEdit as EditDecl,
+  GThumbsUp as ThumbsUpDecl,
+  GThumbsDown as ThumbsDownDecl,
+  GInfo as InfoDecl,
+};
+
 /* Different name, same meaning. */
 export const Trash2 = /* @__PURE__ */ glyph(GTrash);
 export const FileText = /* @__PURE__ */ glyph(GFile);
