@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { useGooPill } from '@xenosystem/elements-react';
 import { Check, ChevronDown, Clock, Pause, Play, Search, Trash2 } from '@/lib/icons';
 import {
   SCHEDULED_STATUS_LABEL,
@@ -70,6 +71,11 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
   const [sort, setSort] = useState<ScheduledSort>('next');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [isSortOpen, setIsSortOpen] = useState(false);
+  /* The sort menu here is the same shape as every menu in ChatWithLLM — `chat-history-popover`,
+     p-1, buttons with `menuitem` — and was the only one still painting its own hover background
+     instead of letting the pill travel. `.chat-goo` is declared in the chat shell, which is this
+     page's parent, so the class is already in scope. */
+  const sortGoo = useGooPill<HTMLDivElement>();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [creating, setCreating] = useState(false);
@@ -212,8 +218,9 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
             </button>
             {isSortOpen && (
               <div
+                {...sortGoo.hostProps}
                 role="menu"
-                className={`chat-history-popover absolute left-0 top-full z-10 mt-1.5 min-w-full w-max overflow-hidden ${RADIUS} border p-1`}
+                className={`${sortGoo.hostProps.className} chat-goo chat-history-popover absolute left-0 top-full z-10 mt-1.5 min-w-full w-max overflow-hidden ${RADIUS} border p-1`}
                 style={{
                   backgroundColor: 'var(--chat-elevated)',
                   borderColor: 'var(--chat-border)',
@@ -221,6 +228,8 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
                     '0 12px 28px -8px color-mix(in srgb, var(--chat-text) 18%, transparent)',
                 }}
               >
+                {/* First child, so the pill paints behind the rows rather than over them. */}
+                {sortGoo.pill}
                 {(Object.keys(SORT_LABELS) as ScheduledSort[]).map((value) => (
                   <button
                     key={value}
@@ -230,7 +239,7 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
                       setSort(value);
                       setIsSortOpen(false);
                     }}
-                    className={`flex w-full items-center ${RADIUS} px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]`}
+                    className={`flex w-full items-center ${RADIUS} px-2.5 py-1.5 text-left text-[12.5px] text-[var(--chat-text)] transition-colors`}
                   >
                     <span>{SORT_LABELS[value]}</span>
                     {sort === value && (

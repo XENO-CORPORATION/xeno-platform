@@ -10358,19 +10358,32 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           ),
         }}
       >
-        <ul className="p-2 space-y-1">
+        {/* Was a `<ul>` of `<li><button>`. The list markup is why the pill could not be dropped in as
+            it stands elsewhere in this file: the host has to be the element the rows measure against,
+            and a `<ul>` may not hold the pill's `<div>`. Every other menu here is a div of buttons, so
+            this is now one too — which also lets the rows carry `menuitem` and be found by the pill's
+            default selector. */}
+        <div
+          {...feedbackGoo.hostProps}
+          role="menu"
+          aria-label="Why was this helpful?"
+          className={`${feedbackGoo.hostProps.className} chat-goo chat-goo-feedback p-2 [&>button+button]:mt-1`}
+        >
+          {/* First child, so the pill paints behind the rows rather than over them. */}
+          {feedbackGoo.pill}
           {feedbackOptions.map((option) => (
-            <li key={option.type}>
-              <button
-                onClick={() => handleFeedbackSubmit(option.type)}
-                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
-              >
-                <option.icon size={16} className="text-[var(--chat-muted)]" />
-                <span>{option.label}</span>
-              </button>
-            </li>
+            <button
+              key={option.type}
+              type="button"
+              role="menuitem"
+              onClick={() => handleFeedbackSubmit(option.type)}
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] transition-colors"
+            >
+              <option.icon size={16} className="text-[var(--chat-muted)]" />
+              <span>{option.label}</span>
+            </button>
           ))}
-        </ul>
+        </div>
       </div>
       </div>
     );
@@ -10435,19 +10448,26 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             ),
           }}
         >
-          <ul className="p-2 space-y-1">
+          <div
+            {...dislikeGoo.hostProps}
+            role="menu"
+            aria-label="What went wrong?"
+            className={`${dislikeGoo.hostProps.className} chat-goo chat-goo-feedback p-2 [&>button+button]:mt-1`}
+          >
+            {dislikeGoo.pill}
             {dislikeOptions.map((option) => (
-              <li key={option.type}>
-                <button
-                  onClick={() => handleDislikeFeedbackSubmit(option.type)}
-                  className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
-                >
-                  <option.icon size={16} className="text-[var(--chat-muted)]" />
-                  <span>{option.label}</span>
-                </button>
-              </li>
+              <button
+                key={option.type}
+                type="button"
+                role="menuitem"
+                onClick={() => handleDislikeFeedbackSubmit(option.type)}
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] transition-colors"
+              >
+                <option.icon size={16} className="text-[var(--chat-muted)]" />
+                <span>{option.label}</span>
+              </button>
             ))}
-          </ul>
+          </div>
         </div>
       </div>
     );
@@ -10516,6 +10536,31 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       }
     };
   }, [showScrollToBottom]);
+
+  /**
+   * Scrolling the transcript dismisses the feedback popovers.
+   *
+   * Every other menu in the chat is a child of the control that opened it, so it travels with it and
+   * the question never comes up. These two are portalled to `document.body` and placed in document
+   * coordinates — which is what lets them escape the column that clips this area — and the transcript
+   * scrolls INSIDE its own container, so the page never moves and nothing tells the popover its
+   * button has left. It just hung there over the new content.
+   *
+   * Dismissing is the honest answer rather than tracking: the menu is about one message, and once
+   * that message has scrolled away the menu is about nothing.
+   */
+  useEffect(() => {
+    if (!feedbackPopupInfo && !dislikePopupInfo) return;
+    const chatArea = chatAreaRef.current;
+    if (!chatArea) return;
+
+    const dismiss = () => {
+      setFeedbackPopupInfo(null);
+      setDislikePopupInfo(null);
+    };
+    chatArea.addEventListener('scroll', dismiss, { passive: true });
+    return () => chatArea.removeEventListener('scroll', dismiss);
+  }, [feedbackPopupInfo, dislikePopupInfo]);
   
   // --- NEW: Function to Delete a Conversation from History ---
   const handleDeleteConversation = async (conversationIdToDelete: string) => {
@@ -11520,6 +11565,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   // so one host). Rows are marked with `data-goo-row` rather than matched by class: these lists are
   // hand-rolled Tailwind and a selector written against utility classes would break the first time
   // someone changed the padding.
+  /* The two feedback popovers. They were the last menus in the chat highlighting a row by painting its
+     own background — the grey rectangle you can see snap on and off, against every other menu here
+     where the highlight travels. They also had no menu semantics at all: a `<ul>` of `<li><button>`
+     with no roles, which is why the pill's default row selector (`button[role^="menuitem"]`) had
+     nothing to find even if it had been wired. Both are fixed by the same edit. */
+  const feedbackGoo = useGooPill<HTMLDivElement>();
+  const dislikeGoo = useGooPill<HTMLDivElement>();
   const historyNavGoo = useGooPill<HTMLDivElement>({ rowSelector: '[data-goo-row]' });
   const historyListGoo = useGooPill<HTMLDivElement>({ rowSelector: '[data-goo-row]' });
 
@@ -12287,6 +12339,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           .chat-goo-list {
             --xeno-goo-inset: 0px;
             --xeno-goo-radius: 8px;
+          }
+          /* The feedback popovers pad their rows by 8, not the 4 the pill assumes from p-1.
+             (No backticks in here: this block is a template literal, and one would end it.) */
+          .chat-goo-feedback {
+            --xeno-goo-inset: 8px;
+            --xeno-goo-radius: 6px;
           }
           .chat-themed [class*="bg-[#0a0a0b]"] { background-color: var(--chat-canvas) !important; }
           .chat-themed [class*="bg-[#0e0e10]"],
@@ -15245,8 +15303,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             makes this column a scroll container, and a sticky descendant
                             then resolves against THIS box instead of the message list that
                             actually scrolls — which is why pinned code-block headers never
-                            pinned. `clip` is not a scroll container, so sticky passes through. */}
-                        <div className={`${isMultiInterface ? 'max-w-full px-2' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-[52rem]')} w-full space-y-1 [overflow:clip] ${
+                            pinned. `clip` is not a scroll container, so sticky passes through.
+
+                            `overflow-clip-margin` is the other half of that swap, and the reason it
+                            is worth having: a focus ring paints 4px outside its button (2px offset,
+                            2px wide), the message action bar is the LAST row in this column, and the
+                            column's edge lands exactly on it — so a focused 👍 / 👎 had its ring
+                            sliced along the bottom. The margin lets painting spill that far past the
+                            clip edge without letting content scroll or bleed. `hidden` has no such
+                            escape hatch; only `clip` does. */}
+                        <div className={`${isMultiInterface ? 'max-w-full px-2' : (isWideChatEnabled ? 'max-w-[72rem]' : 'max-w-[52rem]')} w-full space-y-1 [overflow:clip] [overflow-clip-margin:4px] ${
                           isMultiInterface ? 'mx-auto' : (
                             chatAlignment === 'left' ? 'ml-0 mr-auto' :
                             chatAlignment === 'right' ? 'ml-auto mr-0' :
