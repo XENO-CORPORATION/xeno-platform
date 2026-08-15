@@ -307,19 +307,46 @@ export async function searchThreads(db, query, limit = DEFAULT_LIMIT) {
   if (!q) return [];
 
   const { rows } = await db.query(
-    `WITH tsq AS (SELECT plainto_tsquery('english', $1) AS q),
+    `WITH tsq AS (
+       SELECT plainto_tsquery('english', $1) AS q_and,
+              -- OR of the same terms. plainto_tsquery ANDs, so a four-word
+              -- question needs all four words present — which is why every
+              -- realistic paraphrase missed. websearch_to_tsquery keeps the
+              -- AND for precision; this is the recall tier beneath it.
+              replace(plainto_tsquery('english', $1)::text, ' & ', ' | ')::tsquery AS q_or
+     ),
      hits AS (
+       -- Tier 1: every term present, in the title. Highest precision.
        SELECT t.id AS thread_id,
-              ts_rank(t.search_vector, tsq.q) * 2.0 AS rank,
+              ts_rank(t.search_vector, tsq.q_and) * 4.0 AS rank,
               NULL::text AS body
          FROM forum_threads t, tsq
-        WHERE t.search_vector @@ tsq.q
+        WHERE tsq.q_and IS NOT NULL AND t.search_vector @@ tsq.q_and
        UNION ALL
+       -- Tier 2: every term present, in a post.
        SELECT p.thread_id,
-              ts_rank(p.search_vector, tsq.q) AS rank,
+              ts_rank(p.search_vector, tsq.q_and) * 2.0 AS rank,
               p.body
          FROM forum_posts p, tsq
-        WHERE p.search_vector @@ tsq.q AND p.status = 'visible'
+        WHERE tsq.q_and IS NOT NULL AND p.search_vector @@ tsq.q_and AND p.status = 'visible'
+       UNION ALL
+       -- Tier 3: ANY term present. Recall, ranked below both AND tiers so it
+       -- can never outrank an exact match.
+       SELECT t.id, ts_rank(t.search_vector, tsq.q_or) * 1.0, NULL::text
+         FROM forum_threads t, tsq
+        WHERE tsq.q_or IS NOT NULL AND t.search_vector @@ tsq.q_or
+       UNION ALL
+       SELECT p.thread_id, ts_rank(p.search_vector, tsq.q_or) * 0.6, p.body
+         FROM forum_posts p, tsq
+        WHERE tsq.q_or IS NOT NULL AND p.search_vector @@ tsq.q_or AND p.status = 'visible'
+       UNION ALL
+       -- Tier 4: trigram similarity on the TITLE. Catches what stemming
+       -- cannot — "colours" vs "colors", typos, partial words. Threshold 0.18
+       -- rather than the 0.3 default: a short query against a long title has
+       -- a low similarity even when it is obviously the right thread.
+       SELECT t.id, similarity(t.title, $1) * 0.9, NULL::text
+         FROM forum_threads t
+        WHERE similarity(t.title, $1) > 0.18
      ),
      best AS (
        SELECT DISTINCT ON (thread_id) thread_id, rank, body
