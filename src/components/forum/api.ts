@@ -144,3 +144,16 @@ export const deletePost = (postId: string) =>
 
 // What you have taken part in — asked AND answered (WP5).
 export const getMyActivity = () => request<any>('/me/activity', {}, true);
+
+// Moderation (WP3). The queue needs review_flags; the log needs nothing.
+export const getFlags = (status = 'open') =>
+  request<any>(`/flags?status=${encodeURIComponent(status)}`, {}, true);
+
+export const resolveFlag = (flagId: string, action: 'dismiss' | 'action', note?: string) =>
+  request<any>(`/flags/${flagId}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify(note ? { action, note } : { action }),
+  }, true);
+
+/** Public — deliberately no auth. A log only staff can read is not a public log. */
+export const getModerationLog = () => request<any>('/moderation-log');

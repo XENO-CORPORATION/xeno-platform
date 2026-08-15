@@ -13,7 +13,7 @@
     "test:forum-ranker": "node --test scripts/forum-ranker.test.mjs",
     "test:forum-edit-delete": "node --test scripts/forum-edit-delete.test.mjs scripts/forum-my-activity.test.mjs",
     "test:forum-throttle": "node --test scripts/forum-throttle.test.mjs",
-    "test:forum-moderation": "node --test scripts/forum-moderation.test.mjs",
+    "test:forum-moderation": "node --test scripts/forum-moderation.test.mjs scripts/forum-moderation-ui.test.mjs",
     "test:forum-notify": "node --test scripts/forum-notify.test.mjs scripts/forum-notify-email.test.mjs scripts/forum-notification-ui.test.mjs",
     "test:release-guard": "node --test scripts/secret-box.test.mjs scripts/xeno-release.latest-yml.test.mjs scripts/release-guard.test.mjs scripts/publish-cli-releases.test.mjs scripts/amend-release-entry.test.mjs",
     "test:product-pages": "node --test scripts/experimental-notice.test.mjs scripts/product-privacy.test.mjs",
