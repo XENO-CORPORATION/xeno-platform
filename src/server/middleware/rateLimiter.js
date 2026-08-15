@@ -9,6 +9,7 @@
  */
 
 import rateLimit from 'express-rate-limit';
+import { rateLimitKey } from '../utils/clientIp.js';
 
 // --------------------------------------------------------------------------
 // Helper: normalize IP for IPv6 compatibility
@@ -35,7 +36,15 @@ export function clientIp(req) {
 }
 
 function normalizeIp(req) {
-  return clientIp(req);
+  // 🔴 rateLimitKey, NOT clientIp. An IPv6 user is not one address, it is a
+  // whole ISP allocation — so keying a limit on the full address lets them
+  // rotate freely and never hit it. This function was named for IPv6
+  // compatibility and provided none. clientIp stays correct for LOGGING, where
+  // the exact address is the point.
+  //
+  // ⚠️ There are TWO clientIp implementations — this file's local one (above)
+  // and utils/clientIp.js. They agree today and nothing keeps them agreeing.
+  return rateLimitKey(req);
 }
 
 // --------------------------------------------------------------------------

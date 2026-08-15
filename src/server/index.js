@@ -94,6 +94,7 @@ import jobRoutes from './routes/jobRoutes.js';
 import { requestLoggerMiddleware, logger } from './middleware/requestLogger.js';
 import { staticCacheMiddleware, apiCacheMiddleware, securityHeadersMiddleware } from './middleware/cdnOptimization.js';
 import { authLimiter as perEndpointAuthLimiter, llmLimiter, imageGenLimiter, uploadLimiter, clientIp } from './middleware/rateLimiter.js';
+import { rateLimitKey } from './utils/clientIp.js';
 import { runAllMigrations } from './services/migrationRunner.js';
 import { migrateAccountV2 } from './database/migrate-account-v2.js';
 import { migrateOidcClients } from './database/migrate-oidc-clients.js';
@@ -237,7 +238,7 @@ const globalLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in headers
   legacyHeaders: false,
   validate: { ip: false }, // custom key (CF-Connecting-IP) — skip the built-in req.ip validator
-  keyGenerator: clientIp, // real client IP behind Cloudflare, not the collapsed upstream hop
+  keyGenerator: rateLimitKey, // real client IP behind Cloudflare, not the collapsed upstream hop
   message: { success: false, error: 'Too many requests, please try again later.' },
   skip: (req) => {
     // Skip rate limiting for health checks
@@ -253,7 +254,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: { ip: false },
-  keyGenerator: clientIp, // per-client (else one collapsed bucket = platform-wide login lockout)
+  keyGenerator: rateLimitKey, // per-client (else one collapsed bucket = platform-wide login lockout)
   message: { success: false, error: 'Too many authentication attempts, please try again later.' },
 });
 app.use('/api/auth/login', authLimiter);
@@ -273,7 +274,7 @@ const generationLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: { ip: false },
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitKey,
   message: { success: false, error: 'Generation rate limit exceeded. Please wait before trying again.' },
 });
 app.use('/api/chat/generate', generationLimiter);
