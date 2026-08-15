@@ -361,7 +361,7 @@ export async function searchThreads(db, query, limit = DEFAULT_LIMIT) {
             ow.username AS author_owner_handle,
             ow.display_name AS author_owner_display_name,
             b.rank,
-            ts_headline('english', COALESCE(b.body, t.title), tsq.q,
+            ts_headline('english', COALESCE(b.body, t.title), COALESCE(tsq.q_and, tsq.q_or),
                         'MaxFragments=1,MaxWords=30,MinWords=12,StartSel=<mark>,StopSel=</mark>') AS excerpt,
             COALESCE(
               (SELECT array_agg(g.namespace || ':' || g.value ORDER BY g.namespace, g.value)
