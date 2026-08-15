@@ -91,6 +91,18 @@ import GShare from '@xenosystem/elements/elements/share';
 import GStar from '@xenosystem/elements/elements/star';
 import GTrash from '@xenosystem/elements/elements/trash';
 import GX from '@xenosystem/elements/elements/x';
+import GBell from '@xenosystem/elements/elements/bell';
+import GFilter from '@xenosystem/elements/elements/filter';
+import GHeart from '@xenosystem/elements/elements/heart';
+import GHelp from '@xenosystem/elements/elements/help';
+import GHome from '@xenosystem/elements/elements/home';
+import GMenu from '@xenosystem/elements/elements/menu';
+import GMinus from '@xenosystem/elements/elements/minus';
+import GSliders from '@xenosystem/elements/elements/sliders';
+import GSun from '@xenosystem/elements/elements/sun';
+import GTerminal from '@xenosystem/elements/elements/terminal';
+import GUpload from '@xenosystem/elements/elements/upload';
+import GUser from '@xenosystem/elements/elements/user';
 
 /**
  * The icon facade.
@@ -203,6 +215,28 @@ export const KeyRound = /* @__PURE__ */ glyph(GLock);
 export const Lock = /* @__PURE__ */ glyph(GLock);
 export const Edit2 = /* @__PURE__ */ glyph(GEdit);
 export const Rows = /* @__PURE__ */ glyph(GList);
+
+/* Twelve glyphs the library had drawn and this file had never imported.
+ *
+ * Nothing failed, which is the whole problem with a wildcard re-export: `Sliders` resolved, rendered,
+ * and looked approximately right, so the only symptom was that it came back at lucide's stroke with no
+ * motion attached — the same way `Lock` did, and found the same way, by looking at what the page drew
+ * rather than at what compiled. The chat only uses `Sliders` of the twelve today; the other eleven are
+ * mapped so the next call site does not have to discover this again. */
+export const Bell = /* @__PURE__ */ glyph(GBell);
+export const Filter = /* @__PURE__ */ glyph(GFilter);
+export const Heart = /* @__PURE__ */ glyph(GHeart);
+export const HelpCircle = /* @__PURE__ */ glyph(GHelp);
+export const CircleHelp = /* @__PURE__ */ glyph(GHelp);
+export const Home = /* @__PURE__ */ glyph(GHome);
+export const Menu = /* @__PURE__ */ glyph(GMenu);
+export const Minus = /* @__PURE__ */ glyph(GMinus);
+export const Sliders = /* @__PURE__ */ glyph(GSliders);
+export const SlidersHorizontal = /* @__PURE__ */ glyph(GSliders);
+export const Sun = /* @__PURE__ */ glyph(GSun);
+export const Terminal = /* @__PURE__ */ glyph(GTerminal);
+export const Upload = /* @__PURE__ */ glyph(GUpload);
+export const User = /* @__PURE__ */ glyph(GUser);
 export const Link2 = /* @__PURE__ */ glyph(GLink);
 
 /* Same glyph, mirrored — the shape carries the meaning and the direction is a transform. Because

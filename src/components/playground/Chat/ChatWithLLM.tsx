@@ -34,7 +34,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchResponse, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Square, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast } from '@/lib/icons';
+import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Square, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -11887,7 +11887,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         aria-label="Send message"
                         disabled={!(inputValue.trim() || attachedFiles.length > 0) || isContextLimitReached}
                       >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                        {/* The send arrow was hand-drawn here — stroke 2, round caps — while every other
+                            glyph in the composer came from the set at 1.75 with butt caps. It never
+                            animated because there was nothing to animate: no `data-glyph`, no parts, no
+                            rule to match. It looked like a hover that had been forgotten rather than an
+                            icon that had never been one. */}
+                        <ArrowUp size={16} />
                       </button>
                     </>
                   )}
@@ -17872,22 +17877,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             : 'text-zinc-500 hover:bg-[var(--chat-hover)] hover:text-zinc-200'
                                         }`}
                                       >
-                                        {/* Two-track sliders — Claude uses 2 lines, not Lucide's 3-track SlidersVertical */}
-                                        <svg
-                                          width="13"
-                                          height="13"
-                                          viewBox="0 0 24 24"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeWidth="2"
-                                          strokeLinecap="round"
-                                          aria-hidden="true"
-                                        >
-                                          <path d="M8 5v14" />
-                                          <path d="M16 5v14" />
-                                          <path d="M5.5 10h5" />
-                                          <path d="M13.5 15h5" />
-                                        </svg>
+                                        {/* Was a hand-drawn two-track slider, written to avoid lucide's
+                                            three-track one. XENO's `sliders` is already two tracks, and
+                                            with square handles rather than bare ticks — so the reason
+                                            for hand-drawing it had gone; what was left was a glyph at
+                                            stroke 2 with round caps, and no motion, next to a set at
+                                            1.75 with butt caps.
+
+                                            One real change: the tracks run HORIZONTALLY now. The set
+                                            draws this control one way, and an icon that exists only
+                                            here, rotated, is how the drift started. */}
+                                        <Sliders size={13} aria-hidden="true" />
                               </button>
                             </div>
                           </div>
