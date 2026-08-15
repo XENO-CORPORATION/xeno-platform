@@ -1,6 +1,18 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
 import { IconButton, MenuItem, MessageBubble, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
+// The palettes and the preference that picks one live outside this file now: the CSS at the entry
+// point, the resolution beside it. This component still OWNS the switcher — it is the only thing that
+// writes these keys — but owning a setting never meant being the only place allowed to read it.
+import {
+  CHAT_THEME_STORAGE_KEY,
+  CHAT_THEME_BRIGHTNESS_STORAGE_KEY,
+  VISUAL_CHAT_THEME_OPTIONS,
+  getVisualThemePosition,
+  getClosestVisualTheme,
+  type ChatTheme,
+  type ResolvedChatTheme,
+} from './chatTheme';
 import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
@@ -1692,7 +1704,6 @@ interface ChatWithLLMProps {
 type VoiceInputMode = 'tap' | 'hold';
 
 const VOICE_INPUT_MODE_STORAGE_KEY = 'xeno-chat-voice-input-mode';
-const CHAT_THEME_STORAGE_KEY = 'xeno-chat-theme';
 const PROJECTS_PAGE_OPEN_STORAGE_KEY = 'xeno-chat-projects-page-open';
 const ACTIVE_PROJECT_ID_STORAGE_KEY = 'xeno-chat-active-project-id';
 // v1 prototype limit: project files are stored in localStorage, so keep them small.
@@ -2316,21 +2327,11 @@ const PROJECT_SETTINGS_SECTION_IDS = PROJECT_SETTINGS_SECTIONS.map((s) => s.id);
  * a panel id and each claim to own it; sharing one explicit id is what `panelId` is for.
  */
 const PROJECT_SETTINGS_PANEL_ID = 'project-settings-panel';
-const CHAT_THEME_BRIGHTNESS_STORAGE_KEY = 'xeno-chat-theme-brightness';
 const CHAT_CHROME_EDGE_INSET_PX = 12;
 /** Vertical inset for floating chrome icons (centers an h-9 control in the bar). */
 const CHAT_CHROME_TOP_INSET_PX = 8;
 /** Shared height for history header + main top bar. Hairline sits at this Y (fixed). */
 const CHAT_CHROME_BAR_HEIGHT_PX = 52;
-
-type ChatTheme = 'system' | 'custom' | 'dark' | 'dim' | 'light';
-type ResolvedChatTheme = Exclude<ChatTheme, 'system' | 'custom'>;
-
-const VISUAL_CHAT_THEME_OPTIONS = [
-  { id: 'dark', label: 'Dark', position: 0 },
-  { id: 'dim', label: 'Dim', position: 50 },
-  { id: 'light', label: 'Light', position: 100 },
-] as const;
 
 const THEME_WAVEFORM_BAR_COUNT = 21;
 const THEME_BRIGHTNESS_STEP = 5;
@@ -2470,14 +2471,6 @@ const getThemePreviewTokens = (position: number): ChatThemeRuntimeTokens => {
     ).muted,
   };
 };
-
-const getVisualThemePosition = (theme: ResolvedChatTheme): number =>
-  VISUAL_CHAT_THEME_OPTIONS.find((option) => option.id === theme)?.position ?? 0;
-
-const getClosestVisualTheme = (position: number): ResolvedChatTheme =>
-  VISUAL_CHAT_THEME_OPTIONS.reduce((closest, option) =>
-    Math.abs(option.position - position) < Math.abs(closest.position - position) ? option : closest,
-  ).id;
 
 const normalizeThemeBrightness = (position: number): number =>
   Math.round(Math.min(100, Math.max(0, position)) / THEME_BRIGHTNESS_STEP) * THEME_BRIGHTNESS_STEP;
@@ -12147,98 +12140,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             }
           }
 
-          /* Chat LLM owns these tokens. They do not affect the rest of XENO. */
-          .chat-theme-dark {
-            --chat-canvas: #0a0a0a;
-            --chat-surface: #171717;
-            --chat-elevated: #262626;
-            --chat-control: #262626;
-            --chat-control-strong: #404040;
-            --chat-text: #fafafa;
-            --chat-muted: #a3a3a3;
-            --chat-surface-text: #fafafa;
-            --chat-surface-muted: #a3a3a3;
-            --chat-border: rgba(255, 255, 255, 0.10);
-            --chat-hover: #404040;
-            /* Solid fill for project-card date fade — near canvas, not hover gray. */
-            --chat-project-preview-fade: #171717;
-            --chat-top-bar-btn-active: color-mix(in srgb, var(--chat-canvas) 55%, black);
-            --chat-overlay: rgba(0, 0, 0, 0.18);
-            --chat-accent: #fafafa;
-            --chat-accent-soft: color-mix(in srgb, #fafafa 20%, transparent);
-            --chat-on-accent: #0a0a0a;
-            --chat-danger: #ef4444;
-            --chat-danger-hover: #f87171;
-            /* Composer: dark fill (not washed lighter). Definition = inner border. */
-            --chat-composer-fill: #141416;
-            --chat-composer-border: rgba(255, 255, 255, 0.12);
-            --chat-composer-shadow: none;
-            --chat-input-shadow: none;
-            --chat-tool-rail-stroke: rgba(245, 245, 245, 0.78);
-            --chat-tool-rail-stroke-soft: rgba(245, 245, 245, 0.58);
-            color-scheme: dark;
-          }
-          .chat-theme-dim {
-            --chat-canvas: #171718;
-            --chat-surface: #1b1b1d;
-            --chat-elevated: #212124;
-            --chat-control: #2a2a2e;
-            --chat-control-strong: #36363b;
-            --chat-text: #e7e7e2;
-            --chat-muted: #a1a19d;
-            --chat-surface-text: #e7e7e2;
-            --chat-surface-muted: #a1a19d;
-            --chat-border: rgba(255, 255, 255, 0.12);
-            --chat-hover: rgba(255, 255, 255, 0.07);
-            /* Dim hover is translucent — fade needs a solid match for the preview box. */
-            --chat-project-preview-fade: #222225;
-            --chat-top-bar-btn-active: color-mix(in srgb, var(--chat-canvas) 55%, black);
-            --chat-overlay: rgba(0, 0, 0, 0.16);
-            --chat-accent: #e7e7e2;
-            --chat-accent-soft: color-mix(in srgb, #e7e7e2 20%, transparent);
-            --chat-on-accent: #171718;
-            --chat-danger: #ef4444;
-            --chat-danger-hover: #f87171;
-            --chat-composer-fill: #1b1b1d;
-            --chat-composer-border: rgba(255, 255, 255, 0.12);
-            --chat-composer-shadow: none;
-            --chat-input-shadow: none;
-            --chat-tool-rail-stroke: rgba(232, 232, 226, 0.72);
-            --chat-tool-rail-stroke-soft: rgba(232, 232, 226, 0.52);
-            color-scheme: dark;
-          }
-          .chat-theme-light {
-            --chat-canvas: #ffffff;
-            --chat-surface: #fafafa;
-            --chat-elevated: #ffffff;
-            --chat-control: #f5f5f5;
-            --chat-control-strong: #e5e5e5;
-            --chat-text: #0a0a0a;
-            --chat-muted: #737373;
-            --chat-surface-text: #0a0a0a;
-            --chat-surface-muted: #737373;
-            --chat-border: #d4d4d4;
-            --chat-hover: #f5f5f5;
-            --chat-project-preview-fade: #f5f5f5;
-            --chat-top-bar-btn-active: var(--chat-control);
-            --chat-overlay: rgba(10, 10, 10, 0.04);
-            --chat-accent: #0a0a0a;
-            --chat-accent-soft: color-mix(in srgb, #0a0a0a 14%, transparent);
-            --chat-on-accent: #ffffff;
-            --chat-danger: #dc2626;
-            --chat-danger-hover: #b91c1c;
-            --chat-composer-fill: #ffffff;
-            --chat-composer-border: rgba(0, 0, 0, 0.14);
-            --chat-composer-shadow: none;
-            --chat-input-shadow: none;
-            --chat-tool-rail-stroke: rgba(24, 24, 27, 0.72);
-            --chat-tool-rail-stroke-soft: rgba(24, 24, 27, 0.48);
-            color-scheme: light;
-          }
-          .chat-themed {
-            color: var(--chat-text);
-            background: var(--chat-canvas);
-          }
           .chat-themed .chat-top-bar {
             background-color: var(--chat-canvas) !important;
             border-color: var(--chat-border) !important;
@@ -12300,40 +12201,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             box-shadow:
               0 1px 2px rgba(0, 0, 0, 0.06),
               0 2px 4px rgba(0, 0, 0, 0.04) !important;
-          }
-          /* ── The token bridge ──────────────────────────────────────────────────────────────────
-             (No backticks anywhere in this block — it lives inside a template literal, and one
-             would end it.)
-
-             The library's components read --xeno-*; this chat's three runtime themes drive
-             --chat-*. Both sets resolve on this element and they do NOT agree — --xeno-text is
-             #d8d8de where --chat-text is #fafafa — so any library component dropped into the chat
-             today would arrive in the library's palette rather than the theme the user picked.
-
-             The whole reconciliation is eleven lines, because the two vocabularies match name for
-             name: everything the library's stylesheets consume for colour has a --chat- twin. They
-             were designed to the same list and never wired together.
-
-             Direction matters. The chat is the source of truth — it owns the theme switcher and the
-             three palettes — so --xeno-* inherits from --chat-*, never the reverse.
-
-             This changes nothing today, deliberately: no library COMPONENT renders in the chat yet.
-             What renders is icons, which draw in currentColor, the goo pill, whose fill this file
-             already overrides below, and the scrollbar, which has its own --xeno-scroll-* family.
-             It is here so that the first component adopted arrives already wearing the right theme,
-             instead of the adoption also being a palette migration. */
-          .chat-themed {
-            --xeno-text: var(--chat-text);
-            --xeno-muted: var(--chat-muted);
-            --xeno-border: var(--chat-border);
-            --xeno-canvas: var(--chat-canvas);
-            --xeno-surface: var(--chat-surface);
-            --xeno-elevated: var(--chat-elevated);
-            --xeno-control: var(--chat-control);
-            --xeno-hover: var(--chat-hover);
-            --xeno-danger: var(--chat-danger);
-            --xeno-danger-hover: var(--chat-danger-hover);
-            --xeno-on-accent: var(--chat-on-accent);
           }
           /* The user turn is the library's MessageBubble, and these are the two things this chat wants
              said differently.

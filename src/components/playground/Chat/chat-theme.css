@@ -1,0 +1,137 @@
+/*
+ * The chat's three palettes, and the bridge that hands them to the element library.
+ *
+ * These lived in a <style> element inside ChatWithLLM's JSX, which meant they existed only while that
+ * component was mounted. Every other chat surface is a sibling route -- the search interface is at
+ * /overview/chat/search and never renders ChatWithLLM at all -- so on those routes every --chat-*
+ * resolved to nothing, and the only way to look right was to not use the tokens. That is why the
+ * search interface carries 159 hardcoded colours: not carelessness, the only thing available to it.
+ *
+ * A palette is not one component's private state. It loads once, at the entry point, and any surface
+ * that wants it says so with a class.
+ *
+ * Moved verbatim: nothing here was ever interpolated, it was static CSS inside a template literal.
+ */
+
+/* Chat LLM owns these tokens. They do not affect the rest of XENO. */
+.chat-theme-dark {
+  --chat-canvas: #0a0a0a;
+  --chat-surface: #171717;
+  --chat-elevated: #262626;
+  --chat-control: #262626;
+  --chat-control-strong: #404040;
+  --chat-text: #fafafa;
+  --chat-muted: #a3a3a3;
+  --chat-surface-text: #fafafa;
+  --chat-surface-muted: #a3a3a3;
+  --chat-border: rgba(255, 255, 255, 0.10);
+  --chat-hover: #404040;
+  /* Solid fill for project-card date fade — near canvas, not hover gray. */
+  --chat-project-preview-fade: #171717;
+  --chat-top-bar-btn-active: color-mix(in srgb, var(--chat-canvas) 55%, black);
+  --chat-overlay: rgba(0, 0, 0, 0.18);
+  --chat-accent: #fafafa;
+  --chat-accent-soft: color-mix(in srgb, #fafafa 20%, transparent);
+  --chat-on-accent: #0a0a0a;
+  --chat-danger: #ef4444;
+  --chat-danger-hover: #f87171;
+  /* Composer: dark fill (not washed lighter). Definition = inner border. */
+  --chat-composer-fill: #141416;
+  --chat-composer-border: rgba(255, 255, 255, 0.12);
+  --chat-composer-shadow: none;
+  --chat-input-shadow: none;
+  --chat-tool-rail-stroke: rgba(245, 245, 245, 0.78);
+  --chat-tool-rail-stroke-soft: rgba(245, 245, 245, 0.58);
+  color-scheme: dark;
+}
+.chat-theme-dim {
+  --chat-canvas: #171718;
+  --chat-surface: #1b1b1d;
+  --chat-elevated: #212124;
+  --chat-control: #2a2a2e;
+  --chat-control-strong: #36363b;
+  --chat-text: #e7e7e2;
+  --chat-muted: #a1a19d;
+  --chat-surface-text: #e7e7e2;
+  --chat-surface-muted: #a1a19d;
+  --chat-border: rgba(255, 255, 255, 0.12);
+  --chat-hover: rgba(255, 255, 255, 0.07);
+  /* Dim hover is translucent — fade needs a solid match for the preview box. */
+  --chat-project-preview-fade: #222225;
+  --chat-top-bar-btn-active: color-mix(in srgb, var(--chat-canvas) 55%, black);
+  --chat-overlay: rgba(0, 0, 0, 0.16);
+  --chat-accent: #e7e7e2;
+  --chat-accent-soft: color-mix(in srgb, #e7e7e2 20%, transparent);
+  --chat-on-accent: #171718;
+  --chat-danger: #ef4444;
+  --chat-danger-hover: #f87171;
+  --chat-composer-fill: #1b1b1d;
+  --chat-composer-border: rgba(255, 255, 255, 0.12);
+  --chat-composer-shadow: none;
+  --chat-input-shadow: none;
+  --chat-tool-rail-stroke: rgba(232, 232, 226, 0.72);
+  --chat-tool-rail-stroke-soft: rgba(232, 232, 226, 0.52);
+  color-scheme: dark;
+}
+.chat-theme-light {
+  --chat-canvas: #ffffff;
+  --chat-surface: #fafafa;
+  --chat-elevated: #ffffff;
+  --chat-control: #f5f5f5;
+  --chat-control-strong: #e5e5e5;
+  --chat-text: #0a0a0a;
+  --chat-muted: #737373;
+  --chat-surface-text: #0a0a0a;
+  --chat-surface-muted: #737373;
+  --chat-border: #d4d4d4;
+  --chat-hover: #f5f5f5;
+  --chat-project-preview-fade: #f5f5f5;
+  --chat-top-bar-btn-active: var(--chat-control);
+  --chat-overlay: rgba(10, 10, 10, 0.04);
+  --chat-accent: #0a0a0a;
+  --chat-accent-soft: color-mix(in srgb, #0a0a0a 14%, transparent);
+  --chat-on-accent: #ffffff;
+  --chat-danger: #dc2626;
+  --chat-danger-hover: #b91c1c;
+  --chat-composer-fill: #ffffff;
+  --chat-composer-border: rgba(0, 0, 0, 0.14);
+  --chat-composer-shadow: none;
+  --chat-input-shadow: none;
+  --chat-tool-rail-stroke: rgba(24, 24, 27, 0.72);
+  --chat-tool-rail-stroke-soft: rgba(24, 24, 27, 0.48);
+  color-scheme: light;
+}
+.chat-themed {
+  color: var(--chat-text);
+  background: var(--chat-canvas);
+}
+
+/* ── The token bridge ──────────────────────────────────────────────────────────────────
+   The library's components read --xeno-*; this chat's three runtime themes drive
+   --chat-*. Both sets resolve on this element and they do NOT agree — --xeno-text is
+   #d8d8de where --chat-text is #fafafa — so any library component dropped into the chat
+   today would arrive in the library's palette rather than the theme the user picked.
+
+   The whole reconciliation is eleven lines, because the two vocabularies match name for
+   name: everything the library's stylesheets consume for colour has a --chat- twin. They
+   were designed to the same list and never wired together.
+
+   Direction matters. The chat is the source of truth — it owns the theme switcher and the
+   three palettes — so --xeno-* inherits from --chat-*, never the reverse.
+
+   Written before a single library component rendered here, so that the first one adopted
+   would arrive already wearing the right theme instead of the adoption also being a palette
+   migration. It now dresses every IconButton, MenuItem and MessageBubble in the chat. */
+.chat-themed {
+  --xeno-text: var(--chat-text);
+  --xeno-muted: var(--chat-muted);
+  --xeno-border: var(--chat-border);
+  --xeno-canvas: var(--chat-canvas);
+  --xeno-surface: var(--chat-surface);
+  --xeno-elevated: var(--chat-elevated);
+  --xeno-control: var(--chat-control);
+  --xeno-hover: var(--chat-hover);
+  --xeno-danger: var(--chat-danger);
+  --xeno-danger-hover: var(--chat-danger-hover);
+  --xeno-on-accent: var(--chat-on-accent);
+}

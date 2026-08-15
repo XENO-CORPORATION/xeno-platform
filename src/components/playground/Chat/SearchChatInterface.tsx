@@ -30,6 +30,7 @@ import {
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
+import { useResolvedChatTheme } from './chatTheme';
 
 // Helper to format large token counts
 const formatTokens = (tokens: number): string => {
@@ -178,6 +179,10 @@ const DEFAULT_MODEL: Model = {
 };
 
 const SearchChatInterface: React.FC = () => {
+  // Which of the three palettes the user picked in the chat. Read-only here — this surface has no
+  // switcher of its own, it just wears whatever was chosen.
+  const resolvedChatTheme = useResolvedChatTheme();
+
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -1185,34 +1190,44 @@ Based on these search results, provide a helpful, accurate, and concise answer t
   };
 
   return (
-    <div className="relative flex h-full text-white overflow-hidden bg-[#121212]">
+    // `chat-themed` brings the --chat-* palette and hands it on to the library as --xeno-*;
+    // `chat-theme-<resolved>` picks which of the three. This route never mounts ChatWithLLM, so
+    // until the palettes moved to a stylesheet of their own there was nothing here to inherit — which
+    // is why every colour in this file used to be a literal.
+    //
+    // `xeno-icon-hosts` says every button and link in here hosts a glyph, so the icons animate on
+    // hover without each control having to opt in. They were all already XENO glyphs; none of them
+    // moved.
+    <div
+      className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} relative flex h-full text-[var(--chat-text)] overflow-hidden bg-[var(--chat-canvas)]`}
+    >
       {/* History Sidebar */}
       <div
-        className={`absolute left-0 top-0 bottom-0 z-30 bg-[#121212] border-r border-[#3a3a3d] transition-all duration-300 ease-in-out ${
+        className={`absolute left-0 top-0 bottom-0 z-30 bg-[var(--chat-canvas)] border-r border-[var(--chat-border)] transition-all duration-300 ease-in-out ${
           isHistoryOpen ? 'w-80 translate-x-0' : 'w-80 -translate-x-full'
         }`}
       >
         {/* History Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#3a3a3d]">
-          <h3 className="text-sm font-medium text-white">Search History</h3>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--chat-border)]">
+          <h3 className="text-sm font-medium text-[var(--chat-text)]">Search History</h3>
           <button
             onClick={() => setIsHistoryOpen(false)}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-[#2a2a2d] transition-colors"
+            className="p-1.5 rounded-lg text-[var(--chat-muted)] hover:text-[var(--chat-text)] hover:bg-[var(--chat-control)] transition-colors"
           >
             <X size={16} />
           </button>
         </div>
 
         {/* Search Bar */}
-        <div className="p-3 border-b border-[#3a3a3d]">
+        <div className="p-3 border-b border-[var(--chat-border)]">
           <div className="relative">
-            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]" />
             <input
               type="text"
               placeholder="Search history..."
               value={historySearchQuery}
               onChange={(e) => setHistorySearchQuery(e.target.value)}
-              className="w-full bg-[#19191a] border border-[#3a3a3d] rounded-lg py-1.5 pl-9 pr-3 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500 transition-colors h-9"
+              className="w-full bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg py-1.5 pl-9 pr-3 text-sm text-[var(--chat-text)] placeholder-[var(--chat-muted)] focus:outline-none focus:border-[var(--chat-muted)] transition-colors h-9"
             />
           </div>
         </div>
@@ -1221,14 +1236,14 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         <div className="flex-1 overflow-y-auto p-2" style={{ height: 'calc(100% - 110px)' }}>
           {isLoadingHistory ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Loader2 size={32} className="text-gray-600 mb-3 animate-spin" />
-              <p className="text-sm text-gray-500">Loading history...</p>
+              <Loader2 size={32} className="text-[var(--chat-muted)] mb-3 animate-spin" />
+              <p className="text-sm text-[var(--chat-muted)]">Loading history...</p>
             </div>
           ) : conversationHistory.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Clock size={32} className="text-gray-600 mb-3" />
-              <p className="text-sm text-gray-500">No search history</p>
-              <p className="text-xs text-gray-600 mt-1">Your searches will appear here</p>
+              <Clock size={32} className="text-[var(--chat-muted)] mb-3" />
+              <p className="text-sm text-[var(--chat-muted)]">No search history</p>
+              <p className="text-xs text-[var(--chat-muted)] mt-1">Your searches will appear here</p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -1243,22 +1258,22 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   onClick={() => loadConversation(conv)}
                   className={`group flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                     activeConversationId === conv.id
-                      ? 'bg-[#2a2a2d]'
-                      : 'hover:bg-[#1a1a1d]'
+                      ? 'bg-[var(--chat-control)]'
+                      : 'hover:bg-[var(--chat-surface)]'
                   }`}
                 >
-                  <div className="flex-shrink-0 mt-0.5 text-gray-500">
+                  <div className="flex-shrink-0 mt-0.5 text-[var(--chat-muted)]">
                     {getEngineIcon(conv.searchEngine)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white truncate">{conv.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-sm text-[var(--chat-text)] truncate">{conv.title}</p>
+                    <p className="text-xs text-[var(--chat-muted)] mt-0.5">
                       {formatTimestamp(conv.timestamp)}
                     </p>
                   </div>
                   <button
                     onClick={(e) => deleteConversation(conv.id, e)}
-                    className="flex-shrink-0 p-1 rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                    className="flex-shrink-0 p-1 rounded text-[var(--chat-muted)] hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -1278,13 +1293,13 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         }}
       >
         {/* Top Bar */}
-        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-[#121212]">
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-[var(--chat-canvas)]">
           {/* Left side - History & New Chat */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsHistoryOpen(!isHistoryOpen)}
-              className={`flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${
-                isHistoryOpen ? 'border-gray-500' : ''
+              className={`flex items-center justify-center bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-[var(--chat-text)]/80 hover:border-[var(--chat-muted)] transition-colors h-9 ${
+                isHistoryOpen ? 'border-[var(--chat-muted)]' : ''
               }`}
               title="Search History"
             >
@@ -1292,7 +1307,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
             </button>
             <button
               onClick={handleNewChat}
-              className="flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9"
+              className="flex items-center justify-center bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-[var(--chat-text)]/80 hover:border-[var(--chat-muted)] transition-colors h-9"
               title="New Search"
             >
               <SquarePen size={16} />
@@ -1300,13 +1315,13 @@ Based on these search results, provide a helpful, accurate, and concise answer t
           </div>
 
           {/* Center - Engine Selector */}
-          <div className="flex items-center bg-[#19191a] border border-[#3a3a3d] rounded-lg p-1">
+          <div className="flex items-center bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg p-1">
             <button
               onClick={() => setSearchEngine('xeno')}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-all ${
                 searchEngine === 'xeno'
-                  ? 'bg-[#2a2a2d] text-white'
-                  : 'text-gray-500 hover:text-gray-300'
+                  ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                  : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
               }`}
               title="Xeno Search"
             >
@@ -1317,8 +1332,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               onClick={() => setSearchEngine('google')}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-all ${
                 searchEngine === 'google'
-                  ? 'bg-[#2a2a2d] text-white'
-                  : 'text-gray-500 hover:text-gray-300'
+                  ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                  : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
               }`}
               title="Google Search"
             >
@@ -1329,8 +1344,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               onClick={() => setSearchEngine('brave')}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-all ${
                 searchEngine === 'brave'
-                  ? 'bg-[#2a2a2d] text-white'
-                  : 'text-gray-500 hover:text-gray-300'
+                  ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                  : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
               }`}
               title="Brave Search"
             >
@@ -1346,21 +1361,21 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               onClick={() => setIsCompanyDropdownOpen(!isCompanyDropdownOpen)}
               onMouseEnter={() => setIsModelSelectorButtonHovered(true)}
               onMouseLeave={() => setIsModelSelectorButtonHovered(false)}
-              className={`flex items-center justify-center gap-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 ${
+              className={`flex items-center justify-center gap-2 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--chat-text)]/80 hover:border-[var(--chat-muted)] transition-colors h-9 ${
                 (showResultsPanel || isBrowserOpen) ? 'w-[8rem]' : 'w-[10rem]'
               }`}
             >
               {isModelsLoading ? (
-                <Loader2 size={16} className="text-gray-500 flex-shrink-0 animate-spin" />
+                <Loader2 size={16} className="text-[var(--chat-muted)] flex-shrink-0 animate-spin" />
               ) : (
-                <Brain size={16} className="text-gray-500 flex-shrink-0" />
+                <Brain size={16} className="text-[var(--chat-muted)] flex-shrink-0" />
               )}
               <span className="truncate">{selectedModel.name}</span>
             </button>
 
             {(isModelSelectorButtonHovered && !isCompanyDropdownOpen) && (
               <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 pointer-events-none">
-                <ChevronDown size={16} className="text-gray-500" />
+                <ChevronDown size={16} className="text-[var(--chat-muted)]" />
               </div>
             )}
 
@@ -1371,7 +1386,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                 absolute top-full mt-[10px] right-0 z-20
                 transition-all duration-200 ease-out origin-top-right
                 ${isCompanyDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}
-                w-72 bg-[#19191a] border border-[#3a3a3d] rounded-lg shadow-xl
+                w-72 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg shadow-xl
                 max-h-[70vh] overflow-hidden flex flex-col
               `}
             >
@@ -1392,13 +1407,13 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                           });
                         }}
                         className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
-                          isExpanded ? 'bg-white/5' : 'hover:bg-white/5'
+                          isExpanded ? 'bg-[var(--chat-hover)]' : 'hover:bg-[var(--chat-hover)]'
                         }`}
                       >
-                        <span className={`text-sm ${isActiveCompany ? 'text-white' : 'text-gray-400'}`}>
+                        <span className={`text-sm ${isActiveCompany ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'}`}>
                           {group.companyName}
                         </span>
-                        <ChevronDown size={14} className={`text-gray-600 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                        <ChevronDown size={14} className={`text-[var(--chat-muted)] transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                       </button>
 
                       <div className={`overflow-hidden transition-all duration-200 ${isExpanded ? 'max-h-[400px]' : 'max-h-0'}`}>
@@ -1408,19 +1423,19 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                               key={model.id}
                               onClick={() => handleModelSelect(model)}
                               className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
-                                selectedModel.id === model.id ? 'bg-white/10' : 'hover:bg-white/5'
+                                selectedModel.id === model.id ? 'bg-[var(--chat-control)]' : 'hover:bg-[var(--chat-hover)]'
                               }`}
                             >
                               <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <span className={`text-sm truncate ${selectedModel.id === model.id ? 'text-white' : 'text-gray-400'}`}>
+                                <span className={`text-sm truncate ${selectedModel.id === model.id ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'}`}>
                                   {model.name}
                                 </span>
-                                <span className="text-[10px] text-gray-600 flex-shrink-0">
+                                <span className="text-[10px] text-[var(--chat-muted)] flex-shrink-0">
                                   {formatTokens(model.maxTokens)}
                                 </span>
                               </div>
                               {selectedModel.id === model.id && (
-                                <Check size={14} className="text-gray-400 flex-shrink-0" />
+                                <Check size={14} className="text-[var(--chat-muted)] flex-shrink-0" />
                               )}
                             </button>
                           ))}
@@ -1445,8 +1460,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     onClick={() => setSearchMode('web')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                       searchMode === 'web'
-                        ? 'bg-[#19191a] border border-[#3a3a3d] text-white'
-                        : 'text-gray-500 hover:text-gray-300'
+                        ? 'bg-[var(--chat-surface)] border border-[var(--chat-border)] text-[var(--chat-text)]'
+                        : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
                     }`}
                   >
                     <Globe size={16} />
@@ -1456,8 +1471,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     onClick={() => setSearchMode('agent')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                       searchMode === 'agent'
-                        ? 'bg-[#19191a] border border-[#3a3a3d] text-white'
-                        : 'text-gray-500 hover:text-gray-300'
+                        ? 'bg-[var(--chat-surface)] border border-[var(--chat-border)] text-[var(--chat-text)]'
+                        : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
                     }`}
                   >
                     <Bot size={16} />
@@ -1466,21 +1481,21 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                 </div>
 
                 {/* Feature Card */}
-                <div className="w-full max-w-xl bg-[#19191a] border border-[#3a3a3d] rounded-2xl p-6">
+                <div className="w-full max-w-xl bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-2xl p-6">
                   {/* Header */}
                   <div className="flex items-center gap-4 mb-6">
-                    <div className="w-12 h-12 rounded-xl bg-[#111113] border border-[#3a3a3d] flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-[var(--chat-canvas)] border border-[var(--chat-border)] flex items-center justify-center">
                       {searchMode === 'web' ? (
-                        <Globe size={24} className="text-gray-400" />
+                        <Globe size={24} className="text-[var(--chat-muted)]" />
                       ) : (
-                        <Bot size={24} className="text-gray-400" />
+                        <Bot size={24} className="text-[var(--chat-muted)]" />
                       )}
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-white">
+                      <h2 className="text-lg font-semibold text-[var(--chat-text)]">
                         {searchMode === 'web' ? 'Web Search' : 'Agent Search'}
                       </h2>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-[var(--chat-muted)]">
                         {searchMode === 'web'
                           ? 'Search the web and open results in the built-in browser.'
                           : 'AI agent that browses and extracts information autonomously.'}
@@ -1493,14 +1508,14 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     {currentFeatures.map((feature, idx) => (
                       <div
                         key={idx}
-                        className="flex items-center gap-3 p-3 bg-[#111113] border border-[#3a3a3d] rounded-xl"
+                        className="flex items-center gap-3 p-3 bg-[var(--chat-canvas)] border border-[var(--chat-border)] rounded-xl"
                       >
-                        <div className="w-9 h-9 rounded-lg bg-[#19191a] border border-[#3a3a3d] flex items-center justify-center flex-shrink-0">
-                          <feature.icon size={16} className="text-gray-500" />
+                        <div className="w-9 h-9 rounded-lg bg-[var(--chat-surface)] border border-[var(--chat-border)] flex items-center justify-center flex-shrink-0">
+                          <feature.icon size={16} className="text-[var(--chat-muted)]" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-white">{feature.title}</p>
-                          <p className="text-xs text-gray-500">{feature.subtitle}</p>
+                          <p className="text-sm font-medium text-[var(--chat-text)]">{feature.title}</p>
+                          <p className="text-xs text-[var(--chat-muted)]">{feature.subtitle}</p>
                         </div>
                       </div>
                     ))}
@@ -1513,34 +1528,34 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   <div key={message.id}>
                     {message.role === 'user' ? (
                       <div className="flex justify-end">
-                        <div className="max-w-[75%] bg-[#2a2a2d] border border-[#3a3a3d] text-white rounded-2xl rounded-br-none p-3">
+                        <div className="max-w-[75%] bg-[var(--chat-control)] border border-[var(--chat-border)] text-[var(--chat-text)] rounded-2xl rounded-br-none p-3">
                           <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                         </div>
                       </div>
                     ) : (
                       <div className="flex justify-start">
                         <div className="max-w-[75%]">
-                          <div className="bg-[#19191a] text-gray-200 rounded-2xl rounded-bl-none p-3 prose prose-sm prose-invert max-w-none prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-gray-200 prose-headings:font-medium prose-strong:text-white prose-strong:font-semibold leading-relaxed">
+                          <div className="bg-[var(--chat-surface)] text-[var(--chat-text)] rounded-2xl rounded-bl-none p-3 prose prose-sm prose-invert max-w-none prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-[var(--chat-text)] prose-headings:font-medium prose-strong:text-[var(--chat-text)] prose-strong:font-semibold leading-relaxed">
                             <ReactMarkdown
                               components={{
                                 p: ({ children }) => <p className="text-sm my-2">{children}</p>,
-                                strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                                strong: ({ children }) => <strong className="font-semibold text-[var(--chat-text)]">{children}</strong>,
                                 ul: ({ children }) => <ul className="list-disc pl-4 my-2 space-y-1">{children}</ul>,
                                 ol: ({ children }) => <ol className="list-decimal pl-4 my-2 space-y-1">{children}</ol>,
-                                li: ({ children }) => <li className="text-sm text-gray-300">{children}</li>,
-                                h1: ({ children }) => <h1 className="text-lg font-semibold text-white mt-4 mb-2">{children}</h1>,
-                                h2: ({ children }) => <h2 className="text-base font-semibold text-white mt-3 mb-2">{children}</h2>,
-                                h3: ({ children }) => <h3 className="text-sm font-semibold text-white mt-2 mb-1">{children}</h3>,
-                                code: ({ children }) => <code className="bg-[#2a2a2d] px-1.5 py-0.5 rounded text-xs text-gray-300">{children}</code>,
-                                pre: ({ children }) => <pre className="bg-[#2a2a2d] p-3 rounded-lg overflow-x-auto my-2">{children}</pre>,
+                                li: ({ children }) => <li className="text-sm text-[var(--chat-text)]">{children}</li>,
+                                h1: ({ children }) => <h1 className="text-lg font-semibold text-[var(--chat-text)] mt-4 mb-2">{children}</h1>,
+                                h2: ({ children }) => <h2 className="text-base font-semibold text-[var(--chat-text)] mt-3 mb-2">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-sm font-semibold text-[var(--chat-text)] mt-2 mb-1">{children}</h3>,
+                                code: ({ children }) => <code className="bg-[var(--chat-control)] px-1.5 py-0.5 rounded text-xs text-[var(--chat-text)]">{children}</code>,
+                                pre: ({ children }) => <pre className="bg-[var(--chat-control)] p-3 rounded-lg overflow-x-auto my-2">{children}</pre>,
                                 a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{children}</a>,
-                                blockquote: ({ children }) => <blockquote className="border-l-2 border-[#3a3a3d] pl-3 my-2 text-gray-400 italic">{children}</blockquote>,
+                                blockquote: ({ children }) => <blockquote className="border-l-2 border-[var(--chat-border)] pl-3 my-2 text-[var(--chat-muted)] italic">{children}</blockquote>,
                               }}
                             >
                               {message.content}
                             </ReactMarkdown>
                             {message.pageContext && (
-                              <p className="text-xs mt-2 text-gray-500 flex items-center gap-1">
+                              <p className="text-xs mt-2 text-[var(--chat-muted)] flex items-center gap-1">
                                 <Eye size={12} /> Viewing: {getDomain(message.pageContext)}
                               </p>
                             )}
@@ -1553,8 +1568,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
                 {(isLoading || isSearching || isAgentWorking) && (
                   <div className="flex justify-start">
-                    <div className="bg-[#19191a] rounded-2xl rounded-bl-none p-3">
-                      <div className="flex items-center gap-2 text-gray-400">
+                    <div className="bg-[var(--chat-surface)] rounded-2xl rounded-bl-none p-3">
+                      <div className="flex items-center gap-2 text-[var(--chat-muted)]">
                         <Loader2 size={16} className="animate-spin" />
                         <span className="text-sm">
                           {isSearching ? 'Searching the web...' :
@@ -1563,8 +1578,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                         </span>
                       </div>
                       {isAgentWorking && agentSteps.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-[#3a3a3d]">
-                          <p className="text-xs text-gray-500">
+                        <div className="mt-2 pt-2 border-t border-[var(--chat-border)]">
+                          <p className="text-xs text-[var(--chat-muted)]">
                             Last action: {agentSteps[agentSteps.length - 1]?.action?.type || 'processing'}
                           </p>
                         </div>
@@ -1582,10 +1597,10 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         {/* Page Content Indicator */}
         {isBrowserOpen && currentPageContent && (
           <div className="px-4 mb-2">
-            <div className="max-w-full mx-auto px-3 py-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg">
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+            <div className="max-w-full mx-auto px-3 py-2 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg">
+              <div className="flex items-center gap-2 text-xs text-[var(--chat-muted)]">
                 <Eye size={12} className="text-green-500" />
-                <span>AI can see: <span className="text-gray-300">{currentPageContent.title}</span></span>
+                <span>AI can see: <span className="text-[var(--chat-text)]">{currentPageContent.title}</span></span>
                 {isLoadingPageContent && <Loader2 size={12} className="animate-spin ml-auto" />}
               </div>
             </div>
@@ -1596,13 +1611,13 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         {showResultsPanel && !isBrowserOpen && (
           <div className="flex-shrink-0 px-4 mb-2">
             <div className="max-w-full mx-auto text-center">
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-[var(--chat-muted)]">
                 {isSearching ? (
                   'Searching...'
                 ) : searchResults.length > 0 ? (
                   <>
-                    <span className="text-white font-medium">Search Results</span>
-                    <span className="text-gray-500"> / </span>
+                    <span className="text-[var(--chat-text)] font-medium">Search Results</span>
+                    <span className="text-[var(--chat-muted)]"> / </span>
                     <span>{searchResults.length} results for "{currentQuery}"</span>
                   </>
                 ) : (
@@ -1615,7 +1630,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
         {/* Input Container */}
         <div className="flex-shrink-0 px-4 pb-4">
-          <div className={`mx-auto bg-[#19191a] border border-[#3a3a3d] rounded-2xl overflow-hidden shadow-lg ${
+          <div className={`mx-auto bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-2xl overflow-hidden shadow-lg ${
             (showResultsPanel || isBrowserOpen) ? 'max-w-full' : 'max-w-3xl'
           }`}>
             {/* Textarea Row */}
@@ -1626,7 +1641,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="w-full bg-transparent text-white placeholder-gray-500 pl-4 pr-4 py-3 outline-none resize-none flex-grow focus:ring-0 border-none focus:outline-none focus:shadow-none text-base"
+                className="w-full bg-transparent text-[var(--chat-text)] placeholder-[var(--chat-muted)] pl-4 pr-4 py-3 outline-none resize-none flex-grow focus:ring-0 border-none focus:outline-none focus:shadow-none text-base"
                 style={{ maxHeight: '150px' }}
                 rows={1}
               />
@@ -1637,20 +1652,20 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               <div className="flex items-center gap-2">
                 {/* Attach Button */}
                 <button
-                  className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2d] transition-colors"
+                  className="flex items-center justify-center w-9 h-9 rounded-lg text-[var(--chat-muted)] hover:text-[var(--chat-text)] hover:bg-[var(--chat-control)] transition-colors"
                   title="Attach file"
                 >
                   <Paperclip size={18} />
                 </button>
 
                 {/* Mode Toggle Buttons */}
-                <div className="flex items-center bg-[#111113] border border-[#3a3a3d] rounded-lg p-1">
+                <div className="flex items-center bg-[var(--chat-canvas)] border border-[var(--chat-border)] rounded-lg p-1">
                   <button
                     onClick={() => setSearchMode('web')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                       searchMode === 'web'
-                        ? 'bg-[#2a2a2d] text-white'
-                        : 'text-gray-500 hover:text-gray-300'
+                        ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                        : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
                     }`}
                   >
                     <Globe size={14} />
@@ -1660,8 +1675,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     onClick={() => setSearchMode('agent')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                       searchMode === 'agent'
-                        ? 'bg-[#2a2a2d] text-white'
-                        : 'text-gray-500 hover:text-gray-300'
+                        ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                        : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
                     }`}
                   >
                     <Bot size={14} />
@@ -1678,7 +1693,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                       setIsLoading(false);
                       setIsSearching(false);
                     }}
-                    className="flex items-center justify-center w-10 h-10 rounded-lg bg-[#2a2a2d] text-gray-400 hover:text-white transition-colors"
+                    className="flex items-center justify-center w-10 h-10 rounded-lg bg-[var(--chat-control)] text-[var(--chat-muted)] hover:text-[var(--chat-text)] transition-colors"
                     title="Stop"
                   >
                     <StopCircle size={18} />
@@ -1686,7 +1701,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                 ) : (
                   <button
                     onClick={handleSubmit}
-                    className="flex items-center justify-center w-10 h-10 rounded-lg bg-[#2a2a2d] text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center justify-center w-10 h-10 rounded-lg bg-[var(--chat-control)] text-[var(--chat-muted)] hover:text-[var(--chat-text)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     disabled={!inputValue.trim()}
                   >
                     <Send size={18} />
@@ -1700,7 +1715,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
       {/* Right Panel - Unified Browser & Results */}
       <div
-        className="absolute top-0 bottom-0 right-0 w-[55%] flex bg-[#121212] transition-all duration-300 ease-out"
+        className="absolute top-0 bottom-0 right-0 w-[55%] flex bg-[var(--chat-canvas)] transition-all duration-300 ease-out"
         style={{
           transform: (showResultsPanel || isBrowserOpen) ? 'translateX(0)' : 'translateX(100%)',
           opacity: (showResultsPanel || isBrowserOpen) ? 1 : 0
@@ -1709,7 +1724,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         {/* Spacer Line */}
         {(showResultsPanel || isBrowserOpen) && (
           <div className="flex-shrink-0 flex items-center py-8">
-            <div className="w-px h-full bg-[#3a3a3d]"></div>
+            <div className="w-px h-full bg-[var(--chat-control-strong)]"></div>
           </div>
         )}
 
@@ -1768,6 +1783,9 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     >
                       <path
                         d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.48 0 .72-.58.38-.92L6.35 2.85a.5.5 0 0 0-.85.36Z"
+                        // The one colour in this file, and it stays: this is a drawing of a mouse
+                        // pointer moving across a page the agent is browsing — content, not chrome,
+                        // and the white outline is the one every OS cursor has.
                         fill="#3b82f6"
                         stroke="#fff"
                         strokeWidth="1.5"
@@ -1791,13 +1809,13 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   {agentCursor.action === 'scroll' && (
                     <div className="absolute -right-8 top-0 flex flex-col items-center text-blue-400">
                       <ChevronDown size={20} className="animate-bounce" />
-                      <span className="text-[10px] bg-blue-500/80 px-1.5 py-0.5 rounded text-white">scroll</span>
+                      <span className="text-[10px] bg-blue-500/80 px-1.5 py-0.5 rounded text-[var(--chat-text)]">scroll</span>
                     </div>
                   )}
                   {/* Type indicator */}
                   {agentCursor.action === 'type' && (
-                    <div className="absolute left-8 top-0 bg-blue-500 px-2 py-1 rounded text-xs text-white shadow-lg flex items-center gap-1">
-                      <span className="inline-block w-1.5 h-3 bg-white animate-pulse" />
+                    <div className="absolute left-8 top-0 bg-blue-500 px-2 py-1 rounded text-xs text-[var(--chat-text)] shadow-lg flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-3 bg-[var(--chat-text)] animate-pulse" />
                       typing...
                     </div>
                   )}
@@ -1822,16 +1840,16 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
               {/* Agent Steps Overlay - Shows on top of browser when in agent mode */}
               {searchMode === 'agent' && agentSteps.length > 0 && (
-                <div className="absolute bottom-0 left-0 right-0 max-h-[35%] overflow-y-auto bg-[#121212]/95 border-t border-[#3a3a3d] backdrop-blur-sm z-30">
+                <div className="absolute bottom-0 left-0 right-0 max-h-[35%] overflow-y-auto bg-[var(--chat-canvas)]/95 border-t border-[var(--chat-border)] backdrop-blur-sm z-30">
                   <div className="p-3">
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                    <div className="flex items-center gap-2 text-xs text-[var(--chat-muted)] mb-2">
                       <Layers size={12} />
                       <span>Agent Steps ({agentSteps.length})</span>
                       {isAgentWorking && <Loader2 size={12} className="animate-spin text-blue-400" />}
                       {!isAgentWorking && (
                         <button
                           onClick={() => setAgentSteps([])}
-                          className="ml-auto p-1 rounded hover:bg-[#2a2a2d] text-gray-500 hover:text-white transition-colors"
+                          className="ml-auto p-1 rounded hover:bg-[var(--chat-control)] text-[var(--chat-muted)] hover:text-[var(--chat-text)] transition-colors"
                           title="Clear steps"
                         >
                           <X size={12} />
@@ -1845,14 +1863,14 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                           className={`p-2 border rounded-lg text-xs transition-all ${
                             idx === agentSteps.length - 1 && isAgentWorking
                               ? 'bg-blue-500/10 border-blue-500/30'
-                              : 'bg-[#19191a] border-[#3a3a3d]'
+                              : 'bg-[var(--chat-surface)] border-[var(--chat-border)]'
                           }`}
                         >
                           <div className="flex items-start gap-2">
                             <span className={`flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
                               idx === agentSteps.length - 1 && isAgentWorking
                                 ? 'bg-blue-500/20 text-blue-400'
-                                : 'bg-[#2a2a2d] text-gray-400'
+                                : 'bg-[var(--chat-control)] text-[var(--chat-muted)]'
                             }`}>
                               {idx === agentSteps.length - 1 && isAgentWorking ? (
                                 <Loader2 size={8} className="animate-spin" />
@@ -1863,17 +1881,17 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                             <div className="flex-1 min-w-0">
                               {/* Show URL context if available */}
                               {step.url && (
-                                <div className="text-[10px] text-gray-600 truncate mb-0.5" title={step.url}>
+                                <div className="text-[10px] text-[var(--chat-muted)] truncate mb-0.5" title={step.url}>
                                   📍 {getDomain(step.url)}
                                 </div>
                               )}
-                              <p className="text-gray-300 text-xs">{step.thought}</p>
+                              <p className="text-[var(--chat-text)] text-xs">{step.thought}</p>
                               {step.action && (
-                                <div className="flex items-center gap-1 mt-1 text-gray-500">
+                                <div className="flex items-center gap-1 mt-1 text-[var(--chat-muted)]">
                                   <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                                     idx === agentSteps.length - 1 && isAgentWorking
                                       ? 'bg-blue-500/20 text-blue-400'
-                                      : 'bg-[#111113]'
+                                      : 'bg-[var(--chat-canvas)]'
                                   }`}>
                                     {step.action.type}
                                   </span>
@@ -1893,16 +1911,16 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
               {/* Mode Indicator Badge - Only show when not agent working */}
               {!isAgentWorking && (
-                <div className="absolute top-14 right-4 z-10 flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#19191a] border border-[#3a3a3d]">
+                <div className="absolute top-14 right-4 z-10 flex items-center gap-1.5 px-2 py-1 rounded-md bg-[var(--chat-surface)] border border-[var(--chat-border)]">
                   {searchMode === 'agent' ? (
                     <>
-                      <Bot size={12} className="text-gray-400" />
-                      <span className="text-[10px] text-gray-400 font-medium">Agent</span>
+                      <Bot size={12} className="text-[var(--chat-muted)]" />
+                      <span className="text-[10px] text-[var(--chat-muted)] font-medium">Agent</span>
                     </>
                   ) : (
                     <>
-                      <Globe size={12} className="text-gray-400" />
-                      <span className="text-[10px] text-gray-400 font-medium">Web</span>
+                      <Globe size={12} className="text-[var(--chat-muted)]" />
+                      <span className="text-[10px] text-[var(--chat-muted)] font-medium">Web</span>
                     </>
                   )}
                 </div>
@@ -1915,14 +1933,14 @@ Based on these search results, provide a helpful, accurate, and concise answer t
             <div className="flex-1 overflow-y-auto p-6 pt-4">
               {isSearching ? (
                 <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 size={32} className="animate-spin text-gray-500 mb-3" />
-                  <p className="text-sm text-gray-500">Searching the web...</p>
+                  <Loader2 size={32} className="animate-spin text-[var(--chat-muted)] mb-3" />
+                  <p className="text-sm text-[var(--chat-muted)]">Searching the web...</p>
                 </div>
               ) : searchResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Globe size={32} className="text-gray-600 mb-3" />
-                  <p className="text-sm text-gray-500">No results found</p>
-                  <p className="text-xs text-gray-600 mt-1">Try a different search term</p>
+                  <Globe size={32} className="text-[var(--chat-muted)] mb-3" />
+                  <p className="text-sm text-[var(--chat-muted)]">No results found</p>
+                  <p className="text-xs text-[var(--chat-muted)] mt-1">Try a different search term</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1930,7 +1948,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     <div
                       key={idx}
                       onClick={() => openInBrowser(result.url)}
-                      className={`group p-4 bg-[#19191a] border border-[#3a3a3d] rounded-xl hover:border-gray-500 cursor-pointer transition-all duration-300 ${
+                      className={`group p-4 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-xl hover:border-[var(--chat-muted)] cursor-pointer transition-all duration-300 ${
                         idx < visibleResults
                           ? 'opacity-100 translate-y-0'
                           : 'opacity-0 translate-y-4'
@@ -1946,9 +1964,9 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                           className="w-4 h-4 rounded"
                           onError={(e) => (e.currentTarget.style.display = 'none')}
                         />
-                        <span className="text-xs text-gray-500">{result.domain}</span>
+                        <span className="text-xs text-[var(--chat-muted)]">{result.domain}</span>
                         {result.relevance_score && (
-                          <span className="ml-auto text-[10px] text-gray-600 bg-[#111113] px-2 py-0.5 rounded">
+                          <span className="ml-auto text-[10px] text-[var(--chat-muted)] bg-[var(--chat-canvas)] px-2 py-0.5 rounded">
                             {Math.round(result.relevance_score * 100)}% match
                           </span>
                         )}
@@ -1956,10 +1974,10 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                       <h4 className="text-sm font-medium text-blue-400 group-hover:underline mb-2 line-clamp-2">
                         {result.title}
                       </h4>
-                      <p className="text-xs text-gray-400 line-clamp-3">
+                      <p className="text-xs text-[var(--chat-muted)] line-clamp-3">
                         {result.snippet}
                       </p>
-                      <div className="flex items-center gap-2 mt-3 text-xs text-gray-500">
+                      <div className="flex items-center gap-2 mt-3 text-xs text-[var(--chat-muted)]">
                         <ExternalLink size={12} />
                         <span>Click to open in browser</span>
                       </div>

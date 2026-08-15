@@ -8,6 +8,10 @@ import App from './App.tsx';
 // restyles none of the 392 components already here. It only supplies the tokens, the scrollbar, and
 // the styles for XENO components as they are adopted.
 import '@xenosystem/elements-react/xeno-elements.css';
+// The chat's three palettes and the --chat-* -> --xeno-* bridge. Here rather than inside a component,
+// because every chat surface is its own route: while these lived in ChatWithLLM's JSX they existed
+// only while that one component was mounted, and the sibling routes had no tokens to use.
+import './components/playground/Chat/chat-theme.css';
 import './index.css';
 import { SiteGateProvider } from './contexts/SiteGateContext.tsx';
 import { SiteGateWrapper } from './components/auth/SiteGate.tsx';
