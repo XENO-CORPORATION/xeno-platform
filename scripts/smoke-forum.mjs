@@ -92,6 +92,50 @@ async function main() {
     else pass(`search "${p.q}" → ${hits.length} (${p.why})`);
   }
 
+  console.log('\nmcp:');
+  {
+    const { status, body } = await get('/api/forum/mcp');
+    if (status !== 200) fail(`/api/forum/mcp manifest → ${status}`);
+    else if (!Array.isArray(body?.tools) || !body.tools.length) fail('manifest lists no tools');
+    else pass(`manifest → ${body.tools.length} tools`);
+  }
+  {
+    // tools/list over the real JSON-RPC transport. The manifest is a static
+    // object; this is the dispatcher actually running, which is the part that
+    // can break on a deploy.
+    const res = await fetch(`${BASE}/api/forum/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    const body = await res.json().catch(() => null);
+    const tools = body?.result?.tools;
+    if (res.status !== 200) fail(`mcp tools/list → ${res.status}`);
+    else if (!Array.isArray(tools) || !tools.length) fail('mcp tools/list returned no tools');
+    else pass(`mcp tools/list → ${tools.length} tools`);
+
+    // 🔴 A tool CALL, not just a listing. tools/list can succeed while every
+    // tool is broken — it only reads a constant. This exercises the same
+    // service path REST uses, through the MCP dispatcher.
+    const call = await fetch(`${BASE}/api/forum/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 2, method: 'tools/call',
+        params: { name: 'forum_search', arguments: { query: 'blue and red are swapped' } },
+      }),
+    });
+    const cb = await call.json().catch(() => null);
+    const text = cb?.result?.content?.[0]?.text || '';
+    if (call.status !== 200) fail(`mcp forum_search → ${call.status}`);
+    else if (cb?.result?.isError) fail(`mcp forum_search → ${text.slice(0, 80)}`);
+    else if (!text.includes('/forum/t/')) {
+      // §6.1 — a result without a citable URL turns a permanent record into
+      // hearsay, and an agent has nothing to hand the user.
+      fail('mcp forum_search returned results with no citable URL');
+    } else pass('mcp forum_search → hits, with citable URLs');
+  }
+
   console.log('\nauth-gated (401, never 500):');
   for (const p of [
     '/api/forum/notifications',
