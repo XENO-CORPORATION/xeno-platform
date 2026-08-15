@@ -440,6 +440,66 @@ router.put('/threads/:shortId/subscription', authMiddleware, loadActor, handled(
   res.json({ success: true, ...(await write.setThreadSubscription(req.db, req.actor, shortId, subscribed)) });
 }));
 
+/**
+ * GET /api/forum/me/activity — what you have taken part in (WP5).
+ *
+ * Threads you asked AND threads you answered. A list of only what you started
+ * will never contain the question you helped somebody else with, which is
+ * usually the one you are trying to find again.
+ */
+/* ──────────────────────────────────────────────────────────────────────────
+ * Flag review (WP3)
+ *
+ * forum_flags carried status / resolved_by / resolved_at / resolution and
+ * nothing in the application could read a flag or resolve one. "Report" was a
+ * button whose report went into a table with no reader.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * GET /api/forum/moderation-log — PUBLIC. No auth, by design.
+ *
+ * §7.2/§11: "if the thesis is openness, moderation is where it is tested."
+ * A log only staff can read is not a public log.
+ *
+ * Carries actions TAKEN — never accusations made, never the reporter, never
+ * the removed content. See listModerationLog for why each of those is out.
+ */
+router.get('/moderation-log', async (req, res) => {
+  try {
+    res.json({ success: true, log: await svc.listModerationLog(req.db, { limit: req.query.limit }) });
+  } catch (error) {
+    return serverError(res, error, 'moderationLog');
+  }
+});
+
+/** GET /api/forum/flags?status=open — the review queue. Needs review_flags. */
+router.get('/flags', authMiddleware, loadActor, handled('listFlags', async (req, res) => {
+  res.json({
+    success: true,
+    flags: await write.listFlags(req.db, req.actor, { status: req.query.status, limit: req.query.limit }),
+  });
+}));
+
+/**
+ * POST /api/forum/flags/:id/resolve  { action: 'dismiss' | 'action', note }
+ *
+ * `action` hides the target as part of the same resolution. A queue whose only
+ * outcome is a status column is theatre — the reporter would see their report
+ * marked handled while the thing they reported is still on the page.
+ */
+router.post('/flags/:id/resolve', authMiddleware, loadActor, handled('resolveFlag', async (req, res) => {
+  res.json({
+    success: true,
+    ...(await write.resolveFlag(req.db, req.actor, req.params.id, {
+      action: req.body?.action, note: req.body?.note,
+    })),
+  });
+}));
+
+router.get('/me/activity', authMiddleware, loadActor, handled('myActivity', async (req, res) => {
+  res.json({ success: true, threads: await svc.listMyActivity(req.db, req.actor.id, { limit: req.query.limit }) });
+}));
+
 /** GET /api/forum/subscriptions — tags you follow. */
 router.get('/subscriptions', authMiddleware, loadActor, handled('listSubscriptions', async (req, res) => {
   res.json({ success: true, tags: await write.listSubscriptions(req.db, req.actor.id) });

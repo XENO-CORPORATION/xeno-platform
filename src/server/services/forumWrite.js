@@ -1194,3 +1194,127 @@ export async function deleteThread(db, user, shortId) {
 
   return { ok: true, deleted: true, keptForAnswers: hasOtherVoices };
 }
+
+// --------------------------------------------------------------------------
+// Flag review (WP3) — the read half of a table that was write-only
+// --------------------------------------------------------------------------
+//
+// `forum_flags` carries status / resolved_by / resolved_at / resolution. The
+// ENTIRE review workflow was modelled, `raiseFlag` INSERTed into it, and nothing
+// in the application could ever read a flag or resolve one. "Report" was a
+// button whose report went into a table with no reader. Seventh instance of that
+// shape here.
+
+/**
+ * The queue.
+ *
+ * Trusted users triage first, staff escalate second (§7.2) — which is what the
+ * `review_flags: 50` rung of the ladder is for, and `can()` already lets staff
+ * past any threshold.
+ *
+ * Reporters are shown to reviewers because a flag is an accusation and an
+ * anonymous accusation cannot be weighed: the same person reporting the same
+ * author six times is the single most useful signal in a moderation queue.
+ * It is NOT shown to anyone else — that is what the public log is for, and the
+ * log carries decisions, never reporters.
+ */
+export async function listFlags(db, user, { status = 'open', limit = 50 } = {}) {
+  await assertCan(db, user, 'review_flags');
+  const capped = Math.min(200, Math.max(1, Number(limit) || 50));
+  const wanted = ['open', 'reviewing', 'actioned', 'dismissed'].includes(status) ? status : 'open';
+
+  const { rows } = await db.query(
+    `SELECT f.id, f.target_type, f.target_id, f.reason, f.detail, f.status,
+            f.created_at, f.resolved_at, f.resolution, f.reporter_kind,
+            COALESCE(ru.display_name, ru.username) AS reporter_name,
+            COALESCE(mu.display_name, mu.username) AS resolved_by_name,
+            t.short_id AS thread_short_id, t.slug AS thread_slug, t.title AS thread_title,
+            p.position AS post_position,
+            left(COALESCE(p.body, ''), 400) AS post_excerpt
+       FROM forum_flags f
+       LEFT JOIN users ru ON ru.id = f.reporter_id
+       LEFT JOIN users mu ON mu.id = f.resolved_by
+       LEFT JOIN forum_posts p   ON f.target_type = 'post'   AND p.id = f.target_id
+       LEFT JOIN forum_threads t ON t.id = COALESCE(p.thread_id,
+                                     CASE WHEN f.target_type = 'thread' THEN f.target_id END)
+      WHERE f.status = $1
+      ORDER BY f.created_at
+      LIMIT $2`,
+    [wanted, capped],
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    target: { type: r.target_type, id: r.target_id, position: r.post_position ?? null },
+    reason: r.reason,
+    detail: r.detail,
+    status: r.status,
+    createdAt: r.created_at,
+    // An agent may flag-to-review, never flag-to-remove (§7.2). Showing the kind
+    // is how a reviewer knows which they are looking at.
+    reporter: r.reporter_name ? { name: r.reporter_name, kind: r.reporter_kind } : null,
+    resolvedAt: r.resolved_at,
+    resolvedBy: r.resolved_by_name,
+    resolution: r.resolution,
+    thread: r.thread_short_id
+      ? { shortId: r.thread_short_id, title: r.thread_title,
+          url: `/forum/t/${r.thread_short_id}/${r.thread_slug}` }
+      : null,
+    excerpt: r.post_excerpt || null,
+  }));
+}
+
+/**
+ * Resolve a flag — and, when upheld, actually do something about it.
+ *
+ * 🔴 A queue whose only outcome is changing a status column is theatre. If
+ * "actioned" does not hide the content, the reporter sees their report marked
+ * handled while the thing they reported is still on the page, which is worse
+ * than no queue at all: it teaches people that reporting is pointless AND tells
+ * them so officially.
+ *
+ * So `action` hides the target in the same transaction as the resolution.
+ * `dismiss` changes nothing but the flag.
+ *
+ * Every flag on the SAME target resolves together. Three people reporting one
+ * post is one decision, and leaving the other two open would show a reviewer a
+ * queue of work that has already been done.
+ */
+export async function resolveFlag(db, user, flagId, { action, note } = {}) {
+  await assertCan(db, user, 'review_flags');
+  if (!['dismiss', 'action'].includes(action)) {
+    throw new ForumError("action must be 'dismiss' or 'action'", 'invalid_action', 400);
+  }
+
+  const { rows } = await db.query(
+    'SELECT id, target_type, target_id, status FROM forum_flags WHERE id = $1',
+    [flagId],
+  );
+  const flag = rows[0];
+  if (!flag) throw new ForumError('Flag not found', 'flag_not_found', 404);
+  if (flag.status !== 'open' && flag.status !== 'reviewing') {
+    throw new ForumError('That flag is already resolved', 'flag_already_resolved', 409);
+  }
+
+  if (action === 'action') {
+    // 'hidden', not 'deleted': a moderator removing something is a different
+    // fact from an author retracting it, and the public log has to be able to
+    // tell them apart. Both are invisible to readers; only one is the author's
+    // own choice.
+    if (flag.target_type === 'post') {
+      await db.query(`UPDATE forum_posts SET status = 'hidden' WHERE id = $1`, [flag.target_id]);
+    } else {
+      await db.query(`UPDATE forum_threads SET status = 'locked' WHERE id = $1`, [flag.target_id]);
+    }
+  }
+
+  const { rowCount } = await db.query(
+    `UPDATE forum_flags
+        SET status = $3, resolved_by = $2, resolved_at = NOW(), resolution = $4
+      WHERE target_type = $5 AND target_id = $6 AND status IN ('open', 'reviewing')`,
+    [flagId, user.id, action === 'action' ? 'actioned' : 'dismissed',
+     note ? String(note).slice(0, 1000) : null, flag.target_type, flag.target_id],
+  );
+
+  return { ok: true, resolved: rowCount, action };
+}

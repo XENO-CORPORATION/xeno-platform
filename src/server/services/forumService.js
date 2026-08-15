@@ -520,3 +520,127 @@ export async function markOpened(db, userId, threadId) {
     [userId, threadId],
   );
 }
+
+/**
+ * Everything a person has taken part in (WP5).
+ *
+ * Not "threads you authored" — that is the easy query and the wrong one. If you
+ * answered a question three weeks ago and want to find it again, it was never
+ * yours to begin with, and a list of what you STARTED will never contain it.
+ * So this unions threads you authored with threads you posted in, and says
+ * which it was.
+ *
+ * Deleted content is excluded on both sides: a tombstone you can still find in
+ * your own history is a delete that did not take.
+ */
+export async function listMyActivity(db, userId, { limit = 40 } = {}) {
+  const capped = Math.min(100, Math.max(1, Number(limit) || 40));
+  const { rows } = await db.query(
+    `SELECT t.*, s.slug AS space_slug, s.name AS space_name, s.kind AS space_kind,
+            (t.author_id = $1) AS authored,
+            (SELECT COUNT(*) FROM forum_posts p
+              WHERE p.thread_id = t.id AND p.author_id = $1 AND p.status = 'visible'
+                AND p.position > 1) AS my_replies,
+            (SELECT array_agg(g.namespace || ':' || g.value ORDER BY g.namespace, g.value)
+               FROM forum_thread_tags tt JOIN forum_tags g ON g.id = tt.tag_id
+              WHERE tt.thread_id = t.id) AS tags
+       FROM forum_threads t
+       JOIN forum_spaces s ON s.id = t.space_id
+      WHERE t.status NOT IN ('archived', 'deleted')
+        AND (
+          t.author_id = $1
+          OR EXISTS (SELECT 1 FROM forum_posts p
+                      WHERE p.thread_id = t.id AND p.author_id = $1
+                        AND p.status = 'visible' AND p.position > 1)
+        )
+      ORDER BY t.last_activity_at DESC
+      LIMIT $2`,
+    [userId, capped],
+  );
+
+  return rows.map((r) => ({
+    ...serializeThreadSummary(r),
+    // Why it is in YOUR list — the same explain-yourself rule the Feed follows
+    // (D11). "You asked this" and "you answered this" are different memories,
+    // and a list that flattens them is harder to scan than one that does not.
+    mine: r.authored ? 'asked' : 'answered',
+    myReplies: Number(r.my_replies || 0),
+  }));
+}
+
+/**
+ * The public moderation log (§7.2, §11).
+ *
+ * "If the thesis is openness, moderation is where it is tested." A forum that
+ * removes things silently is asking to be trusted; one that publishes what it
+ * removed and why is showing its work.
+ *
+ * ── WHAT IS IN IT, AND WHAT IS DELIBERATELY NOT ─────────────────────────────
+ *
+ * 🔴 ACTIONS TAKEN, NEVER ACCUSATIONS MADE. Dismissed flags do not appear.
+ * Publishing them would create a permanent public record that a named person
+ * was reported for "abuse" and cleared — which is a worse outcome for an
+ * innocent author than the report ever was, and it turns the log into a weapon:
+ * anyone could put a neighbour in the public record just by reporting them.
+ * A dismissal is visible to the reviewer, and to nobody else.
+ *
+ * 🔴 NEVER THE REPORTER. A flag is an accusation; naming the accuser publicly
+ * makes reporting an act of open conflict, and the people most in need of the
+ * report button are the ones least able to afford that.
+ *
+ * 🔴 NEVER THE REMOVED CONTENT. Republishing what was hidden defeats hiding it,
+ * and would make the log the most reliable place to find exactly the material
+ * moderation exists to remove.
+ *
+ * What remains is the accountable part: something was removed, from where, by
+ * which moderator, when, and under which reason category. Enough to audit a
+ * moderator; not enough to relitigate a victim.
+ *
+ * Public — no auth. A log only staff can read is not a public log.
+ */
+export async function listModerationLog(db, { limit = 50 } = {}) {
+  const capped = Math.min(200, Math.max(1, Number(limit) || 50));
+  const { rows } = await db.query(
+    `SELECT f.id, f.target_type, f.reason, f.resolved_at,
+            COALESCE(mu.display_name, mu.username) AS moderator,
+            t.short_id AS thread_short_id, t.slug AS thread_slug, t.title AS thread_title,
+            p.position AS post_position,
+            CASE WHEN f.target_type = 'post' THEN p.status ELSE t.status END AS target_status
+       FROM forum_flags f
+       LEFT JOIN users mu ON mu.id = f.resolved_by
+       LEFT JOIN forum_posts p   ON f.target_type = 'post' AND p.id = f.target_id
+       LEFT JOIN forum_threads t ON t.id = COALESCE(p.thread_id,
+                                     CASE WHEN f.target_type = 'thread' THEN f.target_id END)
+      WHERE f.status = 'actioned'
+      ORDER BY f.resolved_at DESC
+      LIMIT $1`,
+    [capped],
+  );
+
+  // One decision per target, not one row per report. Three people reporting the
+  // same post produced three flag rows and ONE moderator decision; listing it
+  // three times would misrepresent both the volume of moderation and the
+  // amount of trouble a single author caused.
+  const seen = new Set();
+  const out = [];
+  for (const r of rows) {
+    const key = `${r.target_type}:${r.thread_short_id}:${r.post_position ?? 'thread'}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      at: r.resolved_at,
+      what: r.target_type,
+      // 'hidden' vs 'locked' vs the author's own 'deleted' are different facts.
+      // The log states which, because "removed" flattens a moderator decision
+      // and a retraction into one word.
+      outcome: r.target_status,
+      reason: r.reason,
+      moderator: r.moderator || 'a moderator',
+      thread: r.thread_short_id
+        ? { shortId: r.thread_short_id, title: r.thread_title,
+            url: `/forum/t/${r.thread_short_id}/${r.thread_slug}` }
+        : null,
+    });
+  }
+  return out;
+}

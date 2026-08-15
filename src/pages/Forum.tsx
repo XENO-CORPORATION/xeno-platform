@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  MessageSquare, CheckCircle2, Clock, Loader2, PenLine, Info, Sparkles, Layers, Search, Hash,
+  MessageSquare, CheckCircle2, Clock, Loader2, PenLine, Info, Sparkles, Layers, Search, Hash, User,
 } from 'lucide-react';
 import ForumShell, {
   RailSearch, RailNeedsAnswer, RailResolved, RailAgents,
@@ -244,7 +244,9 @@ const Forum: React.FC = () => {
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [surface, setSurface] = useState<'feed' | 'record'>('record');
+  const [surface, setSurface] = useState<'feed' | 'record' | 'mine'>('record');
+  const [mine, setMine] = useState<any[] | null>(null);
+  const [mineLoading, setMineLoading] = useState(false);
   const [feedItems, setFeedItems] = useState<any[]>([]);
   const [feedRanker, setFeedRanker] = useState('unsolved-for-me');
   const [feedRankers, setFeedRankers] = useState<Record<string, string>>({});
@@ -290,6 +292,19 @@ const Forum: React.FC = () => {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [space, tag, sort, reloadKey]);
+
+  // Fetched on selection, not on mount: most visits never open it, and a
+  // history query is the most expensive read in the product.
+  useEffect(() => {
+    if (surface !== 'mine' || !signedIn) return;
+    let cancelled = false;
+    setMineLoading(true);
+    api.getMyActivity()
+      .then((r) => { if (!cancelled) setMine(r.threads || []); })
+      .catch(() => { if (!cancelled) setMine([]); })
+      .finally(() => { if (!cancelled) setMineLoading(false); });
+    return () => { cancelled = true; };
+  }, [surface, signedIn, reloadKey]);
 
   useEffect(() => {
     if (surface !== 'feed' || !signedIn) return;
@@ -385,7 +400,11 @@ const Forum: React.FC = () => {
         */}
         <div className="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 border-b border-white/[0.08] bg-[#08080a]/90 py-3 backdrop-blur-xl">
           <div className="inline-flex gap-1 rounded-md border border-white/[0.08] bg-[#060608] p-1">
-            {([['record', 'The Record', Layers], ['feed', 'For you', Sparkles]] as const).map(([key, label, Icon]) => (
+            {([
+              ['record', 'The Record', Layers],
+              ['feed', 'For you', Sparkles],
+              ...(signedIn ? [['mine', 'Yours', User]] : []),
+            ] as const).map(([key, label, Icon]: any) => (
               <button
                 key={key} type="button" onClick={() => setSurface(key as any)}
                 className={`cursor-pointer inline-flex items-center gap-2 rounded-md px-4 py-2 text-[13.5px] transition-colors ${
@@ -488,7 +507,39 @@ const Forum: React.FC = () => {
             <InlineComposer spaces={spaces} onPosted={() => setReloadKey((k) => k + 1)} initial={initial} />
           </div>
 
-          {surface === 'feed' ? (
+          {surface === 'mine' ? (
+            /*
+              Your own history. Deliberately NOT ranked and NOT scored — this is
+              a memory aid, and the only useful order for "where was that thing"
+              is when it last moved.
+
+              Each row says whether you ASKED or ANSWERED. Those are different
+              memories, and a list that flattens them is harder to scan, not
+              simpler — the same explain-yourself rule the Feed follows (D11).
+            */
+            mineLoading && mine === null ? (
+              <div className="flex justify-center py-10 text-[#57575e]"><Loader2 className="h-4 w-4 animate-spin" /></div>
+            ) : !mine?.length ? (
+              <div className="mx-4 rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[13px] text-[#a8a8b1]">
+                Nothing yet. Threads you ask or answer show up here.
+              </div>
+            ) : (
+              <div>
+                {mine.map((t: any) => (
+                  <div key={t.shortId}>
+                    <div className="px-4 pt-3 text-[11.5px] text-[#57575e]">
+                      {t.mine === 'asked'
+                        ? 'You asked this'
+                        : t.myReplies > 1
+                          ? 'You answered this · ' + t.myReplies + ' replies'
+                          : 'You answered this'}
+                    </div>
+                    <PostCard thread={t} />
+                  </div>
+                ))}
+              </div>
+            )
+          ) : surface === 'feed' ? (
             !signedIn ? (
               <div className="mx-4 rounded-md border border-white/10 bg-[#060608] px-4 py-3.5 text-[13px] text-[#a8a8b1]">
                 <a href="/auth" className="text-[#e5e5e9] font-medium hover:text-white">Sign in</a>{' '}
