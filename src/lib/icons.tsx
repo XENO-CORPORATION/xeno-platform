@@ -53,6 +53,13 @@ import GHand from '@xenosystem/elements/elements/hand';
 import GFileClock from '@xenosystem/elements/elements/file-clock';
 import GBuilding from '@xenosystem/elements/elements/building';
 import GNextDismiss from '@xenosystem/elements/elements/next-dismiss';
+import GBrain from '@xenosystem/elements/elements/brain';
+import GBrainCircuit from '@xenosystem/elements/elements/brain-circuit';
+import GBot from '@xenosystem/elements/elements/bot';
+import GSparkles from '@xenosystem/elements/elements/sparkles';
+import GWandSparkles from '@xenosystem/elements/elements/wand-sparkles';
+import GTarget from '@xenosystem/elements/elements/target';
+import GSmile from '@xenosystem/elements/elements/smile';
 import GCheck from '@xenosystem/elements/elements/check';
 import GChevronDown from '@xenosystem/elements/elements/chevron-down';
 import GChevronRight from '@xenosystem/elements/elements/chevron-right';
@@ -287,6 +294,33 @@ export const FileClock = /* @__PURE__ */ glyph(GFileClock);
 
 /* Drawn for the share dialog, which had been hand-writing an animated building of its own. */
 export const Building = /* @__PURE__ */ glyph(GBuilding);
+
+/* The metaphors — the last group still on lucide, and the one that mattered most: 33 of the 41
+ * remaining import sites, and the only ones on the normal path through the chat rather than in a corner
+ * of it. `Brain` alone is thirteen, between the thinking status and the model selector.
+ *
+ * They held out because the rest of the set is OBJECTS, and none of these is one. A brain is an organ, a
+ * bot is a character, a sparkle is a lighting effect — there is nothing to draw as a rounded square. The
+ * way through was the exception the grammar already makes for `zap` and `waves`: a shape's construction
+ * follows what the shape is, and the square is a claim about MADE things. So these are drawn in curves,
+ * and the rule they still keep is the one that matters — no circles anywhere, including the circuit
+ * nodes and the bot's eyes, which are squares and strokes instead. */
+export const Brain = /* @__PURE__ */ glyph(GBrain);
+export const BrainCircuit = /* @__PURE__ */ glyph(GBrainCircuit);
+export const Bot = /* @__PURE__ */ glyph(GBot);
+export const Sparkles = /* @__PURE__ */ glyph(GSparkles);
+export const WandSparkles = /* @__PURE__ */ glyph(GWandSparkles);
+
+/* The two that were supposed to stay on lucide, because a target and a face are ROUND and this grammar
+ * has no circles — drawing them square looked like the grammar overruling the object.
+ *
+ * The rendered menu is what changed it. `Like response` lists five reasons; three of them were XENO and
+ * two were rings at a lighter stroke, and side by side the rings did not read as the honest drawing of a
+ * target, they read as two rows borrowed from somewhere else. Consistency inside one menu is worth more
+ * than fidelity to a shape nobody is looking at in isolation — and both survive the translation anyway:
+ * see the declarations. */
+export const Target = /* @__PURE__ */ glyph(GTarget);
+export const Smile = /* @__PURE__ */ glyph(GSmile);
 
 /* The one glyph here that takes a STATE rather than just a size.
  *
