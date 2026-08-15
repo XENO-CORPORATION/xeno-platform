@@ -216,6 +216,7 @@ export {
   GBriefcase as BriefcaseDecl,
   GGear as GearDecl,
   GPlus as PlusDecl,
+  GBookmark as BookmarkDecl,
 };
 
 /* Different name, same meaning. */

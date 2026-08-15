@@ -37,6 +37,11 @@ const ROLES: readonly (readonly [string, string, string])[] = [
   ['.action-buttons', '#af52de', 'action bar'],
   ['.xeno-icon-btn', '#ff2d55', 'IconButton'],
   ['[role="menu"], .chat-history-popover', '#0a84ff', 'menu'],
+  /* The two states of the adoption, side by side inside the same list. `xeno-menu-item` is the
+     library's row; the second selector is every other menu row, which is still hand-written. Seeing
+     them in one open menu is the fastest way to answer "which one is the component". */
+  ['.xeno-menu-item', '#30d158', 'MenuItem'],
+  ['[role^="menuitem"]:not(.xeno-menu-item)', '#ff9f0a', 'hand-written row'],
 ];
 
 export const OUTLINE_DEBUG_CSS = ROLES.map(

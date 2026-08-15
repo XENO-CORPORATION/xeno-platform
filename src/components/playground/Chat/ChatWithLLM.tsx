@@ -35,7 +35,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -14929,20 +14929,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     >
                       View files in chat
                     </MenuItem>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={moreMenuItemClass}
+                  {/* `iconState`, not a `fill-current` class. `bookmark` declares a selection axis
+                      whose `on` variant is the same silhouette filled, and the two MORPH — one path,
+                      equal length — so pinning now animates the ribbon closed instead of swapping a
+                      CSS fill onto a glyph the row did not own. */}
+                  <MenuItem
+                    leadingIcon={BookmarkDecl}
+                    iconState={{ selection: activeHistoryConvo?.isPinned ? 'on' : 'off' }}
                     disabled={!activeHistoryConvo}
-                    onClick={() => {
+                    onSelect={() => {
                       if (!activeHistoryConvo) return;
                       handleTogglePinConversation(activeHistoryConvo.id);
-                      setIsChatMoreMenuOpen(false);
                     }}
                   >
-                    <Pin size={14} className={`flex-shrink-0 ${activeHistoryConvo?.isPinned ? 'fill-current text-zinc-100' : 'text-zinc-500'}`} />
-                    <span>{activeHistoryConvo?.isPinned ? 'Unpin chat' : 'Pin chat'}</span>
-                  </button>
+                    {activeHistoryConvo?.isPinned ? 'Unpin chat' : 'Pin chat'}
+                  </MenuItem>
                   <button
                     type="button"
                     role="menuitem"
