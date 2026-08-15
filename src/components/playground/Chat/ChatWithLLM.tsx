@@ -34,7 +34,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -18094,8 +18094,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       />
                         </button>
                                     <div className="flex flex-shrink-0 items-center gap-0.5">
-                                      <button
-                                        type="button"
+                                      <IconButton
+                                        icon={ArrowUpRightDecl}
+                                        size="xs"
+                                        iconSize={13}
                                         onClick={(event) => {
                                           event.stopPropagation();
                                           dismissChatOverlays();
@@ -18108,14 +18110,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         }}
                                         aria-label="Open all chats and tasks"
                                         title="Open all chats"
-                                        className={`flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 transition-[opacity,colors,background-color] duration-150 hover:bg-[var(--chat-hover)] hover:text-zinc-200 ${
+                                        /* Only the REVEAL rides on className. The button's own look —
+                                           quiet at rest, filled on hover — is the ghost variant now. */
+                                        className={
                                           isRecentsSectionHovered || isChatsCatalogOpen
                                             ? 'opacity-100'
                                             : 'pointer-events-none opacity-0'
-                                        }`}
-                                      >
-                                        <ArrowUpRight size={13} aria-hidden="true" />
-                                      </button>
+                                        }
+                                      />
                               <button
                                 type="button"
                                         onClick={(event) => {

@@ -210,6 +210,7 @@ export {
   GX as XDecl,
   GSearch as SearchDecl,
   GPanelLeftClose as PanelLeftCloseDecl,
+  GArrowUpRight as ArrowUpRightDecl,
 };
 
 /* Different name, same meaning. */
