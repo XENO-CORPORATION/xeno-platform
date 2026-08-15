@@ -7,6 +7,7 @@ import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
 import { Reveal } from '../components/landing-v3/primitives';
 import ReleaseFeed from '../components/product/ReleaseFeed';
+import ForumThreadsWidget from '../components/product/ForumThreadsWidget';
 import ExperimentalNotice from '../components/product/ExperimentalNotice';
 import {
   getProduct, fetchReleases, latestRelease, downloadLink, type Release, type Product,
@@ -177,6 +178,11 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
             </div>
           </section>
         )}
+
+        {/* Known issues and answers — renders NOTHING when this product has
+            no threads, so a quiet product page stays quiet rather than
+            advertising an empty forum. */}
+        <ForumThreadsWidget slug={product.slug} />
       </main>
 
       <Footer />
