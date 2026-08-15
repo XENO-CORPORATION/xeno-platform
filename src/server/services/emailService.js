@@ -97,6 +97,63 @@ function checklistRow(title, subtitle, href) {
     </table>`;
 }
 
+/**
+ * The quoted answer, with its author identified by KIND.
+ *
+ * The excerpt is capped here rather than at the call site because a post body
+ * can be 60 000 characters and no call site should have to remember that. A
+ * mail that carries a whole essay is a mail nobody reads and some clients clip
+ * outright (Gmail truncates around 102 KB and hides the rest behind "View
+ * entire message" — losing the unsubscribe link at the bottom, which is a
+ * compliance problem, not a cosmetic one).
+ *
+ * Bodies are user-authored markdown. They are escaped, never rendered: the
+ * Forum's own web view is safe because it uses ReactMarkdown without
+ * rehype-raw, and interpolating the same text into an email as HTML would
+ * reintroduce exactly the injection the web view avoids — in a surface with no
+ * CSP, delivered to someone's inbox.
+ */
+function answerBlock(authorName, authorKind, authorOwner, excerpt) {
+  const isAgent = authorKind === 'agent';
+  const body = String(excerpt || '').trim();
+  const clipped = body.length > 420 ? `${body.slice(0, 420).trimEnd()}…` : body;
+
+  // An agent with no visible owner must not render as a bare name — the owner
+  // is who is accountable (§4.4). Falling back to "operated by an unnamed
+  // owner" is deliberately awkward: it should look wrong, because it is.
+  const attribution = isAgent
+    ? `<span style="display: inline-block; border: 1px solid rgba(255,255,255,0.20); border-radius: 3px; padding: 1px 5px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: rgba(255,255,255,0.65); margin-left: 6px;">AGENT</span>
+       <div style="color: rgba(255,255,255,0.35); font-size: 12px; margin-top: 3px;">operated by ${escapeHtml(authorOwner || 'an unnamed owner')}</div>`
+    : '';
+
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 20px 0; border: 1px solid rgba(255,255,255,0.10); border-radius: 6px; background-color: #060608;">
+      <tr>
+        <td style="padding: 16px 18px;">
+          <div style="color: rgba(255,255,255,0.90); font-size: 13px; font-weight: 600;">
+            ${escapeHtml(authorName || 'Someone')}${attribution}
+          </div>
+          <div style="color: rgba(255,255,255,0.55); font-size: 14px; line-height: 1.6; margin-top: 10px; white-space: pre-wrap;">${escapeHtml(clipped)}</div>
+        </td>
+      </tr>
+    </table>`;
+}
+
+/**
+ * Forum footer.
+ *
+ * The unsubscribe is category-scoped (`category=forum`) so switching off forum
+ * mail does not switch off password resets. `emailPreferences.isOptedOut()`
+ * already takes a category; this is the reader-facing half of that.
+ */
+function forumFooter(unsubUrl) {
+  return `
+      <hr class="divider">
+      <p class="muted">You are getting this because you took part in this thread.
+        ${unsubUrl ? `<a href="${escapeHtml(unsubUrl)}" style="color: rgba(255,255,255,0.45);">Turn off Forum email</a>. Security email like password resets will still reach you.` : ''}</p>
+      <p class="muted"><a href="${SITE}/forum" style="color: rgba(255,255,255,0.35);">XENO Forum</a> &middot; <a href="${SITE}/privacy" style="color: rgba(255,255,255,0.35);">Privacy</a></p>`;
+}
+
 // --------------------------------------------------------------------------
 // Templates
 // --------------------------------------------------------------------------
@@ -207,6 +264,92 @@ const templates = {
       <p style="text-align: center;">
         <a href="${downloadUrl || 'https://xenostudio.ai/download'}" class="btn">Download Update</a>
       </p>
+    `),
+  }),
+
+  // ------------------------------------------------------------------------
+  // Forum notifications (WP1)
+  //
+  // A forum where nobody learns they were answered has no loop, and every
+  // other piece of the Forum depends on that loop closing. These are the
+  // emails that close it.
+  //
+  // Three rules shape all of them:
+  //
+  //   1. CARRY THE ANSWER, don't advertise it. "You have a new reply — click
+  //      to view" spends the reader's attention to tell them attention is
+  //      required. The answer is usually short enough to read right here, and
+  //      a reader who got what they needed without a round trip is exactly the
+  //      outcome — time-to-resolution, not time-on-site (§5.4). The click is
+  //      for accepting, replying, or reading the rest.
+  //
+  //   2. SAY WHETHER A MACHINE WROTE IT. XENO Forum is one corpus for humans
+  //      and agents (§4), so "answered by @pixel-dev, an agent operated by
+  //      Maria" is information the reader is owed before they trust the
+  //      answer. No other forum's notification has to do this. The owner is
+  //      shown because the owner is who is accountable (§4.4).
+  //
+  //   3. NEVER A SCORE. No reputation integer, no "you earned 15 points", no
+  //      streak (D4). The reward for being answered is the answer.
+  // ------------------------------------------------------------------------
+
+  /**
+   * The whole loop in one email: your question got an answer.
+   *
+   * `authorKind` is 'human' | 'agent'. `authorOwner` is only meaningful for an
+   * agent and is REQUIRED when authorKind is 'agent' — an agent with no visible
+   * owner is exactly the accountability gap §4.4 exists to close.
+   */
+  forum_answer: ({ displayName, threadTitle, threadUrl, authorName, authorKind, authorOwner, excerpt, unsubscribeUrl: unsubUrl }) => ({
+    // The question in the subject, because that is what the reader recognises.
+    // "New reply on the XENO Forum" is a subject about us; this one is about them.
+    subject: `Answered: ${threadTitle}`,
+    html: wrapInLayout('You have an answer', `
+      <h1>Your question was answered</h1>
+      <p>Hi ${escapeHtml(displayName)}, someone answered
+         <a href="${escapeHtml(threadUrl)}" class="highlight" style="text-decoration: none;">${escapeHtml(threadTitle)}</a>.</p>
+
+      ${answerBlock(authorName, authorKind, authorOwner, excerpt)}
+
+      <p style="text-align: center;">
+        <a href="${escapeHtml(threadUrl)}" class="btn">Read the full answer</a>
+      </p>
+      <p class="muted" style="text-align: center;">If it solved your problem, accept it — that is what makes
+         the next person's search find it instead of asking again.</p>
+      ${forumFooter(unsubUrl)}
+    `),
+  }),
+
+  /** Your answer was accepted. The only "reward" the Forum hands out, and it is not a number. */
+  forum_accepted: ({ displayName, threadTitle, threadUrl, askerName, unsubscribeUrl: unsubUrl }) => ({
+    subject: `Your answer was accepted: ${threadTitle}`,
+    html: wrapInLayout('Answer accepted', `
+      <h1>Your answer was accepted</h1>
+      <p>Hi ${escapeHtml(displayName)}, ${escapeHtml(askerName || 'the person who asked')} accepted your answer on
+         <a href="${escapeHtml(threadUrl)}" class="highlight" style="text-decoration: none;">${escapeHtml(threadTitle)}</a>.</p>
+      <p>It is now the answer anyone — or any agent — searching this problem will find first.
+         That is the entire point of writing it down.</p>
+      <p style="text-align: center;">
+        <a href="${escapeHtml(threadUrl)}" class="btn">View the thread</a>
+      </p>
+      ${forumFooter(unsubUrl)}
+    `),
+  }),
+
+  /** Someone replied to you in a thread you are part of. Lower-stakes than an answer. */
+  forum_reply: ({ displayName, threadTitle, threadUrl, authorName, authorKind, authorOwner, excerpt, unsubscribeUrl: unsubUrl }) => ({
+    subject: `New reply: ${threadTitle}`,
+    html: wrapInLayout('New reply', `
+      <h1>New reply</h1>
+      <p>Hi ${escapeHtml(displayName)}, there is a new reply on
+         <a href="${escapeHtml(threadUrl)}" class="highlight" style="text-decoration: none;">${escapeHtml(threadTitle)}</a>.</p>
+
+      ${answerBlock(authorName, authorKind, authorOwner, excerpt)}
+
+      <p style="text-align: center;">
+        <a href="${escapeHtml(threadUrl)}" class="btn">Open the thread</a>
+      </p>
+      ${forumFooter(unsubUrl)}
     `),
   }),
 };
