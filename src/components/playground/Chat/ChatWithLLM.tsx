@@ -7,9 +7,14 @@ import { IconButton, MenuItem, MessageBubble, useDialog, useGooPill, useMenu, us
 import {
   CHAT_THEME_STORAGE_KEY,
   CHAT_THEME_BRIGHTNESS_STORAGE_KEY,
+  THEME_BRIGHTNESS_STEP,
   VISUAL_CHAT_THEME_OPTIONS,
-  getVisualThemePosition,
+  buildChatThemeStyle,
+  getThemePreviewTokens,
   getClosestVisualTheme,
+  getRelativeLuminance,
+  getVisualThemePosition,
+  normalizeThemeBrightness,
   type ChatTheme,
   type ResolvedChatTheme,
 } from './chatTheme';
@@ -2334,7 +2339,6 @@ const CHAT_CHROME_TOP_INSET_PX = 8;
 const CHAT_CHROME_BAR_HEIGHT_PX = 52;
 
 const THEME_WAVEFORM_BAR_COUNT = 21;
-const THEME_BRIGHTNESS_STEP = 5;
 
 /**
  * The theme mark. Same idea as the hand-drawn half-circle it replaces — a shape with one half solid —
@@ -2349,131 +2353,6 @@ const THEME_BRIGHTNESS_STEP = 5;
 const ManualThemeIcon = ({ size = 16, ...props }: React.SVGProps<SVGSVGElement> & { size?: number }) => (
   <Contrast size={size} aria-hidden="true" focusable="false" {...props} />
 );
-
-type ChatThemePreviewTokens = {
-  canvas: string;
-  surface: string;
-  elevated: string;
-  control: string;
-  controlStrong: string;
-  text: string;
-  muted: string;
-  border: string;
-  hover: string;
-  overlay: string;
-};
-
-type ChatThemeRuntimeTokens = ChatThemePreviewTokens & {
-  surfaceText: string;
-  surfaceMuted: string;
-};
-
-const createChatThemePalette = (
-  canvas: string,
-  surface: string,
-  elevated: string,
-  control: string,
-  controlStrong: string,
-  text: string,
-  muted: string,
-  border: string,
-  hover: string,
-  overlay: string,
-): ChatThemePreviewTokens => ({
-  canvas,
-  surface,
-  elevated,
-  control,
-  controlStrong,
-  text,
-  muted,
-  border,
-  hover,
-  overlay,
-});
-
-// Every selectable five-percent step owns a complete semantic palette. The
-// surfaces therefore change independently instead of receiving one shared
-// brightness curve. The first and last entries remain the ElevenLabs endpoints.
-const CHAT_THEME_SURFACE_PALETTES: readonly ChatThemePreviewTokens[] = [
-  createChatThemePalette('#0a0a0a', '#171717', '#262626', '#262626', '#404040', '#fafafa', '#a3a3a3', '#242424', '#404040', '#171717'),
-  createChatThemePalette('#0c0c0d', '#19191a', '#282829', '#29292a', '#424244', '#fafafa', '#a4a4a4', '#272728', '#424244', '#19191a'),
-  createChatThemePalette('#0e0e0f', '#1b1b1c', '#2a2a2b', '#2c2c2d', '#444446', '#fafafa', '#a6a6a6', '#2a2a2b', '#444446', '#1b1b1c'),
-  createChatThemePalette('#101011', '#1d1d1e', '#2c2c2d', '#2f2f30', '#464648', '#fafafa', '#a8a8a8', '#2d2d2e', '#464648', '#1d1d1e'),
-  createChatThemePalette('#121213', '#1f1f20', '#2e2e2f', '#323233', '#48484a', '#fafafa', '#aaaaaa', '#303031', '#48484a', '#1f1f20'),
-  createChatThemePalette('#141415', '#212122', '#303031', '#353536', '#4a4a4c', '#fafafa', '#acacac', '#333334', '#4a4a4c', '#212122'),
-  createChatThemePalette('#161617', '#232324', '#323233', '#383839', '#4c4c4e', '#fafafa', '#aeaeae', '#363637', '#4c4c4e', '#232324'),
-  createChatThemePalette('#181819', '#252526', '#343435', '#3b3b3c', '#4e4e50', '#fafafa', '#b0b0b0', '#39393a', '#4e4e50', '#252526'),
-  createChatThemePalette('#1a1a1b', '#272728', '#363637', '#3e3e3f', '#505052', '#f8f8f8', '#b2b2b2', '#3c3c3d', '#505052', '#272728'),
-  createChatThemePalette('#1c1c1d', '#29292a', '#383839', '#414142', '#525254', '#f7f7f7', '#b4b4b4', '#3f3f40', '#525254', '#29292a'),
-  createChatThemePalette('#181a1e', '#24272c', '#30343a', '#383c43', '#4b5059', '#f4f5f7', '#aeb2b8', '#3c4047', '#4b5059', '#24272c'),
-  createChatThemePalette('#1b1d22', '#272a30', '#34383f', '#3c4149', '#505660', '#f4f5f7', '#b2b6bd', '#41464e', '#505660', '#272a30'),
-  createChatThemePalette('#1e2126', '#2b2e35', '#383c44', '#41464f', '#565d67', '#f5f6f8', '#b6bbc2', '#464b53', '#565d67', '#2b2e35'),
-  createChatThemePalette('#21242a', '#2f333a', '#3c4149', '#464b54', '#5c636e', '#f5f6f8', '#bbc0c7', '#4b5059', '#5c636e', '#2f333a'),
-  createChatThemePalette('#25282e', '#33373f', '#41464f', '#4b515b', '#626a75', '#f6f7f8', '#c0c5cc', '#505660', '#626a75', '#33373f'),
-  createChatThemePalette('#282b31', '#383c44', '#464b55', '#505661', '#69717c', '#f7f8fa', '#c5cad0', '#565d67', '#69717c', '#383c44'),
-  createChatThemePalette('#30343b', '#41464d', '#505661', '#5b626d', '#757d88', '#f8f9fa', '#d0d4d9', '#626a74', '#757d88', '#41464d'),
-  createChatThemePalette('#3b4048', '#4b515b', '#5d6470', '#686f7b', '#858c96', '#fafafa', '#e0e2e6', '#707782', '#858c96', '#4b515b'),
-  createChatThemePalette('#414956', '#4d5562', '#59616f', '#656e7c', '#7a8492', '#fafafa', '#d5dae2', '#59616f', '#656e7c', '#4d5562'),
-  createChatThemePalette('#d7d9dd', '#e1e3e6', '#eceef0', '#f1f2f3', '#f6f7f8', '#0a0a0a', '#55585d', '#dfe1e4', '#f6f7f8', '#e1e3e6'),
-  createChatThemePalette('#ffffff', '#fafafa', '#ffffff', '#f5f5f5', '#e5e5e5', '#0a0a0a', '#737373', '#e5e5e5', '#f5f5f5', '#fafafa'),
-];
-
-const getRelativeLuminance = (hex: string): number => {
-  const channels = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255);
-  const [red, green, blue] = channels.map((channel) =>
-    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
-  );
-  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-};
-
-const getContrastRatio = (first: string, second: string): number => {
-  const [lighter, darker] = [getRelativeLuminance(first), getRelativeLuminance(second)].sort((a, b) => b - a);
-  return (lighter + 0.05) / (darker + 0.05);
-};
-
-const getAccessibleTextTokens = (
-  canvas: string,
-  preferredText?: string,
-  preferredMuted?: string,
-): Pick<ChatThemePreviewTokens, 'text' | 'muted'> => {
-  const lightText = '#fafafa';
-  const darkText = '#0a0a0a';
-  const fallbackText = getContrastRatio(lightText, canvas) >= getContrastRatio(darkText, canvas) ? lightText : darkText;
-  const text = preferredText && getContrastRatio(preferredText, canvas) >= 4.5 ? preferredText : fallbackText;
-  const muted = preferredMuted && getContrastRatio(preferredMuted, canvas) >= 4.5
-    ? preferredMuted
-    : text;
-
-  return { text, muted };
-};
-
-const getThemePreviewTokens = (position: number): ChatThemeRuntimeTokens => {
-  const clampedPosition = Math.min(100, Math.max(0, position));
-  const paletteIndex = Math.min(
-    CHAT_THEME_SURFACE_PALETTES.length - 1,
-    Math.round(clampedPosition / THEME_BRIGHTNESS_STEP),
-  );
-  const paletteTokens = CHAT_THEME_SURFACE_PALETTES[paletteIndex];
-
-  return {
-    ...paletteTokens,
-    ...getAccessibleTextTokens(paletteTokens.canvas, paletteTokens.text, paletteTokens.muted),
-    surfaceText: getAccessibleTextTokens(
-      paletteTokens.controlStrong,
-      paletteTokens.text,
-      paletteTokens.muted,
-    ).text,
-    surfaceMuted: getAccessibleTextTokens(
-      paletteTokens.controlStrong,
-      paletteTokens.text,
-      paletteTokens.muted,
-    ).muted,
-  };
-};
-
-const normalizeThemeBrightness = (position: number): number =>
-  Math.round(Math.min(100, Math.max(0, position)) / THEME_BRIGHTNESS_STEP) * THEME_BRIGHTNESS_STEP;
 
 const getThemeSliderValueText = (position: number): string => {
   const exactTheme = VISUAL_CHAT_THEME_OPTIONS.find((option) => option.position === position);
@@ -2699,53 +2578,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     const previewPosition = themePreviewPosition ?? (chatTheme === 'custom' ? chatThemeBrightness : null);
     if (previewPosition === null) return {};
 
-    const tokens = getThemePreviewTokens(previewPosition);
-    const railIsLight = getRelativeLuminance(tokens.elevated) > 0.45;
-    const canvasIsLight = getRelativeLuminance(tokens.canvas) > 0.45;
-    return {
-      '--chat-canvas': tokens.canvas,
-      '--chat-surface': tokens.surface,
-      '--chat-elevated': tokens.elevated,
-      '--chat-control': tokens.control,
-      '--chat-control-strong': tokens.controlStrong,
-      '--chat-text': tokens.text,
-      '--chat-muted': tokens.muted,
-      '--chat-surface-text': tokens.surfaceText,
-      '--chat-surface-muted': tokens.surfaceMuted,
-      '--chat-border': tokens.border,
-      '--chat-hover': tokens.hover,
-      // Dark themes: fade must stay near-canvas (tokens.hover is often too light).
-      '--chat-project-preview-fade': canvasIsLight
-        ? tokens.hover
-        : `color-mix(in srgb, ${tokens.canvas} 82%, ${tokens.elevated} 18%)`,
-      '--chat-overlay': tokens.overlay,
-      '--chat-accent': tokens.text,
-      '--chat-accent-soft': canvasIsLight
-        ? `color-mix(in srgb, ${tokens.text} 14%, transparent)`
-        : `color-mix(in srgb, ${tokens.text} 20%, transparent)`,
-      '--chat-on-accent': tokens.canvas,
-      '--chat-danger': canvasIsLight ? '#dc2626' : '#ef4444',
-      '--chat-danger-hover': canvasIsLight ? '#b91c1c' : '#f87171',
-      '--chat-composer-fill': canvasIsLight
-        ? tokens.elevated
-        : `color-mix(in srgb, ${tokens.canvas} 70%, ${tokens.elevated} 30%)`,
-      '--chat-composer-border': canvasIsLight
-        ? 'rgba(0, 0, 0, 0.14)'
-        : 'rgba(255, 255, 255, 0.12)',
-      // No drop shadow on the composer: it would paint a hard edge straight across the
-      // liquid neck the gooey reveal grows out of the box. The stroke carries the shape.
-      '--chat-composer-shadow': 'none',
-      '--chat-tool-rail-stroke': railIsLight ? 'rgba(24, 24, 27, 0.72)' : 'rgba(245, 245, 245, 0.78)',
-      '--chat-top-bar-btn-active': canvasIsLight
-        ? tokens.control
-        : `color-mix(in srgb, ${tokens.canvas} 55%, black)`,
-      '--chat-tool-rail-stroke-soft': railIsLight ? 'rgba(24, 24, 27, 0.48)' : 'rgba(245, 245, 245, 0.58)',
-      // History sidebar tracks the interpolated surface at every custom brightness;
-      // the fixed Light theme keeps its warm cream via the CSS fallback.
-      '--chat-history-fill': tokens.surface,
-      '--chat-history-border': tokens.border,
-      '--chat-history-shadow': canvasIsLight ? '0 4px 18px rgba(0, 0, 0, 0.06)' : 'none',
-    } as React.CSSProperties;
+    return buildChatThemeStyle(previewPosition) as React.CSSProperties;
   }, [chatTheme, chatThemeBrightness, themePreviewPosition]);
   const handleChatThemeChange = useCallback((nextTheme: ChatTheme, closeMenu = true) => {
     if (nextTheme !== 'system' && nextTheme !== 'custom') {

@@ -30,7 +30,7 @@ import {
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
-import { useResolvedChatTheme } from './chatTheme';
+import { useChatTheme } from './chatTheme';
 
 // Helper to format large token counts
 const formatTokens = (tokens: number): string => {
@@ -179,9 +179,10 @@ const DEFAULT_MODEL: Model = {
 };
 
 const SearchChatInterface: React.FC = () => {
-  // Which of the three palettes the user picked in the chat. Read-only here — this surface has no
-  // switcher of its own, it just wears whatever was chosen.
-  const resolvedChatTheme = useResolvedChatTheme();
+  // Whatever the user set on the chat's brightness slider. Read-only here — this surface has no
+  // switcher of its own, it just wears the answer. Both halves are needed: the class is the base
+  // palette, the style is the exact stop when that stop has no name.
+  const { themeClass, themeStyle } = useChatTheme();
 
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1190,16 +1191,18 @@ Based on these search results, provide a helpful, accurate, and concise answer t
   };
 
   return (
-    // `chat-themed` brings the --chat-* palette and hands it on to the library as --xeno-*;
-    // `chat-theme-<resolved>` picks which of the three. This route never mounts ChatWithLLM, so
-    // until the palettes moved to a stylesheet of their own there was nothing here to inherit — which
-    // is why every colour in this file used to be a literal.
+    // `chat-themed` brings the --chat-* palette and hands it on to the library as --xeno-*. The
+    // class picks the base palette and the style carries the exact brightness stop when the slider
+    // is not parked on one of the three named ones. This route never mounts ChatWithLLM, so until
+    // the palettes moved to a stylesheet of their own there was nothing here to inherit — which is
+    // why every colour in this file used to be a literal.
     //
     // `xeno-icon-hosts` says every button and link in here hosts a glyph, so the icons animate on
     // hover without each control having to opt in. They were all already XENO glyphs; none of them
     // moved.
     <div
-      className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} relative flex h-full text-[var(--chat-text)] overflow-hidden bg-[var(--chat-canvas)]`}
+      className={`chat-themed xeno-icon-hosts ${themeClass} relative flex h-full text-[var(--chat-text)] overflow-hidden bg-[var(--chat-canvas)]`}
+      style={themeStyle}
     >
       {/* History Sidebar */}
       <div
