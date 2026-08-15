@@ -262,10 +262,15 @@ export const Contrast = /* @__PURE__ */ glyph(GContrast);
    different hands, read as a mistake rather than a pair.
 
    `StopCircle` becomes a squared stop. The ring is not missing by accident — the grammar has no
-   circles, and the ring never said anything the square does not. `Square` itself stays on lucide: the
-   one call site paints it solid (`fill` + `strokeWidth={0}`), which is a filled shape, not this glyph. */
+   circles, and the ring never said anything the square does not.
+
+   `Stop` is exported under its own name too, and that is what finally took `Square` off the composer's
+   stop button. The argument for leaving it was that the call site painted a solid shape rather than an
+   icon — true, and it was the last lucide import in the chat's chrome, drawn by a library the rest of
+   the surface had stopped using. The declaration had already answered what stop looks like here. */
 export const Play = /* @__PURE__ */ glyph(GPlay);
 export const Pause = /* @__PURE__ */ glyph(GPause);
+export const Stop = /* @__PURE__ */ glyph(GStop);
 export const StopCircle = /* @__PURE__ */ glyph(GStop);
 export const PanelLeftOpen = /* @__PURE__ */ glyph(GPanelLeft);
 export const PanelLeftClose = /* @__PURE__ */ glyph(GPanelLeftClose);

@@ -34,7 +34,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchResponse, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Square, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders } from '@/lib/icons';
+import { Send, ArrowLeft, ArrowLeftRight, ArrowUp, ArrowUpRight, Waves, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Play, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Save, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, ChevronUp, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, TimerOff, Monitor, MoreVertical, EyeOff, Eye, Archive, AppWindow, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -2070,6 +2070,115 @@ const themeMenuPanelMotionStyle = (
         }),
 });
 
+/**
+ * The 👍 / 👎 feedback popovers.
+ *
+ * Same family as the Appearance menu — grow out of the edge nearest the button, reverse to close —
+ * one step quicker, because these are lists of choices that open right under the pointer rather
+ * than a panel of controls. The direction follows the placement: a menu that opened downward has to
+ * collapse back up into its button, and one that opened upward, back down.
+ */
+const FEEDBACK_POPUP_MS = 200;
+
+type FeedbackPopupPlacement = 'below' | 'above';
+
+/**
+ * Where the popover sits — anchored to the button, never measured against a guess.
+ *
+ * `top` is the button's own edge. An upward menu then lifts itself by its OWN height, so its bottom
+ * lands on the button whatever the list weighs. The previous version placed it from an estimated
+ * height — 210px for five rows, 260px for seven — and an estimate that is short by a row puts the
+ * menu on top of the button that opened it, which is exactly what the seven-row dislike menu did.
+ *
+ * The wrapper owns this transform and the panel inside owns the animated one. One element cannot
+ * carry both: the animation would overwrite the lift and drop the menu back over its button.
+ */
+const feedbackPopupAnchorStyle = (
+  position: { x: number; y: number },
+  placement: FeedbackPopupPlacement,
+): React.CSSProperties => ({
+  position: 'absolute',
+  left: `${position.x}px`,
+  top: `${position.y}px`,
+  zIndex: 100,
+  ...(placement === 'above' ? { transform: 'translateY(-100%)' } : null),
+});
+
+/** The panel itself — the box that is drawn, and the element the motion runs on. */
+const FEEDBACK_POPUP_PANEL_STYLE: React.CSSProperties = {
+  width: '220px',
+  backgroundColor: 'var(--chat-elevated)',
+  color: 'var(--chat-text)',
+  border: '1px solid var(--chat-border)',
+  borderRadius: '12px',
+  boxShadow: '0 5px 15px color-mix(in srgb, var(--chat-text) 16%, transparent)',
+  overflow: 'hidden',
+};
+
+const feedbackPopupMotionStyle = (
+  placement: FeedbackPopupPlacement,
+  shown: boolean,
+  open: boolean,
+): React.CSSProperties => {
+  const above = placement === 'above';
+  return {
+    transformOrigin: above ? 'bottom left' : 'top left',
+    // Read by both keyframes, so the two placements share one pair rather than owning four.
+    ['--chat-feedback-popup-dy' as string]: above ? '8px' : '-8px',
+    willChange: 'transform, opacity',
+    ...(shown
+      ? {
+          animation: `chat-feedback-popup-in ${FEEDBACK_POPUP_MS}ms ${SCHEDULE_DATE_EASE} forwards`,
+        }
+      : !open
+        ? {
+            animation: `chat-feedback-popup-out ${FEEDBACK_POPUP_MS}ms ${SCHEDULE_DATE_EASE} forwards`,
+          }
+        : {
+            opacity: 0,
+            transform: `translateY(${above ? '8px' : '-8px'}) scale(0.94)`,
+          }),
+  };
+};
+
+/**
+ * Mount, paint closed, then play — and on close, play the exit before unmounting.
+ *
+ * The ⋯ and Appearance menus each spell this out with three booleans of their own. These two
+ * popovers carry their anchor INSIDE the state object, so presence has to follow the object: the
+ * exit keeps drawing at the position the popover was opened at, and that position is gone the
+ * instant the state is nulled. Holding the last non-null value is what lets the close animate at
+ * all. Reopening on another message changes the object's identity, which replays the enter from
+ * the new anchor.
+ */
+function usePopoverPresence<T>(info: T | null, durationMs: number) {
+  const [rendered, setRendered] = useState<T | null>(info);
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    if (info) {
+      setRendered(info);
+      setShown(false);
+      // Two frames: one to mount at the closed values, one to be sure they were painted before the
+      // flip. A single frame can still be batched with the mount, and the browser then sees only
+      // the end state — no transition, a hard cut.
+      let second = 0;
+      const first = window.requestAnimationFrame(() => {
+        second = window.requestAnimationFrame(() => setShown(true));
+      });
+      return () => {
+        window.cancelAnimationFrame(first);
+        window.cancelAnimationFrame(second);
+      };
+    }
+    setShown(false);
+    const timer = window.setTimeout(() => setRendered(null), durationMs);
+    return () => window.clearTimeout(timer);
+  }, [info, durationMs]);
+
+  return { rendered, shown } as const;
+}
+
 /** Pixel offset from viewport center to a trigger’s center — card grows from that point. */
 const measureModalFromTrigger = (el: Element | null): { x: number; y: number } => {
   if (typeof window === 'undefined') return { x: 0, y: 0 };
@@ -2949,17 +3058,25 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [expandedInfoMessageId, setExpandedInfoMessageId] = useState<string | null>(null);
   // const modelTooltipRef = useRef<HTMLDivElement>(null); // Moved up
 
+  // `placement` is decided when the popover opens, from where the button sits in the viewport, and
+  // it is what the exit animation needs: the menu has to collapse back toward its button, not in
+  // some fixed direction.
   const [feedbackPopupInfo, setFeedbackPopupInfo] = useState<{
     messageId: string;
     position: { x: number; y: number };
+    placement: FeedbackPopupPlacement;
   } | null>(null);
   // const feedbackPopupRef = useRef<HTMLDivElement>(null); // Moved up
 
   const [dislikePopupInfo, setDislikePopupInfo] = useState<{
     messageId: string;
     position: { x: number; y: number };
+    placement: FeedbackPopupPlacement;
   } | null>(null);
   // const dislikePopupRef = useRef<HTMLDivElement>(null); // Moved up
+
+  const feedbackPopupPresence = usePopoverPresence(feedbackPopupInfo, FEEDBACK_POPUP_MS);
+  const dislikePopupPresence = usePopoverPresence(dislikePopupInfo, FEEDBACK_POPUP_MS);
 
   const [feedbackStatusMap, setFeedbackStatusMap] = useState<Record<string, 'liked' | 'disliked' | null>>(() => {
     try {
@@ -9516,24 +9633,24 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
   // Rename and modify to open the feedback popup
   const handleOpenFeedbackPopup = (event: React.MouseEvent<HTMLButtonElement>, messageId: string) => {
-    // console.log('Like clicked, opening feedback for message:', messageId);
     const rect = event.currentTarget.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
-    const estimatedPopupHeight = 210; // Estimate based on 5 items + padding
     const gap = 5; // Gap between button and popup
 
     const x = rect.left + window.scrollX;
-    let y;
-    if (rect.top < viewportHeight / 2) {
-      y = rect.bottom + window.scrollY + gap;
-    } else {
-      y = rect.top + window.scrollY - estimatedPopupHeight - gap;
-    }
+    const placement: FeedbackPopupPlacement = rect.top < viewportHeight / 2 ? 'below' : 'above';
+    // Both anchors are the button's own edge; an upward menu lifts itself by its height in CSS.
+    const y =
+      placement === 'below'
+        ? rect.bottom + window.scrollY + gap
+        : rect.top + window.scrollY - gap;
 
-    setFeedbackPopupInfo({
-      messageId,
-      position: { x, y },
-    });
+    // The button toggles. Click-outside deliberately ignores clicks on this button — otherwise it
+    // would close the menu and the click would reopen it — so a second press had nothing to act on
+    // and the menu simply stayed put.
+    setFeedbackPopupInfo(prev =>
+      prev && prev.messageId === messageId ? null : { messageId, position: { x, y }, placement },
+    );
   };
 
   const handleLike = (messageId: string) => {
@@ -10150,10 +10267,18 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   };
   
   // --- Feedback Popup Component --- 
-  const FeedbackPopup = () => {
-    if (!feedbackPopupInfo) return null;
+  // A render FUNCTION, called inline, not a component rendered as <FeedbackPopup />. Declared inside
+  // the parent, it would be a new component type on every parent render, and React remounts on a
+  // changed type — which restarts the CSS animation from 0% each time. The exit is 200ms long and a
+  // chat re-renders for many reasons, so the close was being cut off and replaced by a cut. Called
+  // as a function there is no component boundary at all: the div is reconciled by position and key.
+  const renderFeedbackPopup = () => {
+    // The RETAINED info, not the live state: while the popover is closing the live one is already
+    // null, and the exit still has to be drawn where the popover stood.
+    const info = feedbackPopupPresence.rendered;
+    if (!info) return null;
 
-    const { messageId, position } = feedbackPopupInfo;
+    const { messageId, position, placement } = info;
 
     const handleFeedbackSubmit = (feedbackType: string) => {
       setFeedbackStatusMap(prev => {
@@ -10176,26 +10301,33 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       { label: 'Good use of memory', icon: BrainCircuit, type: 'memory' },
     ];
 
-    const popupStyle: React.CSSProperties = {
-      position: 'absolute',
-      left: `${position.x}px`,
-      top: `${position.y}px`,
-      zIndex: 100,
-      width: '220px',
-      backgroundColor: 'var(--chat-elevated)',
-      color: 'var(--chat-text)',
-      border: '1px solid var(--chat-border)',
-      borderRadius: '12px',
-      boxShadow: '0 5px 15px color-mix(in srgb, var(--chat-text) 16%, transparent)',
-      overflow: 'hidden',
-      ...chatThemePreviewStyle,
-    };
-
     return (
       <div
         ref={feedbackPopupRef}
-        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover`}
-        style={popupStyle}
+        // Hidden from assistive tech the moment the intent is gone, even though the box is still
+        // on screen playing its exit.
+        aria-hidden={!feedbackPopupInfo}
+        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme}`}
+        style={{
+          ...feedbackPopupAnchorStyle(position, placement),
+          // A menu on its way out must not swallow the click that follows it.
+          pointerEvents: feedbackPopupPresence.shown ? 'auto' : 'none',
+          ...chatThemePreviewStyle,
+        }}
+      >
+      <div
+        // Remount on each flip, so a close that arrives mid-open restarts the animation instead of
+        // being ignored as "same animation-name, already running".
+        key={feedbackPopupPresence.shown ? 'feedback-popup-in' : 'feedback-popup-out'}
+        className="chat-history-popover"
+        style={{
+          ...FEEDBACK_POPUP_PANEL_STYLE,
+          ...feedbackPopupMotionStyle(
+            placement,
+            feedbackPopupPresence.shown,
+            Boolean(feedbackPopupInfo),
+          ),
+        }}
       >
         <ul className="p-2 space-y-1">
           {feedbackOptions.map((option) => (
@@ -10211,14 +10343,18 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           ))}
         </ul>
       </div>
+      </div>
     );
   };
-  
-  // --- Dislike Feedback Popup Component --- 
-  const DislikeFeedbackPopup = () => {
-    if (!dislikePopupInfo) return null;
 
-    const { messageId, position } = dislikePopupInfo;
+  // --- Dislike Feedback Popup Component ---
+  // Called inline, for the same reason as the like popover above.
+  const renderDislikeFeedbackPopup = () => {
+    // See renderFeedbackPopup: the retained info is what the exit is drawn from.
+    const info = dislikePopupPresence.rendered;
+    if (!info) return null;
+
+    const { messageId, position, placement } = info;
 
     const handleDislikeFeedbackSubmit = (feedbackType: string) => {
       setFeedbackStatusMap(prev => {
@@ -10247,64 +10383,64 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       { label: 'Incorrect memory', icon: FileX, type: 'incorrect-memory' }, 
     ];
 
-    const popupStyle: React.CSSProperties = {
-      position: 'absolute',
-      left: `${position.x}px`,
-      top: `${position.y}px`,
-      zIndex: 100,
-      width: '220px',
-      backgroundColor: 'var(--chat-elevated)',
-      color: 'var(--chat-text)',
-      border: '1px solid var(--chat-border)',
-      borderRadius: '12px',
-      boxShadow: '0 5px 15px color-mix(in srgb, var(--chat-text) 16%, transparent)',
-      overflow: 'hidden',
-      ...chatThemePreviewStyle,
-    };
-
     return (
       <div
         ref={dislikePopupRef}
-        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover`}
-        style={popupStyle}
+        aria-hidden={!dislikePopupInfo}
+        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme}`}
+        style={{
+          ...feedbackPopupAnchorStyle(position, placement),
+          pointerEvents: dislikePopupPresence.shown ? 'auto' : 'none',
+          ...chatThemePreviewStyle,
+        }}
       >
-        <ul className="p-2 space-y-1">
-          {dislikeOptions.map((option) => (
-            <li key={option.type}>
-              <button
-                onClick={() => handleDislikeFeedbackSubmit(option.type)}
-                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
-              >
-                <option.icon size={16} className="text-[var(--chat-muted)]" />
-                <span>{option.label}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div
+          key={dislikePopupPresence.shown ? 'dislike-popup-in' : 'dislike-popup-out'}
+          className="chat-history-popover"
+          style={{
+            ...FEEDBACK_POPUP_PANEL_STYLE,
+            ...feedbackPopupMotionStyle(
+              placement,
+              dislikePopupPresence.shown,
+              Boolean(dislikePopupInfo),
+            ),
+          }}
+        >
+          <ul className="p-2 space-y-1">
+            {dislikeOptions.map((option) => (
+              <li key={option.type}>
+                <button
+                  onClick={() => handleDislikeFeedbackSubmit(option.type)}
+                  className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
+                >
+                  <option.icon size={16} className="text-[var(--chat-muted)]" />
+                  <span>{option.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     );
   };
   
   // Handler for opening the DISLIKE feedback popup
   const handleOpenDislikePopup = (event: React.MouseEvent<HTMLButtonElement>, messageId: string) => {
-    // console.log('Dislike clicked, opening feedback for message:', messageId);
     const rect = event.currentTarget.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
-    const estimatedPopupHeight = 260; // Estimate based on 7 items + padding
-    const gap = 5; 
+    const gap = 5;
 
     const x = rect.left + window.scrollX;
-    let y;
-    if (rect.top < viewportHeight / 2) {
-      y = rect.bottom + window.scrollY + gap;
-    } else {
-      y = rect.top + window.scrollY - estimatedPopupHeight - gap;
-    }
+    const placement: FeedbackPopupPlacement = rect.top < viewportHeight / 2 ? 'below' : 'above';
+    const y =
+      placement === 'below'
+        ? rect.bottom + window.scrollY + gap
+        : rect.top + window.scrollY - gap;
 
-    setDislikePopupInfo({ // Set state for dislike popup
-      messageId,
-      position: { x, y },
-    });
+    // Toggles, like the like menu.
+    setDislikePopupInfo(prev =>
+      prev && prev.messageId === messageId ? null : { messageId, position: { x, y }, placement },
+    );
   };
   
   // Function to smoothly scroll to bottom
@@ -11800,7 +11936,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         aria-label="Stop generating"
                         className={`${composerActionButtonSizeClass} flex items-center justify-center bg-[#0e0e10] text-white transition-all hover:bg-[#2a2a2d] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70`}
                       >
-                        <Square size={14} fill="currentColor" strokeWidth={0} />
+                        {/* The last lucide import left in the chat's chrome, and it was not being used
+                            as an icon: `fill="currentColor" strokeWidth={0}` is a call site asking for a
+                            RECTANGLE. XENO has a `stop`, and its declaration already settled what stop
+                            looks like in this grammar — a rounded square outline, deliberately not the
+                            filled block a media player would use.
+
+                            So this is a visible change: the button goes from a solid square to an
+                            outlined one. It is the set's own answer to the question, and it brings the
+                            control a hover motion it never had. */}
+                        <Stop size={14} />
                       </button>
                     )
                   ) : (
@@ -11923,6 +12068,28 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           @keyframes chat-theme-menu-out {
             from { opacity: 1; transform: translateY(0) scale(1); }
             to { opacity: 0; transform: translateY(-8px) scale(0.92); }
+          }
+
+          /* 👍 / 👎 feedback popovers. One pair for both placements: the sign of the travel comes
+             from --chat-feedback-popup-dy, which the popover sets from where it opened, so the menu
+             always collapses back toward its own button. */
+          @keyframes chat-feedback-popup-in {
+            from { opacity: 0; transform: translateY(var(--chat-feedback-popup-dy, -8px)) scale(0.94); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+          @keyframes chat-feedback-popup-out {
+            from { opacity: 1; transform: translateY(0) scale(1); }
+            to { opacity: 0; transform: translateY(var(--chat-feedback-popup-dy, -8px)) scale(0.94); }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            @keyframes chat-feedback-popup-in {
+              from { opacity: 0; transform: none; }
+              to { opacity: 1; transform: none; }
+            }
+            @keyframes chat-feedback-popup-out {
+              from { opacity: 1; transform: none; }
+              to { opacity: 0; transform: none; }
+            }
           }
 
           /* Chat LLM owns these tokens. They do not affect the rest of XENO. */
@@ -14140,7 +14307,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           aria-label={`Remove ${file.name}`}
                                           title="Remove"
                                         >
-                                          <X size={11} strokeWidth={1.75} aria-hidden="true" />
+                                          <X size={11} aria-hidden="true" />
                                         </button>
                                       )}
                                     </div>
@@ -14446,7 +14613,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   data-active={isTemporaryChat ? 'true' : undefined}
                   className={topBarBtnClass(isTemporaryChat, 'gap-1.5 px-2.5 text-[13px]')}
                 >
-                  <UserRoundX size={15} strokeWidth={1.75} className="flex-shrink-0" aria-hidden="true" />
+                  {/* `strokeWidth={1.75}` was here and was RIGHT — which is the argument for taking it
+                      out. A call site that restates the contract's number is correct until the contract
+                      changes, and then it is the one place that silently does not. */}
+                  <UserRoundX size={15} className="flex-shrink-0" aria-hidden="true" />
                   <span className="font-medium leading-none">Temporary</span>
                   <span className="leading-none text-[12px] text-[var(--chat-muted)]">Preview</span>
                 </button>
@@ -15815,8 +15985,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             document.body
         )}
         {modelTooltipInfo && createPortal(<ModelInfoTooltip />, document.body)}
-        {feedbackPopupInfo && createPortal(<FeedbackPopup />, document.body)}
-        {dislikePopupInfo && createPortal(<DislikeFeedbackPopup />, document.body)}
+        {/* Presence, not the live state — the popover outlives its info by one exit animation. */}
+        {feedbackPopupPresence.rendered && createPortal(renderFeedbackPopup(), document.body)}
+        {dislikePopupPresence.rendered && createPortal(renderDislikeFeedbackPopup(), document.body)}
         {isDeleteModalMounted && createPortal(renderDeleteConfirmationModal(), document.body)}
         {isCreateProjectModalMounted && createPortal(renderCreateProjectModal(), document.body)}
         {isProjectSettingsMounted &&

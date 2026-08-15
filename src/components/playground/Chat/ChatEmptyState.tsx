@@ -671,7 +671,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
           onClick={() => closeAgentActions(() => onAgentActionSelect(action.id))}
         >
           <span className="flex items-center gap-1.5">
-            <Icon size={13} strokeWidth={1.7} aria-hidden="true" />
+            {/* No `strokeWidth`: the declaration's contract owns the weight, and these were the only
+                glyphs in the chat not drawn at it. See the mode tabs below. */}
+            <Icon size={13} aria-hidden="true" />
             <span>{action.label}</span>
           </span>
         </button>
@@ -751,7 +753,13 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                     onKeyDown={(event) => handleModeKeyDown(event, index)}
                   >
                     <span className="flex items-center gap-1.5">
-                      <Icon size={13} strokeWidth={1.8} aria-hidden="true" />
+                      {/* `strokeWidth={1.8}` used to be here, and it reached the `<svg>`: measured on
+                          the running chat, these four tabs drew at 1.8 while the other sixty-nine
+                          glyphs on the page drew at 1.75. They are the most prominent chips in the
+                          empty state, so the one place the drift showed was the first thing anyone
+                          sees. The contract carries the weight; a call site should not restate it,
+                          because a restated number is one that can be restated WRONG. */}
+                      <Icon size={13} aria-hidden="true" />
                       <span>{mode.label}</span>
                     </span>
                   </button>

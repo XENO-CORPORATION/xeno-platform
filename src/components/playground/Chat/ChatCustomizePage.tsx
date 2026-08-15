@@ -475,10 +475,12 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
                   style={{ backgroundColor: 'var(--chat-surface)' }}
                   aria-hidden="true"
                 >
+                  {/* The weight comes from the declaration. 1.5 was here to make a 22px glyph read
+                      lighter in an empty state, which is a job for colour — and it already has the
+                      muted token doing exactly that. */}
                   <Briefcase
                     size={22}
                     className="text-[var(--chat-muted)]"
-                    strokeWidth={1.5}
                   />
                 </div>
                 <p className="max-w-[20rem] text-[13px] leading-relaxed text-[var(--chat-muted)]">
