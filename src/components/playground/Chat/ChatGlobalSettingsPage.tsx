@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { useTabs } from '@xenosystem/elements-react';
 import { Check, Search, Settings, Trash2 } from '@/lib/icons';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 import {
@@ -106,6 +107,16 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  /* Declared after `setQuery`, not next to `section`, for the reason `useDialog`'s callers learned the
+     hard way: a hook that closes over a `const` has to come after it. */
+  const tabs = useTabs<Section>({
+    ids: SECTIONS.map((s) => s.id),
+    activeId: section,
+    onChange: (id) => {
+      setQuery('');
+      setSection(id);
+    },
+  });
   const reduceMotion = useReducedMotion() ?? false;
   const staggerItemVariants = buildSettingsStaggerItemVariants(reduceMotion);
 
@@ -246,7 +257,7 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
             borderColor: 'var(--chat-border)',
             backgroundColor: 'var(--chat-surface)',
           }}
-          role="tablist"
+          {...tabs.tablistProps}
           aria-label="Settings sections"
         >
           {SECTIONS.map(({ id, label }) => {
@@ -255,8 +266,7 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
               <button
                 key={id}
                 type="button"
-                role="tab"
-                aria-selected={active}
+                {...tabs.tabProps(id)}
                 onClick={() => {
                   setQuery('');
                   setSection(id);
@@ -275,7 +285,10 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
           })}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto pb-8 hide-scrollbar">
+        {/* This scroller was already the panel; it just never said so. `panelProps` gives it the role,
+            an id for the tabs to point at, the selected tab as its label, and — because it scrolls —
+            a tabindex, so the keyboard can reach and scroll it at all. */}
+        <div {...tabs.panelProps} className="min-h-0 flex-1 overflow-y-auto pb-8 hide-scrollbar">
           <AnimatePresence mode="wait" initial={false}>
             {loading && section !== 'skills' ? (
               <motion.p

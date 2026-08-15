@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { useDialog, useGooPill } from '@xenosystem/elements-react';
+import { useDialog, useGooPill, useTabs } from '@xenosystem/elements-react';
 import './chatMock'; // DEV-only offline mock backend (self-installs a fetch interceptor)
 import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from './ChatEmptyState';
 import ChatModelSelector from './ChatModelSelector';
@@ -2312,6 +2312,14 @@ const PROJECT_SETTINGS_SECTIONS = [
   { id: 'danger', label: 'Danger zone' },
 ] as const;
 type ProjectSettingsSection = (typeof PROJECT_SETTINGS_SECTIONS)[number]['id'];
+/** Module-level so `useTabs` gets the same array identity on every render rather than a fresh one. */
+const PROJECT_SETTINGS_SECTION_IDS = PROJECT_SETTINGS_SECTIONS.map((s) => s.id);
+/**
+ * The header renders these sections TWICE — a wide row and a narrow scroller, one hidden by CSS — and
+ * both are in the document, pointing at the single panel below. Two `useTabs` instances would each mint
+ * a panel id and each claim to own it; sharing one explicit id is what `panelId` is for.
+ */
+const PROJECT_SETTINGS_PANEL_ID = 'project-settings-panel';
 const CHAT_THEME_BRIGHTNESS_STORAGE_KEY = 'xeno-chat-theme-brightness';
 const CHAT_CHROME_EDGE_INSET_PX = 12;
 /** Vertical inset for floating chrome icons (centers an h-9 control in the bar). */
@@ -3341,6 +3349,26 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     projectId: string;
     section: ProjectSettingsSection;
   } | null>(null);
+  /* Hoisted here rather than into `renderProjectSettingsModal`, which is a render FUNCTION and not a
+     component — hooks called inside it would run conditionally, because it returns null when no project
+     is open. Two instances, one per breakpoint's tablist, sharing the panel. */
+  const activeProjectSection: ProjectSettingsSection =
+    projectSettings?.section ?? PROJECT_SETTINGS_SECTIONS[0].id;
+  const changeProjectSection = useCallback((section: ProjectSettingsSection) => {
+    setProjectSettings((current) => (current ? { ...current, section } : current));
+  }, []);
+  const projectTabsWide = useTabs<ProjectSettingsSection>({
+    ids: PROJECT_SETTINGS_SECTION_IDS,
+    activeId: activeProjectSection,
+    onChange: changeProjectSection,
+    panelId: PROJECT_SETTINGS_PANEL_ID,
+  });
+  const projectTabsNarrow = useTabs<ProjectSettingsSection>({
+    ids: PROJECT_SETTINGS_SECTION_IDS,
+    activeId: activeProjectSection,
+    onChange: changeProjectSection,
+    panelId: PROJECT_SETTINGS_PANEL_ID,
+  });
   const [isProjectSettingsOpen, setIsProjectSettingsOpen] = useState(false);
   const [isProjectSettingsMounted, setIsProjectSettingsMounted] = useState(false);
   const [isProjectSettingsShown, setIsProjectSettingsShown] = useState(false);
@@ -8595,7 +8623,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   <nav
                     className="hidden min-w-0 flex-1 flex-wrap items-center gap-1 sm:flex"
                     aria-label="Settings sections"
-                    role="tablist"
+                    {...projectTabsWide.tablistProps}
                   >
                     {PROJECT_SETTINGS_SECTIONS.map((section) => {
                       const isActive = activeSection === section.id;
@@ -8603,8 +8631,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                         <button
                           key={section.id}
                           type="button"
-                          role="tab"
-                          aria-selected={isActive}
+                          {...projectTabsWide.tabProps(section.id)}
                           onClick={() => setActiveSection(section.id)}
                           className={`min-h-8 rounded-md px-2 py-1 text-[11.5px] font-medium transition-colors ${
                             isActive
@@ -8642,7 +8669,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             <nav
               className="mt-3 flex gap-1 overflow-x-auto pb-0.5 sm:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               aria-label="Settings sections"
-              role="tablist"
+              {...projectTabsNarrow.tablistProps}
             >
               {PROJECT_SETTINGS_SECTIONS.map((section) => {
                 const isActive = activeSection === section.id;
@@ -8650,8 +8677,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   <button
                     key={section.id}
                     type="button"
-                    role="tab"
-                    aria-selected={isActive}
+                    {...projectTabsNarrow.tabProps(section.id)}
                     onClick={() => setActiveSection(section.id)}
                     className={`min-h-9 flex-shrink-0 rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors ${
                       isActive
@@ -8674,9 +8700,12 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             </nav>
           </div>
 
+          {/* This already had `role="tabpanel"` and nothing tying it to the tab that opened it — no id
+              for `aria-controls` to name, no label. The wide tablist owns it; the narrow one points at
+              the same id through `panelId`. */}
           <div
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-5 scrollbar-thin scrollbar-thumb-zinc-500/40 scrollbar-track-transparent"
-            role="tabpanel"
+            {...projectTabsWide.panelProps}
           >
             {activeSection === 'general' && (
               <div className="space-y-3 pt-2 sm:pt-3">

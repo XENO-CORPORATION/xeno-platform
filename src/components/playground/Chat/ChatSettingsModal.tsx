@@ -11,7 +11,7 @@ import {
   setChatPersonaId,
   type ChatPersona,
 } from './chatCustomize';
-import { useDialog } from '@xenosystem/elements-react';
+import { useDialog, useTabs } from '@xenosystem/elements-react';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 
 export type ChatFontSize = 'small' | 'medium' | 'large';
@@ -71,6 +71,7 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
   onExportMarkdown,
 }) => {
   const [section, setSection] = useState<Section>('customize');
+  const tabs = useTabs<Section>({ ids: SECTIONS.map((s) => s.id), activeId: section, onChange: setSection });
   const [personas, setPersonas] = useState<ChatPersona[]>([]);
   const [chatPersonaId, setChatPersonaIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,7 +152,7 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
 
         <div
           className="ml-1 flex min-w-0 flex-1 items-center gap-0.5"
-          role="tablist"
+          {...tabs.tablistProps}
           aria-label="Settings sections"
         >
           {SECTIONS.map(({ id, label }) => {
@@ -160,8 +161,7 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
               <button
                 key={id}
                 type="button"
-                role="tab"
-                aria-selected={active}
+                {...tabs.tabProps(id)}
                 onClick={() => setSection(id)}
                 className={`${RADIUS} px-2.5 py-1 text-[12.5px] transition-colors ${
                   active
@@ -185,7 +185,7 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4">
+      <div {...tabs.panelProps} className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4">
         {loading ? (
           <p className="py-8 text-[12.5px] text-[var(--chat-muted)]">
             Loading…
