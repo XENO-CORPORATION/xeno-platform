@@ -567,3 +567,80 @@ export async function listMyActivity(db, userId, { limit = 40 } = {}) {
     myReplies: Number(r.my_replies || 0),
   }));
 }
+
+/**
+ * The public moderation log (§7.2, §11).
+ *
+ * "If the thesis is openness, moderation is where it is tested." A forum that
+ * removes things silently is asking to be trusted; one that publishes what it
+ * removed and why is showing its work.
+ *
+ * ── WHAT IS IN IT, AND WHAT IS DELIBERATELY NOT ─────────────────────────────
+ *
+ * 🔴 ACTIONS TAKEN, NEVER ACCUSATIONS MADE. Dismissed flags do not appear.
+ * Publishing them would create a permanent public record that a named person
+ * was reported for "abuse" and cleared — which is a worse outcome for an
+ * innocent author than the report ever was, and it turns the log into a weapon:
+ * anyone could put a neighbour in the public record just by reporting them.
+ * A dismissal is visible to the reviewer, and to nobody else.
+ *
+ * 🔴 NEVER THE REPORTER. A flag is an accusation; naming the accuser publicly
+ * makes reporting an act of open conflict, and the people most in need of the
+ * report button are the ones least able to afford that.
+ *
+ * 🔴 NEVER THE REMOVED CONTENT. Republishing what was hidden defeats hiding it,
+ * and would make the log the most reliable place to find exactly the material
+ * moderation exists to remove.
+ *
+ * What remains is the accountable part: something was removed, from where, by
+ * which moderator, when, and under which reason category. Enough to audit a
+ * moderator; not enough to relitigate a victim.
+ *
+ * Public — no auth. A log only staff can read is not a public log.
+ */
+export async function listModerationLog(db, { limit = 50 } = {}) {
+  const capped = Math.min(200, Math.max(1, Number(limit) || 50));
+  const { rows } = await db.query(
+    `SELECT f.id, f.target_type, f.reason, f.resolved_at,
+            COALESCE(mu.display_name, mu.username) AS moderator,
+            t.short_id AS thread_short_id, t.slug AS thread_slug, t.title AS thread_title,
+            p.position AS post_position,
+            CASE WHEN f.target_type = 'post' THEN p.status ELSE t.status END AS target_status
+       FROM forum_flags f
+       LEFT JOIN users mu ON mu.id = f.resolved_by
+       LEFT JOIN forum_posts p   ON f.target_type = 'post' AND p.id = f.target_id
+       LEFT JOIN forum_threads t ON t.id = COALESCE(p.thread_id,
+                                     CASE WHEN f.target_type = 'thread' THEN f.target_id END)
+      WHERE f.status = 'actioned'
+      ORDER BY f.resolved_at DESC
+      LIMIT $1`,
+    [capped],
+  );
+
+  // One decision per target, not one row per report. Three people reporting the
+  // same post produced three flag rows and ONE moderator decision; listing it
+  // three times would misrepresent both the volume of moderation and the
+  // amount of trouble a single author caused.
+  const seen = new Set();
+  const out = [];
+  for (const r of rows) {
+    const key = `${r.target_type}:${r.thread_short_id}:${r.post_position ?? 'thread'}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      at: r.resolved_at,
+      what: r.target_type,
+      // 'hidden' vs 'locked' vs the author's own 'deleted' are different facts.
+      // The log states which, because "removed" flattens a moderator decision
+      // and a retraction into one word.
+      outcome: r.target_status,
+      reason: r.reason,
+      moderator: r.moderator || 'a moderator',
+      thread: r.thread_short_id
+        ? { shortId: r.thread_short_id, title: r.thread_title,
+            url: `/forum/t/${r.thread_short_id}/${r.thread_slug}` }
+        : null,
+    });
+  }
+  return out;
+}

@@ -94,3 +94,70 @@ test('the queue is bounded and its status filter is validated', () => {
   assert.match(body, /\['open', 'reviewing', 'actioned', 'dismissed'\]\.includes\(status\)/,
     'an unknown status must fall back, not interpolate into the query.');
 });
+
+// ── the public moderation log (§7.2, §11) ─────────────────────────────────
+
+const SERVICE = codeOnly(readFileSync(src('services', 'forumService.js'), 'utf8'));
+const logFn = () => {
+  const s = SERVICE.slice(SERVICE.indexOf('export async function listModerationLog'));
+  const next = s.indexOf('\nexport ');
+  return next === -1 ? s : s.slice(0, next);
+};
+
+test('the log is PUBLIC — no auth', () => {
+  // "If the thesis is openness, moderation is where it is tested." A log only
+  // staff can read is not a public log.
+  const route = ROUTES.slice(ROUTES.indexOf("router.get('/moderation-log'"));
+  const decl = route.slice(0, route.indexOf('\n'));
+  assert.doesNotMatch(decl, /authMiddleware/,
+    'gating the moderation log behind auth defeats its entire purpose.');
+});
+
+test('🔴 ACTIONS taken, never ACCUSATIONS made — dismissals stay private', () => {
+  // Publishing a dismissed flag creates a permanent public record that a named
+  // person was reported for "abuse" and cleared. That is a worse outcome for an
+  // innocent author than the report ever was, and it turns the log into a
+  // weapon: anyone could put a neighbour into the public record by reporting
+  // them.
+  const body = logFn();
+  assert.match(body, /WHERE f\.status = 'actioned'/,
+    'only upheld decisions may be published.');
+  assert.doesNotMatch(body, /'dismissed'/,
+    'a dismissed report must never reach the public log.');
+});
+
+test('never the reporter', () => {
+  // Naming the accuser publicly makes reporting an act of open conflict, and
+  // the people most in need of the report button can least afford that.
+  const body = logFn();
+  assert.doesNotMatch(body, /reporter_id|reporter_name|reporter_kind/,
+    'the public log must not carry who reported.');
+});
+
+test('never the removed content', () => {
+  // Republishing what was hidden defeats hiding it, and would make the log the
+  // most reliable place to find exactly the material moderation removes.
+  const body = logFn();
+  assert.doesNotMatch(body, /p\.body|post_excerpt|detail/,
+    'the log states that something was removed, never what it said.');
+});
+
+test('one decision per target, not one row per report', () => {
+  // Three people reporting one post produced three flag rows and ONE moderator
+  // decision. Listing it three times misrepresents both the volume of
+  // moderation and how much trouble a single author caused.
+  const body = logFn();
+  assert.match(body, /const seen = new Set\(\)/, 'must dedup by target.');
+});
+
+test('the outcome distinguishes a moderator hide from an author deletion', () => {
+  // "removed" flattens a moderator decision and a retraction into one word.
+  const body = logFn();
+  assert.match(body, /outcome: r\.target_status/,
+    'the log must state hidden / locked, not a generic "removed".');
+});
+
+test('and it is bounded', () => {
+  assert.match(logFn(), /Math\.min\(200/);
+  assert.match(logFn(), /LIMIT \$1/);
+});

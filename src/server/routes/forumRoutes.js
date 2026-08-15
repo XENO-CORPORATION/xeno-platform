@@ -455,6 +455,23 @@ router.put('/threads/:shortId/subscription', authMiddleware, loadActor, handled(
  * button whose report went into a table with no reader.
  * ────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * GET /api/forum/moderation-log — PUBLIC. No auth, by design.
+ *
+ * §7.2/§11: "if the thesis is openness, moderation is where it is tested."
+ * A log only staff can read is not a public log.
+ *
+ * Carries actions TAKEN — never accusations made, never the reporter, never
+ * the removed content. See listModerationLog for why each of those is out.
+ */
+router.get('/moderation-log', async (req, res) => {
+  try {
+    res.json({ success: true, log: await svc.listModerationLog(req.db, { limit: req.query.limit }) });
+  } catch (error) {
+    return serverError(res, error, 'moderationLog');
+  }
+});
+
 /** GET /api/forum/flags?status=open — the review queue. Needs review_flags. */
 router.get('/flags', authMiddleware, loadActor, handled('listFlags', async (req, res) => {
   res.json({
