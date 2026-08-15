@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, NextDismiss, Sparkles } from '@/lib/icons';
+import { getRelativeLuminance } from './chatTheme';
 import ChatUpdateDemoPanel from './ChatUpdateDemoPanel';
 import { captureDissolvePlate, runPixelDissolve } from './pixelDissolve';
 
@@ -156,12 +157,15 @@ const readChatThemeChipStyles = (): {
       return value || next;
     };
 
-    // Light shell uses a near-white canvas — pick light fallbacks when tokens are missing.
+    // Which fallbacks to reach for if a token is missing. Measured off the canvas rather than named,
+    // because the name is a snap: the brightness slider has twenty-one stops and only three of them
+    // are classes, so a position at 85% is CLASSED `chat-theme-light` while its canvas is #3b4048 —
+    // a dark one. Testing the colour asks the question the fallbacks actually care about, and it
+    // holds at every stop instead of the three that have names.
     const canvas = token('--chat-canvas', '');
-    const isLight =
-      canvas.toLowerCase() === '#ffffff'
-      || canvas.toLowerCase() === '#fff'
-      || themeHost.classList.contains('chat-theme-light');
+    // The palettes are all #rrggbb, which is what the helper parses. Anything else yields NaN, and
+    // NaN > 0.45 is false — the dark fallbacks, which is where this started.
+    const isLight = /^#[0-9a-f]{6}$/i.test(canvas) && getRelativeLuminance(canvas) > 0.45;
 
     if (isLight) {
       return {
