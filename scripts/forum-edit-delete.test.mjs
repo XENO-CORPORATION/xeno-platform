@@ -184,3 +184,65 @@ test('"edited" is finally RENDERED — the field existed and never appeared', ()
   assert.match(THREAD, /Edits are shown publicly/,
     'the editor should say so before you save, not after.');
 });
+
+// ── GDPR erasure: the forum's half ─────────────────────────────────────────
+
+const ERASE = codeOnly(readFileSync(src('utils', 'gdprErasure.js'), 'utf8'));
+
+test('erasure actually reaches forum content', () => {
+  // gdprErasure tombstones the BYLINE. A post body is free text written by the
+  // subject and routinely contains their own personal data — anonymising the
+  // author while leaving "my number is …" published is not erasure.
+  assert.match(ERASE, /eraseForumContent\(client, userId\)/,
+    'eraseSubject never touches forum content: every post and thread body the '
+    + 'subject wrote stays published after they ask to be erased.');
+  assert.match(ERASE, /import \{ eraseForumContent \}/, 'and it must import it.');
+});
+
+test('forum erasure runs INSIDE the erasure transaction', () => {
+  // A failure here must roll back the identity tombstone too, rather than
+  // reporting a half-erased subject as erased.
+  const i = ERASE.indexOf('eraseForumContent(client, userId)');
+  const commit = ERASE.indexOf("client.query('COMMIT')");
+  assert.ok(i > 0 && commit > i,
+    'eraseForumContent must be called before COMMIT, on the same client.');
+});
+
+test('erasure is SCOPED to the subject', () => {
+  // The failure mode is not subtle: an UPDATE missing its WHERE blanks the
+  // entire forum on one person's erasure request.
+  const body = fn('eraseForumContent');
+  const updates = body.match(/UPDATE forum_(posts|threads)[\s\S]*?(?=`)/g) || [];
+  assert.ok(updates.length >= 3, 'expected the posts, titles and reopen updates');
+  for (const u of updates) {
+    assert.match(u, /author_id = \$1|author_id = \(SELECT|WHERE t\.answer_post_id IN|t\.id IN \(SELECT/,
+      `an UPDATE in eraseForumContent is not scoped to the subject:\n${u.slice(0, 120)}`);
+  }
+});
+
+test('the subject\'s words go; OTHER PEOPLE\'S posts stay', () => {
+  const body = fn('eraseForumContent');
+  assert.match(body, /body = ''/,
+    "blanking the body is the erasure — and because search_vector is GENERATED "
+    + 'ALWAYS from body, it also drops the post out of the full-text index.');
+  assert.doesNotMatch(body, /thread_id IN \(SELECT id FROM forum_threads WHERE author_id[\s\S]{0,80}(DELETE|body = '')/,
+    'erasing a thread must NOT blank the answers other people wrote in it — '
+    + 'that is third-party data, destroyed on one person\'s request.');
+  assert.match(body, /title = '\[removed\]'/,
+    'a title is free text too, and the most-indexed sentence in the product.');
+});
+
+test('an erased accepted answer reopens its thread', () => {
+  const body = fn('eraseForumContent');
+  assert.match(body, /answer_post_id = NULL, status = 'open'/,
+    'a thread pointing at a blanked answer shows a resolved question with no '
+    + 'resolution, which stops anyone answering it.');
+  assert.match(body, /post_count = \(SELECT COUNT/,
+    'counts must be recomputed or threads claim replies that are gone.');
+});
+
+test('erasure takes a CLIENT, not a pool', () => {
+  assert.match(WRITE, /export async function eraseForumContent\(client, userId\)/,
+    'taking a pool would open a second connection outside the transaction, so a '
+    + 'failure would leave the identity erased and the content published.');
+});

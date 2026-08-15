@@ -1055,3 +1055,77 @@ export async function deletePost(db, user, postId) {
 
   return { ok: true, deleted: true, reopenedThread: Boolean(post.is_answer) };
 }
+
+// --------------------------------------------------------------------------
+// GDPR erasure — the forum's half (WP2)
+// --------------------------------------------------------------------------
+
+/**
+ * Remove a subject's authored forum CONTENT.
+ *
+ * `utils/gdprErasure.js` already tombstones the identity: it scrubs the `users`
+ * row to an id-derived sentinel and kills every session and token. What it
+ * cannot know about is the free text — a post body is authored by the subject
+ * and routinely contains their own personal data ("I'm at Acme, mail me at
+ * …"). Anonymising the byline while leaving the sentence "my number is …"
+ * published is not erasure.
+ *
+ * ⚠️ It is also why erasure could not simply DELETE the user row and lean on
+ * the `SET NULL` foreign keys: SET NULL removes the LINK, never the TEXT. The
+ * FK design is right — it protects other people's threads from collapsing when
+ * one participant leaves — but it is not an erasure mechanism.
+ *
+ * ── WHAT IS DELIBERATELY KEPT ───────────────────────────────────────────────
+ *
+ * Other people's posts, including the answers to a question this subject asked.
+ * Those are third-party content, and erasing them on one person's request would
+ * destroy data belonging to people who did not ask for anything. So a thread
+ * whose question is erased becomes a tombstone that still carries its answers:
+ * the asker is gone, the knowledge stays.
+ *
+ * Takes a CLIENT, not a pool — it must run inside the erasure transaction, so a
+ * failure here rolls back the identity tombstone too rather than reporting a
+ * half-erased subject as erased.
+ */
+export async function eraseForumContent(client, userId) {
+  // Bodies first. status='deleted' + body='' is exactly what deletePost does,
+  // and because search_vector is GENERATED ALWAYS from body, this drops every
+  // one of them out of the full-text index with no separate reindex.
+  const posts = await client.query(
+    `UPDATE forum_posts
+        SET status = 'deleted', body = '', deleted_at = NOW(),
+            is_answer = FALSE, accepted_at = NULL, accepted_by = NULL
+      WHERE author_id = $1 AND status <> 'deleted'`,
+    [userId],
+  );
+
+  // Titles are free text too, and a title is the most-indexed sentence in the
+  // product — it is what search matches and what every card shows.
+  const threads = await client.query(
+    `UPDATE forum_threads
+        SET title = '[removed]'
+      WHERE author_id = $1 AND title <> '[removed]'`,
+    [userId],
+  );
+
+  // A thread whose accepted answer was written by the subject must not keep
+  // pointing at a blanked post; it reopens, exactly as deletePost does.
+  await client.query(
+    `UPDATE forum_threads t
+        SET answer_post_id = NULL, status = 'open', resolved_at = NULL, resolved_by = NULL
+      WHERE t.answer_post_id IN (SELECT id FROM forum_posts WHERE author_id = $1)`,
+    [userId],
+  );
+
+  // Counts are recomputed from what is still visible, or every thread the
+  // subject replied to keeps claiming replies that are no longer there.
+  await client.query(
+    `UPDATE forum_threads t
+        SET post_count = (SELECT COUNT(*) FROM forum_posts p
+                           WHERE p.thread_id = t.id AND p.status = 'visible')
+      WHERE t.id IN (SELECT DISTINCT thread_id FROM forum_posts WHERE author_id = $1)`,
+    [userId],
+  );
+
+  return { postsErased: posts.rowCount, threadsErased: threads.rowCount };
+}
