@@ -36,7 +36,23 @@ type Thread = {
   postCount?: number;
 };
 
-const ForumThreadsWidget: React.FC<{ slug: string; limit?: number }> = ({ slug, limit = 4 }) => {
+/*
+ * ⚠️ THE WIDGET OWNS ITS SECTION WRAPPER, DELIBERATELY.
+ *
+ * The obvious composition — host renders <section>, widget renders the list —
+ * breaks the one property that matters: the host's wrapper would render even
+ * when the widget returns null, leaving an empty bordered band on every quiet
+ * product page. The decision "should anything appear here at all" and the
+ * markup that appears are the same decision, so they live in the same place.
+ *
+ * `className` lets a host match its own rhythm without taking that decision
+ * away from the widget.
+ */
+const ForumThreadsWidget: React.FC<{ slug: string; limit?: number; className?: string }> = ({
+  slug,
+  limit = 4,
+  className,
+}) => {
   const [threads, setThreads] = useState<Thread[] | null>(null);
 
   useEffect(() => {
@@ -56,7 +72,7 @@ const ForumThreadsWidget: React.FC<{ slug: string; limit?: number }> = ({ slug, 
   const resolved = threads.filter((t) => t.isResolved || t.status === 'resolved').length;
 
   return (
-    <section className="page-gutter pb-[clamp(56px,8vh,110px)] pt-[clamp(20px,3vh,40px)]">
+    <section className={className ?? 'page-gutter pb-[clamp(56px,8vh,110px)] pt-[clamp(20px,3vh,40px)]'}>
       <div className="mx-auto max-w-[820px]">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#756f66]">

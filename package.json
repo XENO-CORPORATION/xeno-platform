@@ -34,6 +34,7 @@
     "verify:acp-launch": "node scripts/verify-acp-launch-content.mjs",
     "smoke:public-auth": "node scripts/smoke-public-auth.mjs",
     "smoke:public-api": "node scripts/smoke-public-api.mjs",
+    "smoke:forum-widget": "node scripts/forum-widget-render.mjs",
     "smoke:forum": "node scripts/smoke-forum.mjs",
     "models:catalog": "node scripts/publish-local-model-catalog.mjs",
     "models:catalog:upload": "node scripts/publish-local-model-catalog.mjs --upload",

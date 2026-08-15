@@ -18,12 +18,22 @@ const codeOnly = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/
 
 const W = codeOnly(read('components', 'product', 'ForumThreadsWidget.tsx'));
 const PAGE = codeOnly(read('pages', 'ProductPage.tsx'));
+const LANDING = codeOnly(read('pages', 'ProductLanding.tsx'));
 
-test('the widget is RENDERED by the product page, not just written', () => {
-  assert.match(PAGE, /import ForumThreadsWidget from '\.\.\/components\/product\/ForumThreadsWidget'/);
-  assert.match(PAGE, /<ForumThreadsWidget slug=\{product\.slug\} \/>/,
-    'an unrendered component is a file, not a feature — the defect this repo has '
-    + 'shipped nine times.');
+test('🔴 the widget is rendered by BOTH branches of the product-page dispatcher', () => {
+  // `ProductPage` dispatches: products with a content module render
+  // ProductLanding, everything else renders LeanProductPage. Mounting the
+  // widget in one branch means it is mounted on the pages nobody visits —
+  // which is what shipped, and what the live render check caught.
+  //
+  // An unrendered component is a file, not a feature: the defect this repo has
+  // now shipped TEN times.
+  for (const [name, src] of [['ProductPage (lean)', PAGE], ['ProductLanding (rich)', LANDING]]) {
+    assert.match(src, /import ForumThreadsWidget from '\.\.\/components\/product\/ForumThreadsWidget'/,
+      `${name} must import the widget.`);
+    assert.match(src, /<ForumThreadsWidget\s+slug=\{product\.slug\}/,
+      `${name} must actually render it — nearly every real product takes the rich branch.`);
+  }
 });
 
 test('🔴 it renders NOTHING when the product has no threads', () => {
