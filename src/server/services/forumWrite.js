@@ -48,6 +48,29 @@ const RATE_LIMITS = {
   agent: { threads: 3, posts: 15 },
 };
 
+/**
+ * The first day costs more (§7.2 "new-account throttles").
+ *
+ * A brand-new account had the FULL budget on its first minute, which is the
+ * shape every spam run relies on: registering is cheap, so the only thing
+ * between a fresh account and 10 threads an hour was willingness to click
+ * Sign up.
+ *
+ * Deliberately not draconian. A genuinely enthusiastic new user asks two or
+ * three questions on their first day, and a throttle they can hit by being
+ * keen is one that teaches them to leave. 3 threads / 10 posts in an hour is
+ * well above real first-day behaviour and well below useful spam.
+ *
+ * New AGENTS are tighter again: an agent is least proven and its owner least
+ * accountable on day one, and an agent that genuinely needs more than one
+ * thread an hour that early is doing something a human should look at first.
+ */
+const NEW_ACCOUNT_WINDOW_HOURS = 24;
+const NEW_ACCOUNT_LIMITS = {
+  human: { threads: 3, posts: 10 },
+  agent: { threads: 1, posts: 5 },
+};
+
 export class ForumError extends Error {
   constructor(message, code, statusCode = 400) {
     super(message);
@@ -192,17 +215,35 @@ export async function voteWeightFor(db, userId, threadId) {
 // --------------------------------------------------------------------------
 
 async function assertWithinRateLimit(db, user, what) {
-  const limits = RATE_LIMITS[actorKind(user)] || RATE_LIMITS.human;
-  const cap = limits[what];
+  const kind = actorKind(user);
   const table = what === 'threads' ? 'forum_threads' : 'forum_posts';
+  // Count and account age in ONE round trip. Two queries would double the cost
+  // of every post to answer a question that is almost always "no".
   const { rows } = await db.query(
-    `SELECT COUNT(*)::int AS n FROM ${table}
-      WHERE author_id = $1 AND created_at > NOW() - INTERVAL '1 hour'`,
-    [user.id],
+    `SELECT (SELECT COUNT(*)::int FROM ${table}
+              WHERE author_id = $1 AND created_at > NOW() - INTERVAL '1 hour') AS n,
+            (u.created_at > NOW() - ($2 || ' hours')::interval) AS is_new
+       FROM users u WHERE u.id = $1`,
+    [user.id, String(NEW_ACCOUNT_WINDOW_HOURS)],
   );
+
+  // No user row is not a licence to post freely. Fail to the TIGHTER budget —
+  // the only ways here are a race with account deletion or a bug, and neither
+  // deserves the generous limit.
+  const isNew = rows[0] ? Boolean(rows[0].is_new) : true;
+  const table_limits = (isNew ? NEW_ACCOUNT_LIMITS : RATE_LIMITS)[kind]
+    || (isNew ? NEW_ACCOUNT_LIMITS : RATE_LIMITS).human;
+  const cap = table_limits[what];
+
   if (Number(rows[0]?.n ?? 0) >= cap) {
+    // The message says WHY. "Rate limit reached" on a new account reads as a
+    // broken product; "new accounts are limited for the first day" reads as a
+    // rule — and a rule with an end date is one people wait out rather than
+    // give up on.
     throw new ForumError(
-      `Rate limit reached (${cap} ${what}/hour). Try again shortly.`,
+      isNew
+        ? `New accounts are limited to ${cap} ${what} per hour for the first ${NEW_ACCOUNT_WINDOW_HOURS} hours. Try again shortly.`
+        : `Rate limit reached (${cap} ${what}/hour). Try again shortly.`,
       'rate_limited',
       429,
     );
