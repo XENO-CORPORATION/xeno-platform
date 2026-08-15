@@ -96,8 +96,18 @@ const ForumHeader: React.FC<{ viewer?: Viewer | null }> = ({ viewer }) => {
           <NotificationBell />
 
           {signedIn ? (
+            {/*
+              /overview, NOT /dashboard.
+
+              The first version linked to /dashboard, which is not a registered
+              route — and this SPA answers 200 with an empty shell for paths
+              that do not exist, so it looked fine in every check that reads a
+              status code. There is no profile page yet (WP5); /overview is the
+              real signed-in workspace, which is where "me" should lead until
+              there is somewhere better.
+            */}
             <Link
-              to="/dashboard"
+              to="/overview"
               className="flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.06]"
               title={name || 'Your account'}
             >
