@@ -34,7 +34,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Loader2, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -8671,14 +8671,13 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 </div>
                 <p className="mt-1 truncate text-[12px] text-[var(--chat-muted)]">{project.name}</p>
               </div>
-              <button
-                type="button"
+              <IconButton
+                icon={XDecl}
+                size="lg"
+                iconSize={16}
                 onClick={closeProjectSettings}
-                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] sm:h-8 sm:w-8"
                 aria-label="Close project settings"
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
+              />
             </div>
 
             {/* Mobile: tabs sit under the title so they do not crush into one row. */}
@@ -17600,17 +17599,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           aria-label="Search conversations"
                         />
                       </div>
-                      <button
-                        type="button"
+                      <IconButton
+                        icon={XDecl}
+                        size="lg"
+                        iconSize={15}
                         onClick={() => {
                           setIsHistorySearchOpen(false);
                         }}
                         aria-label="Close search"
                         title="Close search"
-                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                      >
-                        <X size={15} />
-                      </button>
+                      />
                     </div>
                   ) : (
                     <>
@@ -17618,8 +17616,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         XENO
                       </span>
                       <div className="flex flex-shrink-0 items-center gap-0.5">
-                        <button
-                          type="button"
+                        <IconButton
+                          icon={PanelLeftCloseDecl}
+                          size="lg"
+                          iconSize={16}
                           onClick={() => {
                             setIsHistorySearchOpen(false);
                             setHistorySearchTerm('');
@@ -17627,19 +17627,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           }}
                           aria-label="Close conversation history"
                           title="Close"
-                          className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                        >
-                          <PanelLeftClose size={16} aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
+                        />
+                        <IconButton
+                          icon={SearchDecl}
+                          size="lg"
+                          iconSize={16}
                           onClick={() => setIsHistorySearchOpen(true)}
                           aria-label="Search conversations"
                           title="Search"
-                          className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                        >
-                          <Search size={16} aria-hidden="true" />
-                        </button>
+                        />
                       </div>
                     </>
                   )}

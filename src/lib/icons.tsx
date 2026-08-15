@@ -207,6 +207,9 @@ export {
   GThumbsUp as ThumbsUpDecl,
   GThumbsDown as ThumbsDownDecl,
   GInfo as InfoDecl,
+  GX as XDecl,
+  GSearch as SearchDecl,
+  GPanelLeftClose as PanelLeftCloseDecl,
 };
 
 /* Different name, same meaning. */
