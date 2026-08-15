@@ -116,9 +116,17 @@ export type IconProps = Omit<SVGProps<SVGSVGElement>, 'ref'> & {
   readonly size?: number | string;
 };
 
+/* A mirror is only a mirror about the CENTRE. `transform-origin` governs the standalone `scale`
+   property exactly as it governs `transform`, so a glyph whose motion rule moves the origin — and
+   `arrow-right` does, `transform-origin: left center`, so it can shoot forward from its tail —
+   flips about that edge instead: `scale: -1 1` about the left edge lands the whole drawing one full
+   width to the LEFT of its own box. That is how a 14px arrow ended up outside a 32px button.
+   Pinning the origin here costs the mirrored copy nothing — the travel is a translate, which no
+   origin affects, and the stretch reads the same either way — and it is what keeps every flipped
+   glyph inside the control that hosts it. */
 const FLIP: Record<string, CSSProperties> = {
-  x: { scale: '-1 1' } as CSSProperties,
-  y: { scale: '1 -1' } as CSSProperties,
+  x: { scale: '-1 1', transformOrigin: 'center' } as CSSProperties,
+  y: { scale: '1 -1', transformOrigin: 'center' } as CSSProperties,
 };
 
 /**
