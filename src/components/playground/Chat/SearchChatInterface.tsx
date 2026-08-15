@@ -1276,7 +1276,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   </div>
                   <button
                     onClick={(e) => deleteConversation(conv.id, e)}
-                    className="flex-shrink-0 p-1 rounded text-[var(--chat-muted)] hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                    className="flex-shrink-0 p-1 rounded text-[var(--chat-muted)] hover:text-[var(--chat-danger)] hover:bg-[var(--chat-danger)]/15 opacity-0 group-hover:opacity-100 transition-all"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -1551,7 +1551,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                                 h3: ({ children }) => <h3 className="text-sm font-semibold text-[var(--chat-text)] mt-2 mb-1">{children}</h3>,
                                 code: ({ children }) => <code className="bg-[var(--chat-control)] px-1.5 py-0.5 rounded text-xs text-[var(--chat-text)]">{children}</code>,
                                 pre: ({ children }) => <pre className="bg-[var(--chat-control)] p-3 rounded-lg overflow-x-auto my-2">{children}</pre>,
-                                a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{children}</a>,
+                                a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-[var(--chat-accent)] underline decoration-[var(--chat-border)] underline-offset-2 transition-colors hover:decoration-[var(--chat-accent)]">{children}</a>,
                                 blockquote: ({ children }) => <blockquote className="border-l-2 border-[var(--chat-border)] pl-3 my-2 text-[var(--chat-muted)] italic">{children}</blockquote>,
                               }}
                             >
@@ -1775,6 +1775,11 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                       : 'left 150ms ease-out, top 150ms ease-out'
                   }}
                 >
+                  {/* The blue on this overlay is deliberate and it is the only hue in the file.
+                      Everything here belongs to one live activity — an agent driving a browser: the
+                      pointer, its trail, the ping ring, the step list, the "controlling browser"
+                      banner. That is CONTENT, in the grammar's sense, and content is where colour is
+                      allowed to live; the shell around it stays monochrome. One feature, one hue. */}
                   {/* Cursor icon with trail effect during movement */}
                   <div className={`relative ${agentCursor.action === 'moving' ? 'scale-110' : 'scale-100'} transition-transform duration-200`}>
                     <svg
@@ -1974,7 +1979,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                           </span>
                         )}
                       </div>
-                      <h4 className="text-sm font-medium text-blue-400 group-hover:underline mb-2 line-clamp-2">
+                      <h4 className="text-sm font-medium text-[var(--chat-accent)] underline-offset-2 group-hover:underline mb-2 line-clamp-2">
                         {result.title}
                       </h4>
                       <p className="text-xs text-[var(--chat-muted)] line-clamp-3">

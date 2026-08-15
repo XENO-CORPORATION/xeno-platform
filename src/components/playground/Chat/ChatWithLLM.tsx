@@ -985,7 +985,7 @@ const sourceHighlightStyles = `
     border-radius: 0.25rem;
     padding: 0 0.25rem;
     cursor: pointer;
-    color: #d1d5db; /* text-gray-300 for general text inside */
+    color: #d1d5db; /* text-[var(--chat-text)] for general text inside */
   }
 
   .source-highlight a,
@@ -1550,16 +1550,16 @@ const XenoSearchLoadingAnimation: React.FC<{
         {/* Search Icon with animated ring */}
         <div className="xeno-search-icon-wrapper">
           <div className="xeno-search-ring"></div>
-          <Search size={18} className="text-gray-300 relative z-10" />
+          <Search size={18} className="text-[var(--chat-text)] relative z-10" />
         </div>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
-            <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-[var(--chat-text)] flex items-center gap-2">
               <span className="xeno-search-title">Xeno Search</span>
               {progress !== undefined && progress > 0 && progress < 100 && (
-                <span className="text-xs font-medium text-gray-400">
+                <span className="text-xs font-medium text-[var(--chat-muted)]">
                   {Math.round(progress)}%
                 </span>
               )}
@@ -1574,7 +1574,7 @@ const XenoSearchLoadingAnimation: React.FC<{
           {/* Progress bar */}
           {progress !== undefined && progress > 0 && (
             <div className="mt-2 w-full">
-              <div className="h-1 bg-[#2a2a2d] rounded-full overflow-hidden">
+              <div className="h-1 bg-[var(--chat-control)] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-gray-400 to-white rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${Math.min(progress, 100)}%` }}
@@ -1621,17 +1621,17 @@ const XenoDeepSearchAnimationInline: React.FC<{
           </div>
           <div className="flex-1">
             <div className="flex items-center justify-between mb-1">
-              <h4 className="text-sm font-semibold text-white">
+              <h4 className="text-sm font-semibold text-[var(--chat-text)]">
                 🔍 Xeno Deep Search
               </h4>
               <span className="text-xs font-medium text-[var(--chat-accent)]">
                 {Math.round(progress)}%
               </span>
             </div>
-            <p className="text-xs text-gray-300 mb-2">
+            <p className="text-xs text-[var(--chat-text)] mb-2">
               {message}
             </p>
-            <div className="w-full bg-gray-700 rounded-full h-1.5">
+            <div className="w-full bg-[var(--chat-control)] rounded-full h-1.5">
               <div 
                 className="bg-[var(--chat-accent)] h-1.5 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${progress}%` }}
@@ -1641,7 +1641,7 @@ const XenoDeepSearchAnimationInline: React.FC<{
         </div>
         
         {data && (
-          <div className="text-xs text-gray-400">
+          <div className="text-xs text-[var(--chat-muted)]">
             {phase === 'analyzing_sources' && data.initial_sources_count && (
               <span>• Found {data.initial_sources_count} initial sources</span>
             )}
@@ -8756,7 +8756,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                     <button 
                         type="button"
                         onClick={handleConfirm}
-                        className="rounded-md px-4 py-1.5 text-sm font-medium text-white transition-colors"
+                        className="rounded-md px-4 py-1.5 text-sm font-medium text-[var(--chat-text)] transition-colors"
                         style={{
                           backgroundColor: 'var(--chat-danger)',
                         }}
@@ -10466,7 +10466,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 link.click();
                 document.body.removeChild(link);
               }}
-              className="relative z-10 p-2 rounded-md text-white hover:bg-white/10 active:scale-95 transition-all duration-150 ease-in-out"
+              className="relative z-10 p-2 rounded-md text-[var(--chat-text)] hover:bg-[var(--chat-hover)] active:scale-95 transition-all duration-150 ease-in-out"
               title="Download Image"
             >
               <Download size={20} />
@@ -10474,7 +10474,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           )}
           <button
             onClick={(e) => { e.stopPropagation(); onClose(); }}
-            className="relative z-10 p-2 ml-1 rounded-md text-white hover:bg-white/10 active:scale-95 transition-all duration-150 ease-in-out"
+            className="relative z-10 p-2 ml-1 rounded-md text-[var(--chat-text)] hover:bg-[var(--chat-hover)] active:scale-95 transition-all duration-150 ease-in-out"
             title="Close Fullscreen"
           >
             <X size={24} />
@@ -11452,14 +11452,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           >
           {/* Queue Container */}
           {queue.messages.length > 0 && (
-            <div className="mb-3 bg-[#0e0e10] border border-[#1e1e21] rounded-lg shadow-md">
-              <div className="w-full flex items-center justify-between p-3 text-left text-gray-300 rounded-lg">
+            <div className="mb-3 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg shadow-md">
+              <div className="w-full flex items-center justify-between p-3 text-left text-[var(--chat-text)] rounded-lg">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{queue.messages.length} in queue</span>
                 </div>
                 <button
                   onClick={toggleQueueExpansion}
-                  className="p-1 hover:bg-[#2a2a2d] transition-colors rounded"
+                  className="p-1 hover:bg-[var(--chat-control)] transition-colors rounded"
                 >
                   <ChevronDown 
                     size={16} 
@@ -11473,16 +11473,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   {queue.messages.map((queuedMessage, index) => (
                     <div 
                       key={queuedMessage.id}
-                      className="flex items-center justify-between p-2 bg-[#0e0e10]/80 rounded-md border border-[#1e1e21]/50"
+                      className="flex items-center justify-between p-2 bg-[var(--chat-surface)]/80 rounded-md border border-[var(--chat-border)]/50"
                     >
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <div className="w-4 h-4 rounded-full border-2 border-[#1e1e21] flex-shrink-0"></div>
+                        <div className="w-4 h-4 rounded-full border-2 border-[var(--chat-border)] flex-shrink-0"></div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm text-gray-300 truncate">
+                          <div className="text-sm text-[var(--chat-text)] truncate">
                             {queuedMessage.text || `Task ${index + 1}`}
                           </div>
                           {queuedMessage.attachedFiles.length > 0 && (
-                            <div className="text-xs text-gray-500 mt-1">
+                            <div className="text-xs text-[var(--chat-muted)] mt-1">
                               {queuedMessage.attachedFiles.length} file(s) attached
                             </div>
                           )}
@@ -11490,7 +11490,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       </div>
                       <button
                         onClick={() => removeFromQueue(queuedMessage.id)}
-                        className="p-1 text-gray-400 hover:text-[var(--chat-danger)] hover:bg-[var(--chat-danger)]/15 rounded transition-colors"
+                        className="p-1 text-[var(--chat-muted)] hover:text-[var(--chat-danger)] hover:bg-[var(--chat-danger)]/15 rounded transition-colors"
                       >
                         <X size={14} />
                       </button>
@@ -11516,7 +11516,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               </div>
             )}
             {attachedFiles.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2 border-b border-[#2a2a2d] pb-3">
+                <div className="mb-3 flex flex-wrap gap-2 border-b border-[var(--chat-border)] pb-3">
                     {attachedFiles.map((file) => (
                         <div
                             key={file.id}
@@ -11527,7 +11527,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     <img
                                         src={URL.createObjectURL(file.fileObject)}
                                         alt={file.name}
-                                        className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-[#1e1e21] group-hover:border-[#6b7280] transition-all duration-200 ease-out cursor-pointer group-hover:scale-[1.02]"
+                                        className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-[var(--chat-border)] group-hover:border-[var(--chat-muted)] transition-all duration-200 ease-out cursor-pointer group-hover:scale-[1.02]"
                                         onClick={() => {
                                             if (file.fileObject) {
                                                 setFullScreenImageUrl(URL.createObjectURL(file.fileObject));
@@ -11550,17 +11550,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             ) : (
                                 <div className="relative">
                                     <div
-                                        className={`h-11 rounded-lg flex items-center gap-2 px-3 bg-[#0e0e10] border border-[#1e1e21] group-hover:border-[#6b7280] transition-all duration-200 ease-out text-[13px] text-gray-300 group-hover:text-white ${file.fileObject ? 'cursor-pointer group-hover:scale-[1.01]' : 'cursor-default opacity-70'}`}
+                                        className={`h-11 rounded-lg flex items-center gap-2 px-3 bg-[var(--chat-surface)] border border-[var(--chat-border)] group-hover:border-[var(--chat-muted)] transition-all duration-200 ease-out text-[13px] text-[var(--chat-text)] group-hover:text-[var(--chat-text)] ${file.fileObject ? 'cursor-pointer group-hover:scale-[1.01]' : 'cursor-default opacity-70'}`}
                                         onClick={() => {
                                             if (file.fileObject) {
                                                 handleShowFileInContextPanel(file);
                                             }
                                         }}
                                     >
-                                        <FileText size={14} className={file.fileObject ? "text-gray-400 group-hover:text-gray-300" : "text-gray-600"} />
+                                        <FileText size={14} className={file.fileObject ? "text-[var(--chat-muted)] group-hover:text-[var(--chat-text)]" : "text-[var(--chat-muted)]"} />
                                         <span className="truncate max-w-[140px]" title={file.name}>{file.name}</span>
                                         {!file.fileObject && (
-                                            <span className="text-[11px] text-gray-600 ml-0.5">(recent)</span>
+                                            <span className="text-[11px] text-[var(--chat-muted)] ml-0.5">(recent)</span>
                                         )}
                                     </div>
                                     <button
@@ -11599,7 +11599,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   // Shift+Enter adds a new line (default behavior)
                 }}
                 rows={messages.length === 0 ? 2 : 2}
-                className={`w-full resize-none border-none bg-transparent px-1 text-[15px] leading-6 text-zinc-100 outline-none placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:shadow-none ${messages.length === 0 ? 'min-h-[3.25rem] pb-2 pt-0.5' : 'min-h-[3rem] max-h-[7.5rem] pb-1 pt-0.5'}`}
+                className={`w-full resize-none border-none bg-transparent px-1 text-[15px] leading-6 text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:outline-none focus:ring-0 focus:shadow-none ${messages.length === 0 ? 'min-h-[3.25rem] pb-2 pt-0.5' : 'min-h-[3rem] max-h-[7.5rem] pb-1 pt-0.5'}`}
                 style={{ maxHeight: messages.length === 0 ? '120px' : '120px' }}
               />
             </div>
@@ -11614,7 +11614,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <button
                           ref={attachButtonRef}
                           onClick={toggleAttachMenu}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] text-zinc-400 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/20 hover:bg-white/[0.04] hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-white/[0.08] disabled:hover:bg-transparent disabled:hover:text-zinc-400"
+                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--chat-border)] text-[var(--chat-muted)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[var(--chat-border)] disabled:hover:bg-transparent disabled:hover:text-[var(--chat-muted)]"
                           aria-label="Attach file"
                           disabled={!modelSupportsVision(selectedModel)}
                       >
@@ -11774,7 +11774,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               );
                             }
                             return (
-                              <span className={`text-xs tabular-nums ${isOverLimit ? 'text-[var(--chat-danger)]' : isNearLimit ? 'text-[var(--chat-text)]' : 'text-gray-400'}`}>
+                              <span className={`text-xs tabular-nums ${isOverLimit ? 'text-[var(--chat-danger)]' : isNearLimit ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'}`}>
                                 {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
                               </span>
                             );
@@ -11790,7 +11790,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             e.stopPropagation();
                             setIsReasonToggled(prev => !prev);
                           }}
-    className={`flex h-7 w-7 select-none items-center justify-center rounded-lg border border-white/[0.08] transition-[background-color,border-color,color,transform] duration-150 hover:border-white/20 hover:bg-white/[0.04] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${isReasonToggled ? 'bg-white/[0.06] text-zinc-200' : 'text-zinc-600'}`}
+    className={`flex h-7 w-7 select-none items-center justify-center rounded-lg border border-[var(--chat-border)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${isReasonToggled ? 'bg-[var(--chat-hover)] text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'}`}
   >
     <Brain size={14} />
                         </button>
@@ -11803,7 +11803,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <button
                         onClick={addToQueue}
                         title="Add this message to the queue"
-                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#2a2a2d] text-white transition-colors hover:bg-[#3a3a3d]"
+                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--chat-control)] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-control-strong)]"
                       >
                         <Plus size={16} />
                       </button>
@@ -11812,7 +11812,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         onClick={handleStopGeneration}
                         title="Stop generating"
                         aria-label="Stop generating"
-                        className={`${composerActionButtonSizeClass} flex items-center justify-center bg-[#0e0e10] text-white transition-all hover:bg-[#2a2a2d] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70`}
+                        className={`${composerActionButtonSizeClass} flex items-center justify-center bg-[var(--chat-surface)] text-[var(--chat-text)] transition-all hover:bg-[var(--chat-control)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-muted)]`}
                       >
                         {/* The last lucide import left in the chat's chrome, and it was not being used
                             as an icon: `fill="currentColor" strokeWidth={0}` is a call site asking for a
@@ -11837,7 +11837,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           type="button"
                           data-voice-mode-trigger
                           onClick={() => (isVoiceModeMenuOpen ? closeVoiceMenu() : openVoiceMenu())}
-                          className="absolute right-full mr-1 flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-[#242426] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                          className="absolute right-full mr-1 flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-control)] hover:text-[var(--chat-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-muted)]"
                           aria-label="Voice input options"
                           aria-expanded={isVoiceModeMenuOpen}
                           aria-haspopup="dialog"
@@ -11853,7 +11853,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           onPointerCancel={handleVoicePointerUp}
                           onKeyDown={handleVoiceKeyDown}
                           onKeyUp={handleVoiceKeyUp}
-                          className={`${composerActionButtonSizeClass} flex items-center justify-center transition-all relative ${isVoiceInputActive ? 'bg-[#2a2a2d]/70' : 'bg-[#0e0e10] hover:bg-[#2a2a2d]'}`}
+                          className={`${composerActionButtonSizeClass} flex items-center justify-center transition-all relative ${isVoiceInputActive ? 'bg-[var(--chat-control)]/70' : 'bg-[var(--chat-surface)] hover:bg-[var(--chat-control)]'}`}
                           aria-label={isVoiceInputActive ? 'Stop voice input' : voiceInputMode === 'hold' ? 'Hold to record voice input' : 'Start voice input'}
                         >
                           {isVoiceInputActive && (
@@ -11861,7 +11861,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               <span className="animate-ping h-3.5 w-3.5 rounded-full bg-[var(--chat-danger)] opacity-75"></span>
                             </span>
                           )}
-                          <Mic size={16} className={`relative ${isVoiceInputActive ? 'text-[var(--chat-danger)]' : 'text-gray-400'}`} />
+                          <Mic size={16} className={`relative ${isVoiceInputActive ? 'text-[var(--chat-danger)]' : 'text-[var(--chat-muted)]'}`} />
                         </button>
                         {(isVoiceModeMenuOpen || isVoiceMenuClosing) && (
                           <div
@@ -12085,22 +12085,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             --xeno-goo-inset: 8px;
             --xeno-goo-radius: 6px;
           }
-          .chat-themed [class*="bg-[#0a0a0b]"] { background-color: var(--chat-canvas) !important; }
-          .chat-themed [class*="bg-[#0e0e10]"],
+          .chat-themed [class*="bg-[var(--chat-canvas)]"] { background-color: var(--chat-canvas) !important; }
+          .chat-themed [class*="bg-[var(--chat-surface)]"],
           .chat-themed [class*="bg-[#0f0f11]"],
           .chat-themed [class*="bg-[#111113]"],
           .chat-themed [class*="bg-[#121214]"] { background-color: var(--chat-surface) !important; }
-          .chat-themed [class*="bg-[#141416]"],
+          .chat-themed [class*="bg-[var(--chat-elevated)]"],
           .chat-themed [class*="bg-[#161618]"],
           .chat-themed [class*="bg-[#18181a]"],
           .chat-themed [class*="bg-[#18171b]"],
           .chat-themed [class*="bg-[#0c0c0e]"] { background-color: var(--chat-elevated) !important; }
           .chat-themed [class*="bg-[#1e1e21]"],
           .chat-themed [class*="bg-[#232021]"],
-          .chat-themed [class*="bg-[#242426]"],
+          .chat-themed [class*="bg-[var(--chat-control)]"],
           .chat-themed [class*="bg-[#252527]"] { background-color: var(--chat-control) !important; }
-          .chat-themed [class*="bg-[#2a2a2d]"],
-          .chat-themed [class*="bg-[#3a3a3d]"] { background-color: var(--chat-control-strong) !important; }
+          .chat-themed [class*="bg-[var(--chat-control)]"],
+          .chat-themed [class*="bg-[var(--chat-control-strong)]"] { background-color: var(--chat-control-strong) !important; }
           /* Only bare bg-black* fills — not hover:bg-black/… class substrings. */
           .chat-themed [class~="bg-black"],
           .chat-themed [class*=" bg-black/"],
@@ -12239,43 +12239,43 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             outline: 1px solid var(--chat-text);
             outline-offset: 3px;
           }
-          .chat-themed [class*="text-white"],
-          .chat-themed [class*="text-zinc-100"],
-          .chat-themed [class*="text-zinc-200"],
-          .chat-themed [class*="text-gray-200"],
-          .chat-themed [class*="text-gray-300"] { color: var(--chat-text) !important; }
-          .chat-themed [class*="text-gray-400"],
-          .chat-themed [class*="text-gray-500"],
-          .chat-themed [class*="text-gray-600"],
-          .chat-themed [class*="text-zinc-500"],
-          .chat-themed [class*="text-zinc-600"] { color: var(--chat-muted) !important; }
+          .chat-themed [class*="text-[var(--chat-text)]"],
+          .chat-themed [class*="text-[var(--chat-text)]"],
+          .chat-themed [class*="text-[var(--chat-text)]"],
+          .chat-themed [class*="text-[var(--chat-text)]"],
+          .chat-themed [class*="text-[var(--chat-text)]"] { color: var(--chat-text) !important; }
+          .chat-themed [class*="text-[var(--chat-muted)]"],
+          .chat-themed [class*="text-[var(--chat-muted)]"],
+          .chat-themed [class*="text-[var(--chat-muted)]"],
+          .chat-themed [class*="text-[var(--chat-muted)]"],
+          .chat-themed [class*="text-[var(--chat-muted)]"] { color: var(--chat-muted) !important; }
           .chat-themed [class*="placeholder:text-gray"]::placeholder,
           .chat-themed [class*="placeholder:text-zinc"]::placeholder {
             color: var(--chat-muted) !important;
             opacity: 0.9 !important;
           }
-          .chat-themed [data-chat-composer-shell] [class*="text-white"],
-          .chat-themed [data-chat-composer-shell] [class*="text-zinc-100"],
-          .chat-themed [data-chat-composer-shell] [class*="text-zinc-200"],
-          .chat-themed [data-chat-composer-shell] [class*="text-gray-200"],
-          .chat-themed [data-chat-composer-shell] [class*="text-gray-300"] { color: var(--chat-surface-text) !important; }
-          .chat-themed [data-chat-composer-shell] [class*="text-gray-400"],
-          .chat-themed [data-chat-composer-shell] [class*="text-gray-500"],
-          .chat-themed [data-chat-composer-shell] [class*="text-gray-600"],
-          .chat-themed [data-chat-composer-shell] [class*="text-zinc-500"],
-          .chat-themed [data-chat-composer-shell] [class*="text-zinc-600"],
+          .chat-themed [data-chat-composer-shell] [class*="text-[var(--chat-text)]"],
+          .chat-themed [data-chat-composer-shell] [class*="text-[var(--chat-text)]"],
+          .chat-themed [data-chat-composer-shell] [class*="text-[var(--chat-text)]"],
+          .chat-themed [data-chat-composer-shell] [class*="text-[var(--chat-text)]"],
+          .chat-themed [data-chat-composer-shell] [class*="text-[var(--chat-text)]"] { color: var(--chat-surface-text) !important; }
+          .chat-themed [data-chat-composer-shell] [class*="text-[var(--chat-muted)]"],
+          .chat-themed [data-chat-composer-shell] [class*="text-[var(--chat-muted)]"],
+          .chat-themed [data-chat-composer-shell] [class*="text-[var(--chat-muted)]"],
+          .chat-themed [data-chat-composer-shell] [class*="text-[var(--chat-muted)]"],
+          .chat-themed [data-chat-composer-shell] [class*="text-[var(--chat-muted)]"],
           .chat-themed [data-chat-composer-shell] [class*="placeholder:text-gray"]::placeholder,
           .chat-themed [data-chat-composer-shell] [class*="placeholder:text-zinc"]::placeholder {
             color: var(--chat-surface-muted) !important;
           }
           .chat-themed [class*="text-[#f6b98b]"] { color: var(--chat-text) !important; }
           .chat-themed [class*="border-white"],
-          .chat-themed [class*="border-[#1e1e21]"],
+          .chat-themed [class*="border-[var(--chat-border)]"],
           .chat-themed [class*="border-[#232021]"],
-          .chat-themed [class*="border-[#2a2a2d]"] { border-color: var(--chat-border) !important; }
+          .chat-themed [class*="border-[var(--chat-border)]"] { border-color: var(--chat-border) !important; }
           .chat-themed [class*="hover:bg-black"]:hover,
-          .chat-themed [class*="hover:bg-[#2a2a2d]"]:hover,
-          .chat-themed [class*="hover:bg-[#3a3a3d]"]:hover { background-color: var(--chat-hover) !important; }
+          .chat-themed [class*="hover:bg-[var(--chat-control)]"]:hover,
+          .chat-themed [class*="hover:bg-[var(--chat-control-strong)]"]:hover { background-color: var(--chat-hover) !important; }
           .chat-themed .prose h1,
           .chat-themed .prose h2,
           .chat-themed .prose h3,
@@ -12871,7 +12871,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               onClick={() => setIsHistoryOpen(true)}
               aria-label="Open conversation history"
               title="Open history"
-              className="animate-chat-history-chrome-enter flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08] text-white/80 transition-colors hover:border-white/20 hover:bg-[var(--chat-hover)] hover:text-white active:scale-[0.98]"
+              className="animate-chat-history-chrome-enter flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--chat-border)] text-[var(--chat-text)]/80 transition-colors hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98]"
             >
               <PanelLeftOpen size={16} aria-hidden="true" />
             </button>
@@ -12882,13 +12882,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               }}
               aria-label={isTaskbarHidden ? 'Show toolbar' : 'Hide toolbar'}
               title={isTaskbarHidden ? 'Show toolbar' : 'Hide toolbar'}
-              className="animate-chat-history-chrome-enter-delay flex h-9 items-center px-1 font-display text-[1.05rem] font-semibold tracking-tight text-white/80 transition-colors hover:text-white active:scale-[0.98]"
+              className="animate-chat-history-chrome-enter-delay flex h-9 items-center px-1 font-display text-[1.05rem] font-semibold tracking-tight text-[var(--chat-text)]/80 transition-colors hover:text-[var(--chat-text)] active:scale-[0.98]"
             >
               XENO
             </button>
             {isProjectsPageOpen && (
               <span
-                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-zinc-500"
+                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-[var(--chat-muted)]"
                 aria-current="page"
               >
                 Projects
@@ -12896,7 +12896,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             )}
             {isArtifactsPageOpen && (
               <span
-                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-zinc-500"
+                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-[var(--chat-muted)]"
                 aria-current="page"
               >
                 Artifacts
@@ -12904,7 +12904,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             )}
             {isGlobalSettingsPageOpen && (
               <span
-                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-zinc-500"
+                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-[var(--chat-muted)]"
                 aria-current="page"
               >
                 Settings
@@ -12912,7 +12912,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             )}
             {isScheduledPageOpen && (
               <span
-                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-zinc-500"
+                className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-[var(--chat-muted)]"
                 aria-current="page"
               >
                 Scheduled
@@ -14183,7 +14183,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {/* Top Bar - matches PDF/Word interface style */}
         <div
           ref={topBarRef}
-          className={`chat-top-bar absolute top-0 left-0 z-30 flex main-content-transition bg-[#0a0a0b] ${
+          className={`chat-top-bar absolute top-0 left-0 z-30 flex main-content-transition bg-[var(--chat-canvas)] ${
             isMultiInterface ? 'flex-col px-2 py-1' : 'items-center px-0'
           }`}
           style={{
@@ -14272,7 +14272,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 const isNearLimit = totalUsagePercent > 0.9;
                 const isOverLimit = totalUsagePercent > 1;
                 return (
-                  <span className={`text-xs tabular-nums ${isOverLimit ? 'text-[var(--chat-danger)]' : isNearLimit ? 'text-[var(--chat-text)]' : 'text-gray-400'}`}>
+                  <span className={`text-xs tabular-nums ${isOverLimit ? 'text-[var(--chat-danger)]' : isNearLimit ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'}`}>
                     {totalUsedTokens.toLocaleString()} / {maxTokens.toLocaleString()}
                   </span>
                 );
@@ -14449,7 +14449,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   className={topBarBtnClass(isThemeMenuOpen, 'gap-0.5 px-2')}
                 >
                   <ThemeTriggerIcon size={16} />
-                  <ChevronDown size={12} className={`text-gray-500 transition-transform duration-200 ${isThemeMenuOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={12} className={`text-[var(--chat-muted)] transition-transform duration-200 ${isThemeMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {isThemeMenuMounted && (
                 <div
@@ -14540,7 +14540,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <button
                     onClick={handleRefreshConversation}
                     disabled={isRefreshing}
-                    className={`flex items-center justify-center border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/80 hover:border-white/20 hover:bg-[var(--chat-hover)] transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`flex items-center justify-center border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-[var(--chat-text)]/80 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     aria-label="Refresh conversation"
                 >
                     <RefreshCcw size={16} className={isRefreshing ? 'animate-spin' : ''} />
@@ -14549,7 +14549,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               {isMultiInterface && messages.length > 0 && (
                 <button
                     onClick={handleNewChat}
-                    className="flex h-9 items-center justify-center rounded-lg border border-white/[0.08] px-3 py-1.5 text-white/80 transition-colors hover:border-white/20 hover:bg-[var(--chat-hover)]"
+                    className="flex h-9 items-center justify-center rounded-lg border border-[var(--chat-border)] px-3 py-1.5 text-[var(--chat-text)]/80 transition-colors hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)]"
                     aria-label="Start New Chat"
                 >
                     <SquarePen size={16} />
@@ -14561,8 +14561,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     setIsMessageSearchOpen(!isMessageSearchOpen);
                     if (isMessageSearchOpen) setMessageSearchQuery('');
                   }}
-                  className={`flex h-9 items-center justify-center rounded-lg border px-3 py-1.5 text-white/80 transition-colors hover:border-white/20 hover:bg-[var(--chat-hover)] ${
-                    isMessageSearchOpen ? 'border-gray-500' : 'border-[#1e1e21]'
+                  className={`flex h-9 items-center justify-center rounded-lg border px-3 py-1.5 text-[var(--chat-text)]/80 transition-colors hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] ${
+                    isMessageSearchOpen ? 'border-[var(--chat-muted)]' : 'border-[var(--chat-border)]'
                   }`}
                   aria-label="Search messages"
                 >
@@ -14620,7 +14620,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   {...(() => { const { ...menu } = chatMoreMenu.menuProps; return menu; })()}
                   key={isChatMoreMenuShown ? 'chat-more-menu-in' : 'chat-more-menu-out'}
                   aria-hidden={!isChatMoreMenuOpen}
-                  className={`${chatMoreGoo.hostProps.className} chat-goo absolute right-0 top-full z-30 mt-2 w-[220px] rounded-xl border border-[#2a2a2d] bg-[#141416] p-1 shadow-xl`}
+                  className={`${chatMoreGoo.hostProps.className} chat-goo absolute right-0 top-full z-30 mt-2 w-[220px] rounded-xl border border-[var(--chat-border)] bg-[var(--chat-elevated)] p-1 shadow-xl`}
                   style={{
                     backgroundColor: 'var(--chat-elevated)',
                     borderColor: 'var(--chat-border)',
@@ -14687,7 +14687,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     Delete
                   </MenuItem>
 
-                  <div className="my-1 border-t border-[#1e1e21]" />
+                  <div className="my-1 border-t border-[var(--chat-border)]" />
 
                   <div ref={themeMenuRef}>
                     {/* A disclosure, not a submenu — it grows the ⋯ menu rather than opening a
@@ -14847,7 +14847,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     Temporary chat
                   </MenuItem>
 
-                  <div className="my-1 border-t border-[#1e1e21]" />
+                  <div className="my-1 border-t border-[var(--chat-border)]" />
 
                   <MenuItem
                     onSelect={(event) => {
@@ -15059,11 +15059,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         return (
                             <div key={message.id} className="flex justify-start w-full pl-[1.125rem]">
                                 {isRefinementPlaceholder ? (
-                                    <div className="flex items-center gap-2 bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-3 py-1.5 text-sm">
+                                    <div className="flex items-center gap-2 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm">
                                         <span className="flex h-2 w-2 relative mr-1">
-                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-500 animate-pulse"></span>
+                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--chat-muted)] animate-pulse"></span>
                                         </span>
-                                        <span className="text-gray-400">Okay, let me figure out{ellipsisText}</span>
+                                        <span className="text-[var(--chat-muted)]">Okay, let me figure out{ellipsisText}</span>
                                     </div>
                                 ) : (
                                     <ThinkingAnimation
@@ -15086,13 +15086,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         return (
                             <div key={message.id} className="group relative flex justify-start w-full">
                                 <div className="flex items-center"> {/* Flex row for both elements */}
-                                    <div className="flex items-center gap-2 bg-[#0e0e10] border border-[#1e1e21] rounded-lg px-3 py-1.5 text-sm text-gray-400 italic">
+                                    <div className="flex items-center gap-2 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--chat-muted)] italic">
                                         <MessageSquareX size={16} className="mr-1 flex-shrink-0" /> 
                                         <span>{message.isXenoSearchCancelled ? message.text : 'Request Aborted'}</span>
                                     </div>
                                     <div 
                                         onClick={() => message.isXenoSearchCancelled ? handleTryWithoutSearch(message.id) : handleRegenerate(message.id)}
-                                        className="ml-3 text-xs font-sans font-medium text-gray-400 hover:text-white cursor-pointer opacity-0 group-hover:opacity-100 transition-all duration-150 ease-in-out"
+                                        className="ml-3 text-xs font-sans font-medium text-[var(--chat-muted)] hover:text-[var(--chat-text)] cursor-pointer opacity-0 group-hover:opacity-100 transition-all duration-150 ease-in-out"
                                     >
                                         {message.isXenoSearchCancelled 
                                             ? (isXenoSearchEnabled ? 'Try again' : 'Try without search')
@@ -15126,17 +15126,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                      <div
                                          className="chat-message-editor flex w-full max-w-[90%] flex-col gap-2 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-[var(--chat-text)] md:max-w-[75%]"
                                      >
-                                         <div className="rounded-lg border border-[var(--chat-accent)]/70 bg-[#0a0a0b]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-accent)] focus-within:ring-1 focus-within:ring-blue-500/25">
+                                         <div className="rounded-lg border border-[var(--chat-accent)]/70 bg-[var(--chat-canvas)]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-accent)] focus-within:ring-1 focus-within:ring-blue-500/25">
                                          <textarea
                                              ref={editInputRef}
                                              value={editText}
                                              onChange={(e) => setEditText(e.target.value)}
-                                             className="min-h-[2.75rem] w-full resize-y bg-transparent text-[15px] leading-6 text-white outline-none"
+                                             className="min-h-[2.75rem] w-full resize-y bg-transparent text-[15px] leading-6 text-[var(--chat-text)] outline-none"
                                                rows={1}
                                            />
                                          </div>
-                                         <div className="flex items-start gap-1.5 text-xs leading-4 text-zinc-500">
-                                           <Info size={13} className="mt-0.5 flex-shrink-0 text-zinc-500" aria-hidden="true" />
+                                         <div className="flex items-start gap-1.5 text-xs leading-4 text-[var(--chat-muted)]">
+                                           <Info size={13} className="mt-0.5 flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
                                            <p>
                                              Editing this message will create a new conversation branch. You can switch between branches using the arrow navigation buttons.
                                            </p>
@@ -15218,7 +15218,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                            type="button"
                                                            onClick={() => openUserImageFullView(img)}
                                                            aria-label={`View ${img.name} full size`}
-                                                           className="block h-[200px] w-[148px] flex-shrink-0 overflow-hidden rounded-xl focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
+                                                           className="block h-[200px] w-[148px] flex-shrink-0 overflow-hidden rounded-xl focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]"
                                                          >
                                                            <img
                                                              src={src}
@@ -15308,16 +15308,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                                       {/* Full message edit mode - transforms entire container into input box */}
                                       {editingAiMessageId === message.id ? (
-                                        <div className="w-full bg-[#0e0e10] border border-[#1e1e21] rounded-2xl p-4">
+                                        <div className="w-full bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-2xl p-4">
                                           <div className="flex items-center gap-2 mb-3">
-                                            <Pencil size={14} className="text-gray-500" />
-                                            <span className="text-sm text-gray-400">Editing Response</span>
-                                            <span className="text-xs text-gray-600 ml-auto">Markdown supported</span>
+                                            <Pencil size={14} className="text-[var(--chat-muted)]" />
+                                            <span className="text-sm text-[var(--chat-muted)]">Editing Response</span>
+                                            <span className="text-xs text-[var(--chat-muted)] ml-auto">Markdown supported</span>
                                           </div>
                                           <textarea
                                             value={editingAiContent}
                                             onChange={(e) => setEditingAiContent(e.target.value)}
-                                            className="w-full min-h-[300px] max-h-[600px] p-4 bg-[#121214] border border-[#1e1e21] rounded-xl text-white text-sm resize-y focus:outline-none focus:border-gray-500 leading-relaxed"
+                                            className="w-full min-h-[300px] max-h-[600px] p-4 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-xl text-[var(--chat-text)] text-sm resize-y focus:outline-none focus:border-[var(--chat-muted)] leading-relaxed"
                                             placeholder="Edit AI response..."
                                             autoFocus
                                             spellCheck={false}
@@ -15358,7 +15358,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               </button>
                                               <div className={`chat-collapsible ${showThinkingId === message.id ? 'chat-collapsible-open' : ''}`}>
                                                 <div className="chat-collapsible-inner">
-                                                  <div className="chat-collapsible-content mt-1.5 border-l-2 border-[#1e1e21] pl-3 text-sm prose prose-sm prose-invert max-w-none text-gray-400 prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-gray-200 prose-headings:font-medium leading-relaxed">
+                                                  <div className="chat-collapsible-content mt-1.5 border-l-2 border-[var(--chat-border)] pl-3 text-sm prose prose-sm prose-invert max-w-none text-[var(--chat-muted)] prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-[var(--chat-text)] prose-headings:font-medium leading-relaxed">
                                                 {message.thinkingContent ? (
                                                               <ReactMarkdown 
                                                                   remarkPlugins={[remarkGfm]}
@@ -15399,7 +15399,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                           {message.thinkingContent || ''} 
                                                               </ReactMarkdown>
                                                   ) : (
-                                                      <p className="text-gray-400 italic text-sm">
+                                                      <p className="text-[var(--chat-muted)] italic text-sm">
                                                           {message.modelIdUsed?.includes('google/gemini-2.5-pro') 
                                                               ? "Gemini 2.5 Pro provided a direct answer. Its detailed thought process wasn't explicitly formatted in this instance."
                                                               : message.modelIdUsed?.includes('x-ai/grok')
@@ -15471,7 +15471,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                             const actualUrl = extractActualUrl(source.uri);
                                                                             const favicon = sourceMetadataCache[actualUrl]?.favicon;
                                                                             return (
-                                                                                <div key={idx} style={{ background: favicon ? 'var(--chat-hover)' : sourceBadgeColor(actualUrl) }} className="w-6 h-6 rounded-md border-2 border-[var(--chat-surface)] flex items-center justify-center overflow-hidden font-mono text-[8px] font-bold text-white">
+                                                                                <div key={idx} style={{ background: favicon ? 'var(--chat-hover)' : sourceBadgeColor(actualUrl) }} className="w-6 h-6 rounded-md border-2 border-[var(--chat-surface)] flex items-center justify-center overflow-hidden font-mono text-[8px] font-bold text-[var(--chat-text)]">
                                                                                     {favicon ? (
                                                                                         <img src={favicon} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                                                                     ) : (
@@ -15556,11 +15556,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            !(message.searchInfo && message.searchInfo.sources && message.searchInfo.sources.length > 0 && !message.text) && (
                                               <div className="flex items-center gap-2 py-2">
                                                   <div className="flex items-center space-x-1 ai-response-dots">
-                                                      <div className="w-2 h-2 rounded-full bg-gray-400 dot"></div>
-                                                      <div className="w-2 h-2 rounded-full bg-gray-400 dot"></div>
-                                                      <div className="w-2 h-2 rounded-full bg-gray-400 dot"></div>
+                                                      <div className="w-2 h-2 rounded-full bg-[var(--chat-muted)] dot"></div>
+                                                      <div className="w-2 h-2 rounded-full bg-[var(--chat-muted)] dot"></div>
+                                                      <div className="w-2 h-2 rounded-full bg-[var(--chat-muted)] dot"></div>
                                                   </div>
-                                                  <span className="text-gray-400 text-sm">Generating response...</span>
+                                                  <span className="text-[var(--chat-muted)] text-sm">Generating response...</span>
                                               </div>
                                           )}
 
@@ -15710,9 +15710,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                   // off from it: this is a footnote about the message,
                                                   // not another control in the row, and at text-xs
                                                   // butted against the ⓘ it read as one.
-                                                  <div className="ml-2 flex items-center gap-3 text-[11px] text-gray-500">
+                                                  <div className="ml-2 flex items-center gap-3 text-[11px] text-[var(--chat-muted)]">
                                                       {message.timestamp && (
-                                                          <span className="text-gray-600">{formatMessageTime(message.timestamp)}</span>
+                                                          <span className="text-[var(--chat-muted)]">{formatMessageTime(message.timestamp)}</span>
                                                       )}
                                                       <span>{message.modelIdUsed.split('/').pop()}</span>
                                                       {message.answerTokenCount !== undefined && (
@@ -16990,14 +16990,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 {historyProjectSubmenuOpen && (
                   <div
                     // Follows its parent menu's radius — a submenu is the same object, continued.
-                    className="chat-history-popover absolute left-full top-0 z-[1001] ml-1 w-[180px] rounded-lg border border-[#1e1e21] bg-[#141416] p-1"
+                    className="chat-history-popover absolute left-full top-0 z-[1001] ml-1 w-[180px] rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] p-1"
                     style={{
                       backgroundColor: 'var(--chat-elevated)',
                       borderColor: 'var(--chat-border)',
                     }}
                   >
                     {chatProjects.length === 0 ? (
-                      <p className="px-2.5 py-1.5 text-[11px] text-zinc-500">No projects yet</p>
+                      <p className="px-2.5 py-1.5 text-[11px] text-[var(--chat-muted)]">No projects yet</p>
                     ) : (
                       chatProjects.map((project) => (
                         <MenuItem
@@ -17016,7 +17016,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         </MenuItem>
                       ))
                     )}
-                    <div className="my-1 border-t border-[#1e1e21]" />
+                    <div className="my-1 border-t border-[var(--chat-border)]" />
                       <MenuItem
                         onSelect={() => {
                         closeHistoryRowMenu();
@@ -17040,7 +17040,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           )}
               </div>
 
-              <div className="my-1 border-t border-[#1e1e21]" />
+              <div className="my-1 border-t border-[var(--chat-border)]" />
 
               <MenuItem
                 onSelect={() => {
@@ -17174,7 +17174,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   >
                     Last activity
                   </MenuItem>
-                  <div className="my-1 border-t border-[#1e1e21]" />
+                  <div className="my-1 border-t border-[var(--chat-border)]" />
                   <MenuItem
                     onMouseEnter={(event) => openSubmenu('group', event)}
                     onClick={(event) => openSubmenu('group', event)}
@@ -17207,7 +17207,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     {submenuOptions.map((option) => (
                       <React.Fragment key={String(option.value)}>
                         {'separatedBefore' in option && option.separatedBefore && (
-                          <div className="my-1 border-t border-[#1e1e21]" />
+                          <div className="my-1 border-t border-[var(--chat-border)]" />
                         )}
                         <MenuItem
                           selected={option.selected}
@@ -17431,8 +17431,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       indented ? 'pl-8' : ''
                     } ${
                       isActive
-                        ? 'bg-[var(--chat-control)] text-zinc-100'
-                        : 'text-zinc-100'
+                        ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                        : 'text-[var(--chat-text)]'
                     }`;
 
                   const pinnedDragFromIndex = historyDragId
@@ -17510,10 +17510,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             : ''
                         } ${
                           isListDragging
-                            ? 'cursor-grabbing text-zinc-500'
+                            ? 'cursor-grabbing text-[var(--chat-muted)]'
                             : isActive
-                              ? 'cursor-pointer bg-[var(--chat-control)] text-zinc-100'
-                              : `cursor-pointer text-zinc-500 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} hover:text-zinc-200`
+                              ? 'cursor-pointer bg-[var(--chat-control)] text-[var(--chat-text)]'
+                              : `cursor-pointer text-[var(--chat-muted)] ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} hover:text-[var(--chat-text)]`
                         } ${
                           !isListDragging
                             ? 'transition-[color,padding,background-color] duration-150 ease-out'
@@ -17542,7 +17542,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         title={convo.title}
                       >
                         {isEditingTitle ? (
-                          <div className="flex min-w-0 items-center gap-0.5 rounded border border-[#1e1e21] bg-[#0e0e10] pr-0.5">
+                          <div className="flex min-w-0 items-center gap-0.5 rounded border border-[var(--chat-border)] bg-[var(--chat-surface)] pr-0.5">
                                          <input
                               id={`edit-title-${convo.id}-${interfaceId}`}
                                            type="text"
@@ -17559,7 +17559,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 }
                               }}
                               onClick={(e) => e.stopPropagation()}
-                              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0.5 text-[13px] text-zinc-100 focus:outline-none"
+                              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0.5 text-[13px] text-[var(--chat-text)] focus:outline-none"
                             />
                             <button
                               type="button"
@@ -17568,7 +17568,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 e.stopPropagation();
                                 handleSaveConversationTitle();
                               }}
-                              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-zinc-100 transition-colors hover:bg-[var(--chat-hover)]"
+                              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
                               aria-label="Confirm rename"
                               title="Save"
                             >
@@ -17578,9 +17578,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                      ) : (
                           <span className="flex min-w-0 items-center gap-1.5">
                             {convo.isUnread && (
-                              <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-zinc-100" aria-label="Unread" />
+                              <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--chat-text)]" aria-label="Unread" />
                             )}
-                            <MessageSquare size={13} className="flex-shrink-0 text-zinc-500" aria-hidden="true" />
+                            <MessageSquare size={13} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
                             <HistoryConversationTitle title={convo.title} isSliding={isRowHovered} />
                                                </span>
                         )}
@@ -17612,7 +17612,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               );
                               toggleHistoryRowMenu(convo.id, rect.bottom + 4, left);
                             }}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-[var(--chat-hover)] hover:text-zinc-200"
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                             aria-label="Conversation actions"
                             aria-haspopup="menu"
                             aria-expanded={menuOpen}
@@ -17627,8 +17627,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                   const emptyPanel = (title: string, body: string) => (
                     <div className="px-3 py-10 text-center">
-                      <p className="text-[13px] font-medium text-zinc-100">{title}</p>
-                      <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-500">{body}</p>
+                      <p className="text-[13px] font-medium text-[var(--chat-text)]">{title}</p>
+                      <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--chat-muted)]">{body}</p>
                         </div>
                   );
 
@@ -17637,7 +17637,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       {/* Top nav — separate from Pinned / Recents */}
                       <div
                         {...historyNavGoo.hostProps}
-                        className={`${historyNavGoo.hostProps.className} chat-goo chat-goo-sidebar flex-shrink-0 space-y-0.5 border-b border-[#1e1e21] px-1.5 py-2`}
+                        className={`${historyNavGoo.hostProps.className} chat-goo chat-goo-sidebar flex-shrink-0 space-y-0.5 border-b border-[var(--chat-border)] px-1.5 py-2`}
                       >
                         {historyNavGoo.pill}
                                 <button
@@ -17647,7 +17647,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             handleNewChat();
                           }}
                         >
-                          <Plus size={16} className="flex-shrink-0 text-zinc-100" />
+                          <Plus size={16} className="flex-shrink-0 text-[var(--chat-text)]" />
                           <span>New</span>
                                 </button>
                         <button
@@ -17727,11 +17727,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         {historyNavView === 'chats' && (
                           conversationHistory.filter((c) => !c.isArchived).length === 0 && !searchTermLower ? (
                             <div className="px-2 py-8 text-center">
-                              <p className="text-[12px] text-zinc-600">No conversations yet</p>
+                              <p className="text-[12px] text-[var(--chat-muted)]">No conversations yet</p>
                             </div>
                           ) : sortedHistory.length === 0 ? (
                             <div className="px-2 py-8 text-center">
-                              <p className="text-[12px] text-zinc-600">No matching conversations</p>
+                              <p className="text-[12px] text-[var(--chat-muted)]">No matching conversations</p>
                             </div>
                           ) : (
                             <div className="space-y-3">
@@ -17752,12 +17752,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           type="button"
                                     onClick={() => setIsPinnedSectionOpen((open) => !open)}
                                     aria-expanded={isPinnedSectionOpen}
-                                    className="flex w-full items-center gap-1 px-2.5 pb-1 text-left text-[11px] font-semibold tracking-wide text-zinc-100 transition-colors hover:text-white"
+                                    className="flex w-full items-center gap-1 px-2.5 pb-1 text-left text-[11px] font-semibold tracking-wide text-[var(--chat-text)] transition-colors hover:text-[var(--chat-text)]"
                                   >
                                     <span>Pinned</span>
                                     <ChevronRight
                                       size={12}
-                                      className={`flex-shrink-0 text-zinc-500 transition-transform duration-200 ease-out ${
+                                      className={`flex-shrink-0 text-[var(--chat-muted)] transition-transform duration-200 ease-out ${
                                         isPinnedSectionOpen ? 'rotate-90' : 'rotate-0'
                                       }`}
                                       aria-hidden="true"
@@ -17784,12 +17784,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           type="button"
                                       onClick={() => setIsRecentsSectionOpen((open) => !open)}
                                       aria-expanded={isRecentsSectionOpen}
-                                      className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-left text-[11px] font-semibold tracking-wide text-zinc-100 transition-colors hover:text-white"
+                                      className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-left text-[11px] font-semibold tracking-wide text-[var(--chat-text)] transition-colors hover:text-[var(--chat-text)]"
                                     >
                                       <span>Recents</span>
                                       <ChevronRight
                                         size={12}
-                                        className={`flex-shrink-0 text-zinc-500 transition-transform duration-200 ease-out ${
+                                        className={`flex-shrink-0 text-[var(--chat-muted)] transition-transform duration-200 ease-out ${
                                           isRecentsSectionOpen ? 'rotate-90' : 'rotate-0'
                                         }`}
                                         aria-hidden="true"
@@ -17841,8 +17841,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         title="Filter"
                                         className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
                                           recentsFilterMenu
-                                            ? 'bg-[var(--chat-control)] text-zinc-100'
-                                            : 'text-zinc-500 hover:bg-[var(--chat-hover)] hover:text-zinc-200'
+                                            ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                                            : 'text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
                                         }`}
                                       >
                                         {/* Was a hand-drawn two-track slider, written to avoid lucide's
@@ -17861,12 +17861,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           </div>
                                   {isRecentsSectionOpen &&
                                     (recentConversations.length === 0 ? (
-                                      <p className="px-2.5 py-3 text-[12px] text-zinc-600">No matching conversations</p>
+                                      <p className="px-2.5 py-3 text-[12px] text-[var(--chat-muted)]">No matching conversations</p>
                                     ) : (
                                       recentGroups.map((group) => (
                                         <div key={group.key} className="space-y-0.5">
                                           {group.label && (
-                                            <p className="px-2.5 pt-1.5 pb-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                                            <p className="px-2.5 pt-1.5 pb-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
                                               {group.label}
                                             </p>
                                           )}
@@ -17886,7 +17886,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         type="button"
                               data-goo-row=""
                               onClick={() => openCreateProjectModal()}
-                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-zinc-100 transition-colors"
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-[var(--chat-text)] transition-colors"
                             >
                               <Plus size={15} />
                               <span>New project</span>
@@ -17918,12 +17918,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors ${
                                         isActiveProject
                                           ? 'bg-[var(--chat-hover)] text-[var(--chat-text)]'
-                                          : 'text-zinc-100'
+                                          : 'text-[var(--chat-text)]'
                                       }`}
                                     >
-                                      <Folder size={15} className="flex-shrink-0 text-zinc-500" />
+                                      <Folder size={15} className="flex-shrink-0 text-[var(--chat-muted)]" />
                                       <span className="min-w-0 flex-1 truncate">{project.name}</span>
-                                      <span className="text-[11px] text-zinc-500">{count}</span>
+                                      <span className="text-[11px] text-[var(--chat-muted)]">{count}</span>
                                     </button>
                                   );
                                 })}
@@ -17937,7 +17937,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             emptyPanel('No archived chats', 'Archive a conversation from the ⋯ menu to see it here.')
                           ) : (
                             <div className="space-y-0.5">
-                              <p className="px-2.5 pb-1 text-[11px] font-semibold tracking-wide text-zinc-100">
+                              <p className="px-2.5 pb-1 text-[11px] font-semibold tracking-wide text-[var(--chat-text)]">
                                 Archived
                               </p>
                               {archivedConversations.map((convo) => renderHistoryRow(convo, 'archived'))}
@@ -17947,7 +17947,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                         {historyNavView === 'artifacts' && !isArtifactsPageOpen && (
                           <div className="px-3 py-8 text-center">
-                            <p className="text-[12px] text-zinc-500">
+                            <p className="text-[12px] text-[var(--chat-muted)]">
                               Artifacts open in the main panel.
                             </p>
                           </div>
@@ -17955,7 +17955,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                         {historyNavView === 'global_settings' && !isGlobalSettingsPageOpen && (
                           <div className="px-3 py-8 text-center">
-                            <p className="text-[12px] text-zinc-500">
+                            <p className="text-[12px] text-[var(--chat-muted)]">
                               Settings open in the main panel.
                             </p>
                           </div>
@@ -17963,7 +17963,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                         {historyNavView === 'scheduled' && !isScheduledPageOpen && (
                           <div className="px-3 py-8 text-center">
-                            <p className="text-[12px] text-zinc-500">
+                            <p className="text-[12px] text-[var(--chat-muted)]">
                               Scheduled opens in the main panel.
                             </p>
                           </div>
