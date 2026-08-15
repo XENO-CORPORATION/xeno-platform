@@ -10336,7 +10336,12 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         // Hidden from assistive tech the moment the intent is gone, even though the box is still
         // on screen playing its exit.
         aria-hidden={!feedbackPopupInfo}
-        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme}`}
+        // The wrapper POSITIONS and nothing else. `chat-themed` paints `background: var(--chat-canvas)`,
+        // and a wrapper carrying it draws an opaque square-cornered rectangle right behind the rounded
+        // panel — visible at the corners, and visible all round while the panel is still scaled at 0.94
+        // on the way in. The panel's own inline `--chat-elevated` fill used to cover that, back when
+        // both were the same element; splitting them for the placement transform is what exposed it.
+        // The theme classes therefore ride on the panel, where a background is wanted.
         style={{
           ...feedbackPopupAnchorStyle(position, placement),
           // A menu on its way out must not swallow the click that follows it.
@@ -10348,7 +10353,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         // Remount on each flip, so a close that arrives mid-open restarts the animation instead of
         // being ignored as "same animation-name, already running".
         key={feedbackPopupPresence.shown ? 'feedback-popup-in' : 'feedback-popup-out'}
-        className="chat-history-popover"
+        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover`}
         style={{
           ...FEEDBACK_POPUP_PANEL_STYLE,
           ...feedbackPopupMotionStyle(
@@ -10429,7 +10434,8 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       <div
         ref={dislikePopupRef}
         aria-hidden={!dislikePopupInfo}
-        className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme}`}
+        // Positions only — see the like popover: `chat-themed` carries a canvas fill, so it belongs on
+        // the panel, not on the box that merely places it.
         style={{
           ...feedbackPopupAnchorStyle(position, placement),
           pointerEvents: dislikePopupPresence.shown ? 'auto' : 'none',
@@ -10438,7 +10444,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       >
         <div
           key={dislikePopupPresence.shown ? 'dislike-popup-in' : 'dislike-popup-out'}
-          className="chat-history-popover"
+          className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-popover`}
           style={{
             ...FEEDBACK_POPUP_PANEL_STYLE,
             ...feedbackPopupMotionStyle(
@@ -10548,6 +10554,13 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
    *
    * Dismissing is the honest answer rather than tracking: the menu is about one message, and once
    * that message has scrolled away the menu is about nothing.
+   *
+   * The gestures, not the `scroll` event. The transcript scrolls itself for its own reasons —
+   * measured: opening a menu on an older message is followed by the view returning to the bottom —
+   * and a `scroll` listener cannot tell that from the user pushing the wheel, so it closed the menu
+   * the instant it opened. `wheel` and `touchmove` only ever come from a person. Dragging the
+   * scrollbar is already covered: it starts with a mousedown outside the menu, which is the
+   * dismissal rule this popover has always had.
    */
   useEffect(() => {
     if (!feedbackPopupInfo && !dislikePopupInfo) return;
@@ -10558,8 +10571,12 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       setFeedbackPopupInfo(null);
       setDislikePopupInfo(null);
     };
-    chatArea.addEventListener('scroll', dismiss, { passive: true });
-    return () => chatArea.removeEventListener('scroll', dismiss);
+    chatArea.addEventListener('wheel', dismiss, { passive: true });
+    chatArea.addEventListener('touchmove', dismiss, { passive: true });
+    return () => {
+      chatArea.removeEventListener('wheel', dismiss);
+      chatArea.removeEventListener('touchmove', dismiss);
+    };
   }, [feedbackPopupInfo, dislikePopupInfo]);
   
   // --- NEW: Function to Delete a Conversation from History ---
@@ -15971,7 +15988,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               </div>
                                               {/* Inline Info Display */}
                                               {expandedInfoMessageId === message.id && message.modelIdUsed && (
-                                                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                                                  // A step down from the action bar's own size and set
+                                                  // off from it: this is a footnote about the message,
+                                                  // not another control in the row, and at text-xs
+                                                  // butted against the ⓘ it read as one.
+                                                  <div className="ml-2 flex items-center gap-3 text-[11px] text-gray-500">
                                                       {message.timestamp && (
                                                           <span className="text-gray-600">{formatMessageTime(message.timestamp)}</span>
                                                       )}
