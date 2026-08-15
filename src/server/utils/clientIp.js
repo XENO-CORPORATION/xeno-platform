@@ -1,3 +1,4 @@
+import { ipKeyGenerator } from 'express-rate-limit';
 /**
  * The visitor's real IP address.
  *
@@ -54,3 +55,26 @@ export function clientIp(req) {
 }
 
 export default clientIp;
+
+/**
+ * The rate-limit KEY for a client — not the same thing as its address.
+ *
+ * 🔴 An IPv6 user is not one address, it is a /64. ISPs hand out a /64 per
+ * customer, which is 18 quintillion addresses, so keying a rate limit on the
+ * full IPv6 address means an IPv6 client can rotate freely and NEVER hit a
+ * limit. IPv4 has no equivalent problem, which is why this stays invisible on a
+ * v4-only test and then does nothing in production.
+ *
+ * express-rate-limit ships `ipKeyGenerator` to collapse v6 to its /64 and leave
+ * v4 alone; using `clientIp` raw is why the library logs
+ * ERR_ERL_KEY_GEN_IPV6 at startup. That warning was being printed on every boot
+ * and read by nobody.
+ *
+ * Use this — never `clientIp` — as a `keyGenerator`. `clientIp` remains correct
+ * for LOGGING and audit, where the exact address is the point.
+ */
+export function rateLimitKey(req) {
+  const ip = clientIp(req);
+  if (!ip) return 'unknown';
+  return ip.includes(':') ? ipKeyGenerator(ip) : ip;
+}
