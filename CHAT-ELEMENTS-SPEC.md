@@ -375,6 +375,19 @@ Re-deciding these costs more than it saves.
   `padding-left: 32px`, which is what `hover:pl-8` said by hand. The remaining §9 entries are all
   colour or token questions, and none of them is a component's to answer.
 
+- **Six controls sit below the scale's floor.** The control scale starts at `xs` = 24px; the chat has
+  six squares at 18–20px — the two attachment-chip remove badges, the customize page's "i", and
+  three more. Each is a badge or a hint notched into something else, where six pixels of growth is six
+  more pixels of what it sits on being covered. `iconSize` reaches the glyph and deliberately not the
+  box: the library's position is that height is a surface-level variable, so an 18px control is a
+  size this app has not declared rather than an override to write at six call sites.
+
+- **Panels that are not menus.** `MenuItem` renders `role="menuitem"`, which has to be owned by a
+  `role="menu"`. Four rows across the chat want it — the attach panel's two, and the search view's
+  model dropdown — and each sits in a plain `<div>` with a click-outside ref. **Eight sibling panels
+  in ChatWithLLM already run on `useMenu`**, so the shape is established and the fix is small; it is
+  keyboard behaviour rather than a control swap, which is why it is here and not in an iteration.
+
 - **7 `ReferenceError`s** outside the chat — Office, AudioGeneration, ImageStudio. `npm run
   check:names` lists them with file and line. The fixes need their authors' intent (`smoothStroke`
   has a different signature; `currentEditIndex` does not exist as state). **Report, do not guess.**

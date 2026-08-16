@@ -11495,6 +11495,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             }
                                         }}
                                     />
+                                    {/* Stays hand-written: 18 x 18, and the control scale starts at
+                                        xs = 24. This is a badge notched into the chip's corner with a
+                                        -6px overhang; six pixels wider is six more pixels of the chip
+                                        covered, which is a visible change to the composition rather
+                                        than to the control. `iconSize` reaches the glyph and
+                                        deliberately not the box — the library's position is that
+                                        height is a surface-level variable, so an 18px control is a
+                                        size this app has not declared. Six controls in this chat sit
+                                        below the floor (spec §9). */}
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -11522,6 +11531,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             <span className="text-[11px] text-[var(--chat-muted)] ml-0.5">(recent)</span>
                                         )}
                                     </div>
+                                    {/* Stays hand-written — the file chip's remove badge, the image
+                                        chip's twin, same 18px box below the scale's floor. */}
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -11594,11 +11605,24 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           `}
                        >
                            <div className="space-y-1 p-2">
+                               {/* Stays hand-written, and so does its sibling below. Both are
+                                   `<MenuItem>` to the letter — a leading glyph, a label, a
+                                   `--chat-hover` fill on the row, and for Recent a trailing chevron
+                                   that says it leads somewhere, which is `submenu`.
+                                   What blocks them is that `MenuItem` renders `role="menuitem"`, and
+                                   a menuitem has to be owned by a `role="menu"`. This panel is a
+                                   plain div with a click-outside ref. EIGHT sibling panels in this
+                                   same file already run on `useMenu` — this is one of the few that
+                                   does not — so the fix is known and small, but it is keyboard
+                                   behaviour rather than a control swap, and it is not verifiable
+                                   against a mock with no files in it. */}
                                <button onClick={handleUploadFile} className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] hover:bg-[var(--chat-hover)]">
                                    <FolderUp size={18} className="text-[var(--chat-muted)]" />
                                    <span>Upload a file</span>
                                </button>
                                <div className="mx-1 my-1 border-t border-[var(--chat-border)]"></div>
+                               {/* Stays hand-written — Upload a file's sibling, same owning-menu
+                                   blocker, plus the chevron that would be `submenu`. */}
                                <button onClick={handleShowRecent} className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] hover:bg-[var(--chat-hover)]">
                                    <div className="flex items-center gap-3">
                                       <FileClock size={18} className="text-[var(--chat-muted)]" />
@@ -11719,6 +11743,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                             if (canCompress) {
                               // Show compress button only when CONVERSATION history is near limit
+                              /* Stays hand-written: it has no box. No padding, no height, no fill
+                                 and no border — a line of tabular numbers that swaps itself for the
+                                 word "Compress" under the pointer. A `Button` is a box with a height
+                                 and side padding, and giving this one either would move the
+                                 composer's status row. It reads as text because it is text that
+                                 happens to be clickable. */
                               return (
                                 <button
                                   onClick={() => compactConversation(selectedModel)}
