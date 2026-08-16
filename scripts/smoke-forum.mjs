@@ -134,6 +134,26 @@ async function main() {
       // hearsay, and an agent has nothing to hand the user.
       fail('mcp forum_search returned results with no citable URL');
     } else pass('mcp forum_search → hits, with citable URLs');
+
+    // 🔴 §5: the URL must RESOLVE, not merely be well-formed. "Citable" is a
+    // promise that a human can follow the link an agent handed them, and a URL
+    // built from a field the serializer does not publish looks perfect and
+    // points nowhere — that exact class of bug was caught by hand this week
+    // (`t.id` is undefined on a thread payload).
+    //
+    // Checked against the API rather than the HTML page on purpose: the thread
+    // page is a client-rendered SPA route, so curling it returns the shell for a
+    // real thread and a dead one alike — the documented false-200 trap. The API
+    // resource behind the short id is what proves the link is not dead.
+    const shortId = (text.match(/\/forum\/t\/([a-z0-9]+)/) || [])[1];
+    if (!shortId) {
+      fail('no short id could be parsed from the citable URL');
+    } else {
+      const { status, body: t } = await get(`/api/forum/threads/${shortId}`);
+      if (status !== 200) fail(`the citable URL is DEAD — /api/forum/threads/${shortId} → ${status}`);
+      else if (t?.thread?.shortId !== shortId) fail(`it resolves to a different thread (${t?.thread?.shortId})`);
+      else pass(`the citable URL resolves → "${String(t.thread.title).slice(0, 40)}…"`);
+    }
   }
 
   console.log('\nauth-gated (401, never 500):');
