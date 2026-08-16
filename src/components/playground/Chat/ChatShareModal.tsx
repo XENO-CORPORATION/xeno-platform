@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { IconButton, useDialog } from '@xenosystem/elements-react';
+import { Button, IconButton, useDialog } from '@xenosystem/elements-react';
 import { Building, Check, Copy, Globe, Lock, X, XDecl } from '@/lib/icons';
 import {
   VISIBILITY_OPTIONS,
@@ -484,25 +484,27 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
             </button>
           ) : (
             <div className="flex w-full gap-2 sm:w-auto">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="lg"
+                className="flex-1 sm:flex-none"
                 onClick={() => void handleDelete()}
-                className="h-10 flex-1 rounded-xl px-4 text-sm font-medium text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] sm:flex-none"
                 style={{ boxShadow: 'inset 0 0 0 1px var(--chat-border)' }}
               >
                 Delete link
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="ghost"
+                size="lg"
+                className="flex-1 sm:flex-none"
                 onClick={onClose}
-                className="h-10 flex-1 rounded-xl px-4 text-sm font-medium sm:flex-none"
                 style={{
                   backgroundColor: 'var(--chat-text)',
                   color: 'var(--chat-elevated)',
                 }}
               >
                 Done
-              </button>
+              </Button>
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { IconButton, MenuItem, MessageBubble, Spinner, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
+import { Button, IconButton, MenuItem, MessageBubble, Spinner, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
 // The palettes and the preference that picks one live outside this file now: the CSS at the entry
 // point, the resolution beside it. This component still OWNS the switcher — it is the only thing that
 // writes these keys — but owning a setting never meant being the only place allowed to read it.
@@ -8603,17 +8603,18 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 <p className="text-[12px] leading-relaxed text-[var(--chat-muted)]">
                   Deleting a project removes it and its files. Conversations are kept.
                 </p>
-                <button
-                  type="button"
+                <Button
+                  variant="danger"
+                  size="lg"
+                  className="w-full sm:w-auto sm:min-h-0 sm:py-2"
                   onClick={() => {
                     handleDeleteProject(project.id);
                     closeProjectSettings();
                   }}
-                  className="min-h-10 w-full rounded-lg border px-3 py-2.5 text-[12.5px] font-medium text-[var(--chat-danger)] transition-colors hover:bg-[var(--chat-hover)] sm:w-auto sm:min-h-0 sm:py-2"
                   style={{ borderColor: 'var(--chat-danger)' }}
                 >
                   Delete project
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -8623,32 +8624,35 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             style={{ borderColor: 'var(--chat-border)' }}
           >
             {activeSection === 'danger' ? (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="lg"
+                className="w-full sm:min-h-0 sm:w-auto sm:py-2"
                 onClick={closeProjectSettings}
-                className="min-h-10 w-full rounded-lg px-3.5 py-2.5 text-[13px] font-medium transition-colors sm:min-h-0 sm:w-auto sm:py-2"
                 style={{ backgroundColor: 'var(--chat-control)', color: 'var(--chat-text)' }}
               >
                 Close
-              </button>
+              </Button>
             ) : (
               <>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="w-full sm:min-h-0 sm:w-auto sm:py-2"
                   onClick={closeProjectSettings}
-                  className="min-h-10 w-full rounded-lg px-3.5 py-2.5 text-[13px] font-medium transition-colors sm:min-h-0 sm:w-auto sm:py-2"
                   style={{ backgroundColor: 'var(--chat-control)', color: 'var(--chat-text)' }}
                 >
                   Cancel
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="w-full sm:min-h-0 sm:w-auto sm:py-2"
                   onClick={saveProjectSettings}
-                  className="min-h-10 w-full rounded-lg px-3.5 py-2.5 text-[13px] font-medium transition-opacity sm:min-h-0 sm:w-auto sm:py-2"
                   style={{ backgroundColor: 'var(--chat-text)', color: 'var(--chat-canvas)' }}
                 >
                   Save changes
-                </button>
+                </Button>
               </>
             )}
           </div>
@@ -14234,13 +14238,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       className={`flex h-9 w-[8rem] items-center justify-center rounded-lg border px-3 py-1.5 text-sm transition-colors ${selectedPersona === persona.id ? 'border-[var(--chat-accent)] bg-[var(--chat-control)] text-[var(--chat-text)]' : 'border-[var(--chat-border)] bg-[var(--chat-elevated)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'}`}
                     >{persona.label}</button>
                   ))}
-                  <button onClick={() => { setIsSystemPromptOpen(false); setIsCustomPromptOpen(true); }}
-                    className={`flex h-9 w-[8rem] items-center justify-center rounded-lg border px-3 py-1.5 text-sm transition-colors ${selectedPersona === 'custom' ? 'border-[var(--chat-accent)] bg-[var(--chat-control)] text-[var(--chat-text)]' : 'border-[var(--chat-border)] bg-[var(--chat-elevated)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'}`}
-                  >Custom</button>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    onClick={() => { setIsSystemPromptOpen(false); setIsCustomPromptOpen(true); }}
+                  >
+                    Custom
+                  </Button>
                   {selectedPersona && (
-                    <button onClick={handleClearSystemPrompt}
-                      className="flex h-9 w-[8rem] items-center justify-center rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] px-3 py-1.5 text-sm text-[var(--chat-muted)] transition-colors hover:border-[var(--chat-danger)] hover:text-[var(--chat-danger)]"
-                    >Clear</button>
+                    <Button
+                      variant="danger"
+                      size="lg"
+                      onClick={handleClearSystemPrompt}
+                    >
+                      Clear
+                    </Button>
                   )}
                 </div>
                 <div className={`absolute left-0 top-full z-20 mt-[10px] origin-top-left overflow-hidden rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl transition-all duration-200 ease-out ${isCustomPromptOpen ? 'visible scale-100 opacity-100' : 'pointer-events-none invisible scale-95 opacity-0'}`}

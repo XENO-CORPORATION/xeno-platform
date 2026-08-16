@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { IconButton, TextInput } from '@xenosystem/elements-react';
+import { Button, IconButton, TextInput } from '@xenosystem/elements-react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Plus, Search, Trash2, Trash2Decl, SearchDecl } from '@/lib/icons';
 import {
@@ -643,13 +643,13 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
                   variants={staggerItemVariants}
                   className="flex justify-end gap-2"
                 >
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="lg"
                     onClick={() => setPanel('library')}
-                    className={`${RADIUS} h-9 px-3 text-[12.5px] text-[var(--chat-muted)] hover:text-[var(--chat-text)]`}
                   >
                     Cancel
-                  </button>
+                  </Button>
                   <button
                     type="button"
                     onClick={() => void handleCreate()}
@@ -893,13 +893,13 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
                   variants={staggerItemVariants}
                   className="flex justify-end gap-2"
                 >
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="lg"
                     onClick={() => setPanel('library')}
-                    className={`${RADIUS} h-9 px-3 text-[12.5px] text-[var(--chat-muted)] hover:text-[var(--chat-text)]`}
                   >
                     Cancel
-                  </button>
+                  </Button>
                   <button
                     type="button"
                     onClick={() => void handleImport()}
