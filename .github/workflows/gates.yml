@@ -115,6 +115,14 @@ jobs:
         with:
           node-version: '22'
 
+      # BOTH installs. The proofs live at the repo ROOT (scripts/*.mjs) and import
+      # `pg` from there; the services they drive live in src/server and import
+      # theirs from there. Installing only one leaves the other unresolvable —
+      # which is the same shape as the express-rate-limit failure on this
+      # workflow's first run, in the other direction.
+      - name: Install (root)
+        run: npm ci || npm install
+
       - name: Install (src/server)
         working-directory: src/server
         run: npm ci --omit=dev || npm install --omit=dev
