@@ -84,8 +84,20 @@ async function applySchema() {
   for (const f of files) {
     try {
       await pool.query(readFileSync(join(MIGRATIONS, f), 'utf8'));
+      console.log(`  applied ${f}`);
     } catch (err) {
-      throw new Error(`migration ${f} failed: ${err.message}`);
+      // Say what DOES exist. "relation X does not exist" while applying
+      // migrations in order means either the creating migration was skipped or
+      // it did not create what its name suggests — and those need opposite
+      // fixes, so guessing costs a CI round each time.
+      const { rows } = await pool.query(
+        "SELECT table_name FROM information_schema.tables WHERE table_name LIKE 'forum_%' ORDER BY 1",
+      ).catch(() => ({ rows: [] }));
+      throw new Error(
+        `migration ${f} failed: ${err.message}
+`
+        + `  forum tables present: ${rows.map((r) => r.table_name).join(', ') || '(none)'}`,
+      );
     }
   }
   return files.length;
