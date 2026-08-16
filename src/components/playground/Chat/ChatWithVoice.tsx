@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button, IconButton } from '@xenosystem/elements-react';
 import { useChatTheme } from './chatTheme';
-import { Mic, MicOff, Loader, StopCircle, Play, AlertTriangle, Check, MessageSquare, ArrowLeft, Trash, MessageSquareDecl, CheckDecl, CopyDecl, PauseDecl, PlayDecl } from '@/lib/icons';
+import { Mic, MicOff, Loader, StopCircle, Play, AlertTriangle, Check, MessageSquare, MessageSquareDecl, ArrowRightDecl, CheckDecl, CopyDecl, PauseDecl, PlayDecl, Trash2Decl } from '@/lib/icons';
 import { GoogleGenAI, Modality } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1806,6 +1806,13 @@ const ChatWithVoice: React.FC = () => {
           <div className="w-44 sm:w-48 h-[70px] mb-6 sm:mb-8 flex items-center justify-center relative">
             {renderWaveformVisualizer()}
           </div>
+          {/* Stays hand-written, and not marginally. It is `rounded-full` at p-5/p-6 — an 80-to-96px
+              CIRCLE, where this design system draws rounded squares and never circles, and where the
+              control scale stops at 36. `micButtonClasses()` branches five ways: disabled, an OpenAI
+              session with its own pulse, OpenAI without one, Google with another pulse, and every
+              other provider — several of them tinted with `--accent-color`, which belongs to no
+              token set here. There is no variant, no size and no axis in the library that any of
+              that maps onto. This is the voice view's subject, not one of its controls. */}
           <button
             onClick={handleMicButtonClick}
             title={getMicButtonTitle()}
@@ -1838,26 +1845,36 @@ const ChatWithVoice: React.FC = () => {
           <div className="absolute top-0 left-0 z-10 flex flex-shrink-0 items-center justify-between px-4 pt-4 pb-0 w-full bg-transparent">
             {/* Left side button */}
             <div className="flex items-center gap-2">
-              <button 
+              {/* Border plus a `--chat-surface` fill is `secondary` by the conversion table, and
+                  `h-9` is `lg`. The fill moves a step lighter doing it — the variants carry one
+                  control fill, `--xeno-control`, where this said `--chat-surface`.
+                  The arrow is `arrow-right` mirrored: the library draws one geometry and flips it
+                  where it is used, and `.chat-icon-flip-x` is how a component's glyph gets flipped
+                  when the call site cannot reach inside it. */}
+              <IconButton
+                icon={ArrowRightDecl}
+                variant="secondary"
+                size="lg"
+                iconSize={16}
+                className="chat-icon-flip-x"
                 onClick={() => setShowDetailedChat(false)}
-                className="flex items-center justify-center bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--chat-text)]/80 hover:border-[var(--chat-muted)] transition-colors h-9"
                 aria-label="Go back to voice interface"
                 title="Back to Voice"
-              >
-                <ArrowLeft size={16} />
-              </button>
+              />
             </div>
 
             {/* Right side button */}
             <div className="flex items-center gap-2">
-              <button 
+              {/* The back arrow's twin at the other end of the bar. */}
+              <IconButton
+                icon={Trash2Decl}
+                variant="secondary"
+                size="lg"
+                iconSize={16}
                 onClick={() => setMessages([])}
-                className="flex items-center justify-center bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--chat-text)]/80 hover:border-[var(--chat-muted)] transition-colors h-9"
                 aria-label="Clear chat history"
                 title="Clear Chat"
-              >
-                <Trash size={16} />
-              </button>
+              />
             </div>
           </div>
 
@@ -2040,6 +2057,13 @@ const ChatWithVoice: React.FC = () => {
           {/* Back to Voice Mode Button */}
           <div className="p-4">
             <div className="flex justify-center">
+              {/* Stays hand-written, on three counts. It is 48px tall where the control scale stops
+                  at 36, so no size token describes it. It rests on `--chat-hover`, which is a
+                  POINTER signal in this token set rather than a surface — a variant filling with it
+                  would read as permanently hovered, which is a mistake this project has already come
+                  close to making once. And `shadow-glass` + `backdrop-blur-xs` is a glass treatment
+                  the variants have no member for; it belongs to this view's voice chrome, not to the
+                  control grammar. */}
               <button
                 onClick={() => setShowDetailedChat(false)}
                 className="flex items-center gap-2 px-6 py-3 bg-[var(--chat-hover)] border border-[var(--chat-border)] rounded-xl text-[var(--chat-text)] hover:border-[var(--chat-muted)] transition-all duration-300 shadow-glass hover:shadow-glass-hover backdrop-blur-xs"
