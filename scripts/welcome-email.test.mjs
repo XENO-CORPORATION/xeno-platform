@@ -15,6 +15,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-for-unsubscribe-hmac';
 delete process.env.RESEND_API_KEY;
@@ -148,13 +149,111 @@ test('the welcome email contains a checklist, a CTA and a working unsubscribe li
   const sent = await captureSend(db, 'welcome', 'new@example.com', { displayName: 'Ana' });
 
   assert.ok(sent, 'a payload was transmitted');
-  assert.match(sent.subject, /get you set up/i, 'the subject invites an action');
   assert.match(sent.html, /Welcome, Ana/, 'greets the person by name');
 
-  // The checklist rows — the actual job of a welcome email.
-  for (const row of ['Download XENO Hub', 'Bring your own AI', 'Open a creative app', 'Read the docs']) {
-    assert.ok(sent.html.includes(row), `checklist row missing: ${row}`);
+  // ── Subject: pinned by PROPERTY, not by wording ──────────────────────────
+  //
+  // This previously asserted /get you set up/i — the literal copy of the
+  // template at the time. That makes any rewrite a test failure even when the
+  // rewrite is better, which trains people to edit the gate rather than think
+  // about it. What actually matters about a subject line is checked here
+  // instead, and one of these is a real deliverability constraint the old
+  // assertion did not cover at all.
+  assert.ok(sent.subject.trim().length > 0, 'there is a subject');
+  assert.match(sent.subject, /XENO/, 'the subject identifies the sender');
+  assert.ok(sent.subject.length <= 78,
+    `subject is ${sent.subject.length} chars — inboxes truncate past ~78, so the ask must land before the cut`);
+
+  // ── The steps: pinned by REACHABILITY, not by wording ────────────────────
+  //
+  // The old loop pinned four literal row titles. That is the same mistake in a
+  // different place, and it protects less than it looks: four exact strings can
+  // all be present while every link behind them 404s.
+  //
+  // 🔴 What a welcome email must never do is send someone to a dead end — this
+  // template's own comment says exactly that. So the gate now checks the thing
+  // that would actually hurt: every internal link resolves to a route the app
+  // has REGISTERED. A redesign proposed on 2026-08-16 included "Complete your
+  // profile" and "Launch your first workflow"; neither has a route, and this
+  // assertion is what catches that class of copy.
+  //
+  // Checked against src/App.tsx because this SPA answers 200 with an empty
+  // shell for paths that do not exist — a fetch would report every dead link as
+  // healthy.
+  const appSrc = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+
+  // 🔴 The CATCH-ALL is excluded, and that exclusion is the whole point.
+  //
+  // App.tsx registers path="*" — the 404 component. Left in the set it matches
+  // every string, so this gate would pass ANY link, including one that renders
+  // the not-found page. It would break OPEN: green forever, protecting nothing.
+  // (It also crashed outright — `new RegExp('^*$')` throws — which is the only
+  // reason the mistake was visible at all rather than silently useless.)
+  const routes = [...appSrc.matchAll(/path="([^"]+)"/g)]
+    .map((m) => m[1])
+    .filter((r) => r !== '*' && r !== '/*');
+
+  const routeMatches = (p) => routes.some((r) => {
+    if (r === p) return true;
+    // Escape regex metacharacters in the literal parts, then re-introduce the
+    // two React-Router wildcards deliberately:
+    //   :param  -> one path segment   (/product/:slug/download ~ /product/hub/download)
+    //   trailing /* -> optional subtree (/overview/* ~ /overview and /overview/chat)
+    const src = r
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/:[^/]+/g, '[^/]+')
+      .replace(/\/\*$/, '(/.*)?');
+    return new RegExp(`^${src}$`).test(p);
+  });
+
+  // The matcher must be able to FAIL. A gate that cannot fail is not evidence,
+  // and this one is two characters away from matching everything.
+  assert.ok(!routeMatches('/definitely-not-a-route-9f3a'),
+    'the route matcher accepts anything — it is not actually checking');
+  assert.ok(routeMatches('/docs'), 'the route matcher rejects a route that exists');
+
+  const internal = [...sent.html.matchAll(/href="https:\/\/xenostudio\.ai([^"]*)"/g)]
+    .map((m) => m[1].split('?')[0] || '/');
+
+  // A welcome email carries links of TWO kinds, and checking both against
+  // App.tsx is a category error — that is what the first version did, and it
+  // failed the unsubscribe link, which is a perfectly real endpoint.
+  //
+  //   /docs, /overview        React routes  -> App.tsx
+  //   /api/email/unsubscribe  Express route -> src/server
+  //
+  // Excluding /api/ would have been the easy fix and the wrong one: the
+  // unsubscribe link is the single link in this mail with a LEGAL obligation
+  // behind it, so it is the last one that should go unchecked.
+  const spa = [...new Set(internal.filter((p) => !p.startsWith('/api/')))];
+  const api = [...new Set(internal.filter((p) => p.startsWith('/api/')))];
+
+  assert.ok(spa.length >= 3, `expected at least 3 actionable links, found ${spa.length}`);
+  for (const p of spa) {
+    assert.ok(routeMatches(p),
+      `the welcome email links ${p}, which is NOT a registered route — a dead end in onboarding`);
   }
+
+  const serverSrc = readFileSync(new URL('../src/server/index.js', import.meta.url), 'utf8');
+  for (const p of api) {
+    // The mount must exist, and the remainder must be handled by the router it
+    // mounts. Both halves are needed: a mounted prefix with no matching handler
+    // still 404s.
+    const mounts = [...serverSrc.matchAll(/app\.use\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    const mount = mounts.filter((mt) => p === mt || p.startsWith(`${mt}/`))
+      .sort((a, b) => b.length - a.length)[0];
+    assert.ok(mount, `${p} has no matching app.use() mount in src/server/index.js`);
+
+    const rest = p.slice(mount.length) || '/';
+    const routerFile = serverSrc.match(
+      new RegExp(`import\\s+(\\w+)\\s+from\\s+'([^']*routes/[^']+)';[\\s\\S]*?app\\.use\\(\\s*['"]${mount.replace(/[/]/g, '\\/')}['"][^)]*\\1`),
+    );
+    assert.ok(routerFile, `could not resolve which router serves ${mount}`);
+    const routerSrc = readFileSync(new URL(`../src/server/${routerFile[2].replace(/^\.\//, '')}`, import.meta.url), 'utf8');
+    assert.ok(routerSrc.includes(`'${rest}'`) || routerSrc.includes(`"${rest}"`),
+      `${p} is mounted at ${mount} but ${routerFile[2]} defines no ${rest} handler — a dead unsubscribe link is a compliance problem, not a cosmetic one`);
+  }
+
   assert.match(sent.html, /<table role="presentation"/, 'table layout, so Outlook renders it');
 
   // The unsubscribe link must be present AND verify for this exact recipient.
