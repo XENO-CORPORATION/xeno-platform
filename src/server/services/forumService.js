@@ -755,8 +755,18 @@ export async function getPredicate(db, userId) {
  *   shipped  what was marked fixed since last time, from Loop C's write-back.
  *            Without it an agent re-reports things the team already fixed,
  *            which is exactly how a digest destroys its own credibility.
+ *
+ * ⚠️ `advanceCursor` exists because computing the digest STAMPS `last_digest_at`
+ * as a side effect, and that side effect belongs to the PULL channel alone. The
+ * webhook push has its own clock (`last_push_at`), and a push that quietly
+ * advanced the pull cursor would consume a window the agent's next poll was
+ * about to ask for — the poll would succeed, return nothing, and nothing in the
+ * system would report that anything had been lost.
+ *
+ * A read that writes is fine when it has one caller. The moment it has two, the
+ * write has to become the caller's decision.
  */
-export async function getDigest(db, userId, { since } = {}) {
+export async function getDigest(db, userId, { since, advanceCursor = true } = {}) {
   const sub = await getPredicate(db, userId);
   if (!sub) return { subscribed: false, sections: null };
 
@@ -774,14 +784,32 @@ export async function getDigest(db, userId, { since } = {}) {
     ? valid
     : new Date(Date.now() - 7 * 864e5);
 
-  const params = [windowStart.toISOString(), tags.length ? tags : null, space];
+  const tagList = tags.length ? tags : null;
 
-  const tagFilter = `(
-      $2::text[] IS NULL OR EXISTS (
+  /*
+   * 🔴 PARAMETERS ARE NUMBERED PER QUERY, NOT SHARED ACROSS ALL THREE.
+   *
+   * The first version passed one `[window, tags, space]` array to all three
+   * statements. `waiting` is deliberately STATE-based — "still open, still
+   * unanswered", with no time bound — so it never referenced $1, and Postgres
+   * cannot infer the type of a parameter a statement does not use:
+   *
+   *     error: could not determine data type of parameter $1
+   *
+   * Every digest call threw. It went unnoticed because `forum_subscriptions`
+   * held zero predicates until this feature existed, so the endpoint had never
+   * once run with a real subscriber — the query was correct in isolation and
+   * unreachable in practice, which is this codebase's signature failure.
+   *
+   * Each filter now takes its own placeholder index and each statement passes
+   * exactly the parameters it uses.
+   */
+  const tagFilter = (i) => `(
+      $${i}::text[] IS NULL OR EXISTS (
         SELECT 1 FROM forum_thread_tags tt JOIN forum_tags g ON g.id = tt.tag_id
-         WHERE tt.thread_id = t.id AND (g.namespace || ':' || g.value) = ANY($2::text[])
+         WHERE tt.thread_id = t.id AND (g.namespace || ':' || g.value) = ANY($${i}::text[])
       ))`;
-  const spaceFilter = '($3::text IS NULL OR s.slug = $3::text)';
+  const spaceFilter = (i) => `($${i}::text IS NULL OR s.slug = $${i}::text)`;
   const alive = "t.status NOT IN ('archived', 'deleted')";
 
   const [rising, waiting, shipped] = await Promise.all([
@@ -794,11 +822,11 @@ export async function getDigest(db, userId, { since } = {}) {
          FROM forum_threads t
          JOIN forum_spaces s ON s.id = t.space_id
          LEFT JOIN forum_posts p ON p.thread_id = t.id AND p.status = 'visible'
-        WHERE ${alive} AND s.kind = 'feedback' AND ${tagFilter} AND ${spaceFilter}
+        WHERE ${alive} AND s.kind = 'feedback' AND ${tagFilter(2)} AND ${spaceFilter(3)}
         GROUP BY t.id, t.short_id, t.title, t.slug
        HAVING COUNT(DISTINCT p.author_id) FILTER (WHERE p.created_at >= $1) > 0
         ORDER BY 4 DESC, 5 DESC LIMIT 10`,
-      params,
+      [windowStart.toISOString(), tagList, space],
     ),
     db.query(
       `SELECT t.short_id, t.title, t.slug, t.created_at,
@@ -807,26 +835,31 @@ export async function getDigest(db, userId, { since } = {}) {
          JOIN forum_spaces s ON s.id = t.space_id
         WHERE ${alive} AND t.status = 'open' AND t.answer_post_id IS NULL
           AND t.fixed_in_version IS NULL
-          AND ${tagFilter} AND ${spaceFilter}
+          AND ${tagFilter(1)} AND ${spaceFilter(2)}
         ORDER BY t.last_activity_at ASC LIMIT 10`,
-      params,
+      // No window: "waiting" is a STATE, not a change. A thread that went quiet
+      // three weeks ago is more overdue than one that went quiet yesterday, and
+      // dropping it out of the digest because it is old is precisely backwards.
+      [tagList, space],
     ),
     db.query(
       `SELECT t.short_id, t.title, t.slug, t.fixed_in_version, t.fixed_at
          FROM forum_threads t
          JOIN forum_spaces s ON s.id = t.space_id
-        WHERE ${alive} AND t.fixed_at >= $1 AND ${tagFilter} AND ${spaceFilter}
+        WHERE ${alive} AND t.fixed_at >= $1::timestamptz AND ${tagFilter(2)} AND ${spaceFilter(3)}
         ORDER BY t.fixed_at DESC LIMIT 10`,
-      params,
+      [windowStart.toISOString(), tagList, space],
     ),
   ]);
 
   const url = (r) => `/forum/t/${r.short_id}/${r.slug}`;
 
-  await db.query(
-    'UPDATE forum_subscriptions SET last_digest_at = NOW() WHERE user_id = $1 AND predicate IS NOT NULL',
-    [userId],
-  );
+  if (advanceCursor) {
+    await db.query(
+      'UPDATE forum_subscriptions SET last_digest_at = NOW() WHERE user_id = $1 AND predicate IS NOT NULL',
+      [userId],
+    );
+  }
 
   return {
     subscribed: true,

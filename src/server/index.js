@@ -103,6 +103,7 @@ import { seedMarketplace } from './database/seeds/marketplace-seed.js';
 import { seedForum } from './database/seeds/forum-seed.js';
 import { initBackgroundJobs } from './services/backgroundJobs.js';
 import { startNotificationEmailSweep } from './services/forumNotifyEmail.js';
+import { startWebhookPushSweep } from './services/forumWebhookPush.js';
 
 // ── Internal-service JSON POST helper (replaces the axios dependency) ──────────
 // Uses the module's existing `fetch` + an AbortController timeout. Returns
@@ -3801,6 +3802,9 @@ initBackgroundJobs(pool).catch(err => {
 // side effect of a deploy. This call is what makes the bridge REACHABLE; the
 // service being correct is not the same as it running.
 startNotificationEmailSweep(pool);
+// Loop D push half. The delivery engine it feeds had ZERO producers before this
+// line existed — see forumWebhookPush.js.
+startWebhookPushSweep(pool);
 
 // Start main server
 server.listen(PORT, () => {
