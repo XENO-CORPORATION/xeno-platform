@@ -52,7 +52,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -11456,15 +11456,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{queue.messages.length} in queue</span>
                 </div>
-                <button
+                <IconButton
+                  icon={ChevronDownDecl}
+                  variant="ghost"
+                  size="xs"
+                  iconSize={16}
                   onClick={toggleQueueExpansion}
-                  className="p-1 hover:bg-[var(--chat-control)] transition-colors rounded"
-                >
-                  <ChevronDown 
-                    size={16} 
-                    className={`transition-transform duration-200 ${queue.isExpanded ? 'rotate-180' : ''}`}
-                  />
-                </button>
+                />
               </div>
               
               {queue.isExpanded && (
@@ -11487,12 +11485,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           )}
                         </div>
                       </div>
-                      <button
+                      <IconButton
+                        icon={XDecl}
+                        variant="ghost"
+                        size="xs"
+                        iconSize={14}
                         onClick={() => removeFromQueue(queuedMessage.id)}
-                        className="p-1 text-[var(--chat-muted)] hover:text-[var(--chat-danger)] hover:bg-[var(--chat-danger)]/15 rounded transition-colors"
-                      >
-                        <X size={14} />
-                      </button>
+                      />
                     </div>
                   ))}
                 </div>
@@ -11784,17 +11783,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       )}
                       {/* Reasoning toggle */}
                       {modelHasReasoningCapability(selectedModel.id, selectedModel) === 'toggleable' && (
-                        <button
-                          type="button"
+                        <IconButton
+                          icon={BrainDecl}
+                          variant="quiet"
+                          size="sm"
+                          iconSize={14}
                           onMouseDown={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             setIsReasonToggled(prev => !prev);
                           }}
-    className={`flex h-7 w-7 select-none items-center justify-center rounded-lg border border-[var(--chat-border)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${isReasonToggled ? 'bg-[var(--chat-hover)] text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'}`}
-  >
-    <Brain size={14} />
-                        </button>
+                        />
                       )}
               </div>
                   <div className="flex items-center gap-2 md:gap-3">
@@ -13239,8 +13238,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 >
                                   {formatConversationListDate(convo.timestamp)}
                                 </span>
-                                <button
-                                  type="button"
+                                <IconButton
+                                  icon={MoreVerticalDecl}
+                                  variant="ghost"
+                                  size="sm"
+                                  iconSize={15}
                                   data-history-row-menu-trigger=""
                                   onClick={(event) => {
                                     event.stopPropagation();
@@ -13252,18 +13254,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     );
                                     toggleHistoryRowMenu(convo.id, rect.bottom + 4, left);
                                   }}
-                                  className={`absolute right-0 flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-opacity hover:bg-[var(--chat-control)] hover:text-[var(--chat-text)] ${
-                                    menuOpen
-                                      ? 'opacity-100'
-                                      : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
-                                  }`}
                                   aria-label="Conversation actions"
                                   aria-haspopup="menu"
                                   aria-expanded={menuOpen}
                                   title="More options"
-                                >
-                                  <MoreVertical size={15} />
-                                </button>
+                                />
                               </div>
                             )}
                           </div>
@@ -17821,9 +17816,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             : 'pointer-events-none opacity-0'
                                         }
                                       />
-                              <button
-                                type="button"
-                                        onClick={(event) => {
+                              <IconButton
+                                icon={SlidersDecl}
+                                variant="ghost"
+                                size="xs"
+                                iconSize={13}
+                                onClick={(event) => {
                                           event.stopPropagation();
                                           const rect = event.currentTarget.getBoundingClientRect();
                                           const menuWidth = 168;
@@ -17836,28 +17834,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             current ? null : { top: rect.bottom + 4, left },
                                           );
                                         }}
-                                        aria-label="Filter recents"
-                                        aria-haspopup="menu"
-                                        aria-expanded={Boolean(recentsFilterMenu)}
-                                        title="Filter"
-                                        className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
-                                          recentsFilterMenu
-                                            ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
-                                            : 'text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
-                                        }`}
-                                      >
-                                        {/* Was a hand-drawn two-track slider, written to avoid lucide's
-                                            three-track one. XENO's `sliders` is already two tracks, and
-                                            with square handles rather than bare ticks — so the reason
-                                            for hand-drawing it had gone; what was left was a glyph at
-                                            stroke 2 with round caps, and no motion, next to a set at
-                                            1.75 with butt caps.
-
-                                            One real change: the tracks run HORIZONTALLY now. The set
-                                            draws this control one way, and an icon that exists only
-                                            here, rotated, is how the drift started. */}
-                                        <Sliders size={13} aria-hidden="true" />
-                              </button>
+                                aria-label="Filter recents"
+                                aria-haspopup="menu"
+                                aria-expanded={Boolean(recentsFilterMenu)}
+                                title="Filter"
+                              />
                             </div>
                           </div>
                                   {isRecentsSectionOpen &&

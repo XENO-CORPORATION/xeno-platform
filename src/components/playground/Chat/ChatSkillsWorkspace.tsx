@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { IconButton } from '@xenosystem/elements-react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Plus, Search, Trash2 } from '@/lib/icons';
+import { ChevronLeft, ChevronRight, Plus, Search, Trash2, Trash2Decl } from '@/lib/icons';
 import {
   addCatalogSkillToLibrary,
   addGlobalSkillToChat,
@@ -554,20 +555,20 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
                           (visibility === 'global'
                             ? skill.visibility === 'global'
                             : skill.visibility === 'chat') ? (
-                            <button
-                              type="button"
+                            <IconButton
+                              icon={Trash2Decl}
+                              variant="ghost"
+                              size="sm"
+                              iconSize={13}
                               onClick={() => {
                                 void (async () => {
                                   await deleteLibrarySkill(skill.id);
                                   await refresh(query);
                                 })();
                               }}
-                              className={`${RADIUS} inline-flex h-7 w-7 flex-shrink-0 items-center justify-center text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-danger)]`}
                               aria-label={`Delete ${skill.name}`}
                               title="Delete"
-                            >
-                              <Trash2 size={13} aria-hidden="true" />
-                            </button>
+                            />
                           ) : (
                             <span className="inline-block h-7 w-7 flex-shrink-0" />
                           )}

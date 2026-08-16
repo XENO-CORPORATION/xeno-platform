@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { MenuItem, useGooPill, useMenu } from '@xenosystem/elements-react';
-import { Check, ChevronDown, Clock, Pause, Play, Search, Trash2 } from '@/lib/icons';
+import { IconButton, MenuItem, useGooPill, useMenu } from '@xenosystem/elements-react';
+import { Check, ChevronDown, Clock, Pause, Play, Search, Trash2, Trash2Decl } from '@/lib/icons';
 import {
   SCHEDULED_STATUS_LABEL,
   createScheduledTask,
@@ -454,18 +454,18 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
                                 <Play size={13} aria-hidden="true" />
                               )}
                             </button>
-                            <button
-                              type="button"
+                            <IconButton
+                              icon={Trash2Decl}
+                              variant="ghost"
+                              size="sm"
+                              iconSize={13}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 void handleDelete(task.id);
                               }}
-                              className={`chat-scheduled-action flex h-7 w-7 items-center justify-center text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-danger)] ${RADIUS}`}
                               aria-label={`Delete ${task.title}`}
                               title="Delete"
-                            >
-                              <Trash2 size={13} aria-hidden="true" />
-                            </button>
+                            />
                           </div>
                         </div>
                       </motion.div>

@@ -240,6 +240,10 @@ export {
   GCalendar as CalendarDecl,
   GClock as ClockDecl,
   GArrowRight as ArrowRightDecl,
+  GTrash as Trash2Decl,
+  GMessage as MessageSquareDecl,
+  GBrain as BrainDecl,
+  GSliders as SlidersDecl,
 };
 
 /* Different name, same meaning. */

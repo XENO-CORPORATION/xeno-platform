@@ -1,6 +1,6 @@
 import React, { useState, useMemo, memo } from 'react';
-import { Spinner } from '@xenosystem/elements-react';
-import { Copy, Check, Rows, Minimize2, Maximize2, Play, X, Pencil } from '@/lib/icons';
+import { IconButton, Spinner } from '@xenosystem/elements-react';
+import { Copy, Check, Rows, Minimize2, Maximize2, Play, X, Pencil, XDecl } from '@/lib/icons';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -293,13 +293,15 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
           <div className="execution-output-container relative rounded-lg bg-[var(--chat-surface)] border border-[var(--chat-border)] px-4 py-2 text-xs shadow-none">
               {/* Close Button for Output - Conditionally Rendered */}
               {!currentIsRunning && (currentRunOutput || currentRunError) && (
-                <button 
+                <IconButton
+                  icon={XDecl}
+                  variant="ghost"
+                  size="xs"
+                  iconSize={14}
+                  className="absolute top-1 right-1"
                   onClick={handleCloseOutput}
-                  className="absolute top-1 right-1 p-1 text-[var(--chat-muted)] hover:text-[var(--chat-text)] hover:bg-[var(--chat-hover)] rounded-md transition-colors"
                   aria-label="Close output"
-                >
-                  <X size={14} />
-                </button>
+                />
               )}
 
               {currentIsRunning && (

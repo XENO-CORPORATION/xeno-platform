@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { IconButton, Spinner } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Globe, X, ChevronDown, Eye, Brain, Check, SquarePen, StopCircle, Paperclip, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, ArrowLeft, Lightbulb, Trash2, Search as SearchIcon, Clock, PaperclipDecl } from '@/lib/icons';
+import { Send, Globe, X, ChevronDown, Eye, Brain, Check, SquarePen, StopCircle, Paperclip, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, ArrowLeft, Lightbulb, Trash2, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
@@ -1188,12 +1188,13 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         {/* History Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--chat-border)]">
           <h3 className="text-sm font-medium text-[var(--chat-text)]">Search History</h3>
-          <button
+          <IconButton
+            icon={XDecl}
+            variant="ghost"
+            size="sm"
+            iconSize={16}
             onClick={() => setIsHistoryOpen(false)}
-            className="p-1.5 rounded-lg text-[var(--chat-muted)] hover:text-[var(--chat-text)] hover:bg-[var(--chat-control)] transition-colors"
-          >
-            <X size={16} />
-          </button>
+          />
         </div>
 
         {/* Search Bar */}
@@ -1249,12 +1250,14 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                       {formatTimestamp(conv.timestamp)}
                     </p>
                   </div>
-                  <button
+                  <IconButton
+                    icon={Trash2Decl}
+                    variant="ghost"
+                    size="xs"
+                    iconSize={14}
+                    className="opacity-0"
                     onClick={(e) => deleteConversation(conv.id, e)}
-                    className="flex-shrink-0 p-1 rounded text-[var(--chat-muted)] hover:text-[var(--chat-danger)] hover:bg-[var(--chat-danger)]/15 opacity-0 group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  />
                 </div>
               ))}
             </div>

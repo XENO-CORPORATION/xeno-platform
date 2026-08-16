@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Spinner } from '@xenosystem/elements-react';
-import { ArrowLeft, Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight } from '@/lib/icons';
+import { IconButton, Spinner } from '@xenosystem/elements-react';
+import { ArrowLeft, Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight, ArrowRightDecl } from '@/lib/icons';
 import type { GroupedModels, Model } from '@/services/modelService';
 import { chainDurationMs, MODEL_CHAIN } from './composerGooey';
 
@@ -294,20 +294,17 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                 </span>
               ) : activeInlineProviderGroup ? (
                 <>
-                <button
-                  type="button"
-                  data-inline-model-provider-back
-                  data-gooey-chip
+                <IconButton
+                  icon={ArrowRightDecl}
+                  className="chat-icon-flip-x"
+                  variant="quiet"
+                  size="md"
+                  iconSize={14}
                   disabled={isInlineTrayClosing}
                   onClick={() => transitionInlineProvider(null)}
                   style={{ animationDelay: getInlineAnimationDelay(0) }}
-                  className={`chat-inline-model-action flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--chat-border)] bg-[var(--chat-overlay)] text-[var(--chat-muted)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${inlineItemAnimationClass}`}
                   aria-label="Back to providers"
-                >
-                  <span className="flex items-center justify-center">
-                    <ArrowLeft size={14} />
-                  </span>
-                </button>
+                />
                 {activeInlineProviderGroup.models.map((model, index) => {
                   const isSelected = selectedModel.id === model.id;
 

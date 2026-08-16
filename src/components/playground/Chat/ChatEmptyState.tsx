@@ -1,15 +1,6 @@
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import {
-  ArrowLeft,
-  Bot,
-  Code2,
-  FolderUp,
-  Library,
-  MessageSquare,
-  Plus,
-  Search,
-  Store,
-} from '@/lib/icons';
+import { IconButton } from '@xenosystem/elements-react';
+import { ArrowLeft, Bot, Code2, FolderUp, Library, MessageSquare, Plus, Search, Store, ArrowRightDecl } from '@/lib/icons';
 import ChatUpdateCarousel, { type ChatUpdate } from './ChatUpdateCarousel';
 import {
   AGENT_HUB_MOCK_ACTIONS,
@@ -705,24 +696,15 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
             data-gooey-from="[data-chat-mode='agents']"
             className="flex h-full min-w-max items-center gap-1.5"
           >
-            <button
-              type="button"
-              data-gooey-chip
+            <IconButton
+              icon={ArrowRightDecl}
+              className="chat-icon-flip-x"
+              variant="quiet"
+              size="md"
+              iconSize={14}
               onClick={() => closeAgentActions(() => onModeChange('chat'))}
-              // chat-mode-action is what the themed control styles hook onto. Without it
-              // this button kept its raw `border-[var(--chat-border)]`, which is invisible against
-              // a light theme — so it looked fine while its blob stood in for it, then lost
-              // its outline the moment the blob dissolved.
-              className={`chat-mode-action flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]`}
-              // No `title`: the native tooltip lingers past the click, and this button
-              // unmounts on that click — leaving a black "Back" box floating over the
-              // transition. aria-label already names it for assistive tech.
               aria-label="Back to chat modes"
-            >
-              <span className="flex items-center justify-center">
-                <ArrowLeft size={14} aria-hidden="true" />
-              </span>
-            </button>
+            />
             {renderAgentActionButtons()}
           </div>
         ) : (

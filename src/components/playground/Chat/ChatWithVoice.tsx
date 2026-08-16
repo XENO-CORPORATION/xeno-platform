@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { IconButton } from '@xenosystem/elements-react';
 import { useChatTheme } from './chatTheme';
-import { Mic, MicOff, MessageSquareText, Loader, Settings, StopCircle, Play, Pause, X, AlertTriangle, ChevronLeft, ChevronRight, KeyRound, SquarePen, Copy, Check, MessageSquare, ArrowLeft, Edit2, Paperclip, Clock, Trash } from '@/lib/icons';
+import { Mic, MicOff, MessageSquareText, Loader, Settings, StopCircle, Play, Pause, X, AlertTriangle, ChevronLeft, ChevronRight, KeyRound, SquarePen, Copy, Check, MessageSquare, ArrowLeft, Edit2, Paperclip, Clock, Trash, MessageSquareDecl } from '@/lib/icons';
 import { GoogleGenAI, Modality } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1820,13 +1821,14 @@ const ChatWithVoice: React.FC = () => {
 
           {/* Voice Interface Controls */}
           <div className="flex items-center justify-center gap-4 mb-6">
-            <button
+            <IconButton
+              icon={MessageSquareDecl}
+              variant="ghost"
+              size="lg"
+              iconSize={22}
               onClick={() => setShowDetailedChat(true)}
-              className="p-2 text-[var(--chat-muted)] hover:text-[var(--chat-text)] hover:bg-[var(--chat-hover)] rounded-md transition-colors"
               title="View Chat History"
-            >
-              <MessageSquare size={22} />
-            </button>
+            />
           </div>
         </div>
       ) : (

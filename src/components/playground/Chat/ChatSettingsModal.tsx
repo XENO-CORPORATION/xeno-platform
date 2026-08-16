@@ -1,17 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Download,
-  Plus,
-  Settings,
-  X,
-} from '@/lib/icons';
+import { Download, Plus, Settings, X, XDecl } from '@/lib/icons';
 import {
   getChatPersonaId,
   listPersonas,
   setChatPersonaId,
   type ChatPersona,
 } from './chatCustomize';
-import { useDialog, useTabs } from '@xenosystem/elements-react';
+import { IconButton, useDialog, useTabs } from '@xenosystem/elements-react';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 
 export type ChatFontSize = 'small' | 'medium' | 'large';
@@ -175,14 +170,14 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
           })}
         </div>
 
-        <button
-          type="button"
+        <IconButton
+          icon={XDecl}
+          variant="ghost"
+          size="md"
+          iconSize={16}
           onClick={onClose}
-          className={`${RADIUS} flex h-8 w-8 flex-shrink-0 items-center justify-center text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]`}
           aria-label="Close chat settings"
-        >
-          <X size={16} aria-hidden="true" />
-        </button>
+        />
       </div>
 
       <div {...tabs.panelProps} className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4">

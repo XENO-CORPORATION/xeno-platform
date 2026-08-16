@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { useDialog } from '@xenosystem/elements-react';
-import { Briefcase, ChevronLeft, ChevronRight, Search, X } from '@/lib/icons';
+import { IconButton, useDialog } from '@xenosystem/elements-react';
+import { Briefcase, ChevronLeft, ChevronRight, Search, X, XDecl } from '@/lib/icons';
 import {
   listSkills,
   setSkillEnabled,
@@ -418,14 +418,14 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
               </div>
             </div>
           </div>
-          <button
-            type="button"
+          <IconButton
+            icon={XDecl}
+            variant="ghost"
+            size="md"
+            iconSize={16}
             onClick={onClose}
-            className={`${RADIUS} flex h-8 w-8 flex-shrink-0 items-center justify-center text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]`}
             aria-label="Close customize"
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
+          />
         </div>
 
         <div className="flex-shrink-0 px-5 pb-3">

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { useTabs } from '@xenosystem/elements-react';
-import { Check, Search, Settings, Trash2 } from '@/lib/icons';
+import { IconButton, useTabs } from '@xenosystem/elements-react';
+import { Check, Search, Settings, Trash2, Trash2Decl } from '@/lib/icons';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 import {
   deleteMemoryEntry,
@@ -442,8 +442,11 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                               <span className="flex-shrink-0 whitespace-nowrap text-[var(--chat-muted)]">
                                 {formatUpdated(entry.updatedAt)}
                               </span>
-                              <button
-                                type="button"
+                              <IconButton
+                                icon={Trash2Decl}
+                                variant="ghost"
+                                size="sm"
+                                iconSize={13}
                                 onClick={() => {
                                   void (async () => {
                                     const next = await deleteMemoryEntry(
@@ -452,12 +455,9 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                                     setMemoryEntries(next.entries);
                                   })();
                                 }}
-                                className={`${RADIUS} inline-flex h-7 w-7 flex-shrink-0 items-center justify-center text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-danger)]`}
                                 aria-label="Delete memory entry"
                                 title="Delete"
-                              >
-                                <Trash2 size={13} aria-hidden="true" />
-                              </button>
+                              />
                             </div>
                           </motion.div>
                         ))
