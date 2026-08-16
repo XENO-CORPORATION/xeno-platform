@@ -31,6 +31,7 @@
  */
 
 import crypto from 'crypto';
+import { pathToFileURL } from 'node:url';
 import pg from 'pg';
 
 const CONFIRM = process.argv.includes('--confirm');
@@ -86,10 +87,14 @@ function savepointShim(client) {
 }
 
 async function service(name, dirHint = 'services') {
-  const dir = process.env.FORUM_SERVICE_DIR;
+  // Separators normalised before any path surgery: on Windows this arrives as
+  // X:\...\src\server\services, and a /\/services$/ replace silently does
+  // nothing — so the utils/ fallback resolves to a path that does not exist and
+  // the proof reports "cannot locate gdprErasure.js" with no hint why.
+  const dir = (process.env.FORUM_SERVICE_DIR || '').replace(/\\/g, '/') || null;
   const candidates = dir
-    ? [new URL(`${dir.replace(/\/$/, '')}/${name}`, 'file:///').href,
-       new URL(`${dir.replace(/\/services$/, '')}/utils/${name}`, 'file:///').href]
+    ? [pathToFileURL(`${dir.replace(/\/$/, '')}/${name}`).href,
+       pathToFileURL(`${dir.replace(/\/services$/, '')}/utils/${name}`).href]
     : [`../src/server/${dirHint}/${name}`, `../${dirHint}/${name}`];
   for (const p of candidates) {
     try { return await import(p); } catch (err) {

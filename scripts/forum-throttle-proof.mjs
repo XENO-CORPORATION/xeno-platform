@@ -32,6 +32,7 @@
  */
 
 import crypto from 'crypto';
+import { pathToFileURL } from 'node:url';
 import pg from 'pg';
 
 const CONFIRM = process.argv.includes('--confirm');
@@ -45,7 +46,7 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 async function service(name) {
   const dir = process.env.FORUM_SERVICE_DIR;
   const candidates = dir
-    ? [new URL(`${dir.replace(/\/$/, '')}/${name}`, 'file:///').href]
+    ? [pathToFileURL(`${dir.replace(/\/$/, '')}/${name}`).href]
     : [`../src/server/services/${name}`, `../services/${name}`];
   for (const p of candidates) {
     try { return await import(p); } catch (err) {
