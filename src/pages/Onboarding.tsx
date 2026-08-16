@@ -1,18 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, Loader2, Check, Sparkles, PenTool, Code2, Clapperboard,
+  ArrowRight, Loader2, Sparkles, PenTool, Code2, Clapperboard,
   Megaphone, Building2, GraduationCap, MoreHorizontal,
   Palette, Layers, Boxes, Terminal, FileText, MessageSquare, Wand2, Library, Globe,
 } from 'lucide-react';
 import { PRODUCTS } from '../lib/productCatalog';
 import AuthMark from '../components/auth/AuthMark';
-import { Card, Inset, Eyebrow, SelectTile, Progress, cx } from '../components/onboarding/OnboardingPieces';
+import {
+  StepHeading, SelectTile, Field, Checkbox, PrimaryButton, TextButton, Progress,
+  INPUT_CLS, cx,
+} from '../components/onboarding/OnboardingPieces';
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * ONBOARDING
- *
- * Five steps: about you → role → interests → plan → where to start.
+ * ONBOARDING — five steps: about you → role → interests → plan → where to start
  *
  * ── HOW IT DIFFERS FROM THE REFERENCE FLOW ─────────────────────────────────
  *
@@ -20,7 +21,7 @@ import { Card, Inset, Eyebrow, SelectTile, Progress, cx } from '../components/on
  *     platforms and ten features; the XENO catalog is 37 products across 9
  *     categories. A tile per product is a wall, and a wall is not a choice.
  *     Categories are derived from the catalog itself, so the flow cannot
- *     advertise a category with nothing behind it and a product joins the day
+ *     advertise a category with nothing behind it, and a product joins the day
  *     it ships.
  *
  *  2. THE PLAN STEP IS NOT LAST. Theirs ends on pricing, so the final thing a
@@ -41,40 +42,39 @@ import { Card, Inset, Eyebrow, SelectTile, Progress, cx } from '../components/on
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const API = '/api/auth';
+const STEPS = 5;
 
 /** Roles, each with a mark. Ordered most→least common rather than
  *  alphabetically: the list is scanned, and burying the likeliest answer taxes
  *  most users to spare a few. */
 const ROLES: Array<{ label: string; icon: React.ReactNode }> = [
-  { label: 'Personal use',     icon: <Sparkles className="h-4 w-4" /> },
-  { label: 'Designer',         icon: <PenTool className="h-4 w-4" /> },
-  { label: 'Developer',        icon: <Code2 className="h-4 w-4" /> },
-  { label: 'Creator',          icon: <Clapperboard className="h-4 w-4" /> },
-  { label: 'Marketer',         icon: <Megaphone className="h-4 w-4" /> },
-  { label: 'Studio or agency', icon: <Building2 className="h-4 w-4" /> },
-  { label: 'Education',        icon: <GraduationCap className="h-4 w-4" /> },
-  { label: 'Other',            icon: <MoreHorizontal className="h-4 w-4" /> },
+  { label: 'Personal use',     icon: <Sparkles className="h-[18px] w-[18px]" /> },
+  { label: 'Designer',         icon: <PenTool className="h-[18px] w-[18px]" /> },
+  { label: 'Developer',        icon: <Code2 className="h-[18px] w-[18px]" /> },
+  { label: 'Creator',          icon: <Clapperboard className="h-[18px] w-[18px]" /> },
+  { label: 'Marketer',         icon: <Megaphone className="h-[18px] w-[18px]" /> },
+  { label: 'Studio or agency', icon: <Building2 className="h-[18px] w-[18px]" /> },
+  { label: 'Education',        icon: <GraduationCap className="h-[18px] w-[18px]" /> },
+  { label: 'Other',            icon: <MoreHorizontal className="h-[18px] w-[18px]" /> },
 ];
 
 /** A mark per catalog category. Falls back rather than throwing: a category
- *  added to the catalog tomorrow gets a generic icon, never a crash or a hole
- *  in the grid. */
+ *  added to the catalog tomorrow gets a generic icon, never a hole in the grid. */
 const CATEGORY_ICON: Record<string, React.ReactNode> = {
-  Create:   <Palette className="h-4 w-4" />,
-  Design:   <Layers className="h-4 w-4" />,
-  Build:    <Boxes className="h-4 w-4" />,
-  Develop:  <Terminal className="h-4 w-4" />,
-  Office:   <FileText className="h-4 w-4" />,
-  Connect:  <MessageSquare className="h-4 w-4" />,
-  Generate: <Wand2 className="h-4 w-4" />,
-  Library:  <Library className="h-4 w-4" />,
-  Platform: <Globe className="h-4 w-4" />,
+  Create:   <Palette className="h-[18px] w-[18px]" />,
+  Design:   <Layers className="h-[18px] w-[18px]" />,
+  Build:    <Boxes className="h-[18px] w-[18px]" />,
+  Develop:  <Terminal className="h-[18px] w-[18px]" />,
+  Office:   <FileText className="h-[18px] w-[18px]" />,
+  Connect:  <MessageSquare className="h-[18px] w-[18px]" />,
+  Generate: <Wand2 className="h-[18px] w-[18px]" />,
+  Library:  <Library className="h-[18px] w-[18px]" />,
+  Platform: <Globe className="h-[18px] w-[18px]" />,
 };
 
-/** Options for the interests step, derived from the catalog.
- *
- *  `coming-soon` is filtered out on purpose: offering an interest we cannot act
- *  on produces a recommendation screen full of things you cannot open. */
+/** Options for the interests step, derived from the catalog. `coming-soon` is
+ *  filtered out: offering an interest we cannot act on produces a
+ *  recommendation screen full of things you cannot open. */
 function useAvailableCategories() {
   return useMemo(() => {
     const byCategory = new Map<string, typeof PRODUCTS>();
@@ -91,11 +91,8 @@ function useAvailableCategories() {
 }
 
 type Answers = {
-  displayName: string;
-  heardFrom: string;
-  role: string | null;
-  interests: string[];
-  marketingOptIn: boolean;
+  displayName: string; heardFrom: string; role: string | null;
+  interests: string[]; marketingOptIn: boolean;
 };
 
 /** A sellable item as `/api/billing/config` reports it. `available` is false
@@ -116,12 +113,17 @@ function formatPrice(amount: number, currency = 'usd') {
       style: 'currency', currency: currency.toUpperCase(),
       minimumFractionDigits: 0, maximumFractionDigits: 0,
     }).format(amount);
-  } catch {
-    return `${amount}`;
-  }
+  } catch { return `${amount}`; }
 }
 
-const STEPS = 5;
+/** Per-item entrance delay, so a grid arrives as a wave instead of a slab.
+ *  Applied per tile because the grid is ONE child of the stagger container and
+ *  would otherwise animate as a single block. */
+const wave = (i: number, base = 0.10, step = 0.035): React.CSSProperties => ({
+  animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards',
+  animationDelay: `${base + i * step}s`,
+  opacity: 0,
+});
 
 const Onboarding: React.FC = () => {
   const navigate = useNavigate();
@@ -234,353 +236,296 @@ const Onboarding: React.FC = () => {
     );
   }
 
-  const HEADINGS = [
-    { eyebrow: 'Welcome',   title: "Let's set up your workspace", sub: 'Three short questions. All optional — skip any and nothing breaks.' },
-    { eyebrow: 'About you', title: answers.displayName ? `Nice to meet you, ${answers.displayName}` : 'A bit about you', sub: 'Which of these fits best?' },
-    { eyebrow: 'Interests', title: 'What do you want to do here?', sub: 'Pick any that apply — this decides what we put in front of you next.' },
-    { eyebrow: 'Plan',      title: 'Choose your plan', sub: 'A plan unlocks everything you just picked.' },
-    { eyebrow: 'Ready',     title: "Here's where to start", sub: answers.interests.length ? 'Based on what you picked.' : 'The products that are furthest along.' },
-  ];
-  const head = HEADINGS[step];
-
   return (
     <div
-      className="h-screen h-[100dvh] overflow-hidden flex flex-col text-white"
+      className="relative flex h-screen h-[100dvh] flex-col overflow-hidden text-white"
       style={{ background: '#060606' }}
     >
-      {/* Ambient wash. One soft ellipse behind the card so the ground is not a
-          flat black rectangle — the homepage does the same thing under its
-          hero. Pointer-events-none so it can never eat a click. */}
+      {/* Ambient wash so the ground is not a flat black rectangle. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[60vh]"
-        style={{ background: 'radial-gradient(ellipse 70% 55% at 50% 0%, rgba(255,255,255,0.045), transparent 70%)' }}
+        className="pointer-events-none absolute inset-x-0 top-0 h-[55vh]"
+        style={{ background: 'radial-gradient(ellipse 65% 50% at 50% 0%, rgba(255,255,255,0.04), transparent 70%)' }}
       />
 
-      <header className="relative z-10 flex shrink-0 items-center justify-between px-6 py-5">
-        <Progress step={step} total={STEPS} />
+      <header className="relative z-10 flex shrink-0 items-center justify-end px-7 py-6">
         <AuthMark />
       </header>
 
+      {/* No page card. Content sits directly on the ground in ONE left-aligned
+          column, centred in the viewport — a wrapper card adds two borders and
+          a padding well between the user and the task, and steals the width
+          that makes the whole thing breathe. */}
       <main className="relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center px-5 py-4">
-          {/* `key={step}` remounts on every step change, which replays the
-              entrance animation. Without it React reuses the subtree and the
-              CSS animation — already finished — never runs again, so steps 2+
-              would snap in with no motion at all. */}
-          <div key={step} className="w-full max-w-[600px] xeno-scale-in">
-            <Card className="p-6 sm:p-7">
-              <div className="xeno-stagger space-y-5">
+        <div className="flex min-h-full items-center justify-center px-6 py-6">
+          {/* `key={step}` remounts on step change, replaying the entrance
+              animation. Without it React reuses the subtree and the finished
+              CSS animation never runs again, so steps 2+ snap in with no
+              motion at all. */}
+          <div key={step} className="w-full max-w-[620px] xeno-stagger space-y-8">
 
-                <div className="space-y-1.5">
-                  <Eyebrow>{head.eyebrow}</Eyebrow>
-                  <h1 className="text-[24px] sm:text-[27px] font-semibold leading-[1.15] tracking-[-0.02em] text-balance">
-                    {head.title}
-                  </h1>
-                  <p className="text-[13px] leading-relaxed text-white/40">{head.sub}</p>
+            {/* ── 0 · About you ───────────────────────────────────────────── */}
+            {step === 0 && (
+              <>
+                <StepHeading
+                  title="Let's set up your workspace"
+                  sub="Three short questions. All optional — skip any and nothing breaks."
+                />
+
+                <div className="space-y-5">
+                  <Field label="What should we call you?" optional style={wave(0)}>
+                    <input
+                      autoFocus
+                      value={answers.displayName}
+                      onChange={(e) => setAnswers((a) => ({ ...a, displayName: e.target.value }))}
+                      placeholder="Emilian"
+                      className={INPUT_CLS}
+                    />
+                  </Field>
+
+                  <Field label="How did you hear about XENO?" optional style={wave(1)}>
+                    <input
+                      value={answers.heardFrom}
+                      onChange={(e) => setAnswers((a) => ({ ...a, heardFrom: e.target.value }))}
+                      placeholder="A podcast, a friend, X…"
+                      className={INPUT_CLS}
+                    />
+                  </Field>
+
+                  {/* Unticked writes an opt-out; ticked writes nothing, because
+                      subscribed is already the default state. */}
+                  <label className="group flex cursor-pointer items-start gap-3 pt-1" style={wave(2)}>
+                    <Checkbox
+                      checked={answers.marketingOptIn}
+                      onChange={(v) => setAnswers((a) => ({ ...a, marketingOptIn: v }))}
+                    />
+                    <span className="text-[13px] leading-relaxed text-white/40 transition-colors group-hover:text-white/65">
+                      Send me product updates and release notes. You can unsubscribe from any
+                      email, at any time.
+                    </span>
+                  </label>
                 </div>
 
-                {/* ── 0 · About you ───────────────────────────────────────── */}
-                {step === 0 && (
-                  <>
-                    <Inset className="divide-y divide-white/[0.05]">
-                      <FieldRow label="What should we call you?" optional>
-                        <input
-                          autoFocus
-                          value={answers.displayName}
-                          onChange={(e) => setAnswers((a) => ({ ...a, displayName: e.target.value }))}
-                          placeholder="Emilian"
-                          className={inputCls}
-                        />
-                      </FieldRow>
-                      <FieldRow label="How did you hear about XENO?" optional>
-                        <input
-                          value={answers.heardFrom}
-                          onChange={(e) => setAnswers((a) => ({ ...a, heardFrom: e.target.value }))}
-                          placeholder="A podcast, a friend, X…"
-                          className={inputCls}
-                        />
-                      </FieldRow>
-                    </Inset>
+                <Nav onNext={() => { save(answers); setStep(1); }} onSkip={skipAll} nextLabel="Continue" />
+              </>
+            )}
 
-                    {/* Unticked writes an opt-out; ticked writes nothing,
-                        because subscribed is already the default state. */}
-                    <label className="group flex cursor-pointer items-start gap-3">
-                      <Checkbox
-                        checked={answers.marketingOptIn}
-                        onChange={(v) => setAnswers((a) => ({ ...a, marketingOptIn: v }))}
+            {/* ── 1 · Role ────────────────────────────────────────────────── */}
+            {step === 1 && (
+              <>
+                <StepHeading
+                  title={answers.displayName ? `Nice to meet you, ${answers.displayName}` : 'A bit about you'}
+                  sub="Which one describes you best?"
+                />
+
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  {ROLES.map((r, i) => (
+                    <SelectTile
+                      key={r.label}
+                      icon={r.icon}
+                      label={r.label}
+                      selected={answers.role === r.label}
+                      style={wave(i)}
+                      onClick={() => {
+                        const next = { ...answers, role: r.label };
+                        setAnswers(next); save(next); setStep(2);
+                      }}
+                    />
+                  ))}
+                </div>
+
+                <Nav onBack={() => setStep(0)} onSkip={() => setStep(2)} />
+              </>
+            )}
+
+            {/* ── 2 · Interests ───────────────────────────────────────────── */}
+            {step === 2 && (
+              <>
+                <StepHeading
+                  title="What do you want to do here?"
+                  sub="Select all that apply — this decides what we put in front of you next."
+                />
+
+                <div className="grid gap-2.5 sm:grid-cols-3">
+                  {categories.map(({ category, products }, i) => {
+                    const on = answers.interests.includes(category);
+                    return (
+                      <SelectTile
+                        key={category}
+                        icon={CATEGORY_ICON[category] || <Boxes className="h-[18px] w-[18px]" />}
+                        label={category}
+                        // The count is honest signal, not decoration: it says
+                        // how much is actually behind the tile.
+                        meta={`${products.length} ${products.length === 1 ? 'product' : 'products'}`}
+                        selected={on}
+                        style={wave(i)}
+                        onClick={() =>
+                          setAnswers((a) => ({
+                            ...a,
+                            interests: on
+                              ? a.interests.filter((c) => c !== category)
+                              : [...a.interests, category],
+                          }))
+                        }
                       />
-                      <span className="text-[12.5px] leading-relaxed text-white/40 transition-colors group-hover:text-white/60">
-                        Send me product updates and release notes. You can unsubscribe from any
-                        email, at any time.
-                      </span>
-                    </label>
+                    );
+                  })}
+                </div>
 
-                    <Nav onNext={() => { save(answers); setStep(1); }} onSkip={skipAll} nextLabel="Continue" />
-                  </>
-                )}
+                <Nav
+                  onBack={() => setStep(1)}
+                  onNext={() => { save(answers); setStep(3); }}
+                  onSkip={() => setStep(3)}
+                  nextLabel="Continue"
+                  nextDisabled={answers.interests.length === 0}
+                />
+              </>
+            )}
 
-                {/* ── 1 · Role ────────────────────────────────────────────── */}
-                {step === 1 && (
-                  <>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {ROLES.map((r, i) => (
-                        <SelectTile
-                          key={r.label}
-                          icon={r.icon}
-                          label={r.label}
-                          selected={answers.role === r.label}
-                          // Per-tile delay so the grid arrives as a wave. Tied
-                          // to index, not to the parent stagger, because the
-                          // grid is ONE stagger child and would otherwise
-                          // animate as a single block.
-                          style={{ animation: 'xenoRise 0.45s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: `${0.10 + i * 0.035}s`, opacity: 0 }}
-                          onClick={() => {
-                            const next = { ...answers, role: r.label };
-                            setAnswers(next); save(next); setStep(2);
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <Nav onBack={() => setStep(0)} onSkip={() => setStep(2)} />
-                  </>
-                )}
+            {/* ── 3 · Plan ────────────────────────────────────────────────── */}
+            {step === 3 && (
+              <>
+                <StepHeading
+                  title="Do more with XENO"
+                  sub="Browsing stays free. Generation, agents and cloud projects need a plan."
+                />
 
-                {/* ── 2 · Interests ───────────────────────────────────────── */}
-                {step === 2 && (
-                  <>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {categories.map(({ category, products }, i) => {
-                        const on = answers.interests.includes(category);
-                        return (
-                          <SelectTile
-                            key={category}
-                            icon={CATEGORY_ICON[category] || <Boxes className="h-4 w-4" />}
-                            label={category}
-                            // The count is honest signal, not decoration: it
-                            // says how much is actually behind the tile.
-                            meta={`${products.length} ${products.length === 1 ? 'product' : 'products'}`}
-                            selected={on}
-                            style={{ animation: 'xenoRise 0.45s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: `${0.10 + i * 0.035}s`, opacity: 0 }}
-                            onClick={() =>
-                              setAnswers((a) => ({
-                                ...a,
-                                interests: on
-                                  ? a.interests.filter((c) => c !== category)
-                                  : [...a.interests, category],
-                              }))
-                            }
-                          />
-                        );
-                      })}
-                    </div>
-                    <Nav
-                      onBack={() => setStep(1)}
-                      onNext={() => { save(answers); setStep(3); }}
-                      onSkip={() => setStep(3)}
-                      nextLabel="Continue"
-                      nextDisabled={answers.interests.length === 0}
-                    />
-                  </>
-                )}
-
-                {/* ── 3 · Plan ────────────────────────────────────────────── */}
-                {step === 3 && (
-                  <>
-                    <p className="-mt-2 text-[12.5px] leading-relaxed text-white/35">
-                      Without one you can browse the workspace and read the docs, but generation,
-                      agents and cloud projects stay locked.
-                    </p>
-
-                    {subscriptions.length > 0 ? (
-                      <div className="space-y-2">
-                        {subscriptions.map((item, i) => (
-                          <Inset
-                            key={item.id}
-                            className="p-4"
-                            // Same wave as the tile grids.
-                          >
-                            <div
-                              style={{ animation: 'xenoRise 0.45s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: `${0.12 + i * 0.06}s`, opacity: 0 }}
-                            >
-                              <div className="flex items-baseline justify-between gap-3">
-                                <span className="flex items-baseline gap-2">
-                                  <span className="text-[14px] font-medium text-white/90">{item.label}</span>
-                                  {item.badge && (
-                                    <span className="rounded-[3px] border border-white/10 px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider text-white/40">
-                                      {item.badge}
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="text-[16px] font-semibold tabular-nums text-white">
-                                  {formatPrice(item.price, billing?.currency)}
-                                  <span className="text-[11.5px] font-normal text-white/35">
-                                    /{item.interval || 'month'}{item.perSeat ? ' · seat' : ''}
-                                  </span>
-                                </span>
-                              </div>
-
-                              <button
-                                type="button"
-                                disabled={!item.available || checkingOut !== null}
-                                onClick={() => startCheckout(item.id)}
-                                className="focus-self mt-3 w-full rounded-[6px] bg-white px-4 py-2.5 text-[13px] font-medium text-black
-                                           transition-all duration-200 hover:bg-white/90 active:scale-[0.99]
-                                           disabled:cursor-not-allowed disabled:opacity-25"
-                              >
-                                {checkingOut === item.id ? 'Opening checkout…'
-                                  : item.available ? `Get ${item.label}`
-                                  : 'Not yet available'}
-                              </button>
-                            </div>
-                          </Inset>
-                        ))}
-                      </div>
-                    ) : (
-                      /* No sellable plan. Says so plainly rather than rendering
-                       * a dead price card — a "Select plan" button that cannot
-                       * charge is worse than an honest empty state. */
-                      <Inset className="px-4 py-5">
-                        <p className="text-[13px] text-white/70">Plans aren&rsquo;t open yet.</p>
-                        <p className="mt-1 text-[12.5px] leading-relaxed text-white/35">
-                          Your account is ready. We&rsquo;ll email you the moment subscriptions go
-                          live — nothing to do until then.
-                        </p>
-                      </Inset>
-                    )}
-
-                    <Nav onBack={() => setStep(2)} onNext={() => setStep(4)} onSkip={() => setStep(4)} nextLabel="Maybe later" />
-                  </>
-                )}
-
-                {/* ── 4 · Where to start ──────────────────────────────────── */}
-                {step === 4 && (
-                  <>
-                    <div className="space-y-2">
-                      {recommended.map((p, i) => (
-                        <button
-                          key={p.slug}
-                          type="button"
-                          onClick={() => finish(p)}
-                          disabled={saving}
-                          style={{ animation: 'xenoRise 0.45s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: `${0.10 + i * 0.045}s`, opacity: 0 }}
-                          className="focus-self group flex w-full items-center gap-3 rounded-[7px] border border-white/[0.07]
-                                     bg-white/[0.02] px-4 py-3 text-left transition-all duration-200
-                                     hover:border-white/[0.16] hover:bg-white/[0.05] active:scale-[0.99]
-                                     disabled:opacity-50"
-                        >
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[5px] border border-white/[0.07] bg-white/[0.03] text-white/45 transition-colors group-hover:text-white/75">
-                            {CATEGORY_ICON[p.category] || <Boxes className="h-4 w-4" />}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-2">
-                              <span className="text-[13.5px] font-medium text-white/90">{p.name}</span>
-                              {/* Status shown, not hidden. Sending somebody to
-                                  a beta without saying so is how a first
-                                  impression becomes "it's broken". */}
-                              {p.status === 'beta' && (
-                                <span className="rounded-[3px] border border-white/10 px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider text-white/35">
-                                  Beta
-                                </span>
-                              )}
+                {subscriptions.length > 0 ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {subscriptions.map((item, i) => (
+                      <div
+                        key={item.id}
+                        style={wave(i, 0.10, 0.06)}
+                        className="flex flex-col rounded-[10px] border border-white/[0.09] bg-white/[0.015] p-5
+                                   transition-colors duration-200 hover:border-white/20"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-[15px] font-medium text-white">{item.label}</span>
+                          {item.badge && (
+                            <span className="rounded-[4px] border border-white/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-white/45">
+                              {item.badge}
                             </span>
-                            <span className="mt-0.5 block truncate text-[12px] text-white/35">{p.tagline}</span>
+                          )}
+                        </div>
+
+                        <div className="mt-3 flex items-baseline gap-1">
+                          <span className="text-[28px] font-semibold leading-none tabular-nums text-white">
+                            {formatPrice(item.price, billing?.currency)}
                           </span>
-                          <ArrowRight className="h-4 w-4 shrink-0 text-white/15 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-white/50" />
+                          <span className="text-[13px] text-white/35">
+                            /{item.interval || 'month'}{item.perSeat ? ' · seat' : ''}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={!item.available || checkingOut !== null}
+                          onClick={() => startCheckout(item.id)}
+                          className="focus-self mt-5 w-full rounded-[8px] border border-white/20 bg-transparent px-4 py-2.5
+                                     text-[13.5px] font-medium text-white transition-all duration-200
+                                     hover:border-white/40 hover:bg-white/[0.06] active:scale-[0.99]
+                                     disabled:cursor-not-allowed disabled:opacity-20"
+                        >
+                          {checkingOut === item.id ? 'Opening checkout…'
+                            : item.available ? 'Select plan'
+                            : 'Not yet available'}
                         </button>
-                      ))}
-                    </div>
-                    <Nav
-                      onBack={() => setStep(3)}
-                      onNext={() => finish()}
-                      nextLabel={saving ? 'Saving…' : 'Go to my workspace'}
-                    />
-                  </>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* No sellable plan. Says so plainly rather than rendering a
+                   * dead price card — a "Select plan" button that cannot charge
+                   * is worse than an honest empty state. */
+                  <div className="rounded-[10px] border border-white/[0.09] bg-white/[0.015] px-5 py-6">
+                    <p className="text-[14px] text-white/75">Plans aren&rsquo;t open yet.</p>
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-white/35">
+                      Your account is ready. We&rsquo;ll email you the moment subscriptions go live —
+                      nothing to do until then.
+                    </p>
+                  </div>
                 )}
-              </div>
-            </Card>
+
+                <Nav onBack={() => setStep(2)} onSkip={() => setStep(4)} skipLabel="Skip for now" />
+              </>
+            )}
+
+            {/* ── 4 · Where to start ──────────────────────────────────────── */}
+            {step === 4 && (
+              <>
+                <StepHeading
+                  title="Here's where to start"
+                  sub={answers.interests.length
+                    ? 'Based on what you picked. Everything else stays in your workspace.'
+                    : 'The products that are furthest along. Everything else is in your workspace.'}
+                />
+
+                <div className="space-y-2.5">
+                  {recommended.map((p, i) => (
+                    <button
+                      key={p.slug}
+                      type="button"
+                      onClick={() => finish(p)}
+                      disabled={saving}
+                      style={wave(i, 0.10, 0.045)}
+                      className="focus-self group flex w-full items-center gap-3.5 rounded-[10px] border border-white/[0.09]
+                                 bg-white/[0.015] px-4 py-3.5 text-left transition-all duration-200
+                                 hover:border-white/25 hover:bg-white/[0.04] active:scale-[0.99] disabled:opacity-50"
+                    >
+                      <span className="shrink-0 text-white/40 transition-colors group-hover:text-white/80">
+                        {CATEGORY_ICON[p.category] || <Boxes className="h-[18px] w-[18px]" />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="text-[14px] font-medium text-white">{p.name}</span>
+                          {/* Status shown, not hidden. Sending somebody to a
+                              beta without saying so is how a first impression
+                              becomes "it's broken". */}
+                          {p.status === 'beta' && (
+                            <span className="rounded-[4px] border border-white/12 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-white/35">
+                              Beta
+                            </span>
+                          )}
+                        </span>
+                        <span className="mt-1 block truncate text-[12.5px] text-white/35">{p.tagline}</span>
+                      </span>
+                      <ArrowRight className="h-4 w-4 shrink-0 text-white/15 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-white/60" />
+                    </button>
+                  ))}
+                </div>
+
+                <Nav
+                  onBack={() => setStep(3)}
+                  onNext={() => finish()}
+                  nextLabel={saving ? 'Saving…' : 'Go to my workspace'}
+                />
+              </>
+            )}
           </div>
         </div>
       </main>
 
-      <footer className="relative z-10 shrink-0 py-5 text-center">
-        <span className="text-[11.5px] text-white/20">
-          Step {step + 1} of {STEPS}
-        </span>
+      <footer className="relative z-10 shrink-0 pb-9 pt-4">
+        <Progress step={step} total={STEPS} />
       </footer>
     </div>
   );
 };
 
-/* ── small pieces ────────────────────────────────────────────────────────── */
-
-/* `focus-self` opts out of the global :focus-visible ring — these fields paint
-   their own focus state, and the global rule would draw a SECOND one floating
-   2px outside the border. See index.css. */
-const inputCls =
-  'focus-self w-full bg-transparent px-4 py-3 text-[13.5px] text-white outline-none ' +
-  'placeholder:text-white/20 transition-colors duration-150';
-
-/** Label above, field below, inside an Inset row. */
-const FieldRow: React.FC<{ label: string; optional?: boolean; children: React.ReactNode }> = ({
-  label, optional, children,
-}) => (
-  <label className="group block px-4 pt-3 pb-1 transition-colors focus-within:bg-white/[0.02]">
-    <span className="text-[11.5px] text-white/45">
-      {label}{optional && <span className="text-white/20"> (optional)</span>}
-    </span>
-    <div className="-mx-4">{children}</div>
-  </label>
-);
-
-/** Square, 2px radius — DESIGN_SYSTEM forbids circles and pills. */
-const Checkbox: React.FC<{ checked: boolean; onChange: (v: boolean) => void }> = ({ checked, onChange }) => (
-  <>
-    <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="peer sr-only" />
-    <span
-      aria-hidden
-      className={cx(
-        'mt-0.5 grid h-[17px] w-[17px] shrink-0 place-items-center rounded-[3px] border',
-        'transition-all duration-200 ease-out peer-focus-visible:ring-1 peer-focus-visible:ring-white/40',
-        checked ? 'border-white bg-white' : 'border-white/20 bg-transparent',
-      )}
-    >
-      <Check className={cx('h-3 w-3 text-black transition-transform duration-200', checked ? 'scale-100' : 'scale-0')} strokeWidth={3} />
-    </span>
-  </>
-);
-
-/** Back / Skip / Next. Skip is always plain text — a skip styled to compete
- *  with the primary action is a dark pattern in reverse. */
+/** Back / Skip / Next, laid out like the reference: the primary action first,
+ *  then quiet text links beside it. */
 const Nav: React.FC<{
   onBack?: () => void; onNext?: () => void; onSkip?: () => void;
-  nextLabel?: string; nextDisabled?: boolean;
-}> = ({ onBack, onNext, onSkip, nextLabel, nextDisabled }) => (
-  <div className="flex items-center gap-4 pt-1">
+  nextLabel?: string; skipLabel?: string; nextDisabled?: boolean;
+}> = ({ onBack, onNext, onSkip, nextLabel, skipLabel, nextDisabled }) => (
+  <div className={cx('flex items-center gap-5', onNext ? 'pt-1' : 'pt-2')}>
     {onNext && (
-      <button
-        type="button"
-        onClick={onNext}
-        disabled={nextDisabled}
-        className="focus-self rounded-[6px] bg-white px-5 py-2.5 text-[13px] font-medium text-black
-                   transition-all duration-200 hover:bg-white/90 active:scale-[0.98]
-                   disabled:cursor-not-allowed disabled:opacity-25"
-      >
+      <PrimaryButton onClick={onNext} disabled={nextDisabled}>
         {nextLabel || 'Continue'}
-      </button>
+      </PrimaryButton>
     )}
-    {onBack && (
-      <button type="button" onClick={onBack}
-        className="focus-self text-[12.5px] text-white/40 transition-colors hover:text-white/75">
-        Back
-      </button>
-    )}
-    {onSkip && (
-      <button type="button" onClick={onSkip}
-        className="focus-self ml-auto text-[12.5px] text-white/25 transition-colors hover:text-white/55">
-        Skip
-      </button>
-    )}
+    {onBack && <TextButton onClick={onBack}>Back</TextButton>}
+    {onSkip && <TextButton onClick={onSkip}>{skipLabel || 'Skip'}</TextButton>}
   </div>
 );
 

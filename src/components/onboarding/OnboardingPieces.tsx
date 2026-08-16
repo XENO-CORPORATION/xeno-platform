@@ -4,93 +4,64 @@ import { Check } from 'lucide-react';
 /* ═══════════════════════════════════════════════════════════════════════════
  * Onboarding building blocks.
  *
- * The vocabulary is lifted from landing-v3/primitives + ProductsShowcase — the
- * homepage's own language — so onboarding looks like the site a user just came
- * from rather than a form bolted onto it: a floating CARD on the page ground,
- * an INSET panel inside it, hairline borders at white/[0.07], 6–8px radii.
+ * ── THE LAYOUT LESSON, WHICH IS THE WHOLE POINT ────────────────────────────
  *
- * ⚠️ Structure is borrowed; HUE is not. landing-v3 leans on a violet accent
- * (#a760ff) that `DESIGN_SYSTEM.md` retired — and that file is the locked
- * authority, so where the homepage and the design system disagree the document
- * wins and the homepage is the deviation. Emphasis here therefore comes from
- * surface lightness and text brightness, never colour, which also keeps this
- * screen consistent with the auth surface that leads directly into it.
+ * The first version wrapped every step in a single big Card. That is what made
+ * it read as cramped and boxy — a container around the content adds two
+ * borders and a padding well between the user and the thing they are doing,
+ * and it shrinks the usable width so everything inside gets tighter.
  *
- * The one exception is semantic, not decorative: a satisfied requirement goes
- * green, because "this rule now passes" is meaning rather than styling — and
- * it is carried by the ICON as well, so it never depends on colour alone.
+ * The reference flow does the opposite: content sits DIRECTLY on the page in
+ * one left-aligned column, centred in the viewport, with generous air around
+ * it. The only cards are the CHOICES themselves. That inversion — no shell,
+ * cards only where there is something to pick — is what makes it feel calm.
+ *
+ * So: no page card. One column, ~600px. Big headline, muted sub, real space
+ * between groups, a compact button (not a full-width slab), text links for
+ * Back/Skip, and progress pinned to the bottom of the viewport.
+ *
+ * ── COLOUR ────────────────────────────────────────────────────────────────
+ *
+ * The reference is light; XENO is dark, and the auth screen this flows out of
+ * is #060606. Adopting their layout does not mean adopting their theme — so
+ * this is the dark reading of the same structure. Emphasis comes from surface
+ * lightness and border brightness, per DESIGN_SYSTEM.md, never hue.
  * ═══════════════════════════════════════════════════════════════════════════ */
-
-/** Page ground → card → inset. Matching landing-v3's T tokens exactly. */
-export const SURFACE = {
-  page: '#060606',
-  card: '#111111',
-  inset: '#0b0b0b',
-  border: 'rgba(255,255,255,0.07)',
-  borderHi: 'rgba(255,255,255,0.18)',
-} as const;
 
 export function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ');
 }
 
-/* ── Card ────────────────────────────────────────────────────────────────── */
+/* ── Heading ─────────────────────────────────────────────────────────────── */
 
 /**
- * The floating container every step lives in.
+ * Step headline + sub.
  *
- * Not a flat bordered box: it carries a top hairline highlight, which is what
- * makes a surface read as lit from above and therefore as raised. That single
- * inset shadow is the difference between "a div with a border" and a card.
+ * Left-aligned, not centred: centred body copy is harder to scan because every
+ * line starts in a different place, and each of these screens is followed by a
+ * left-aligned form or grid the eye has to return to anyway.
  */
-export const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({
-  children, className = '',
-}) => (
-  <div
-    className={cx('relative rounded-[10px] border overflow-hidden', className)}
-    style={{
-      background: SURFACE.card,
-      borderColor: SURFACE.border,
-      boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.045), 0 24px 60px -20px rgba(0,0,0,0.9)',
-    }}
-  >
-    {children}
+export const StepHeading: React.FC<{ title: string; sub?: string }> = ({ title, sub }) => (
+  <div className="space-y-2">
+    <h1 className="text-[30px] sm:text-[33px] font-semibold leading-[1.12] tracking-[-0.025em] text-white text-balance">
+      {title}
+    </h1>
+    {sub && <p className="text-[14.5px] leading-relaxed text-white/40">{sub}</p>}
   </div>
-);
-
-/** A recessed panel inside a card — where inputs and lists sit. */
-export const Inset: React.FC<{ children: React.ReactNode; className?: string }> = ({
-  children, className = '',
-}) => (
-  <div
-    className={cx('rounded-[7px] border', className)}
-    style={{ background: SURFACE.inset, borderColor: SURFACE.border }}
-  >
-    {children}
-  </div>
-);
-
-/* ── Eyebrow ─────────────────────────────────────────────────────────────── */
-
-/** Uppercase micro-label. Same treatment as the landing sections' eyebrows. */
-export const Eyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/30">
-    {children}
-  </span>
 );
 
 /* ── SelectTile ──────────────────────────────────────────────────────────── */
 
 /**
- * The choice tile used for roles and interests.
+ * The choice card — roles, interests.
  *
- * Selection is shown THREE ways — brighter surface, brighter border, and a
- * check mark — because a border shift alone is easy to miss against a dark
- * ground, and on a multi-select the user needs to scan which ones are on.
+ * Sized for presence: a real card with room around its label, not a compressed
+ * row. Selection is a BRIGHT BORDER plus a lifted surface, mirroring the
+ * reference's black-border-on-white, which is the highest-contrast selection
+ * signal available without introducing colour.
  *
- * The check is absolutely positioned and the tile reserves right padding for
- * it, so selecting never reflows the label. A tile that resizes on click makes
- * a grid twitch every time you choose.
+ * Right padding is reserved for the check so selecting never reflows the
+ * label — a tile that resizes on click makes the whole grid twitch.
  */
 export const SelectTile: React.FC<{
   selected: boolean;
@@ -99,30 +70,25 @@ export const SelectTile: React.FC<{
   label: string;
   meta?: string;
   style?: React.CSSProperties;
-  className?: string;
-}> = ({ selected, onClick, icon, label, meta, style, className = '' }) => (
+}> = ({ selected, onClick, icon, label, meta, style }) => (
   <button
     type="button"
     onClick={onClick}
     aria-pressed={selected}
     style={style}
     className={cx(
-      'focus-self group relative flex items-center gap-3 rounded-[7px] border pl-3.5 pr-9 py-3 text-left',
-      'transition-[background-color,border-color,transform] duration-200 ease-out',
-      'active:scale-[0.985]',
+      'focus-self group relative flex min-h-[72px] w-full items-center gap-3 rounded-[10px] border',
+      'px-4 pr-10 py-4 text-left transition-all duration-200 ease-out active:scale-[0.99]',
       selected
-        ? 'border-white/25 bg-white/[0.07]'
-        : 'border-white/[0.07] bg-white/[0.02] hover:border-white/[0.14] hover:bg-white/[0.04]',
-      className,
+        ? 'border-white/70 bg-white/[0.06]'
+        : 'border-white/[0.09] bg-white/[0.015] hover:border-white/25 hover:bg-white/[0.035]',
     )}
   >
     {icon && (
       <span
         className={cx(
-          'grid h-8 w-8 shrink-0 place-items-center rounded-[5px] border transition-colors duration-200',
-          selected
-            ? 'border-white/20 bg-white/[0.10] text-white'
-            : 'border-white/[0.07] bg-white/[0.03] text-white/45 group-hover:text-white/70',
+          'shrink-0 transition-colors duration-200',
+          selected ? 'text-white' : 'text-white/40 group-hover:text-white/70',
         )}
       >
         {icon}
@@ -132,23 +98,21 @@ export const SelectTile: React.FC<{
     <span className="min-w-0 flex-1">
       <span
         className={cx(
-          'block truncate text-[13px] transition-colors duration-200',
-          selected ? 'text-white' : 'text-white/70 group-hover:text-white/90',
+          'block text-[14px] leading-snug transition-colors duration-200',
+          selected ? 'text-white' : 'text-white/75 group-hover:text-white',
         )}
       >
         {label}
       </span>
-      {meta && (
-        <span className="mt-0.5 block text-[11px] tabular-nums text-white/30">{meta}</span>
-      )}
+      {meta && <span className="mt-1 block text-[11.5px] tabular-nums text-white/25">{meta}</span>}
     </span>
 
-    {/* Scales in rather than appearing — a check that pops is legible as a
-        response to the click, which is the feedback a tile otherwise lacks. */}
+    {/* Scales in rather than appearing — a check that pops reads as a response
+        to the click, which is the feedback a tile otherwise lacks. */}
     <span
       aria-hidden
       className={cx(
-        'absolute right-3 grid h-4 w-4 place-items-center rounded-[3px] bg-white',
+        'absolute right-3.5 top-1/2 grid h-[18px] w-[18px] -translate-y-1/2 place-items-center rounded-[4px] bg-white',
         'transition-all duration-200 ease-out',
         selected ? 'scale-100 opacity-100' : 'scale-50 opacity-0',
       )}
@@ -158,25 +122,117 @@ export const SelectTile: React.FC<{
   </button>
 );
 
+/* ── Field ───────────────────────────────────────────────────────────────── */
+
+/**
+ * Label above an input, both full width.
+ *
+ * The label sits OUTSIDE the field rather than inside it as a placeholder:
+ * a placeholder-as-label disappears the moment you type, so anyone who pauses
+ * mid-form has to clear the field to remember what it wanted.
+ */
+export const Field: React.FC<{
+  label: string; optional?: boolean; children: React.ReactNode; style?: React.CSSProperties;
+}> = ({ label, optional, children, style }) => (
+  <label className="block space-y-2" style={style}>
+    <span className="block text-[13.5px] font-medium text-white/75">
+      {label}
+      {optional && <span className="font-normal text-white/25"> (optional)</span>}
+    </span>
+    {children}
+  </label>
+);
+
+/** Shared input recipe. `focus-self` opts out of the global :focus-visible
+ *  ring, which would otherwise draw a SECOND stroke 2px outside this border. */
+export const INPUT_CLS =
+  'focus-self w-full rounded-[9px] border border-white/[0.10] bg-white/[0.02] px-4 py-3 ' +
+  'text-[14px] text-white placeholder:text-white/20 outline-none ' +
+  'transition-colors duration-150 hover:border-white/20 focus:border-white/45 focus:bg-white/[0.04]';
+
+/* ── Checkbox ────────────────────────────────────────────────────────────── */
+
+/** Square, 4px radius — DESIGN_SYSTEM forbids circles and pills. */
+export const Checkbox: React.FC<{ checked: boolean; onChange: (v: boolean) => void }> = ({
+  checked, onChange,
+}) => (
+  <>
+    <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="peer sr-only" />
+    <span
+      aria-hidden
+      className={cx(
+        'mt-[1px] grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[4px] border',
+        'transition-all duration-200 ease-out peer-focus-visible:ring-2 peer-focus-visible:ring-white/30',
+        checked ? 'border-white bg-white' : 'border-white/20 bg-transparent hover:border-white/40',
+      )}
+    >
+      <Check
+        className={cx('h-3 w-3 text-black transition-transform duration-200', checked ? 'scale-100' : 'scale-0')}
+        strokeWidth={3}
+      />
+    </span>
+  </>
+);
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+/**
+ * Primary action. COMPACT and left-aligned — deliberately not a full-width
+ * slab. A button stretched across the column reads as the end of a checkout;
+ * at its natural width it reads as one step in a flow, which is what this is.
+ */
+export const PrimaryButton: React.FC<{
+  onClick: () => void; disabled?: boolean; children: React.ReactNode;
+}> = ({ onClick, disabled, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    className="focus-self rounded-[9px] bg-white px-6 py-3 text-[14px] font-semibold text-black
+               transition-all duration-200 hover:bg-white/90 active:scale-[0.98]
+               disabled:cursor-not-allowed disabled:opacity-20"
+  >
+    {children}
+  </button>
+);
+
+/** Back / Skip. Plain text — a skip styled to compete with the primary action
+ *  is a dark pattern in reverse. */
+export const TextButton: React.FC<{
+  onClick: () => void; children: React.ReactNode; className?: string;
+}> = ({ onClick, children, className = '' }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={cx(
+      'focus-self text-[13.5px] text-white/35 transition-colors hover:text-white/80',
+      className,
+    )}
+  >
+    {children}
+  </button>
+);
+
 /* ── Progress ────────────────────────────────────────────────────────────── */
 
 /**
- * Step progress. A track with a filling bar, not disconnected dots.
- *
- * Dots say "5 things exist"; a continuous bar says "you are 3/5 through and it
- * ends" — which is the question somebody halfway through a signup is actually
- * asking. Steps already completed stay marked so going back is legible.
+ * Pinned to the bottom of the viewport, centred — out of the content's way,
+ * exactly like the reference. The active step is a wide pill and the rest are
+ * dots, so position is readable at a glance without counting.
  */
 export const Progress: React.FC<{ step: number; total: number }> = ({ step, total }) => (
-  <div className="flex items-center gap-1.5" role="progressbar"
-       aria-valuenow={step + 1} aria-valuemin={1} aria-valuemax={total}
-       aria-label={`Step ${step + 1} of ${total}`}>
+  <div
+    className="flex items-center justify-center gap-[7px]"
+    role="progressbar"
+    aria-valuenow={step + 1} aria-valuemin={1} aria-valuemax={total}
+    aria-label={`Step ${step + 1} of ${total}`}
+  >
     {Array.from({ length: total }).map((_, i) => (
       <span
         key={i}
         className={cx(
-          'h-[3px] rounded-full transition-all duration-500 ease-out',
-          i === step ? 'w-7 bg-white/75' : i < step ? 'w-3 bg-white/35' : 'w-3 bg-white/[0.10]',
+          'h-[5px] rounded-full transition-all duration-500 ease-out',
+          i === step ? 'w-8 bg-white/85' : 'w-[5px] bg-white/20',
         )}
       />
     ))}
