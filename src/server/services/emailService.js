@@ -756,12 +756,35 @@ export async function sendEmail(db, template, toEmail, data, userId = null) {
 export function sendWelcomeEmail(db, user) {
   if (!user?.email) return;
   const displayName = user.display_name || user.displayName || user.username || '';
-  Promise.resolve()
-    .then(() => sendEmail(db, 'welcome', user.email, {
-      displayName,
-      loginUrl: 'https://xenostudio.ai',
-    }, user.id || null))
-    .catch((err) => console.error(`[Email] welcome send failed for ${user.email}:`, err?.message || err));
+
+  // DETACHED on purpose — a signup must never fail because mail is down. But
+  // detached also meant "lost on the first transient error", with a console
+  // line as the only trace. A welcome email is sent exactly once in a user's
+  // life and there is no second natural trigger, so a dropped one is gone for
+  // good. `email_logs` had TWO rows against 223 accounts when this was written;
+  // whatever the cause, nothing here would have told us.
+  //
+  // Three attempts with backoff. A 4xx is NOT retried — Resend rejecting a
+  // payload on content will reject it identically twice more, which only delays
+  // the log line that explains why.
+  const attempt = (n) => sendEmail(db, 'welcome', user.email, {
+    displayName,
+    // /overview, not the marketing home. The template's primary CTA reads
+    // "Open the workspace"; pointing it at the landing page makes it a lie.
+    loginUrl: `${SITE}/overview`,
+  }, user.id || null).catch((err) => {
+    const status = err?.status || err?.statusCode;
+    const retriable = !(status >= 400 && status < 500);
+    if (n >= 3 || !retriable) {
+      console.error(`[Email] welcome PERMANENTLY failed for ${user.email} after ${n} attempt(s):`, err?.message || err);
+      return { success: false, failed: true };
+    }
+    const wait = 2000 * n;
+    console.warn(`[Email] welcome attempt ${n} failed for ${user.email}, retrying in ${wait}ms:`, err?.message || err);
+    return new Promise((r) => setTimeout(r, wait)).then(() => attempt(n + 1));
+  });
+
+  Promise.resolve().then(() => attempt(1));
 }
 
 /**
