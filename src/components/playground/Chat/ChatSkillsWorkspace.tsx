@@ -594,6 +594,13 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
                   <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
                     Name
                   </span>
+                  {/* Stays hand-written, and the three fields in this workspace share one reason
+                      with two halves. They are `h-10` — 40px, where the control scale tops out at 36
+                      — and they are filled with `--chat-surface` because they sit on a raised panel.
+                      `.xeno-input` hard-codes `background: var(--xeno-canvas)`, so the component
+                      would darken each of them to #0a0a0a inside a #171717 card. Neither half is a
+                      call site's to fix: the height wants a size this app has not declared, and the
+                      fill wants the component to take one. */}
                   <input
                     type="text"
                     value={createName}
@@ -614,6 +621,7 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
                   <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
                     Summary
                   </span>
+                  {/* Stays hand-written — the Name field's twin, same height and same fill. */}
                   <input
                     type="text"
                     value={createSummary}
@@ -841,6 +849,8 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
                     <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
                       Name
                     </span>
+                    {/* Stays hand-written — the create fields' twin one panel over, same 40px box
+                        and same panel fill. */}
                     <input
                       type="text"
                       value={importName}

@@ -274,8 +274,19 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
 
         <div className="mb-3 flex flex-shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <input
+            {/* `TextInput lg`. The box matches on every count that has a token: 36px is lg, the
+                component's `--xeno-radius-md` is 6px which is this page's RADIUS, and the border and
+                focus ring come from the same `--chat-border` / `--chat-muted` pair this wrote by
+                hand. The fill goes from `bg-transparent` to the component's `--xeno-canvas`, which on
+                this page IS what was showing through.
+                The type does not move. `.xeno-input` sets no font-size and `.xeno-input-field` is
+                `font: inherit`, so a field takes the type of the place it sits in — worth knowing,
+                because §7 warned about that for Textarea and it is not true of this one.
+                `className` lands on the WRAPPER, which is the box that has to flex. */}
+            <TextInput
+              size="lg"
               type="text"
+              className="min-w-0 flex-1"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -285,8 +296,6 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
                 }
               }}
               placeholder="New task…"
-              className={`h-9 min-w-0 flex-1 border bg-transparent px-2.5 text-[12.5px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] ${RADIUS}`}
-              style={{ borderColor: 'var(--chat-border)' }}
               aria-label="New scheduled task"
             />
             {/* The global settings page's Save, down to the class string: a `--chat-control` fill
