@@ -14297,6 +14297,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               {/* System Prompt — multi-interface only; main chat opens it from ⋯ */}
               {isMultiInterface && (
               <div className={`relative ${messages.length === 0 ? 'hidden' : ''}`}>
+                {/* Stays hand-written, and only for its selected state. At rest it is `quiet` to
+                    the letter — hairline, muted ink, full ink over a hover tint — but with a persona
+                    chosen the BORDER turns `--chat-accent` and the ink comes up, with no fill. That
+                    is the ninth ringed selection in this chat and the library says chosen by filling
+                    and dropping the outline, which is the opposite move (§9). Converting the resting
+                    half and hand-painting the other would put the split back inside one button. */}
                 <button
                   ref={systemPromptButtonRef}
                   onClick={toggleSystemPrompt}
@@ -14322,6 +14328,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   ref={systemPromptPanelRef}
                   className={`absolute left-0 top-full z-20 mt-[10px] flex origin-top-left flex-col gap-2 transition-all duration-200 ease-out ${isSystemPromptOpen && !isCustomPromptOpen ? 'visible scale-100 opacity-100' : 'pointer-events-none invisible scale-95 opacity-0'}`}
                 >
+                  {/* Stays hand-written, and it needs more than the ring. Unselected these rest on
+                      `--chat-elevated`; selected they take `--chat-control` AND an accent border. The
+                      variants carry one control fill and no accent outline, so both states would have
+                      to be repainted rather than named. */}
                   {PERSONAS.map((persona) => (
                     <button key={persona.id} onClick={() => handlePersonaSelect(persona.id)}
                       className={`flex h-9 w-[8rem] items-center justify-center rounded-lg border px-3 py-1.5 text-sm transition-colors ${selectedPersona === persona.id ? 'border-[var(--chat-accent)] bg-[var(--chat-control)] text-[var(--chat-text)]' : 'border-[var(--chat-border)] bg-[var(--chat-elevated)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'}`}
@@ -14348,12 +14358,31 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   style={{ width: '18rem' }}>
                   <textarea placeholder="Enter custom system prompt..." value={systemPrompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSystemPrompt(e.target.value)}
                     className="h-32 w-full resize-none border-b border-[var(--chat-border)] bg-[var(--chat-elevated)] p-3 text-sm text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]" />
+                  {/* Both are `quiet` word for word: a `--chat-border` hairline, muted ink, and
+                      full ink over a `--chat-hover` tint when reached for. 12px padding and 14px type
+                      are `md` to the pixel. Save's disabled branch was a hand-written 40% opacity
+                      with a not-allowed cursor, which is the availability axis said twice — the
+                      component carries both. `flex-1` stays; it is layout.
+                      Their two siblings one panel up converted several passes ago, so this row has
+                      been half component and half hand-written since. */}
                   <div className="flex gap-2 p-2">
-                    <button onClick={() => { setIsCustomPromptOpen(false); setIsSystemPromptOpen(true); }}
-                      className="flex-1 rounded-lg border border-[var(--chat-border)] px-3 py-1.5 text-sm text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]">Back</button>
-                    <button onClick={() => { setSavedSystemPrompt(systemPrompt); setIsCustomPromptOpen(false); setSelectedPersona('custom'); setIsSystemPromptSaved(true); setTimeout(() => setIsSystemPromptSaved(false), 1500); }}
+                    <Button
+                      variant="quiet"
+                      size="md"
+                      className="flex-1"
+                      onClick={() => { setIsCustomPromptOpen(false); setIsSystemPromptOpen(true); }}
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      variant="quiet"
+                      size="md"
+                      className="flex-1"
                       disabled={!systemPrompt.trim()}
-                      className={`flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${systemPrompt.trim() ? 'border-[var(--chat-border)] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]' : 'cursor-not-allowed border-[var(--chat-border)] text-[var(--chat-muted)] opacity-40'}`}>Save</button>
+                      onClick={() => { setSavedSystemPrompt(systemPrompt); setIsCustomPromptOpen(false); setSelectedPersona('custom'); setIsSystemPromptSaved(true); setTimeout(() => setIsSystemPromptSaved(false), 1500); }}
+                    >
+                      Save
+                    </Button>
                   </div>
                 </div>
               </div>
