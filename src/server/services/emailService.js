@@ -14,6 +14,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { isOptedOut, unsubscribeUrl } from './emailPreferences.js';
+import { activationUrl } from './accountActivation.js';
 
 /**
  * Templates that are SECURITY / ACCOUNT-RECOVERY mail and are therefore never
@@ -325,7 +326,7 @@ const templates = {
    * checklist row for a product that is not downloadable — an onboarding email that
    * sends people to a dead end is worse than no onboarding email.
    */
-  welcome: ({ displayName, loginUrl, unsubscribeUrl: unsubUrl }) => ({
+  welcome: ({ displayName, loginUrl, activateUrl, unsubscribeUrl: unsubUrl }) => ({
     // The subject promises the shape of the mail, not a greeting. "Welcome to
     // XENO" alone tells the reader nothing they did not already know from
     // having just signed up.
@@ -357,8 +358,8 @@ const templates = {
       </table>
 
       ${stepRow('01', 'Confirm your email',
-        'Takes one click, and it is what keeps account recovery working if you ever lose your password.',
-        `${SITE}/verify-email`, 'Confirm')}
+        'One click, and it is what unlocks the workspace. It also keeps account recovery working if you ever lose your password.',
+        activateUrl || `${SITE}/verify-email`, 'Confirm')}
 
       ${stepRow('02', 'Open the workspace',
         'Nothing to install. Start a conversation with a model in the browser and work from there.',
@@ -386,7 +387,7 @@ const templates = {
               <td width="50%" style="padding-left:2px;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#2b2b2b; border-radius:4px;">
                   <tr><td align="center">
-                    <a href="${SITE}/verify-email" style="display:block; padding:10px 14px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11.5px; font-weight:500; color:#d8d8de; text-decoration:none;">Confirm email</a>
+                    <a href="${escapeHtml(activateUrl || `${SITE}/verify-email`)}" style="display:block; padding:10px 14px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11.5px; font-weight:500; color:#d8d8de; text-decoration:none;">Confirm email</a>
                   </td></tr>
                 </table>
               </td>
@@ -772,6 +773,12 @@ export function sendWelcomeEmail(db, user) {
     // /overview, not the marketing home. The template's primary CTA reads
     // "Open the workspace"; pointing it at the landing page makes it a lie.
     loginUrl: `${SITE}/overview`,
+    // 🔴 The activation link is the ONLY way into the platform for a new
+    // account, so this mail stopped being a courtesy the moment the gate went
+    // in — it is now load-bearing. That is precisely why the retry below
+    // exists: a welcome silently lost to one transient Resend error used to
+    // cost a nicety, and now costs the user their account.
+    activateUrl: activationUrl(user.id),
   }, user.id || null).catch((err) => {
     const status = err?.status || err?.statusCode;
     const retriable = !(status >= 400 && status < 500);

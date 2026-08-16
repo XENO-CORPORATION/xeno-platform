@@ -17,6 +17,11 @@ import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail, sendWelcomeEmail } from '../services/emailService.js';
 import { recordSecurityEvent, EVENTS } from '../services/securityEvents.js';
 import { clientIp } from '../utils/clientIp.js';
+import {
+  verifyActivationToken,
+  activate as activateAccount,
+  isActivated as isAccountActivated,
+} from '../services/accountActivation.js';
 import { describeClient } from '../utils/userAgent.js';
 import {
   requireRegistrationOpen,
@@ -2160,6 +2165,82 @@ async function xmCheckHandleFree(db, handle) {
  * taken when it is not is a worse lie than the one being fixed. A caller can
  * now say "available — invite-only right now", which is the truth.
  */
+/**
+ * GET /activate?u=<userId>&t=<token> — the one click that turns a signup into
+ * an account that can use the platform.
+ *
+ * PUBLIC by necessity: it is clicked from an email client, often before any
+ * session cookie exists on that device, and requiring a login first would make
+ * the link fail exactly when it is most needed. Its authority is the HMAC, not
+ * a session.
+ *
+ * Redirects rather than returning JSON, because a human is on the other end of
+ * this URL. A JSON blob in a browser tab reads as a broken link.
+ */
+router.get('/activate', async (req, res) => {
+  const site = process.env.PUBLIC_SITE_URL || 'https://xenostudio.ai';
+  try {
+    const userId = String(req.query.u || '').trim();
+    const token = String(req.query.t || '').trim();
+
+    if (!userId || !token || !verifyActivationToken(userId, token)) {
+      return res.redirect(302, `${site}/auth?activation=invalid`);
+    }
+
+    // The account must still exist. A token for a deleted account is not an
+    // error worth explaining — it is simply not activatable.
+    const { rows } = await req.db.query('SELECT id FROM users WHERE id = $1', [userId]);
+    if (!rows.length) return res.redirect(302, `${site}/auth?activation=invalid`);
+
+    await activateAccount(req.db, userId, { method: 'email_link', ip: clientIp(req) });
+    return res.redirect(302, `${site}/overview?activated=1`);
+  } catch (e) {
+    console.error('[activate] error:', e?.message || e);
+    return res.redirect(302, `${site}/auth?activation=error`);
+  }
+});
+
+/**
+ * POST /resend-activation — authenticated, so it cannot be used to spray mail
+ * at arbitrary addresses. Rate-limited by the global limiter.
+ *
+ * Resolves the bearer token INLINE rather than via authMiddleware, because that
+ * is this file's convention (`/me`, `/logout` and the rest do the same) — this
+ * router is mounted WITHOUT auth in index.js, so `authMiddleware` is not a
+ * symbol in scope here. Reaching for it compiled fine and threw
+ * `ReferenceError` at import time, taking every DB-backed suite down with it.
+ */
+router.post('/resend-activation', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
+    const { rows } = await req.db.query(
+      'SELECT id, email, display_name, username FROM users WHERE id = $1', [decoded.userId],
+    );
+    if (!rows.length) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    if (await isAccountActivated(req.db, rows[0].id)) {
+      return res.json({ success: true, alreadyActivated: true });
+    }
+    sendWelcomeEmail(req.db, rows[0]);
+    res.json({ success: true, sent: true });
+  } catch (e) {
+    if (e?.name === 'JsonWebTokenError' || e?.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    console.error('[resend-activation] error:', e?.message || e);
+    res.status(500).json({ success: false, error: 'Could not resend' });
+  }
+});
+
 router.get('/handle-available', async (req, res) => {
   try {
     const handle = String(req.query.handle || '').trim().toLowerCase();
