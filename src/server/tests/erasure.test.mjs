@@ -19,6 +19,23 @@ CREATE TABLE IF NOT EXISTS credit_transactions (id uuid PRIMARY KEY DEFAULT gen_
 CREATE TABLE IF NOT EXISTS api_usage_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, surface varchar(64), operation varchar(128), model varchar(128), provider varchar(64), actual_cost_micro bigint, estimated_cost_micro bigint, input_tokens int DEFAULT 0, output_tokens int DEFAULT 0, status varchar(16), request_id varchar(128), endpoint text, method varchar(8), created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS external_identity_links (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), source_system varchar(64) NOT NULL, external_user_id text, external_email text, platform_user_id uuid NOT NULL, metadata jsonb, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS user_sessions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, token_hash varchar(255), session_token varchar(512), expires_at timestamp NOT NULL, ip_address text, user_agent text, created_at timestamp DEFAULT now());
+
+-- 🔴 Forum tables, because ERASURE NOW ERASES FORUM CONTENT.
+--
+-- eraseSubject step 5 calls eraseForumContent, which blanks the subject's post
+-- bodies and thread titles. Without these tables the whole suite dies with
+-- 'relation "forum_posts" does not exist' -- which is what it had been doing.
+--
+-- Only the columns the erasure path actually touches. A fixture that mirrors the
+-- full schema is a second schema to keep in sync; one that mirrors the WRITE
+-- PATH stays honest, and fails loudly the day that path grows a column -- which
+-- is exactly how this suite and auth-token-confusion both broke.
+--
+-- NOTE: no backticks in here. BASE is a JS template literal, so a backtick ends
+-- the string -- which is how the first version of this comment turned the file
+-- into a SyntaxError.
+CREATE TABLE IF NOT EXISTS forum_threads (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), author_id uuid, title varchar(300) DEFAULT '', status varchar(24) DEFAULT 'open', answer_post_id uuid, resolved_at timestamptz, resolved_by uuid, post_count int DEFAULT 0);
+CREATE TABLE IF NOT EXISTS forum_posts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), thread_id uuid, author_id uuid, body text DEFAULT '', status varchar(24) DEFAULT 'visible', is_answer boolean DEFAULT false, accepted_at timestamptz, accepted_by uuid, deleted_at timestamptz);
 `;
 
 async function main() {
