@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { IconButton, TextInput, useTabs } from '@xenosystem/elements-react';
+import { IconButton, Switch, TextInput, useTabs } from '@xenosystem/elements-react';
 import { Check, Search, Settings, Trash2, Trash2Decl, SearchDecl } from '@/lib/icons';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 import {
@@ -384,11 +384,13 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                             Allow XENO to store short facts from conversations.
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={memoryOn}
-                          onClick={() => {
+                        {/* The one real switch in the chat, and it converts at exactly its own size:
+                            36 × 20 with a 14px knob is what this was hand-built to and what the
+                            component is. The other three `role="switch"` controls here are text
+                            pills — a switch by role, a button by shape — so they are not this. */}
+                        <Switch
+                          checked={memoryOn}
+                          onCheckedChange={() => {
                             void (async () => {
                               const next =
                                 await setMemoryGenerateFromChats(!memoryOn);
@@ -396,23 +398,9 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                               setMemoryEntries(next.entries);
                             })();
                           }}
-                          className={`relative h-5 w-9 flex-shrink-0 border transition-colors ${RADIUS}`}
-                          style={{
-                            borderColor: 'var(--chat-border)',
-                            backgroundColor: memoryOn
-                              ? 'var(--chat-control)'
-                              : 'var(--chat-canvas)',
-                          }}
-                        >
-                          <span
-                            className={`absolute top-0.5 block h-3.5 w-3.5 rounded-[3px] transition-transform ${
-                              memoryOn
-                                ? 'translate-x-[18px]'
-                                : 'translate-x-0.5'
-                            }`}
-                            style={{ backgroundColor: 'var(--chat-text)' }}
-                          />
-                        </button>
+                          className="flex-shrink-0"
+                          aria-label="Generate memories from chats"
+                        />
                       </motion.div>
 
                       {memoryEntries.length === 0 ? (
