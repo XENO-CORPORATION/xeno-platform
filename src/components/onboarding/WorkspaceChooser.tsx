@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { Palette, FileText, Terminal, MessageSquare, Check, Sparkles } from 'lucide-react';
 import {
-  SUITES, EVERYTHING_ID, productsForSuite, allAvailableProducts, type Suite,
+  SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts, type Suite,
 } from '../../lib/workspaceSuites';
 import XenoGlyph from '../auth/XenoGlyph';
 import SuiteVisual from './SuiteVisual';
@@ -293,7 +293,14 @@ const SuiteCard: React.FC<{
             <Check className="h-3 w-3 text-black" strokeWidth={3} />
           </span>
         ) : (
-          <span className="shrink-0 text-[10.5px] tabular-nums text-white/30">{products.length}</span>
+          /* The LIVE count, not the row count. The card lists unshipped
+             products so the workspace's real scope is visible, but a header
+             number is read as "things I get", and counting four unreleased
+             apps into that is the kind of overstatement people notice on
+             day two. */
+          <span className="shrink-0 text-[10.5px] tabular-nums text-white/30">
+            {availableForSuite(suite).length}
+          </span>
         )}
       </span>
 
@@ -317,14 +324,25 @@ const SuiteCard: React.FC<{
         <span className="mt-2 grid grid-cols-2 gap-x-2 gap-y-[7px]">
           {products.map((p) => (
             <span key={p.slug} className="flex min-w-0 items-center gap-1.5">
-              <span className="shrink-0 text-white/35 transition-colors duration-200 group-hover:text-white/60">
+              <span className={`shrink-0 transition-colors duration-200 ${
+                p.status === 'coming-soon' ? 'text-white/15' : 'text-white/35 group-hover:text-white/60'
+              }`}>
                 {productIcon(p.slug)}
               </span>
               {/* The catalog prefixes every name with "XENO"; inside a XENO
                   workspace card that word is on every line and carries nothing. */}
-              <span className="truncate text-[11.5px] text-white/65">
+              <span className={`truncate text-[11.5px] ${
+                p.status === 'coming-soon' ? 'text-white/25' : 'text-white/65'
+              }`}>
                 {p.name.replace(/^XENO\s+/, '')}
               </span>
+              {/* Dimming alone is not a label — it could read as disabled, or
+                  as a rendering fault. The word says which. */}
+              {p.status === 'coming-soon' && (
+                <span className="shrink-0 text-[8.5px] font-semibold uppercase tracking-[0.1em] text-white/20">
+                  Soon
+                </span>
+              )}
             </span>
           ))}
         </span>

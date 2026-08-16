@@ -9,7 +9,7 @@ import { PRODUCTS } from '../lib/productCatalog';
 import AuthMark from '../components/auth/AuthMark';
 import WorkspaceChooser from '../components/onboarding/WorkspaceChooser';
 import useStepTransition from '../components/onboarding/useStepTransition';
-import { SUITES, EVERYTHING_ID, productsForSuite, suiteLabel } from '../lib/workspaceSuites';
+import { SUITES, EVERYTHING_ID, availableForSuite, suiteLabel } from '../lib/workspaceSuites';
 import {
   StepHeading, SelectTile, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress,
   INPUT_CLS, cx,
@@ -279,8 +279,13 @@ const Onboarding: React.FC = () => {
   const recommended = useMemo(() => {
     const rank = (s: string) => (s === 'shipping' ? 0 : s === 'beta' ? 1 : 2);
     const suite = SUITES.find((x) => x.id === answers.workspace);
+    /* availableForSuite, NOT productsForSuite: the card shows unshipped
+     * products to describe the workspace, but this step hands somebody a
+     * place to GO. Recommending a product that cannot be opened is the one
+     * case where showing scope becomes a dead end. `.filter(Boolean)` also
+     * drops non-catalog extras like Forum, which have no product page. */
     const pool = suite
-      ? productsForSuite(suite).map((p) => PRODUCTS.find((c) => c.slug === p.slug)!).filter(Boolean)
+      ? availableForSuite(suite).map((p) => PRODUCTS.find((c) => c.slug === p.slug)).filter(Boolean)
       : PRODUCTS.filter((p) => p.status !== 'coming-soon');
     return [...pool].sort((a, b) => rank(a.status) - rank(b.status)).slice(0, 5);
   }, [answers.workspace]);

@@ -1,9 +1,12 @@
 import React from 'react';
 import {
   Image, Video, Music, Box, Frame, Film, Brush, AudioWaveform,
-  FileText, NotebookPen, Table2, Presentation,
+  Camera, BookOpen, Rotate3d, Ruler,
+  FileText, NotebookPen, Table2, Presentation, FileType2,
+  Library as LibraryIcon, Type, FolderOpen,
   Plug, Bot, TerminalSquare, Sparkles, Cpu, Package, SquareTerminal, Workflow,
-  LayoutGrid, Globe, MessagesSquare, Puzzle, Send,
+  Gamepad2, MousePointerClick, Blocks,
+  LayoutGrid, Globe, MessagesSquare, Puzzle, Send, MessagesSquare as Forum,
   Boxes,
 } from 'lucide-react';
 
@@ -40,12 +43,20 @@ export const PRODUCT_ICON: Record<string, React.ReactNode> = {
   motion:    <Film className={I} />,
   pixel:     <Brush className={I} />,
   sound:     <AudioWaveform className={I} />,
+  photo:     <Camera className={I} />,
+  layout:    <BookOpen className={I} />,
+  '3d':      <Rotate3d className={I} />,
+  architect: <Ruler className={I} />,
 
   // Office
   docs:      <FileText className={I} />,
   notes:     <NotebookPen className={I} />,
   sheets:    <Table2 className={I} />,
   slides:    <Presentation className={I} />,
+  pdf:       <FileType2 className={I} />,
+  stock:     <LibraryIcon className={I} />,
+  fonts:     <Type className={I} />,
+  assets:    <FolderOpen className={I} />,
 
   // Developer
   acp:       <Plug className={I} />,
@@ -56,6 +67,9 @@ export const PRODUCT_ICON: Record<string, React.ReactNode> = {
   sdk:       <Package className={I} />,
   shell:     <SquareTerminal className={I} />,
   workflow:  <Workflow className={I} />,
+  engine:    <Gamepad2 className={I} />,
+  use:       <MousePointerClick className={I} />,
+  apps:      <Blocks className={I} />,
 
   // Connect
   hub:       <LayoutGrid className={I} />,
@@ -63,6 +77,9 @@ export const PRODUCT_ICON: Record<string, React.ReactNode> = {
   comms:     <MessagesSquare className={I} />,
   extension: <Puzzle className={I} />,
   post:      <Send className={I} />,
+  // Not a catalog product — a platform surface declared as a suite `extra`.
+  // It still needs a mark, because it still renders on the Connect card.
+  forum:     <Forum className={I} />,
 };
 
 /** The mark for a product, or a generic one. */

@@ -34,6 +34,19 @@ export type Suite = {
   tagline: string;
   /** Catalog categories that make up this suite. */
   categories: string[];
+  /**
+   * Members that are NOT catalog products.
+   *
+   * The catalog lists things you download or open as an app. A few real,
+   * shipping surfaces are not that — Forum lives at xenostudio.ai/forum by a
+   * locked spec decision (no repo, no installer, Marketplace pattern), so it
+   * has no slug, no category and nothing for the mapping above to find.
+   *
+   * Declared explicitly rather than faked into productCatalog, because a
+   * catalog entry would give it a product page, a download route and a
+   * releases feed that do not exist. Honest membership, honest absence.
+   */
+  extras?: SuiteProduct[];
 };
 
 export const SUITES: Suite[] = [
@@ -58,8 +71,14 @@ export const SUITES: Suite[] = [
   {
     id: 'connect',
     name: 'Connect',
-    tagline: 'Messaging, social and the agent-native browser',
+    tagline: 'Messaging, social, community and the agent-native browser',
     categories: ['Connect', 'Platform'],
+    // Live at /forum, and the only suite member that is a platform surface
+    // rather than an app. See `extras` above for why it is not in the catalog.
+    extras: [{
+      slug: 'forum', name: 'XENO Forum', tagline: 'Community and support',
+      status: 'beta', category: 'Connect',
+    }],
   },
 ];
 
@@ -70,23 +89,44 @@ export type SuiteProduct = {
   slug: string; name: string; tagline: string; status: string; category: string;
 };
 
-/** Products in a suite — derived from the catalog, best-status first.
+/**
+ * Products in a suite — derived from the catalog, available first.
  *
- *  `coming-soon` is excluded: a workspace built around things you cannot open
- *  is a worse first impression than a smaller workspace that works. */
+ * ⚠️ `coming-soon` is INCLUDED here, sorted last, and callers are expected to
+ * mark it. That reverses the earlier decision to filter it, and the reason is
+ * that filtering was answering the wrong question: on a card whose job is
+ * "what is this workspace", an unshipped product is part of the answer, and
+ * hiding it made Office look like four apps when it is eight. Half the
+ * catalog is coming-soon, so filtering silently shrank the ecosystem by half
+ * on the one screen meant to show its scale.
+ *
+ * It stays filtered where the question IS "what can I open now" — see
+ * `availableForSuite`, used by the recommendation step.
+ */
 export function productsForSuite(suite: Suite): SuiteProduct[] {
   const rank = (s: string) => (s === 'shipping' ? 0 : s === 'beta' ? 1 : 2);
-  return PRODUCTS
-    .filter((p) => suite.categories.includes(p.category) && p.status !== 'coming-soon')
-    .sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name))
+  const fromCatalog = PRODUCTS
+    .filter((p) => suite.categories.includes(p.category))
     .map((p) => ({
       slug: p.slug, name: p.name, tagline: p.tagline, status: p.status, category: p.category,
     }));
+  return [...fromCatalog, ...(suite.extras || [])]
+    .sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name));
 }
 
-/** Every available product, for the "everything" card. */
-export function allAvailableProducts(): SuiteProduct[] {
+/** Only what a user can actually open today. */
+export function availableForSuite(suite: Suite): SuiteProduct[] {
+  return productsForSuite(suite).filter((p) => p.status !== 'coming-soon');
+}
+
+/** Every product across every suite, including unshipped. */
+export function allSuiteProducts(): SuiteProduct[] {
   return SUITES.flatMap(productsForSuite);
+}
+
+/** Every product a user can open today — the honest number for a count. */
+export function allAvailableProducts(): SuiteProduct[] {
+  return SUITES.flatMap(availableForSuite);
 }
 
 /**
@@ -107,7 +147,7 @@ export function unmappedCategories(): string[] {
 
 /** Suite ids that resolve to nothing — an empty card is worse than no card. */
 export function emptySuites(): string[] {
-  return SUITES.filter((s) => productsForSuite(s).length === 0).map((s) => s.id);
+  return SUITES.filter((s) => availableForSuite(s).length === 0).map((s) => s.id);
 }
 
 /** The name to show for a stored choice, including the everything case. */
