@@ -58,21 +58,11 @@ async function main() {
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(), username text UNIQUE, email text UNIQUE,
     display_name text, avatar_url text, email_verified boolean DEFAULT true,
     is_active boolean DEFAULT true, role text DEFAULT 'user', created_at timestamptz DEFAULT now())`);
-  // 🔴 `last_active_at` is NOT optional here, and its absence broke CI for two
-  // days. `middleware/auth.js` writes it on every authenticated request —
-  // session liveness, landed 2026-08-14 in `2a08cf8` — so a fixture without the
-  // column makes every authenticated call in this suite throw
-  // `column "last_active_at" does not exist`.
-  //
-  // ⚠️ The real lesson is the PATTERN, not the column. This fixture hand-rolls a
-  // schema that production gets from migrations, so it drifts by construction:
-  // it is correct only until someone adds a column, and nothing links the two.
-  // The durable fix is to seed from the baseline migration; this is the
-  // one-line version that turns CI green now.
-  await pool.query(`CREATE TABLE IF NOT EXISTS user_sessions (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, expires_at timestamptz,
-    last_active_at timestamptz DEFAULT now(),
-    created_at timestamptz DEFAULT now())`);
+  // user_sessions comes from the MIGRATIONS, not from a hand-written copy.
+  // This fixture used to declare its own and lost `last_active_at` when session
+  // liveness shipped, which broke CI for two days.
+  await pool.query(tableDDL('user_sessions'));
+
   await pool.query(`CREATE TABLE IF NOT EXISTS api_keys (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL,
     key_prefix varchar(16) NOT NULL, key_hash varchar(255) NOT NULL UNIQUE,
