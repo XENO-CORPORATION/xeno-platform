@@ -248,6 +248,8 @@ export {
   GStop as StopCircleDecl,
   GFolderUp as FolderUpDecl,
   GNextDismiss as NextDismissDecl,
+  GPause as PauseDecl,
+  GPlay as PlayDecl,
 };
 
 /* Different name, same meaning. */

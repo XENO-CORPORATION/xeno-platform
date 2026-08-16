@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { IconButton, MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/elements-react';
-import { ChevronDown, Clock, Pause, Play, Search, Trash2Decl, SearchDecl } from '@/lib/icons';
+import { ChevronDown, Clock, Pause, Play, Search, Trash2Decl, SearchDecl, PauseDecl, PlayDecl } from '@/lib/icons';
 import {
   SCHEDULED_STATUS_LABEL,
   createScheduledTask,
@@ -428,26 +428,23 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
                             {formatNextRun(task.nextRunAt)}
                           </span>
                           <div className="flex flex-shrink-0 items-center justify-end gap-0.5">
-                            <button
-                              type="button"
+                            <IconButton
+                              icon={isActive ? PauseDecl : PlayDecl}
+                              variant="ghost"
+                              size="sm"
+                              iconSize={13}
+                              className="chat-scheduled-action flex-shrink-0"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 void handleToggleStatus(task);
                               }}
-                              className={`chat-scheduled-action flex h-7 w-7 items-center justify-center text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] ${RADIUS}`}
                               aria-label={
                                 isActive
                                   ? `Pause ${task.title}`
                                   : `Resume ${task.title}`
                               }
                               title={isActive ? 'Pause' : 'Resume'}
-                            >
-                              {isActive ? (
-                                <Pause size={13} aria-hidden="true" />
-                              ) : (
-                                <Play size={13} aria-hidden="true" />
-                              )}
-                            </button>
+                            />
                             <IconButton
                               icon={Trash2Decl}
                               variant="ghost"

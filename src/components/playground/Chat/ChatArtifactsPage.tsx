@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/elements-react';
-import { Check, ChevronDown, Copy, File, FileImage, FileText, Search, Shapes, SearchDecl } from '@/lib/icons';
+import { Button, MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/elements-react';
+import { Check, ChevronDown, Copy, File, FileImage, FileText, Search, Shapes, SearchDecl, CheckDecl, CopyDecl } from '@/lib/icons';
 import {
   ARTIFACT_KIND_LABEL,
   deleteArtifact,
@@ -344,13 +344,15 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
                             {artifact.conversationTitle} · {formatEdited(artifact.updatedAt)}
                           </span>
                         </span>
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          leadingIcon={isCopied ? CheckDecl : CopyDecl}
+                          className="chat-artifact-copy-btn flex-shrink-0"
                           onClick={(event) => {
                             event.stopPropagation();
                             void handleCopyLink(artifact.id);
                           }}
-                          className="chat-artifact-copy-btn flex h-7 flex-shrink-0 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                           aria-label={
                             isCopied
                               ? `Copied link for ${artifact.title}`
@@ -358,13 +360,8 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
                           }
                           title={isCopied ? 'Copied' : 'Copy link'}
                         >
-                          {isCopied ? (
-                            <Check size={13} aria-hidden="true" />
-                          ) : (
-                            <Copy size={13} aria-hidden="true" />
-                          )}
-                          <span>{isCopied ? 'Copied' : 'Copy link'}</span>
-                        </button>
+                          {isCopied ? 'Copied' : 'Copy link'}
+                        </Button>
                       </div>
                       <pre
                         className="max-h-[4.5rem] overflow-hidden whitespace-pre-wrap break-words rounded-lg px-2.5 py-2 font-mono text-[11px] leading-relaxed text-[var(--chat-muted)]"
