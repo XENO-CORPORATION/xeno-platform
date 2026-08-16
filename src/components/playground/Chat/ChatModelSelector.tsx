@@ -316,6 +316,14 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                 {activeInlineProviderGroup.models.map((model, index) => {
                   const isSelected = selectedModel.id === model.id;
 
+                  /* Stays hand-written, and the blocker is a SURFACE the variant set has no member
+                     for. Unselected, this chip rests on `--chat-overlay`, which is
+                     `rgba(0, 0, 0, 0.18)` — a translucent wash that darkens the composer behind it,
+                     not a colour. Every fill the library offers is opaque, and swapping an opaque
+                     `--xeno-control` in would make these sit ON the composer instead of IN it.
+                     That substitution has been made once before in this project, in the other
+                     direction — `--chat-hover` used as a rest fill — and it would have left every
+                     chip looking permanently hovered. Same class of mistake. */
                   return (
                     <button
                       key={model.id}
@@ -348,6 +356,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                 inlineProviderGroups.map((group, index) => {
                 const isSelectedProvider = group.companyName === selectedProviderName;
 
+                // Stays hand-written: the model chip's twin one rail up, same `--chat-overlay` rest.
                 return (
                   <button
                     key={group.companyName}
@@ -375,6 +384,10 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
             </div>
           </div>
 
+          {/* Stays hand-written, both of them: these are not buttons wearing a gradient, they ARE
+              the gradient — a 40px fade over the rail's edge that happens to be clickable and to
+              hold a hint chevron. There is no box, no label and no rest state for a variant to
+              decide. Three more of the same shape live elsewhere in the chat. */}
           {isInlineRailSettled && inlineRailScrollState.canScrollLeft && (
             <button
               type="button"
@@ -387,6 +400,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
             </button>
           )}
 
+          {/* Stays hand-written — the right-hand half of the pair above, same reason. */}
           {isInlineRailSettled && inlineRailScrollState.canScrollRight && (
             <button
               type="button"
@@ -400,6 +414,11 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
           )}
         </div>
       )}
+      {/* Stays hand-written, and it was already decided: the library's ModelPicker has no place for
+          the gooey inline tray this opens. Three further things hold it here even as a plain
+          `<Button>` — it rests on `--chat-overlay` in its minimal form, index.css pins its whole
+          chip family with `!important` so no size token would survive, and its face is four
+          conditional glyphs deep (spinner, brain-circuit, brain, chevron). */}
       <button
         ref={triggerRef}
         type="button"
@@ -479,6 +498,14 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                       {group.models.map((model, modelIndex) => {
                         const isSelected = selectedModel.id === model.id;
 
+                        /* Stays hand-written, on three counts rather than one. Its selected fill is
+                           `--chat-control-strong`, a second unmapped surface — the variants have one
+                           control fill, not two, so selected and unselected would come out the same
+                           weight and only the check would separate them. It is laid out
+                           `justify-between`, a name on the left and a token count on the right,
+                           where a button centres its content. And it carries a per-item
+                           `animationDelay`, which `Button` omits from its props by design.
+                           A row, in other words, not a button. */
                         return (
                           <button
                             key={model.id}

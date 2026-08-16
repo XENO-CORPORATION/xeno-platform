@@ -294,6 +294,26 @@ Re-deciding these costs more than it saves.
 
 ## 9. Out of scope — belongs to someone else
 
+- **Two chat surface roles the variant set has no member for.** Not a conversion decision — a
+  question for whoever owns the design system, and `CLAUDE.md` rule 1 says it is not this repo's to
+  answer.
+
+  | Token | What it is | Blocks |
+  |---|---|---|
+  | `--chat-overlay` | `rgba(0,0,0,0.18)` — a translucent wash that darkens what is behind it, not a colour | 6 controls: the 4 mode tabs, the inline model + provider chips, the model trigger's minimal form |
+  | `--chat-control-strong` | a second, brighter control fill (`#404040` dark / `#e5e5e5` light) | 8 sites, incl. the model tray rows, where it is the *selected* fill |
+
+  Every fill the library offers is opaque and there is exactly one control fill, so a chip resting on
+  the wash would come out sitting ON the composer instead of IN it, and a two-weight selection would
+  flatten to one. **Do not substitute `--xeno-control` for either.** That exact substitution has been
+  made once already in this project — `--chat-hover`, a pointer signal, used as a rest fill — and it
+  would have shipped a chat where every chip looked permanently hovered.
+
+- **The sort trigger's reveal.** Two pages now carry the same unconvertible control (artifacts,
+  scheduled): a chevron that is not a leading icon but a 600ms padding reveal, sliding out from under
+  a label that carries its own background. `leadingIcon` is a slot in a flex row and that is the one
+  place it cannot be. Worth one library answer rather than a third comment.
+
 - **7 `ReferenceError`s** outside the chat — Office, AudioGeneration, ImageStudio. `npm run
   check:names` lists them with file and line. The fixes need their authors' intent (`smoothStroke`
   has a different signature; `currentEditIndex` does not exist as state). **Report, do not guess.**

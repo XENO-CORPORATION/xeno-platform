@@ -67,11 +67,23 @@ function expander(src) {
  */
 const MARKER = 'Stays hand-written';
 function documentedAbove(src, at) {
-  const before = src.slice(Math.max(0, at - 1200), at).trimEnd();
-  const tail = before.endsWith('*/}') ? before.slice(0, -1) : before;
-  if (!tail.endsWith('*/')) return false;
-  const open = tail.lastIndexOf('/*');
-  return open >= 0 && tail.slice(open).includes(MARKER);
+  /*
+   * Looks for the PHRASE in the window above, not for a comment glued to the tag.
+   *
+   * The first version required the text immediately before `<button` to end in a block-comment
+   * close, and it found one marker out of six: a reason written above a `return (`, or above a
+   * `{cond && (`, or as a line comment, all read as undocumented. Worse than not detecting — the board
+   * then keeps offering a finished file as the smallest one left, which is the exact loop this was
+   * added to break.
+   *
+   * The guard against a comment being claimed by the wrong button is that no OTHER `<button` may
+   * stand between the phrase and this one.
+   */
+  const from = Math.max(0, at - 1400);
+  const before = src.slice(from, at);
+  const marker = before.lastIndexOf(MARKER);
+  if (marker < 0) return false;
+  return !before.slice(marker).includes('<button');
 }
 
 function buttonsIn(file) {
