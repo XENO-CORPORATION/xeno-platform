@@ -80,6 +80,7 @@ import { databaseMiddleware } from './middleware/database.js';
 import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
 import forumRoutes from './routes/forumRoutes.js';
+import { requireActivated } from './services/accountActivation.js';
 import agentRoutes from './routes/agentRoutes.js';
 import { authMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
@@ -471,15 +472,29 @@ app.use('/api/filesystem', (req, res, next) => {
 // Conversion routes — SECURITY: require auth at the mount (identity comes only from
 // req.user, never from headers). uploadLimiter caps the file-upload endpoint.
 app.use('/api/conversion/upload', uploadLimiter);
-app.use('/api/conversion', databaseMiddleware, authMiddleware, conversionRoutes);
+// ── ACTIVATION GATE ────────────────────────────────────────────────────────
+//
+// `requireActivated` is applied to the PLATFORM surfaces above (generation,
+// media, workspaces) and deliberately NOT to:
+//
+//   /api/auth     you must be able to sign in to learn you are unactivated,
+//                 and to ask for the link again
+//   /api/v2/me    the client needs to READ its own state to render the prompt
+//   /api/email    the unsubscribe link is clicked from mail, unauthenticated
+//   /api/forum    the Record is public by design (SPEC D2)
+//   /api/billing  never block someone from paying you
+//
+// A gate that blocks login does not read as "confirm your email" — it reads as
+// "your account is broken", and support cannot tell those apart either.
+app.use('/api/conversion', databaseMiddleware, authMiddleware, requireActivated, conversionRoutes);
 
 // Video Studio routes (with auth and database middleware)
-app.use('/api/video', databaseMiddleware, authMiddleware, videoRoutes);
+app.use('/api/video', databaseMiddleware, authMiddleware, requireActivated, videoRoutes);
 console.log('🎬 Video Studio routes integrated: /api/video/*');
 
 
 // Xeno AI proxy routes (credit-tracked generation)
-app.use('/api/xeno', databaseMiddleware, authMiddleware, xenoRoutes);
+app.use('/api/xeno', databaseMiddleware, authMiddleware, requireActivated, xenoRoutes);
 console.log('🎯 Xeno AI proxy routes integrated: /api/xeno/*');
 
 // Marketplace routes (catalog, commerce, developer publishing, admin review).
@@ -500,7 +515,7 @@ console.log('👤 Account + dashboard routes integrated: /api/account/* + /api/d
 
 // Workspaces / teams (multi-tenant): workspace entity tables + ReBAC membership
 // (workspace:<id>#<role>@user:<id>). Standard authMiddleware — not OIDC-gated.
-app.use('/api/workspaces', databaseMiddleware, authMiddleware, workspaceRoutes);
+app.use('/api/workspaces', databaseMiddleware, authMiddleware, requireActivated, workspaceRoutes);
 app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceInviteRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 
@@ -544,7 +559,7 @@ app.use('/api/image', databaseMiddleware, imagePublicRoutes);
 console.log('🎨 Image Studio public routes integrated: /api/image/xeno-flow/*');
 
 // Image Studio routes (with auth and database middleware)
-app.use('/api/image', databaseMiddleware, authMiddleware, imageRoutes);
+app.use('/api/image', databaseMiddleware, authMiddleware, requireActivated, imageRoutes);
 console.log('🎨 Image Studio routes integrated: /api/image/*');
 
 // Chat routes - init and generate endpoints don't require auth, others do
