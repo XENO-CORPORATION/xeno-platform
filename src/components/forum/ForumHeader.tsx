@@ -95,17 +95,21 @@ const ForumHeader: React.FC<{ viewer?: Viewer | null }> = ({ viewer }) => {
           {/* Renders nothing when signed out — see NotificationBell. */}
           <NotificationBell />
 
-          {signedIn ? (
-            {/*
-              /overview, NOT /dashboard.
+          {/*
+            The signed-in link goes to /overview, NOT /dashboard.
 
-              The first version linked to /dashboard, which is not a registered
-              route — and this SPA answers 200 with an empty shell for paths
-              that do not exist, so it looked fine in every check that reads a
-              status code. There is no profile page yet (WP5); /overview is the
-              real signed-in workspace, which is where "me" should lead until
-              there is somewhere better.
-            */}
+            It first pointed at /dashboard, which is not a registered route — and
+            this SPA answers 200 with an empty shell for paths that do not exist,
+            so it looked fine in every check that reads a status code. There is no
+            profile page yet (WP5); /overview is the real signed-in workspace.
+
+            This note lives OUT here on purpose, and must stay here. Placed as the
+            first thing inside the ternary's parentheses it is a SYNTAX ERROR: a
+            JSX comment is only legal in children position, never as the opening
+            token of a parenthesised expression. That exact mistake broke the
+            frontend build on main.
+          */}
+          {signedIn ? (
             <Link
               to="/overview"
               className="flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.06]"
