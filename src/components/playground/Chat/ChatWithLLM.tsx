@@ -11800,6 +11800,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         title="Add this message to the queue"
                       />
                     ) : (
+                      /* Stays hand-written, and the reason is a pair rather than this button.
+                         The three composer actions — Stop, Mic, Send — are guaranteed the same box
+                         by one shared `composerActionButtonSizeClass`, and a test counts its uses to
+                         keep that guarantee. Send cannot convert at all: index.css repaints it with
+                         `!important` in both states, so a variant would have nothing to decide.
+                         Converting the two that could would leave the pair the same size by two
+                         different mechanisms, which is the drift the shared class exists to stop.
+                         The class itself is already the scale — `h-7 w-7 rounded-lg` is `sm` at the
+                         control radius — so this converts the day Send can. */
                       <button
                         onClick={handleStopGeneration}
                         title="Stop generating"
@@ -11846,6 +11855,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           aria-expanded={isVoiceModeMenuOpen}
                           aria-haspopup="dialog"
                         />
+                        {/* Stays hand-written — Stop's neighbour, same shared size class and the
+                            same pair that cannot be split. */}
                         <button
                           type="button"
                           data-voice-primary
@@ -11877,6 +11888,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 <Hand size={13} className="shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
                                 <span className="truncate text-[11px] font-medium text-[var(--chat-text)]">Hold to record</span>
                               </div>
+                              {/* Stays hand-written: a 28 x 16 track with a thumb that grows as it
+                                  travels, where `<Switch>` is 36 x 20 with a 14px knob. Smaller than
+                                  the component in both directions, and its exact class strings are
+                                  pinned by scripts/test-chat-voice-controls.mjs down to the thumb's
+                                  travel in pixels. */}
                               <button
                                 type="button"
                                 data-voice-hold-switch
@@ -11904,6 +11920,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           </div>
                         )}
                       </div>
+                      {/* Stays hand-written, and it is the one holding the other two here. The
+                          normalisation block paints it with `!important` in both states — accent
+                          fill and inverted ink when it can send, a muted control fill when it
+                          cannot — so every colour a variant would choose is overruled before it
+                          renders. Its enabled state is also the inverted emphasis the variant set
+                          does not carry (§9). */}
                       <button
                         type="button"
                         data-composer-send-button
