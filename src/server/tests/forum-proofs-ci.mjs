@@ -166,3 +166,53 @@ async function main() {
 }
 
 main().catch((e) => { console.error('FATAL', e.message); process.exit(1); });
+
+/*
+ * ⚠️ UNFINISHED — DO NOT MERGE WITHOUT READING THIS.
+ *
+ * Nine CI rounds in, the job does not work and I stopped rather than keep
+ * spending on it. Recording the state so the next attempt starts from the
+ * evidence rather than from scratch.
+ *
+ * ── THE SYMPTOM, NARROWED ───────────────────────────────────────────────────
+ *
+ *   applied 00000000000000-baseline.sql        users=users spaces=null hooks=null
+ *   applied 20260318000001-infrastructure...   users=users spaces=null hooks=null
+ *   applied 20260809120000-forum-tables.sql    users=users spaces=null hooks=null
+ *   FATAL   ...forum-participation.sql: relation "forum_tags" does not exist
+ *
+ * The BASELINE applies and its tables exist. The two hand-written migrations
+ * after it send real SQL — 5,261 bytes / 6 CREATEs, and 10,322 bytes / 5
+ * CREATEs, verified by printing what is passed to `pool.query` — return without
+ * error, and create NOTHING. Same database, same schema (`forum_proofs`,
+ * `public`), checked with `to_regclass` rather than `information_schema` so a
+ * privilege or catalog quirk is not the explanation.
+ *
+ * ── RULED OUT ───────────────────────────────────────────────────────────────
+ *
+ *   • The UP/DOWN split. Verified locally: the UP half of forum-tables.sql is
+ *     205 lines with 5 CREATE TABLE and 0 DROP TABLE, split the same way
+ *     `services/migrationRunner.js` does.
+ *   • Truncation. The byte counts above are of the string actually sent.
+ *   • Wrong database or schema. Printed; both correct.
+ *   • A false-negative count. `to_regclass` agrees with
+ *     `information_schema.tables`.
+ *   • An error being swallowed. `await pool.query(sql)` sits inside the try that
+ *     reports the failure for the NEXT file.
+ *
+ * ── WHAT I WOULD CHECK NEXT ─────────────────────────────────────────────────
+ *
+ * The difference between the file that works and the ones that do not is that
+ * the baseline is a pg_dump of plain statements, while both failures are
+ * hand-written migrations. So: an implicit-transaction interaction with node-pg's
+ * simple-query protocol, something in those files that opens a transaction the
+ * split then leaves unterminated, or a `SET` that changes where objects land.
+ * Print `SELECT txid_current_if_assigned(), current_setting('search_path')`
+ * immediately after the query, and try applying ONE statement at a time.
+ *
+ * ── STATUS ──────────────────────────────────────────────────────────────────
+ *
+ * The `gates` job (npm test, 26 steps) IS merged and green on main — that half
+ * works and is the one that matters day to day. This job is branch-only and
+ * main is unaffected.
+ */
