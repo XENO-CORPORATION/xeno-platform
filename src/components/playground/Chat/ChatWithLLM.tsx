@@ -15137,6 +15137,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               />
               </div>
               ) : (
+              /* Stays hand-written, and it is not a control: zero by zero, `aria-hidden`, out of
+                 the tab order and pointer-transparent. It exists only so `settingsButtonRef` has
+                 something to point at when the real settings button is not rendered — a popover
+                 anchors against it. Giving it a variant would paint a button nobody can see or
+                 reach. */
               <button
                   ref={settingsButtonRef}
                   type="button"
@@ -15344,14 +15349,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            </p>
                                          </div>
                                          <div className="flex items-center justify-end gap-1.5">
-                                           <button
-                                             type="button"
+                                           {/* `secondary sm` word for word: a hairline, a
+                                               `--chat-control` fill, full ink, and a `--chat-hover`
+                                               tint on top when reached for. 13px type is sm's own. */}
+                                           <Button
+                                             variant="secondary"
+                                             size="sm"
                                              onClick={handleCancelEdit}
-                                             className="rounded-md border border-[var(--chat-border)] bg-[var(--chat-control)] px-3 py-1 text-[13px] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
                                              aria-label="Cancel edit"
                                            >
-                                                   Cancel
-                                               </button>
+                                             Cancel
+                                           </Button>
+                                           {/* Stays hand-written: a `--chat-accent` fill carrying
+                                               `--chat-on-accent` ink, which is the inverted emphasis
+                                               the variant set has no member for. Thirteenth control
+                                               in this chat filled that way, and the third Cancel/
+                                               confirm pair where only the Cancel can convert (§9). */}
                                            <button
                                              type="button"
                                              onClick={() => void handleSaveEdit()}
@@ -15414,6 +15427,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                            ? URL.createObjectURL(img.file)
                                                            : '';
                                                        if (!src) return null;
+                                                       /* Stays hand-written: a 148 x 200 image card.
+                                                          Its whole surface is the picture — no ink, no
+                                                          fill, no border and no label for a variant to
+                                                          decide, and the only chrome is a focus ring.
+                                                          A `Button` would add a control's height and
+                                                          side padding around an object that is already
+                                                          the right size. */
                                                        return (
                                                          <button
                                                            key={`${message.id}-img-${imageIndex}-${img.name}`}
