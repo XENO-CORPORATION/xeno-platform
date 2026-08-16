@@ -20,6 +20,7 @@
  */
 
 import crypto from 'crypto';
+import { ForumError } from './forumError.js';
 
 // Sort modes for the Record. Note what is absent: there is no "popular",
 // "trending", or "most viewed" — those are the forbidden signals in §5.4 and
@@ -756,21 +757,52 @@ export async function getPredicate(db, userId) {
  *            Without it an agent re-reports things the team already fixed,
  *            which is exactly how a digest destroys its own credibility.
  *
- * ⚠️ `advanceCursor` exists because computing the digest STAMPS `last_digest_at`
- * as a side effect, and that side effect belongs to the PULL channel alone. The
- * webhook push has its own clock (`last_push_at`), and a push that quietly
- * advanced the pull cursor would consume a window the agent's next poll was
- * about to ask for — the poll would succeed, return nothing, and nothing in the
- * system would report that anything had been lost.
+ * ── `channel` — ONE parameter, because the two behaviours are not independent ─
  *
- * A read that writes is fine when it has one caller. The moment it has two, the
- * write has to become the caller's decision.
+ * Computing the digest both CONSULTS and STAMPS `last_digest_at`. Both belong to
+ * the PULL channel: the webhook push has its own clock (`last_push_at`), and a
+ * push that advanced the pull cursor would consume a window the agent's next
+ * poll was about to ask for — the poll would succeed, return nothing, and
+ * nothing would report the loss.
+ *
+ * These started as two flags (`enforceRate`, `advanceCursor`) and were collapsed
+ * because three of the four combinations are wrong, and one is a trap: enforcing
+ * against a clock you never advance means the FIRST call sets the clock and
+ * every later call is refused forever. A parameter whose invalid settings are
+ * unrepresentable beats two booleans and a comment.
+ *
+ *   channel: 'pull'  consults and stamps last_digest_at  (REST, MCP, any client)
+ *   channel: 'push'  touches neither — the sweep owns last_push_at
+ *
+ * 🔴 THE RATE LIMIT LIVES HERE, NOT IN THE ROUTE. It used to be in the REST
+ * handler, which meant the MCP `forum_digest` tool — used by exactly the agents
+ * `max_per_hour` exists to restrain — bypassed it completely by choosing the
+ * other surface. The route's own comment warns that a second code path is how
+ * two surfaces drift; it had already happened one function below. Enforcing in
+ * the service makes every present and future surface inherit the rule.
  */
-export async function getDigest(db, userId, { since, advanceCursor = true } = {}) {
+export async function getDigest(db, userId, { since, channel = 'pull' } = {}) {
+  const isPull = channel !== 'push';
   const sub = await getPredicate(db, userId);
   if (!sub) return { subscribed: false, sections: null };
 
   const p = sub.predicate || {};
+
+  // 429 with a retry time, never a silent empty digest: an agent handed `{}`
+  // learns nothing and polls again immediately, which is precisely the
+  // behaviour the limit exists to stop.
+  if (isPull && sub.lastDigestAt && p.max_per_hour) {
+    const minGapMs = 3600000 / Number(p.max_per_hour);
+    const waited = Date.now() - new Date(sub.lastDigestAt).getTime();
+    if (waited < minGapMs) {
+      throw new ForumError(
+        'Digest requested faster than the predicate allows',
+        'digest_rate_limited',
+        429,
+        { retryAfterSeconds: Math.ceil((minGapMs - waited) / 1000) },
+      );
+    }
+  }
   const tags = Array.isArray(p.tags) ? p.tags : [];
   const space = p.space || null;
 
@@ -854,7 +886,7 @@ export async function getDigest(db, userId, { since, advanceCursor = true } = {}
 
   const url = (r) => `/forum/t/${r.short_id}/${r.slug}`;
 
-  if (advanceCursor) {
+  if (isPull) {
     await db.query(
       'UPDATE forum_subscriptions SET last_digest_at = NOW() WHERE user_id = $1 AND predicate IS NOT NULL',
       [userId],

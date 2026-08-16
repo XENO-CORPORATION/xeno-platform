@@ -19,6 +19,7 @@
  *      of creating a competitor.
  */
 
+import { ForumError } from './forumError.js';
 import { newShortId, slugifyTitle, searchThreads } from './forumService.js';
 // WP1 — the return path. Every notification in the product is created through
 // this one function; see the choke-point note in forumNotify.js.
@@ -71,14 +72,10 @@ const NEW_ACCOUNT_LIMITS = {
   agent: { threads: 1, posts: 5 },
 };
 
-export class ForumError extends Error {
-  constructor(message, code, statusCode = 400) {
-    super(message);
-    this.name = 'ForumError';
-    this.code = code;
-    this.statusCode = statusCode;
-  }
-}
+// Moved to its own module so the READ path can throw one too without closing
+// an import cycle (this file already imports forumService). Re-exported here so
+// every existing `import { ForumError } from './forumWrite.js'` keeps working.
+export { ForumError } from './forumError.js';
 
 const MAX_TITLE = 300;
 const MAX_BODY = 60000;
