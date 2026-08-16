@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { IconButton, MenuItem, useGooPill, useMenu } from '@xenosystem/elements-react';
-import { Check, ChevronDown, Clock, Pause, Play, Search, Trash2, Trash2Decl } from '@/lib/icons';
+import { IconButton, MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/elements-react';
+import { Check, ChevronDown, Clock, Pause, Play, Search, Trash2, Trash2Decl, SearchDecl } from '@/lib/icons';
 import {
   SCHEDULED_STATUS_LABEL,
   createScheduledTask,
@@ -279,22 +279,16 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
               Time-based runs — managed as a table, not a card gallery.
             </p>
           </div>
-          <label className="relative block w-full sm:max-w-[14rem]">
-            <span className="sr-only">Search scheduled tasks</span>
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search"
-              className={`h-9 w-full border bg-transparent pl-8 pr-3 text-[12.5px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] ${RADIUS}`}
-              style={{ borderColor: 'var(--chat-border)' }}
-            />
-          </label>
+          <TextInput
+            leadingIcon={SearchDecl}
+            size="lg"
+            type="search"
+            className="w-full sm:max-w-[14rem]"
+            aria-label="Search scheduled tasks"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search"
+          />
         </div>
 
         <div className="mb-3 flex flex-shrink-0 flex-col gap-2 sm:flex-row sm:items-center">

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MenuItem, useGooPill, useMenu } from '@xenosystem/elements-react';
-import { Check, ChevronDown, Copy, File, FileImage, FileText, Search, Shapes } from '@/lib/icons';
+import { MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/elements-react';
+import { Check, ChevronDown, Copy, File, FileImage, FileText, Search, Shapes, SearchDecl } from '@/lib/icons';
 import {
   ARTIFACT_KIND_LABEL,
   deleteArtifact,
@@ -269,22 +269,16 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
               Artifacts
             </h2>
           </div>
-          <label className="relative block w-full sm:max-w-[16rem]">
-            <span className="sr-only">Search artifacts</span>
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search"
-              className="h-9 w-full rounded-lg border bg-transparent pl-8 pr-3 text-[12.5px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-border)]"
-              style={{ borderColor: 'var(--chat-border)' }}
-            />
-          </label>
+          <TextInput
+            leadingIcon={SearchDecl}
+            size="lg"
+            type="search"
+            className="w-full sm:max-w-[16rem]"
+            aria-label="Search artifacts"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search"
+          />
         </div>
 
         <div className="mb-3 flex flex-shrink-0 flex-wrap gap-1.5">

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { IconButton, useTabs } from '@xenosystem/elements-react';
-import { Check, Search, Settings, Trash2, Trash2Decl } from '@/lib/icons';
+import { IconButton, TextInput, useTabs } from '@xenosystem/elements-react';
+import { Check, Search, Settings, Trash2, Trash2Decl, SearchDecl } from '@/lib/icons';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 import {
   deleteMemoryEntry,
@@ -485,22 +485,16 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                           Applies to the open chat (new or existing). Click again
                           to clear. Create/edit personas stay in this library.
                         </p>
-                        <label className="relative block w-full sm:w-[12rem]">
-                          <span className="sr-only">{searchPlaceholder}</span>
-                          <Search
-                            size={14}
-                            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]"
-                            aria-hidden="true"
-                          />
-                          <input
-                            type="search"
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder="Search"
-                            className={`h-9 w-full border bg-transparent pl-8 pr-3 text-[12.5px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] ${RADIUS}`}
-                            style={{ borderColor: 'var(--chat-border)' }}
-                          />
-                        </label>
+                        <TextInput
+                          leadingIcon={SearchDecl}
+                          size="lg"
+                          type="search"
+                          className="w-full sm:w-[12rem]"
+                          aria-label={{searchPlaceholder}}
+                          value={query}
+                          onChange={(event) => setQuery(event.target.value)}
+                          placeholder="Search"
+                        />
                       </motion.div>
                       {personas.length === 0 ? (
                         <motion.p
@@ -622,24 +616,18 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                               );
                             })}
                           </div>
-                          <label className="relative block w-full sm:w-[12rem]">
-                            <span className="sr-only">{searchPlaceholder}</span>
-                            <Search
-                              size={14}
-                              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]"
-                              aria-hidden="true"
-                            />
-                            <input
-                              type="search"
-                              value={query}
-                              onChange={(event) =>
+                          <TextInput
+                            leadingIcon={SearchDecl}
+                            size="lg"
+                            type="search"
+                            className="w-full sm:w-[12rem]"
+                            aria-label={{searchPlaceholder}}
+                            value={query}
+                            onChange={(event) =>
                                 setQuery(event.target.value)
                               }
-                              placeholder="Search"
-                              className={`h-9 w-full border bg-transparent pl-8 pr-3 text-[12.5px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] ${RADIUS}`}
-                              style={{ borderColor: 'var(--chat-border)' }}
-                            />
-                          </label>
+                            placeholder="Search"
+                          />
                         </div>
                       </motion.div>
                       {connectors.length === 0 ? (
@@ -722,22 +710,16 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                         <p className="text-[12.5px] text-[var(--chat-muted)]">
                           Install packs of skills and connectors.
                         </p>
-                        <label className="relative block w-full sm:w-[12rem]">
-                          <span className="sr-only">{searchPlaceholder}</span>
-                          <Search
-                            size={14}
-                            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]"
-                            aria-hidden="true"
-                          />
-                          <input
-                            type="search"
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder="Search"
-                            className={`h-9 w-full border bg-transparent pl-8 pr-3 text-[12.5px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] ${RADIUS}`}
-                            style={{ borderColor: 'var(--chat-border)' }}
-                          />
-                        </label>
+                        <TextInput
+                          leadingIcon={SearchDecl}
+                          size="lg"
+                          type="search"
+                          className="w-full sm:w-[12rem]"
+                          aria-label={{searchPlaceholder}}
+                          value={query}
+                          onChange={(event) => setQuery(event.target.value)}
+                          placeholder="Search"
+                        />
                       </motion.div>
                       {plugins.length === 0 ? (
                         <motion.p

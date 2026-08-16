@@ -1906,7 +1906,7 @@ const ChatWithVoice: React.FC = () => {
                               ref={editInputRef}
                               value={editText}
                               onChange={(e) => setEditText(e.target.value)}
-                              className="w-full bg-transparent text-sm leading-snug text-[var(--chat-text)] outline-none resize-none focus:ring-0 border-none focus:outline-none focus:shadow-none whitespace-pre-wrap focus:outline-none"
+                              className="w-full bg-transparent text-sm leading-snug text-[var(--chat-text)] outline-none resize-none focus:ring-0 border-none focus:outline-none focus:shadow-none whitespace-pre-wrap"
                               rows={1}
                               style={{ overflowY: 'hidden' }}
                             />

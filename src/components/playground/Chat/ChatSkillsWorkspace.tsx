@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { IconButton } from '@xenosystem/elements-react';
+import { IconButton, TextInput } from '@xenosystem/elements-react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Plus, Search, Trash2, Trash2Decl } from '@/lib/icons';
+import { ChevronLeft, ChevronRight, Plus, Search, Trash2, Trash2Decl, SearchDecl } from '@/lib/icons';
 import {
   addCatalogSkillToLibrary,
   addGlobalSkillToChat,
@@ -424,28 +424,16 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
           })}
         </div>
         {panel === 'library' && (
-          <label
-            // mr-1.5 keeps the field off the settings body's right edge. That body scrolls
-            // vertically, so it clips horizontally, and its edge landed exactly on this
-            // field — close enough that the global :focus-visible ring, which paints
-            // outside the border box, was sliced clean off whenever the field was focused.
-            className="relative ml-auto mr-1.5 block min-w-0 max-w-[14rem] flex-1"
-          >
-            <span className="sr-only">Search skills</span>
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search"
-              className={`h-9 w-full border bg-transparent pl-8 pr-3 text-[12.5px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] ${RADIUS}`}
-              style={{ borderColor: 'var(--chat-border)' }}
-            />
-          </label>
+          <TextInput
+            leadingIcon={SearchDecl}
+            size="lg"
+            type="search"
+            className="w-full ml-auto mr-1.5 min-w-0 max-w-[14rem] flex-1"
+            aria-label="Search skills"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search"
+          />
         )}
         {addBackLabel && (
           <button

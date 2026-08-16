@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { IconButton, useDialog } from '@xenosystem/elements-react';
-import { Briefcase, ChevronLeft, ChevronRight, Search, X, XDecl } from '@/lib/icons';
+import { IconButton, TextInput, useDialog } from '@xenosystem/elements-react';
+import { Briefcase, ChevronLeft, ChevronRight, Search, X, XDecl, SearchDecl } from '@/lib/icons';
 import {
   listSkills,
   setSkillEnabled,
@@ -429,25 +429,19 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
         </div>
 
         <div className="flex-shrink-0 px-5 pb-3">
-          <label className="relative block w-full">
-            <span className="sr-only">Search skills</span>
-            <Search
-              size={15}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => {
+          <TextInput
+            leadingIcon={SearchDecl}
+            size="lg"
+            type="search"
+            className="w-full"
+            aria-label="Search skills"
+            value={query}
+            onChange={(event) => {
                 setQuery(event.target.value);
                 if (event.target.value.trim()) setActiveCategory(null);
               }}
-              placeholder="Search"
-              className={`h-10 w-full border bg-transparent pl-10 pr-4 text-[13px] text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] ${RADIUS}`}
-              style={{ borderColor: 'var(--chat-border)' }}
-            />
-          </label>
+            placeholder="Search"
+          />
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden px-5 pb-6">
