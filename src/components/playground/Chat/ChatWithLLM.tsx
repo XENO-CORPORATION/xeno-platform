@@ -14027,6 +14027,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               title="Project settings"
                             />
                           </div>
+                          {/* Stays hand-written, and so do the three below it: the project
+                              sidebar's section cards are CARDS, and a `Button` is a horizontal row
+                              holding one line of label at a height the size scale picks. Every one of
+                              these stacks its content vertically at a height of its own.
+                              This one clamps four lines of the project instructions under a bold
+                              first line. `ListRow` is the nearest thing and it truncates title and
+                              subtitle to one line each, which is the opposite of what a preview is
+                              for. */}
                           <div className="px-1 pb-1.5 pt-0.5">
                             <button
                               type="button"
@@ -14072,6 +14080,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             <span className="truncate text-[13px] font-semibold leading-none tracking-tight text-[var(--chat-text)]">
                               Files
                             </span>
+                            {/* Stays hand-written: a mono counter, not a control. It is set in the
+                                MONO face — every button component here imposes the control font — and
+                                its ink is `--chat-muted` at 30%, a transparency no variant offers,
+                                brightening through two JS handlers rather than a state. */}
                             {hasHiddenProjectFiles ? (
                               <button
                                 type="button"
@@ -14127,6 +14139,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             </div>
                           </div>
 
+                          {/* Stays hand-written: a 104px dropzone, centred, stacking a glyph over
+                              a bold line over a wrapped sentence. `Button` centres its content in one
+                              horizontal row, and `Tile` is a small square that holds a single glyph —
+                              neither is a panel that explains itself. */}
                           {projectFiles.length === 0 ? (
                             <button
                               type="button"
@@ -14157,6 +14173,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       key={file.id}
                                       className="group/file relative min-w-0"
                                     >
+                                      {/* Stays hand-written — a 53.6px file card, `flex-col`, its
+                                          own border and a press that scales to 0.98. The sidebar's
+                                          card shape, and the third of four here. */}
                                       <button
                                         type="button"
                                         onClick={() =>
