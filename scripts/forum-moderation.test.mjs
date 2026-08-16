@@ -42,9 +42,19 @@ test('🔴 "actioned" HIDES the content — a status-only queue is theatre', () 
   // worse than no queue: it teaches people reporting is pointless AND tells
   // them so officially.
   const body = fn('resolveFlag');
-  assert.match(body, /UPDATE forum_posts SET status = 'hidden'/,
-    "upholding a flag on a post must hide it.");
-  assert.match(body, /UPDATE forum_threads SET status = 'locked'/,
+
+  // ⚠️ WHITESPACE-TOLERANT, AND THAT IS THE POINT. These assertions used to pin
+  // the exact one-line SQL `UPDATE forum_threads SET status = 'locked'`. Adding
+  // `locked_by`/`locked_at` — so a locked thread can say who locked it and when
+  // — reformatted the statement across lines and broke the test, while making
+  // the property it describes STRICTLY STRONGER.
+  //
+  // Fourth time a test in this repo has pinned a mechanism and then blocked an
+  // improvement to the thing it guards. Pin WHAT: the statement updates that
+  // table, to that status.
+  assert.match(body, /UPDATE\s+forum_posts\s+SET[\s\S]{0,120}?status\s*=\s*'hidden'/,
+    'upholding a flag on a post must hide it.');
+  assert.match(body, /UPDATE\s+forum_threads\s*[\s\S]{0,40}?SET[\s\S]{0,120}?status\s*=\s*'locked'/,
     'upholding a flag on a thread must lock it.');
 });
 
