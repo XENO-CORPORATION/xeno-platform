@@ -22,6 +22,7 @@ import {
   requireRegistrationOpen,
   assertRegistrationAllowed,
   assertAccountUsable,
+  isRegistrationOpen,
   AccountCreationBlockedError,
   AccountSuspendedError,
 } from '../middleware/registrationGate.js';
@@ -2139,13 +2140,42 @@ async function xmCheckHandleFree(db, handle) {
 }
 
 // Public availability check for the signup form (no auth — pre-account).
+/**
+ * GET /handle-available?handle=… — is this handle free, and can it be claimed?
+ *
+ * 🔴 AVAILABILITY AND ELIGIBILITY ARE DIFFERENT QUESTIONS, and conflating them
+ * is the bug this answers.
+ *
+ * `/register-with-handle` carries `requireRegistrationOpen`. This endpoint did
+ * not, and reported only whether the handle was free — so with signups closed,
+ * XENO Mail's signup page shows a green "Available" and a
+ * "Create you@xenostudio.ai" button, and the click fails. Recorded as
+ * `xeno-mail/STATUS.md` §5.8; what makes it urgent is that it is DATED — the
+ * box sets `REGISTRATION_OPEN_UNTIL=2026-08-28` for the YC window, so this
+ * turns from working to broken on the 29th with nobody touching the code.
+ *
+ * `signupOpen` is ADDITIVE and `ok` keeps its meaning ("the handle is free"),
+ * deliberately: collapsing the two into one boolean would make a closed signup
+ * indistinguishable from a taken handle, and telling someone their name is
+ * taken when it is not is a worse lie than the one being fixed. A caller can
+ * now say "available — invite-only right now", which is the truth.
+ */
 router.get('/handle-available', async (req, res) => {
   try {
     const handle = String(req.query.handle || '').trim().toLowerCase();
     const domain = mailDomain();
+    const signupOpen = isRegistrationOpen();
     const reason = await xmCheckHandleFree(req.db, handle);
-    if (reason) return res.json({ ok: false, reason, handle });
-    res.json({ ok: true, handle, address: `${handle}@${domain}` });
+    if (reason) return res.json({ ok: false, reason, handle, signupOpen });
+    res.json({
+      ok: true,
+      handle,
+      address: `${handle}@${domain}`,
+      signupOpen,
+      // Present ONLY when it changes what the caller should render, so a client
+      // that ignores it degrades to the old behaviour rather than to a lie.
+      ...(signupOpen ? {} : { claimable: false, claimReason: 'invite_only' }),
+    });
   } catch (e) {
     console.error('[handle-available] error:', e.message);
     res.status(500).json({ ok: false, reason: 'error' });

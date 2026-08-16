@@ -8,6 +8,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   isRegistrationOpen,
   registrationDecision,
@@ -213,4 +214,52 @@ test('an expired window refuses account creation through the throwing path too',
   withEnv({ REGISTRATION_OPEN: undefined, REGISTRATION_OPEN_UNTIL: '2020-01-01', REGISTRATION_ALLOWLIST: undefined }, () => {
     assert.throws(() => assertRegistrationAllowed('late@gmail.com'), AccountCreationBlockedError);
   });
+});
+
+// ── /handle-available must report ELIGIBILITY, not just availability ────────
+//
+// 🔴 This exists because the two were conflated, and the consequence was DATED.
+//
+// `/register-with-handle` carries requireRegistrationOpen. `/handle-available`
+// did not — it reported only whether the handle was free. So with signups
+// closed, XENO Mail's signup page shows a green "Available" and a
+// "Create you@xenostudio.ai" button, and the click fails. Recorded as
+// xeno-mail/STATUS.md §5.8.
+//
+// What makes it worth a gate rather than a fix: the box sets
+// REGISTRATION_OPEN_UNTIL=2026-08-28 for the YC window, so this turns from
+// working to broken on the 29th with nobody touching the code. A defect on a
+// timer is the kind nothing catches until a user hits it.
+//
+// Asserted against SOURCE because exercising the route needs an express app and
+// a database; what must never regress is that the handler consults the gate at
+// all, and that it does not collapse the two answers into one boolean.
+
+test('/handle-available consults the registration gate', () => {
+  const src = readFileSync(
+    new URL('../src/server/routes/authRoutes.js', import.meta.url), 'utf8');
+  const start = src.indexOf("router.get('/handle-available'");
+  assert.ok(start > -1, 'the /handle-available route still exists');
+  const handler = src.slice(start, src.indexOf('router.', start + 10));
+
+  assert.match(handler, /isRegistrationOpen\s*\(/,
+    'the handler does not consult isRegistrationOpen — with signups closed it will '
+    + 'report a claimable handle that /register-with-handle then refuses');
+  assert.match(handler, /signupOpen/,
+    'the response does not carry signupOpen, so no client can tell "free" from "claimable"');
+});
+
+test('availability and eligibility stay SEPARATE fields', () => {
+  // Collapsing them into `ok` would make a closed signup indistinguishable from
+  // a taken handle — telling someone their name is taken when it is free is a
+  // worse lie than the one being fixed.
+  const src = readFileSync(
+    new URL('../src/server/routes/authRoutes.js', import.meta.url), 'utf8');
+  const start = src.indexOf("router.get('/handle-available'");
+  const handler = src.slice(start, src.indexOf('router.', start + 10));
+
+  assert.match(handler, /ok:\s*true/,
+    'the free-handle branch must still report ok:true — ok means "the handle is free"');
+  assert.ok(!/ok:\s*signupOpen|ok:\s*.*&&\s*signupOpen/.test(handler),
+    'ok has been made dependent on signupOpen — that conflates "taken" with "closed"');
 });
