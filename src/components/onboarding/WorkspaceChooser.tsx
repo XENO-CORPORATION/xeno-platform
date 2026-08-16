@@ -226,6 +226,25 @@ const SuiteCard: React.FC<{
 }> = ({ suite, index, selected, absorbing, flightStyle, onSelect, registerRef }) => {
   const products = productsForSuite(suite);
 
+  /* ── SHELL / PLATE ANATOMY ────────────────────────────────────────────────
+   *
+   * Straight out of `XENO CHROME - CONSTRUCTION PLAYBOOK.md`, which is the
+   * callable authority for this and says it in one line: a surface is not a
+   * flat card, it is a SHELL OF PAGE BACKGROUND carrying separate plates with
+   * a 2px gap letting the page colour show between them.
+   *
+   *   shell   #08080a  (darkest — it is the page showing through)
+   *   header  #1a1a1a  (lightest plate)
+   *   body    #111111  (mid)
+   *
+   * The header being LIGHTER than the body is the part that looks wrong
+   * written down and correct on screen — it is what makes the body read as a
+   * recessed well rather than a panel sitting on top of a bar.
+   *
+   * ⚠️ A single surface with `border-bottom` dividers does NOT produce this.
+   * The playbook calls that out specifically; the gap is the whole effect, and
+   * a divider is a line where this needs a seam.
+   * ───────────────────────────────────────────────────────────────────────── */
   return (
     <button
       ref={registerRef as React.Ref<HTMLButtonElement>}
@@ -233,49 +252,57 @@ const SuiteCard: React.FC<{
       onClick={onSelect}
       aria-pressed={selected}
       style={{
-        background: selected
-          ? 'linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.018))'
-          : 'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008))',
+        background: '#08080a',
         boxShadow: selected
-          ? 'inset 0 1px 0 0 rgba(255,255,255,0.16), 0 20px 46px -18px rgba(0,0,0,0.92)'
-          : 'inset 0 1px 0 0 rgba(255,255,255,0.05), 0 10px 30px -16px rgba(0,0,0,0.8)',
+          ? '0 20px 46px -18px rgba(0,0,0,0.92)'
+          : '0 10px 30px -16px rgba(0,0,0,0.8)',
         ...(absorbing
           ? { transition: `transform ${ABSORB_MS}ms cubic-bezier(0.55,0,0.35,1), opacity ${ABSORB_MS}ms ease-in`, ...flightStyle }
           : { animation: 'xenoRise 0.6s cubic-bezier(0.16,1.02,0.3,1) forwards', animationDelay: `${0.06 + index * 0.07}s`, opacity: 0 }),
       }}
-      className={`focus-self group relative flex flex-col rounded-[14px] border p-3.5 text-left
+      className={`focus-self group relative flex flex-col gap-[2px] rounded-[10px] border p-1.5 text-left
                   ${absorbing
                     ? ''
                     : 'transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform hover:-translate-y-[5px] active:translate-y-0'}
-                  ${selected ? 'border-white/45' : 'border-white/[0.10] hover:border-white/[0.28]'}`}
+                  ${selected ? 'border-white/40' : 'border-white/[0.07] hover:border-white/[0.22]'}`}
     >
-      {/* The miniature. Same role as the reference card's gradient thumbnail —
-          it is what the card is ABOUT, and it goes first. */}
-      <SuiteVisual suiteId={suite.id} />
-
-      <span className="mt-3 flex items-start gap-2">
+      {/* ── Header plate ── */}
+      <span
+        className="flex shrink-0 items-center gap-2 rounded-t-[7px] px-3 py-2.5 transition-colors duration-200"
+        style={{ background: selected ? '#242424' : '#1a1a1a' }}
+      >
         <span className="min-w-0 flex-1">
-          <span className="block text-[14.5px] font-semibold leading-tight text-white">{suite.name}</span>
-          <span className="mt-1 block text-[11.5px] leading-snug text-white/35">{suite.tagline}</span>
+          <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">
+            {suite.name}
+          </span>
         </span>
-        <span
-          aria-hidden
-          className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] bg-white transition-all duration-200
-                     ${selected ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`}
-        >
-          <Check className="h-3 w-3 text-black" strokeWidth={3} />
-        </span>
+        {/* Selection replaces the count rather than sitting beside it — two
+            pieces of metadata in a header this small compete, and once chosen
+            the count is no longer the thing you need to know. */}
+        {selected ? (
+          <span aria-hidden className="grid h-[17px] w-[17px] shrink-0 place-items-center rounded-[4px] bg-white">
+            <Check className="h-3 w-3 text-black" strokeWidth={3} />
+          </span>
+        ) : (
+          <span className="shrink-0 text-[10.5px] tabular-nums text-white/30">{products.length}</span>
+        )}
       </span>
 
-      {/* Divider + "Includes" + a two-column icon grid — the anatomy of the
-          reference card. Every product carries its own mark, because a column
-          of identical bullets reads as a checklist rather than a set of
-          distinct tools. */}
-      <span className="mt-3.5 block border-t border-white/[0.07] pt-3">
-        <span className="block text-[9.5px] font-semibold uppercase tracking-[0.13em] text-white/25">
+      {/* ── Body plate ── */}
+      <span
+        className="flex flex-1 flex-col rounded-b-[7px] p-3"
+        style={{ background: '#111111' }}
+      >
+        <SuiteVisual suiteId={suite.id} />
+
+        <span className="mt-2.5 block text-[11.5px] leading-snug text-white/35">
+          {suite.tagline}
+        </span>
+
+        <span className="mt-3 block text-[9.5px] font-semibold uppercase tracking-[0.13em] text-white/25">
           Includes
         </span>
-        <span className="mt-2.5 grid grid-cols-2 gap-x-2 gap-y-[7px]">
+        <span className="mt-2 grid grid-cols-2 gap-x-2 gap-y-[7px]">
           {products.map((p) => (
             <span key={p.slug} className="flex min-w-0 items-center gap-1.5">
               <span className="shrink-0 text-white/35 transition-colors duration-200 group-hover:text-white/60">

@@ -171,64 +171,74 @@ export const PlanCard: React.FC<{
   onSelect: () => void;
   style?: React.CSSProperties;
 }> = ({ label, price, interval, features, badge, highlighted, available, busy, onSelect, style }) => (
+  /* Shell + plates, same anatomy as the suite cards and per
+     `XENO CHROME - CONSTRUCTION PLAYBOOK.md`: the shell carries page
+     background and the plates float on it with a 2px gap. Header LIGHTER than
+     body is deliberate — it is what makes the body read as a recessed well. */
   <div
     style={{
-      background: highlighted
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.018))'
-        : 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))',
+      background: '#08080a',
       boxShadow: highlighted
-        ? 'inset 0 1px 0 0 rgba(255,255,255,0.15), 0 18px 44px -18px rgba(0,0,0,0.95)'
-        : 'inset 0 1px 0 0 rgba(255,255,255,0.05), 0 10px 30px -16px rgba(0,0,0,0.85)',
+        ? '0 20px 48px -18px rgba(0,0,0,0.95)'
+        : '0 10px 30px -16px rgba(0,0,0,0.85)',
       ...style,
     }}
     className={cx(
-      'relative flex flex-col rounded-[14px] border p-5 transition-colors duration-200',
-      highlighted ? 'border-white/30' : 'border-white/[0.10] hover:border-white/20',
+      'relative flex flex-col gap-[2px] rounded-[12px] border p-1.5 transition-colors duration-200',
+      highlighted ? 'border-white/35' : 'border-white/[0.08] hover:border-white/20',
     )}
   >
     {badge && (
-      /* Sits ON the top edge rather than inside the padding, so it reads as a
-         ribbon on the card instead of a first list item. */
-      <span className="absolute -top-[9px] left-5 rounded-[5px] border border-white/25 bg-[#0e0e0e] px-2 py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.12em] text-white/80">
+      /* Sits ON the shell's top edge rather than inside a plate, so it reads as
+         a ribbon on the card instead of a first list item. */
+      <span className="absolute -top-[9px] left-4 z-10 rounded-[5px] border border-white/25 bg-[#0e0e0e] px-2 py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.12em] text-white/85">
         {badge}
       </span>
     )}
 
-    <span className={cx('text-[15px] font-medium', highlighted ? 'text-white' : 'text-white/85')}>
-      {label}
-    </span>
-
-    <div className="mt-2.5 flex items-baseline gap-1.5">
-      <span className="text-[32px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-white">
-        {price}
+    {/* ── Header plate ── */}
+    <div
+      className="flex shrink-0 items-baseline justify-between gap-2 rounded-t-[8px] px-4 py-3"
+      style={{ background: highlighted ? '#242424' : '#1a1a1a' }}
+    >
+      <span className={cx('text-[14.5px] font-semibold', highlighted ? 'text-white' : 'text-white/85')}>
+        {label}
       </span>
-      <span className="text-[13px] text-white/35">/{interval}</span>
+      <span className="flex items-baseline gap-1">
+        <span className="text-[22px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-white">
+          {price}
+        </span>
+        <span className="text-[11.5px] text-white/35">/{interval}</span>
+      </span>
     </div>
 
-    <ul className="mt-5 flex-1 space-y-2.5">
-      {features.map((f) => (
-        <li key={f} className="flex items-start gap-2.5">
-          <Check className="mt-[3px] h-[13px] w-[13px] shrink-0 text-white/55" strokeWidth={2.5} />
-          <span className="text-[12.5px] leading-snug text-white/60">{f}</span>
-        </li>
-      ))}
-    </ul>
+    {/* ── Body plate ── */}
+    <div className="flex flex-1 flex-col rounded-b-[8px] px-4 py-4" style={{ background: '#111111' }}>
+      <ul className="flex-1 space-y-2.5">
+        {features.map((f) => (
+          <li key={f} className="flex items-start gap-2.5">
+            <Check className="mt-[3px] h-[13px] w-[13px] shrink-0 text-white/55" strokeWidth={2.5} />
+            <span className="text-[12.5px] leading-snug text-white/60">{f}</span>
+          </li>
+        ))}
+      </ul>
 
-    <button
-      type="button"
-      disabled={!available || busy}
-      onClick={onSelect}
-      className={cx(
-        'focus-self mt-6 w-full rounded-[9px] px-4 py-2.5 text-[13.5px] font-semibold',
-        'transition-all duration-200 active:scale-[0.99]',
-        'disabled:cursor-not-allowed disabled:opacity-25',
-        highlighted
-          ? 'bg-white text-black hover:bg-white/90'
-          : 'border border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/[0.06]',
-      )}
-    >
-      {busy ? 'Opening checkout…' : available ? 'Select plan' : 'Not yet available'}
-    </button>
+      <button
+        type="button"
+        disabled={!available || busy}
+        onClick={onSelect}
+        className={cx(
+          'focus-self mt-5 w-full rounded-[8px] px-4 py-2.5 text-[13.5px] font-semibold',
+          'transition-all duration-200 active:scale-[0.99]',
+          'disabled:cursor-not-allowed disabled:opacity-25',
+          highlighted
+            ? 'bg-white text-black hover:bg-white/90'
+            : 'border border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/[0.06]',
+        )}
+      >
+        {busy ? 'Opening checkout…' : available ? 'Select plan' : 'Not yet available'}
+      </button>
+    </div>
   </div>
 );
 
