@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { IconButton } from '@xenosystem/elements-react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ArrowLeft, NextDismiss, Sparkles } from '@/lib/icons';
+import { ArrowLeft, NextDismiss, Sparkles, ArrowRightDecl, NextDismissDecl } from '@/lib/icons';
 import { getRelativeLuminance } from './chatTheme';
 import ChatUpdateDemoPanel from './ChatUpdateDemoPanel';
 import { captureDissolvePlate, runPixelDissolve } from './pixelDissolve';
@@ -527,22 +528,34 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
           >
             {showNavigation && (
               <>
-                <button
-                  type="button"
+                <IconButton
+                  icon={ArrowRightDecl}
+                  variant="quiet"
+                  size="md"
+                  iconSize={14}
+                  className="chat-icon-flip-x disabled:pointer-events-none disabled:opacity-50"
                   onClick={showPrevious}
                   disabled={isDissolving}
                   aria-label="Show previous update"
-                  className={`${navButtonClassName} disabled:pointer-events-none disabled:opacity-50`}
-                >
-                  <ArrowLeft size={14} />
-                </button>
+                />
                 <span className="min-w-10 text-center text-[11px] tabular-nums text-[var(--chat-muted)]">
                   {currentIndex + 1} / {availableUpdates.length}
                 </span>
               </>
             )}
-            <button
-              type="button"
+            {/* The morph is the whole point of this control: `next-dismiss` draws the same three
+                strokes as an arrow or as a cross, and `iconState` is what lets the button say which.
+                Converted only once `IconButton` could carry that — an earlier pass took the glyph and
+                dropped the state without saying so.
+                The two `data-` hooks that used to ride along are gone: neither was referenced
+                anywhere, in this file or out of it. */}
+            <IconButton
+              icon={NextDismissDecl}
+              variant="quiet"
+              size="md"
+              iconSize={14}
+              iconState={{ selection: showDismissInNav ? 'on' : 'off' }}
+              className="disabled:pointer-events-none disabled:opacity-50"
               onClick={showDismissInNav ? dismissCurrent : showNext}
               disabled={isDissolving}
               aria-label={
@@ -550,16 +563,7 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
                   ? `Dismiss ${currentUpdate.title}`
                   : 'Show next update'
               }
-              {...(showDismissInNav ? { 'data-update-carousel-dismiss': true } : {})}
-              className={`${navButtonClassName} disabled:pointer-events-none disabled:opacity-50`}
-            >
-              <NextDismiss
-                size={14}
-                state={{ selection: showDismissInNav ? 'on' : 'off' }}
-                data-update-nav-morph={showDismissInNav ? 'dismiss' : 'next'}
-                aria-hidden="true"
-              />
-            </button>
+            />
           </div>
         )}
       </div>

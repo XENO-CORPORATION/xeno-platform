@@ -247,6 +247,7 @@ export {
   GSend as SendDecl,
   GStop as StopCircleDecl,
   GFolderUp as FolderUpDecl,
+  GNextDismiss as NextDismissDecl,
 };
 
 /* Different name, same meaning. */
