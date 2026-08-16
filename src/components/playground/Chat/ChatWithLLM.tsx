@@ -52,7 +52,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, UserRoundX, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, UserRoundX, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -14410,19 +14410,34 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           {/* Center - Conversation Selector (only in multi-interface mode) - absolutely centered */}
           {isMultiInterface && (
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-              <button
+              {/* `quiet` + `data-selection`, and here that pairing means exactly what the library
+                  wrote it for: a quiet button is ON while the thing it opened is on screen. The other
+                  accent-bordered triggers in this file mark a CHOICE and stay hand-written; this one
+                  marks a panel, which is the disclosure the variant already names. It trades the
+                  accent border for the `--chat-control` fill, which is that sentence in the library's
+                  grammar.
+                  Both glyphs go to 16 — `iconSize` is one number for both slots, and the chevron was
+                  14. The chevron still flips, through `.chat-icon-turn` reading `aria-expanded`, an
+                  attribute this trigger did not have and should have. */}
+              <Button
                 ref={conversationSelectorButtonRef}
+                variant="quiet"
+                size="lg"
+                iconSize={16}
+                leadingIcon={MessageSquarePlusDecl}
+                trailingIcon={ChevronDownDecl}
+                className="chat-icon-turn max-w-[14rem] [--chat-icon-turn:180deg]"
+                data-selection={isConversationSelectorOpen ? 'on' : 'off'}
+                aria-expanded={isConversationSelectorOpen}
+                aria-haspopup="dialog"
                 onClick={() => setIsConversationSelectorOpen(!isConversationSelectorOpen)}
-                className={`flex h-9 max-w-[14rem] items-center justify-center gap-2 rounded-lg border border-[var(--chat-border)] px-3 py-1.5 text-sm text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] ${isConversationSelectorOpen ? 'border-[var(--chat-accent)] text-[var(--chat-text)]' : ''}`}
               >
-                <MessageSquarePlus size={16} className="flex-shrink-0 text-[var(--chat-muted)]" />
                 <span className="max-w-[10rem] truncate">
                   {activeConversationId
                     ? (conversationHistory.find(c => c.id === activeConversationId)?.title || 'Select Chat')
                     : 'New Chat'}
                 </span>
-                <ChevronDown size={14} className={`flex-shrink-0 text-[var(--chat-muted)] transition-transform ${isConversationSelectorOpen ? 'rotate-180' : ''}`} />
-              </button>
+              </Button>
 
               {/* Conversation Selector Dropdown */}
               <div
@@ -14477,25 +14492,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       </div>
                     ) : (
                       <div className="py-1">
+                        {/* A title over a date, both truncating, a hover that paints the row and a
+                            `--chat-control` fill on the active one — `ListRow` with `subtitle` and
+                            `selected`, which is the shape this was already drawing by hand. */}
                         {filteredConversations.map(convo => (
-                          <button
+                          <ListRow
                             key={convo.id}
-                            onClick={() => {
+                            title={convo.title}
+                            subtitle={new Date(convo.timestamp).toLocaleDateString()}
+                            selected={activeConversationId === convo.id}
+                            onSelect={() => {
                               handleLoadConversation(convo.id);
                               setIsConversationSelectorOpen(false);
                               setConversationSearchQuery('');
                             }}
-                            className={`w-full px-3 py-2 text-left text-sm transition-colors ${
-                              activeConversationId === convo.id
-                                ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
-                                : 'text-[var(--chat-text)] hover:bg-[var(--chat-hover)]'
-                            }`}
-                          >
-                            <p className="truncate text-xs">{convo.title}</p>
-                            <p className="mt-0.5 text-[10px] text-[var(--chat-muted)]">
-                              {new Date(convo.timestamp).toLocaleDateString()}
-                            </p>
-                          </button>
+                          />
                         ))}
                       </div>
                     );
@@ -14504,16 +14515,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                 {/* New Chat option */}
                 <div className="border-t border-[var(--chat-border)] p-2">
-                  <button
-                    onClick={() => {
+                  {/* The rows above it are `ListRow`s now, so this is one too — a leading glyph and
+                      a title, with the same hover painting the whole row. It keeps the list's rhythm
+                      instead of being a slightly smaller button pinned under it. */}
+                  <ListRow
+                    leading={<Plus size={14} aria-hidden="true" />}
+                    title="New Conversation"
+                    onSelect={() => {
                       handleNewChat();
                       setIsConversationSelectorOpen(false);
                     }}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                  >
-                    <Plus size={14} />
-                    <span>New Conversation</span>
-                  </button>
+                  />
                 </div>
               </div>
             </div>

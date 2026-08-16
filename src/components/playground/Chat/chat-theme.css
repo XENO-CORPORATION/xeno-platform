@@ -167,16 +167,22 @@
    truth the rotation is about. A second class would be a second place for the same fact to
    be wrong. The transition lives on the base rule so it plays in BOTH directions; put it
    on the open rule only and closing snaps. */
-.chat-icon-turn .xeno-element {
+/* The angle is a variable because two glyphs turn here and they do not agree: a plus becomes a
+   close at 135°, a chevron flips at 180°. The default is the plus, since it came first.
+
+   `:last-child`, because a button can lead with one glyph and trail with another and only the
+   TRAILING one is the disclosure mark. A lone glyph is both first and last, so the composer's plus
+   still matches. */
+.chat-icon-turn .xeno-element:last-child {
   transform-origin: center;
   transition: rotate 300ms cubic-bezier(0.34, 1.4, 0.5, 1);
 }
-.chat-icon-turn[aria-expanded='true'] .xeno-element {
-  rotate: 135deg;
+.chat-icon-turn[aria-expanded='true'] .xeno-element:last-child {
+  rotate: var(--chat-icon-turn, 135deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-icon-turn .xeno-element {
+  .chat-icon-turn .xeno-element:last-child {
     transition: none;
   }
 }
