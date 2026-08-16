@@ -315,6 +315,18 @@ Re-deciding these costs more than it saves.
   made once already in this project — `--chat-hover`, a pointer signal, used as a rest fill — and it
   would have shipped a chat where every chip looked permanently hovered.
 
+- **The chat marks selection with a RING as often as with a fill, and only one of those is a
+  variant.** Eight ringed states across the chat: an inset hairline — usually `--chat-muted` at 50–55%
+  — with no background at all. The settings dialog's four preference groups, the catalog row's Select
+  all, and the project settings tablist with its narrow twin. `quiet[data-selection=on]` says chosen
+  by FILLING and dropping the outline, which is the opposite move, and it would put a `--chat-control`
+  plate where these deliberately have none. `outline` is a rest state at full ink whose brightening is
+  a hover, not a selection.
+
+  These are the same eight controls that the surface collision below would also catch, and the two
+  findings share a fix: a selection that reads on any surface, and a name for the one this chat
+  already draws.
+
 - **`quiet[data-selection=on]` has a surface precondition, and nothing states it.** It says "chosen"
   by filling with `--xeno-control` and dropping the outline. In the dark theme `--chat-control` and
   `--chat-elevated` are **the same value, `#262626`** — so on an elevated surface the fill is

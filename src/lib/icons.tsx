@@ -256,6 +256,8 @@ export {
   GStop as StopCircleDecl,
   GFolderUp as FolderUpDecl,
   GFileClock as FileClockDecl,
+  GPanelRight as PanelRightOpenDecl,
+  GPanelRightClose as PanelRightCloseDecl,
   GNextDismiss as NextDismissDecl,
   GPause as PauseDecl,
   GPlay as PlayDecl,

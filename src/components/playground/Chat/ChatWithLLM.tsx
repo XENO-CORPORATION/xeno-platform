@@ -52,7 +52,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, PanelRightOpen, PanelRightClose, UserRoundX, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, UserRoundX, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -8395,6 +8395,15 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   >
                     {PROJECT_SETTINGS_SECTIONS.map((section) => {
                       const isActive = activeSection === section.id;
+                      /* Stays hand-written, and it is the third place this chat marks a selection
+                         with a RING rather than a fill: an inset hairline of `--chat-muted` at 55%,
+                         with no background at all. The library says chosen by FILLING and dropping
+                         the outline, which is the opposite move — `quiet[data-selection=on]` would
+                         put a `--chat-control` plate where this design deliberately has none.
+                         Eight ringed states across the chat now. The settings dialog's four
+                         preference groups were the first, the catalog row's Select all the second,
+                         and this tablist and its narrow twin make it a pattern rather than a
+                         preference. §9 carries the count. */
                       return (
                         <button
                           key={section.id}
@@ -8440,6 +8449,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             >
               {PROJECT_SETTINGS_SECTIONS.map((section) => {
                 const isActive = activeSection === section.id;
+                /* Stays hand-written — the wide tablist's narrow twin, same ringed selection. */
                 return (
                   <button
                     key={section.id}
@@ -13882,19 +13892,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         aria-label={project.isStarred ? 'Unstar project' : 'Star project'}
                         title={project.isStarred ? 'Unstar' : 'Star'}
                       />
-                      <button
-                        type="button"
+                      {/* `ghost md` to the pixel — 32px square, muted ink brightening over a
+                          `--chat-hover` fill, glyph 16 which is md's own. The two faces stay ONE
+                          button with the ternary in `icon`, so the panel glyph animates its own
+                          change instead of being swapped for a different element. It sits beside an
+                          IconButton that converted earlier; this was the odd one left in the row. */}
+                      <IconButton
+                        icon={isProjectSidebarOpen ? PanelRightCloseDecl : PanelRightOpenDecl}
+                        variant="ghost"
+                        size="md"
+                        iconSize={16}
                         onClick={() => setIsProjectSidebarOpen((open) => !open)}
-                        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                         aria-label={isProjectSidebarOpen ? 'Close project panel' : 'Open project panel'}
                         title={isProjectSidebarOpen ? 'Close panel' : 'Open panel'}
-                      >
-                        {isProjectSidebarOpen ? (
-                          <PanelRightClose size={16} aria-hidden="true" />
-                        ) : (
-                          <PanelRightOpen size={16} aria-hidden="true" />
-                        )}
-                      </button>
+                      />
                     </div>
                   </div>
 
