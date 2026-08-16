@@ -33,10 +33,21 @@ CREATE TABLE IF NOT EXISTS users (
   status text DEFAULT 'active', role text DEFAULT 'user', plan text DEFAULT 'free',
   recovery_email text, workspace_activated_at timestamptz,
   last_login timestamptz, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
+-- The session write in authRoutes.js inserts id, user_id, token_hash,
+-- expires_at, ip_address, user_agent, device_type, browser, os -- and stamps
+-- last_active_at on every authenticated request. A fixture missing any of them
+-- makes the write fail, the code falls back to a STATELESS token with no sid,
+-- and the assertions about sid fail two steps later with no obvious cause.
+--
+-- Third fixture in this repo to drift the same way (auth-token-confusion lost
+-- last_active_at, erasure had no forum tables at all). These hand-rolled
+-- schemas are correct only until someone adds a column, and nothing links them
+-- to the migrations that production uses.
 CREATE TABLE IF NOT EXISTS user_sessions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid, token_hash text, session_token text, expires_at timestamptz,
-  ip_address text, user_agent text, created_at timestamptz DEFAULT now());
+  ip_address text, user_agent text, device_type text, browser text, os text,
+  last_active_at timestamptz DEFAULT now(), created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS password_resets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid REFERENCES users(id) ON DELETE CASCADE, token_hash varchar(255) NOT NULL,
