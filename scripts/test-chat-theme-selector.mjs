@@ -2,11 +2,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-const sourcePath = path.resolve(
-  process.cwd(),
+/*
+ * Two files, because the subject moved and the assertions did not.
+ *
+ * The twenty-one palettes and the brightness maths used to live inside ChatWithLLM's JSX. They are
+ * in `chatTheme.ts` now, and that was the point of moving them: every chat surface is its own route,
+ * so while the palettes existed only while THAT component was mounted, the sibling routes — Voice,
+ * Search — had no tokens to use. Nothing about what these checks assert changed; only where the
+ * answer is written. Reading both keeps every one of them meaningful.
+ */
+const sources = [
   'src/components/playground/Chat/ChatWithLLM.tsx',
-);
-const source = fs.readFileSync(sourcePath, 'utf8');
+  'src/components/playground/Chat/chatTheme.ts',
+].map((p) => fs.readFileSync(path.resolve(process.cwd(), p), 'utf8'));
+const source = sources.join('\n');
 const sharedComposerActionSizeReferences = source.match(/composerActionButtonSizeClass/g) ?? [];
 
 const assertions = [

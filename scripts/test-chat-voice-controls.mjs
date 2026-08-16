@@ -13,8 +13,14 @@ assert.match(source, /disabled=\{!\(inputValue\.trim\(\) \|\| attachedFiles\.len
 assert.match(source, /motion-safe:animate-send-button-enter/, 'Send button should animate when it becomes active');
 assert.match(source, /data-voice-mode-trigger/, 'Voice mode chevron should have a stable trigger');
 assert.match(source, /data-voice-mode-popover/, 'Voice mode settings should render in a connected popover');
-assert.match(source, /className="absolute right-full mr-1 flex h-7 w-7/, 'Chevron should sit to the left of the microphone without moving Send');
-assert.match(source, /className="absolute right-0 top-full z-40 mt-1\.5 w-40/, 'Voice options should open as a compact popover below the composer controls');
+// `flex h-7 w-7` was the chevron's own box until it became an IconButton; `size="sm"` is the same
+// 28px said in the size scale. What still has to be asserted here is the POSITIONING, because that
+// is what keeps the chevron out of the row's flow — it went missing once, and Send moved.
+assert.match(source, /className="absolute right-full mr-1"/, 'Chevron should sit to the left of the microphone without moving Send');
+// It opened BELOW (`right-0 top-full mt-1.5`) until 3d27aef moved it above the controls — a
+// deliberate change in the composer-polish pass, not an adoption one, and this line simply never
+// followed it. Pinned to where it actually opens so the check still catches an accidental move.
+assert.match(source, /absolute -right-10 bottom-full z-40 mb-1\.5 w-40/, 'Voice options should open as a compact popover above the composer controls');
 const voicePopoverStart = source.indexOf('data-voice-mode-popover');
 const voicePopoverEnd = source.indexOf('</div>', voicePopoverStart);
 assert.doesNotMatch(source.slice(voicePopoverStart, voicePopoverEnd), /blue/, 'Voice options should preserve XENO\'s monochromatic palette');

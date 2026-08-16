@@ -15,8 +15,14 @@ repo disagree, the repo is right and this document is stale.
 ```bash
 cd C:/code-dev/xeno-platform
 node scripts/check-undefined-names.mjs src/components/playground/Chat   # must be clean before starting
+npm run test:chat                                                       # must be green before starting
 git status --short                                                      # must be clean before starting
 ```
+
+`test:chat` runs all ten `test-chat-*.mjs` and knows which are already red and why, so a failure it
+reports is a failure this iteration caused. It went in after six of the ten were found failing at
+once — four of them from conversions that dropped a `data-` hook or moved a `<style>` block out from
+under a test that read it. **Green before you start, green before you commit.**
 
 If `git status` shows changes you did not make, **stop and report**. Someone else works in this repo.
 
@@ -198,8 +204,9 @@ ready for that call site: stop and add the door, do not convert around it.**
 nowhere, and each time `scripts/test-*.mjs` was reaching for it — so a test went red and stayed red,
 because nothing runs those tests but a person who thinks to.
 
-**So: before converting a file, run its test if it has one.** `scripts/test-chat-*.mjs`. Run it
-BEFORE you touch anything, so a failure you inherit is not a failure you think you caused.
+**So: `npm run test:chat`, before you touch anything and again before you commit.** It knows which
+tests are already red and why, so anything it reports is yours. That is §0's second command and it is
+there because this went unnoticed for days.
 
 When a test asserts the OLD mechanism — `h-8`, `h-9 rounded-lg`, an inline `style.color` — move the
 assertion to the new one rather than deleting it. `data-xeno-size="md"` is the same 32px said in the

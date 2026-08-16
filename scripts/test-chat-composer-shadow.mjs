@@ -2,10 +2,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-const chatSource = fs.readFileSync(
-  path.resolve(process.cwd(), 'src/components/playground/Chat/ChatWithLLM.tsx'),
-  'utf8',
-);
+/*
+ * `chat-theme.css` joins the chat source here for the same reason it exists at all: the three
+ * palettes and the tokens under them used to be a <style> block inside ChatWithLLM's JSX, so they
+ * were only mounted while that one component was, and the sibling chat routes had no tokens. Moving
+ * them out did not change a single value these checks assert — `--chat-composer-shadow: none` is
+ * still declared three times, once per named theme — only which file says so.
+ */
+const chatSource = [
+  'src/components/playground/Chat/ChatWithLLM.tsx',
+  'src/components/playground/Chat/chat-theme.css',
+]
+  .map((p) => fs.readFileSync(path.resolve(process.cwd(), p), 'utf8'))
+  .join('\n');
 const emptyStateSource = fs.readFileSync(
   path.resolve(process.cwd(), 'src/components/playground/Chat/ChatEmptyState.tsx'),
   'utf8',

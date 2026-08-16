@@ -11840,11 +11840,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         className="voice-control relative flex items-center"
                         data-voice-menu-open={isVoiceModeMenuOpen ? 'true' : 'false'}
                       >
+                        {/* Two losses from one conversion, and the second is not cosmetic.
+                            `data-voice-mode-trigger` went because the grep for it only read `src/`;
+                            `scripts/test-chat-voice-controls.mjs` reads this file as TEXT and looks
+                            for the attribute by name.
+                            `absolute right-full mr-1` went because the whole className was replaced
+                            rather than filtered — and those are LAYOUT. Without them the chevron
+                            joined the flow and pushed Send along the row, which is the one thing the
+                            test that noticed is named after. `flex h-7 w-7` did not come back: that
+                            is `sm`, and it is the component's to say. */}
                         <IconButton
                           icon={ChevronDownDecl}
                           variant="ghost"
                           size="sm"
                           iconSize={15}
+                          className="absolute right-full mr-1"
+                          data-voice-mode-trigger
                           onClick={() => (isVoiceModeMenuOpen ? closeVoiceMenu() : openVoiceMenu())}
                           aria-label="Voice input options"
                           aria-expanded={isVoiceModeMenuOpen}

@@ -294,12 +294,20 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                 </span>
               ) : activeInlineProviderGroup ? (
                 <>
+                {/* Both hooks were dropped when this became an IconButton and both are load-bearing.
+                    `scripts/test-chat-model-selector.mjs` reaches for the first; index.css reaches
+                    for the second twice — once to pour this chip out of the composer with the rest of
+                    its family, and once for the rule that keeps a Back arrow square-ish rather than
+                    13px wide. The test had been red since, and the padding rule had quietly stopped
+                    matching. */}
                 <IconButton
                   icon={ArrowRightDecl}
                   className="chat-icon-flip-x"
                   variant="quiet"
                   size="md"
                   iconSize={14}
+                  data-inline-model-provider-back
+                  data-gooey-chip
                   disabled={isInlineTrayClosing}
                   onClick={() => transitionInlineProvider(null)}
                   style={{ animationDelay: getInlineAnimationDelay(0) }}
