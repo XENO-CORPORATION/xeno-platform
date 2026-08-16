@@ -331,7 +331,7 @@ const Onboarding: React.FC = () => {
               // Only stagger on the way IN. Running the entrance while the
               // container is sliding out fights itself and reads as a stutter.
               t.phase === 'in' && 'xeno-stagger',
-              t.rendered === 0 ? 'max-w-[1180px]' : 'max-w-[620px]',
+              t.rendered === 0 ? 'max-w-[1240px]' : 'max-w-[620px]',
             )}
           >
 

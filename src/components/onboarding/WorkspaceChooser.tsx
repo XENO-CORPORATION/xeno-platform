@@ -4,6 +4,8 @@ import {
   SUITES, EVERYTHING_ID, productsForSuite, allAvailableProducts, type Suite,
 } from '../../lib/workspaceSuites';
 import XenoGlyph from '../auth/XenoGlyph';
+import SuiteVisual from './SuiteVisual';
+import { productIcon } from '../../lib/productIcons';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * WORKSPACE CHOOSER — the first and most consequential step.
@@ -161,7 +163,7 @@ export const WorkspaceChooser: React.FC<{
   /* ── The choice ────────────────────────────────────────────────────────── */
   return (
     <div>
-      <div ref={gridRef} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div ref={gridRef} className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SUITES.map((suite, i) => (
           <SuiteCard
             key={suite.id}
@@ -223,11 +225,6 @@ const SuiteCard: React.FC<{
   registerRef: (el: HTMLElement | null) => void;
 }> = ({ suite, index, selected, absorbing, flightStyle, onSelect, registerRef }) => {
   const products = productsForSuite(suite);
-  // Four fit before the card gets tall enough to unbalance the row; the rest
-  // are counted rather than truncated, because "+4 more" is information and a
-  // cut-off list is just a cut-off list.
-  const shown = products.slice(0, 4);
-  const rest = products.length - shown.length;
 
   return (
     <button
@@ -237,34 +234,28 @@ const SuiteCard: React.FC<{
       aria-pressed={selected}
       style={{
         background: selected
-          ? 'linear-gradient(180deg, rgba(255,255,255,0.085), rgba(255,255,255,0.02))'
-          : 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))',
+          ? 'linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.018))'
+          : 'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008))',
         boxShadow: selected
-          ? 'inset 0 1px 0 0 rgba(255,255,255,0.16), 0 16px 40px -16px rgba(0,0,0,0.9)'
-          : 'inset 0 1px 0 0 rgba(255,255,255,0.05), 0 8px 26px -14px rgba(0,0,0,0.8)',
-        // Entrance while idle; flight takes over during the absorb. Applying
-        // both at once would fight over `transform`.
+          ? 'inset 0 1px 0 0 rgba(255,255,255,0.16), 0 20px 46px -18px rgba(0,0,0,0.92)'
+          : 'inset 0 1px 0 0 rgba(255,255,255,0.05), 0 10px 30px -16px rgba(0,0,0,0.8)',
         ...(absorbing
           ? { transition: `transform ${ABSORB_MS}ms cubic-bezier(0.55,0,0.35,1), opacity ${ABSORB_MS}ms ease-in`, ...flightStyle }
-          : { animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: `${0.06 + index * 0.06}s`, opacity: 0 }),
+          : { animation: 'xenoRise 0.6s cubic-bezier(0.16,1.02,0.3,1) forwards', animationDelay: `${0.06 + index * 0.07}s`, opacity: 0 }),
       }}
-      className={`focus-self group relative flex flex-col rounded-[12px] border p-4 text-left
+      className={`focus-self group relative flex flex-col rounded-[14px] border p-3.5 text-left
                   ${absorbing
                     ? ''
-                    : 'transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform hover:-translate-y-[4px] active:translate-y-0'}
+                    : 'transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform hover:-translate-y-[5px] active:translate-y-0'}
                   ${selected ? 'border-white/45' : 'border-white/[0.10] hover:border-white/[0.28]'}`}
     >
-      <span className="flex items-start gap-2.5">
-        <span
-          className={`grid h-8 w-8 shrink-0 place-items-center rounded-[7px] border transition-colors duration-200
-                     ${selected
-                       ? 'border-white/25 bg-white/[0.12] text-white'
-                       : 'border-white/[0.09] bg-white/[0.04] text-white/50 group-hover:text-white/85'}`}
-        >
-          {SUITE_ICON[suite.id]}
-        </span>
+      {/* The miniature. Same role as the reference card's gradient thumbnail —
+          it is what the card is ABOUT, and it goes first. */}
+      <SuiteVisual suiteId={suite.id} />
+
+      <span className="mt-3 flex items-start gap-2">
         <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-semibold leading-tight text-white">{suite.name}</span>
+          <span className="block text-[14.5px] font-semibold leading-tight text-white">{suite.name}</span>
           <span className="mt-1 block text-[11.5px] leading-snug text-white/35">{suite.tagline}</span>
         </span>
         <span
@@ -276,22 +267,27 @@ const SuiteCard: React.FC<{
         </span>
       </span>
 
-      <span className="mt-4 block border-t border-white/[0.07] pt-3">
+      {/* Divider + "Includes" + a two-column icon grid — the anatomy of the
+          reference card. Every product carries its own mark, because a column
+          of identical bullets reads as a checklist rather than a set of
+          distinct tools. */}
+      <span className="mt-3.5 block border-t border-white/[0.07] pt-3">
         <span className="block text-[9.5px] font-semibold uppercase tracking-[0.13em] text-white/25">
           Includes
         </span>
-        <span className="mt-2 flex flex-col gap-1.5">
-          {shown.map((p) => (
-            <span key={p.slug} className="flex items-center gap-1.5 text-[12px] text-white/60">
-              <span className="h-[3px] w-[3px] shrink-0 rounded-full bg-white/25" />
+        <span className="mt-2.5 grid grid-cols-2 gap-x-2 gap-y-[7px]">
+          {products.map((p) => (
+            <span key={p.slug} className="flex min-w-0 items-center gap-1.5">
+              <span className="shrink-0 text-white/35 transition-colors duration-200 group-hover:text-white/60">
+                {productIcon(p.slug)}
+              </span>
               {/* The catalog prefixes every name with "XENO"; inside a XENO
                   workspace card that word is on every line and carries nothing. */}
-              <span className="truncate">{p.name.replace(/^XENO\s+/, '')}</span>
+              <span className="truncate text-[11.5px] text-white/65">
+                {p.name.replace(/^XENO\s+/, '')}
+              </span>
             </span>
           ))}
-          {rest > 0 && (
-            <span className="mt-0.5 text-[11.5px] tabular-nums text-white/25">+{rest} more</span>
-          )}
         </span>
       </span>
     </button>
