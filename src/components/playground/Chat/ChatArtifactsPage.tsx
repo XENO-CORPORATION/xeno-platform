@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/elements-react';
-import { Check, ChevronDown, Copy, File, FileImage, FileText, Search, Shapes, SearchDecl, CheckDecl, CopyDecl } from '@/lib/icons';
+import { ChevronDown, Copy, File, FileImage, FileText, Search, Shapes, SearchDecl, CheckDecl, CopyDecl } from '@/lib/icons';
 import {
   ARTIFACT_KIND_LABEL,
   deleteArtifact,

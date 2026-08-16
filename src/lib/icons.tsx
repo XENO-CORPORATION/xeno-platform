@@ -250,6 +250,8 @@ export {
   GNextDismiss as NextDismissDecl,
   GPause as PauseDecl,
   GPlay as PlayDecl,
+  GMaximize as Maximize2Decl,
+  GMinimize as Minimize2Decl,
 };
 
 /* Different name, same meaning. */

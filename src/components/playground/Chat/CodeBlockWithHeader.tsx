@@ -1,6 +1,6 @@
 import React, { useState, useMemo, memo } from 'react';
-import { IconButton, Spinner } from '@xenosystem/elements-react';
-import { Copy, Check, Rows, Minimize2, Maximize2, Play, Pencil, XDecl } from '@/lib/icons';
+import { Button, IconButton, Spinner } from '@xenosystem/elements-react';
+import { Copy, Check, Rows, XDecl, Maximize2Decl, Minimize2Decl, EditDecl, CheckDecl, CopyDecl, PlayDecl } from '@/lib/icons';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -181,70 +181,80 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
           <div className="flex items-center gap-3">
              {/* Collapse Button */}
              {canCollapse && !isEditing && (
-                 <button
-                    className={`${baseButtonClass} hover:bg-[var(--chat-hover)]`}
+                 <Button
+                    variant="ghost"
+                    size="sm"
+                    leadingIcon={isCollapsed ? Maximize2Decl : Minimize2Decl}
                     title={isCollapsed ? "Expand code" : "Collapse code"}
                     onClick={toggleCollapse}
                     disabled={currentIsRunning} // Disable while running
                  >
-                    {isCollapsed ? <Maximize2 size={15} /> : <Minimize2 size={15} />}
                     <span className="hidden sm:inline">{isCollapsed ? 'Expand' : 'Collapse'}</span>
-                 </button>
+                 </Button>
              )}
              {/* Run Button (Conditional) */}
              {isRunnable && !isEditing && (
-                <button
-                   className={`${baseButtonClass} ${currentIsRunning || runtimesLoading ? 'text-[var(--chat-muted)] cursor-not-allowed' : 'hover:bg-[var(--chat-hover)]'}`}
+                <Button
+                   variant="ghost"
+                   size="sm"
+                   {...(currentIsRunning || runtimesLoading ? {} : { leadingIcon: PlayDecl })}
                    title={runtimesLoading ? "Loading runtimes..." : currentIsRunning ? "Running..." : "Run code"}
                    onClick={handleRun}
-                   disabled={currentIsRunning || runtimesLoading} // Disable if running OR if runtimes are loading
+                   disabled={currentIsRunning || runtimesLoading}
                 >
-                   {currentIsRunning || runtimesLoading ? <Spinner size={15} /> : <Play size={15} className="fill-current"/>}
+                   {/* The leading slot takes a DECLARATION and the busy face is a Spinner component,
+                       so the two cannot share it. The spinner rides in children instead, where the
+                       label already is. */}
+                   {(currentIsRunning || runtimesLoading) && <Spinner size={15} />}
                    <span className="hidden sm:inline">{runtimesLoading ? "Loading..." : currentIsRunning ? 'Running' : 'Run'}</span>
-                </button>
+                </Button>
              )}
              {/* Edit Button */}
              {onEditCode && !isEditing && (
-                <button
-                   className={`${baseButtonClass} hover:bg-[var(--chat-hover)]`}
+                <Button
+                   variant="ghost"
+                   size="sm"
+                   leadingIcon={EditDecl}
                    title="Edit code"
                    onClick={() => onEditCode(codeBlockId, code, cleanLanguage)}
                    disabled={currentIsRunning}
                 >
-                   <Pencil size={15} />
                    <span className="hidden sm:inline">Edit</span>
-                </button>
+                </Button>
              )}
              {/* Save/Cancel Buttons when editing */}
              {isEditing && (
                 <>
-                  <button
-                     className="text-xs text-[var(--chat-muted)] hover:text-[var(--chat-text)] px-2 py-1 transition-colors"
+                  <Button
+                     variant="ghost"
+                     size="xs"
                      title="Cancel editing"
                      onClick={onCancelCodeEdit}
                   >
                      Cancel
-                  </button>
-                  <button
-                     className="text-xs bg-[var(--chat-accent)] text-[var(--chat-on-accent)] px-3 py-1 rounded-md font-semibold hover:opacity-90 transition-colors"
+                  </Button>
+                  <Button
+                     variant="primary"
+                     size="xs"
                      title="Save changes"
                      onClick={onSaveCodeEdit}
                   >
                      Save
-                  </button>
+                  </Button>
                 </>
              )}
              {/* Copy Button */}
-          <button
-                className={`${baseButtonClass} ${copied ? copiedButtonClass : 'hover:bg-[var(--chat-hover)]'}`}
+          <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={copied ? CheckDecl : CopyDecl}
                 title={copied ? "Copied!" : "Copy code"}
                 data-selection={copied ? 'on' : 'off'}
-            onClick={handleCopy}
-                disabled={copied || currentIsRunning || isEditing} // Disable while running, copied, or editing
+                onClick={handleCopy}
+                disabled={copied || currentIsRunning || isEditing}
           >
-                {copied ? <Check size={15} /> : <Copy size={15} />}
                 <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
-          </button>
+          </Button>
           </div>
         </div>
 
