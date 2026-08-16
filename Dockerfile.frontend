@@ -21,8 +21,25 @@ WORKDIR /app
 # Copy package files first to leverage Docker cache
 COPY package*.json ./
 
-# Clean install for reproducible builds (uses package-lock.json)
-RUN npm ci --legacy-peer-deps
+# Clean install for reproducible builds (uses package-lock.json).
+#
+# ── THE CACHE MOUNT IS THE POINT, AND IT IS NOT THE LAYER CACHE ─────────────
+#
+# Docker already caches this LAYER on the hash of package*.json. The problem is
+# that the layer is invalidated by ANY edit to package.json — including adding an
+# npm script, which is not a dependency change at all. Measured on the box:
+# `npm ci` is 73s of a 122s build, and a run of adding test scripts paid it every
+# single time.
+#
+# `--mount=type=cache` keeps npm's own download cache across builds, so an
+# invalidated layer re-links from disk instead of re-fetching the registry. It
+# changes nothing about WHAT is installed — package-lock.json still decides that,
+# so the build stays reproducible.
+#
+# ⚠️ Requires BuildKit, which `docker compose build` already uses here. On a
+# builder without it this line is a syntax error rather than a silent no-op,
+# which is the failure mode you want.
+RUN --mount=type=cache,target=/root/.npm npm ci --legacy-peer-deps
 
 # Copy configuration files (these rarely change, so cache them before src/)
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./
