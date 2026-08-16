@@ -10672,6 +10672,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         {/* Content */}
         <div className="context-panel-content">
           {isEditingContextPanel ? (
+            /* Stays hand-written — not a form field at all. `.context-panel-edit-area` is
+               `height: 100%`, `border: none`, `resize: none`, 16px of padding and a monospace face:
+               an editing SURFACE that fills the panel it lives in. `.xeno-textarea` is a bordered
+               card with a 12px radius that grows when you drag it. Every one of those properties
+               would have to be overridden back, which is the definition of the wrong component. */
             <textarea
               className="context-panel-edit-area"
               value={editedContextContent}
@@ -11605,6 +11610,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
             {/* Textarea Row */}
             <div className="flex items-end relative">
+              {/* Stays hand-written — one of the two composer fields §7 excludes by name, and this is
+                  the marker that was missing: the spec knew, the file did not, so the board counted
+                  it as undecided work. It is driven by a ref that measures and resets `scrollHeight`
+                  on every keystroke to auto-grow, its rows change with the conversation, and Enter
+                  sends while Shift+Enter does not. The library's own note calls the full composer a
+                  Tier-2 container built ON this component rather than an instance of it. */}
               <textarea
                 ref={textareaRef}
                 placeholder={CHAT_MODE_PLACEHOLDERS[emptyStateMode]}
@@ -14403,6 +14414,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 </div>
                 <div className={`absolute left-0 top-full z-20 mt-[10px] origin-top-left overflow-hidden rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl transition-all duration-200 ease-out ${isCustomPromptOpen ? 'visible scale-100 opacity-100' : 'pointer-events-none invisible scale-95 opacity-0'}`}
                   style={{ width: '18rem' }}>
+                  {/* Stays hand-written, and it fails both shapes at once. The fill is
+                      `--chat-elevated` where `.xeno-textarea` hard-codes `--xeno-canvas`; and it owns
+                      no box of its own — the popover is the box, and this field contributes a single
+                      `border-b` hairline separating it from the button row beneath. A component that
+                      draws four borders and a 12px radius cannot be half of a joined panel. */}
                   <textarea placeholder="Enter custom system prompt..." value={systemPrompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSystemPrompt(e.target.value)}
                     className="h-32 w-full resize-none border-b border-[var(--chat-border)] bg-[var(--chat-elevated)] p-3 text-sm text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]" />
                   {/* Both are `quiet` word for word: a `--chat-border` hairline, muted ink, and
@@ -15378,6 +15394,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                          className="chat-message-editor flex w-full max-w-[90%] flex-col gap-2 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-[var(--chat-text)] md:max-w-[75%]"
                                      >
                                          <div className="rounded-lg border border-[var(--chat-accent)]/70 bg-[var(--chat-canvas)]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-accent)] focus-within:ring-1 focus-within:ring-blue-500/25">
+                                         {/* Stays hand-written — bare inside a box it does not
+                                             own. The `--chat-canvas`/40 plate around it carries the
+                                             border, the radius and a `focus-within` ring that
+                                             brightens to accent, which is why the field itself is
+                                             `bg-transparent` with no outline. Giving it
+                                             `.xeno-textarea` would draw a second bordered card
+                                             inside the one already lighting up. */}
                                          <textarea
                                              ref={editInputRef}
                                              value={editText}
@@ -15580,6 +15603,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             <span className="text-sm text-[var(--chat-muted)]">Editing Response</span>
                                             <span className="text-xs text-[var(--chat-muted)] ml-auto">Markdown supported</span>
                                           </div>
+                                          {/* Stays hand-written for the fill, and this one is
+                                              deliberate flat-on-flat: the field is `--chat-surface`
+                                              on a `--chat-surface` card, separated by its border
+                                              alone. `.xeno-textarea` would paint `--xeno-canvas` and
+                                              punch a dark well into the middle of the card. */}
                                           <textarea
                                             value={editingAiContent}
                                             onChange={(e) => setEditingAiContent(e.target.value)}
