@@ -137,6 +137,46 @@ function blockComments(src) {
   return ranges;
 }
 
+/*
+ * §7's fields, split the way §3's buttons are. A raw `<input` count cannot say whether §7 is
+ * finished: it counts a decided field and an untouched one the same, so the number sat at 15 through
+ * an iteration that decided five of them. Same three buckets as the buttons — excluded by kind,
+ * documented, still to decide — so the board can be read for "what is left" rather than "how many
+ * exist".
+ *
+ * `type="file"` and `type="range"` are read off the tag rather than listed by name: a hidden picker
+ * and a slider are not fields `TextInput` was ever going to take, and a rule beats a hardcoded six.
+ */
+function fieldsIn(file) {
+  const src = readFileSync(file, 'utf8');
+  const comments = blockComments(src);
+  const inComment = (at) => comments.some(([a, b]) => at >= a && at < b);
+  const out = [];
+  for (const tag of ['<input', '<textarea']) {
+    let i = 0;
+    for (;;) {
+      i = src.indexOf(tag, i);
+      if (i < 0) break;
+      if (inComment(i)) {
+        i += tag.length;
+        continue;
+      }
+      const end = tagEnd(src, i + tag.length);
+      if (end < 0) break;
+      const attrs = src.slice(i, end);
+      const type = /type="(\w+)"/.exec(attrs);
+      out.push({
+        line: src.slice(0, i).split('\n').length,
+        kind: tag === '<input' ? 'input' : 'textarea',
+        excluded: type ? type[1] === 'file' || type[1] === 'range' : false,
+        documented: documentedAbove(src, i, inComment),
+      });
+      i = end;
+    }
+  }
+  return out;
+}
+
 function buttonsIn(file) {
   const src = readFileSync(file, 'utf8');
   const expand = expander(src);
@@ -294,8 +334,17 @@ for (const { name, open, rows } of per) {
   console.log(`    ${name.padEnd(30)} ${String(open.length).padEnd(4)}${note}`);
 }
 
-console.log(`\nFIELDS: <input> ${count('<input')}   <textarea> ${count('<textarea')}`);
-console.log('  (2 file pickers, 2 range sliders and 2 composer textareas are excluded — see spec §7)');
+const fields = files.flatMap((f) => fieldsIn(f).map((r) => ({ ...r, file: path.basename(f) })));
+const openFields = fields.filter((r) => !r.excluded && !r.documented);
+const fieldTally = (kind) => openFields.filter((r) => r.kind === kind).length;
+
+console.log(`FIELDS still to decide: ${openFields.length}`);
+console.log(`  <input> ${fieldTally('input')}   <textarea> ${fieldTally('textarea')}`);
+console.log(
+  `  (+ ${fields.filter((r) => r.documented).length} decided, ` +
+    `${fields.filter((r) => r.excluded).length} excluded as pickers and sliders — see spec §7)`,
+);
+for (const r of openFields) console.log(`    ${r.file}:${r.line}  <${r.kind}>`);
 
 console.log('\nADOPTED:');
 for (const c of ['IconButton', 'MenuItem', 'Button', 'Spinner', 'TextInput', 'MessageBubble', 'Switch']) {

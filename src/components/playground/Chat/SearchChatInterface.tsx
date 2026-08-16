@@ -1221,6 +1221,13 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         {/* Search Bar */}
         <div className="p-3 border-b border-[var(--chat-border)]">
           <div className="relative">
+            {/* Stays hand-written, and this is the cleanest instance of the fill problem in the
+                chat: EVERYTHING else about it converts. `h-9` is exactly lg, `text-sm` is exactly
+                lg's 14px, the magnifier's 14 is what `iconSize` is for, the border is
+                `--chat-border` and the focus ring is already `--chat-muted` — the component's own
+                pair. One declaration blocks it: the field is `--chat-surface` and `.xeno-input`
+                hard-codes `background: var(--xeno-canvas)`, which would sink a raised bar to
+                #0a0a0a. Third field to fail on this and nothing else. */}
             <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]" />
             <input
               type="text"

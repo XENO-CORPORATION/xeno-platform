@@ -13541,6 +13541,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       boxShadow: 'inset 0 0 0 1px var(--chat-border)',
                     }}
                   >
+                    {/* Stays hand-written — the chats catalog search's twin, one page over and
+                        built the same way: the BOX is the wrapper, a `--chat-control` plate carrying
+                        its own padding and inset border, and the field is bare inside it. Taking
+                        `TextInput`, which is box and field together, means replacing the plate. */}
                     <Search size={15} className="flex-shrink-0 text-[var(--chat-muted)]" />
                     <input
                       type="search"
@@ -17875,6 +17879,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       >
                         {isEditingTitle ? (
                           <div className="flex min-w-0 items-center gap-0.5 rounded border border-[var(--chat-border)] bg-[var(--chat-surface)] pr-0.5">
+                              {/* Stays hand-written — a rename-in-place field that owns none of
+                                  its box. The `--chat-surface` plate around it is shared with two
+                                  IconButtons (confirm and cancel), so the field is `border-0
+                                  bg-transparent` by design and the row draws the border. A field
+                                  that is one of three things inside a box is not a `TextInput`. */}
                                          <input
                               id={`edit-title-${convo.id}-${interfaceId}`}
                                            type="text"
