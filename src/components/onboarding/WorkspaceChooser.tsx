@@ -260,7 +260,15 @@ const SuiteCard: React.FC<{
           ? { transition: `transform ${ABSORB_MS}ms cubic-bezier(0.55,0,0.35,1), opacity ${ABSORB_MS}ms ease-in`, ...flightStyle }
           : { animation: 'xenoRise 0.6s cubic-bezier(0.16,1.02,0.3,1) forwards', animationDelay: `${0.06 + index * 0.07}s`, opacity: 0 }),
       }}
+      /* A portrait MINIMUM, not a fixed height: at ~285px wide (1240 / 4) a
+         9:16 card is ~500px, but content still decides the real height —
+         Developer carries 8 products and Office 4, and `items-stretch` on the
+         grid already matches all four to the tallest. A hard height would
+         either clip the fullest card or strand the emptiest.
+         Only applied at `lg`, where the row is actually four across; at two
+         columns a 500px floor is just a lot of empty plate. */
       className={`focus-self group relative flex flex-col gap-[2px] rounded-[10px] border p-1.5 text-left
+                  lg:min-h-[500px]
                   ${absorbing
                     ? ''
                     : 'transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform hover:-translate-y-[5px] active:translate-y-0'}
@@ -299,7 +307,10 @@ const SuiteCard: React.FC<{
           {suite.tagline}
         </span>
 
-        <span className="mt-3 block text-[9.5px] font-semibold uppercase tracking-[0.13em] text-white/25">
+        {/* mt-auto: with the card now taller than its content, the product
+            grid sits on the FLOOR of the plate instead of floating in the
+            middle with dead space under it. */}
+        <span className="mt-auto pt-4 block text-[9.5px] font-semibold uppercase tracking-[0.13em] text-white/25">
           Includes
         </span>
         <span className="mt-2 grid grid-cols-2 gap-x-2 gap-y-[7px]">
