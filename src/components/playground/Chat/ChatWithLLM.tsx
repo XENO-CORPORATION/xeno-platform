@@ -12996,6 +12996,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <span className="text-[13px] text-[var(--chat-muted)]">
                         {selectedCount} selected
                       </span>
+                      {/* Stays hand-written. This row carries FOUR levels of emphasis and the
+                          variant set carries one of them: Select and Filter by are plain and have
+                          converted; this one wears an inset --chat-accent ring to say it is the
+                          active selection action, New is inverted, Delete is a solid danger fill.
+                          A ringed secondary is not a variant, and adding the ring back as a class
+                          would be typing appearance at a call site to make up for it. Same §9 gap
+                          as the dialog confirms, seen here as a whole row at once. */}
                       <button
                         type="button"
                         onClick={() => {
@@ -13014,6 +13021,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       >
                         Select all
                       </button>
+                      {/* Stays hand-written — a SOLID danger fill, where the library variant of that
+                          name is the quiet reading. Third of this row's four emphases, and note the
+                          #ffffff: a literal white that no chat token names, which is its own small
+                          thing to fix. */}
                       {selectedCount > 0 && (
                         <button
                           type="button"
@@ -13057,30 +13068,31 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </div>
                   ) : (
                     <div className="flex flex-shrink-0 items-center gap-2">
-                      <button
-                        type="button"
+                      {/* `secondary sm` — a `--chat-control` fill with text ink, and 27px of box
+                          rounds to sm, whose 13px type is nearest the 12.5 here. It gains the
+                          variant's hairline, the trade every other filled control in this chat
+                          took. */}
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={() => {
                           setIsChatsCatalogSelecting(true);
                           setChatsCatalogSelectedIds([]);
                           setIsChatsCatalogFilterOpen(false);
                         }}
-                        className={catalogControlBtn}
-                        style={{
-                          backgroundColor: 'var(--chat-control)',
-                          color: 'var(--chat-text)',
-                        }}
                       >
                         Select
-                      </button>
+                      </Button>
                       <div className="relative">
-                        <button
-                          type="button"
+                        {/* Select's twin, and the two-tone label rides along as children: a muted
+                            "Filter by" beside the chosen value in full ink. The component sets the
+                            button's colour and each span still says its own. */}
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => setIsChatsCatalogFilterOpen((open) => !open)}
-                          className={`flex items-center gap-1.5 ${catalogControlBtn}`}
-                          style={{
-                            backgroundColor: 'var(--chat-control)',
-                            color: 'var(--chat-text)',
-                          }}
+                          trailingIcon={ChevronDownDecl}
+                          iconSize={13}
                           aria-haspopup="menu"
                           aria-expanded={isChatsCatalogFilterOpen}
                         >
@@ -13088,8 +13100,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <span className="font-medium text-[var(--chat-text)]">
                             {catalogFilterLabels[chatsCatalogFilter]}
                           </span>
-                          <ChevronDown size={13} className="text-[var(--chat-muted)]" />
-                        </button>
+                        </Button>
                         {isChatsCatalogFilterOpen && (
                           <div
                             {...(() => { const { ref: _g, className: _c, ...handlers } = catalogFilterGoo.hostProps; return handlers; })()}
@@ -13125,6 +13136,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           </div>
                         )}
                       </div>
+                      {/* Stays hand-written — inverted, which is the shape of primary and unusable
+                          until the bridge carries the chrome tokens (§9). The twelfth control in
+                          this chat filled that way. */}
                       <button
                         type="button"
                         onClick={() => {

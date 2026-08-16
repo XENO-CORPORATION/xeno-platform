@@ -22,11 +22,30 @@ const files = readdirSync(CHAT).filter((f) => f.endsWith('.tsx')).map((f) => pat
 
 const BACKSLASH = String.fromCharCode(92);
 
-/** End of the opening tag that starts at `from`, skipping strings and nested braces. */
+/**
+ * End of the opening tag that starts at `from`, skipping strings, comments and nested braces.
+ *
+ * Comments matter because JSX allows one BETWEEN attributes, and English inside it is full of
+ * apostrophes. Without this, one `it is` inside an in-tag comment opened a string the scanner never
+ * closed, `tagEnd` ran past the real tag, and the board quietly lost THIRTY buttons — a measurement
+ * that would have told the loop it was nearly finished. An undercount is the worst direction for
+ * this tool to be wrong in, so the scanner reads comments rather than trusting nobody writes one
+ * there.
+ */
 function tagEnd(s, from) {
   let i = from, depth = 0, quote = null;
   while (i < s.length) {
     const c = s[i];
+    if (!quote && c === '/' && s[i + 1] === '*') {
+      const end = s.indexOf('*/', i + 2);
+      i = end < 0 ? s.length : end + 2;
+      continue;
+    }
+    if (!quote && c === '/' && s[i + 1] === '/') {
+      const end = s.indexOf('\n', i);
+      i = end < 0 ? s.length : end + 1;
+      continue;
+    }
     if (quote) {
       if (c === BACKSLASH) i += 1;
       else if (c === quote) quote = null;
