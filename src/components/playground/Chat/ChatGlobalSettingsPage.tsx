@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { IconButton, Switch, TextInput, useTabs } from '@xenosystem/elements-react';
+import { Button, IconButton, Switch, TextInput, useTabs } from '@xenosystem/elements-react';
 import { Check, Settings, Trash2Decl, SearchDecl } from '@/lib/icons';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 import {
@@ -262,25 +262,25 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
         >
           {SECTIONS.map(({ id, label }) => {
             const active = section === id;
+            /* `quiet` + `data-selection` is the library's own name for what the two inline colours
+               said: ON fills with `--xeno-control` and drops its outline, OFF is muted.
+               `tabs.tabProps` still supplies the roving tabindex and `aria-selected` — the hook was
+               already adopted, and this only changes what paints. */
             return (
-              <button
+              <Button
                 key={id}
-                type="button"
+                variant="quiet"
+                size="sm"
+                data-selection={active ? 'on' : 'off'}
+                className="flex-shrink-0"
                 {...tabs.tabProps(id)}
                 onClick={() => {
                   setQuery('');
                   setSection(id);
                 }}
-                className={`${RADIUS} flex-shrink-0 px-2.5 py-1.5 text-[12px] font-medium transition-colors`}
-                style={{
-                  backgroundColor: active
-                    ? 'var(--chat-control)'
-                    : 'transparent',
-                  color: active ? 'var(--chat-text)' : 'var(--chat-muted)',
-                }}
               >
                 {label}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -343,18 +343,20 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                     Applies to new chats. Personas can layer a stronger role on
                     top.
                   </p>
-                  <button
-                    type="button"
+                  {/* `secondary` — a `--chat-control` fill with full text ink, which is what the
+                      inline pair said. It gains the hairline that comes with the variant; the fill
+                      alone had nothing holding its edge against the panel behind it.
+                      `h-9` is `lg` exactly. Disabled stops being three utility classes and becomes
+                      the availability axis the component already carries. */}
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    className="flex-shrink-0"
                     onClick={() => void handleSaveInstructions()}
                     disabled={!dirty || saving}
-                    className={`${RADIUS} h-9 flex-shrink-0 px-3 text-[12.5px] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-40`}
-                    style={{
-                      backgroundColor: 'var(--chat-control)',
-                      color: 'var(--chat-text)',
-                    }}
                   >
                     {savedFlash ? 'Saved' : saving ? 'Saving…' : 'Save'}
-                  </button>
+                  </Button>
                 </motion.div>
               </SettingsSectionShell>
             ) : section === 'memory' ? (
@@ -584,23 +586,19 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                               ] as const
                             ).map(([id, label]) => {
                               const active = connectorFilter === id;
+                              // Same filter pair as the artifacts page and the tabs above it:
+                              // `quiet` carries both states, `data-selection` says which.
                               return (
-                                <button
+                                <Button
                                   key={id}
-                                  type="button"
+                                  variant="quiet"
+                                  size="xs"
+                                  data-selection={active ? 'on' : 'off'}
+                                  aria-pressed={active}
                                   onClick={() => setConnectorFilter(id)}
-                                  className={`${RADIUS} px-2 py-1 text-[11.5px] transition-colors`}
-                                  style={{
-                                    backgroundColor: active
-                                      ? 'var(--chat-control)'
-                                      : 'transparent',
-                                    color: active
-                                      ? 'var(--chat-text)'
-                                      : 'var(--chat-muted)',
-                                  }}
                                 >
                                   {label}
-                                </button>
+                                </Button>
                               );
                             })}
                           </div>
@@ -645,8 +643,9 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                                 <span className="flex-shrink-0 text-[var(--chat-muted)]">
                                   {connector.type}
                                 </span>
-                                <button
-                                  type="button"
+                                <Button
+                                  variant="secondary"
+                                  size="xs"
                                   onClick={() => {
                                     void (async () => {
                                       await setConnectorStatus(
@@ -663,14 +662,10 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                                       );
                                     })();
                                   }}
-                                  className={`${RADIUS} flex-shrink-0 px-2 py-1 text-[11.5px] font-medium`}
-                                  style={{
-                                    backgroundColor: 'var(--chat-control)',
-                                    color: 'var(--chat-text)',
-                                  }}
+                                  className="flex-shrink-0"
                                 >
                                   {connected ? 'Disconnect' : 'Connect'}
-                                </button>
+                                </Button>
                               </div>
                             </motion.div>
                           );
@@ -738,8 +733,16 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                               <span className="hidden flex-shrink-0 whitespace-nowrap text-[var(--chat-muted)] sm:block">
                                 {plugin.author}
                               </span>
-                              <button
-                                type="button"
+                              {/* The connector row's twin, and it converts the same way — a
+                                  `--chat-control` fill with text ink is `secondary`, and the
+                                  11.5px/px-2/py-1 box is `xs`. Both rows also drop from this page's
+                                  hand-typed 6px radius to the scale's 8px for controls; the
+                                  CONTAINERS around them still say 6, and reconciling those is a
+                                  change to panels rather than to buttons. */}
+                              <Button
+                                variant="secondary"
+                                size="xs"
+                                className="flex-shrink-0"
                                 onClick={() => {
                                   void (async () => {
                                     await setPluginInstalled(
@@ -749,14 +752,9 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                                     setPlugins(await listPlugins({ query }));
                                   })();
                                 }}
-                                className={`${RADIUS} flex-shrink-0 px-2 py-1 text-[11.5px] font-medium`}
-                                style={{
-                                  backgroundColor: 'var(--chat-control)',
-                                  color: 'var(--chat-text)',
-                                }}
                               >
                                 {plugin.installed ? 'Remove' : 'Install'}
-                              </button>
+                              </Button>
                             </div>
                           </motion.div>
                         ))
