@@ -275,6 +275,19 @@ Same rules, plus:
   magnifier and the `pl-8` that dodged it all go. The glyph becomes `leadingIcon`.
 - `.xeno-textarea` is 15px; most of these are 13px. That is a real change to body text in forms —
   make it deliberately, in its own commit.
+- **A field's type comes from its size token, not from the page.** It is easy to read `.xeno-input`
+  and conclude otherwise — the WRAPPER sets no font-size, so the box looks type-neutral — but
+  `.xeno-input-field` is `font-size: var(--xeno-font)`, and `--xeno-font` is welded to `--xeno-h`:
+  28px comes with 13px text, 36px with 14px. So picking the right HEIGHT retypes the field unless
+  the source happened to match the step. `fontSize` is the door out (added for the two project
+  dialogs, whose 13px fields would otherwise have outgrown their own 13px labels). Two fields were
+  converted before that door existed and moved 12px → 13px with the box; that is recorded, not
+  re-litigated.
+- **Two shapes the component cannot take, and both recur:** a field on a raised panel
+  (`.xeno-input` hard-codes `background: var(--xeno-canvas)`), and a field that is bare inside a box
+  it does not own — a filled wrapper, an animating bar, a row that also hosts a clear button.
+  `TextInput` is box-and-field together, so adopting it there means replacing the box that carries
+  the fill. Most of the chat's remaining fields fail on one of these two, not on anything local.
 - **Do not convert:** the two composer textareas (refs, auto-grow, bespoke motion), the two
   `type="file"` pickers (hidden), the two `type="range"` inputs (the theme slider — `TextInput` is
   not a range).
@@ -396,6 +409,20 @@ Re-deciding these costs more than it saves.
   running chat — at rest `opacity: 0` and parked `translate: 22px` right of where it lands; on hover
   `padding-left: 32px`, which is what `hover:pl-8` said by hand. The remaining §9 entries are all
   colour or token questions, and none of them is a component's to answer.
+
+- ~~**A field cannot keep its type.**~~ **Closed.** `TextInput` carries `fontSize` now, and the gap
+  was `iconSize`'s exactly one property over — `--xeno-font` is welded to `--xeno-h`, so a 36/13
+  dialog field asking for its own height came back retyped to 14px, a pixel larger than the 13px
+  label above it. Both project dialogs converted on it. The prop doc names the hazard the override
+  carries: it also beats the touch surface, where md and lg go to 16px because iOS Safari zooms a
+  focused sub-16px input.
+
+- **`.xeno-input` hard-codes its fill, and that is what most of the chat's fields fail on.** Nine of
+  the remaining fifteen sit on `--chat-surface` or `--chat-control` — sidebars, raised dialogs, filled
+  wrapper plates — where the component paints `--xeno-canvas` and would sink each of them to #0a0a0a
+  inside a lighter panel. It is the same shape as the `primary` finding: a component that decides its
+  own background can only be used on the one surface it assumed. A field is the case where it bites
+  most, because a field is nearly always ON something.
 
 - **Six controls sit below the scale's floor.** The control scale starts at `xs` = 24px; the chat has
   six squares at 18–20px — the two attachment-chip remove badges, the customize page's "i", and

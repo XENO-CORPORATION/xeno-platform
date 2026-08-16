@@ -8212,7 +8212,19 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
               >
                 What are you working on?
               </label>
-              <input
+              {/* `TextInput lg`, and the field that made the library grow a `fontSize`. The box was
+                  already 36px and already `--chat-canvas`, which is what `.xeno-input` paints — but
+                  the size scale welds type to height, so asking for the right height would have
+                  retyped this 13px field to 14px, a pixel LARGER than the 13px label directly above
+                  it. `fontSize={13}` is the same door `iconSize` is, one property over.
+                  What leaves with the swap is the interesting part: the inline fill, the inset
+                  box-shadow standing in for a border, and TWO JS handlers that hand-painted the focus
+                  ring on every focus and blur. `.xeno-input:focus-within` is one CSS rule. The ring
+                  moves accent → muted, which is where every other field in this chat already was. */}
+              <TextInput
+                size="lg"
+                fontSize={13}
+                className="w-full"
                 id={`create-project-name-${interfaceId}`}
                 type="text"
                 autoFocus
@@ -8228,17 +8240,6 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   }
                 }}
                 placeholder="Name your project"
-                className={fieldClassName}
-                style={{
-                  backgroundColor: 'var(--chat-canvas)',
-                  boxShadow: 'inset 0 0 0 1px var(--chat-border)',
-                }}
-                onFocus={(event) => {
-                  event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-accent)';
-                }}
-                onBlur={(event) => {
-                  event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-border)';
-                }}
               />
               <p className="text-right text-[11px] tabular-nums text-[var(--chat-muted)]">
                 {newChatProjectName.length}/{PROJECT_NAME_MAX_CHARS}
@@ -8493,7 +8494,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   >
                     Project name
                   </label>
-                  <input
+                  {/* The create dialog's name field, one dialog over and converted the same way.
+                      `fieldStyle`, `focusField` and `blurField` stay declared because the three
+                      textareas below still use them — this dialog's fields were always one shape, and
+                      only the single-line one has a component to take. */}
+                  <TextInput
+                    size="lg"
+                    fontSize={13}
+                    className="w-full"
                     id={`project-settings-name-${interfaceId}`}
                     type="text"
                     value={settingsNameDraft}
@@ -8502,10 +8510,6 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                       setSettingsNameDraft(event.target.value.slice(0, PROJECT_NAME_MAX_CHARS))
                     }
                     placeholder="Name your project"
-                    className={fieldClassName}
-                    style={fieldStyle}
-                    onFocus={focusField}
-                    onBlur={blurField}
                   />
                   <p className="text-right text-[11px] tabular-nums text-[var(--chat-muted)]">
                     {settingsNameDraft.length}/{PROJECT_NAME_MAX_CHARS}
@@ -15210,6 +15214,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           <div className="w-full border-b border-[var(--chat-border)] bg-[var(--chat-canvas)] px-4 py-2">
             <div className={`${isMultiInterface ? 'max-w-full' : (isWideChatEnabled ? 'max-w-[67.5rem]' : 'max-w-[45rem]')} mx-auto`}>
               <div className="relative">
+                {/* Stays hand-written, for two reasons that each hold alone. The fill is
+                    `--chat-surface` — a raised bar — where `.xeno-input` hard-codes `--xeno-canvas`.
+                    And the box HOSTS a control: a clear button sits inside it on the right, and
+                    `TextInput` has a leading slot and nothing on the trailing edge. Same missing
+                    trailing slot the `iconReveal` note records for Button. */}
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 transform text-[var(--chat-muted)]" />
                 <input
                   type="text"
@@ -16359,6 +16368,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
                       Title
                     </span>
+                    {/* Stays hand-written, and both halves of the reason are the familiar ones:
+                        `h-10` is 40px where the control scale stops at 36, and the fill is
+                        `--chat-surface` because the dialog is a raised card. Neither is a call
+                        site's to fix. */}
                     <input
                       type="text"
                       value={projectScheduledCreateTitle}
@@ -17600,6 +17613,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         style={{ backgroundColor: 'var(--chat-control)' }}
                       >
                         <Search size={14} className="flex-shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
+                        {/* Stays hand-written — a bare field with no box of its own. It is
+                            `bg-transparent` inside a bar that animates in from the right, and the
+                            surrounding row owns the border, the fill and the slide. `TextInput` is
+                            box-and-field together, so taking it would mean giving this field a second
+                            box inside the one that moves. */}
                         <input
                           type="search"
                           autoFocus
