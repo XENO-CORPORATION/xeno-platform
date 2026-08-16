@@ -242,8 +242,17 @@ scratchpad/final.mjs       lucideLeft: []
 scratchpad/mixrow.mjs      every row adopted, h 32, r 6px, font 14
 scratchpad/lightchat.mjs   no near-white ink except the caption on the dark image
 scratchpad/custom.mjs      chat and search identical at 15/30/65/85 %
-scratchpad/voice.mjs       voice identical at dark/light/30/65 %
+scripts/probe-voicebright.mjs   voice AND search identical to chat at dark/light/30/65 %
 ```
+
+`voicebright.mjs` replaces a line that named `voice.mjs` for this. That file is an earlier
+diagnostic — it prints button and glyph counts and asserts nothing about brightness — so the entry
+described a check that was never running. The probe now reads eleven tokens off each route's themed
+root and compares them to the chat route, which is what the line always claimed.
+
+Every probe above passes as of §7 closing. `final.mjs` also reports two console errors, a 500 and a
+401 from the mock's own API; they pre-date the adoption and its assertion is `lucideLeft`, which is
+empty.
 
 **Pin reduced motion in any new probe**, or every glyph reads as still:
 
