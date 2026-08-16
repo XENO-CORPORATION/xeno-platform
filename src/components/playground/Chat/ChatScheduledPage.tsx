@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { IconButton, MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/elements-react';
+import { Button, IconButton, MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/elements-react';
 import { ChevronDown, Clock, Pause, Trash2Decl, SearchDecl, PauseDecl, PlayDecl } from '@/lib/icons';
 import {
   SCHEDULED_STATUS_LABEL,
@@ -193,6 +193,14 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
       <div className="mx-auto flex h-full w-full max-w-[56rem] flex-col px-4 sm:px-6">
         <div className="flex min-h-[2.75rem] flex-shrink-0 items-center justify-between gap-3 pt-6 pb-4 md:min-h-[3rem] md:pt-8 md:pb-5">
           <div className="relative" data-scheduled-sort-menu="">
+            {/* Stays hand-written — the artifacts page's sort trigger, and the same blocker. The
+                chevron is not a leading icon but a REVEAL: the button's left padding grows from 12
+                to 32 over 600ms while the glyph slides out from under a label that carries its own
+                background, so it passes behind the text. That needs the chevron as an absolutely
+                positioned child, and `leadingIcon` is a slot in a flex row.
+                The fill is the other half: a filled button with no border, and the only
+                fill-without-border in the variant set is `quiet[data-selection=on]`, which means
+                "the panel I opened is on screen" — not what this says at rest. */}
             <button
               type="button"
               onClick={() => setIsSortOpen((open) => !open)}
@@ -251,13 +259,9 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className={`${RADIUS} px-3 py-1.5 text-[12.5px] text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]`}
-          >
+          <Button variant="ghost" size="sm" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </div>
 
         <div className="mb-4 flex flex-shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -308,35 +312,37 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
               style={{ borderColor: 'var(--chat-border)' }}
               aria-label="New scheduled task"
             />
-            <button
-              type="button"
+            {/* The global settings page's Save, down to the class string: a `--chat-control` fill
+                with full text ink is `secondary` minus its hairline, and `h-9` is `lg`. It gains the
+                hairline, which is what gives its edge something to hold against the field beside it.
+                Disabled becomes the availability axis instead of three utility classes. */}
+            <Button
+              variant="secondary"
+              size="lg"
+              className="flex-shrink-0"
               onClick={() => void handleCreate()}
               disabled={!draft.trim() || creating}
-              className={`${RADIUS} h-9 flex-shrink-0 px-3 text-[12.5px] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-40`}
-              style={{
-                backgroundColor: 'var(--chat-control)',
-                color: 'var(--chat-text)',
-              }}
             >
               {creating ? 'Adding…' : 'Add'}
-            </button>
+            </Button>
           </div>
           <div className="flex flex-wrap gap-1">
             {STATUS_FILTERS.map((filter) => {
               const active = status === filter.id;
               return (
-                <button
+                // The artifacts page's kind filters, byte for byte. `quiet` holds both states and
+                // `data-selection` says which; an inactive chip picks up the hairline that gives the
+                // row its shape between selections.
+                <Button
                   key={filter.id}
-                  type="button"
+                  variant="quiet"
+                  size="xs"
+                  data-selection={active ? 'on' : 'off'}
+                  aria-pressed={active}
                   onClick={() => setStatus(filter.id)}
-                  className={`${RADIUS} px-2.5 py-1 text-[12px] transition-colors`}
-                  style={{
-                    backgroundColor: active ? 'var(--chat-control)' : 'transparent',
-                    color: active ? 'var(--chat-text)' : 'var(--chat-muted)',
-                  }}
                 >
                   {filter.label}
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -488,13 +494,17 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
                           {selected.prompt}
                         </p>
                       </div>
-                      <button
-                        type="button"
+                      {/* `danger`, per §3.2, and the same rest-state change the artifacts page's
+                          Delete took: red on the card becomes muted behind a hairline until you
+                          reach for it, and then the word and its outline both go red. */}
+                      <Button
+                        variant="danger"
+                        size="xs"
+                        className="flex-shrink-0"
                         onClick={() => void handleDelete(selected.id)}
-                        className={`${RADIUS} flex-shrink-0 px-2.5 py-1 text-[12px] text-[var(--chat-danger)] transition-colors hover:bg-[var(--chat-hover)]`}
                       >
                         Delete
-                      </button>
+                      </Button>
                     </div>
                   </motion.div>
                 )}
