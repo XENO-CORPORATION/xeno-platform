@@ -1,5 +1,6 @@
 import React, { useState, useMemo, memo } from 'react';
-import { Copy, Check, Rows, Minimize2, Maximize2, Play, Loader2, X, Pencil } from '@/lib/icons';
+import { Spinner } from '@xenosystem/elements-react';
+import { Copy, Check, Rows, Minimize2, Maximize2, Play, X, Pencil } from '@/lib/icons';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -198,7 +199,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
                    onClick={handleRun}
                    disabled={currentIsRunning || runtimesLoading} // Disable if running OR if runtimes are loading
                 >
-                   {currentIsRunning || runtimesLoading ? <Loader2 size={15} className="animate-spin"/> : <Play size={15} className="fill-current"/>}
+                   {currentIsRunning || runtimesLoading ? <Spinner size={15} /> : <Play size={15} className="fill-current"/>}
                    <span className="hidden sm:inline">{runtimesLoading ? "Loading..." : currentIsRunning ? 'Running' : 'Run'}</span>
                 </button>
              )}
@@ -303,7 +304,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
 
               {currentIsRunning && (
                   <div className="flex items-center gap-2 text-gray-400 text-xs">
-                      <Loader2 size={14} className="animate-spin"/> 
+                      <Spinner size={14} /> 
                       <span>Running...</span>
                   </div>
               )}

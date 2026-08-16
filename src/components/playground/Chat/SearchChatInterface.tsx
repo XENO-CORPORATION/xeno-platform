@@ -1,32 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Spinner } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
-import {
-  Send,
-  Globe,
-  Loader2,
-  X,
-  ChevronDown,
-  Eye,
-  Brain,
-  Check,
-  SquarePen,
-  StopCircle,
-  Paperclip,
-  Zap,
-  Link2,
-  Sparkles,
-  ExternalLink,
-  Bot,
-  Navigation,
-  ScanEye,
-  Layers,
-  FileOutput,
-  ArrowLeft,
-  Lightbulb,
-  Trash2,
-  Search as SearchIcon,
-  Clock
-} from '@/lib/icons';
+import { Send, Globe, X, ChevronDown, Eye, Brain, Check, SquarePen, StopCircle, Paperclip, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, ArrowLeft, Lightbulb, Trash2, Search as SearchIcon, Clock } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
@@ -1239,7 +1214,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         <div className="flex-1 overflow-y-auto p-2" style={{ height: 'calc(100% - 110px)' }}>
           {isLoadingHistory ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Loader2 size={32} className="text-[var(--chat-muted)] mb-3 animate-spin" />
+              <Spinner size={32} className="mb-3" />
               <p className="text-sm text-[var(--chat-muted)]">Loading history...</p>
             </div>
           ) : conversationHistory.length === 0 ? (
@@ -1369,7 +1344,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               }`}
             >
               {isModelsLoading ? (
-                <Loader2 size={16} className="text-[var(--chat-muted)] flex-shrink-0 animate-spin" />
+                <Spinner size={16} className="flex-shrink-0" />
               ) : (
                 <Brain size={16} className="text-[var(--chat-muted)] flex-shrink-0" />
               )}
@@ -1573,7 +1548,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   <div className="flex justify-start">
                     <div className="bg-[var(--chat-surface)] rounded-2xl rounded-bl-none p-3">
                       <div className="flex items-center gap-2 text-[var(--chat-muted)]">
-                        <Loader2 size={16} className="animate-spin" />
+                        <Spinner size={16} />
                         <span className="text-sm">
                           {isSearching ? 'Searching the web...' :
                            isAgentWorking ? `Agent working... (Step ${agentSteps.length + 1})` :
@@ -1604,7 +1579,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               <div className="flex items-center gap-2 text-xs text-[var(--chat-muted)]">
                 <Eye size={12} className="text-green-500" />
                 <span>AI can see: <span className="text-[var(--chat-text)]">{currentPageContent.title}</span></span>
-                {isLoadingPageContent && <Loader2 size={12} className="animate-spin ml-auto" />}
+                {isLoadingPageContent && <Spinner size={12} className="ml-auto" />}
               </div>
             </div>
           </div>
@@ -1841,7 +1816,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   <div className="flex items-center justify-center gap-2 py-2">
                     <Bot size={14} className="text-blue-400 animate-pulse" />
                     <span className="text-xs text-blue-400 font-medium">Agent controlling browser</span>
-                    <Loader2 size={12} className="text-blue-400 animate-spin" />
+                    <Spinner size={12} style={{ ["--xeno-spinner-track"]: "rgb(96 165 250 / 0.35)", ["--xeno-spinner-edge"]: "rgb(96 165 250)" } as React.CSSProperties} />
                   </div>
                 </div>
               )}
@@ -1853,7 +1828,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     <div className="flex items-center gap-2 text-xs text-[var(--chat-muted)] mb-2">
                       <Layers size={12} />
                       <span>Agent Steps ({agentSteps.length})</span>
-                      {isAgentWorking && <Loader2 size={12} className="animate-spin text-blue-400" />}
+                      {isAgentWorking && <Spinner size={12} style={{ ["--xeno-spinner-track"]: "rgb(96 165 250 / 0.35)", ["--xeno-spinner-edge"]: "rgb(96 165 250)" } as React.CSSProperties} />}
                       {!isAgentWorking && (
                         <button
                           onClick={() => setAgentSteps([])}
@@ -1881,7 +1856,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                                 : 'bg-[var(--chat-control)] text-[var(--chat-muted)]'
                             }`}>
                               {idx === agentSteps.length - 1 && isAgentWorking ? (
-                                <Loader2 size={8} className="animate-spin" />
+                                <Spinner size={8} />
                               ) : (
                                 idx + 1
                               )}
@@ -1941,7 +1916,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
             <div className="flex-1 overflow-y-auto p-6 pt-4">
               {isSearching ? (
                 <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 size={32} className="animate-spin text-[var(--chat-muted)] mb-3" />
+                  <Spinner size={32} className="mb-3" />
                   <p className="text-sm text-[var(--chat-muted)]">Searching the web...</p>
                 </div>
               ) : searchResults.length === 0 ? (

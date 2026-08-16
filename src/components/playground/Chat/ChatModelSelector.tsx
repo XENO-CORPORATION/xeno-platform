@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight, Loader2 } from '@/lib/icons';
+import { Spinner } from '@xenosystem/elements-react';
+import { ArrowLeft, Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight } from '@/lib/icons';
 import type { GroupedModels, Model } from '@/services/modelService';
 import { chainDurationMs, MODEL_CHAIN } from './composerGooey';
 
@@ -424,7 +425,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
         <span className="flex min-w-0 items-center gap-1.5">
           {!isMinimal && (
             isLoading ? (
-              <Loader2 size={14} className="flex-shrink-0 animate-spin text-zinc-500" />
+              <Spinner size={14} className="flex-shrink-0" />
             ) : isReasoningActive ? (
               <BrainCircuit size={14} className="flex-shrink-0 text-zinc-500" />
             ) : (
