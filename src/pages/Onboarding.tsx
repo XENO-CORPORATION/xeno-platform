@@ -8,7 +8,7 @@ import {
 import { PRODUCTS } from '../lib/productCatalog';
 import AuthMark from '../components/auth/AuthMark';
 import {
-  StepHeading, SelectTile, Field, Checkbox, PrimaryButton, TextButton, Progress,
+  StepHeading, SelectTile, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress,
   INPUT_CLS, cx,
 } from '../components/onboarding/OnboardingPieces';
 
@@ -98,11 +98,72 @@ type Answers = {
 /** A sellable item as `/api/billing/config` reports it. `available` is false
  *  when the item has no Stripe price id — the server's own fail-safe, which
  *  this UI respects rather than rendering a button that cannot charge. */
+type Entitlements = {
+  canUse?: boolean; commercial?: boolean; maxResolution?: string; priority?: boolean;
+  inHouseDailyLimit?: number | null; privateProjects?: boolean; teamSeats?: number;
+  cloudSync?: boolean; crossApp?: boolean; agents?: boolean; collaboration?: boolean;
+};
+
 type CatalogItem = {
   id: string; kind: string; label: string; price: number;
   interval?: string; credits?: number; badge?: string;
   available?: boolean; perSeat?: boolean; plan?: string;
+  entitlements?: Entitlements;
 };
+
+/** Turn a plan's REAL entitlement set into readable lines.
+ *
+ *  Derived, never hand-written: the same table `requireEntitlement` reads is
+ *  what produces these bullets, so a card cannot advertise a capability the
+ *  server does not grant. A typed marketing list is how "Pro includes agents"
+ *  outlives the code that made it true.
+ *
+ *  Order is deliberate — the things somebody is actually deciding between come
+ *  first, and only entitlements that are GRANTED are listed. A pricing card is
+ *  not the place to enumerate what you do not get. */
+function allFeatures(e?: Entitlements): string[] {
+  if (!e) return [];
+  const out: string[] = [];
+  if (e.inHouseDailyLimit === null) out.push('Unlimited in-house generation');
+  else if (e.inHouseDailyLimit) out.push(`${e.inHouseDailyLimit} in-house generations/day`);
+  if (e.agents) out.push('AI agents across every app');
+  if (e.crossApp) out.push('Cross-app workflows');
+  if (e.cloudSync) out.push('Cloud sync and multi-device');
+  if (e.privateProjects) out.push('Private cloud projects');
+  if (e.maxResolution === '4k') out.push('Up to 4K server-side output');
+  if (e.commercial) out.push('Commercial-use licence');
+  if (e.priority) out.push('Priority queue');
+  if (e.collaboration) out.push('Real-time collaboration');
+  if (e.teamSeats) out.push(`${e.teamSeats} team seats included`);
+  return out;
+}
+
+/**
+ * The lines a plan's card shows.
+ *
+ * Two problems with listing everything: the card becomes a wall of ten
+ * near-identical ticks, and — worse — a higher tier's DIFFERENTIATORS sort to
+ * the bottom, because they are the rarest entitlements. Team's whole argument
+ * (collaboration, seats) ended up last, under eight lines it shares with Pro.
+ *
+ * So a tier that is a superset of a cheaper one leads with what is NEW, then
+ * rolls the rest up into one "Everything in X" line. That is both shorter and
+ * a truer description of the decision being made — nobody compares Team to
+ * nothing, they compare it to Pro.
+ */
+function featuresFor(e?: Entitlements, baseline?: { label: string; entitlements?: Entitlements }): string[] {
+  const mine = allFeatures(e);
+  if (!baseline?.entitlements) return mine.slice(0, 6);
+
+  const base = new Set(allFeatures(baseline.entitlements));
+  const added = mine.filter((f) => !base.has(f));
+  // Only roll up when this tier genuinely contains the cheaper one. If it does
+  // not, "Everything in Pro" would be a lie and the full list is correct.
+  const isSuperset = mine.length > 0 && [...base].every((f) => mine.includes(f));
+  if (!isSuperset || added.length === 0) return mine.slice(0, 6);
+
+  return [`Everything in ${baseline.label}`, ...added].slice(0, 6);
+}
 
 /** Money in the server's currency. Intl rather than a '$' template: the anchor
  *  price is set in EUR, and a hardcoded dollar sign in front of a euro amount
@@ -391,53 +452,40 @@ const Onboarding: React.FC = () => {
                 />
 
                 {subscriptions.length > 0 ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3.5 sm:grid-cols-2">
                     {subscriptions.map((item, i) => (
-                      <div
+                      <PlanCard
                         key={item.id}
-                        style={wave(i, 0.10, 0.06)}
-                        className="flex flex-col rounded-[10px] border border-white/[0.09] bg-white/[0.015] p-5
-                                   transition-colors duration-200 hover:border-white/20"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-[15px] font-medium text-white">{item.label}</span>
-                          {item.badge && (
-                            <span className="rounded-[4px] border border-white/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-white/45">
-                              {item.badge}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="mt-3 flex items-baseline gap-1">
-                          <span className="text-[28px] font-semibold leading-none tabular-nums text-white">
-                            {formatPrice(item.price, billing?.currency)}
-                          </span>
-                          <span className="text-[13px] text-white/35">
-                            /{item.interval || 'month'}{item.perSeat ? ' · seat' : ''}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={!item.available || checkingOut !== null}
-                          onClick={() => startCheckout(item.id)}
-                          className="focus-self mt-5 w-full rounded-[8px] border border-white/20 bg-transparent px-4 py-2.5
-                                     text-[13.5px] font-medium text-white transition-all duration-200
-                                     hover:border-white/40 hover:bg-white/[0.06] active:scale-[0.99]
-                                     disabled:cursor-not-allowed disabled:opacity-20"
-                        >
-                          {checkingOut === item.id ? 'Opening checkout…'
-                            : item.available ? 'Select plan'
-                            : 'Not yet available'}
-                        </button>
-                      </div>
+                        label={item.label}
+                        price={formatPrice(item.price, billing?.currency)}
+                        interval={`${item.interval || 'month'}${item.perSeat ? ' · seat' : ''}`}
+                        // Compare against the cheapest OTHER subscription, so
+                        // the rollup names a real plan rather than a hardcoded
+                        // one — reordering or renaming the catalog cannot make
+                        // this reference stale.
+                        features={featuresFor(
+                          item.entitlements,
+                          subscriptions.find((o) => o.id !== item.id && o.price < item.price),
+                        )}
+                        // Pro is the anchor tier in the locked pricing strategy,
+                        // so it carries the emphasis. Derived from the plan, not
+                        // from position, so reordering the catalog cannot move
+                        // the highlight onto the wrong card.
+                        highlighted={item.plan === 'pro'}
+                        badge={item.plan === 'pro' ? 'Most popular' : item.badge}
+                        available={Boolean(item.available)}
+                        busy={checkingOut === item.id}
+                        onSelect={() => startCheckout(item.id)}
+                        style={wave(i, 0.10, 0.07)}
+                      />
                     ))}
                   </div>
                 ) : (
                   /* No sellable plan. Says so plainly rather than rendering a
                    * dead price card — a "Select plan" button that cannot charge
                    * is worse than an honest empty state. */
-                  <div className="rounded-[10px] border border-white/[0.09] bg-white/[0.015] px-5 py-6">
+                  <div className="rounded-[12px] border border-white/[0.10] px-5 py-6"
+                       style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))' }}>
                     <p className="text-[14px] text-white/75">Plans aren&rsquo;t open yet.</p>
                     <p className="mt-1.5 text-[13px] leading-relaxed text-white/35">
                       Your account is ready. We&rsquo;ll email you the moment subscriptions go live —

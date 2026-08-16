@@ -75,20 +75,39 @@ export const SelectTile: React.FC<{
     type="button"
     onClick={onClick}
     aria-pressed={selected}
-    style={style}
+    style={{
+      /* A GRADIENT surface, not a flat rgba fill. This is the single biggest
+         reason the first version read as "empty dark rectangles": a uniform
+         fill has no light direction, so nothing tells the eye the shape is a
+         surface rather than a hole. The homepage's cards are all gradients
+         (see ProductsShowcase) for exactly this reason. */
+      background: selected
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.085), rgba(255,255,255,0.03))'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))',
+      /* Top hairline = lit from above; the drop shadow seats it on the page.
+         Together they are what make a div read as a raised card. */
+      boxShadow: selected
+        ? 'inset 0 1px 0 0 rgba(255,255,255,0.16), 0 8px 24px -8px rgba(0,0,0,0.8)'
+        : 'inset 0 1px 0 0 rgba(255,255,255,0.055), 0 4px 14px -8px rgba(0,0,0,0.7)',
+      ...style,
+    }}
     className={cx(
-      'focus-self group relative flex min-h-[72px] w-full items-center gap-3 rounded-[10px] border',
-      'px-4 pr-10 py-4 text-left transition-all duration-200 ease-out active:scale-[0.99]',
-      selected
-        ? 'border-white/70 bg-white/[0.06]'
-        : 'border-white/[0.09] bg-white/[0.015] hover:border-white/25 hover:bg-white/[0.035]',
+      'focus-self group relative flex min-h-[86px] w-full items-center gap-3.5 rounded-[12px] border',
+      'px-4 pr-11 py-4 text-left transition-[border-color,transform] duration-200 ease-out',
+      'active:scale-[0.985]',
+      selected ? 'border-white/45' : 'border-white/[0.10] hover:border-white/[0.26]',
     )}
   >
     {icon && (
+      /* Icon in a bordered CHIP rather than bare on the surface. A loose glyph
+         floating next to text reads as clip-art; boxed, it reads as a control.
+         Same treatment the homepage uses for its inline marks. */
       <span
         className={cx(
-          'shrink-0 transition-colors duration-200',
-          selected ? 'text-white' : 'text-white/40 group-hover:text-white/70',
+          'grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border transition-all duration-200',
+          selected
+            ? 'border-white/25 bg-white/[0.12] text-white'
+            : 'border-white/[0.09] bg-white/[0.04] text-white/50 group-hover:border-white/20 group-hover:text-white/85',
         )}
       >
         {icon}
@@ -98,13 +117,13 @@ export const SelectTile: React.FC<{
     <span className="min-w-0 flex-1">
       <span
         className={cx(
-          'block text-[14px] leading-snug transition-colors duration-200',
-          selected ? 'text-white' : 'text-white/75 group-hover:text-white',
+          'block text-[14px] font-medium leading-snug transition-colors duration-200',
+          selected ? 'text-white' : 'text-white/80 group-hover:text-white',
         )}
       >
         {label}
       </span>
-      {meta && <span className="mt-1 block text-[11.5px] tabular-nums text-white/25">{meta}</span>}
+      {meta && <span className="mt-1 block text-[11.5px] tabular-nums text-white/30">{meta}</span>}
     </span>
 
     {/* Scales in rather than appearing — a check that pops reads as a response
@@ -112,7 +131,7 @@ export const SelectTile: React.FC<{
     <span
       aria-hidden
       className={cx(
-        'absolute right-3.5 top-1/2 grid h-[18px] w-[18px] -translate-y-1/2 place-items-center rounded-[4px] bg-white',
+        'absolute right-3.5 top-1/2 grid h-[19px] w-[19px] -translate-y-1/2 place-items-center rounded-[5px] bg-white',
         'transition-all duration-200 ease-out',
         selected ? 'scale-100 opacity-100' : 'scale-50 opacity-0',
       )}
@@ -120,6 +139,93 @@ export const SelectTile: React.FC<{
       <Check className="h-3 w-3 text-black" strokeWidth={3} />
     </span>
   </button>
+);
+
+/* ── PlanCard ────────────────────────────────────────────────────────────── */
+
+/**
+ * A pricing card with actual content.
+ *
+ * The first version was a label, a price and a dead button on a flat panel —
+ * mostly empty space, which is why it looked unfinished. A pricing card's job
+ * is to answer "what do I get", and that answer has to be ON the card.
+ *
+ * The features are DERIVED from the plan's real entitlement set (served by
+ * /api/billing/config), not hand-written marketing bullets. A typed list is
+ * how "Pro includes agents" outlives the code that made it true; deriving it
+ * means the card and the gate cannot disagree.
+ */
+export const PlanCard: React.FC<{
+  label: string;
+  price: string;
+  interval: string;
+  features: string[];
+  badge?: string;
+  highlighted?: boolean;
+  available: boolean;
+  busy?: boolean;
+  onSelect: () => void;
+  style?: React.CSSProperties;
+}> = ({ label, price, interval, features, badge, highlighted, available, busy, onSelect, style }) => (
+  <div
+    style={{
+      background: highlighted
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.018))'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))',
+      boxShadow: highlighted
+        ? 'inset 0 1px 0 0 rgba(255,255,255,0.15), 0 18px 44px -18px rgba(0,0,0,0.95)'
+        : 'inset 0 1px 0 0 rgba(255,255,255,0.05), 0 10px 30px -16px rgba(0,0,0,0.85)',
+      ...style,
+    }}
+    className={cx(
+      'relative flex flex-col rounded-[14px] border p-5 transition-colors duration-200',
+      highlighted ? 'border-white/30' : 'border-white/[0.10] hover:border-white/20',
+    )}
+  >
+    {badge && (
+      /* Sits ON the top edge rather than inside the padding, so it reads as a
+         ribbon on the card instead of a first list item. */
+      <span className="absolute -top-[9px] left-5 rounded-[5px] border border-white/25 bg-[#0e0e0e] px-2 py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.12em] text-white/80">
+        {badge}
+      </span>
+    )}
+
+    <span className={cx('text-[15px] font-medium', highlighted ? 'text-white' : 'text-white/85')}>
+      {label}
+    </span>
+
+    <div className="mt-2.5 flex items-baseline gap-1.5">
+      <span className="text-[32px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-white">
+        {price}
+      </span>
+      <span className="text-[13px] text-white/35">/{interval}</span>
+    </div>
+
+    <ul className="mt-5 flex-1 space-y-2.5">
+      {features.map((f) => (
+        <li key={f} className="flex items-start gap-2.5">
+          <Check className="mt-[3px] h-[13px] w-[13px] shrink-0 text-white/55" strokeWidth={2.5} />
+          <span className="text-[12.5px] leading-snug text-white/60">{f}</span>
+        </li>
+      ))}
+    </ul>
+
+    <button
+      type="button"
+      disabled={!available || busy}
+      onClick={onSelect}
+      className={cx(
+        'focus-self mt-6 w-full rounded-[9px] px-4 py-2.5 text-[13.5px] font-semibold',
+        'transition-all duration-200 active:scale-[0.99]',
+        'disabled:cursor-not-allowed disabled:opacity-25',
+        highlighted
+          ? 'bg-white text-black hover:bg-white/90'
+          : 'border border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/[0.06]',
+      )}
+    >
+      {busy ? 'Opening checkout…' : available ? 'Select plan' : 'Not yet available'}
+    </button>
+  </div>
 );
 
 /* ── Field ───────────────────────────────────────────────────────────────── */

@@ -60,7 +60,7 @@ const CATALOG = [
   { id: 'team_seat',      kind: 'subscription', label: 'Team', plan: 'team', credits: 0, price: 40, interval: 'month', perSeat: true, priceEnv: 'STRIPE_PRICE_TEAM_SEAT_MONTHLY' },
   // Legacy flat-rate Team — kept readable for any pre-existing subscription, NOT offered
   // publicly (unconfigured priceEnv → available:false; the UI points Team → team_seat).
-  { id: 'team_monthly',   kind: 'subscription', label: 'Team (legacy flat)', plan: 'team', credits: 0, price: 60, interval: 'month', priceEnv: 'STRIPE_PRICE_TEAM_MONTHLY' },
+  { id: 'team_monthly',   kind: 'subscription', label: 'Team (legacy flat)', plan: 'team', credits: 0, price: 60, interval: 'month', priceEnv: 'STRIPE_PRICE_TEAM_MONTHLY', legacy: true },
 ];
 
 function resolveItem(raw) {
@@ -94,14 +94,33 @@ async function livePriceFor(priceId) {
 }
 
 /** Public catalog with LIVE Stripe prices overlaid onto the static fallback. */
+/* `legacy` items are readable by existing subscribers but NEVER offered.
+ *
+ * 🔴 This flag exists because the intent was a COMMENT and nothing enforced it.
+ * `team_monthly` is annotated "NOT offered publicly", yet getPublicCatalog
+ * returned it like anything else — it merely LOOKED hidden because an
+ * unconfigured priceEnv makes it `available: false`. Configure Stripe and a
+ * €60 legacy plan would have appeared in onboarding beside the real ones.
+ *
+ * A prose invariant is not an invariant. This is the filter that makes it one. */
+const isOfferable = (item) => !item.legacy;
+
 export async function getPublicCatalog() {
-  return Promise.all(CATALOG.map(resolveItem).map(async ({ priceEnv, ...pub }) => {
+  return Promise.all(CATALOG.filter(isOfferable).map(resolveItem).map(async ({ priceEnv, ...pub }) => {
     if (stripe && pub.priceId) {
       const live = await livePriceFor(pub.priceId);
       if (live && live.amount != null) return { ...pub, price: live.amount, currency: live.currency };
     }
     return { ...pub, currency: CURRENCY };
-  }));
+  })).then((items) => items.map((item) => (
+    /* Features come from the SAME table requireEntitlement reads, so a pricing
+     * card can never advertise a capability the gate does not grant. Hand-typed
+     * marketing bullets are how "Pro includes agents" outlives the code that
+     * made it true. */
+    item.kind === 'subscription' && item.plan
+      ? { ...item, entitlements: entitlementsFor(item.plan) }
+      : item
+  )));
 }
 
 export async function getConfig() {
