@@ -190,6 +190,15 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
       <div className="mx-auto flex h-full w-full max-w-[48rem] flex-col px-4 sm:px-6">
         <div className="flex min-h-[2.75rem] flex-shrink-0 items-center justify-between gap-3 pt-6 pb-4 md:min-h-[3rem] md:pt-8 md:pb-5">
           <div className="relative" data-artifacts-sort-menu="">
+            {/* Stays hand-written. The glyph here is not a leading icon, it is a REVEAL: the button's
+                left padding grows from 12 to 32 over 600ms while the chevron slides out from under
+                the label, which carries its own background so the glyph passes behind it. That needs
+                the chevron as an absolutely-positioned child of the button, and `leadingIcon` is a
+                slot in a flex row — the one thing it cannot be is somewhere else.
+                The fill is the other half: this is a filled button with no border, and the variants
+                pair those two. `quiet[data-selection=on]` is the only fill-without-border in the set
+                and it means "the panel I opened is on screen", which is a different sentence from
+                what this button says at rest. */}
             <button
               type="button"
               onClick={() => setIsSortOpen((open) => !open)}
@@ -253,13 +262,9 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-3 py-1.5 text-[12.5px] text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-          >
+          <Button variant="ghost" size="sm" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </div>
 
         <div className="mb-4 flex flex-shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -285,18 +290,21 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
           {KIND_FILTERS.map((filter) => {
             const active = kind === filter.id;
             return (
-              <button
+              /* `quiet` + `data-selection`, which is the library's own way of saying exactly what the
+                 two inline colours said: ON takes a `--xeno-control` fill and drops its outline, OFF
+                 is muted ink. The one thing that changes is that an inactive chip now carries the
+                 hairline border every quiet control has at rest — the fill/no-fill pair had nothing
+                 to hold the row's shape between selections. */
+              <Button
                 key={filter.id}
-                type="button"
+                variant="quiet"
+                size="xs"
+                data-selection={active ? 'on' : 'off'}
+                aria-pressed={active}
                 onClick={() => setKind(filter.id)}
-                className="rounded-lg px-2.5 py-1 text-[12px] transition-colors"
-                style={{
-                  backgroundColor: active ? 'var(--chat-control)' : 'transparent',
-                  color: active ? 'var(--chat-text)' : 'var(--chat-muted)',
-                }}
               >
                 {filter.label}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -396,13 +404,20 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
                     Backend-ready id: <span className="font-mono">{selected.id}</span>
                   </p>
                 </div>
-                <button
-                  type="button"
+                {/* `danger`, per the conversion table — and it changes what this reads like at rest.
+                    It used to be red on the card and neutral under the pointer; the variant is the
+                    other way round, muted with a hairline until you reach for it, and then the word
+                    and its outline both go red. That is the design system's position on destructive
+                    controls rather than a preference of this page's, which is exactly why the table
+                    settles it instead of each call site arguing it again. */}
+                <Button
+                  variant="danger"
+                  size="xs"
+                  className="flex-shrink-0"
                   onClick={() => void handleDelete(selected.id)}
-                  className="flex-shrink-0 rounded-lg px-2.5 py-1 text-[12px] text-[var(--chat-danger)] transition-colors hover:bg-[var(--chat-hover)]"
                 >
                   Delete
-                </button>
+                </Button>
               </div>
               <p className="mt-3 text-[12.5px] leading-relaxed text-[var(--chat-muted)]">
                 Open-in-chat and full preview ship when the artifacts API is live. This panel
