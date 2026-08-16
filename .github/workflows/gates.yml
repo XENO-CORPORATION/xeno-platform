@@ -1,0 +1,75 @@
+# The `npm test` chain — 26 steps that, until 2026-08-16, ran nowhere but a
+# workstation.
+#
+# ── WHY THIS EXISTS ──────────────────────────────────────────────────────────
+#
+# Two CI workflows were already here (core-tests, money-tests) and neither runs
+# `npm test`. So every gate written for the Forum — the SQL placeholder check
+# across 663 queries, the surface-parity decision record, the XSS payload
+# battery, the de-index protections, the column-mention sweep — existed and was
+# checked only when somebody happened to run it locally.
+#
+#   A gate that does not run is a comment.
+#
+# That is the same sentence this repo has needed four times: xeno-workflow's 76
+# unregistered node types, xeno-tools' never-called `install`, the Forum's
+# write-only flags, and a surface-parity gate that was written and then not added
+# to the chain. Writing the check is the easy half.
+#
+# ── DELIBERATELY NO DATABASE AND NO NETWORK ─────────────────────────────────
+#
+# Everything in `npm test` is a source-level or pure-logic gate. The things that
+# need a live system — `proof:*` (real database, rolled-back transactions) and
+# `smoke:*` (the deployed site, a real browser) — are NOT here on purpose: a
+# check that needs production to be up is a check that goes red for reasons that
+# have nothing to do with the commit, and a red that means nothing gets ignored.
+#
+# They stay operator-run, and the release runbook is where they are required.
+
+name: gates
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'nginx/**'
+      - 'public/robots.txt'
+      - 'Dockerfile.frontend'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/gates.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'nginx/**'
+      - 'public/robots.txt'
+      - 'Dockerfile.frontend'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/gates.yml'
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # `npm ci` needs the lockfile to be installable on Linux. ⚠️ npm on Windows
+      # writes `@esbuild/*` platform entries without `optional: true`, which makes
+      # `npm ci` on Linux treat a foreign binary as required and fail EBADPLATFORM
+      # before any step runs. This repo is developed on Windows, so the fallback
+      # is deliberate rather than lazy — see xeno-workflow's CI notes, which hit
+      # exactly this.
+      - name: Install
+        run: npm ci || npm install
+
+      - name: Run the gate chain
+        run: npm test
