@@ -183,8 +183,9 @@ export const WorkspaceChooser: React.FC<{
         disabled={phase === 'absorbing'}
         style={{ animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: '0.28s', opacity: 0 }}
         className="focus-self group relative mt-3 flex w-full items-center gap-3.5 overflow-hidden rounded-[12px]
-                   border border-white/[0.14] px-5 py-4 text-left transition-all duration-200
-                   hover:border-white/35 active:scale-[0.995] disabled:cursor-default"
+                   border border-white/[0.14] px-5 py-4 text-left transition-all duration-200 ease-out
+                   will-change-transform hover:-translate-y-[3px] hover:border-white/35
+                   active:translate-y-0 active:scale-[0.995] disabled:cursor-default"
       >
         <span
           aria-hidden
@@ -248,7 +249,9 @@ const SuiteCard: React.FC<{
           : { animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: `${0.06 + index * 0.06}s`, opacity: 0 }),
       }}
       className={`focus-self group relative flex flex-col rounded-[12px] border p-4 text-left
-                  ${absorbing ? '' : 'transition-[border-color] duration-200'}
+                  ${absorbing
+                    ? ''
+                    : 'transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform hover:-translate-y-[4px] active:translate-y-0'}
                   ${selected ? 'border-white/45' : 'border-white/[0.10] hover:border-white/[0.28]'}`}
     >
       <span className="flex items-start gap-2.5">

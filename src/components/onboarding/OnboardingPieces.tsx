@@ -93,8 +93,12 @@ export const SelectTile: React.FC<{
     }}
     className={cx(
       'focus-self group relative flex min-h-[86px] w-full items-center gap-3.5 rounded-[12px] border',
-      'px-4 pr-11 py-4 text-left transition-[border-color,transform] duration-200 ease-out',
-      'active:scale-[0.985]',
+      'px-4 pr-11 py-4 text-left',
+      // The card LIFTS on hover. A colour-only hover state is why the grid felt
+      // inert — nothing moved, so nothing felt touchable. `will-change` keeps
+      // the lift on its own layer so it does not repaint the text under it.
+      'transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform',
+      'hover:-translate-y-[3px] active:translate-y-0 active:scale-[0.985]',
       selected ? 'border-white/45' : 'border-white/[0.10] hover:border-white/[0.26]',
     )}
   >

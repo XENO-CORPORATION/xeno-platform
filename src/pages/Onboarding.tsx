@@ -8,6 +8,7 @@ import {
 import { PRODUCTS } from '../lib/productCatalog';
 import AuthMark from '../components/auth/AuthMark';
 import WorkspaceChooser from '../components/onboarding/WorkspaceChooser';
+import useStepTransition from '../components/onboarding/useStepTransition';
 import { SUITES, EVERYTHING_ID, productsForSuite, suiteLabel } from '../lib/workspaceSuites';
 import {
   StepHeading, SelectTile, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress,
@@ -185,6 +186,11 @@ const Onboarding: React.FC = () => {
   const [billing, setBilling] = useState<{ enabled: boolean; currency: string; catalog: CatalogItem[] } | null>(null);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
 
+  /* Holds the outgoing step in the DOM long enough to animate it out. Without
+   * it `key={step}` only ever animates the INCOMING subtree — React has already
+   * unmounted the old one — so every change was a hard cut. */
+  const t = useStepTransition(step);
+
   const token = () => localStorage.getItem('token');
 
   /* Never show this to somebody who already finished or dismissed it —
@@ -318,15 +324,19 @@ const Onboarding: React.FC = () => {
               where a wide measure hurts readability. One column width for all
               of them would have to be wrong for one of the two. */}
           <div
-            key={step}
+            key={t.rendered}
+            style={t.style}
             className={cx(
-              'w-full xeno-stagger space-y-8',
-              step === 0 ? 'max-w-[1180px]' : 'max-w-[620px]',
+              'w-full space-y-8',
+              // Only stagger on the way IN. Running the entrance while the
+              // container is sliding out fights itself and reads as a stutter.
+              t.phase === 'in' && 'xeno-stagger',
+              t.rendered === 0 ? 'max-w-[1180px]' : 'max-w-[620px]',
             )}
           >
 
             {/* ── 0 · Workspace — the choice that shapes the platform ──── */}
-            {step === 0 && (
+            {t.rendered === 0 && (
               <>
                 <StepHeading
                   title="Choose your workspace"
@@ -352,7 +362,7 @@ const Onboarding: React.FC = () => {
             )}
 
             {/* ── 1 · About you ───────────────────────────────────────────── */}
-            {step === 1 && (
+            {t.rendered === 1 && (
               <>
                 <StepHeading
                   title={`Set up ${suiteLabel(answers.workspace)}`}
@@ -403,7 +413,7 @@ const Onboarding: React.FC = () => {
             )}
 
             {/* ── 2 · Role ────────────────────────────────────────────────── */}
-            {step === 2 && (
+            {t.rendered === 2 && (
               <>
                 <StepHeading
                   title={answers.displayName ? `Nice to meet you, ${answers.displayName}` : 'A bit about you'}
@@ -431,7 +441,7 @@ const Onboarding: React.FC = () => {
             )}
 
             {/* ── 3 · Plan ────────────────────────────────────────────────── */}
-            {step === 3 && (
+            {t.rendered === 3 && (
               <>
                 <StepHeading
                   title="Do more with XENO"
@@ -486,7 +496,7 @@ const Onboarding: React.FC = () => {
             )}
 
             {/* ── 4 · Where to start ──────────────────────────────────────── */}
-            {step === 4 && (
+            {t.rendered === 4 && (
               <>
                 <StepHeading
                   title="Here's where to start"

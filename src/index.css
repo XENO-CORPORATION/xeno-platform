@@ -229,13 +229,18 @@ html, body, #root, #app {
  * the element simply renders in its final state. Defining them here makes the
  * vocabulary available to every page rather than to one layout's subtree.
  * ─────────────────────────────────────────────────────────────────────────── */
+/* 14px was too timid to register as movement — at that distance a fade-up
+   reads as "the page was slow", not as motion. 26px with a slight scale gives
+   the eye something to actually track, and the overshoot curve lets it settle
+   rather than stop dead. */
 @keyframes xenoRise {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(26px) scale(0.97); }
+  60%  { opacity: 1; }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes xenoScaleIn {
-  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  from { opacity: 0; transform: translateY(10px) scale(0.94); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -248,25 +253,28 @@ html, body, #root, #app {
 
 .xeno-scale-in {
   opacity: 0;
-  animation: xenoScaleIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: xenoScaleIn 0.6s cubic-bezier(0.16, 1.02, 0.3, 1) forwards;
 }
 
 /* Stagger by depth. Deliberately capped at 12: past roughly half a second of
    accumulated delay a stagger stops reading as choreography and starts reading
    as the page being slow. */
-.xeno-stagger > * { opacity: 0; animation: xenoRise 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-.xeno-stagger > *:nth-child(1)  { animation-delay: 0.04s; }
-.xeno-stagger > *:nth-child(2)  { animation-delay: 0.09s; }
-.xeno-stagger > *:nth-child(3)  { animation-delay: 0.14s; }
-.xeno-stagger > *:nth-child(4)  { animation-delay: 0.19s; }
-.xeno-stagger > *:nth-child(5)  { animation-delay: 0.24s; }
-.xeno-stagger > *:nth-child(6)  { animation-delay: 0.29s; }
-.xeno-stagger > *:nth-child(7)  { animation-delay: 0.34s; }
-.xeno-stagger > *:nth-child(8)  { animation-delay: 0.38s; }
-.xeno-stagger > *:nth-child(9)  { animation-delay: 0.42s; }
-.xeno-stagger > *:nth-child(10) { animation-delay: 0.46s; }
-.xeno-stagger > *:nth-child(11) { animation-delay: 0.50s; }
-.xeno-stagger > *:nth-child(n+12) { animation-delay: 0.54s; }
+.xeno-stagger > * {
+  opacity: 0;
+  /* A curve that overshoots slightly and settles. cubic-bezier(.22,1,.36,1) is
+     a pure decelerate — correct but inert; this one has a bit of life in the
+     tail, which is the difference between "appeared" and "arrived". */
+  animation: xenoRise 0.62s cubic-bezier(0.16, 1.02, 0.3, 1) forwards;
+}
+
+
+.xeno-stagger > *:nth-child(1)  { animation-delay: 0.02s; }
+.xeno-stagger > *:nth-child(2)  { animation-delay: 0.10s; }
+.xeno-stagger > *:nth-child(3)  { animation-delay: 0.18s; }
+.xeno-stagger > *:nth-child(4)  { animation-delay: 0.25s; }
+.xeno-stagger > *:nth-child(5)  { animation-delay: 0.31s; }
+.xeno-stagger > *:nth-child(6)  { animation-delay: 0.37s; }
+.xeno-stagger > *:nth-child(n+7) { animation-delay: 0.42s; }
 
 /* Motion is decoration here; the content is identical without it. Anyone who
    has asked the OS to stop moving things gets the final state immediately —
