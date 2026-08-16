@@ -16838,6 +16838,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             {SCHEDULE_HOURS_12.map((hour) => {
                                               const active =
                                                 selected.hour12 === hour;
+                                              /* Stays hand-written, with the weekday grid's shape:
+                                                 a cell in a scrolling PICKER column, not a button in
+                                                 a row. `h-7` is sm and the type is 12 against sm's 13,
+                                                 which is close — but the cell is `w-full` inside a
+                                                 narrow column with no horizontal padding at all, and
+                                                 `.xeno-btn` carries 10px on each side. Twenty pixels
+                                                 of padding inside a column sized for two digits is
+                                                 the conversion breaking the thing it converts. */
                                               return (
                                                 <button
                                                   key={hour}
@@ -16878,6 +16886,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             {SCHEDULE_MINUTES.map((minute) => {
                                               const active =
                                                 selected.minute === minute;
+                                              /* Stays hand-written — the hour column's twin. */
                                               return (
                                                 <button
                                                   key={minute}
@@ -16918,6 +16927,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             {SCHEDULE_MERIDIEMS.map((meridiem) => {
                                               const active =
                                                 selected.meridiem === meridiem;
+                                              /* Stays hand-written — the hour column's twin. */
                                               return (
                                                 <button
                                                   key={meridiem}
@@ -16960,17 +16970,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     </div>
                   </div>
                   <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      type="button"
+                    {/* `secondary md` — a `--chat-control` fill with text ink, 32px of box, and it
+                        gains the variant's hairline. The same conversion as the create-project
+                        dialog's Cancel, which is the footer this one copies. */}
+                    <Button
+                      variant="secondary"
+                      size="md"
                       onClick={closeProjectScheduledCreate}
-                      className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors"
-                      style={{
-                        backgroundColor: 'var(--chat-control)',
-                        color: 'var(--chat-text)',
-                      }}
                     >
                       Cancel
-                    </button>
+                    </Button>
+                    {/* Stays hand-written: `--chat-text` fill with `--chat-canvas` ink, the
+                        inverted emphasis. Fifteenth in this chat and the FIFTH Cancel/confirm pair
+                        split by the same missing variant (§9). Its disabled branch is the
+                        availability axis written out, which the component would carry. */}
                     <button
                       type="button"
                       onClick={submitProjectScheduledCreate}
