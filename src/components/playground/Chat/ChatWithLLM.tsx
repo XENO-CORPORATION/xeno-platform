@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
+import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, TextInput, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
 // The palettes and the preference that picks one live outside this file now: the CSS at the entry
 // point, the resolution beside it. This component still OWNS the switcher — it is the only thing that
 // writes these keys — but owning a setting never meant being the only place allowed to read it.
@@ -8847,6 +8847,12 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
               className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]"
               aria-hidden="true"
             />
+            {/* Stays hand-written for the fill. This is the same search field as the two just
+                converted, but it rests on `--chat-control` rather than `--chat-canvas`, and
+                `.xeno-input` hard-codes `background: var(--xeno-canvas)` — the component would sink
+                it to #0a0a0a inside a #262626 panel. The rest of the box would convert perfectly:
+                `h-8` is md and the magnifier is the same 14. One hard-coded background is all that
+                separates this field from the two above it. */}
             <input
               type="search"
               placeholder="Search files…"
@@ -11714,15 +11720,29 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                      </div>
                                      <div className="mx-1.5 mb-2 h-px bg-[var(--chat-border)]" />
                                      {/* Recent Files Search */}
+                                     {/* §7's canonical field: the `relative` wrapper, the
+                                         absolutely-placed magnifier and the `pl-7` that dodged it
+                                         all go, and the glyph becomes `leadingIcon`. Four lines
+                                         become one, and the box that was three elements deep is one
+                                         element.
+                                         `iconSize={14}` holds the magnifier where it was — `sm`
+                                         draws 16, which is why `TextInput` grew that door in this
+                                         same pass. The fill was already `--chat-canvas`, which is
+                                         what `.xeno-input` paints, and the focus border was already
+                                         `--chat-muted`, which is what it focuses to. The radius
+                                         moves 8 to 6, onto the scale. */}
                                      {recentFiles.length > 3 && (
-                                       <div className="relative mb-2">
-                                         <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 transform text-[var(--chat-muted)]" />
-                                         <input
+                                       <div className="mb-2">
+                                         <TextInput
+                                           size="sm"
+                                           iconSize={14}
+                                           leadingIcon={SearchDecl}
+                                           className="w-full"
                                            type="text"
                                            placeholder="Search files..."
                                            value={recentFilesSearchQuery}
                                            onChange={(e) => setRecentFilesSearchQuery(e.target.value)}
-                                           className="w-full rounded-lg border border-[var(--chat-border)] bg-[var(--chat-canvas)] py-1.5 pl-7 pr-2 text-xs text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-muted)]"
+                                           aria-label="Search recent files"
                                          />
                                        </div>
                                      )}
@@ -13242,6 +13262,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     className="flex items-center gap-2 rounded-lg px-3 py-2.5"
                     style={{ backgroundColor: 'var(--chat-control)' }}
                   >
+                    {/* Stays hand-written, and for a second reason on top of the fill. The BOX here
+                        is the wrapper — a `--chat-control` plate with its own padding — and the input
+                        is bare inside it. `TextInput` is the box AND the field together, so taking it
+                        means replacing the wrapper too, and the wrapper is what carries this panel's
+                        fill. Same collision as above, reached from the other side. */}
                     <Search size={15} className="flex-shrink-0 text-[var(--chat-muted)]" />
                     <input
                       type="search"
@@ -14480,16 +14505,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               >
                 {/* Search */}
                 <div className="border-b border-[var(--chat-border)] p-2">
-                  <div className="relative">
-                    <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 transform text-[var(--chat-muted)]" />
-                    <input
-                      type="text"
-                      placeholder="Search conversations..."
-                      value={conversationSearchQuery}
-                      onChange={(e) => setConversationSearchQuery(e.target.value)}
-                      className="w-full rounded-md border border-[var(--chat-border)] bg-[var(--chat-canvas)] py-1.5 pl-7 pr-2 text-xs text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-accent)]"
-                    />
-                  </div>
+                  {/* The recent-files search's twin, converted the same way. One difference worth
+                      naming: its focus border was `--chat-accent` and the component focuses to
+                      `--chat-muted`. Every other field in this chat focuses to muted, including the
+                      one two panels away that this was copied from, so the odd one out is the one
+                      being corrected. */}
+                  <TextInput
+                    size="sm"
+                    iconSize={14}
+                    leadingIcon={SearchDecl}
+                    className="w-full"
+                    type="text"
+                    placeholder="Search conversations..."
+                    value={conversationSearchQuery}
+                    onChange={(e) => setConversationSearchQuery(e.target.value)}
+                    aria-label="Search conversations"
+                  />
                 </div>
 
                 {/* Conversation List */}
