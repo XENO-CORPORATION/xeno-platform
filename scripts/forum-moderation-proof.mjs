@@ -197,10 +197,18 @@ try {
   else pass('resolved_by recorded');
 
   const { rows: afterThread } = await client.query(
-    'SELECT status FROM forum_threads WHERE id = $1', [threadId],
+    'SELECT status, locked_by, locked_at FROM forum_threads WHERE id = $1', [threadId],
   );
   if (afterThread[0]?.status !== 'locked') fail(`the actioned thread is "${afterThread[0]?.status}", expected locked`);
   else pass('the content state changed — the action had an effect');
+
+  // `locked_by`/`locked_at` were modelled and never written: the row said "this
+  // is closed" and could not say since when, or on whose decision.
+  if (!afterThread[0]?.locked_by) fail('locked_by is null — the thread cannot say who locked it');
+  else if (String(afterThread[0].locked_by) !== String(moderator.id)) fail('locked_by names the wrong person');
+  else pass('locked_by records the moderator');
+  if (!afterThread[0]?.locked_at) fail('locked_at is null — the thread cannot say since when');
+  else pass('locked_at is stamped');
 
   // Acting twice must be refused, or two moderators double-punish one item.
   const twice = await expectThrow(() => write.resolveFlag(client, moderator, raised[0].id, { action: 'dismiss' }));

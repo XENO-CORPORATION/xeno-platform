@@ -1342,7 +1342,21 @@ export async function resolveFlag(db, user, flagId, { action, note } = {}) {
     if (flag.target_type === 'post') {
       await db.query(`UPDATE forum_posts SET status = 'hidden' WHERE id = $1`, [flag.target_id]);
     } else {
-      await db.query(`UPDATE forum_threads SET status = 'locked' WHERE id = $1`, [flag.target_id]);
+      // 🔴 `locked_by` and `locked_at` were modelled and NEVER WRITTEN — found
+      // by asking which forum columns appear nowhere in the server source.
+      // Locking a thread without recording who did it and when leaves the row
+      // saying only "this is closed", and the answer to "since when, and on
+      // whose decision" reachable solely by scanning the moderation log.
+      //
+      // The log is the PUBLIC record and stays authoritative; this is the row
+      // being able to answer for itself. They are different jobs: one is
+      // transparency, the other is state a reader can act on without a join.
+      await db.query(
+        `UPDATE forum_threads
+            SET status = 'locked', locked_by = $2, locked_at = NOW()
+          WHERE id = $1`,
+        [flag.target_id, user.id],
+      );
     }
   }
 
