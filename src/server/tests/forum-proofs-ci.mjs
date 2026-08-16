@@ -101,10 +101,10 @@ async function applySchema() {
       // tables were disappearing but not which file removed them, and each
       // guess costs a CI round.
       const { rows: t } = await pool.query(
-        "SELECT to_regclass('forum_spaces') AS spaces, to_regclass('forum_tags') AS tags, current_database() AS db, current_schema() AS sch",
+        "SELECT to_regclass('users') AS users, to_regclass('forum_spaces') AS spaces, to_regclass('webhooks') AS hooks",
       );
       console.log(`  applied ${f}  bytes=${sql.length} creates=${(sql.match(/CREATE TABLE/gi) || []).length}`
-        + `  spaces=${t[0].spaces} tags=${t[0].tags} db=${t[0].db} schema=${t[0].sch}`);
+        + `  users=${t[0].users} spaces=${t[0].spaces} webhooks=${t[0].hooks}`);
     } catch (err) {
       // Say what DOES exist. "relation X does not exist" while applying
       // migrations in order means either the creating migration was skipped or
