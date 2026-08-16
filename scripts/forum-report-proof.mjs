@@ -227,7 +227,7 @@ try {
   // ── 4. 🔴 does the collector actually feed Loop D? ───────────────────────
   console.log('\n4. the join — does this reach a dev agent?');
   await setPredicate(client, admins[0].id, { tags: ['product:pixel'], max_per_hour: 4 });
-  const digest = await getDigest(client, admins[0].id, { advanceCursor: false });
+  const digest = await getDigest(client, admins[0].id, { channel: 'push' });
 
   const rising = digest?.sections?.rising || [];
   const hit = rising.find((r) => r.shortId === created.shortId);

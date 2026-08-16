@@ -122,10 +122,10 @@ export async function pushPendingDigests(db, { limit = 25 } = {}) {
 
     for (const sub of due) {
       try {
-        // `advanceCursor: false` — the pull channel's clock is not ours to move.
+        // `channel: 'push'` — the pull cursor is not ours to consult OR move.
         const digest = await getDigest(client, sub.user_id, {
           since: sub.last_push_at ? new Date(sub.last_push_at).toISOString() : undefined,
-          advanceCursor: false,
+          channel: 'push',
         });
 
         if (digestIsEmpty(digest)) {

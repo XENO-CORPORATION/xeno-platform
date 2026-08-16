@@ -51,8 +51,13 @@ function handled(context, fn) {
       await fn(req, res);
     } catch (error) {
       if (error instanceof ForumError) {
+        // `details` carries structured fields the caller can ACT on —
+        // `retryAfterSeconds` on a 429 being the motivating case. A rate limit
+        // that says only "too fast" leaves an agent with nothing but a retry
+        // loop, which is the behaviour the limit exists to stop.
         return res.status(error.statusCode).json({
           success: false, error: error.message, code: error.code,
+          ...(error.details || {}),
         });
       }
       return serverError(res, error, context);
@@ -567,22 +572,12 @@ router.get('/predicate', authMiddleware, loadActor, handled('getPredicate', asyn
  * and the server holds it to it, or the declared limit is decoration.
  */
 router.get('/digest', authMiddleware, loadActor, handled('digest', async (req, res) => {
-  const sub = await svc.getPredicate(req.db, req.actor.id);
-  if (sub?.lastDigestAt && sub.predicate?.max_per_hour) {
-    const minGapMs = 3600000 / Number(sub.predicate.max_per_hour);
-    const waited = Date.now() - new Date(sub.lastDigestAt).getTime();
-    if (waited < minGapMs) {
-      // 429 with retryAfter, not a silent empty digest: an agent that receives
-      // {} learns nothing and polls again immediately, which is the behaviour
-      // the limit exists to stop.
-      return res.status(429).json({
-        success: false,
-        error: 'Digest requested faster than the predicate allows',
-        code: 'digest_rate_limited',
-        retryAfterSeconds: Math.ceil((minGapMs - waited) / 1000),
-      });
-    }
-  }
+  // 🔴 The max_per_hour check USED TO LIVE HERE, and that was the bug: the MCP
+  // `forum_digest` tool called the service directly, so an agent — the exact
+  // caller the limit exists to restrain — bypassed it by choosing the other
+  // surface. It now lives in `getDigest`, which is the one place both surfaces
+  // pass through. See the note two comments below about surfaces drifting; it
+  // had already happened.
   res.json({ success: true, ...(await svc.getDigest(req.db, req.actor.id, { since: req.query.since })) });
 }));
 
