@@ -213,13 +213,45 @@ test('the welcome email contains a checklist, a CTA and a working unsubscribe li
   assert.ok(routeMatches('/docs'), 'the route matcher rejects a route that exists');
 
   const internal = [...sent.html.matchAll(/href="https:\/\/xenostudio\.ai([^"]*)"/g)]
-    .map((m) => m[1].split('?')[0] || '/')
-    .filter((p) => !p.startsWith('/email/') && !p.startsWith('/unsubscribe'));
+    .map((m) => m[1].split('?')[0] || '/');
 
-  assert.ok(internal.length >= 3, `expected at least 3 actionable links, found ${internal.length}`);
-  for (const p of new Set(internal)) {
+  // A welcome email carries links of TWO kinds, and checking both against
+  // App.tsx is a category error — that is what the first version did, and it
+  // failed the unsubscribe link, which is a perfectly real endpoint.
+  //
+  //   /docs, /overview        React routes  -> App.tsx
+  //   /api/email/unsubscribe  Express route -> src/server
+  //
+  // Excluding /api/ would have been the easy fix and the wrong one: the
+  // unsubscribe link is the single link in this mail with a LEGAL obligation
+  // behind it, so it is the last one that should go unchecked.
+  const spa = [...new Set(internal.filter((p) => !p.startsWith('/api/')))];
+  const api = [...new Set(internal.filter((p) => p.startsWith('/api/')))];
+
+  assert.ok(spa.length >= 3, `expected at least 3 actionable links, found ${spa.length}`);
+  for (const p of spa) {
     assert.ok(routeMatches(p),
       `the welcome email links ${p}, which is NOT a registered route — a dead end in onboarding`);
+  }
+
+  const serverSrc = readFileSync(new URL('../src/server/index.js', import.meta.url), 'utf8');
+  for (const p of api) {
+    // The mount must exist, and the remainder must be handled by the router it
+    // mounts. Both halves are needed: a mounted prefix with no matching handler
+    // still 404s.
+    const mounts = [...serverSrc.matchAll(/app\.use\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    const mount = mounts.filter((mt) => p === mt || p.startsWith(`${mt}/`))
+      .sort((a, b) => b.length - a.length)[0];
+    assert.ok(mount, `${p} has no matching app.use() mount in src/server/index.js`);
+
+    const rest = p.slice(mount.length) || '/';
+    const routerFile = serverSrc.match(
+      new RegExp(`import\\s+(\\w+)\\s+from\\s+'([^']*routes/[^']+)';[\\s\\S]*?app\\.use\\(\\s*['"]${mount.replace(/[/]/g, '\\/')}['"][^)]*\\1`),
+    );
+    assert.ok(routerFile, `could not resolve which router serves ${mount}`);
+    const routerSrc = readFileSync(new URL(`../src/server/${routerFile[2].replace(/^\.\//, '')}`, import.meta.url), 'utf8');
+    assert.ok(routerSrc.includes(`'${rest}'`) || routerSrc.includes(`"${rest}"`),
+      `${p} is mounted at ${mount} but ${routerFile[2]} defines no ${rest} handler — a dead unsubscribe link is a compliance problem, not a cosmetic one`);
   }
 
   assert.match(sent.html, /<table role="presentation"/, 'table layout, so Outlook renders it');
