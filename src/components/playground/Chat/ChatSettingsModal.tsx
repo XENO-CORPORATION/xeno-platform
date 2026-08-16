@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Download, Plus, Settings, X, XDecl } from '@/lib/icons';
+import { Download, Plus, Settings, XDecl } from '@/lib/icons';
 import {
   getChatPersonaId,
   listPersonas,

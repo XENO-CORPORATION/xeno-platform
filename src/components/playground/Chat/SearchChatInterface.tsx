@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { IconButton, Spinner } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Globe, X, ChevronDown, Eye, Brain, Check, SquarePen, StopCircle, Paperclip, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, ArrowLeft, Lightbulb, Trash2, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl } from '@/lib/icons';
+import { Send, Globe, ChevronDown, Eye, Brain, Check, SquarePen, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Lightbulb, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';

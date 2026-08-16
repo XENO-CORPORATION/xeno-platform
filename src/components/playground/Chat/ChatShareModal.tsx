@@ -470,18 +470,15 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
             Don&apos;t share personal information or third-party content without permission.
           </p>
           {step === 'configure' ? (
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="lg"
+              className="w-full sm:w-auto"
               onClick={() => void handleCreate()}
               disabled={isCreating || messages.length === 0}
-              className="h-10 w-full rounded-xl px-4 text-sm font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
-              style={{
-                backgroundColor: 'var(--chat-text)',
-                color: 'var(--chat-elevated)',
-              }}
             >
               {isCreating ? 'Creating…' : 'Create share link'}
-            </button>
+            </Button>
           ) : (
             <div className="flex w-full gap-2 sm:w-auto">
               <Button

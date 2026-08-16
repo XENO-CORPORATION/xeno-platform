@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { IconButton, TextInput, useDialog } from '@xenosystem/elements-react';
-import { Briefcase, ChevronLeft, ChevronRight, Search, X, XDecl, SearchDecl } from '@/lib/icons';
+import { Button, IconButton, TextInput, useDialog } from '@xenosystem/elements-react';
+import { Briefcase, ChevronRight, Search, XDecl, SearchDecl, ChevronRightDecl } from '@/lib/icons';
 import {
   listSkills,
   setSkillEnabled,
@@ -580,14 +580,15 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
                       variants={staggerItemVariants}
                       className="flex flex-shrink-0 items-center gap-2"
                     >
-                      <button
-                        type="button"
+                      <Button
+                        variant="ghost"
+                        size="md"
+                        leadingIcon={ChevronRightDecl}
+                        className="chat-icon-flip-x"
                         onClick={showCategories}
-                        className={`${RADIUS} flex h-8 items-center gap-1 px-2 text-[12.5px] text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]`}
                       >
-                        <ChevronLeft size={16} aria-hidden="true" />
                         Categories
-                      </button>
+                      </Button>
                       <span className="text-[12.5px] text-[var(--chat-muted)]">
                         {SKILL_CATEGORY_LABEL[activeCategory]}
                         {leafSkills.length > 0

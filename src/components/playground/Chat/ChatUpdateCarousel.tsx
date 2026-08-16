@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { IconButton } from '@xenosystem/elements-react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ArrowLeft, NextDismiss, Sparkles, ArrowRightDecl, NextDismissDecl } from '@/lib/icons';
+import { Sparkles, ArrowRightDecl, NextDismissDecl } from '@/lib/icons';
 import { getRelativeLuminance } from './chatTheme';
 import ChatUpdateDemoPanel from './ChatUpdateDemoPanel';
 import { captureDissolvePlate, runPixelDissolve } from './pixelDissolve';

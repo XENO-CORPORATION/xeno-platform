@@ -1,15 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { Button } from '@xenosystem/elements-react';
 import { motion, useReducedMotion } from 'framer-motion';
-import {
-  ArrowUp,
-  Check,
-  ChevronDown,
-  Copy,
-  ExternalLink,
-  FileText,
-  LayoutGrid,
-  MessageSquare,
-} from '@/lib/icons';
+import { ArrowUp, ChevronDown, Copy, ExternalLink, FileText, LayoutGrid, MessageSquare, CheckDecl, CopyDecl } from '@/lib/icons';
 import type { ChatUpdateDemoBody, ChatUpdateDemoLayout } from './ChatUpdateCarousel';
 
 interface ChatUpdateDemoPanelProps {
@@ -214,16 +206,17 @@ const ChatUpdateDemoPanel: React.FC<ChatUpdateDemoPanelProps> = ({
       <div className={demoHeaderClassName}>
         <span className="min-w-0 truncate text-[11px] font-medium text-[var(--chat-muted)]">{demo.header}</span>
         {demo.copyValue ? (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="xs"
+            leadingIcon={copied ? CheckDecl : CopyDecl}
+            className="shrink-0"
             onClick={() => onCopy(demo.copyValue!)}
             data-selection={copied ? 'on' : 'off'}
             aria-label={copied ? 'Copied' : demo.header}
-            className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]"
           >
-            {copied ? <Check size={12} /> : <Copy size={12} />}
             {copied ? 'Copied' : 'Copy'}
-          </button>
+          </Button>
         ) : demo.headerMeta ? (
           <span className="shrink-0 text-[10px] uppercase tracking-[0.08em] text-[var(--chat-muted)]">
             {demo.headerMeta}

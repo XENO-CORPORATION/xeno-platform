@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { IconButton, Spinner } from '@xenosystem/elements-react';
-import { ArrowLeft, Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight, ArrowRightDecl } from '@/lib/icons';
+import { Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight, ArrowRightDecl } from '@/lib/icons';
 import type { GroupedModels, Model } from '@/services/modelService';
 import { chainDurationMs, MODEL_CHAIN } from './composerGooey';
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, memo } from 'react';
 import { IconButton, Spinner } from '@xenosystem/elements-react';
-import { Copy, Check, Rows, Minimize2, Maximize2, Play, X, Pencil, XDecl } from '@/lib/icons';
+import { Copy, Check, Rows, Minimize2, Maximize2, Play, Pencil, XDecl } from '@/lib/icons';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 

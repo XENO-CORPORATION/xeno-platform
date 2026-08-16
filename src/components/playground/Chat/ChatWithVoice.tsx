@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { IconButton } from '@xenosystem/elements-react';
 import { useChatTheme } from './chatTheme';
-import { Mic, MicOff, MessageSquareText, Loader, Settings, StopCircle, Play, Pause, X, AlertTriangle, ChevronLeft, ChevronRight, KeyRound, SquarePen, Copy, Check, MessageSquare, ArrowLeft, Edit2, Paperclip, Clock, Trash, MessageSquareDecl } from '@/lib/icons';
+import { Mic, MicOff, Loader, StopCircle, Play, Pause, AlertTriangle, Copy, Check, MessageSquare, ArrowLeft, Trash, MessageSquareDecl } from '@/lib/icons';
 import { GoogleGenAI, Modality } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
