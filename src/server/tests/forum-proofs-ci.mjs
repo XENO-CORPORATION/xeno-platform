@@ -72,6 +72,11 @@ const REQUIRED = [
   '00000000000000-baseline.sql',
   '20260318000001-infrastructure-tables.sql',
   '20260811130000-agent-identities.sql',
+  // GDPR erasure touches the email opt-out table on its way through. It is not
+  // a forum table, but the erasure proof cannot run without it — and a missing
+  // one aborts the transaction, so every assertion after it fails for a reason
+  // that has nothing to do with erasure.
+  '20260814120000-email-opt-outs.sql',
 ];
 
 async function applySchema() {
@@ -94,8 +99,8 @@ async function applySchema() {
       // interpretation of the migration format is a second thing to keep in
       // sync — which is the whole lesson of the fixtures this job exists beside.
       const sql = readFileSync(join(MIGRATIONS, f), 'utf8')
-        .split(/^--\s*DOWN/im)[0]
-        .replace(/^--\s*UP.*$/im, '');
+        .split(/^--\s*DOWN\b/im)[0]
+        .replace(/^--\s*UP\b.*$/im, '');
       await pool.query(sql);
       // Count after EVERY file. "applied X" followed later by "(none)" told me
       // tables were disappearing but not which file removed them, and each
@@ -125,14 +130,26 @@ async function applySchema() {
 
 async function main() {
   const applied = await applySchema();
-  console.log(`schema: ${applied} migrations applied\n`);
+
+  // `oauth_refresh_tokens` and the rest of the account-v2 surface come from a
+  // JAVASCRIPT migration, not a .sql file — which is also why "apply every .sql"
+  // was never a faithful reconstruction. Every other DB suite in this repo calls
+  // this for the same reason.
+  const { migrateAccountV2 } = await import('../database/migrate-account-v2.js');
+  await migrateAccountV2(pool);
+  console.log(`schema: ${applied} migrations + account-v2 applied\n`);
 
   // The proofs all resolve an admin as their acting principal, and every one of
   // them clones that row to build the users it needs — so this is the only seed
   // required beyond the schema itself.
+  // `password_hash` is NOT NULL and this account never logs in — the proofs
+  // resolve it as a principal and clone it. A placeholder that is obviously not
+  // a usable credential is the honest choice: leaving it null fails the
+  // constraint, and putting a real hash there would imply the account can sign in.
   await pool.query(
-    `INSERT INTO users (email, username, display_name, role, is_active, email_verified, created_at)
-     VALUES ('ci-admin@example.invalid', 'ci_admin', 'CI Admin', 'admin', true, true, NOW() - INTERVAL '90 days')
+    `INSERT INTO users (email, username, display_name, password_hash, role, is_active, email_verified, created_at)
+     VALUES ('ci-admin@example.invalid', 'ci_admin', 'CI Admin',
+             'NOT-A-CREDENTIAL-ci-fixture-only', 'admin', true, true, NOW() - INTERVAL '90 days')
      ON CONFLICT DO NOTHING`,
   );
 
