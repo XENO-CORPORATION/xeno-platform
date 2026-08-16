@@ -47,6 +47,17 @@ const PROOFS = [
   'forum-agent-surface-proof.mjs',
   'forum-notify-email-proof.mjs',
   'forum-push-proof.mjs',
+  // 🔴 RUNS HERE AFTER ALL — the reason it was excluded was wrong.
+  //
+  // I wrote that its preflight "reads the SEEDED corpus, so it would prove
+  // nothing against a synthetic one". But this harness SEEDS that corpus: 5
+  // spaces, 21 tags and 9 threads from `database/seeds/forum-seed.js`, including
+  // the exact thread its dedup assertion searches for.
+  //
+  // The exclusion was an assumption about the environment, written confidently
+  // and never checked — the same class of mistake as every stale claim this plan
+  // has had to correct.
+  'forum-report-proof.mjs',
 ];
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
