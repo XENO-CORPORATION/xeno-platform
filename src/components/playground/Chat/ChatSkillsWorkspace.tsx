@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, IconButton, TextInput } from '@xenosystem/elements-react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Plus, Trash2Decl, SearchDecl } from '@/lib/icons';
+import { ChevronRight, ChevronRightDecl, PlusDecl, Trash2Decl, SearchDecl } from '@/lib/icons';
 import {
   addCatalogSkillToLibrary,
   addGlobalSkillToChat,
@@ -229,21 +229,22 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
           {item.summary}
         </span>
       </div>
-      <button
-        type="button"
+      {/* `--chat-control` fill with full text ink is `secondary` minus its hairline, and `h-7` is
+          `sm`. `iconSize={11}` holds the plus where it was — `sm` draws 16, and a five-pixel jump on
+          a chip this small would be a resize wearing a swap's clothes. */}
+      <Button
+        variant="secondary"
+        size="sm"
+        iconSize={11}
+        leadingIcon={PlusDecl}
+        className="flex-shrink-0"
         onClick={() => {
           void handleAddSkill(item, kind);
         }}
-        className={`${RADIUS} inline-flex h-7 flex-shrink-0 items-center gap-0.5 px-2 text-[11px] font-medium`}
-        style={{
-          backgroundColor: 'var(--chat-control)',
-          color: 'var(--chat-text)',
-        }}
         aria-label={`Add ${item.name}`}
       >
-        <Plus size={11} aria-hidden="true" />
         Add
-      </button>
+      </Button>
     </motion.div>
   );
 
@@ -406,20 +407,16 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
           ).map(([id, label]) => {
             const active = panel === id;
             return (
-              <button
+              <Button
                 key={id}
-                type="button"
+                variant="quiet"
+                size="sm"
+                data-selection={active ? 'on' : 'off'}
+                aria-pressed={active}
                 onClick={() => setPanel(id)}
-                className={`${RADIUS} px-2.5 py-1.5 text-[11.5px] font-medium transition-colors`}
-                style={{
-                  backgroundColor: active
-                    ? 'var(--chat-control)'
-                    : 'transparent',
-                  color: active ? 'var(--chat-text)' : 'var(--chat-muted)',
-                }}
               >
                 {label}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -435,15 +432,21 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
             placeholder="Search"
           />
         )}
+        {/* No fill, no border, muted going to full ink — `ghost`. The left-pointing chevron is
+            `chevron-right` mirrored: the library draws one geometry and flips it where it is used,
+            and `.chat-icon-flip-x` is how a component's glyph gets flipped, since the call site
+            cannot reach inside it. `ml-auto` and `flex-shrink-0` stay — those are layout. */}
         {addBackLabel && (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
+            iconSize={14}
+            leadingIcon={ChevronRightDecl}
+            className="chat-icon-flip-x ml-auto flex-shrink-0"
             onClick={handleAddBack}
-            className={`${RADIUS} ml-auto inline-flex flex-shrink-0 items-center gap-1 px-2 py-1.5 text-[11.5px] font-medium text-[var(--chat-muted)] hover:text-[var(--chat-text)]`}
           >
-            <ChevronLeft size={14} aria-hidden="true" />
             {addBackLabel}
-          </button>
+          </Button>
         )}
       </motion.div>
 
@@ -510,6 +513,12 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
                           <span className="hidden flex-shrink-0 text-[var(--chat-muted)] sm:block">
                             {SOURCE_LABEL[skill.source]}
                           </span>
+                          {/* Stays hand-written: a switch by ROLE, a button by shape. `<Switch>` is
+                              a 36 × 20 track with a sliding knob; this is a 52px pill that spells
+                              the state out in words, and the word is what makes a list of skills
+                              readable at a glance. The second of the three such pills — the
+                              customize page holds another, and the one real switch converted, at
+                              exactly its own size, in ChatGlobalSettingsPage. */}
                           {showEnabled && (
                             <button
                               type="button"
@@ -650,18 +659,17 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
                   >
                     Cancel
                   </Button>
-                  <button
-                    type="button"
+                  {/* The other half of a pair whose Cancel is already a `<Button>` — a confirm that
+                      stayed hand-written while its sibling converted is the kind of split that makes
+                      a row drift. `secondary lg`, same as every other filled confirm in the chat. */}
+                  <Button
+                    variant="secondary"
+                    size="lg"
                     onClick={() => void handleCreate()}
                     disabled={!createBody.trim() || saving}
-                    className={`${RADIUS} h-9 px-3 text-[12.5px] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-40`}
-                    style={{
-                      backgroundColor: 'var(--chat-control)',
-                      color: 'var(--chat-text)',
-                    }}
                   >
                     {saving ? 'Creating…' : 'Create skill'}
-                  </button>
+                  </Button>
                 </motion.div>
               </motion.div>
             ) : panel === 'catalog' ? (
@@ -900,18 +908,15 @@ const ChatSkillsWorkspace: React.FC<ChatSkillsWorkspaceProps> = ({
                   >
                     Cancel
                   </Button>
-                  <button
-                    type="button"
+                  {/* Create skill's twin, one panel over. */}
+                  <Button
+                    variant="secondary"
+                    size="lg"
                     onClick={() => void handleImport()}
                     disabled={!importBody.trim() || saving}
-                    className={`${RADIUS} h-9 px-3 text-[12.5px] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-40`}
-                    style={{
-                      backgroundColor: 'var(--chat-control)',
-                      color: 'var(--chat-text)',
-                    }}
                   >
                     {saving ? 'Importing…' : 'Import skill'}
-                  </button>
+                  </Button>
                 </motion.div>
               </motion.div>
             )}
