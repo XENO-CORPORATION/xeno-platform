@@ -89,3 +89,38 @@ jobs:
 
       - name: Run the gate chain
         run: npm test
+
+  # ── The Forum's end-to-end proofs ───────────────────────────────────────────
+  #
+  # Separate job because it needs a database, and because it must be possible to
+  # read "the gates are green but the Forum proofs are red" as two different
+  # facts. A single job that mixes source checks with a live-system check tells
+  # you less than two jobs that each mean one thing.
+  forum-proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: forum_proofs
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+        ports: ['5432:5432']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install (src/server)
+        working-directory: src/server
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Run the Forum proofs against a fresh database
+        working-directory: src/server
+        env:
+          DATABASE_URL: postgresql://postgres:test@localhost:5432/forum_proofs
+        run: node tests/forum-proofs-ci.mjs
