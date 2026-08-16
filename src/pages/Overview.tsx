@@ -25,6 +25,7 @@ import SearchChatInterface from '../components/playground/Chat/SearchChatInterfa
 const ThreeDGenerationInterface = React.lazy(() => import('../components/playground/Generation/ThreeDGenerationInterface'));
 import AudioGenerationInterface from '../components/playground/Generation/AudioGenerationInterface';
 import VideoGenerationInterface from '../components/playground/Generation/VideoGenerationInterface';
+import VideoGenerationInterface2 from '../components/playground/Generation/VideoGenerationInterface2';
 // Add imports for the new training components
 import LoRaImageTrainComponent from '../components/playground/Train/LoRaImageTrainInterface';
 import LoRaVideoTrainComponent from '../components/playground/Train/LoRaVideoTrainInterface';
@@ -260,6 +261,7 @@ const OverviewContent: React.FC = () => {
             <Route path="/overview/generation/image2-copy" element={<ImageGenerationInterface2Copy />} />
             <Route path="generation/3d" element={<React.Suspense fallback={<div>Loading 3D Studio...</div>}><ThreeDGenerationInterface /></React.Suspense>} />
             <Route path="generation/video" element={<VideoGenerationInterface />} />
+            <Route path="generation/video2" element={<VideoGenerationInterface2 />} />
             <Route path="generation/audio" element={<AudioGenerationInterface />} />
             <Route path="enhance/image" element={<ImageUpscaleInterface />} />
             <Route path="enhance/video" element={<VideoUpscaleInterface />} />
