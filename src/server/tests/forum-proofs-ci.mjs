@@ -51,11 +51,36 @@ const PROOFS = [
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
+/**
+ * The migrations the Forum needs, in filename order.
+ *
+ * ⚠️ NOT "every migration". The first version applied all 24 and died on
+ * `20260621123000-remote-run-workspace.sql`, which ALTERs `xeno_remote_runs` —
+ * a table created by a JavaScript migration, not a SQL one. Applying the SQL
+ * files alone is not a faithful reconstruction of production, and pretending
+ * otherwise would make this job fail for reasons that have nothing to do with
+ * the Forum.
+ *
+ * So: the baseline (users, api_keys), the infrastructure tables the push half
+ * delivers through (webhooks, webhook_deliveries), agent identities, and every
+ * forum migration. Anything else is another feature's problem.
+ *
+ * A file named here that does not exist is a hard error — a renamed migration
+ * must break this loudly rather than silently drop a table.
+ */
+const REQUIRED = [
+  '00000000000000-baseline.sql',
+  '20260318000001-infrastructure-tables.sql',
+  '20260811130000-agent-identities.sql',
+];
+
 async function applySchema() {
-  // Every migration, in filename order — the same sequence production ran.
-  // Applied one file at a time so a failure names the file rather than the
-  // 2,300th line of a concatenation.
-  const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort();
+  const all = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort();
+  for (const f of REQUIRED) {
+    if (!all.includes(f)) throw new Error(`required migration ${f} is missing — was it renamed?`);
+  }
+  const files = [...new Set([...REQUIRED, ...all.filter((f) => f.includes('forum'))])].sort();
+
   for (const f of files) {
     try {
       await pool.query(readFileSync(join(MIGRATIONS, f), 'utf8'));
