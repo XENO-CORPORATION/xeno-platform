@@ -289,7 +289,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
               className="ml-auto flex min-w-max items-center gap-1.5"
             >
               {inlineProviderGroups.length === 0 ? (
-                <span className="whitespace-nowrap px-1 text-xs text-zinc-600">
+                <span className="whitespace-nowrap px-1 text-xs text-[var(--chat-muted)]">
                   {isLoading ? 'Loading models...' : 'No models available.'}
                 </span>
               ) : activeInlineProviderGroup ? (
@@ -301,7 +301,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                   disabled={isInlineTrayClosing}
                   onClick={() => transitionInlineProvider(null)}
                   style={{ animationDelay: getInlineAnimationDelay(0) }}
-                  className={`chat-inline-model-action flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-black/15 text-zinc-500 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${inlineItemAnimationClass}`}
+                  className={`chat-inline-model-action flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--chat-border)] bg-[var(--chat-overlay)] text-[var(--chat-muted)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${inlineItemAnimationClass}`}
                   aria-label="Back to providers"
                 >
                   <span className="flex items-center justify-center">
@@ -321,10 +321,10 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                       disabled={isInlineTrayClosing}
                       onClick={() => handleSelect(model)}
                       style={{ animationDelay: getInlineAnimationDelay(index + 1) }}
-                      className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${inlineItemAnimationClass} ${
+                      className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${inlineItemAnimationClass} ${
                         isSelected
-                          ? 'border-white/[0.18] bg-white/[0.08] text-white'
-                          : 'border-white/[0.06] bg-black/15 text-zinc-400'
+                          ? 'border-[var(--chat-muted)] bg-[var(--chat-control)] text-[var(--chat-text)]'
+                          : 'border-[var(--chat-border)] bg-[var(--chat-overlay)] text-[var(--chat-muted)]'
                       }`}
                       // No `title`: selecting a model unmounts this chip, and a native
                       // tooltip outlives it — a stray black box left hanging over the
@@ -333,7 +333,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                     >
                       <span className="flex items-center gap-1.5">
                         <span className="max-w-[11rem] truncate">{model.name}</span>
-                        {isSelected && <Check size={12} className="text-zinc-200" />}
+                        {isSelected && <Check size={12} className="text-[var(--chat-text)]" />}
                       </span>
                     </button>
                   );
@@ -353,15 +353,15 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                     disabled={isInlineTrayClosing}
                     onClick={() => transitionInlineProvider(group.companyName)}
                     style={{ animationDelay: getInlineAnimationDelay(index) }}
-                    className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${inlineItemAnimationClass} ${
+                    className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${inlineItemAnimationClass} ${
                       isSelectedProvider
-                        ? 'border-white/[0.18] bg-white/[0.08] text-white'
-                        : 'border-white/[0.06] bg-black/15 text-zinc-400'
+                        ? 'border-[var(--chat-muted)] bg-[var(--chat-control)] text-[var(--chat-text)]'
+                        : 'border-[var(--chat-border)] bg-[var(--chat-overlay)] text-[var(--chat-muted)]'
                     }`}
                   >
                     <span className="flex items-center gap-1.5">
                       <span>{group.companyName}</span>
-                      <span className="tabular-nums text-zinc-600">{group.models.length}</span>
+                      <span className="tabular-nums text-[var(--chat-muted)]">{group.models.length}</span>
                     </span>
                   </button>
                 );
@@ -375,10 +375,10 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
               type="button"
               data-inline-model-scroll="left"
               onClick={() => scrollInlineRail('left')}
-              className="group absolute inset-y-0 left-0 z-10 flex w-10 items-center justify-start bg-gradient-to-r from-[#0f0f11] via-[#0f0f11]/90 to-transparent pl-1 focus-visible:outline-none"
+              className="group absolute inset-y-0 left-0 z-10 flex w-10 items-center justify-start bg-gradient-to-r from-[var(--chat-composer-fill)] via-[var(--chat-composer-fill)]/90 to-transparent pl-1 focus-visible:outline-none"
               aria-label="Show previous models"
             >
-              <ChevronLeft data-inline-model-scroll-hint size={14} className="text-zinc-500" />
+              <ChevronLeft data-inline-model-scroll-hint size={14} className="text-[var(--chat-muted)]" />
             </button>
           )}
 
@@ -387,10 +387,10 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
               type="button"
               data-inline-model-scroll="right"
               onClick={() => scrollInlineRail('right')}
-              className="group absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end bg-gradient-to-l from-[#0f0f11] via-[#0f0f11]/90 to-transparent pr-1 focus-visible:outline-none"
+              className="group absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end bg-gradient-to-l from-[var(--chat-composer-fill)] via-[var(--chat-composer-fill)]/90 to-transparent pr-1 focus-visible:outline-none"
               aria-label="Show more models"
             >
-              <ChevronRight data-inline-model-scroll-hint size={14} className="text-zinc-500" />
+              <ChevronRight data-inline-model-scroll-hint size={14} className="text-[var(--chat-muted)]" />
             </button>
           )}
         </div>
@@ -413,10 +413,10 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
           setIsInlineTrayClosing(false);
           updateOpen(true);
         }}
-        className={`chat-model-trigger flex items-center justify-center gap-1.5 border text-xs font-medium text-zinc-300 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/20 hover:bg-white/[0.04] hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${
+        className={`chat-model-trigger flex items-center justify-center gap-1.5 border text-xs font-medium text-[var(--chat-text)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${
           isMinimal
-            ? 'h-8 rounded-lg border-white/[0.06] bg-black/15 px-3'
-            : 'h-9 rounded-lg border-white/[0.08] bg-transparent px-2.5'
+            ? 'h-8 rounded-lg border-[var(--chat-border)] bg-[var(--chat-overlay)] px-3'
+            : 'h-9 rounded-lg border-[var(--chat-border)] bg-transparent px-2.5'
         } ${
           isCompact ? 'max-w-[6.5rem]' : 'max-w-[7.5rem]'
         }`}
@@ -427,15 +427,15 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
             isLoading ? (
               <Spinner size={14} className="flex-shrink-0" />
             ) : isReasoningActive ? (
-              <BrainCircuit size={14} className="flex-shrink-0 text-zinc-500" />
+              <BrainCircuit size={14} className="flex-shrink-0 text-[var(--chat-muted)]" />
             ) : (
-              <Brain size={14} className="flex-shrink-0 text-zinc-500" />
+              <Brain size={14} className="flex-shrink-0 text-[var(--chat-muted)]" />
             )
           )}
           <span className="truncate">{selectedModel.name}</span>
           <ChevronDown
             size={13}
-            className={`flex-shrink-0 text-zinc-500 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
+            className={`flex-shrink-0 text-[var(--chat-muted)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
           />
         </span>
       </button>
