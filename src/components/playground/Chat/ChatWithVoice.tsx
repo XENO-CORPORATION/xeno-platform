@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { IconButton } from '@xenosystem/elements-react';
+import { Button, IconButton } from '@xenosystem/elements-react';
 import { useChatTheme } from './chatTheme';
-import { Mic, MicOff, Loader, StopCircle, Play, Pause, AlertTriangle, Copy, Check, MessageSquare, ArrowLeft, Trash, MessageSquareDecl } from '@/lib/icons';
+import { Mic, MicOff, Loader, StopCircle, Play, AlertTriangle, Check, MessageSquare, ArrowLeft, Trash, MessageSquareDecl, CheckDecl, CopyDecl, PauseDecl, PlayDecl } from '@/lib/icons';
 import { GoogleGenAI, Modality } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1911,9 +1911,20 @@ const ChatWithVoice: React.FC = () => {
                               style={{ overflowY: 'hidden' }}
                             />
                             <div className="flex items-center justify-end gap-2 mt-1.5 self-end">
-                              <button onClick={handleCancelEdit} className="text-sm text-[var(--chat-muted)] hover:text-[var(--chat-text)] px-3 py-1" aria-label="Cancel edit">
+                              {/* Cancel is `ghost` — muted ink brightening on hover, and its 12px
+                                  padding and 14px type are `md` to the pixel. */}
+                              <Button variant="ghost" size="md" onClick={handleCancelEdit} aria-label="Cancel edit">
                                 Cancel
-                              </button>
+                              </Button>
+                              {/* Stays hand-written, and `primary` is the reason rather than the
+                                  answer. This is an inverted button — a `--chat-muted` fill carrying
+                                  `--chat-on-accent` ink — which is `primary`'s shape, and `primary`
+                                  reads `--xeno-chrome-btn-primary-bg`. That token is declared on
+                                  `:root` by the chrome files, so it COMPUTES there, before this
+                                  chat's bridge has said anything: measured live inside `.chat-themed`
+                                  it is #2b2b2b on #d8d8de — the library's own palette, not this
+                                  chat's. `primary` is unusable here until the bridge carries the
+                                  chrome tokens too (spec §9). */}
                               <button onClick={handleSaveEdit} className="text-sm bg-[var(--chat-muted)] text-[var(--chat-on-accent)] px-3 py-1 rounded-md font-semibold hover:bg-[var(--chat-hover)] transition-colors" aria-label="Save changes">
                                 Save
                               </button>
@@ -1925,13 +1936,21 @@ const ChatWithVoice: React.FC = () => {
                               <p className="text-sm leading-snug whitespace-pre-wrap">{msg.textContent}</p>
                             </div>
                             <div className="flex items-center justify-end gap-2 mt-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-150">
-                              <button onClick={() => handleCopyUserMessage(msg.textContent, msg.id)} className="xeno-icon-hover p-1 text-[var(--chat-muted)] hover:text-[var(--chat-text)] rounded-md" data-selection={copiedMessageId === msg.id ? 'on' : 'off'} aria-label="Copy message">
-                                {copiedMessageId === msg.id ? (
-                                  <Check size={14} className="text-[var(--chat-text)]" />
-                                ) : (
-                                  <Copy size={14} />
-                                )}
-                              </button>
+                              {/* One button, two faces — the ternary belongs in `icon` so the check
+                                  DRAWS over the copy mark instead of replacing it. `xeno-icon-hover`
+                                  stays: it is what makes `data-selection` a trigger for that draw
+                                  even when the pointer moves off as you click, which is what people
+                                  actually do. */}
+                              <IconButton
+                                icon={copiedMessageId === msg.id ? CheckDecl : CopyDecl}
+                                variant="ghost"
+                                size="xs"
+                                iconSize={14}
+                                className="xeno-icon-hover"
+                                data-selection={copiedMessageId === msg.id ? 'on' : 'off'}
+                                onClick={() => handleCopyUserMessage(msg.textContent, msg.id)}
+                                aria-label="Copy message"
+                              />
                             </div>
                           </div>
                         )
@@ -1967,22 +1986,37 @@ const ChatWithVoice: React.FC = () => {
                           {/* Action Buttons */}
                           {msg.textContent && (
                             <div className={`flex items-center gap-2 mt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-150`}>
-                              <button onClick={() => handleCopyAiMessage(msg.textContent, msg.id)} className="xeno-icon-hover p-1 ml-4 text-[var(--chat-muted)] hover:text-[var(--chat-text)] rounded-md" data-selection={copiedAiMessageId === msg.id ? 'on' : 'off'} aria-label="Copy AI response">
-                                {copiedAiMessageId === msg.id ? <Check size={14} className="text-[var(--chat-text)]" /> : <Copy size={14} />}
-                              </button>
+                              {/* The user turn's copy button, one turn over. `ml-4` is layout. */}
+                              <IconButton
+                                icon={copiedAiMessageId === msg.id ? CheckDecl : CopyDecl}
+                                variant="ghost"
+                                size="xs"
+                                iconSize={14}
+                                className="xeno-icon-hover ml-4"
+                                data-selection={copiedAiMessageId === msg.id ? 'on' : 'off'}
+                                onClick={() => handleCopyAiMessage(msg.textContent, msg.id)}
+                                aria-label="Copy AI response"
+                              />
+                              {/* Play/pause is one button with two faces, same as the copy above it,
+                                  so the ternary goes in `icon`.
+                                  Playing used to be `--accent-color`, a #5D5FEF violet declared at
+                                  the bottom of this file and belonging to no token set — the chat's
+                                  palettes are greyscale and only `--chat-danger` carries hue. It is
+                                  the `selection` axis now, which says the same thing the way this
+                                  design says everything else: brightness, not colour. */}
                               {msg.audioUrl && !msg.isGenerating && (
-                                <button
-                                  onClick={() => playAssistantAudio(msg.id, msg.audioUrl)} 
-                                  disabled={assistantStatus === 'speaking' && !msg.isPlaying} 
-                                  title={msg.isPlaying ? "Pause" : "Play assistant response"}
-                                  className={`p-1 rounded-md transition-colors 
-                                    ${msg.isPlaying 
-                                        ? 'text-[var(--accent-color)] hover:text-[var(--accent-color-secondary)]' 
-                                        : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
-                                    }`}
-                                >
-                                  {msg.isPlaying ? <Pause size={14} className="block" /> : <Play size={14} className="block" />}
-                                </button>
+                                <IconButton
+                                  icon={msg.isPlaying ? PauseDecl : PlayDecl}
+                                  variant="ghost"
+                                  size="xs"
+                                  iconSize={14}
+                                  className="xeno-icon-hover"
+                                  data-selection={msg.isPlaying ? 'on' : 'off'}
+                                  onClick={() => playAssistantAudio(msg.id, msg.audioUrl)}
+                                  disabled={assistantStatus === 'speaking' && !msg.isPlaying}
+                                  title={msg.isPlaying ? 'Pause' : 'Play assistant response'}
+                                  aria-label={msg.isPlaying ? 'Pause' : 'Play assistant response'}
+                                />
                               )}
                             </div>
                           )}

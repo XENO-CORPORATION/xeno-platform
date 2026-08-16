@@ -349,6 +349,17 @@ Re-deciding these costs more than it saves.
   for a filled control and the bridge in `chat-theme.css` should say `--xeno-control: var(--chat-control-strong)`.
   That is one decision for the owner, and it also settles the surface collision above.
 
+- **`primary` is unusable in the chat, and the bridge is why.** It paints from
+  `--xeno-chrome-btn-primary-bg` / `-fg`, which the two chrome files declare on `:root`. A custom
+  property computes where it is DECLARED, so those resolve against the library's own base tokens
+  before `.chat-themed` has said anything — and children inherit the computed value. Measured inside
+  the chat: a `primary` button is **#2b2b2b on #d8d8de**, the library's palette, where every other
+  variant correctly reads the chat's. The bridge maps eleven base tokens and no chrome ones.
+
+  So an inverted button — a fill with `--chat-on-accent` ink, like the voice view's Save — has no
+  variant to convert to. Fixing it means the bridge carrying the chrome tokens as well, which is one
+  more line per token and the owner's call about which construction the chat is wearing.
+
 - **The sort trigger's reveal.** Two pages now carry the same unconvertible control (artifacts,
   scheduled): a chevron that is not a leading icon but a 600ms padding reveal, sliding out from under
   a label that carries its own background. `leadingIcon` is a slot in a flex row and that is the one
