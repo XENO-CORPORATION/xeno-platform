@@ -90,6 +90,48 @@ jobs:
       - name: Run the gate chain
         run: npm test
 
+  # ── The frontend must actually COMPILE ─────────────────────────────────────
+  #
+  # 🔴 Added 2026-08-16 because a JSX syntax error reached main and was found
+  # only when the production Docker build failed, mid-deploy.
+  #
+  # Nothing in CI built the frontend. Every other job here reads source, runs
+  # node tests, or hits a database — none of them parse a .tsx file. So
+  # `{signedIn ? ( {/* comment */} <Link…>` — a comment placed where JSX does
+  # not allow one — passed every gate and broke `docker compose build`.
+  #
+  # This runs the SAME command the image build runs (`npm run build` = vite +
+  # prerender), because a gate that approximates the real build is a gate that
+  # can disagree with it. It is the cheapest possible protection against the
+  # entire class: any syntax error, bad import, or missing module in the
+  # renderer now fails here instead of on the box, 30 minutes into a deploy
+  # with the old container still serving and nobody sure why.
+  frontend-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Same Windows-lockfile caveat as the gates job above.
+      - name: Install (root)
+        run: npm ci || npm install
+
+      - name: Build the frontend exactly as the image does
+        run: npm run build
+
+      # The build is only half the claim. Prerender writes the product pages,
+      # and a build that silently emits nothing would still exit 0.
+      - name: Assert the build produced a real bundle
+        run: |
+          test -d dist || { echo "no dist/ — the build produced nothing"; exit 1; }
+          count=$(find dist/assets -name 'index-*.js' | wc -l)
+          test "$count" -ge 1 || { echo "dist/assets has no index bundle"; exit 1; }
+          echo "dist/ contains $count index bundle(s)"
+
   # ── The Forum's end-to-end proofs ───────────────────────────────────────────
   #
   # Separate job because it needs a database, and because it must be possible to
