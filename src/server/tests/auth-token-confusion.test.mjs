@@ -31,6 +31,7 @@ import crypto from 'node:crypto';
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
+import { tableDDL } from './fixtures/schema.mjs';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth.js';
 import {
   getSigningKey, createAuthorizationCode, exchangeAuthorizationCode,

@@ -26,7 +26,11 @@ async function main() {
   // From the MIGRATIONS. user_sessions and the forum tables are declared once,
   // in the files production is built from, so a new column cannot drift out of
   // this fixture the way last_active_at and the forum tables both did.
-  await pool.query(tablesDDL('user_sessions', 'forum_threads', 'forum_posts'));
+  //
+  // Order matters: forum_threads has an FK to forum_spaces, and forum_posts to
+  // forum_threads. Naming them in dependency order is the price of not running
+  // all 42 tables — and it is visible, which is the point.
+  await pool.query(tablesDDL('user_sessions', 'forum_spaces', 'forum_threads', 'forum_posts'));
   await migrateAccountV2(pool);
   const u = await pool.query("INSERT INTO users (email, username, display_name, credits) VALUES ('jane@real.example','jane','Jane Doe',10) RETURNING id");
   const userId = u.rows[0].id;
