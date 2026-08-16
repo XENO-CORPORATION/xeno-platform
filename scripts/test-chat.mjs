@@ -35,10 +35,6 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
  */
 const KNOWN_RED = new Map([
   [
-    'test-chat-token-counter-layout.mjs',
-    'same marker, same pass — its `controlsEnd` is `{isLoading ?`',
-  ],
-  [
     'test-chat-voice-controls.mjs',
     'the hold-to-record thumb was retimed and resized in the same pass (14px travel -> 12px, thumb 2.5 -> 3 when active); the class-string assertions never followed',
   ],

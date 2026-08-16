@@ -469,6 +469,16 @@ Re-deciding these costs more than it saves.
   The scope is a `<ChatEmptyState>` boundary rather than a conditional, because the failure mode is
   the lesson: a test anchored to an implementation detail deletes itself silently.
 
+  `test-chat-token-counter-layout` was the same marker in the same pass, ending its slice at
+  `{isLoading ?`, and its five assertions had been unread just as long. Four were still true. The
+  fifth — `counterIndex < modelSelectorIndex`, "Token counter should be left of the model selector" —
+  compared two positions in a row that now contains only one of them: the composer-polish pass handed
+  `<ChatModelSelector>` to `<ChatEmptyState>` as a render prop, so it draws above the box and the "+"
+  control reveals it with the mode tabs. **Left alone it would not have failed loudly; it would have
+  compared against -1.** Both halves are pinned now instead of the one comparison — the selector is
+  gone from the row, and it is where it went — and the counter's place is stated against the voice
+  control, the right-hand group's first member, which did not move.
+
 - **Six controls sit below the scale's floor.** The control scale starts at `xs` = 24px; the chat has
   six squares at 18–20px — the two attachment-chip remove badges, the customize page's "i", and
   three more. Each is a badge or a hint notched into something else, where six pixels of growth is six
