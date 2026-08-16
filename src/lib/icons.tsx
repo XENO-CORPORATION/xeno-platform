@@ -228,6 +228,8 @@ export {
   GQuote as QuoteDecl,
   GImage as ImageDecl,
   GSparkles as SparklesDecl,
+  GLibrary as LibraryDecl,
+  GStore as StoreDecl,
   GWandSparkles as WandSparklesDecl,
   GFileX as FileXDecl,
   GContrast as ContrastDecl,

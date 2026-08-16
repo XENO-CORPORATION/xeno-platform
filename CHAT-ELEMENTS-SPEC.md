@@ -118,7 +118,7 @@ should not silently be both. `iconSize` exists for exactly this.
 |---|---|
 | every prop that is not `className` or `type` | `type="button"` — the component sets it |
 | LAYOUT classes: `flex-1`, `w-full`, `min-w-*`, `max-w-*`, `ml-*`, `self-*`, `order-*`, `absolute`, `z-*`, all `sm:`/`md:`/`lg:` | APPEARANCE classes: `p-*`, `h-*`, `w-*` (when square), `rounded-*`, `text-*`, `bg-*`, `border*`, `hover:*`, `transition*` |
-| product hooks: `data-*`, `chat-*` class names that CSS or JS targets | `data-*` hooks nothing references — grep first |
+| product hooks: `data-*`, `chat-*` class names that CSS or JS targets | `data-*` hooks nothing references — grep first, **`scripts/` and `*.css` included** |
 | the accessible name | a visually-hidden `<span className="sr-only">` — becomes `aria-label` |
 
 ### 3.5 Conditional faces stay one button
@@ -191,6 +191,19 @@ nothing to say so. **Filter the class list (§3.4). Never drop it.**
 ready for that call site: stop and add the door, do not convert around it.**
 
 **5.4 Dead imports.** §4.
+
+**5.5 A hook dropped on a grep that only looked at `src/`.** Twice now: the carousel's
+`data-update-carousel-dismiss` / `data-update-nav-morph`, and the composer's
+`data-composer-upload`. Each time the conversion left a comment saying the attribute was referenced
+nowhere, and each time `scripts/test-*.mjs` was reaching for it — so a test went red and stayed red,
+because nothing runs those tests but a person who thinks to.
+
+**So: before converting a file, run its test if it has one.** `scripts/test-chat-*.mjs`. Run it
+BEFORE you touch anything, so a failure you inherit is not a failure you think you caused.
+
+When a test asserts the OLD mechanism — `h-8`, `h-9 rounded-lg`, an inline `style.color` — move the
+assertion to the new one rather than deleting it. `data-xeno-size="md"` is the same 32px said in the
+scale's vocabulary, and it is the stricter statement of the two.
 
 ---
 

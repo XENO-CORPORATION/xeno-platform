@@ -179,7 +179,12 @@ try {
     'Agents should reveal exactly the three confirmed mock actions.',
   );
   assert.ok(agentButtons.every((button) => button.dataset.mockAction === 'true'), 'Every agent action should be marked as mock data.');
-  assert.ok(agentButtons.every((button) => button.className.includes('h-8')), 'Agent actions should use the compact control height.');
+  // `h-8` until these became `<Button>`s; `md` is the same 32px said in the size scale's vocabulary,
+  // and the scale is the stricter statement of the two — a utility class can be any number.
+  assert.ok(
+    agentButtons.every((button) => button.dataset.xenoSize === 'md' && button.classList.contains('xeno-btn')),
+    'Agent actions should use the compact control height.',
+  );
   assert.equal(agentHub.dataset.agentActionsState, 'open', 'Agent actions should begin in their open state after entering.');
   assert.ok(
     agentButtons.every((button) => 'gooeyChip' in button.dataset),

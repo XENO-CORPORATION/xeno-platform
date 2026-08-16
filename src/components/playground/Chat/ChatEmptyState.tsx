@@ -1,6 +1,16 @@
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IconButton } from '@xenosystem/elements-react';
-import { Bot, Code2, FolderUp, Library, MessageSquare, Plus, Search, Store, ArrowRightDecl, FolderUpDecl } from '@/lib/icons';
+import { Button, IconButton } from '@xenosystem/elements-react';
+import {
+  Bot,
+  Code2,
+  MessageSquare,
+  Search,
+  ArrowRightDecl,
+  FolderUpDecl,
+  LibraryDecl,
+  PlusDecl,
+  StoreDecl,
+} from '@/lib/icons';
 import ChatUpdateCarousel, { type ChatUpdate } from './ChatUpdateCarousel';
 import {
   AGENT_HUB_MOCK_ACTIONS,
@@ -56,9 +66,6 @@ interface ChatComposerRevealValue {
 
 const ChatComposerRevealContext = React.createContext<ChatComposerRevealValue | null>(null);
 
-const revealButtonClassName =
-  'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--chat-border)] text-[var(--chat-muted)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] disabled:cursor-not-allowed disabled:opacity-40';
-
 /**
  * The "+" that reveals the mode tabs / model chip, plus the Upload action that comes out
  * with it. Rendered by the composer's control row so both sit bottom-left in the box.
@@ -70,23 +77,19 @@ export const ComposerRevealControls: React.FC = () => {
 
   return (
     <>
-      <button
-        type="button"
+      {/* The turn is not a second icon: one plus, rotated 135° into a close. `.chat-icon-turn` reads
+          the state off `aria-expanded`, which this button already sets — see chat-theme.css. */}
+      <IconButton
+        icon={PlusDecl}
+        variant="quiet"
+        size="sm"
+        className="chat-icon-turn"
         data-composer-reveal-trigger
         aria-expanded={reveal.isOpen}
         aria-label={reveal.isOpen ? 'Hide chat modes' : 'Show chat modes'}
         title={reveal.isOpen ? 'Hide chat modes' : 'Show chat modes'}
         onClick={reveal.toggle}
-        className={revealButtonClassName}
-      >
-        <Plus
-          size={16}
-          className={`transition-transform duration-300 ease-[cubic-bezier(0.34,1.4,0.5,1)] ${
-            reveal.isOpen ? 'rotate-[135deg]' : ''
-          }`}
-          aria-hidden="true"
-        />
-      </button>
+      />
 
       <span
         className={`inline-flex overflow-hidden transition-[width,opacity] duration-300 ease-[cubic-bezier(0.34,1.4,0.5,1)] ${
@@ -98,6 +101,9 @@ export const ComposerRevealControls: React.FC = () => {
           variant="quiet"
           size="sm"
           iconSize={15}
+          /* Dropped when this became an IconButton, on a grep that only looked at `src/`.
+             `scripts/test-chat-empty-state.mjs` is what reaches for it, and it had been red since. */
+          data-composer-upload
           onClick={reveal.onUploadFile}
           disabled={!reveal.canAnalyzeDocument}
           aria-label="Upload file"
@@ -119,14 +125,13 @@ const modeIconById = {
   agents: Bot,
 } as const;
 
+/* Declarations, not components: `Button` composes a glyph through its own renderer, so what a call
+   site names is the declaration. The three of them are the same marks the components drew. */
 const agentActionIconById = {
-  'create-agent': Plus,
-  'my-agents': Library,
-  'agent-marketplace': Store,
+  'create-agent': PlusDecl,
+  'my-agents': LibraryDecl,
+  'agent-marketplace': StoreDecl,
 } as const;
-
-const railButtonClassName =
-  'flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-[var(--chat-muted)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] disabled:cursor-not-allowed disabled:opacity-35';
 
 const TOOLBAR_POINTER_CLOSE_DELAY_MS = 1000;
 /** Blocks hover-reopen after a tool closes the rail while the pointer is still over it. */
@@ -139,9 +144,6 @@ const TOOLBAR_HOVER_REOPEN_SUPPRESS_MS = 350;
 const LEGACY_HOVER_TOOL_RAIL: boolean = false;
 /** The strip plays its gooey chain backwards on close; wait it out before unmounting. */
 const AGENT_ACTION_CLOSE_DURATION_MS = chainDurationMs(AGENT_HUB_MOCK_ACTIONS.length + 1, AGENT_CHAIN);
-
-const agentActionButtonClassName =
-  'chat-mode-action flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--chat-border)] bg-[var(--chat-control)] px-2 text-[11px] font-medium text-[var(--chat-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]';
 
 const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   children,
@@ -649,24 +651,30 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
 
   const renderAgentActionButtons = () =>
     AGENT_HUB_MOCK_ACTIONS.map((action) => {
-      const Icon = agentActionIconById[action.id];
-
       return (
-        <button
+        /* Border and a `--chat-control` fill is `secondary`, which is what the shared class string
+           spelled out and what the component now supplies — measured on the page: #fafafa on
+           rgb(38,38,38) with a hairline, exactly the old chip.
+           `size` is inert here, and that is worth knowing rather than hiding. index.css treats the
+           tabs, the agent actions, the model chip and the model trigger as ONE family and pins the
+           whole family with `!important` — 34px tall, 13px type, 10px radius, 0 13px padding — so
+           whatever token this names, the row wins. `md` is the honest label for the box the class
+           string described; it is simply not the box that renders.
+           `data-gooey-chip` is load-bearing: index.css reaches for it to pour these out of the
+           composer, and `chat-mode-action` is how the family rule finds them. */
+        <Button
           key={`${action.id}-${agentActionsEpoch}`}
-          type="button"
+          variant="secondary"
+          size="md"
+          iconSize={13}
+          leadingIcon={agentActionIconById[action.id]}
+          className="chat-mode-action whitespace-nowrap"
           data-mock-action="true"
           data-gooey-chip
-          className={agentActionButtonClassName}
           onClick={() => closeAgentActions(() => onAgentActionSelect(action.id))}
         >
-          <span className="flex items-center gap-1.5">
-            {/* No `strokeWidth`: the declaration's contract owns the weight, and these were the only
-                glyphs in the chat not drawn at it. See the mode tabs below. */}
-            <Icon size={13} aria-hidden="true" />
-            <span>{action.label}</span>
-          </span>
-        </button>
+          {action.label}
+        </Button>
       );
     });
 
@@ -717,6 +725,14 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                 const isSelected = activeMode === mode.id;
 
                 return (
+                  /* Stays hand-written, and the blocker is a TOKEN rather than a shape. Unselected,
+                     these sit on `--chat-overlay`, which is one of the few chat colours with no
+                     `--xeno-` twin — the bridge in chat-theme.css carries eleven and this is not one
+                     of them, so no variant can name the fill they rest on. Selected they take
+                     `--chat-control` with a `--chat-muted` border, which is `secondary` with the
+                     border brightened, and that half would convert cleanly.
+                     The goo is the second half: `data-gooey-tab` drives a pill that travels between
+                     tabs on a layer above them, and it is the product's, not the library's. */
                   <button
                     key={mode.id}
                     type="button"
@@ -796,6 +812,10 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     >
       {showToolRail && (
         <>
+          {/* Stays hand-written: a 16 × 48 grab target parked outside the composer's left edge, with
+              no fill, no border, no label and no glyph of its own — it holds an indicator span and
+              exists to be hovered. There is nothing here for a variant to decide. Same call as the
+              five gradient scroll overlays. */}
           <button
             ref={handleRef}
             type="button"
@@ -854,9 +874,15 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
               </div>
             ) : (
               <div className={`flex w-[3.25rem] flex-shrink-0 flex-col items-center justify-center gap-1.5 py-3 transition-opacity duration-100 ${isRailOpen ? 'opacity-100 delay-100' : 'opacity-0 delay-0'}`}>
-                <button
-                  type="button"
-                  className={railButtonClassName}
+                {/* `ghost`: no border at rest, muted ink, and hover brings both the fill and the
+                    full text colour. The hand-written version also grew a border on hover; the
+                    variant answers with the fill alone, which is the grammar the other seventy-odd
+                    icon buttons in this chat already speak. */}
+                <IconButton
+                  icon={FolderUpDecl}
+                  variant="ghost"
+                  size="lg"
+                  iconSize={16}
                   onClick={() => {
                     onUploadFile();
                     closeRail({ suppressHoverReopen: true });
@@ -864,9 +890,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                   disabled={!canAnalyzeDocument}
                   aria-label="Upload file"
                   title="Upload file"
-                >
-                  <FolderUp size={16} />
-                </button>
+                />
               </div>
             )}
           </aside>
