@@ -52,7 +52,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, WrapText, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, PanelRightOpen, PanelRightClose, UserRoundX, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, PanelRightOpen, PanelRightClose, UserRoundX, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -1246,90 +1246,10 @@ const sourceHighlightStyles = `
     flex-shrink: 0;
   }
 
-  .context-panel-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: transparent;
-    border: 1px solid var(--chat-border);
-    border-radius: 8px;
-    padding: 0 11px;
-    height: 30px;
-    color: var(--chat-muted);
-    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
-    font-size: 12.5px;
-    font-weight: 500;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .context-panel-btn:hover {
-    border-color: var(--chat-border);
-    color: var(--chat-text);
-    background-color: var(--chat-hover);
-  }
-
-  .context-panel-btn:active {
-    transform: scale(0.95);
-    background-color: var(--chat-hover);
-    border-color: var(--chat-border);
-  }
-
-  .context-panel-btn.active {
-    border-color: var(--chat-border);
-    color: var(--chat-text);
-    background-color: var(--chat-hover);
-  }
-
-  .context-panel-btn.success {
-    border-color: var(--chat-border);
-    color: var(--chat-text);
-    background-color: var(--chat-hover);
-  }
-
-  .context-panel-btn-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: transparent;
-    border: 0;
-    border-radius: 8px;
-    width: 30px;
-    height: 30px;
-    color: var(--chat-muted);
-    transition: background-color 0.15s, color 0.15s;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .context-panel-btn-icon:hover {
-    border-color: var(--chat-border);
-    color: var(--chat-text);
-    background-color: var(--chat-hover);
-  }
-
-  .context-panel-btn-icon:active {
-    transform: scale(0.9);
-    background-color: var(--chat-hover);
-    border-color: var(--chat-border);
-  }
-
-  .context-panel-btn-icon.active {
-    border-color: var(--chat-border);
-    color: var(--chat-text);
-    background-color: var(--chat-hover);
-  }
-
-  .context-panel-btn-icon.success {
-    border-color: var(--chat-border);
-    color: var(--chat-text);
-    background-color: var(--chat-hover);
-  }
-
-  .context-panel-btn-icon.close:hover {
-    color: var(--chat-text);
-    background-color: var(--chat-hover);
-  }
+  /* The .context-panel-btn and .context-panel-btn-icon rules went with the buttons that used
+     them: seventy-eight lines spelling out the quiet and ghost variants in CSS, plus a
+     .success and an .active that were the hover appearance held on. The variants say all of
+     it. (No backticks in here: this block is a template literal and one would end it.) */
 
   .context-panel-content {
     flex: 1;
@@ -10626,64 +10546,87 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           </div>
           <div className="context-panel-actions">
             {/* Edit / Save / Cancel buttons */}
+            {/* The whole cluster converts, and the two hand-written classes it used were already the
+                variants spelled out in CSS. `.context-panel-btn` is `quiet` word for word — a
+                `--chat-border` hairline at rest with muted ink, going to full ink over a
+                `--chat-hover` tint when reached for — and `.context-panel-btn-icon` is `ghost`: the
+                same ink and hover with no border and a square box.
+                Their `.success` and `.active` modifiers were the hover appearance held on. That is
+                the selection axis, so it becomes `data-selection` and reads the way every other held
+                state in this chat now reads: a `--xeno-control` fill with the outline dropped,
+                instead of a pointer tint left switched on.
+                30px sits exactly between `sm` and `md`; `sm` wins on the type, which is 12.5 against
+                sm's 13 and md's 14. Glyphs stay at 14 through `iconSize` — sm draws 16. */}
             {isEditingContextPanel ? (
               <>
-                <button
-                  className={`context-panel-btn ${contextPanelSaveSuccess ? 'success' : ''}`}
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  iconSize={14}
+                  leadingIcon={CheckDecl}
+                  data-selection={contextPanelSaveSuccess ? 'on' : 'off'}
                   onClick={handleSaveEdit}
                   title="Save changes"
                 >
-                  <Check size={14} className="mr-1.5" style={{ transition: 'transform 0.2s ease' }} />
-                  <span>{contextPanelSaveSuccess ? 'Saved!' : 'Save'}</span>
-                </button>
-                <button
-                  className="context-panel-btn-icon close"
+                  {contextPanelSaveSuccess ? 'Saved!' : 'Save'}
+                </Button>
+                <IconButton
+                  icon={XDecl}
+                  variant="ghost"
+                  size="sm"
+                  iconSize={14}
                   onClick={handleCancelEdit}
+                  aria-label="Cancel editing"
                   title="Cancel editing"
-                >
-                  <X size={14} />
-                </button>
+                />
               </>
             ) : (
               <>
-                <button
-                  className={`context-panel-btn ${contextPanelSaveSuccess ? 'success' : ''}`}
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  iconSize={14}
+                  leadingIcon={contextPanelSaveSuccess ? CheckDecl : EditDecl}
+                  data-selection={contextPanelSaveSuccess ? 'on' : 'off'}
                   onClick={handleStartEdit}
                   title="Edit content"
                 >
-                  {contextPanelSaveSuccess ? (
-                    <Check size={14} className="mr-1.5" />
-                  ) : (
-                    <Pencil size={14} className="mr-1.5" />
-                  )}
-                  <span>{contextPanelSaveSuccess ? 'Saved!' : 'Edit'}</span>
-                </button>
-                <button
-                  className={`context-panel-btn-icon ${contextPanelCopySuccess ? 'success' : ''}`}
+                  {contextPanelSaveSuccess ? 'Saved!' : 'Edit'}
+                </Button>
+                <IconButton
+                  icon={contextPanelCopySuccess ? CheckDecl : CopyDecl}
+                  variant="ghost"
+                  size="sm"
+                  iconSize={14}
+                  data-selection={contextPanelCopySuccess ? 'on' : 'off'}
                   onClick={handleCopyContent}
-                  title={contextPanelCopySuccess ? "Copied!" : "Copy content"}
-                >
-                  {contextPanelCopySuccess ? <Check size={14} /> : <Copy size={14} />}
-                </button>
-                <button
-                  className={`context-panel-btn-icon ${contextPanelWrapEnabled ? 'active' : ''}`}
+                  aria-label={contextPanelCopySuccess ? 'Copied' : 'Copy content'}
+                  title={contextPanelCopySuccess ? 'Copied!' : 'Copy content'}
+                />
+                <IconButton
+                  icon={WrapTextDecl}
+                  variant="ghost"
+                  size="sm"
+                  iconSize={14}
+                  data-selection={contextPanelWrapEnabled ? 'on' : 'off'}
                   onClick={() => setContextPanelWrapEnabled(!contextPanelWrapEnabled)}
-                  title={contextPanelWrapEnabled ? "Disable text wrapping" : "Enable text wrapping"}
-                >
-                  <WrapText size={14} />
-                </button>
+                  aria-label={contextPanelWrapEnabled ? 'Disable text wrapping' : 'Enable text wrapping'}
+                  title={contextPanelWrapEnabled ? 'Disable text wrapping' : 'Enable text wrapping'}
+                />
               </>
             )}
-            <button
-              className="context-panel-btn-icon close"
+            <IconButton
+              icon={XDecl}
+              variant="ghost"
+              size="sm"
+              iconSize={14}
               onClick={() => {
                 setIsContextPanelOpen(false);
                 setIsEditingContextPanel(false);
               }}
+              aria-label="Close panel"
               title="Close panel"
-            >
-              <X size={14} />
-            </button>
+            />
           </div>
         </div>
 

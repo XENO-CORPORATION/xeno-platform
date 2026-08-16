@@ -219,6 +219,7 @@ export {
   GDownload as DownloadDecl,
   GLightbulb as LightbulbDecl,
   GGlobe as GlobeDecl,
+  GWrapText as WrapTextDecl,
   GBot as BotDecl,
   GBookmark as BookmarkDecl,
   GArchive as ArchiveDecl,
