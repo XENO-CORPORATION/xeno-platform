@@ -93,6 +93,43 @@ test('the product list is explicit, not derived from the catalog', () => {
     `expected a short explicit list, found ${entries.length}`);
 });
 
+test('🔴 the key comes FROM createAgent — it is never minted a second time', () => {
+  // Found by RUNNING this script against the real database on 2026-08-16, after
+  // it had shipped with eight passing tests. `createAgent` already mints the
+  // agent's key and returns `{ agent, apiKey }` — there is no `agent.id` on that
+  // shape. The loop read `agent.id` (undefined) and passed it to a second
+  // `mintAgentApiKey`, which died on `api_keys.user_id NOT NULL`.
+  //
+  // Every gate above passed the whole time, because all eight cover argument
+  // parsing and none of them call `createAgent`. That is the shape this codebase
+  // keeps shipping: the tests prove the parts, never that the parts connect.
+  assert.match(code, /createAgent\(client,/,
+    'createAgent must be called on the transaction client, not the pool.');
+  assert.match(code, /key = created\.apiKey/,
+    'the key must be the one createAgent already returned.');
+  assert.doesNotMatch(code, /mintAgentApiKey/,
+    'minting a second key is what broke it — createAgent already did.');
+  assert.doesNotMatch(code, /agent\.id/,
+    'createAgent returns { agent, apiKey }; `agent.id` does not exist and reads '
+    + 'as undefined, which the database only rejects at INSERT time.');
+});
+
+test('🔴 an agent commits ATOMICALLY — identity, key and predicate are one fact', () => {
+  // The failure above left a principal that existed and could not authenticate.
+  // That state is PERMANENT: the loop skips a handle that already exists (see
+  // "it REFUSES rather than replaces"), so re-running can never complete it, and
+  // the row looks provisioned to anyone reading the table.
+  assert.match(code, /await client\.query\('BEGIN'\)/, 'creation must open a transaction.');
+  assert.match(code, /await client\.query\('COMMIT'\)/, 'and commit it.');
+  assert.match(code, /ROLLBACK/, 'and roll back on failure.');
+  assert.match(code, /client\.release\(\)/, 'and always return the connection.');
+
+  // Assert the rollback is reachable, not merely present — the same mutation
+  // lesson as the refuse-rather-than-replace gate above.
+  assert.match(code, /catch \(e\) \{[\s\S]*ROLLBACK[\s\S]*throw e;/,
+    'the rollback must sit in a real catch that rethrows, not a dead branch.');
+});
+
 test('the script is never imported by its own test', () => {
   // Importing a module EXECUTES it (§2b, the seed-releases incident). This gate
   // pins the property for whoever edits this file next.

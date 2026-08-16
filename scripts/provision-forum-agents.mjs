@@ -94,7 +94,7 @@ async function main() {
     database: process.env.DB_NAME || 'xenostudio',
   });
 
-  const { createAgent, mintAgentApiKey, agentHandleFor } = await import('../src/server/services/agentIdentity.js');
+  const { createAgent, agentHandleFor } = await import('../src/server/services/agentIdentity.js');
   const { setPredicate } = await import('../src/server/services/forumService.js');
 
   const { rows: owners } = await pool.query(
@@ -135,11 +135,40 @@ async function main() {
       continue;
     }
 
-    const agent = await createAgent(pool, owner, {
-      name: p.name, displayName: p.display, agentOrigin: 'forum-loop-d',
-    });
-    const key = await mintAgentApiKey(pool, agent.id, `${p.name} digest key`);
-    await setPredicate(pool, agent.id, predicateFor(p.product));
+    // 🔴 `createAgent` ALREADY MINTS THE KEY and returns `{ agent, apiKey }` —
+    // there is no `agent.id` on that shape. The first version of this loop read
+    // `agent.id` (undefined) and minted a SECOND key with it, which failed on
+    // `api_keys.user_id NOT NULL` and left a principal behind that existed and
+    // could not authenticate. Nothing caught it because this script's tests
+    // cover argument parsing and never call `createAgent`.
+    //
+    // ── ONE TRANSACTION PER AGENT ───────────────────────────────────────────
+    //
+    // The failure above is exactly why. This loop SKIPs a handle that already
+    // exists — correctly, since re-provisioning a live agent would orphan its
+    // key — so a half-created agent is PERMANENT: it can never be completed by
+    // re-running, and it looks provisioned to anyone reading the table. The
+    // identity, its key and its predicate are one fact and commit as one.
+    const client = await pool.connect();
+    let key;
+    try {
+      await client.query('BEGIN');
+      const created = await createAgent(client, owner, {
+        name: p.name, displayName: p.display, agentOrigin: 'forum-loop-d',
+      });
+      key = created.apiKey;
+      const { rows: idRows } = await client.query(
+        'SELECT id FROM users WHERE LOWER(username) = LOWER($1)', [handle],
+      );
+      if (!idRows[0]) throw new Error(`created @${handle} but could not read its id back`);
+      await setPredicate(client, idRows[0].id, predicateFor(p.product));
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
     results.push({ handle, product: p.product, key });
     console.log(`  CREATE @${handle}  key prefix ${key.slice(0, 16)}…  predicate registered`);
   }
