@@ -7,22 +7,26 @@ import {
 } from 'lucide-react';
 import { PRODUCTS } from '../lib/productCatalog';
 import AuthMark from '../components/auth/AuthMark';
+import WorkspaceChooser from '../components/onboarding/WorkspaceChooser';
+import { SUITES, EVERYTHING_ID, productsForSuite, suiteLabel } from '../lib/workspaceSuites';
 import {
   StepHeading, SelectTile, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress,
   INPUT_CLS, cx,
 } from '../components/onboarding/OnboardingPieces';
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * ONBOARDING — five steps: about you → role → interests → plan → where to start
+ * ONBOARDING — workspace → about you → role → plan → where to start
  *
  * ── HOW IT DIFFERS FROM THE REFERENCE FLOW ─────────────────────────────────
  *
- *  1. INTERESTS ARE CATEGORIES, NOT PRODUCTS. They choose between two
- *     platforms and ten features; the XENO catalog is 37 products across 9
- *     categories. A tile per product is a wall, and a wall is not a choice.
- *     Categories are derived from the catalog itself, so the flow cannot
- *     advertise a category with nothing behind it, and a product joins the day
- *     it ships.
+ *  1. STEP ONE IS A WORKSPACE, AND IT IS LOAD-BEARING. They pick between two
+ *     platforms; we have 25 shipping products, so the equivalent question is
+ *     which SUITE you live in — and unlike a survey answer, this one decides
+ *     how the platform lays itself out. Suites map to catalog categories and
+ *     resolve their products at render time, so a suite can never list
+ *     something that does not exist and a new product joins the day it ships.
+ *     Choosing everything is a first-class answer, not a fifth tile: the four
+ *     cards physically collapse into one.
  *
  *  2. THE PLAN STEP IS NOT LAST. Theirs ends on pricing, so the final thing a
  *     new account sees is a bill it declined. Ours asks, then hands them
@@ -72,27 +76,10 @@ const CATEGORY_ICON: Record<string, React.ReactNode> = {
   Platform: <Globe className="h-[18px] w-[18px]" />,
 };
 
-/** Options for the interests step, derived from the catalog. `coming-soon` is
- *  filtered out: offering an interest we cannot act on produces a
- *  recommendation screen full of things you cannot open. */
-function useAvailableCategories() {
-  return useMemo(() => {
-    const byCategory = new Map<string, typeof PRODUCTS>();
-    for (const p of PRODUCTS) {
-      if (p.status === 'coming-soon') continue;
-      const list = byCategory.get(p.category) || [];
-      list.push(p);
-      byCategory.set(p.category, list);
-    }
-    return [...byCategory.entries()]
-      .map(([category, products]) => ({ category, products }))
-      .sort((a, b) => b.products.length - a.products.length);
-  }, []);
-}
-
 type Answers = {
+  workspace: string | null;
   displayName: string; heardFrom: string; role: string | null;
-  interests: string[]; marketingOptIn: boolean;
+  marketingOptIn: boolean;
 };
 
 /** A sellable item as `/api/billing/config` reports it. `available` is false
@@ -188,13 +175,12 @@ const wave = (i: number, base = 0.10, step = 0.035): React.CSSProperties => ({
 
 const Onboarding: React.FC = () => {
   const navigate = useNavigate();
-  const categories = useAvailableCategories();
 
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(true);
   const [answers, setAnswers] = useState<Answers>({
-    displayName: '', heardFrom: '', role: null, interests: [], marketingOptIn: true,
+    workspace: null, displayName: '', heardFrom: '', role: null, marketingOptIn: true,
   });
   const [billing, setBilling] = useState<{ enabled: boolean; currency: string; catalog: CatalogItem[] } | null>(null);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
@@ -281,13 +267,17 @@ const Onboarding: React.FC = () => {
     [billing],
   );
 
+  /* Recommendations follow the WORKSPACE they chose. That is a far stronger
+   * signal than a category multi-select, and it is the choice they actually
+   * made — so the last screen is visibly a consequence of the first. */
   const recommended = useMemo(() => {
     const rank = (s: string) => (s === 'shipping' ? 0 : s === 'beta' ? 1 : 2);
-    const picked = answers.interests.length
-      ? PRODUCTS.filter((p) => answers.interests.includes(p.category) && p.status !== 'coming-soon')
-      : PRODUCTS.filter((p) => p.status === 'shipping');
-    return [...picked].sort((a, b) => rank(a.status) - rank(b.status)).slice(0, 5);
-  }, [answers.interests]);
+    const suite = SUITES.find((x) => x.id === answers.workspace);
+    const pool = suite
+      ? productsForSuite(suite).map((p) => PRODUCTS.find((c) => c.slug === p.slug)!).filter(Boolean)
+      : PRODUCTS.filter((p) => p.status !== 'coming-soon');
+    return [...pool].sort((a, b) => rank(a.status) - rank(b.status)).slice(0, 5);
+  }, [answers.workspace]);
 
   if (checking) {
     return (
@@ -323,14 +313,50 @@ const Onboarding: React.FC = () => {
               animation. Without it React reuses the subtree and the finished
               CSS animation never runs again, so steps 2+ snap in with no
               motion at all. */}
-          <div key={step} className="w-full max-w-[620px] xeno-stagger space-y-8">
+          {/* Width follows the step. The workspace grid is four cards side by
+              side and needs the full row; every other step is a form or a list,
+              where a wide measure hurts readability. One column width for all
+              of them would have to be wrong for one of the two. */}
+          <div
+            key={step}
+            className={cx(
+              'w-full xeno-stagger space-y-8',
+              step === 0 ? 'max-w-[1180px]' : 'max-w-[620px]',
+            )}
+          >
 
-            {/* ── 0 · About you ───────────────────────────────────────────── */}
+            {/* ── 0 · Workspace — the choice that shapes the platform ──── */}
             {step === 0 && (
               <>
                 <StepHeading
-                  title="Let's set up your workspace"
-                  sub="Three short questions. All optional — skip any and nothing breaks."
+                  title="Choose your workspace"
+                  sub="This decides how XENO is laid out for you. You can change it any time."
+                />
+
+                <WorkspaceChooser
+                  value={answers.workspace}
+                  onChange={(id) => {
+                    const next = { ...answers, workspace: id };
+                    setAnswers(next);
+                    save(next);
+                  }}
+                />
+
+                <Nav
+                  onNext={() => setStep(1)}
+                  onSkip={skipAll}
+                  nextLabel="Continue"
+                  nextDisabled={!answers.workspace}
+                />
+              </>
+            )}
+
+            {/* ── 1 · About you ───────────────────────────────────────────── */}
+            {step === 1 && (
+              <>
+                <StepHeading
+                  title={`Set up ${suiteLabel(answers.workspace)}`}
+                  sub="Two short questions. Both optional — skip and nothing breaks."
                 />
 
                 <div className="space-y-5">
@@ -367,12 +393,17 @@ const Onboarding: React.FC = () => {
                   </label>
                 </div>
 
-                <Nav onNext={() => { save(answers); setStep(1); }} onSkip={skipAll} nextLabel="Continue" />
+                <Nav
+                  onBack={() => setStep(0)}
+                  onNext={() => { save(answers); setStep(2); }}
+                  onSkip={() => setStep(2)}
+                  nextLabel="Continue"
+                />
               </>
             )}
 
-            {/* ── 1 · Role ────────────────────────────────────────────────── */}
-            {step === 1 && (
+            {/* ── 2 · Role ────────────────────────────────────────────────── */}
+            {step === 2 && (
               <>
                 <StepHeading
                   title={answers.displayName ? `Nice to meet you, ${answers.displayName}` : 'A bit about you'}
@@ -389,57 +420,13 @@ const Onboarding: React.FC = () => {
                       style={wave(i)}
                       onClick={() => {
                         const next = { ...answers, role: r.label };
-                        setAnswers(next); save(next); setStep(2);
+                        setAnswers(next); save(next); setStep(3);
                       }}
                     />
                   ))}
                 </div>
 
-                <Nav onBack={() => setStep(0)} onSkip={() => setStep(2)} />
-              </>
-            )}
-
-            {/* ── 2 · Interests ───────────────────────────────────────────── */}
-            {step === 2 && (
-              <>
-                <StepHeading
-                  title="What do you want to do here?"
-                  sub="Select all that apply — this decides what we put in front of you next."
-                />
-
-                <div className="grid gap-2.5 sm:grid-cols-3">
-                  {categories.map(({ category, products }, i) => {
-                    const on = answers.interests.includes(category);
-                    return (
-                      <SelectTile
-                        key={category}
-                        icon={CATEGORY_ICON[category] || <Boxes className="h-[18px] w-[18px]" />}
-                        label={category}
-                        // The count is honest signal, not decoration: it says
-                        // how much is actually behind the tile.
-                        meta={`${products.length} ${products.length === 1 ? 'product' : 'products'}`}
-                        selected={on}
-                        style={wave(i)}
-                        onClick={() =>
-                          setAnswers((a) => ({
-                            ...a,
-                            interests: on
-                              ? a.interests.filter((c) => c !== category)
-                              : [...a.interests, category],
-                          }))
-                        }
-                      />
-                    );
-                  })}
-                </div>
-
-                <Nav
-                  onBack={() => setStep(1)}
-                  onNext={() => { save(answers); setStep(3); }}
-                  onSkip={() => setStep(3)}
-                  nextLabel="Continue"
-                  nextDisabled={answers.interests.length === 0}
-                />
+                <Nav onBack={() => setStep(1)} onSkip={() => setStep(3)} />
               </>
             )}
 
@@ -503,8 +490,8 @@ const Onboarding: React.FC = () => {
               <>
                 <StepHeading
                   title="Here's where to start"
-                  sub={answers.interests.length
-                    ? 'Based on what you picked. Everything else stays in your workspace.'
+                  sub={answers.workspace && answers.workspace !== EVERYTHING_ID
+                    ? `From ${suiteLabel(answers.workspace)}. Everything else stays one click away.`
                     : 'The products that are furthest along. Everything else is in your workspace.'}
                 />
 

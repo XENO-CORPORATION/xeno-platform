@@ -2511,7 +2511,7 @@ router.get('/onboarding', async (req, res) => {
 
   try {
     const { rows } = await req.db.query(
-      `SELECT display_name, heard_from, role, interests, starting_point,
+      `SELECT display_name, heard_from, role, interests, starting_point, workspace,
               completed_at, skipped_at
          FROM user_onboarding WHERE user_id = $1`,
       [user.id],
@@ -2557,6 +2557,7 @@ router.post('/onboarding', async (req, res) => {
     const heardFrom = str(b.heardFrom, 200);
     const role = str(b.role, 60);
     const startingPoint = str(b.startingPoint, 60);
+    const workspace = str(b.workspace, 40);
 
     // Interests: array of short strings, deduped, capped. Anything else is
     // discarded rather than rejected — a malformed optional survey field
@@ -2571,10 +2572,11 @@ router.post('/onboarding', async (req, res) => {
     await req.db.query(
       `INSERT INTO user_onboarding
          (user_id, display_name, heard_from, role, interests, starting_point,
-          completed_at, skipped_at)
+          completed_at, skipped_at, workspace)
        VALUES ($1, $2, $3, $4, $5, $6,
                CASE WHEN $7::boolean THEN NOW() END,
-               CASE WHEN $8::boolean THEN NOW() END)
+               CASE WHEN $8::boolean THEN NOW() END,
+               $9)
        ON CONFLICT (user_id) DO UPDATE SET
          -- COALESCE(new, existing): a later step posting only its own field
          -- must not blank the answers given in an earlier one.
@@ -2582,6 +2584,7 @@ router.post('/onboarding', async (req, res) => {
          heard_from     = COALESCE(EXCLUDED.heard_from,     user_onboarding.heard_from),
          role           = COALESCE(EXCLUDED.role,           user_onboarding.role),
          starting_point = COALESCE(EXCLUDED.starting_point, user_onboarding.starting_point),
+         workspace      = COALESCE(EXCLUDED.workspace,      user_onboarding.workspace),
          -- Interests are REPLACED, not merged: it is a multi-select, so
          -- unticking something has to be able to remove it.
          interests      = CASE WHEN array_length(EXCLUDED.interests, 1) IS NULL
@@ -2589,7 +2592,7 @@ router.post('/onboarding', async (req, res) => {
          completed_at   = COALESCE(user_onboarding.completed_at, EXCLUDED.completed_at),
          skipped_at     = COALESCE(user_onboarding.skipped_at,   EXCLUDED.skipped_at),
          updated_at     = NOW()`,
-      [user.id, displayName, heardFrom, role, interests, startingPoint, completed, skipped],
+      [user.id, displayName, heardFrom, role, interests, startingPoint, completed, skipped, workspace],
     );
 
     /* Marketing preference.
