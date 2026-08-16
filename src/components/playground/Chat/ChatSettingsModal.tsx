@@ -152,14 +152,22 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
         >
           {SECTIONS.map(({ id, label }) => {
             const active = section === id;
-            /* Stays hand-written, for the surface reason in §9 and with a twist worth recording.
-               This dialog is `--chat-elevated`, which equals `--chat-control` in dark (#262626), so
-               a converted `quiet[data-selection=on]` would fill it invisibly and drop its outline.
-               The hand-written tab escapes that only by accident: ChatWithLLM carries a legacy
-               normalisation block that force-maps any class containing `bg-[var(--chat-control)]` to
-               `--chat-control-strong` with `!important`. The selector is listed TWICE with two
-               different answers and the later one wins, so this tab actually paints #404040 —
-               measured. A library component has no such class, so the rule cannot reach it. */
+            /* Stays hand-written — it is a TAB. `tabs.tabProps` gives it `role="tab"` and
+               `aria-selected`; `ToggleButton` would give it `role="button"` and `aria-pressed`, and
+               a tab is not a toggle.
+
+               It draws its selection as a RING, and the history of that is worth keeping. This
+               comment used to say the tab escaped the surface collision "only by accident": the
+               dialog is `--chat-elevated`, which equals `--chat-control` in dark (#262626), and the
+               tab's `bg-[var(--chat-control)]` was being force-mapped to #404040 by a duplicated
+               `!important` rule in ChatWithLLM's normalisation block. That duplicate was a
+               copy-paste and has been removed — which took the accident away and left this tab
+               filling #262626 on a #262626 dialog: a bare bold word, exactly the failure the fill's
+               precondition describes.
+
+               So it says chosen the way the other seven ringed states do, with an inset hairline
+               and no fill. A border is a boundary rather than a value that has to out-contrast its
+               neighbour, so it reads here where a fill cannot. */
             return (
               <button
                 key={id}
@@ -168,9 +176,17 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                 onClick={() => setSection(id)}
                 className={`${RADIUS} px-2.5 py-1 text-[12.5px] transition-colors ${
                   active
-                    ? 'bg-[var(--chat-control)] font-medium text-[var(--chat-text)]'
+                    ? 'font-medium text-[var(--chat-text)]'
                     : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
                 }`}
+                style={
+                  active
+                    ? {
+                        boxShadow:
+                          'inset 0 0 0 1px color-mix(in srgb, var(--chat-muted) 55%, transparent)',
+                      }
+                    : undefined
+                }
               >
                 {label}
               </button>

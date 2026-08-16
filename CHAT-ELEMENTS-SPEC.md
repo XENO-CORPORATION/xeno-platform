@@ -357,8 +357,21 @@ Re-deciding these costs more than it saves.
   closing the toggle's clip-path flood. Measured in the elements preview, seven checks green.
 
   The two findings did share one fix, and the fill's precondition is now written where the fill is
-  declared. **The eight call sites are still hand-written** — converting them is a separate pass with
-  its own before/after.
+  declared. **The eight call sites are still hand-written, and measuring them showed the door does not
+  fit any of them yet** — which is worth knowing before someone tries:
+
+  - **Two are tabs.** The project settings tablist and its narrow twin run on `useTabs`, so they carry
+    `role="tab"` and `aria-selected`. `ToggleButton` carries `role="button"` and `aria-pressed`. A tab
+    is not a toggle, and the ring is not worth the semantics.
+  - **One is not a selection.** The catalog's Select all is an action, and its ring is `--chat-accent`
+    over a `--chat-control` fill — a filled control wearing an accent ring, where `ring` means an
+    empty box with a muted border. Wrong on both counts.
+  - **Four are tiles.** The persona and style groups stack a name over a two-line description at 68px
+    and fill with `--chat-surface` as well as brightening the border. `ring` deliberately has no fill,
+    and a `Button` is a centred inline row.
+
+  A presentation without a component to wear it is still progress — it is the fill's precondition that
+  was doing the damage, and that is now stated — but the conversion is a `Tab` and a `Tile` away.
 
 - **`quiet[data-selection=on]` has a surface precondition, and nothing states it.** It says "chosen"
   by filling with `--xeno-control` and dropping the outline. In the dark theme `--chat-control` and
@@ -513,6 +526,23 @@ Re-deciding these costs more than it saves.
 
   The machinery stays with an empty list. A green board with three unread tests in it was worth less
   than a red one.
+
+- **Removing the duplicated rule took away an accident that one control was living on.** The settings
+  dialog's own tablist said so in a comment, written before the rule was touched: the dialog is
+  `--chat-elevated`, the selected tab filled `--chat-control`, those are the same #262626 in dark, and
+  the tab was legible **only** because the duplicate force-mapped it to #404040. Removing the
+  duplicate was right and left that tab a bare bold word. It draws a ring now, like the other seven.
+
+  The same removal FIXED the model tray, which is the other half of the story and the reason to
+  measure rather than assume. Its rows are `--chat-control` at rest and `--chat-control-strong` when
+  selected; the duplicate had been mapping both to #404040, so **selected and unselected were the same
+  colour** and only a check glyph told them apart. Measured now: tray #262626, resting rows #262626
+  flat against it with their border delineating, selected row #404040.
+
+  `scripts/probe-invisible-fills.mjs` is the check. It reports every control whose fill matches the
+  surface beneath it — which is not automatically wrong, since a resting row on a tray is meant to be
+  flat. The question it answers is about PAIRS: if a control and its selected twin both appear, the
+  selection is invisible.
 
 - **Six controls sit below the scale's floor.** The control scale starts at `xs` = 24px; the chat has
   six squares at 18–20px — the two attachment-chip remove badges, the customize page's "i", and
