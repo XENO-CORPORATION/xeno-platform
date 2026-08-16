@@ -387,10 +387,19 @@ Re-deciding these costs more than it saves.
   component has no such class in its `class` attribute.
 
   So every `secondary` conversion so far — Save, Add, Create skill, Import skill, Connect, Install —
-  is one step darker than what it replaced. **Do not "fix" this at a call site.** Either that
-  duplicated rule is a mistake and `--chat-control` is right, or the chat means `--chat-control-strong`
-  for a filled control and the bridge in `chat-theme.css` should say `--xeno-control: var(--chat-control-strong)`.
-  That is one decision for the owner, and it also settles the surface collision above.
+  was one step darker than what it replaced. **Do not "fix" this at a call site.**
+
+  **Closed: the duplicate was copy-paste, and the block itself says so.** Every other line in it is
+  either a legacy hex mapped onto a token or a token mapped to itself. `--chat-control` →
+  `--chat-control-strong` was the only cross-mapping in the whole block, and it was the duplicated
+  one — the second selector had been pasted alongside `[class*="bg-[var(--chat-control-strong)]"]`,
+  which is that token's own identity rule. Removed.
+
+  Measured on the empty chat before and after, with `scripts/probe-control-fill.mjs`: 11 elements
+  carry the class, 10 painted `rgb(64, 64, 64)` and now paint `rgb(38, 38, 38)`, which is what their
+  class says and what the converted `secondary` Buttons already painted. The eleventh is a selected
+  `.chat-mode-tab`, which a **more specific** rule maps to `--chat-control-strong` on purpose — the
+  cross-mapping still happens exactly where it was meant to, and nowhere else.
 
 - **`primary` is unusable in the chat, and the bridge is why.** It paints from
   `--xeno-chrome-btn-primary-bg` / `-fg`, which the two chrome files declare on `:root`. A custom

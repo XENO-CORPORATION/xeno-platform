@@ -12198,7 +12198,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           .chat-themed [class*="bg-[#232021]"],
           .chat-themed [class*="bg-[var(--chat-control)]"],
           .chat-themed [class*="bg-[#252527]"] { background-color: var(--chat-control) !important; }
-          .chat-themed [class*="bg-[var(--chat-control)]"],
+          /* The bg-[var(--chat-control)] selector was named here TOO, at the same specificity as the
+             rule above, so the later one won and every hand-written control fill in the chat painted
+             #404040 while its own class said #262626. Measured before removal: 10 of the 11 such
+             elements on the empty chat.
+             Every other line in this block is either a legacy hex mapped onto a token or a token
+             mapped to itself; --chat-control to --chat-control-strong was the only cross-mapping in
+             it, and it was the duplicated one. Copy-paste, not intent.
+             No backticks in this comment: it lives inside a style template literal (spec 5.4b). */
           .chat-themed [class*="bg-[var(--chat-control-strong)]"] { background-color: var(--chat-control-strong) !important; }
           /* Only bare bg-black* fills — not hover:bg-black/… class substrings. */
           .chat-themed [class~="bg-black"],
