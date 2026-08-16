@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button, IconButton, SegmentedControl, Spinner } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Globe, ChevronDown, Eye, Brain, Check, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl, EditDecl, LightbulbDecl, GlobeDecl, BotDecl } from '@/lib/icons';
+import { Send, Globe, ChevronDown, Eye, Check, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl, EditDecl, LightbulbDecl, GlobeDecl, BotDecl, BrainDecl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
@@ -1310,14 +1310,14 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               a single-select of connected options inside one bordered track, the chosen one floating
               on an inset `--xeno-control` fill and the rest transparent muted labels — which is this
               engine selector described exactly, container and all.
-              Two doors are missing. `SegmentedOption` is `{ value, label, disabled }` with no glyph
-              slot, and each of these leads with one; that half is a small addition, because
-              `.xeno-segmented-option` is already `inline-flex` with a `--xeno-gap`, so a leading
-              `<XenoElement>` would need no CSS at all. The second half is harder: the label here is
-              CONDITIONAL — it disappears when the results panel or the browser opens, leaving an
-              icon-only segment — and `label: string` is both the visible text and the accessible
-              name, so hiding one hides the other. That is a layout policy the component has no
-              opinion about, and inventing one at a call site is how a component starts drifting. */}
+              ONE door is missing now. The glyph slot went in — `SegmentedOption` takes an `icon`,
+              which is what let the composer's Web/Agent pair below convert — so what is left is the
+              label, and it is the harder half. Here it is CONDITIONAL: it disappears when the
+              results panel or the browser opens, leaving an icon-only segment. `label: string` is
+              both the visible text and the accessible name, so hiding one hides the other, and
+              passing `''` would leave three segments named only by their glyphs. That is a layout
+              policy the component has no opinion about, and inventing one at a call site is how a
+              component starts drifting. */}
           <div className="flex items-center bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg p-1">
             <button
               onClick={() => setSearchEngine('xeno')}
@@ -1361,22 +1361,30 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
           {/* Right side - Model Selector */}
           <div className="relative flex-shrink-0">
-            <button
+            {/* Border plus a fill is `secondary`, `h-9` is `lg`, and the two widths are layout that
+                stays. `busy` is not the door here: it sets `cursor: progress` and nothing visible, so
+                the spinner has to remain a child — `leadingIcon` takes a declaration and a spinner is
+                a component that animates itself. Loading therefore drops the leading glyph and puts
+                the spinner in its place, which is what the hand-written ternary did.
+                The brain also stops being muted against the label and takes the button's ink, which
+                is the component's rule: one control, one colour. */}
+            <Button
               ref={companyDropdownButtonRef}
+              variant="secondary"
+              size="lg"
+              iconSize={16}
+              leadingIcon={isModelsLoading ? undefined : BrainDecl}
+              className={(showResultsPanel || isBrowserOpen) ? 'w-[8rem]' : 'w-[10rem]'}
               onClick={() => setIsCompanyDropdownOpen(!isCompanyDropdownOpen)}
               onMouseEnter={() => setIsModelSelectorButtonHovered(true)}
               onMouseLeave={() => setIsModelSelectorButtonHovered(false)}
-              className={`flex items-center justify-center gap-2 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--chat-text)]/80 hover:border-[var(--chat-muted)] transition-colors h-9 ${
-                (showResultsPanel || isBrowserOpen) ? 'w-[8rem]' : 'w-[10rem]'
-              }`}
+              aria-expanded={isCompanyDropdownOpen}
+              aria-haspopup="dialog"
+              aria-label={`Select model. Current model: ${selectedModel.name}`}
             >
-              {isModelsLoading ? (
-                <Spinner size={16} className="flex-shrink-0" />
-              ) : (
-                <Brain size={16} className="text-[var(--chat-muted)] flex-shrink-0" />
-              )}
+              {isModelsLoading && <Spinner size={16} className="flex-shrink-0" />}
               <span className="truncate">{selectedModel.name}</span>
-            </button>
+            </Button>
 
             {(isModelSelectorButtonHovered && !isCompanyDropdownOpen) && (
               <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 pointer-events-none">
@@ -1401,6 +1409,16 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   const isActiveCompany = getCompanyNameFromModelId(selectedModel.id) === group.companyName;
                   return (
                     <div key={group.companyName}>
+                      {/* Stays hand-written, and the row it wants is `<MenuItem expanded>` — which
+                          draws exactly this: a label, a trailing chevron quarter-turned when open,
+                          and `aria-expanded` rather than `aria-haspopup`. Its sibling below wants
+                          `<MenuItem value>`, the right-aligned value in the UI face, which is the
+                          token count.
+                          What blocks both is semantics, not shape. `MenuItem` renders
+                          `role="menuitem"`, and a menuitem has to be owned by a `role="menu"`. This
+                          dropdown is a plain `<div>` with an accordion inside it, so dropping them
+                          in would scatter orphan menuitems across the tree. Making the panel a real
+                          menu is a behaviour change to a custom disclosure, not a control swap. */}
                       <button
                         onClick={() => {
                           setExpandedCompanies(prev => {
@@ -1423,6 +1441,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
                       <div className={`overflow-hidden transition-all duration-200 ${isExpanded ? 'max-h-[400px]' : 'max-h-0'}`}>
                         <div className="pb-1">
+                          {/* Stays hand-written — the company row's sibling, same owning-menu
+                              blocker. */}
                           {group.models.map((model) => (
                             <button
                               key={model.id}
