@@ -10426,6 +10426,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         <style>{CHAT_MODAL_KEYFRAMES_CSS}</style>
         <div className="group absolute top-4 right-4 z-[1001] w-16 h-16 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out -z-10"></div>
+          /* Stays hand-written, and the reason is what it sits ON. This is an overlay control on
+             a full-screen IMAGE — arbitrary content, any colour — so its ink is `--chat-text` at rest
+             with a plate of its own fading in behind it. `ghost` rests at `--chat-muted`, which is
+             chosen to be quiet against a known surface and is exactly the wrong thing over a
+             photograph. A variant cannot be legible against content it does not know. */
           { (showDownloadButton === undefined || showDownloadButton === true) && (
             <button
               onClick={(e) => {
@@ -11403,6 +11408,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
    * The scroll-to-bottom pill, for the composer to host inside its floating mode row.
    * Same button, same handler — it just needs a home that the row does not cover.
    */
+  /* Stays hand-written — the same morphing pill decided at the other end of this file, and the
+     comment above says so: same button, same handler, a different home. Idle it is a 28px square with
+     a bouncing chevron; working, it stretches to 82px and holds three animated dots that swap for a
+     word under the pointer. Two contents, two widths, two bespoke animations. */
   const composerScrollAffordance = showScrollToBottom && messages.length > 0 ? (
     <button
       type="button"
@@ -14252,6 +14261,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           </div>
                           <div className="flex flex-col gap-1.5 px-1 pb-1.5 pt-0.5">
                             {projectScheduled.map((task) => (
+                              /* Stays hand-written — the project sidebar's card shape, the fourth of
+                                 them: a bordered tile stacking a title over a cadence line, sized by
+                                 its content rather than by a step on the control scale. */
                               <button
                                 key={task.id}
                                 type="button"
@@ -16342,6 +16354,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       When
                     </span>
                     <div className="relative">
+                    {/* Stays hand-written: it is a FIELD, not a button. Full width, label to the
+                        left, chevron to the right, and 40px tall where the control scale stops at 36.
+                        The library has a field-trigger shape in its motion selectors and no component
+                        exported for it, so there is nothing to take. */}
                     <button
                       type="button"
                       onClick={() =>
@@ -18029,6 +18045,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       : ''
                                   }`}
                       >
+                        {/* Stays hand-written, and so is Recents below it: these are section
+                            HEADINGS that happen to toggle. 11px semibold uppercase-ish tracking with
+                            4px of vertical padding and no box — a `Button` would put a 24px control
+                            where the list wants a label. The chevron beside them is a disclosure
+                            mark, not a leading icon. */}
                         <button
                           type="button"
                                     onClick={() => setIsPinnedSectionOpen((open) => !open)}
@@ -18061,6 +18082,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                   onMouseLeave={() => setIsRecentsSectionHovered(false)}
                                 >
                                   <div className="flex items-center justify-between gap-1 px-1 pb-1">
+                        {/* Stays hand-written — Pinned's twin, same heading shape. */}
                         <button
                           type="button"
                                       onClick={() => setIsRecentsSectionOpen((open) => !open)}
@@ -18149,6 +18171,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                         {historyNavView === 'projects' && (
                           <div className="space-y-2">
+                      {/* Stays hand-written — one of the history sidebar's rows, decided with the
+                          seven above it: the library's `Sidebar` is the whole panel, and this one is
+                          hand-built around a goo pill and per-row menus. */}
                       <button
                         type="button"
                               data-goo-row=""
@@ -18166,6 +18191,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                   const count = conversationHistory.filter((c) => c.projectId === project.id).length;
                                   const isActiveProject = activeProjectId === project.id;
                                   return (
+                                    /* Stays hand-written — a history sidebar row, same family
+                                       and same reason as the seven nav rows and the New project row
+                                       above it. */
                                     <button
                                       key={project.id}
                                       type="button"

@@ -85,7 +85,7 @@ function expander(src) {
  * something else entirely.
  */
 const MARKER = 'Stays hand-written';
-function documentedAbove(src, at) {
+function documentedAbove(src, at, inComment = () => false) {
   /*
    * Looks for the PHRASE in the window above, not for a comment glued to the tag.
    *
@@ -105,17 +105,52 @@ function documentedAbove(src, at) {
   const before = src.slice(from, at);
   const marker = before.lastIndexOf(MARKER);
   if (marker < 0) return false;
-  return !before.slice(marker).includes('<button');
+  /* Only a REAL button breaks the chain. Several of these reasons quote the markup they replaced —
+     "it renders as a `<button>` the moment it takes an onSelect" — and counting that as an
+     intervening control made a documented row read as undecided. */
+  for (let k = before.indexOf('<button', marker); k >= 0; k = before.indexOf('<button', k + 7)) {
+    if (!inComment(from + k)) return false;
+  }
+  return true;
+}
+
+/**
+ * The ranges covered by block comments, so a `<button>` written INSIDE one is not counted as a
+ * button. It happens: several reasons in this chat quote the markup they replaced — "Was a `<ul>` of
+ * `<li><button>`" — and the board read two of those as controls still to decide.
+ *
+ * Block comments only. A line comment cannot be found without lexing strings, and the attempt at that
+ * is what once opened a string on the apostrophe in "What's new" and lost thirty buttons. `/*` does
+ * not occur inside ordinary prose or a URL, where `//` does.
+ */
+function blockComments(src) {
+  const ranges = [];
+  let i = 0;
+  for (;;) {
+    const open = src.indexOf('/*', i);
+    if (open < 0) break;
+    const close = src.indexOf('*/', open + 2);
+    const end = close < 0 ? src.length : close + 2;
+    ranges.push([open, end]);
+    i = end;
+  }
+  return ranges;
 }
 
 function buttonsIn(file) {
   const src = readFileSync(file, 'utf8');
   const expand = expander(src);
+  const comments = blockComments(src);
+  const inComment = (at) => comments.some(([a, b]) => at >= a && at < b);
   const out = [];
   let i = 0;
   for (;;) {
     i = src.indexOf('<button', i);
     if (i < 0) break;
+    if (inComment(i)) {
+      i += 7;
+      continue;
+    }
     const end = tagEnd(src, i + 7);
     if (end < 0) break;
     const close = src.indexOf('</button>', end);
@@ -135,7 +170,7 @@ function buttonsIn(file) {
       : stripped ? 'labelled' : 'mixed';
     out.push({
       line: src.slice(0, i).split('\n').length,
-      documented: documentedAbove(src, i),
+      documented: documentedAbove(src, i, inComment),
       kind,
       glyphs: glyphs.length ? glyphs.join(',') : (anyGlyph.join(',') || '-'),
       text: text.slice(0, 18) || '-',
