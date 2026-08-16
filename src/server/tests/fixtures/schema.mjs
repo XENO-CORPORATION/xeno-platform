@@ -99,12 +99,38 @@ export function tableDDL(name) {
   const stmtRe = new RegExp(
     String.raw`ALTER TABLE\s+(?:ONLY\s+)?(?:public\.)?${name}\b[^;]*;`, 'gi',
   );
-  const colRe = /ADD COLUMN\s+(?:IF NOT EXISTS\s+)?([a-z_][a-z0-9_]*)\s+([^;,]+)/gi;
+  const colRe = /ADD COLUMN\s+(?:IF NOT EXISTS\s+)?([a-z_][a-z0-9_]*)\s+/gi;
 
   const alters = [];
   for (const [stmt] of src.matchAll(stmtRe)) {
-    for (const [, col, type] of stmt.matchAll(colRe)) {
-      alters.push(`ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS ${col} ${type.trim()};`);
+    for (const m of stmt.matchAll(colRe)) {
+      // 🔴 THE TYPE MUST BE READ WITH PAREN AWARENESS, not up to the next comma.
+      //
+      // `[^;,]+` looks right and is wrong twice over in this schema:
+      //   NUMERIC(8,2)                       -> truncated to `NUMERIC(8`
+      //   tsvector GENERATED ALWAYS AS (...) -> truncated mid-expression
+      // Both produced SQL that parsed as `syntax error at or near ";"` — in CI,
+      // because there is no Postgres here to catch it sooner.
+      let depth = 0;
+      let j = m.index + m[0].length;
+      for (; j < stmt.length; j += 1) {
+        const ch = stmt[j];
+        if (ch === '(') depth += 1;
+        else if (ch === ')') depth -= 1;
+        else if ((ch === ',' || ch === ';') && depth === 0) break;
+      }
+      alters.push(`ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS ${m[1]} ${stmt.slice(m.index + m[0].length, j).trim()};`);
+    }
+  }
+
+  // Refuse to emit SQL that cannot parse. A helper that hands a suite malformed
+  // DDL turns "the fixture is stale" into "the suite is broken", which is a
+  // worse failure than the one this module exists to remove.
+  for (const line of alters) {
+    const opens = (line.match(/\(/g) || []).length;
+    const closes = (line.match(/\)/g) || []).length;
+    if (opens !== closes) {
+      throw new Error(`tableDDL(${name}): produced unbalanced SQL — ${line}`);
     }
   }
 
