@@ -31,6 +31,33 @@ skill** (available in every project): Claude Code `~/.claude/skills/`, XENO Agen
 (`SKILL.md` = open Agent Skills for Claude Code + Codex; `xeno-product-release.md` =
 XENO Agent CLI). Install steps: `release-guide/README.md`. Spec: `PRODUCT-RELEASE-SKILL-SPEC.md`.
 
+## Working in `../xeno-elements-foundations` from this repo
+
+The chat's design-system adoption edits both repos in one session. The element library has its own
+protocol and it is **not restated here** — a second copy is how two documents drift apart, which is
+the same argument the library makes for not storing geometry twice. Read the canonical text before
+touching that repo: `../xeno-elements-foundations/CLAUDE.md` and `agents.md`.
+
+What it means for work started from this side:
+
+- **Two owners, two constructions, two files.** `chrome-unified.css` (Soft) and
+  `chrome-separated.css` (Industrial) each belong to one person. Never push to or rebase the other
+  owner's branch; check `git log --format='%an'` first. Nothing at the platform level enforces this —
+  the org is on the free tier and branch protection is a paid feature — so the absence of a guard is
+  the reason to be careful, not permission to skip it.
+- **Both branches come off `main`, never off each other.** A branch stacked on the other owner's work
+  goes stale on every push they make, and the person who fixes it is not the person who pushed.
+- **Never type a colour, padding or radius into a COMPONENT stylesheet.** Those files are shared: a
+  literal typed into one changes both constructions. This has already shipped once — seven values
+  altered Soft during an Industrial pass.
+- **A chrome token is a two-file change.** `theme.test.ts` fails in both directions if only one side
+  declares it; declare it in both or it half-renders where no component test can see it.
+- **Verify in Compare mode, not in the suite.** `npm run dev -w @xenosystem/preview`, the Compare
+  column in the header switch. A whole-axis bug is invisible to unit tests: the axis was once
+  declared on `.xeno`, a selector apps nest, so every nested scope reset it and both constructions
+  rendered identically — with 864 tests green.
+- **When the base moves, merge it in — never rebase.** Someone else's history is not ours to rewrite.
+
 ## Related references
 
 - `PRODUCT-LANDING-SPEC.md` — the product landing-page + docs authoring contract (the 4-layer model, the docs system).
