@@ -66,7 +66,7 @@ interface ChatComposerRevealValue {
 const ChatComposerRevealContext = React.createContext<ChatComposerRevealValue | null>(null);
 
 const revealButtonClassName =
-  'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] text-zinc-400 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/20 hover:bg-white/[0.04] hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-40';
+  'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--chat-border)] text-[var(--chat-muted)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] disabled:cursor-not-allowed disabled:opacity-40';
 
 /**
  * The "+" that reveals the mode tabs / model chip, plus the Upload action that comes out
@@ -120,7 +120,7 @@ export const ComposerRevealControls: React.FC = () => {
 };
 
 const starterClassName =
-  'flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-white/[0.16] hover:bg-white/[0.055] hover:text-zinc-100 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70';
+  'flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]';
 
 const modeIconById = {
   chat: MessageSquare,
@@ -136,7 +136,7 @@ const agentActionIconById = {
 } as const;
 
 const railButtonClassName =
-  'flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-zinc-500 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/[0.10] hover:bg-white/[0.06] hover:text-zinc-100 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-35';
+  'flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-[var(--chat-muted)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] disabled:cursor-not-allowed disabled:opacity-35';
 
 const TOOLBAR_POINTER_CLOSE_DELAY_MS = 1000;
 /** Blocks hover-reopen after a tool closes the rail while the pointer is still over it. */
@@ -151,7 +151,7 @@ const LEGACY_HOVER_TOOL_RAIL: boolean = false;
 const AGENT_ACTION_CLOSE_DURATION_MS = chainDurationMs(AGENT_HUB_MOCK_ACTIONS.length + 1, AGENT_CHAIN);
 
 const agentActionButtonClassName =
-  'chat-mode-action flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-white/[0.08] bg-white/[0.018] px-2 text-[11px] font-medium text-zinc-400 transition-[background-color,border-color,color] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70';
+  'chat-mode-action flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--chat-border)] bg-[var(--chat-control)] px-2 text-[11px] font-medium text-[var(--chat-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]';
 
 const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   children,
@@ -603,7 +603,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     ? 'left-[3.25rem] right-auto'
     : 'left-0 right-auto';
   const extensionSurfaceClass = activeTool
-    ? 'rounded-[1.4rem] border border-white/[0.10] bg-[#141416] shadow-none'
+    ? 'rounded-[1.4rem] border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-none'
     : 'border border-transparent bg-transparent shadow-none';
   const outerWidthClass = isOuterExpanded ? 'w-[calc(100%_+_3.25rem)] delay-0' : 'w-full delay-100';
   const railExpandedWidthClass = activeTool === 'recent-files'
@@ -710,10 +710,10 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
               data-gooey-chip
               onClick={() => closeAgentActions(() => onModeChange('chat'))}
               // chat-mode-action is what the themed control styles hook onto. Without it
-              // this button kept its raw `border-white/[0.08]`, which is invisible against
+              // this button kept its raw `border-[var(--chat-border)]`, which is invisible against
               // a light theme — so it looked fine while its blob stood in for it, then lost
               // its outline the moment the blob dissolved.
-              className={`chat-mode-action flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.018] text-zinc-500 transition-[background-color,border-color,color] duration-150 hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70`}
+              className={`chat-mode-action flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]`}
               // No `title`: the native tooltip lingers past the click, and this button
               // unmounts on that click — leaving a black "Back" box floating over the
               // transition. aria-label already names it for assistive tech.
@@ -746,8 +746,8 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                     tabIndex={isSelected ? 0 : -1}
                     className={`chat-mode-tab ${starterClassName} ${
                       isSelected
-                        ? 'chat-mode-tab-selected border-white/[0.13] bg-white/[0.085] text-zinc-100'
-                        : 'border-white/[0.06] bg-black/15 text-zinc-500'
+                        ? 'chat-mode-tab-selected border-[var(--chat-muted)] bg-[var(--chat-control)] text-[var(--chat-text)]'
+                        : 'border-[var(--chat-border)] bg-[var(--chat-overlay)] text-[var(--chat-muted)]'
                     }`}
                     onClick={() => handleModeSelect(mode.id)}
                     onKeyDown={(event) => handleModeKeyDown(event, index)}
@@ -809,7 +809,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       data-composer-context={isActive ? 'empty' : 'conversation'}
       data-rail-open={showToolRail && isRailOpen ? 'true' : 'false'}
       data-active-tool={showToolRail ? (activeTool ?? '') : ''}
-      className={`relative z-10 overflow-visible rounded-2xl border border-white/[0.10] bg-[#141416] transition-[width,border-color] duration-200 ease-out ${
+      className={`relative z-10 overflow-visible rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-elevated)] transition-[width,border-color] duration-200 ease-out ${
         showToolRail ? `self-end ${outerWidthClass}` : 'w-full'
       }`}
     >
@@ -833,7 +833,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
             onMouseLeave={schedulePointerClose}
             onFocus={keepRailOpen}
             onBlur={handleInteractionBlur}
-            className={`absolute left-[-1.25rem] top-1/2 z-30 h-12 w-4 -translate-y-1/2 rounded-md transition-opacity duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 ${isRailOpen ? 'pointer-events-none opacity-0 delay-0' : 'opacity-100 delay-300'}`}
+            className={`absolute left-[-1.25rem] top-1/2 z-30 h-12 w-4 -translate-y-1/2 rounded-md transition-opacity duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${isRailOpen ? 'pointer-events-none opacity-0 delay-0' : 'opacity-100 delay-300'}`}
           >
             <span
               data-tool-rail-indicator
@@ -996,7 +996,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     >
       <h1
         id="chat-empty-state-title"
-        className="-translate-y-6 text-center font-display text-3xl font-semibold leading-[1.1] tracking-[-0.01em] text-zinc-100 sm:text-[2.5rem]"
+        className="-translate-y-6 text-center font-display text-3xl font-semibold leading-[1.1] tracking-[-0.01em] text-[var(--chat-text)] sm:text-[2.5rem]"
       >
         What would you like to explore?
       </h1>

@@ -20,16 +20,16 @@ interface ChatUpdateDemoPanelProps {
 
 /** Fixed Example-prompt shell — every notification fills this same layout. */
 const DEMO_SHELL_CLASS_NAME =
-  'flex h-[8rem] w-full min-w-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[#0c0c0e]';
+  'flex h-[8rem] w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--chat-border)] bg-[var(--chat-elevated)]';
 
 const demoHeaderClassName =
-  'flex h-8 shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3';
+  'flex h-8 shrink-0 items-center justify-between gap-2 border-b border-[var(--chat-border)] px-3';
 
 const demoBodyClassName =
   'flex min-h-0 flex-1 flex-col justify-start gap-0 overflow-hidden px-3 py-2';
 
 const CodeBody: React.FC<{ text: string }> = ({ text }) => (
-  <code className="block max-h-full overflow-x-auto overflow-y-auto text-xs leading-5 text-zinc-300">
+  <code className="block max-h-full overflow-x-auto overflow-y-auto text-xs leading-5 text-[var(--chat-text)]">
     {text}
   </code>
 );
@@ -41,14 +41,14 @@ const DocumentPromptBody: React.FC<{
 }> = ({ fileName, reduceMotion, text }) => (
   <div className="flex h-full min-h-0 flex-col justify-center gap-1.5">
     <motion.div
-      className="inline-flex h-6 w-fit max-w-full shrink-0 items-center gap-1.5 rounded-md border border-white/[0.10] bg-white/[0.03] px-2 text-[10px] text-zinc-300"
+      className="inline-flex h-6 w-fit max-w-full shrink-0 items-center gap-1.5 rounded-md border border-[var(--chat-border)] bg-[var(--chat-control)] px-2 text-[10px] text-[var(--chat-text)]"
       animate={reduceMotion ? undefined : { opacity: [0.75, 1, 0.75] }}
       transition={reduceMotion ? undefined : { duration: 2, repeat: Infinity, ease: 'easeInOut' }}
     >
-      <FileText size={11} className="shrink-0 text-zinc-400" aria-hidden="true" />
+      <FileText size={11} className="shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
       <span className="truncate">{fileName}</span>
     </motion.div>
-    <p className="line-clamp-2 min-h-0 text-[11px] leading-4 text-zinc-400">{text}</p>
+    <p className="line-clamp-2 min-h-0 text-[11px] leading-4 text-[var(--chat-muted)]">{text}</p>
   </div>
 );
 
@@ -72,14 +72,14 @@ const ComposerControlsBody: React.FC<{
 
   return (
     <div className="flex h-full min-h-0 flex-col justify-center gap-2">
-      <div className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-white/[0.08] bg-black/20 p-0.5">
+      <div className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-[var(--chat-border)] bg-[var(--chat-overlay)] p-0.5">
         {modes.map((mode) => {
           const isActive = mode === activeMode;
           return (
             <span
               key={mode}
               className={`relative isolate flex h-full min-w-0 flex-1 items-center justify-center rounded px-1.5 text-[10px] font-medium ${
-                isActive ? 'bg-white/[0.10] text-zinc-100' : 'text-zinc-500'
+                isActive ? 'bg-[var(--chat-control)] text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'
               }`}
             >
               {mode}
@@ -87,16 +87,16 @@ const ComposerControlsBody: React.FC<{
           );
         })}
       </div>
-      <div className="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-white/[0.08] bg-black/20 px-2">
-        <span className="min-w-0 flex-1 truncate text-[10px] text-zinc-500">Ask XENO anything…</span>
-        <span className="hidden max-w-[7.5rem] shrink-0 items-center gap-1 truncate rounded border border-white/[0.08] px-1.5 py-0.5 text-[9px] text-zinc-400 sm:inline-flex">
+      <div className="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-[var(--chat-border)] bg-[var(--chat-overlay)] px-2">
+        <span className="min-w-0 flex-1 truncate text-[10px] text-[var(--chat-muted)]">Ask XENO anything…</span>
+        <span className="hidden max-w-[7.5rem] shrink-0 items-center gap-1 truncate rounded border border-[var(--chat-border)] px-1.5 py-0.5 text-[9px] text-[var(--chat-muted)] sm:inline-flex">
           <MessageSquare size={10} aria-hidden="true" />
           <span className="truncate">{modelLabel}</span>
           <ChevronDown size={10} aria-hidden="true" />
         </span>
         <motion.span
           aria-hidden="true"
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-white/[0.10] bg-white/[0.06] text-zinc-300"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-text)]"
           animate={reduceMotion ? undefined : { scale: [1, 1.06, 1] }}
           transition={reduceMotion ? undefined : { duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
         >
@@ -125,8 +125,8 @@ const FlowLinkBody: React.FC<{
             <motion.span
               className={`inline-flex h-full min-w-0 items-center gap-1 rounded-md border px-2 text-[10px] ${
                 index === resolvedSteps.length - 1
-                  ? 'border-white/[0.14] bg-white/[0.06] text-zinc-100'
-                  : 'border-white/[0.08] text-zinc-400'
+                  ? 'border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-text)]'
+                  : 'border-[var(--chat-border)] text-[var(--chat-muted)]'
               }`}
               animate={
                 reduceMotion || index !== resolvedSteps.length - 1
@@ -145,7 +145,7 @@ const FlowLinkBody: React.FC<{
             {index < resolvedSteps.length - 1 && (
               <motion.span
                 aria-hidden="true"
-                className="shrink-0 text-[11px] text-zinc-500"
+                className="shrink-0 text-[11px] text-[var(--chat-muted)]"
                 animate={reduceMotion ? undefined : { x: [0, 3, 0] }}
                 transition={reduceMotion ? undefined : { duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
               >
@@ -159,7 +159,7 @@ const FlowLinkBody: React.FC<{
         href={href}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-white/[0.10] bg-white/[0.03] px-2.5 text-[11px] font-medium text-zinc-200 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/20 hover:bg-white/[0.06] hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
+        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-[var(--chat-border)] bg-[var(--chat-control)] px-2.5 text-[11px] font-medium text-[var(--chat-text)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]"
       >
         {linkLabel}
         <ExternalLink size={12} />
@@ -212,20 +212,20 @@ const ChatUpdateDemoPanel: React.FC<ChatUpdateDemoPanelProps> = ({
       className={DEMO_SHELL_CLASS_NAME}
     >
       <div className={demoHeaderClassName}>
-        <span className="min-w-0 truncate text-[11px] font-medium text-zinc-500">{demo.header}</span>
+        <span className="min-w-0 truncate text-[11px] font-medium text-[var(--chat-muted)]">{demo.header}</span>
         {demo.copyValue ? (
           <button
             type="button"
             onClick={() => onCopy(demo.copyValue!)}
             data-selection={copied ? 'on' : 'off'}
             aria-label={copied ? 'Copied' : demo.header}
-            className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-zinc-500 transition-colors hover:bg-white/[0.05] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
+            className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]"
           >
             {copied ? <Check size={12} /> : <Copy size={12} />}
             {copied ? 'Copied' : 'Copy'}
           </button>
         ) : demo.headerMeta ? (
-          <span className="shrink-0 text-[10px] uppercase tracking-[0.08em] text-zinc-600">
+          <span className="shrink-0 text-[10px] uppercase tracking-[0.08em] text-[var(--chat-muted)]">
             {demo.headerMeta}
           </span>
         ) : null}
