@@ -1346,11 +1346,32 @@ export async function resolveFlag(db, user, flagId, { action, note } = {}) {
     }
   }
 
+  /*
+   * 🔴 `flagId` IS NOT A PARAMETER HERE, AND USED TO BE.
+   *
+   * It was passed as $1 and referenced nowhere — one decision resolves EVERY
+   * open flag on the same target, which is deliberate (three people reporting
+   * one post is one thing to decide, not three) and is why `resolved` returns
+   * the row count. But Postgres cannot infer the type of a parameter a
+   * statement never uses, so every call threw:
+   *
+   *     error: could not determine data type of parameter $1
+   *
+   * Meaning NO MODERATOR HAD EVER RESOLVED A FLAG. The queue was readable, the
+   * reviewer UI shipped, and the action at the end of it was impossible — a
+   * feature that fails one link further along than the write-only `forum_flags`
+   * bug it replaced.
+   *
+   * Second occurrence of this exact shape in this codebase (`getDigest` was the
+   * first, found the same day). Both survived because the code path had never
+   * run: there were no predicates then, and there are no moderators now. **An
+   * unused placeholder is a syntax error that waits for a caller.**
+   */
   const { rowCount } = await db.query(
     `UPDATE forum_flags
-        SET status = $3, resolved_by = $2, resolved_at = NOW(), resolution = $4
-      WHERE target_type = $5 AND target_id = $6 AND status IN ('open', 'reviewing')`,
-    [flagId, user.id, action === 'action' ? 'actioned' : 'dismissed',
+        SET status = $2, resolved_by = $1, resolved_at = NOW(), resolution = $3
+      WHERE target_type = $4 AND target_id = $5 AND status IN ('open', 'reviewing')`,
+    [user.id, action === 'action' ? 'actioned' : 'dismissed',
      note ? String(note).slice(0, 1000) : null, flag.target_type, flag.target_id],
   );
 
