@@ -356,9 +356,18 @@ Re-deciding these costs more than it saves.
   the chat: a `primary` button is **#2b2b2b on #d8d8de**, the library's palette, where every other
   variant correctly reads the chat's. The bridge maps eleven base tokens and no chrome ones.
 
-  So an inverted button — a fill with `--chat-on-accent` ink, like the voice view's Save — has no
-  variant to convert to. Fixing it means the bridge carrying the chrome tokens as well, which is one
-  more line per token and the owner's call about which construction the chat is wearing.
+  So an inverted button — a fill with inverted ink — has no variant to convert to. **Eleven controls
+  across the chat are filled that way**, most of them `--chat-text` on `--chat-canvas`, which is
+  precisely what the Soft construction defines `primary` to be
+  (`--xeno-chrome-btn-primary-bg: var(--xeno-text)`). Fixing it means the bridge carrying the chrome
+  tokens as well: one more line per token, and the owner's call about which construction the chat
+  wears.
+
+  **The same gap has a destructive half.** Two dialog confirms are a SOLID `--chat-danger` fill going
+  to `--chat-danger-hover`; the library's `danger` is the opposite reading — a neutral hairline with
+  muted ink that turns red only when reached for. That is the right position for a Delete sitting in
+  a row (and three of those converted to it), but not for the confirm INSIDE the dialog that asks. A
+  quiet last-chance button is quiet in the wrong place. Neither half is a call site's to improvise.
 
 - ~~**The sort trigger's reveal.**~~ **Closed.** `Button` carries `iconReveal` now: the glyph goes out
   of flow behind the label, the box opens on its left, and both pages converted. Measured on the

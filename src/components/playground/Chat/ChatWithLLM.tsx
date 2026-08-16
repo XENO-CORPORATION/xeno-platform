@@ -8335,17 +8335,23 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             </div>
 
             <div className="flex justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={closeCreateProjectModal}
-                className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors"
-                style={{
-                  backgroundColor: 'var(--chat-control)',
-                  color: 'var(--chat-text)',
-                }}
-              >
+              {/* `secondary` — a `--chat-control` fill with text ink is the variant minus its
+                  hairline, which it gains. Every other filled Cancel in this chat took the same
+                  trade. */}
+              <Button variant="secondary" size="md" onClick={closeCreateProjectModal}>
                 Cancel
-              </button>
+              </Button>
+              {/* Stays hand-written, and its sibling in the delete dialog stays for the same reason:
+                  the variant set has no SOLID emphasis. This is inverted — a `--chat-text` fill
+                  carrying `--chat-canvas` ink — which is `primary`'s shape and, in the Soft
+                  construction, `primary`'s literal definition (`--xeno-chrome-btn-primary-bg:
+                  var(--xeno-text)`). It still cannot be used: that token is declared on `:root` by
+                  the chrome files, and a custom property computes where it is DECLARED, so it
+                  resolves against the library's own base tokens before `.chat-themed` says anything.
+                  Measured inside the chat, `primary` is #2b2b2b on #d8d8de.
+                  Eleven controls across this chat are filled this way. One line per chrome token in
+                  the bridge would convert all of them, and that is §9's entry rather than a call
+                  site's to improvise. */}
               <button
                 type="button"
                 onClick={submitCreateProjectModal}
@@ -8750,14 +8756,20 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   className="flex justify-end gap-3 border-t border-[var(--chat-border)] px-4 py-3"
                   style={{ backgroundColor: 'var(--chat-surface)' }}
                 >
-                    <button 
-                        type="button"
-                        onClick={handleCancelDelete}
-                        className="rounded-md border border-[var(--chat-border)] bg-[var(--chat-control)] px-4 py-1.5 text-sm font-medium text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
-                    >
+                    {/* `secondary` word for word: a hairline, a `--chat-control` fill, full ink, and
+                        a `--chat-hover` tint on top when you reach for it. */}
+                    <Button variant="secondary" size="md" onClick={handleCancelDelete}>
                         Cancel
-                    </button>
-                    <button 
+                    </Button>
+                    {/* Stays hand-written — the same missing emphasis as Create project, in the
+                        destructive key. This is a SOLID `--chat-danger` fill going to
+                        `--chat-danger-hover`; the library's `danger` is the opposite reading, a
+                        neutral hairline with muted ink that turns red only when you reach for it.
+                        That is a deliberate position on destructive controls and the right one for a
+                        Delete sitting in a row, but this button is the confirm INSIDE the dialog
+                        that asks — the last thing between the user and the deletion — and quiet is
+                        not what it should be. Two of these exist here. */}
+                    <button
                         type="button"
                         onClick={handleConfirm}
                         className="rounded-md px-4 py-1.5 text-sm font-medium text-[var(--chat-text)] transition-colors"
