@@ -135,6 +135,29 @@
   --xeno-danger: var(--chat-danger);
   --xeno-danger-hover: var(--chat-danger-hover);
   --xeno-on-accent: var(--chat-on-accent);
+
+  /* The eleven above are BASE tokens and they were enough until a `primary` button was tried.
+     Chrome tokens are a second layer and they were not bridged, which made `primary` the one variant
+     that could not be used in the chat.
+
+     Why bridging the base was not enough: a custom property computes where it is DECLARED, and the
+     chrome layer declares `--xeno-chrome-btn-primary-bg: var(--xeno-text)`. That reference resolves
+     in ITS OWN scope, and both chrome files sit outside the chat — `chrome-separated.css` on `:root`,
+     `chrome-unified.css` under `[data-chrome='unified']`. Nothing in the chat sets that attribute, so
+     the separated reading wins on `:root`, resolves against the library's own palette, and children
+     inherit the finished colour. Measured inside `.chat-themed`: `--xeno-text` is correctly #fafafa
+     while `--xeno-chrome-btn-primary-bg` is #2b2b2b and `-fg` is #d8d8de. The bridge was doing its
+     job and the value never passed through it.
+
+     Re-declaring the two here puts the same references in a scope where `--xeno-text` and
+     `--xeno-on-accent` are already the chat's, so they resolve to #fafafa on #0a0a0a.
+
+     That formula is the unified construction's, restated rather than chosen: the chat's eleven
+     inverted controls are `--chat-text` on `--chat-canvas` already, and `--chat-on-accent` IS
+     `--chat-canvas` — measured, both #0a0a0a. If the chat should ever wear the separated reading
+     instead, this is the one place that changes. */
+  --xeno-chrome-btn-primary-bg: var(--xeno-text);
+  --xeno-chrome-btn-primary-fg: var(--xeno-on-accent);
 }
 
 /* ── Mirrored glyphs ───────────────────────────────────────────────────────────────────

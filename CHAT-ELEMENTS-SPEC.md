@@ -431,12 +431,25 @@ Re-deciding these costs more than it saves.
   the chat: a `primary` button is **#2b2b2b on #d8d8de**, the library's palette, where every other
   variant correctly reads the chat's. The bridge maps eleven base tokens and no chrome ones.
 
-  So an inverted button — a fill with inverted ink — has no variant to convert to. **Eleven controls
-  across the chat are filled that way**, most of them `--chat-text` on `--chat-canvas`, which is
-  precisely what the Soft construction defines `primary` to be
-  (`--xeno-chrome-btn-primary-bg: var(--xeno-text)`). Fixing it means the bridge carrying the chrome
-  tokens as well: one more line per token, and the owner's call about which construction the chat
-  wears.
+  **Closed: the bridge carries the two chrome tokens now.** The diagnosis needed one more step than
+  §9 first recorded. `chrome-separated.css` declares on `:root` and `chrome-unified.css` under
+  `[data-chrome='unified']` — nothing in the chat sets that attribute, so the chat was getting the
+  SEPARATED reading, resolved on `:root` against the library's own palette. That is exactly the
+  measured #2b2b2b on #d8d8de, and it is why bridging the eleven base tokens had no effect: the
+  bridge was working and the value never passed through it.
+
+  Two lines in `chat-theme.css` re-declare the same references in a scope where `--xeno-text` and
+  `--xeno-on-accent` are already the chat's. Measured after: `primary` paints **#fafafa on #0a0a0a**
+  in dark, **#0a0a0a on #ffffff** in light, and follows both custom stops (#161617, #21242a) — a
+  bridge that did not track the theme would not be a bridge.
+
+  The formula is the unified construction's, restated rather than chosen: the chat's eleven inverted
+  controls are `--chat-text` on `--chat-canvas` already, and `--chat-on-accent` IS `--chat-canvas` —
+  measured, both #0a0a0a. If the chat should wear the separated reading instead, `chat-theme.css` is
+  the one place that changes.
+
+  **The eleven controls are still hand-written.** `primary` is usable now; converting them is a §3
+  pass with its own before/after.
 
   **And it now has a companion.** The projects header's New project is an inverted button that also
   reveals its glyph on the TRAILING edge — the mirror of `iconReveal`, which places the glyph at
