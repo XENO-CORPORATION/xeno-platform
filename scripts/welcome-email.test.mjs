@@ -15,6 +15,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-for-unsubscribe-hmac';
 delete process.env.RESEND_API_KEY;
@@ -148,13 +149,56 @@ test('the welcome email contains a checklist, a CTA and a working unsubscribe li
   const sent = await captureSend(db, 'welcome', 'new@example.com', { displayName: 'Ana' });
 
   assert.ok(sent, 'a payload was transmitted');
-  assert.match(sent.subject, /get you set up/i, 'the subject invites an action');
   assert.match(sent.html, /Welcome, Ana/, 'greets the person by name');
 
-  // The checklist rows — the actual job of a welcome email.
-  for (const row of ['Download XENO Hub', 'Bring your own AI', 'Open a creative app', 'Read the docs']) {
-    assert.ok(sent.html.includes(row), `checklist row missing: ${row}`);
+  // ── Subject: pinned by PROPERTY, not by wording ──────────────────────────
+  //
+  // This previously asserted /get you set up/i — the literal copy of the
+  // template at the time. That makes any rewrite a test failure even when the
+  // rewrite is better, which trains people to edit the gate rather than think
+  // about it. What actually matters about a subject line is checked here
+  // instead, and one of these is a real deliverability constraint the old
+  // assertion did not cover at all.
+  assert.ok(sent.subject.trim().length > 0, 'there is a subject');
+  assert.match(sent.subject, /XENO/, 'the subject identifies the sender');
+  assert.ok(sent.subject.length <= 78,
+    `subject is ${sent.subject.length} chars — inboxes truncate past ~78, so the ask must land before the cut`);
+
+  // ── The steps: pinned by REACHABILITY, not by wording ────────────────────
+  //
+  // The old loop pinned four literal row titles. That is the same mistake in a
+  // different place, and it protects less than it looks: four exact strings can
+  // all be present while every link behind them 404s.
+  //
+  // 🔴 What a welcome email must never do is send someone to a dead end — this
+  // template's own comment says exactly that. So the gate now checks the thing
+  // that would actually hurt: every internal link resolves to a route the app
+  // has REGISTERED. A redesign proposed on 2026-08-16 included "Complete your
+  // profile" and "Launch your first workflow"; neither has a route, and this
+  // assertion is what catches that class of copy.
+  //
+  // Checked against src/App.tsx because this SPA answers 200 with an empty
+  // shell for paths that do not exist — a fetch would report every dead link as
+  // healthy.
+  const appSrc = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const routes = [...appSrc.matchAll(/path="([^"]+)"/g)].map((m) => m[1]);
+  const routeMatches = (p) => routes.some((r) => {
+    if (r === p) return true;
+    // /product/:slug/download matches /product/hub/download; /overview/* matches /overview
+    const rx = new RegExp('^' + r.replace(/:[^/]+/g, '[^/]+').replace(/\/\*$/, '(/.*)?') + '$');
+    return rx.test(p);
+  });
+
+  const internal = [...sent.html.matchAll(/href="https:\/\/xenostudio\.ai([^"]*)"/g)]
+    .map((m) => m[1].split('?')[0] || '/')
+    .filter((p) => !p.startsWith('/email/') && !p.startsWith('/unsubscribe'));
+
+  assert.ok(internal.length >= 3, `expected at least 3 actionable links, found ${internal.length}`);
+  for (const p of new Set(internal)) {
+    assert.ok(routeMatches(p),
+      `the welcome email links ${p}, which is NOT a registered route — a dead end in onboarding`);
   }
+
   assert.match(sent.html, /<table role="presentation"/, 'table layout, so Outlook renders it');
 
   // The unsubscribe link must be present AND verify for this exact recipient.
