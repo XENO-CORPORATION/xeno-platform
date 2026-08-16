@@ -16124,19 +16124,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   >
                     {projectFilePreview.name}
                   </h2>
-                  <button
-                    type="button"
+                  {/* `ghost md` — no fill, no border, muted ink brightening over a `--chat-hover`
+                      tint, and 32px is md. The two faces stay ONE button with the ternary in
+                      `leadingIcon`, which is what lets the check draw itself over the copy mark
+                      instead of replacing it. */}
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    iconSize={14}
+                    leadingIcon={projectFilePreviewCopied ? CheckDecl : CopyDecl}
+                    data-selection={projectFilePreviewCopied ? 'on' : 'off'}
                     onClick={() => void copyProjectFilePreview()}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                     title={projectFilePreviewCopied ? 'Copied' : 'Copy'}
                   >
-                    {projectFilePreviewCopied ? (
-                      <Check size={14} aria-hidden="true" />
-                    ) : (
-                      <Copy size={14} aria-hidden="true" />
-                    )}
                     {projectFilePreviewCopied ? 'Copied' : 'Copy'}
-                  </button>
+                  </Button>
                   <IconButton
                     icon={XDecl}
                     variant="ghost"
@@ -16423,31 +16425,29 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           {SCHEDULE_KIND_OPTIONS.map((option) => {
                             const active =
                               projectScheduledCreateSchedule.kind === option.id;
+                            /* The selection pair this chat repeats: `quiet` + `data-selection`,
+                               which fills with `--xeno-control` when chosen and is muted when not.
+                               The border swaps sides doing it — inactive gains the hairline, active
+                               drops it — which is the library's own inversion, and the box does not
+                               move because these already reserved a transparent 1px.
+                               Legible because the panel is `--chat-surface` (#171717) and the fill is
+                               #262626; the elevated-surface collision in §9 does not reach here. */
                             return (
-                              <button
+                              <Button
                                 key={option.id}
-                                type="button"
+                                variant="quiet"
+                                size="xs"
+                                data-selection={active ? 'on' : 'off'}
+                                aria-pressed={active}
                                 onClick={() =>
                                   setProjectScheduledCreateSchedule((prev) => ({
                                     ...prev,
                                     kind: option.id,
                                   }))
                                 }
-                                className="rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors"
-                                style={{
-                                  backgroundColor: active
-                                    ? 'var(--chat-control)'
-                                    : 'transparent',
-                                  color: active
-                                    ? 'var(--chat-text)'
-                                    : 'var(--chat-muted)',
-                                  border: active
-                                    ? '1px solid var(--chat-border)'
-                                    : '1px solid transparent',
-                                }}
                               >
                                 {option.label}
-                              </button>
+                              </Button>
                             );
                           })}
                         </div>
@@ -16592,6 +16592,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       const selected =
                                         cell.ymd ===
                                         projectScheduledCreateSchedule.date;
+                                      /* Stays hand-written: a date GRID, not a row of controls.
+                                         Forty-two 28px cells at 11px with no padding, and the third
+                                         dimension is `opacity` — days outside the month sit at 0.45,
+                                         which is neither a variant nor an availability but a fact
+                                         about the data. A control scale has nothing to say about a
+                                         calendar. */
                                       return (
                                         <button
                                           key={cell.ymd}
