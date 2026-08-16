@@ -227,6 +227,7 @@ export {
   GMessageX as MessageSquareXDecl,
   GQuote as QuoteDecl,
   GImage as ImageDecl,
+  GSparkles as SparklesDecl,
   GWandSparkles as WandSparklesDecl,
   GFileX as FileXDecl,
   GContrast as ContrastDecl,

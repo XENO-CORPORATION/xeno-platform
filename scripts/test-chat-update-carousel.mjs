@@ -260,19 +260,36 @@ try {
       && !restoreButton?.classList.contains('chat-themed'),
     'Restore must be the chip alone — no full-screen .chat-themed overlay.',
   );
+  /*
+   * The chip is a library <Button> now. Its chrome arrives from `data-xeno-size` and `.xeno-btn`
+   * instead of `h-9 rounded-lg`, and the theme colours are custom properties on the wrapper it
+   * portals inside instead of inline `color`/`backgroundColor` on the button itself.
+   *
+   * The three things worth guarding did not change — a compact control, painted from the live shell,
+   * anchored to the page — so these follow the mechanism rather than being deleted with it. What is
+   * asserted is if anything tighter: `lg` is 36px by the size scale, which is what `h-9` used to say
+   * in Tailwind's vocabulary.
+   */
   assert.ok(
-    restoreButton?.className.includes('h-9')
-      && restoreButton?.className.includes('rounded-lg'),
-    'The restore control should keep compact control chrome.',
+    restoreButton?.classList.contains('xeno-btn')
+      && restoreButton?.getAttribute('data-xeno-size') === 'lg'
+      && restoreButton?.getAttribute('data-variant') === 'secondary',
+    'The restore control should keep compact control chrome (a 36px secondary button).',
   );
+  const restoreScope = restoreButton?.parentElement;
   assert.ok(
-    restoreButton?.style?.color
-      && restoreButton?.style?.backgroundColor
-      && restoreButton?.style?.borderColor,
-    'The restore control should paint with resolved theme colors (inline from the Chat shell).',
+    restoreScope?.style?.getPropertyValue('--xeno-text')
+      && restoreScope?.style?.getPropertyValue('--xeno-control')
+      && restoreScope?.style?.getPropertyValue('--xeno-border'),
+    'The restore control should paint with resolved theme colors (read from the Chat shell).',
   );
   assert.equal(
-    restoreButton?.parentElement,
+    restoreScope?.style?.display,
+    'contents',
+    'The token scope must carry colour and generate no box of its own.',
+  );
+  assert.equal(
+    restoreScope?.parentElement,
     document.body,
     'The restore control must portal to document.body so it anchors to the page, not the composer slot.',
   );

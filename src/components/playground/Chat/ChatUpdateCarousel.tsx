@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { IconButton } from '@xenosystem/elements-react';
+import { Button, IconButton } from '@xenosystem/elements-react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Sparkles, ArrowRightDecl, NextDismissDecl } from '@/lib/icons';
+import { SparklesDecl, ArrowRightDecl, NextDismissDecl } from '@/lib/icons';
 import { getRelativeLuminance } from './chatTheme';
 import ChatUpdateDemoPanel from './ChatUpdateDemoPanel';
 import { captureDissolvePlate, runPixelDissolve } from './pixelDissolve';
@@ -356,30 +356,55 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
     const chip = readChatThemeChipStyles();
 
     return createPortal(
-      <button
-        type="button"
-        data-update-carousel-restore
+      /*
+       * The wrapper exists to carry FOUR custom properties, and nothing else — `display: contents`
+       * generates no box, so the button below still positions itself against the viewport.
+       *
+       * It is needed because the portal escapes `.chat-themed`, which is where this app bridges
+       * --chat-* onto the --xeno-* names the library's components read. Measured rather than assumed:
+       * a bare `.xeno-btn` parked on <body> resolves its radius and its size metrics perfectly well —
+       * those tokens are not class-scoped — but its colours come out in the LIBRARY's palette,
+       * #d8d8de ink on #2b2b2b, instead of the theme the user picked. So colour is the only thing
+       * this element owes the button, and `secondary` reads exactly these four.
+       *
+       * The values still come from the shell via the helper above, NOT from `useChatTheme()`. That
+       * hook reads localStorage and refreshes on the `storage` event, which fires for OTHER tabs —
+       * change the theme in this one and the chip would keep the old palette until a reload. The two
+       * sibling routes can use it because they mount with their own theme; this chip lives inside the
+       * shell that owns the switcher, so it has to read what is on screen now.
+       */
+      <div
         data-update-carousel-restore-root
-        onClick={restoreUpdates}
-        aria-label="What's new"
-        className="fixed bottom-5 right-5 z-[200] flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1"
-        style={{
-          color: chip.color,
-          borderColor: chip.borderColor,
-          backgroundColor: chip.backgroundColor,
-          // Ring matches border token without Tailwind theme coupling.
-          boxShadow: 'none',
-        }}
-        onMouseEnter={(event) => {
-          event.currentTarget.style.backgroundColor = chip.hoverBackgroundColor;
-        }}
-        onMouseLeave={(event) => {
-          event.currentTarget.style.backgroundColor = chip.backgroundColor;
-        }}
+        style={
+          {
+            display: 'contents',
+            '--xeno-text': chip.color,
+            '--xeno-border': chip.borderColor,
+            '--xeno-control': chip.backgroundColor,
+            /* In the library `--xeno-hover` is a translucent TINT that `secondary` layers over its
+               fill; the shell measures an opaque one. Layering an opaque colour resolves to exactly
+               that colour, so the hover the shell intends is the hover that lands — and it is now
+               CSS, which is why the two mouse handlers that used to repaint this button are gone. */
+            '--xeno-hover': chip.hoverBackgroundColor,
+          } as React.CSSProperties
+        }
       >
-        <Sparkles size={16} aria-hidden="true" />
-        <span>What's new</span>
-      </button>,
+        <Button
+          variant="secondary"
+          size="lg"
+          /* The box is 36px, which is `lg`. The glyph is 16, which is not — `lg` draws 18. Two pixels,
+             small enough to pass for a clean swap and large enough that someone would find it changed
+             later with no commit to point at. A swap and a resize are two edits. */
+          iconSize={16}
+          leadingIcon={SparklesDecl}
+          data-update-carousel-restore
+          onClick={restoreUpdates}
+          aria-label="What's new"
+          className="fixed bottom-5 right-5 z-[200]"
+        >
+          What's new
+        </Button>
+      </div>,
       document.body,
     );
   }
@@ -547,14 +572,21 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
                 strokes as an arrow or as a cross, and `iconState` is what lets the button say which.
                 Converted only once `IconButton` could carry that — an earlier pass took the glyph and
                 dropped the state without saying so.
-                The two `data-` hooks that used to ride along are gone: neither was referenced
-                anywhere, in this file or out of it. */}
+
+                Both `data-` hooks stay. The conversion dropped them on the grounds that nothing
+                referenced them, and that was wrong: `scripts/test-chat-update-carousel.mjs` asserts on
+                both, and the grep that cleared them never looked outside `src/`. The test had been red
+                ever since. `data-update-nav-morph` moves from the glyph to the button, because the
+                component owns the glyph element now — and the button is the better host anyway, since
+                the attribute describes which face the CONTROL is wearing. */}
             <IconButton
               icon={NextDismissDecl}
               variant="quiet"
               size="md"
               iconSize={14}
               iconState={{ selection: showDismissInNav ? 'on' : 'off' }}
+              data-update-nav-morph={showDismissInNav ? 'dismiss' : 'next'}
+              {...(showDismissInNav ? { 'data-update-carousel-dismiss': true } : {})}
               className="disabled:pointer-events-none disabled:opacity-50"
               onClick={showDismissInNav ? dismissCurrent : showNext}
               disabled={isDissolving}
