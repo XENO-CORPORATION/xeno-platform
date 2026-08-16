@@ -34,6 +34,7 @@
     "verify:acp-launch": "node scripts/verify-acp-launch-content.mjs",
     "smoke:public-auth": "node scripts/smoke-public-auth.mjs",
     "smoke:public-api": "node scripts/smoke-public-api.mjs",
+    "proof:forum-notify-email": "node scripts/forum-notify-email-proof.mjs",
     "proof:forum-erasure": "node scripts/forum-erasure-proof.mjs",
     "proof:forum-moderation": "node scripts/forum-moderation-proof.mjs",
     "proof:forum-agent-surface": "node scripts/forum-agent-surface-proof.mjs",
