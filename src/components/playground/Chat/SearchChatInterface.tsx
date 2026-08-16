@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { IconButton, Spinner } from '@xenosystem/elements-react';
+import { Button, IconButton, SegmentedControl, Spinner } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Globe, ChevronDown, Eye, Brain, Check, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl, EditDecl, LightbulbDecl } from '@/lib/icons';
+import { Send, Globe, ChevronDown, Eye, Brain, Check, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl, EditDecl, LightbulbDecl, GlobeDecl, BotDecl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
@@ -1461,28 +1461,34 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               <div className="flex flex-col items-center justify-center h-full pt-16">
                 {/* Mode Toggle Tabs */}
                 <div className="flex items-center gap-2 mb-8">
-                  <button
+                  {/* The composer's pair one screen down is the same choice, and it is a
+                      `SegmentedControl` now — but these two are not connected, they sit apart with a
+                      gap, so the track that makes a segmented control one thing does not apply.
+                      `quiet` + `data-selection` instead. They lose `rounded-full` for the scale's
+                      8px doing it; a stadium is not on the radius scale, which runs hair/xs/sm/md/
+                      control/card and draws rounded squares throughout.
+                      Legible because these sit on `--chat-canvas` (#0a0a0a), where a #262626 fill
+                      reads — the elevated-surface collision in §9 does not reach here. */}
+                  <Button
+                    variant="quiet"
+                    size="md"
+                    leadingIcon={GlobeDecl}
+                    data-selection={searchMode === 'web' ? 'on' : 'off'}
+                    aria-pressed={searchMode === 'web'}
                     onClick={() => setSearchMode('web')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                      searchMode === 'web'
-                        ? 'bg-[var(--chat-surface)] border border-[var(--chat-border)] text-[var(--chat-text)]'
-                        : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
-                    }`}
                   >
-                    <Globe size={16} />
                     Web Search
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="quiet"
+                    size="md"
+                    leadingIcon={BotDecl}
+                    data-selection={searchMode === 'agent' ? 'on' : 'off'}
+                    aria-pressed={searchMode === 'agent'}
                     onClick={() => setSearchMode('agent')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                      searchMode === 'agent'
-                        ? 'bg-[var(--chat-surface)] border border-[var(--chat-border)] text-[var(--chat-text)]'
-                        : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
-                    }`}
                   >
-                    <Bot size={16} />
                     Agent Search
-                  </button>
+                  </Button>
                 </div>
 
                 {/* Feature Card */}
@@ -1665,30 +1671,24 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                 />
 
                 {/* Mode Toggle Buttons */}
-                <div className="flex items-center bg-[var(--chat-canvas)] border border-[var(--chat-border)] rounded-lg p-1">
-                  <button
-                    onClick={() => setSearchMode('web')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                      searchMode === 'web'
-                        ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
-                        : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
-                    }`}
-                  >
-                    <Globe size={14} />
-                    Web
-                  </button>
-                  <button
-                    onClick={() => setSearchMode('agent')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                      searchMode === 'agent'
-                        ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
-                        : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
-                    }`}
-                  >
-                    <Bot size={14} />
-                    Agent
-                  </button>
-                </div>
+                {/* Container and both buttons become ONE `<SegmentedControl>`, which is what this
+                    always was: a single-select of connected options inside a bordered track, the
+                    chosen one on an inset `--xeno-control` fill and the other a muted label. The
+                    hand-written version had the track, the padding and the two states; what it did
+                    not have is the thumb that travels between them.
+                    It needed a door first — `SegmentedOption` had no glyph slot, and dropping the
+                    globe and the bot would have been redrawing the control rather than taking it. */}
+                <SegmentedControl
+                  value={searchMode}
+                  onValueChange={(next) => setSearchMode(next as typeof searchMode)}
+                  size="md"
+                  iconSize={14}
+                  options={[
+                    { value: 'web', label: 'Web', icon: GlobeDecl },
+                    { value: 'agent', label: 'Agent', icon: BotDecl },
+                  ]}
+                  aria-label="Search mode"
+                />
               </div>
 
               {/* Send Button */}

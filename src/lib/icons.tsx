@@ -218,6 +218,8 @@ export {
   GPlus as PlusDecl,
   GDownload as DownloadDecl,
   GLightbulb as LightbulbDecl,
+  GGlobe as GlobeDecl,
+  GBot as BotDecl,
   GBookmark as BookmarkDecl,
   GArchive as ArchiveDecl,
   GLayers as LayersDecl,
