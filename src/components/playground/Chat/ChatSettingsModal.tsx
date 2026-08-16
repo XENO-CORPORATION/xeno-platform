@@ -275,6 +275,24 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
               <span className="mb-2 block text-[11px] font-bold uppercase tracking-wide text-[var(--chat-muted)]">
                 Chat width
               </span>
+              {/* Stays hand-written, and this one was CONVERTED and reverted — the measurement is
+                  the reason, so it is written down rather than left to be rediscovered.
+
+                  `quiet` + `data-selection` is how the other five selection families in this chat
+                  say "chosen": fill with `--xeno-control`, drop the outline. It is legible on the
+                  artifacts and scheduled pages because those chips sit on `--chat-canvas` (#0a0a0a)
+                  or `--chat-surface` (#171717). This dialog is `--chat-elevated`, and in the dark
+                  theme `--chat-elevated` and `--chat-control` are the SAME value, #262626. So the
+                  fill is invisible here and dropping the border removes the only edge the chosen
+                  segment had: photographed, "Default" and "Center" and "Medium" rendered as bare
+                  bold words between two outlined neighbours.
+
+                  `prefBtn` says it the other way — brighten the OUTLINE, never fill — which is the
+                  right answer on this surface and which no variant offers: `outline` is a normal
+                  border with full ink, and its brightening is a hover, not a selection.
+
+                  The fill-based selection has a surface precondition. That belongs in the design
+                  system, not in a workaround here (spec §9). */}
               <div className="flex gap-1.5">
                 <button
                   type="button"
@@ -283,6 +301,7 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                 >
                   Default
                 </button>
+                {/* Stays hand-written — the other half of the pair above. */}
                 <button
                   type="button"
                   onClick={() => onWideChatChange(true)}
@@ -298,6 +317,7 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                 Alignment
               </span>
               <div className="flex gap-1.5">
+                {/* Stays hand-written — the chat-width pair's reason, one group down. */}
                 {(['left', 'center', 'right'] as ChatAlignment[]).map((value) => (
                   <button
                     key={value}
@@ -316,6 +336,7 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                 Font size
               </span>
               <div className="flex gap-1.5">
+                {/* Stays hand-written — same surface, same reason. */}
                 {(['small', 'medium', 'large'] as ChatFontSize[]).map((value) => (
                   <button
                     key={value}

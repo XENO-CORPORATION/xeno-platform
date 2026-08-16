@@ -79,7 +79,10 @@ function documentedAbove(src, at) {
    * The guard against a comment being claimed by the wrong button is that no OTHER `<button` may
    * stand between the phrase and this one.
    */
-  const from = Math.max(0, at - 1400);
+  /* Wide enough for a reason that needed measurements in it. What prevents a comment being claimed
+     by the wrong control is the `<button` guard below, not a short window — a small window only
+     loses long reasons, which are the ones most worth keeping. */
+  const from = Math.max(0, at - 4000);
   const before = src.slice(from, at);
   const marker = before.lastIndexOf(MARKER);
   if (marker < 0) return false;

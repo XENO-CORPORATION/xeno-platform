@@ -198,6 +198,12 @@ ready for that call site: stop and add the door, do not convert around it.**
 
 **5.4 Dead imports.** §4.
 
+**5.4b A `{/* … */}` comment as the first thing inside `{cond && ( … )}` is a syntax error.** It has
+happened twice in this loop. `{cond && ( {/* why */} <Button/> )}` is two expressions where one is
+allowed, and esbuild says `Expected ")" but found ...`. Put the comment ABOVE the `{cond &&` line, or
+above the `return (`. Same for a comment as the sole child of a `return (`. The build gate catches
+it, which is why the build gate runs before the commit and not after.
+
 **5.5 A hook dropped on a grep that only looked at `src/`.** Twice now: the carousel's
 `data-update-carousel-dismiss` / `data-update-nav-morph`, and the composer's
 `data-composer-upload`. Each time the conversion left a comment saying the attribute was referenced
@@ -308,6 +314,19 @@ Re-deciding these costs more than it saves.
   flatten to one. **Do not substitute `--xeno-control` for either.** That exact substitution has been
   made once already in this project — `--chat-hover`, a pointer signal, used as a rest fill — and it
   would have shipped a chat where every chip looked permanently hovered.
+
+- **`quiet[data-selection=on]` has a surface precondition, and nothing states it.** It says "chosen"
+  by filling with `--xeno-control` and dropping the outline. In the dark theme `--chat-control` and
+  `--chat-elevated` are **the same value, `#262626`** — so on an elevated surface the fill is
+  invisible and removing the border takes away the only edge the chosen control had. Converted and
+  reverted once on the settings dialog's four preference groups, where it rendered the selected
+  segment as a bare bold word between two outlined neighbours.
+
+  It reads correctly on `--chat-canvas` (`#0a0a0a`) and `--chat-surface` (`#171717`), which is why
+  the artifacts, scheduled, settings-page and skills families all converted cleanly. **Check what the
+  control sits on before using it.** The design system's own answer for a selection on an elevated
+  surface — brighten the outline, as `prefBtn` does — has no variant: `outline` is a normal border at
+  full ink, and its brightening is a hover.
 
 - **The sort trigger's reveal.** Two pages now carry the same unconvertible control (artifacts,
   scheduled): a chevron that is not a leading icon but a 600ms padding reveal, sliding out from under
