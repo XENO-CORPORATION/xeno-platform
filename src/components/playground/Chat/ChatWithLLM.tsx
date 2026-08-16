@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, TextInput, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
+import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, Textarea, TextInput, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
 // The palettes and the preference that picks one live outside this file now: the CSS at the entry
 // point, the resolution beside it. This component still OWNS the switcher — it is the only thing that
 // writes these keys — but owning a setting never meant being the only place allowed to read it.
@@ -8131,9 +8131,6 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   // Render fn (not a nested component) so typing doesn't remount and steal focus.
   const renderCreateProjectModal = () => {
     const canCreate = newChatProjectName.trim().length > 0;
-    const fieldClassName =
-      'w-full rounded-lg px-3 py-2.5 text-[13px] text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none';
-
     return (
       <div
         className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} fixed top-0 right-0 bottom-0 z-[999] flex items-center justify-center p-4 backdrop-blur-sm`}
@@ -8253,23 +8250,22 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
               >
                 What are you trying to achieve?
               </label>
-              <textarea
+              {/* The name field's partner, and it converts on the same door: `.xeno-textarea` had
+                  15px written flat into it, so the library grew `fontSize` before this could be
+                  taken. Pinned at 13 the type does NOT move — this is a conversion, not the type
+                  change §7 reserves its own commit for.
+                  Everything else already matched: `px-3 py-2.5` IS the component's `10px 12px`, the
+                  fill was `--chat-canvas`, the inset shadow was standing in for its 1px border, and
+                  `resize-y` is its `resize: vertical`. The radius moves 8 → 12, onto the card step,
+                  and the focus ring accent → muted with the rest of this dialog. */}
+              <Textarea
+                fontSize={13}
                 id={`create-project-description-${interfaceId}`}
                 value={newChatProjectDescription}
                 onChange={(event) => setNewChatProjectDescription(event.target.value)}
                 placeholder="Describe your project, goals, subject, etc..."
                 rows={4}
-                className={`${fieldClassName} min-h-[6.5rem] resize-y`}
-                style={{
-                  backgroundColor: 'var(--chat-canvas)',
-                  boxShadow: 'inset 0 0 0 1px var(--chat-border)',
-                }}
-                onFocus={(event) => {
-                  event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-accent)';
-                }}
-                onBlur={(event) => {
-                  event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-border)';
-                }}
+                className="w-full min-h-[6.5rem] resize-y text-[var(--chat-text)] placeholder:text-[var(--chat-muted)]"
               />
             </div>
 
@@ -8319,18 +8315,6 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     if (!project || !projectSettings) return null;
 
     const activeSection = projectSettings.section;
-    const fieldStyle: React.CSSProperties = {
-      backgroundColor: 'var(--chat-canvas)',
-      boxShadow: 'inset 0 0 0 1px var(--chat-border)',
-    };
-    const fieldClassName =
-      'w-full rounded-lg px-3 py-2.5 text-[13px] text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none';
-    const focusField = (event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-accent)';
-    };
-    const blurField = (event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      event.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--chat-border)';
-    };
     const setActiveSection = (section: ProjectSettingsSection) => {
       setProjectSettings({ projectId: project.id, section });
     };
@@ -8494,10 +8478,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   >
                     Project name
                   </label>
-                  {/* The create dialog's name field, one dialog over and converted the same way.
-                      `fieldStyle`, `focusField` and `blurField` stay declared because the three
-                      textareas below still use them — this dialog's fields were always one shape, and
-                      only the single-line one has a component to take. */}
+                  {/* The create dialog's name field, one dialog over and converted the same way. Its
+                      two textareas followed once `Textarea` grew the same `fontSize` door, and
+                      `fieldStyle`, `fieldClassName`, `focusField` and `blurField` left with them —
+                      this dialog's fields were always one shape, and the shape is now a component
+                      rather than four consts and a pair of handlers per field. */}
                   <TextInput
                     size="lg"
                     fontSize={13}
@@ -8522,16 +8507,15 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   >
                     Description
                   </label>
-                  <textarea
+                  {/* The create dialog's description, one dialog over, same door and same pin. */}
+                  <Textarea
+                    fontSize={13}
                     id={`project-settings-description-${interfaceId}`}
                     value={settingsDescriptionDraft}
                     onChange={(event) => setSettingsDescriptionDraft(event.target.value)}
                     placeholder="Describe your project, goals, subject, etc..."
                     rows={8}
-                    className={`${fieldClassName} min-h-[10rem] resize-y sm:min-h-[14rem]`}
-                    style={fieldStyle}
-                    onFocus={focusField}
-                    onBlur={blurField}
+                    className="w-full min-h-[10rem] resize-y text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] sm:min-h-[14rem]"
                   />
                 </div>
               </div>
@@ -8543,14 +8527,18 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   Context and rules XENO follows for every chat in this project. These apply on top
                   of your global preferences and the chat's selected style.
                 </p>
-                <textarea
+                {/* The third of the trio, with one thing the other two did not have: it carried
+                    `leading-relaxed` (1.625) and `.xeno-textarea` owns line-height at 1.5. Keeping the
+                    class would have left the two rules fighting on cascade order, which is a
+                    coin-flip nobody can read from this file. Taking 1.5 is 1.5px less per line on a
+                    long instructions box, and it is a number the component states rather than one
+                    that depends on stylesheet order. */}
+                <Textarea
+                  fontSize={13}
                   value={instructionsDraft}
                   onChange={(event) => setInstructionsDraft(event.target.value)}
                   placeholder="e.g. Think step by step and show your reasoning for complex problems. Prefer concrete examples."
-                  className={`${fieldClassName} min-h-[12rem] flex-1 resize-y leading-relaxed sm:min-h-[14rem]`}
-                  style={fieldStyle}
-                  onFocus={focusField}
-                  onBlur={blurField}
+                  className="w-full min-h-[12rem] flex-1 resize-y text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] sm:min-h-[14rem]"
                 />
               </div>
             )}
