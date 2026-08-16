@@ -60,8 +60,22 @@ test('every flag on the same target resolves together', () => {
   // Three people reporting one post is ONE decision. Leaving the other two open
   // shows a reviewer a queue of work that has already been done.
   const body = fn('resolveFlag');
-  assert.match(body, /WHERE target_type = \$5 AND target_id = \$6 AND status IN \('open', 'reviewing'\)/,
+
+  // 🔴 THIS TEST ASSERTED THE BROKEN QUERY. It pinned the literal placeholder
+  // numbers `$5`/`$6` as a proxy for "resolves by target" — and those numbers
+  // were only what they were because a `flagId` sat unused at `$1`, which made
+  // the statement fail to prepare and meant NO MODERATOR COULD EVER RESOLVE A
+  // FLAG. The test was green throughout, and would have blocked the fix.
+  //
+  // Placeholder numbering is a MECHANISM. The property is: the UPDATE selects
+  // by TARGET and does not narrow to a single flag row.
+  const update = body.slice(body.indexOf('UPDATE forum_flags'));
+  assert.match(update, /WHERE target_type = \$\d+ AND target_id = \$\d+/,
     'the resolution must apply to the target, not just the one flag id.');
+  assert.match(update, /status IN \('open', 'reviewing'\)/,
+    'and only to flags that are still open.');
+  assert.doesNotMatch(update.slice(0, 400), /(WHERE|AND) id = \$/,
+    'narrowing to one flag row would leave the other reports on the same target open.');
 });
 
 test('an already-resolved flag cannot be resolved again', () => {
