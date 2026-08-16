@@ -293,6 +293,39 @@ async function main() {
   writePage('products', renderPage(template, null, indexHead));
   pages++;
 
+  // ── Site-level legal pages ────────────────────────────────────────────
+  //
+  // `/terms` and `/privacy` were never prerendered: every crawler, archiver and
+  // link-preview saw the SPA's generic <title> and no canonical, for the two
+  // pages whose entire job is to be the published record of a promise.
+  //
+  // ⚠️ WHAT THIS DOES AND DOES NOT DO. `renderPage` injects HEAD metadata only —
+  // title, description, canonical, OG, JSON-LD. The body still hydrates
+  // client-side, so the promise TEXT is still not in the HTML. Getting that
+  // would mean server-rendering a React page, which is a different project.
+  // Worth stating plainly because "prerendered" reads as "the text is there",
+  // and here it is not.
+  //
+  // 🔴 This does NOT loosen the de-index. The sitemap stays disabled below and
+  // `X-Robots-Tag: noindex` is set in nginx, independently of anything here.
+  // Correct metadata on a noindex page is for the human with the URL and the
+  // archive, not for Google.
+  for (const [route, title, desc] of [
+    ['terms', 'Terms of Service',
+     'The terms you agree to when you use XENO Studio — accounts, your content, acceptable use, and how the agreement ends.'],
+    ['privacy', 'Privacy Policy',
+     'What XENO Studio collects, how it is used, and what we never do with it — including that we do not train models on your content without your explicit consent.'],
+  ]) {
+    writePage(route, renderPage(template, null, privacyHeadFor({
+      title: `${title} — XENO Studio`,
+      desc,
+      canonical: `${SITE}/${route}`,
+      productName: 'XENO Studio',
+    })));
+    urls.push(`/${route}`);
+    pages++;
+  }
+
   // sitemap.xml — DISABLED 2026-08-11 while the site is being de-indexed.
   //
   // A sitemap is an active invitation: it hands Google a list of every URL and a

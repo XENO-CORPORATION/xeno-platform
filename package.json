@@ -5,10 +5,11 @@
   "description": "XENO Platform - Monorepo for xenostudio studio and core libraries",
   "scripts": {
     "start": "vite --host 0.0.0.0 --port 5183",
-    "test": "npm run test:release-guard && npm run test:product-pages && npm run test:registration-gate && npm run test:forum-ranker && npm run test:forum-notify && npm run test:forum-edit-delete && npm run test:forum-moderation && npm run test:forum-throttle && npm run test:forum-writeback && npm run test:forum-report && npm run test:forum-digest && npm run test:forum-agents && npm run test:forum-seed && npm run test:forum-search && npm run test:forum-smoke-gates && npm run test:forum-mcp && npm run test:forum-widget && npm run test:forum-parity && npm run test:forum-xss && npm run test:build-cache && npm run test:forum-columns && npm run test:sql-placeholders && npm run test:entitlements && npm run test:email && npm run test:account",
+    "test": "npm run test:release-guard && npm run test:product-pages && npm run test:registration-gate && npm run test:deindex-gate && npm run test:forum-ranker && npm run test:forum-notify && npm run test:forum-edit-delete && npm run test:forum-moderation && npm run test:forum-throttle && npm run test:forum-writeback && npm run test:forum-report && npm run test:forum-digest && npm run test:forum-agents && npm run test:forum-seed && npm run test:forum-search && npm run test:forum-smoke-gates && npm run test:forum-mcp && npm run test:forum-widget && npm run test:forum-parity && npm run test:forum-xss && npm run test:build-cache && npm run test:forum-columns && npm run test:sql-placeholders && npm run test:entitlements && npm run test:email && npm run test:account",
     "test:entitlements": "node --test scripts/entitlement-enforcement.test.mjs",
     "test:email": "node --test scripts/welcome-email.test.mjs",
     "test:account": "node --test scripts/spend-cap-enforcement.test.mjs scripts/security-events.test.mjs scripts/user-agent.test.mjs",
+    "test:deindex-gate": "node --test scripts/deindex-gate.test.mjs",
     "test:registration-gate": "node --test scripts/registration-gate.test.mjs scripts/client-ip.test.mjs",
     "test:forum-ranker": "node --test scripts/forum-ranker.test.mjs",
     "test:forum-edit-delete": "node --test scripts/forum-edit-delete.test.mjs scripts/forum-my-activity.test.mjs",
