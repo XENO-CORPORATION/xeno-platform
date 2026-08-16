@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Spinner } from '@xenosystem/elements-react';
+import { IconButton, Spinner } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Globe, X, ChevronDown, Eye, Brain, Check, SquarePen, StopCircle, Paperclip, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, ArrowLeft, Lightbulb, Trash2, Search as SearchIcon, Clock } from '@/lib/icons';
+import { Send, Globe, X, ChevronDown, Eye, Brain, Check, SquarePen, StopCircle, Paperclip, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, ArrowLeft, Lightbulb, Trash2, Search as SearchIcon, Clock, PaperclipDecl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
@@ -1629,12 +1629,13 @@ Based on these search results, provide a helpful, accurate, and concise answer t
             <div className="flex items-center justify-between px-3 pb-3">
               <div className="flex items-center gap-2">
                 {/* Attach Button */}
-                <button
-                  className="flex items-center justify-center w-9 h-9 rounded-lg text-[var(--chat-muted)] hover:text-[var(--chat-text)] hover:bg-[var(--chat-control)] transition-colors"
+                <IconButton
+                  icon={PaperclipDecl}
+                  variant="ghost"
+                  size="lg"
+                  iconSize={18}
                   title="Attach file"
-                >
-                  <Paperclip size={18} />
-                </button>
+                />
 
                 {/* Mode Toggle Buttons */}
                 <div className="flex items-center bg-[var(--chat-canvas)] border border-[var(--chat-border)] rounded-lg p-1">

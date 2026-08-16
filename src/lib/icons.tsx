@@ -233,6 +233,13 @@ export {
   GUserX as UserRoundXDecl,
   GShare as ShareDecl,
   GMore as MoreVerticalDecl,
+  GAttach as PaperclipDecl,
+  GChevronDown as ChevronDownDecl,
+  GChevronRight as ChevronRightDecl,
+  GPanelLeft as PanelLeftOpenDecl,
+  GCalendar as CalendarDecl,
+  GClock as ClockDecl,
+  GArrowRight as ArrowRightDecl,
 };
 
 /* Different name, same meaning. */

@@ -52,7 +52,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl } from '@/lib/icons';
+import { ArrowLeft, ArrowUp, ArrowUpRight, Clock, X, ChevronDown, ChevronRight, ChevronLeft, Plus, Download, Brain, Paperclip, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, ThumbsUp, ThumbsDown, Search, ExternalLink, Info, Feather, Target, Smile, BrainCircuit, MessageSquareX, Quote, Image, WandSparkles, FileX, Trash2, WrapText, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Share2, Monitor, MoreVertical, Archive, Layers, Briefcase, Shapes, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, UserRoundX, Star, Calendar, Contrast, Sliders, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -8241,14 +8241,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             >
               Create a project
             </h2>
-            <button
-              type="button"
+            <IconButton
+              icon={XDecl}
+              variant="ghost"
+              size="md"
+              iconSize={16}
               onClick={closeCreateProjectModal}
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
               aria-label="Close create project"
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
+            />
           </div>
 
           <div className="space-y-4 px-5 pb-5">
@@ -8867,15 +8867,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--chat-muted)]">
             Recent
           </span>
-          <button
-            type="button"
-            data-tool-panel-close
+          <IconButton
+            icon={XDecl}
+            variant="ghost"
+            size="sm"
+            iconSize={14}
             onClick={close}
             aria-label="Close Recent files"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-accent)]"
-          >
-            <X size={14} />
-          </button>
+          />
         </div>
         {recentFiles.length > 3 && (
           <div className="relative mb-2 flex-shrink-0">
@@ -8940,15 +8939,15 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                     </span>
                   </span>
                 </button>
-                <button
-                  type="button"
+                <IconButton
+                  icon={XDecl}
+                  variant="ghost"
+                  size="xs"
+                  iconSize={12}
                   onClick={() => handleRemoveRecentFile(file.id)}
-                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-[var(--chat-muted)] opacity-0 transition-opacity hover:text-[var(--chat-danger)] group-hover:opacity-100"
                   aria-label={`Remove ${file.name} from recent`}
                   title="Remove"
-                >
-                  <X size={12} aria-hidden="true" />
-                </button>
+                />
               </div>
             ))
           )}
@@ -11611,15 +11610,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   <ComposerRevealControls />
                   {/* Attach / Recent live on the hover tool rail (empty + conversation). */}
                   <div className="relative hidden">
-                      <button
-                          ref={attachButtonRef}
-                          onClick={toggleAttachMenu}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--chat-border)] text-[var(--chat-muted)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[var(--chat-border)] disabled:hover:bg-transparent disabled:hover:text-[var(--chat-muted)]"
-                          aria-label="Attach file"
-                          disabled={!modelSupportsVision(selectedModel)}
-                      >
-                          <Paperclip size={16} />
-                      </button>
+                      <IconButton
+                        icon={PaperclipDecl}
+                        variant="quiet"
+                        size="sm"
+                        iconSize={16}
+                        ref={attachButtonRef}
+                        onClick={toggleAttachMenu}
+                        aria-label="Attach file"
+                        disabled={!modelSupportsVision(selectedModel)}
+                      />
                       {/* Attach Menu */}
                       <div 
                           ref={attachMenuRef}
@@ -11722,16 +11722,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                </span>
                                              </div>
                                            </div>
-                                           <button 
+                                           <IconButton
+                                             icon={XDecl}
+                                             variant="ghost"
+                                             size="xs"
+                                             iconSize={14}
                                              onClick={(e) => {
                                                e.stopPropagation();
                                                handleRemoveRecentFile(file.id);
                                              }}
                                              aria-label="Remove"
-                                             className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-[var(--chat-muted)] opacity-0 transition-all hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] group-hover:opacity-100"
-                                           >
-                                                 <X size={14} />
-                                             </button>
+                                           />
                                          </div>
                                        ))
                                      )}
@@ -11800,13 +11801,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   {(isLoading || messages.some((m) => m.isStreaming)) ? (
                     // While generating OR typing out the answer: Queue (if typing) else Stop.
                     (inputValue.trim() || attachedFiles.length > 0) ? (
-                      <button
+                      <IconButton
+                        icon={PlusDecl}
+                        variant="ghost"
+                        size="sm"
+                        iconSize={16}
                         onClick={addToQueue}
                         title="Add this message to the queue"
-                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--chat-control)] text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-control-strong)]"
-                      >
-                        <Plus size={16} />
-                      </button>
+                      />
                     ) : (
                       <button
                         onClick={handleStopGeneration}
@@ -11833,17 +11835,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         className="voice-control relative flex items-center"
                         data-voice-menu-open={isVoiceModeMenuOpen ? 'true' : 'false'}
                       >
-                        <button
-                          type="button"
-                          data-voice-mode-trigger
+                        <IconButton
+                          icon={ChevronDownDecl}
+                          variant="ghost"
+                          size="sm"
+                          iconSize={15}
                           onClick={() => (isVoiceModeMenuOpen ? closeVoiceMenu() : openVoiceMenu())}
-                          className="absolute right-full mr-1 flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-control)] hover:text-[var(--chat-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-muted)]"
                           aria-label="Voice input options"
                           aria-expanded={isVoiceModeMenuOpen}
                           aria-haspopup="dialog"
-                        >
-                          <ChevronDown size={15} aria-hidden="true" />
-                        </button>
+                        />
                         <button
                           type="button"
                           data-voice-primary
@@ -12866,15 +12867,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             className="absolute z-[60] flex h-9 items-center gap-1.5 text-[var(--chat-text)]"
             style={{ top: CHAT_CHROME_TOP_INSET_PX, left: CHAT_CHROME_EDGE_INSET_PX }}
           >
-            <button
-              type="button"
+            <IconButton
+              icon={PanelLeftOpenDecl}
+              variant="quiet"
+              size="lg"
+              iconSize={16}
               onClick={() => setIsHistoryOpen(true)}
               aria-label="Open conversation history"
               title="Open history"
-              className="animate-chat-history-chrome-enter flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--chat-border)] text-[var(--chat-text)]/80 transition-colors hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98]"
-            >
-              <PanelLeftOpen size={16} aria-hidden="true" />
-            </button>
+            />
             <button
               type="button"
               onClick={() => {
@@ -12970,19 +12971,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               <div className="mx-auto flex h-full w-full max-w-[48rem] flex-col px-4 sm:px-6">
                 <div className="flex flex-shrink-0 items-center justify-between gap-3 pt-6 pb-3 md:pt-8">
                   <div className="flex min-w-0 items-center gap-2">
-                    <button
-                      type="button"
+                    <IconButton
+                      icon={ArrowRightDecl}
+                      className="chat-icon-flip-x"
+                      variant="ghost"
+                      size="md"
+                      iconSize={16}
                       onClick={() => {
                         setIsChatsCatalogOpen(false);
                         exitCatalogSelection();
                         setIsChatsCatalogFilterOpen(false);
                       }}
-                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                       aria-label="Close chats and tasks"
                       title="Back"
-                    >
-                      <ArrowLeft size={16} aria-hidden="true" />
-                    </button>
+                    />
                     <h2 className="truncate text-[1.5rem] font-medium tracking-tight text-[var(--chat-text)] md:text-[1.75rem]">
                       Chats and tasks
                     </h2>
@@ -13038,19 +13040,19 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           Delete
                         </button>
                       )}
-                      <button
-                        type="button"
+                      <IconButton
+                        icon={XDecl}
+                        variant="ghost"
+                        size="md"
+                        iconSize={14}
                         onClick={exitCatalogSelection}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
                         style={{
                           backgroundColor: 'var(--chat-control)',
                           color: 'var(--chat-text)',
                         }}
                         aria-label="Exit selection"
                         title="Close"
-                      >
-                        <X size={14} aria-hidden="true" />
-                      </button>
+                      />
                     </div>
                   ) : (
                     <div className="flex flex-shrink-0 items-center gap-2">
@@ -13531,9 +13533,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 )}
                               </div>
                               <div className="relative flex-shrink-0" data-project-card-menu>
-                                <button
-                                  type="button"
-                                  className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                                <IconButton
+                                  icon={MoreVerticalDecl}
+                                  variant="ghost"
+                                  size="sm"
+                                  iconSize={15}
                                   aria-label={`More options for ${project.name}`}
                                   aria-haspopup="menu"
                                   aria-expanded={openProjectMenuId === project.id}
@@ -13544,9 +13548,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       current === project.id ? null : project.id,
                                     );
                                   }}
-                                >
-                                  <MoreVertical size={15} aria-hidden="true" />
-                                </button>
+                                />
                                 {openProjectMenuId === project.id && (
                                   <div
                                     {...(() => { const { ref: _g, className: _c, ...handlers } = projectMenuGoo.hostProps; return handlers; })()}
@@ -13801,15 +13803,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               >
                 <div className="mx-auto w-full max-w-[52rem] px-4 sm:px-6">
                   <div className="mt-6 mb-5 flex items-center md:mt-8">
-                    <button
-                      type="button"
+                    <IconButton
+                      icon={ChevronRightDecl}
+                      className="chat-icon-flip-x"
+                      variant="ghost"
+                      size="md"
+                      iconSize={18}
                       onClick={closeProject}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                       aria-label="Back to projects"
                       title="Back to projects"
-                    >
-                      <ChevronLeft size={18} aria-hidden="true" />
-                    </button>
+                    />
                   </div>
 
                   <div className="flex items-start justify-between gap-3">
@@ -13817,19 +13820,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       {project.name}
                     </h1>
                     <div className="flex flex-shrink-0 items-center gap-0.5">
-                      <button
-                        type="button"
+                      <IconButton
+                        icon={StarDecl}
+                        variant="ghost"
+                        size="md"
+                        iconSize={16}
                         onClick={() => handleToggleProjectStar(project.id)}
-                        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                         aria-label={project.isStarred ? 'Unstar project' : 'Star project'}
                         title={project.isStarred ? 'Unstar' : 'Star'}
-                      >
-                        <Star
-                          size={16}
-                          className={project.isStarred ? 'fill-current text-[var(--chat-accent)]' : ''}
-                          aria-hidden="true"
-                        />
-                      </button>
+                      />
                       <button
                         type="button"
                         onClick={() => setIsProjectSidebarOpen((open) => !open)}
@@ -13947,15 +13946,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             <span className="truncate text-[13px] font-semibold leading-snug tracking-tight text-[var(--chat-text)]">
                               Settings
                             </span>
-                            <button
-                              type="button"
+                            <IconButton
+                              icon={MoreVerticalDecl}
+                              variant="ghost"
+                              size="sm"
+                              iconSize={16}
                               onClick={() => openProjectSettings(project, 'general')}
-                              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                               aria-label="Open project settings"
                               title="Project settings"
-                            >
-                              <MoreVertical size={16} aria-hidden="true" />
-                            </button>
+                            />
                           </div>
                           <div className="px-1 pb-1.5 pt-0.5">
                             <button
@@ -14037,23 +14036,23 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               <span aria-hidden="true" />
                             )}
                             <div className="flex items-center justify-end">
-                              <button
-                                type="button"
-                                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
+                              <IconButton
+                                icon={SearchDecl}
+                                variant="ghost"
+                                size="sm"
+                                iconSize={15}
                                 aria-label="Search files"
                                 title="Search files"
-                              >
-                                <Search size={15} aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
+                              />
+                              <IconButton
+                                icon={PlusDecl}
+                                variant="ghost"
+                                size="sm"
+                                iconSize={16}
                                 onClick={() => projectFileInputRef.current?.click()}
-                                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                                 aria-label="Add file"
                                 title="Upload a file"
-                              >
-                                <Plus size={16} aria-hidden="true" />
-                              </button>
+                              />
                             </div>
                           </div>
 
@@ -14136,15 +14135,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             <span className="truncate text-[13px] font-semibold leading-snug tracking-tight text-[var(--chat-text)]">
                               Scheduled
                             </span>
-                            <button
-                              type="button"
+                            <IconButton
+                              icon={PlusDecl}
+                              variant="ghost"
+                              size="sm"
+                              iconSize={16}
                               onClick={openProjectScheduledCreate}
-                              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                               aria-label="Add scheduled task"
                               title="Add scheduled task"
-                            >
-                              <Plus size={16} aria-hidden="true" />
-                            </button>
+                            />
                           </div>
                           <div className="flex flex-col gap-1.5 px-1 pb-1.5 pt-0.5">
                             {projectScheduled.map((task) => (
@@ -15891,14 +15890,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     )}
                     {projectFilePreviewCopied ? 'Copied' : 'Copy'}
                   </button>
-                  <button
-                    type="button"
+                  <IconButton
+                    icon={XDecl}
+                    variant="ghost"
+                    size="md"
+                    iconSize={16}
                     onClick={closeProjectFilePreview}
-                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                     aria-label="Close file preview"
-                  >
-                    <X size={16} aria-hidden="true" />
-                  </button>
+                  />
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                   <pre className="whitespace-pre-wrap break-words font-mono text-[13.5px] leading-relaxed text-[var(--chat-text)]">
@@ -15961,14 +15960,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   >
                     Scheduled task
                   </h2>
-                  <button
-                    type="button"
+                  <IconButton
+                    icon={XDecl}
+                    variant="ghost"
+                    size="md"
+                    iconSize={16}
                     onClick={closeProjectScheduledPreview}
-                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                     aria-label="Close scheduled task"
-                  >
-                    <X size={16} aria-hidden="true" />
-                  </button>
+                  />
                 </div>
                 <div className="flex flex-col gap-4 px-4 py-4">
                   <div>
@@ -16054,14 +16053,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   >
                     Add scheduled task
                   </h2>
-                  <button
-                    type="button"
+                  <IconButton
+                    icon={XDecl}
+                    variant="ghost"
+                    size="md"
+                    iconSize={16}
                     onClick={closeProjectScheduledCreate}
-                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                     aria-label="Close add scheduled task"
-                  >
-                    <X size={16} aria-hidden="true" />
-                  </button>
+                  />
                 </div>
                 <div className="flex flex-col gap-3 px-4 py-4">
                   <label className="block">
@@ -16232,8 +16231,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     projectScheduledCreateSchedule.date,
                                   )}
                                 </span>
-                                <button
-                                  type="button"
+                                <IconButton
+                                  icon={CalendarDecl}
+                                  variant="ghost"
+                                  size="sm"
+                                  iconSize={14}
                                   onClick={toggleProjectScheduleDatePicker}
                                   aria-label={
                                     isProjectScheduleDateOpen
@@ -16241,10 +16243,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       : 'Open calendar'
                                   }
                                   aria-expanded={isProjectScheduleDateOpen}
-                                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                                >
-                                  <Calendar size={14} aria-hidden="true" />
-                                </button>
+                                />
                               </div>
                               {isProjectScheduleDateMounted && (
                                 <div
@@ -16294,8 +16293,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       )}
                                     </span>
                                     <div className="flex items-center gap-0.5">
-                                      <button
-                                        type="button"
+                                      <IconButton
+                                        icon={ChevronRightDecl}
+                                        className="chat-icon-flip-x"
+                                        variant="ghost"
+                                        size="sm"
+                                        iconSize={14}
                                         onClick={() =>
                                           setProjectScheduleCalendarMonth(
                                             (month) =>
@@ -16306,13 +16309,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               ),
                                           )
                                         }
-                                        className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                                         aria-label="Previous month"
-                                      >
-                                        <ChevronLeft size={14} aria-hidden="true" />
-                                      </button>
-                                      <button
-                                        type="button"
+                                      />
+                                      <IconButton
+                                        icon={ChevronRightDecl}
+                                        variant="ghost"
+                                        size="sm"
+                                        iconSize={14}
                                         onClick={() =>
                                           setProjectScheduleCalendarMonth(
                                             (month) =>
@@ -16323,11 +16326,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               ),
                                           )
                                         }
-                                        className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                                         aria-label="Next month"
-                                      >
-                                        <ChevronRight size={14} aria-hidden="true" />
-                                      </button>
+                                      />
                                     </div>
                                   </div>
                                   <div className="grid grid-cols-7 gap-0.5 px-2 pb-1">
@@ -16502,8 +16502,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 projectScheduledCreateSchedule.time,
                               )}
                             </span>
-                            <button
-                              type="button"
+                            <IconButton
+                              icon={ClockDecl}
+                              variant="ghost"
+                              size="sm"
+                              iconSize={14}
                               onClick={toggleProjectScheduleTimePicker}
                               aria-label={
                                 isProjectScheduleTimeOpen
@@ -16511,10 +16514,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                   : 'Open time picker'
                               }
                               aria-expanded={isProjectScheduleTimeOpen}
-                              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                            >
-                              <Clock size={14} aria-hidden="true" />
-                            </button>
+                            />
                           </div>
                           {isProjectScheduleTimeMounted && (
                             <div
@@ -16787,18 +16787,19 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   style={{ borderColor: 'var(--chat-border)' }}
                 >
                   {chatFilesSelected ? (
-                    <button
-                      type="button"
+                    <IconButton
+                      icon={ChevronRightDecl}
+                      className="chat-icon-flip-x"
+                      variant="ghost"
+                      size="md"
+                      iconSize={16}
                       onClick={() => {
                         setChatFilesSelectedKey(null);
                         setChatFilesCopied(false);
                       }}
-                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                       aria-label="Back to files list"
                       title="Back"
-                    >
-                      <ChevronLeft size={16} aria-hidden="true" />
-                    </button>
+                    />
                   ) : (
                     <FileText
                       size={14}
@@ -16827,14 +16828,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       {chatFilesCopied ? 'Copied' : 'Copy'}
                     </button>
                   )}
-                  <button
-                    type="button"
+                  <IconButton
+                    icon={XDecl}
+                    variant="ghost"
+                    size="md"
+                    iconSize={16}
                     onClick={closeChatFilesModal}
-                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                     aria-label="Close files in chat"
-                  >
-                    <X size={16} aria-hidden="true" />
-                  </button>
+                  />
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                   {chatFilesSelected ? (
@@ -17561,19 +17562,19 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               onClick={(e) => e.stopPropagation()}
                               className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0.5 text-[13px] text-[var(--chat-text)] focus:outline-none"
                             />
-                            <button
-                              type="button"
+                            <IconButton
+                              icon={CheckDecl}
+                              variant="ghost"
+                              size="xs"
+                              iconSize={12}
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleSaveConversationTitle();
                               }}
-                              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)]"
                               aria-label="Confirm rename"
                               title="Save"
-                            >
-                              <Check size={12} />
-                            </button>
+                            />
                                        </div>
                                      ) : (
                           <span className="flex min-w-0 items-center gap-1.5">
@@ -17593,9 +17594,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
                           }`}
                         >
-                                           <button 
-                            type="button"
-                            data-history-row-menu-trigger=""
+                                           <IconButton
+                                             icon={MoreVerticalDecl}
+                                             variant="ghost"
+                                             size="sm"
+                                             iconSize={14}
+                                             data-history-row-menu-trigger=""
                                              onClick={(e) => {
                                                e.stopPropagation();
                               const rect = e.currentTarget.getBoundingClientRect();
@@ -17612,14 +17616,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               );
                               toggleHistoryRowMenu(convo.id, rect.bottom + 4, left);
                             }}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                            aria-label="Conversation actions"
-                            aria-haspopup="menu"
-                            aria-expanded={menuOpen}
-                            title="More options"
-                          >
-                            <MoreVertical size={14} />
-                                             </button>
+                                             aria-label="Conversation actions"
+                                             aria-haspopup="menu"
+                                             aria-expanded={menuOpen}
+                                             title="More options"
+                                           />
                                          </div>
                           </div>
                     );

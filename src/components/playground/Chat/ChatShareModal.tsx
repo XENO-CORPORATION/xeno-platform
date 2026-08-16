@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useDialog } from '@xenosystem/elements-react';
-import { Building, Check, Copy, Globe, Lock, X } from '@/lib/icons';
+import { IconButton, useDialog } from '@xenosystem/elements-react';
+import { Building, Check, Copy, Globe, Lock, X, XDecl } from '@/lib/icons';
 import {
   VISIBILITY_OPTIONS,
   buildSocialShareUrl,
@@ -270,14 +270,14 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
                 : 'Public and team links can be reshared. Delete anytime.'}
             </p>
           </div>
-          <button
-            type="button"
+          <IconButton
+            icon={XDecl}
+            variant="ghost"
+            size="lg"
+            iconSize={16}
             onClick={onClose}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] sm:h-8 sm:w-8"
             aria-label="Close share dialog"
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
+          />
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">

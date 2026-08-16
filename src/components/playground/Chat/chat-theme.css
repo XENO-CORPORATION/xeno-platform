@@ -1,5 +1,6 @@
 /*
- * The chat's three palettes, and the bridge that hands them to the element library.
+ * The chat's own stylesheet: the three palettes, the bridge that hands them to the element library,
+ * and the handful of rules every chat surface needs regardless of which one is mounted.
  *
  * These lived in a <style> element inside ChatWithLLM's JSX, which meant they existed only while that
  * component was mounted. Every other chat surface is a sibling route -- the search interface is at
@@ -134,4 +135,21 @@
   --xeno-danger: var(--chat-danger);
   --xeno-danger-hover: var(--chat-danger-hover);
   --xeno-on-accent: var(--chat-on-accent);
+}
+
+/* ── Mirrored glyphs ───────────────────────────────────────────────────────────────────
+   The library draws `arrow-right` and `chevron-right` and no left-pointing twin, deliberately: one
+   geometry, mirrored where it is used. The facade does that with an inline `scale` on the glyph it
+   renders, which works for a bare icon and cannot reach the glyph inside an `<IconButton>` — the
+   component owns that element.
+
+   So the mirror becomes a class the button can wear. Same mechanism as the facade's, and for the same
+   two reasons. `scale` and never `transform`, because a glyph's hover animation owns `transform` and
+   an animation beats an inline style — a transform-based mirror snaps back the instant the icon
+   moves. And the origin is pinned to the centre, because `arrow-right` sets `transform-origin: left
+   center` so it can shoot forward from its tail; mirrored about that edge it lands one full width
+   outside the button that holds it. */
+.chat-icon-flip-x .xeno-element {
+  scale: -1 1;
+  transform-origin: center;
 }
