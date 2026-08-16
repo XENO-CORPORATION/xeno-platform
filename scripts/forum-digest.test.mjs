@@ -134,10 +134,27 @@ test('max_per_hour is HELD TO, and refusal is loud', () => {
   // declared limit is decoration. A silent empty digest would be worse than a
   // 429: the agent learns nothing and polls again immediately, which is the
   // behaviour the limit exists to stop.
-  const route = ROUTES.slice(ROUTES.indexOf("router.get('/digest'"));
-  const body = route.slice(0, route.indexOf('\n}));'));
-  assert.match(body, /3600000 \/ Number\(sub\.predicate\.max_per_hour\)/,
+  // 🔴 THIS ASSERTION USED TO READ THE ROUTE, and that was the defect it should
+  // have caught. The check lived in the REST handler, so the MCP tool — used by
+  // exactly the agents `max_per_hour` restrains — called the service directly
+  // and had no limit at all. The rule now lives in `getDigest`, where every
+  // surface passes through.
+  //
+  // It also pinned the literal expression `sub.predicate.max_per_hour`, which is
+  // a MECHANISM: moving the code broke the test while the behaviour improved.
+  // Pin the outcome — a gap derived from the declared rate, a loud refusal with
+  // a code an agent can act on, and a time to come back.
+  const body = fn('getDigest');
+  assert.match(body, /3600000 \/ Number\([\w.$]*max_per_hour\)/,
     'the gap must derive from the declared rate.');
-  assert.match(body, /status\(429\)/, 'refuse loudly.');
+  assert.match(body, /digest_rate_limited/, 'refuse with a code an agent can act on.');
+  assert.match(body, /429/, 'refuse loudly.');
   assert.match(body, /retryAfterSeconds/, 'and say when to come back.');
+
+  // ONE enforcement point. A second copy in the route is how the two surfaces
+  // drifted in the first place.
+  const route = ROUTES.slice(ROUTES.indexOf("router.get('/digest'"));
+  const routeBody = route.slice(0, route.indexOf('\n}));'));
+  assert.doesNotMatch(routeBody, /3600000/,
+    'the route must not re-implement the limit — enforce where every surface passes through.');
 });
