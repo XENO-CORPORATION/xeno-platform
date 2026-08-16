@@ -83,7 +83,20 @@ async function applySchema() {
 
   for (const f of files) {
     try {
-      await pool.query(readFileSync(join(MIGRATIONS, f), 'utf8'));
+      // 🔴 ONLY THE UP SECTION. These files carry `-- UP` and `-- DOWN`, and
+      // running the whole file creates every table and then DROPS them —
+      // succeeding, silently, with nothing to show for it. That is exactly what
+      // happened: `forum-tables.sql` "applied" and left zero forum tables, and
+      // the next migration failed on a relation the previous one had just
+      // deleted.
+      //
+      // Split the same way `services/migrationRunner.js` does, because a second
+      // interpretation of the migration format is a second thing to keep in
+      // sync — which is the whole lesson of the fixtures this job exists beside.
+      const sql = readFileSync(join(MIGRATIONS, f), 'utf8')
+        .split(/^--\s*DOWN/im)[0]
+        .replace(/^--\s*UP.*$/im, '');
+      await pool.query(sql);
       console.log(`  applied ${f}`);
     } catch (err) {
       // Say what DOES exist. "relation X does not exist" while applying
