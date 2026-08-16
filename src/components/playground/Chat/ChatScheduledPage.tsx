@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Button, IconButton, MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/elements-react';
-import { ChevronDown, Clock, Pause, Trash2Decl, SearchDecl, PauseDecl, PlayDecl } from '@/lib/icons';
+import { Clock, Pause, Trash2Decl, SearchDecl, ChevronDownDecl, PauseDecl, PlayDecl } from '@/lib/icons';
 import {
   SCHEDULED_STATUS_LABEL,
   createScheduledTask,
@@ -193,45 +193,22 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
       <div className="mx-auto flex h-full w-full max-w-[56rem] flex-col px-4 sm:px-6">
         <div className="flex min-h-[2.75rem] flex-shrink-0 items-center justify-between gap-3 pt-6 pb-4 md:min-h-[3rem] md:pt-8 md:pb-5">
           <div className="relative" data-scheduled-sort-menu="">
-            {/* Stays hand-written — the artifacts page's sort trigger, and the same blocker. The
-                chevron is not a leading icon but a REVEAL: the button's left padding grows from 12
-                to 32 over 600ms while the glyph slides out from under a label that carries its own
-                background, so it passes behind the text. That needs the chevron as an absolutely
-                positioned child, and `leadingIcon` is a slot in a flex row.
-                The fill is the other half: a filled button with no border, and the only
-                fill-without-border in the variant set is `quiet[data-selection=on]`, which means
-                "the panel I opened is on screen" — not what this says at rest. */}
-            <button
-              type="button"
+            {/* The artifacts page's sort trigger, and it converts the same way now that `iconReveal`
+                exists. Two pages carrying the same unconvertible control was the argument for
+                answering it once in the library rather than commenting it a third time. */}
+            <Button
+              variant="secondary"
+              size="sm"
+              iconSize={13}
+              iconReveal
+              leadingIcon={ChevronDownDecl}
               onClick={() => setIsSortOpen((open) => !open)}
-              className={`group relative flex items-center overflow-hidden ${RADIUS} py-1.5 pr-3 pl-3 text-[12.5px] hover:pl-8`}
-              style={{
-                backgroundColor: 'var(--chat-control)',
-                color: 'var(--chat-text)',
-                willChange: 'padding',
-                transition: 'padding 600ms cubic-bezier(0.22, 1, 0.36, 1)',
-              }}
               aria-haspopup="menu"
               aria-expanded={isSortOpen}
               aria-label={`Sort by ${SORT_LABELS[sort]}`}
             >
-              <ChevronDown
-                size={13}
-                className="pointer-events-none absolute left-2.5 z-0 translate-x-5 text-[var(--chat-muted)] opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
-                style={{
-                  willChange: 'opacity, transform',
-                  transition:
-                    'opacity 600ms cubic-bezier(0.22, 1, 0.36, 1), transform 600ms cubic-bezier(0.22, 1, 0.36, 1)',
-                }}
-                aria-hidden="true"
-              />
-              <span
-                className="relative z-10 pl-0.5 font-medium text-[var(--chat-text)]"
-                style={{ backgroundColor: 'var(--chat-control)' }}
-              >
-                {SORT_LABELS[sort]}
-              </span>
-            </button>
+              {SORT_LABELS[sort]}
+            </Button>
             {isSortOpen && (
               <div
                 {...(() => { const { ref: _g, className: _c, ...handlers } = sortGoo.hostProps; return handlers; })()}

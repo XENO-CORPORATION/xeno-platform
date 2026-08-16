@@ -360,10 +360,11 @@ Re-deciding these costs more than it saves.
   variant to convert to. Fixing it means the bridge carrying the chrome tokens as well, which is one
   more line per token and the owner's call about which construction the chat is wearing.
 
-- **The sort trigger's reveal.** Two pages now carry the same unconvertible control (artifacts,
-  scheduled): a chevron that is not a leading icon but a 600ms padding reveal, sliding out from under
-  a label that carries its own background. `leadingIcon` is a slot in a flex row and that is the one
-  place it cannot be. Worth one library answer rather than a third comment.
+- ~~**The sort trigger's reveal.**~~ **Closed.** `Button` carries `iconReveal` now: the glyph goes out
+  of flow behind the label, the box opens on its left, and both pages converted. Measured on the
+  running chat — at rest `opacity: 0` and parked `translate: 22px` right of where it lands; on hover
+  `padding-left: 32px`, which is what `hover:pl-8` said by hand. The remaining §9 entries are all
+  colour or token questions, and none of them is a component's to answer.
 
 - **7 `ReferenceError`s** outside the chat — Office, AudioGeneration, ImageStudio. `npm run
   check:names` lists them with file and line. The fixes need their authors' intent (`smoothStroke`

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/elements-react';
-import { ChevronDown, Copy, File, FileImage, FileText, Shapes, SearchDecl, CheckDecl, CopyDecl } from '@/lib/icons';
+import { Copy, File, FileImage, FileText, Shapes, SearchDecl, CheckDecl, ChevronDownDecl, CopyDecl } from '@/lib/icons';
 import {
   ARTIFACT_KIND_LABEL,
   deleteArtifact,
@@ -190,46 +190,27 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
       <div className="mx-auto flex h-full w-full max-w-[48rem] flex-col px-4 sm:px-6">
         <div className="flex min-h-[2.75rem] flex-shrink-0 items-center justify-between gap-3 pt-6 pb-4 md:min-h-[3rem] md:pt-8 md:pb-5">
           <div className="relative" data-artifacts-sort-menu="">
-            {/* Stays hand-written. The glyph here is not a leading icon, it is a REVEAL: the button's
-                left padding grows from 12 to 32 over 600ms while the chevron slides out from under
-                the label, which carries its own background so the glyph passes behind it. That needs
-                the chevron as an absolutely-positioned child of the button, and `leadingIcon` is a
-                slot in a flex row — the one thing it cannot be is somewhere else.
-                The fill is the other half: this is a filled button with no border, and the variants
-                pair those two. `quiet[data-selection=on]` is the only fill-without-border in the set
-                and it means "the panel I opened is on screen", which is a different sentence from
-                what this button says at rest. */}
-            <button
-              type="button"
+            {/* The reveal is a library mode now: `iconReveal`. The glyph waits under the label and
+                slides out from beneath it while the box opens on its left — which is what the twenty
+                lines of hand-written padding, translate and z-index did here, and why this stayed
+                hand-written through two passes. `leadingIcon` is a slot in a flex row; a revealed
+                glyph has to be out of flow and BEHIND the text, and `Button` carries that shape now.
+                The gutter the mode opens is `padx + glyph + gap`, which at `sm` is 32px — exactly
+                what `hover:pl-8` said by hand. `secondary` brings a hairline the filled-no-border
+                original did not have: the same trade every other filled control in this chat took. */}
+            <Button
+              variant="secondary"
+              size="sm"
+              iconSize={13}
+              iconReveal
+              leadingIcon={ChevronDownDecl}
               onClick={() => setIsSortOpen((open) => !open)}
-              className="group relative flex items-center overflow-hidden rounded-lg py-1.5 pr-3 pl-3 text-[12.5px] hover:pl-8"
-              style={{
-                backgroundColor: 'var(--chat-control)',
-                color: 'var(--chat-text)',
-                willChange: 'padding',
-                transition: 'padding 600ms cubic-bezier(0.22, 1, 0.36, 1)',
-              }}
               aria-haspopup="menu"
               aria-expanded={isSortOpen}
               aria-label={`Sort by ${SORT_LABELS[sort]}`}
             >
-              <ChevronDown
-                size={13}
-                className="pointer-events-none absolute left-2.5 z-0 translate-x-5 text-[var(--chat-muted)] opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
-                style={{
-                  willChange: 'opacity, transform',
-                  transition:
-                    'opacity 600ms cubic-bezier(0.22, 1, 0.36, 1), transform 600ms cubic-bezier(0.22, 1, 0.36, 1)',
-                }}
-                aria-hidden="true"
-              />
-              <span
-                className="relative z-10 pl-0.5 font-medium text-[var(--chat-text)]"
-                style={{ backgroundColor: 'var(--chat-control)' }}
-              >
-                {SORT_LABELS[sort]}
-              </span>
-            </button>
+              {SORT_LABELS[sort]}
+            </Button>
             {isSortOpen && (
               <div
                 {...(() => { const { ref: _g, className: _c, ...handlers } = sortGoo.hostProps; return handlers; })()}
