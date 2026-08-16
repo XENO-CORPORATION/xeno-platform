@@ -328,6 +328,27 @@ Re-deciding these costs more than it saves.
   surface — brighten the outline, as `prefBtn` does — has no variant: `outline` is a normal border at
   full ink, and its brightening is a hover.
 
+- **A converted `secondary` fills one step darker than the hand-written button it replaces, and it
+  is not the component's fault.** `ChatWithLLM.tsx` carries a legacy theme-normalisation block that
+  force-maps old hardcoded hex fills onto the chat tokens. Two of its rules name the SAME selector:
+
+  ```css
+  .chat-themed [class*="bg-[var(--chat-control)]"] { background-color: var(--chat-control) !important; }
+  .chat-themed [class*="bg-[var(--chat-control)]"] { background-color: var(--chat-control-strong) !important; }
+  ```
+
+  Same specificity, so the later one wins and every hand-written `bg-[var(--chat-control)]` in the
+  chat actually paints `--chat-control-strong` — **#404040, not #262626**. Measured: the settings
+  dialog's selected tab reads `rgb(64, 64, 64)`; the `secondary` Buttons converted from the same
+  class read `rgb(38, 38, 38)`, because the rule is keyed on a Tailwind class substring and a library
+  component has no such class in its `class` attribute.
+
+  So every `secondary` conversion so far — Save, Add, Create skill, Import skill, Connect, Install —
+  is one step darker than what it replaced. **Do not "fix" this at a call site.** Either that
+  duplicated rule is a mistake and `--chat-control` is right, or the chat means `--chat-control-strong`
+  for a filled control and the bridge in `chat-theme.css` should say `--xeno-control: var(--chat-control-strong)`.
+  That is one decision for the owner, and it also settles the surface collision above.
+
 - **The sort trigger's reveal.** Two pages now carry the same unconvertible control (artifacts,
   scheduled): a chevron that is not a leading icon but a 600ms padding reveal, sliding out from under
   a label that carries its own background. `leadingIcon` is a slot in a flex row and that is the one

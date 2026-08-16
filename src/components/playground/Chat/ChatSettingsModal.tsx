@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Download, Plus, Settings, XDecl } from '@/lib/icons';
+import { DownloadDecl, PlusDecl, Settings, XDecl } from '@/lib/icons';
 import {
   getChatPersonaId,
   listPersonas,
   setChatPersonaId,
   type ChatPersona,
 } from './chatCustomize';
-import { IconButton, useDialog, useTabs } from '@xenosystem/elements-react';
+import { Button, IconButton, useDialog, useTabs } from '@xenosystem/elements-react';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 
 export type ChatFontSize = 'small' | 'medium' | 'large';
@@ -152,6 +152,14 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
         >
           {SECTIONS.map(({ id, label }) => {
             const active = section === id;
+            /* Stays hand-written, for the surface reason in §9 and with a twist worth recording.
+               This dialog is `--chat-elevated`, which equals `--chat-control` in dark (#262626), so
+               a converted `quiet[data-selection=on]` would fill it invisibly and drop its outline.
+               The hand-written tab escapes that only by accident: ChatWithLLM carries a legacy
+               normalisation block that force-maps any class containing `bg-[var(--chat-control)]` to
+               `--chat-control-strong` with `!important`. The selector is listed TWICE with two
+               different answers and the later one wins, so this tab actually paints #404040 —
+               measured. A library component has no such class, so the rule cannot reach it. */
             return (
               <button
                 key={id}
@@ -204,6 +212,11 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                 <div className="flex flex-wrap gap-1.5">
                   {personas.map((persona) => {
                     const active = chatPersonaId === persona.id;
+                    /* Stays hand-written: a 68px tile, not a button. It stacks a name over a
+                       two-line description with `flex-col items-start justify-between` and flexes to
+                       a third of the row, where a `Button` is a centred inline row. Its selected
+                       state also brightens the BORDER and fills with `--chat-surface`, which is the
+                       same sentence the preference groups say and which no variant offers. */
                     return (
                       <button
                         key={persona.id}
@@ -356,8 +369,18 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                   Interfaces
                 </span>
                 <div className="flex flex-col gap-1.5">
-                  <button
-                    type="button"
+                  {/* `quiet` — a hairline at rest with muted ink, brightening when reached for,
+                      which is what `prefBtn(false)` spelled out. These three convert where the four
+                      preference groups above could not, and the difference is that none of them
+                      FILLS: the surface collision only bites a selection that says "chosen" with a
+                      `--chat-control` fill, and a resting outline is legible on any of the three
+                      chat surfaces. */}
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    iconSize={14}
+                    leadingIcon={PlusDecl}
+                    className="w-full"
                     disabled={maxInterfacesReached || !onCreateNewInterface}
                     onClick={() => {
                       if (onCreateNewInterface && !maxInterfacesReached) {
@@ -365,23 +388,24 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                         onClose();
                       }
                     }}
-                    className={`w-full flex items-center justify-center gap-2 ${prefBtn(false)} disabled:cursor-not-allowed disabled:opacity-40`}
                   >
-                    <Plus size={14} aria-hidden="true" />
                     New interface
-                  </button>
+                  </Button>
+                  {/* `danger`, and for once the variant is a word-for-word match rather than a near
+                      one: a neutral hairline with muted ink at rest, both going red under the
+                      pointer. That IS the variant's definition. */}
                   {isMultiInterface && onCloseInterface && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      className="w-full"
                       onClick={() => {
                         onCloseInterface();
                         onClose();
                       }}
-                      className={`w-full flex items-center justify-center gap-2 ${RADIUS} border px-3 py-1.5 text-[12.5px] text-[var(--chat-muted)] hover:border-[var(--chat-danger)] hover:text-[var(--chat-danger)]`}
-                      style={{ borderColor: 'var(--chat-border)' }}
                     >
                       Close this interface
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -392,17 +416,20 @@ const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                 <span className="mb-2 block text-[11px] font-bold uppercase tracking-wide text-[var(--chat-muted)]">
                   Export
                 </span>
-                <button
-                  type="button"
+                {/* New interface's twin, one section down. */}
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  iconSize={14}
+                  leadingIcon={DownloadDecl}
+                  className="w-full"
                   onClick={() => {
                     onExportMarkdown();
                     onClose();
                   }}
-                  className={`w-full flex items-center justify-center gap-2 ${prefBtn(false)}`}
                 >
-                  <Download size={14} aria-hidden="true" />
                   Export markdown
-                </button>
+                </Button>
               </div>
             )}
           </div>

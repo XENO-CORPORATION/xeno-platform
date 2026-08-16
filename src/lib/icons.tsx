@@ -216,6 +216,7 @@ export {
   GBriefcase as BriefcaseDecl,
   GGear as GearDecl,
   GPlus as PlusDecl,
+  GDownload as DownloadDecl,
   GBookmark as BookmarkDecl,
   GArchive as ArchiveDecl,
   GLayers as LayersDecl,
