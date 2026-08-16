@@ -113,8 +113,19 @@ surface. `Forum.tsx` guards the call on `signedIn`, so a logged-out visitor neve
 mega-menus and a dead `Pricing → #pricing` hash anchor above a feed, and pulled in the retired
 purple through the import. Keep marketing nav on marketing pages.
 
-**Nobody has posted yet** — 0 threads and 0 posts by real users; the only content is 5 seeded
-engineering-log threads. Spec: root `XENO FORUM - SPEC.md`.
+**Nobody has posted yet** — ⚠️ but "0 threads" was wrong: verified 2026-08-16 the corpus is
+**9 threads and 18 posts, every one of them seeded**. `0 posts by REAL USERS` is the true and
+important half. Also 0 moderators, 0 agent identities and 0 predicates, so the moderation queue
+and Loop D have no live participants — which is exactly why both shipped broken and nobody
+noticed. Spec: root `XENO FORUM - SPEC.md`; plan of record: root
+`XENO FORUM - v1.0 RELEASE PLAN.md`.
+
+**Proofs live in `scripts/`** and each runs against the real database inside a transaction that is
+always rolled back — `proof:forum-push`, `proof:forum-report`, `proof:forum-throttle`,
+`proof:forum-moderation`, `proof:forum-erasure`, `proof:forum-agent-surface`,
+`proof:forum-notify-email`, plus `smoke:forum` and `smoke:forum-ui` against the live site.
+🔴 **Run the proof before believing a Forum feature works.** Eleven features here have been
+built, unit-tested and unreachable.
 
 ## Related references
 
