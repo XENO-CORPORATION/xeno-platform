@@ -15545,12 +15545,24 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             spellCheck={false}
                                           />
                                           <div className="flex items-center justify-end gap-2 mt-3">
-                                            <button
+                                            {/* `ghost md`: no fill, no border, muted ink coming up
+                                                to full under the pointer, at 12px padding and 14px
+                                                type which are md's own. It gains the variant's
+                                                `--chat-hover` tint on hover, which this one brightened
+                                                the ink alone for. */}
+                                            <Button
+                                              variant="ghost"
+                                              size="md"
                                               onClick={handleCancelAiEdit}
-                                              className="px-3 py-1.5 text-sm text-[var(--chat-muted)] transition-colors hover:text-[var(--chat-text)]"
                                             >
                                               Cancel
-                                            </button>
+                                            </Button>
+                                            {/* Stays hand-written — a `--chat-accent` fill with
+                                                `--chat-on-accent` ink, the inverted emphasis §9 is
+                                                about. Fourteenth in this chat, and the FOURTH
+                                                Cancel/confirm pair where only the Cancel converts.
+                                                Four pairs is not four call sites being awkward; it is
+                                                one missing variant, counted. */}
                                             <button
                                               onClick={handleSaveAiEdit}
                                               className="rounded-md bg-[var(--chat-accent)] px-4 py-1.5 text-sm font-semibold text-[var(--chat-on-accent)] transition-opacity hover:opacity-90"
@@ -15564,6 +15576,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                       {/* 1. Thoughts — compact toggle + gradually expanding content */}
                                       {message.hasThinking && (
                                           <div className="w-full pl-[1.125rem]">
+                                              {/* Stays hand-written: a line of text with 2px of
+                                                  vertical padding and no box at all, whose leading
+                                                  mark is `.xeno-model-cube` — an animated cube this
+                                                  chat draws itself, not a glyph. `leadingIcon` takes a
+                                                  declaration, and a `Button` would put a 32px control
+                                                  around a label that sits inline with the message
+                                                  above it. */}
                                               <button
                                                   type="button"
                                                   onClick={() => setShowThinkingId(showThinkingId === message.id ? null : message.id)}
@@ -15992,6 +16011,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               `scrollAffordance`), because the row is out of flow and lands right here. */}
           {showScrollToBottom && messages.length > 0 && (
             <div data-chat-scroll-to-bottom className="pointer-events-none relative z-20 mb-2 flex justify-center">
+              {/* Stays hand-written: it MORPHS. Idle it is a 28px square holding a bouncing
+                  chevron; while the model works it stretches to 82px and holds three animated dots
+                  that swap for the word "Generating…" under the pointer. Two contents, two widths and
+                  two bespoke animations — `.xeno-gen-dots` and `.xeno-chevron-bounce` — where a
+                  `Button` is one box with one label. */}
               <button
                 type="button"
                 onClick={scrollToBottom}
