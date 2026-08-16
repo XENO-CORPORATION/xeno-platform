@@ -363,6 +363,12 @@ Re-deciding these costs more than it saves.
   tokens as well: one more line per token, and the owner's call about which construction the chat
   wears.
 
+  **And it now has a companion.** The projects header's New project is an inverted button that also
+  reveals its glyph on the TRAILING edge — the mirror of `iconReveal`, which places the glyph at
+  `--xeno-padx` from the left. Three call sites wanted the leading reveal and it went into the
+  library; this is the first that wants the other. It is one job with the chrome tokens rather than
+  two, because the button cannot convert on either alone.
+
   **The same gap has a destructive half.** Two dialog confirms are a SOLID `--chat-danger` fill going
   to `--chat-danger-hover`; the library's `danger` is the opposite reading — a neutral hairline with
   muted ink that turns red only when reached for. That is the right position for a Delete sitting in

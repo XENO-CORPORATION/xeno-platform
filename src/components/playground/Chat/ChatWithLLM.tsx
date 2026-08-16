@@ -13376,37 +13376,23 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 {/* Keep the same top band as the old title row so search + cards do not jump up. */}
                 <div className="flex min-h-[2.75rem] flex-shrink-0 items-center justify-between gap-3 pt-6 pb-5 md:min-h-[3rem] md:pt-8 md:pb-6">
                   <div className="relative">
-                    <button
-                      type="button"
+                    {/* The third sort trigger, and the first one to convert on the day it was
+                        written: the artifacts and scheduled pages carried this same control through
+                        two passes as unconvertible, which is what put `iconReveal` in the library.
+                        Twenty lines of padding, translate and z-index go with it. */}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      iconSize={13}
+                      iconReveal
+                      leadingIcon={ChevronDownDecl}
                       onClick={() => setIsProjectsSortOpen((open) => !open)}
-                      className={`group relative flex items-center overflow-hidden rounded-lg py-1.5 pr-3 pl-3 text-[12.5px] hover:pl-8`}
-                      style={{
-                        backgroundColor: 'var(--chat-control)',
-                        color: 'var(--chat-text)',
-                        willChange: 'padding',
-                        transition: 'padding 600ms cubic-bezier(0.22, 1, 0.36, 1)',
-                      }}
                       aria-haspopup="menu"
                       aria-expanded={isProjectsSortOpen}
                       aria-label={`Sort by ${sortLabels[projectsSort]}`}
                     >
-                      <ChevronDown
-                        size={13}
-                        className="pointer-events-none absolute left-2.5 z-0 translate-x-5 text-[var(--chat-muted)] opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
-                        style={{
-                          willChange: 'opacity, transform',
-                          transition:
-                            'opacity 600ms cubic-bezier(0.22, 1, 0.36, 1), transform 600ms cubic-bezier(0.22, 1, 0.36, 1)',
-                        }}
-                        aria-hidden="true"
-                      />
-                      <span
-                        className="relative z-10 pl-0.5 font-medium text-[var(--chat-text)]"
-                        style={{ backgroundColor: 'var(--chat-control)' }}
-                      >
-                        {sortLabels[projectsSort]}
-                      </span>
-                    </button>
+                      {sortLabels[projectsSort]}
+                    </Button>
                     {isProjectsSortOpen && (
                       <div
                         {...(() => { const { ref: _g, className: _c, ...handlers } = projectsSortGoo.hostProps; return handlers; })()}
@@ -13442,6 +13428,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       </div>
                     )}
                   </div>
+                  {/* Stays hand-written, and it is the reveal's MIRROR. The glyph sits on the
+                      right and travels the other way, so the box opens on its trailing edge —
+                      `iconReveal` places the glyph at `--xeno-padx` from the left and parks it to the
+                      right of where it lands, which is the leading half of the idea and the only half
+                      the library has. Two call sites wanted the leading one and it went in; this is
+                      the first that wants the other.
+                      It would still not convert today: the fill is `--chat-text` with `--chat-canvas`
+                      ink, the inverted emphasis §9 is about, so the trailing reveal and the chrome
+                      tokens are one job rather than two. */}
                   <button
                     type="button"
                     onClick={() => openCreateProjectModal()}
@@ -13527,17 +13522,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       <p className="mt-2 max-w-[22rem] text-[13px] leading-relaxed text-[var(--chat-muted)]">
                         Upload materials, set custom instructions, and organize conversations in one space.
                       </p>
-                      <button
-                        type="button"
+                      {/* `secondary md` — a `--chat-control` fill with text ink, 32px of box, and
+                          it gains the variant's hairline. The same conversion as the create-project
+                          dialog's Cancel, which is the button this one leads to. */}
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        className="mt-5"
                         onClick={() => openCreateProjectModal()}
-                        className="mt-5 rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors"
-                        style={{
-                          backgroundColor: 'var(--chat-control)',
-                          color: 'var(--chat-text)',
-                        }}
                       >
                         New project
-                      </button>
+                      </Button>
                     </div>
                   ) : visibleProjects.length === 0 ? (
                     <p className="py-10 text-center text-[13px] text-[var(--chat-muted)]">
