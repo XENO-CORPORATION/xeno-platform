@@ -6,6 +6,7 @@ import {
 import XenoGlyph from '../auth/XenoGlyph';
 import SuiteVisual from './SuiteVisual';
 import { productIcon } from '../../lib/productIcons';
+import { isUnreleased } from '../../lib/releaseStatus';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * WORKSPACE CHOOSER — the first and most consequential step.
@@ -325,20 +326,20 @@ const SuiteCard: React.FC<{
           {products.map((p) => (
             <span key={p.slug} className="flex min-w-0 items-center gap-1.5">
               <span className={`shrink-0 transition-colors duration-200 ${
-                p.status === 'coming-soon' ? 'text-white/15' : 'text-white/35 group-hover:text-white/60'
+                isUnreleased(p.slug, p.status) ? 'text-white/15' : 'text-white/35 group-hover:text-white/60'
               }`}>
                 {productIcon(p.slug)}
               </span>
               {/* The catalog prefixes every name with "XENO"; inside a XENO
                   workspace card that word is on every line and carries nothing. */}
               <span className={`truncate text-[11.5px] ${
-                p.status === 'coming-soon' ? 'text-white/25' : 'text-white/65'
+                isUnreleased(p.slug, p.status) ? 'text-white/25' : 'text-white/65'
               }`}>
                 {p.name.replace(/^XENO\s+/, '')}
               </span>
               {/* Dimming alone is not a label — it could read as disabled, or
                   as a rendering fault. The word says which. */}
-              {p.status === 'coming-soon' && (
+              {isUnreleased(p.slug, p.status) && (
                 <span className="shrink-0 text-[8.5px] font-semibold uppercase tracking-[0.1em] text-white/20">
                   Soon
                 </span>

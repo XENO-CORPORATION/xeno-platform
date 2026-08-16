@@ -1,4 +1,5 @@
 import { PRODUCTS } from './productCatalog';
+import { isUnreleased } from './releaseStatus';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * WORKSPACE SUITES
@@ -114,9 +115,16 @@ export function productsForSuite(suite: Suite): SuiteProduct[] {
     .sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name));
 }
 
-/** Only what a user can actually open today. */
+/**
+ * Only what a user can actually open today — MEASURED, not claimed.
+ *
+ * Uses `isUnreleased`, which prefers the release probe over the catalog's
+ * `status`. That matters here more than anywhere else in the flow: this feeds
+ * the recommendation step, so a product wrongly marked `coming-soon` is one
+ * nobody is ever sent to. Three products were in exactly that state.
+ */
 export function availableForSuite(suite: Suite): SuiteProduct[] {
-  return productsForSuite(suite).filter((p) => p.status !== 'coming-soon');
+  return productsForSuite(suite).filter((p) => !isUnreleased(p.slug, p.status));
 }
 
 /** Every product across every suite, including unshipped. */
