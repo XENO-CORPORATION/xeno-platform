@@ -52,7 +52,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, UserRoundX, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -14546,50 +14546,67 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 : undefined
             }
           >
+              {/* `topBarBtnClass` was `quiet` written out: a `--chat-border` hairline with muted
+                  ink, going to full ink over a `--chat-hover` tint. Its ACTIVE half was
+                  `border-transparent` plus full ink and no fill, which is what
+                  `quiet[data-selection=on]` draws — and there is already a rule waiting for it.
+                  That rule is the find. `.chat-themed .chat-top-bar-btn[data-selection="on"]` sets
+                  `--chat-top-bar-btn-active`, and these two buttons emitted `data-active`, which
+                  nothing in this codebase reads. The active fill has never painted. Saying
+                  `data-selection` — which the component's axis is named for — makes a dormant rule
+                  live, and the token it reaches for exists in all three palettes. */}
               {!isMultiInterface && messages.length === 0 && (
-                <button
-                  type="button"
+                <Button
+                  variant="quiet"
+                  size="lg"
+                  iconSize={15}
+                  leadingIcon={UserRoundXDecl}
+                  className="chat-top-bar-btn"
+                  data-selection={isTemporaryChat ? 'on' : 'off'}
+                  aria-pressed={isTemporaryChat}
+                  aria-label="Temporary chat preview"
+                  title="Temporary chat"
                   onClick={() => {
                     setIsTemporaryChat((current) => !current);
                     setIsChatMoreMenuOpen(false);
                     setIsSharePreviewOpen(false);
                     setIsThemeMenuOpen(false);
                   }}
-                  aria-pressed={isTemporaryChat}
-                  aria-label="Temporary chat preview"
-                  title="Temporary chat"
-                  data-active={isTemporaryChat ? 'true' : undefined}
-                  className={topBarBtnClass(isTemporaryChat, 'gap-1.5 px-2.5 text-[13px]')}
                 >
-                  {/* `strokeWidth={1.75}` was here and was RIGHT — which is the argument for taking it
-                      out. A call site that restates the contract's number is correct until the contract
-                      changes, and then it is the one place that silently does not. */}
-                  <UserRoundX size={15} className="flex-shrink-0" aria-hidden="true" />
                   <span className="font-medium leading-none">Temporary</span>
                   <span className="leading-none text-[12px] text-[var(--chat-muted)]">Preview</span>
-                </button>
+                </Button>
               )}
 
               {(isMultiInterface || messages.length === 0) && (
               <div ref={themeMenuRef} className="relative flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsThemeMenuOpen((isOpen) => !isOpen);
-                    setIsChatMoreMenuOpen(false);
-                    setIsSharePreviewOpen(false);
-                  }}
+                {/* Temporary's pair, and §8 kept them together on purpose: converting one and not
+                    the other would split a row that reads as one thing.
+                    The chevron stays a CHILD rather than becoming `trailingIcon`, because `iconSize`
+                    is one number for both slots and this chevron is 12 against the mark's 16 — a
+                    subordinate glyph by design, and `trailingIcon` would make them equal. It still
+                    flips: `.chat-icon-turn` targets the last glyph in the button and reads
+                    `aria-expanded`, which this trigger already sets. */}
+                <Button
+                  variant="quiet"
+                  size="lg"
+                  iconSize={16}
+                  leadingIcon={ContrastDecl}
+                  className="chat-top-bar-btn chat-icon-turn [--chat-icon-turn:180deg]"
+                  data-selection={isThemeMenuOpen ? 'on' : 'off'}
                   aria-expanded={isThemeMenuOpen}
                   aria-controls="chat-theme-menu"
                   aria-haspopup="menu"
                   aria-label="Choose Chat LLM theme"
                   title="Choose Chat LLM theme"
-                  data-active={isThemeMenuOpen ? 'true' : undefined}
-                  className={topBarBtnClass(isThemeMenuOpen, 'gap-0.5 px-2')}
+                  onClick={() => {
+                    setIsThemeMenuOpen((isOpen) => !isOpen);
+                    setIsChatMoreMenuOpen(false);
+                    setIsSharePreviewOpen(false);
+                  }}
                 >
-                  <ThemeTriggerIcon size={16} />
-                  <ChevronDown size={12} className={`text-[var(--chat-muted)] transition-transform duration-200 ${isThemeMenuOpen ? 'rotate-180' : ''}`} />
-                </button>
+                  <ChevronDown size={12} className="text-[var(--chat-muted)]" />
+                </Button>
                 {isThemeMenuMounted && (
                 <div
                   key={isThemeMenuShown ? 'chat-theme-menu-in' : 'chat-theme-menu-out'}
