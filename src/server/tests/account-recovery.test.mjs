@@ -15,6 +15,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import authRoutes from '../routes/authRoutes.js';
+import { tableDDL } from './fixtures/schema.mjs';
 
 // Same default the server uses when JWT_SECRET is unset (non-production test env).
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
@@ -33,21 +34,6 @@ CREATE TABLE IF NOT EXISTS users (
   status text DEFAULT 'active', role text DEFAULT 'user', plan text DEFAULT 'free',
   recovery_email text, workspace_activated_at timestamptz,
   last_login timestamptz, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
--- The session write in authRoutes.js inserts id, user_id, token_hash,
--- expires_at, ip_address, user_agent, device_type, browser, os -- and stamps
--- last_active_at on every authenticated request. A fixture missing any of them
--- makes the write fail, the code falls back to a STATELESS token with no sid,
--- and the assertions about sid fail two steps later with no obvious cause.
---
--- Third fixture in this repo to drift the same way (auth-token-confusion lost
--- last_active_at, erasure had no forum tables at all). These hand-rolled
--- schemas are correct only until someone adds a column, and nothing links them
--- to the migrations that production uses.
-CREATE TABLE IF NOT EXISTS user_sessions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid, token_hash text, session_token text, expires_at timestamptz,
-  ip_address text, user_agent text, device_type text, browser text, os text,
-  last_active_at timestamptz DEFAULT now(), created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS password_resets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid REFERENCES users(id) ON DELETE CASCADE, token_hash varchar(255) NOT NULL,
@@ -65,6 +51,10 @@ CREATE TABLE IF NOT EXISTS credit_transactions (id uuid PRIMARY KEY DEFAULT gen_
 
 async function main() {
   await pool.query(BASE);
+  // user_sessions from the MIGRATIONS. The hand-written copy here was missing
+  // device_type/browser/os, so the session INSERT failed, the app fell back to
+  // a stateless token with no sid, and two assertions failed two steps later.
+  await pool.query(tableDDL('user_sessions'));
   await migrateAccountV2(pool); // credit_grants + uq_credit_txn_ref (the idempotency index)
 
   const app = express();
