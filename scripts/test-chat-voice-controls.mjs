@@ -26,9 +26,27 @@ const voicePopoverEnd = source.indexOf('</div>', voicePopoverStart);
 assert.doesNotMatch(source.slice(voicePopoverStart, voicePopoverEnd), /blue/, 'Voice options should preserve XENO\'s monochromatic palette');
 assert.match(source, /data-voice-hold-switch/, 'Hold-to-record control should expose a stable switch hook');
 assert.match(source, /relative inline-flex h-4 w-7 shrink-0 items-center rounded-md border p-\[2px\]/, 'Hold-to-record track should center a squared thumb with even inset');
-assert.match(source, /h-2\.5 w-2\.5 rounded-\[3px\]/, 'Hold-to-record thumb should be squared');
+/*
+ * Restated in form, not in strength. This read `h-2.5 w-2.5 rounded-[3px]` as one contiguous string,
+ * and 3d27aef split the thumb: `rounded-[3px]` stayed on the base span while the size moved into the
+ * branches, because the thumb GROWS when the switch is on. The old line could not see either half.
+ * All three facts are pinned separately now, which is more than it checked before.
+ */
+assert.match(source, /block rounded-\[3px\] transition-\[transform,background-color,width,height\]/, 'Hold-to-record thumb should be squared, and should transition its size as well as its position');
+assert.match(source, /'h-2\.5 w-2\.5 translate-x-0/, 'Resting thumb should be 10px');
+assert.match(source, /'h-3 w-3 translate-x-\[10px\]/, 'Active thumb should grow to 12px as it travels');
 assert.match(source, /bg-\[var\(--chat-text\)\]/, 'Active track should use theme text for contrast on Light and Dark');
-assert.match(source, /translate-x-\[14px\].*bg-\[var\(--chat-elevated\)\]/, 'Active thumb should ease to the right on elevated surface');
+/*
+ * This asserted a 14px travel and the pass moved it to 12, so the line was stale — but taking it
+ * seriously found a bug rather than a number to update. The track is 28px with a 1px border and 2px
+ * of padding, so the thumb's runway is 22px; at 12px wide it can travel 10. Both 14 (with the old
+ * 10px thumb) and 12 (with the new 12px one) overhang the inner edge by 2px, so the thumb rested 3px
+ * from the left and landed 1px from the right — measured, not derived. The travel is 10px now and
+ * the inset matches at both ends.
+ *
+ * The sibling assertion above already pins the number; this one pins what the number is FOR.
+ */
+assert.match(source, /translate-x-\[10px\] -translate-y-1\/2 bg-\[var\(--chat-elevated\)\]/, 'Active thumb should ease to the right on elevated surface, stopping at the same inset it rests on');
 assert.match(source, /bg-\[var\(--chat-canvas\)\]/, 'Inactive track should use canvas fill for contrast with the thumb');
 assert.match(source, /translate-x-0 -translate-y-1\/2 bg-\[var\(--chat-text\)\]/, 'Inactive thumb should use theme text so it stays visible on Light and Dark');
 assert.match(source, /ease-\[cubic-bezier\(0\.16,1,0\.3,1\)\]/, 'Toggle motion should use XENO soft-ease curve');

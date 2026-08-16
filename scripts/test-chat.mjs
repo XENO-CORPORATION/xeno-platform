@@ -27,18 +27,20 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Known-red, with the reason and whose it is. Every one of these is a test asserting on a shape the
- * composer had before `3d27aef` ("streaming answers, thinking status, and composer polish") — they
- * slice ChatWithLLM.tsx between literal source markers, and that pass moved the markers. None of
- * them is element-adoption damage, which is why they are recorded rather than quietly fixed: what
- * the composer should look like now is the author's call, not a conversion pass's.
+ * Known-red, with the reason and whose it is. The list is EMPTY and the machinery stays: it earned
+ * its keep three times over and it is what a fourth red test should land in rather than a commit
+ * message.
+ *
+ * All three entries came from `3d27aef` ("streaming answers, thinking status, and composer polish"),
+ * none from element adoption. Two sliced ChatWithLLM.tsx between literal source markers that pass had
+ * moved, so they failed before their assertions ran and were re-scoped onto anchors the composer
+ * actually has. The third asserted class strings the pass had split; taking it seriously found a 2px
+ * overhang in the product.
+ *
+ * Add an entry only with the reason and only when the fix is genuinely someone else's call. A green
+ * board with three unread tests in it was worth less than a red one.
  */
-const KNOWN_RED = new Map([
-  [
-    'test-chat-voice-controls.mjs',
-    'the hold-to-record thumb was retimed and resized in the same pass (14px travel -> 12px, thumb 2.5 -> 3 when active); the class-string assertions never followed',
-  ],
-]);
+const KNOWN_RED = new Map([]);
 
 const tests = readdirSync(HERE)
   .filter((f) => /^test-chat-.*\.mjs$/.test(f))

@@ -11986,7 +11986,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 <span
                                   className={`pointer-events-none absolute left-[2px] top-1/2 block rounded-[3px] transition-[transform,background-color,width,height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${
                                     voiceInputMode === 'hold'
-                                      ? 'h-3 w-3 translate-x-[12px] -translate-y-1/2 bg-[var(--chat-elevated)]'
+                                      ? 'h-3 w-3 translate-x-[10px] -translate-y-1/2 bg-[var(--chat-elevated)]'
                                       : 'h-2.5 w-2.5 translate-x-0 -translate-y-1/2 bg-[var(--chat-text)]'
                                   }`}
                                 />

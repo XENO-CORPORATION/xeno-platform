@@ -479,6 +479,22 @@ Re-deciding these costs more than it saves.
   gone from the row, and it is where it went — and the counter's place is stated against the voice
   control, the right-hand group's first member, which did not move.
 
+- ~~**Three tests red since the composer-polish pass.**~~ **Closed — 10/10, KNOWN_RED empty.** The
+  third, `test-chat-voice-controls`, is the one that paid for the exercise. Its thumb assertions
+  read `h-2.5 w-2.5 rounded-[3px]` and `translate-x-[14px]` as contiguous strings, and 3d27aef had
+  split them — `rounded-[3px]` stayed on the base span while the size moved into the branches,
+  because the thumb grows when the switch is on.
+
+  Updating the number to 12 would have passed. Measuring it instead found a bug the test had been
+  pointing at all along: the track is 28px with a 1px border and 2px of padding, so a 12px thumb's
+  runway is 10px. **Both the old 14 and the new 12 overhang the inner edge by 2px** — the thumb
+  rested 3px from the left and landed 1px from the right, at rest and after the change. Travel is
+  10px now, measured at 3px inset on both ends. The test's own name had said `even inset` since it
+  was written.
+
+  The machinery stays with an empty list. A green board with three unread tests in it was worth less
+  than a red one.
+
 - **Six controls sit below the scale's floor.** The control scale starts at `xs` = 24px; the chat has
   six squares at 18–20px — the two attachment-chip remove badges, the customize page's "i", and
   three more. Each is a badge or a hint notched into something else, where six pixels of growth is six
