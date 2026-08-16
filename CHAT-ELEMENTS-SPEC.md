@@ -350,9 +350,15 @@ Re-deciding these costs more than it saves.
   plate where these deliberately have none. `outline` is a rest state at full ink whose brightening is
   a hover, not a selection.
 
-  These are the same eight controls that the surface collision below would also catch, and the two
-  findings share a fix: a selection that reads on any surface, and a name for the one this chat
-  already draws.
+  **Closed in the library.** `ToggleButton` carries `selectionStyle="ring"` now: the box stays empty
+  and the border comes up to `--xeno-muted`. It is a presentation of the same axis rather than a
+  variant, because these eight sit on three different variants and none of them wants a different
+  KIND of button — so it also undoes what a variant already said, putting `quiet`'s outline back and
+  closing the toggle's clip-path flood. Measured in the elements preview, seven checks green.
+
+  The two findings did share one fix, and the fill's precondition is now written where the fill is
+  declared. **The eight call sites are still hand-written** — converting them is a separate pass with
+  its own before/after.
 
 - **`quiet[data-selection=on]` has a surface precondition, and nothing states it.** It says "chosen"
   by filling with `--xeno-control` and dropping the outline. In the dark theme `--chat-control` and
@@ -360,6 +366,10 @@ Re-deciding these costs more than it saves.
   invisible and removing the border takes away the only edge the chosen control had. Converted and
   reverted once on the settings dialog's four preference groups, where it rendered the selected
   segment as a bare bold word between two outlined neighbours.
+
+  **Closed: the precondition is stated, and there is now a presentation without one.** The comment on
+  `quiet[data-selection=on]` says in the stylesheet what had only been learned by hitting it, and
+  `selectionStyle="ring"` is the way out for a control whose surface collapses the fill.
 
   It reads correctly on `--chat-canvas` (`#0a0a0a`) and `--chat-surface` (`#171717`), which is why
   the artifacts, scheduled, settings-page and skills families all converted cleanly. **Check what the
