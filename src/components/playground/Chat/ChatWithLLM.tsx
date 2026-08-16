@@ -17091,20 +17091,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   >
                     {chatFilesSelected ? chatFilesSelected.name : 'Files in chat'}
                   </h2>
+                  {/* The file-preview copy button's twin, converted the same way: `ghost md`,
+                      two faces in one button with the ternary in `leadingIcon` so the check draws
+                      rather than appears. */}
                   {chatFilesSelected && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="md"
+                      iconSize={14}
+                      leadingIcon={chatFilesCopied ? CheckDecl : CopyDecl}
+                      data-selection={chatFilesCopied ? 'on' : 'off'}
                       onClick={() => void copyChatFilesPreview()}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                       title={chatFilesCopied ? 'Copied' : 'Copy'}
                     >
-                      {chatFilesCopied ? (
-                        <Check size={14} aria-hidden="true" />
-                      ) : (
-                        <Copy size={14} aria-hidden="true" />
-                      )}
                       {chatFilesCopied ? 'Copied' : 'Copy'}
-                    </button>
+                    </Button>
                   )}
                   <IconButton
                     icon={XDecl}
@@ -17128,36 +17129,23 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     <ul className="flex flex-col gap-1" role="list">
                       {conversationFileItems.map((item) => (
                         <li key={item.key}>
-                          <button
-                            type="button"
-                            onClick={() => {
+                          {/* `ListRow`: a leading glyph, a title that truncates, a trailing mark
+                              and a hover that paints the whole row. The trailing chevron is
+                              DECORATION rather than an action, which is what lets this row take the
+                              component where the recent-file and catalog rows could not — theirs
+                              carry a real button beside the body, and `ListRow` renders its trailing
+                              slot inside its own. */}
+                          <ListRow
+                            leading={item.kind === 'image'
+                              ? <FileImage size={15} aria-hidden="true" />
+                              : <FileText size={15} aria-hidden="true" />}
+                            title={item.name}
+                            trailing={<ChevronRight size={14} aria-hidden="true" />}
+                            onSelect={() => {
                               setChatFilesSelectedKey(item.key);
                               setChatFilesCopied(false);
                             }}
-                            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13px] transition-colors hover:bg-[var(--chat-hover)]"
-                          >
-                            {item.kind === 'image' ? (
-                              <FileImage
-                                size={15}
-                                className="flex-shrink-0 text-[var(--chat-muted)]"
-                                aria-hidden="true"
-                              />
-                            ) : (
-                              <FileText
-                                size={15}
-                                className="flex-shrink-0 text-[var(--chat-muted)]"
-                                aria-hidden="true"
-                              />
-                            )}
-                            <span className="min-w-0 flex-1 truncate text-[var(--chat-text)]">
-                              {item.name}
-                            </span>
-                            <ChevronRight
-                              size={14}
-                              className="flex-shrink-0 text-[var(--chat-muted)]"
-                              aria-hidden="true"
-                            />
-                          </button>
+                          />
                         </li>
                       ))}
                     </ul>
@@ -17919,6 +17907,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         className={`${historyNavGoo.hostProps.className} chat-goo chat-goo-sidebar flex-shrink-0 space-y-0.5 border-b border-[var(--chat-border)] px-1.5 py-2`}
                       >
                         {historyNavGoo.pill}
+                          /* Stays hand-written, and this is one decision covering all seven rows
+                             of this nav. The library's `Sidebar` is the WHOLE panel — sections, its
+                             own search field, and an `inert` closed state that takes the rows out of
+                             the tab order — and `SidebarItem` is a data shape it maps, not an element
+                             a call site can render. This sidebar is hand-built around a goo pill,
+                             project sub-rows and per-row menus, so taking the component would be
+                             replacing the panel rather than converting a row. The component exists at
+                             a different granularity than the thing that needs it. */
                                 <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(false)}
@@ -17929,6 +17925,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <Plus size={16} className="flex-shrink-0 text-[var(--chat-text)]" />
                           <span>New</span>
                                 </button>
+                          /* Stays hand-written — one of the seven nav rows decided above. */
                         <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'chats' && !isProjectsPageOpen)}
@@ -17941,6 +17938,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <span>Chats and tasks</span>
                         </button>
                         {hasArchivedConversations && (
+                          /* Stays hand-written — one of the seven nav rows decided above. */
                           <button
                             type="button"
                             data-goo-row="" className={historyNavItemClass(historyNavView === 'archived')}
@@ -17953,6 +17951,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             <span>Archived conversations</span>
                           </button>
                         )}
+                          /* Stays hand-written — one of the seven nav rows decided above. */
                         <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'projects' || isProjectsPageOpen)}
@@ -17961,6 +17960,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <Folder size={16} className="flex-shrink-0" />
                           <span>Projects</span>
                         </button>
+                          /* Stays hand-written — one of the seven nav rows decided above. */
                       <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'artifacts' || isArtifactsPageOpen)}
@@ -17969,6 +17969,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <Shapes size={16} className="flex-shrink-0" />
                           <span>Artifacts</span>
                       </button>
+                          /* Stays hand-written — one of the seven nav rows decided above. */
                       <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'global_settings' || isGlobalSettingsPageOpen)}
@@ -17977,6 +17978,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <Settings size={16} className="flex-shrink-0" />
                           <span>Settings</span>
                       </button>
+                          /* Stays hand-written — one of the seven nav rows decided above. */
                       <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'scheduled' || isScheduledPageOpen)}
