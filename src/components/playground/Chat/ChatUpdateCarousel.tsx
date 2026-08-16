@@ -115,7 +115,7 @@ export const clampUpdateDescription = (description: string): string =>
     : description.slice(0, MAX_UPDATE_DESCRIPTION_CHARS).trimEnd();
 
 const FRAME_CLASS_NAME =
-  'relative grid h-[14rem] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111113] sm:h-[10.5rem]';
+  'relative grid h-[14rem] overflow-hidden rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] sm:h-[10.5rem]';
 
 const readDismissedIds = (storageKey: string): Set<string> => {
   if (typeof window === 'undefined') return new Set();
@@ -397,7 +397,7 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
   const showNavigation = availableUpdates.length > 1;
   const showDismissInNav = availableUpdates.length === 1 || isLastUpdate;
   const navButtonClassName =
-    'flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] text-zinc-500 transition-[background-color,border-color,color,transform] duration-150 hover:border-white/20 hover:bg-white/[0.04] hover:text-zinc-100 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70';
+    'flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--chat-border)] text-[var(--chat-muted)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]';
 
   const slideVariants = prefersReducedMotion
     ? {
@@ -483,14 +483,14 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <motion.span
                     {...titleMotion}
-                    className="text-sm font-semibold tracking-[-0.01em] text-zinc-100"
+                    className="text-sm font-semibold tracking-[-0.01em] text-[var(--chat-text)]"
                   >
                     {currentUpdate.title}
                   </motion.span>
                   {currentUpdate.label && labelMotion && (
                     <motion.span
                       {...labelMotion}
-                      className="rounded-md border border-white/[0.12] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-500"
+                      className="rounded-md border border-[var(--chat-border)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--chat-muted)]"
                     >
                       {currentUpdate.label}
                     </motion.span>
@@ -498,7 +498,7 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
                 </div>
                 <motion.p
                   {...descriptionMotion}
-                  className="max-w-[48ch] text-sm leading-5 text-zinc-500"
+                  className="max-w-[48ch] text-sm leading-5 text-[var(--chat-muted)]"
                 >
                   {clampUpdateDescription(currentUpdate.description)}
                 </motion.p>
@@ -536,7 +536,7 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
                 >
                   <ArrowLeft size={14} />
                 </button>
-                <span className="min-w-10 text-center text-[11px] tabular-nums text-zinc-500">
+                <span className="min-w-10 text-center text-[11px] tabular-nums text-[var(--chat-muted)]">
                   {currentIndex + 1} / {availableUpdates.length}
                 </span>
               </>

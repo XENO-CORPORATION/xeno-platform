@@ -182,7 +182,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
              {/* Collapse Button */}
              {canCollapse && !isEditing && (
                  <button
-                    className={`${baseButtonClass} hover:bg-zinc-700/60`}
+                    className={`${baseButtonClass} hover:bg-[var(--chat-hover)]`}
                     title={isCollapsed ? "Expand code" : "Collapse code"}
                     onClick={toggleCollapse}
                     disabled={currentIsRunning} // Disable while running
@@ -194,7 +194,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
              {/* Run Button (Conditional) */}
              {isRunnable && !isEditing && (
                 <button
-                   className={`${baseButtonClass} ${currentIsRunning || runtimesLoading ? 'text-gray-500 cursor-not-allowed' : 'hover:bg-zinc-700/60'}`}
+                   className={`${baseButtonClass} ${currentIsRunning || runtimesLoading ? 'text-[var(--chat-muted)] cursor-not-allowed' : 'hover:bg-[var(--chat-hover)]'}`}
                    title={runtimesLoading ? "Loading runtimes..." : currentIsRunning ? "Running..." : "Run code"}
                    onClick={handleRun}
                    disabled={currentIsRunning || runtimesLoading} // Disable if running OR if runtimes are loading
@@ -206,7 +206,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
              {/* Edit Button */}
              {onEditCode && !isEditing && (
                 <button
-                   className={`${baseButtonClass} hover:bg-zinc-700/60`}
+                   className={`${baseButtonClass} hover:bg-[var(--chat-hover)]`}
                    title="Edit code"
                    onClick={() => onEditCode(codeBlockId, code, cleanLanguage)}
                    disabled={currentIsRunning}
@@ -219,14 +219,14 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
              {isEditing && (
                 <>
                   <button
-                     className="text-xs text-gray-400 hover:text-gray-200 px-2 py-1 transition-colors"
+                     className="text-xs text-[var(--chat-muted)] hover:text-[var(--chat-text)] px-2 py-1 transition-colors"
                      title="Cancel editing"
                      onClick={onCancelCodeEdit}
                   >
                      Cancel
                   </button>
                   <button
-                     className="text-xs bg-gray-400 text-zinc-900 px-3 py-1 rounded-md font-semibold hover:bg-gray-300 transition-colors"
+                     className="text-xs bg-[var(--chat-accent)] text-[var(--chat-on-accent)] px-3 py-1 rounded-md font-semibold hover:opacity-90 transition-colors"
                      title="Save changes"
                      onClick={onSaveCodeEdit}
                   >
@@ -236,7 +236,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
              )}
              {/* Copy Button */}
           <button
-                className={`${baseButtonClass} ${copied ? copiedButtonClass : 'hover:bg-zinc-700/60'}`}
+                className={`${baseButtonClass} ${copied ? copiedButtonClass : 'hover:bg-[var(--chat-hover)]'}`}
                 title={copied ? "Copied!" : "Copy code"}
                 data-selection={copied ? 'on' : 'off'}
             onClick={handleCopy}
@@ -263,11 +263,11 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
               </div>
             ) : isCollapsed ? (
               <div
-                className="px-4 py-3 flex items-center justify-center gap-2 text-sm text-gray-500 cursor-pointer hover:text-gray-400 transition-colors duration-150"
+                className="px-4 py-3 flex items-center justify-center gap-2 text-sm text-[var(--chat-muted)] cursor-pointer hover:text-[var(--chat-muted)] transition-colors duration-150"
                 onClick={toggleCollapse}
               >
                   <Rows size={16} />
-                  <span className="text-white">{numberOfLines}</span> <span className="sr-only">hidden lines</span> <span className="hidden md:inline text-gray-400">hidden lines</span>
+                  <span className="text-[var(--chat-text)]">{numberOfLines}</span> <span className="sr-only">hidden lines</span> <span className="hidden md:inline text-[var(--chat-muted)]">hidden lines</span>
               </div>
             ) : (
               <SyntaxHighlighter
@@ -295,7 +295,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
               {!currentIsRunning && (currentRunOutput || currentRunError) && (
                 <button 
                   onClick={handleCloseOutput}
-                  className="absolute top-1 right-1 p-1 text-gray-500 hover:text-gray-300 hover:bg-zinc-700/50 rounded-md transition-colors"
+                  className="absolute top-1 right-1 p-1 text-[var(--chat-muted)] hover:text-[var(--chat-text)] hover:bg-[var(--chat-hover)] rounded-md transition-colors"
                   aria-label="Close output"
                 >
                   <X size={14} />
@@ -303,13 +303,13 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
               )}
 
               {currentIsRunning && (
-                  <div className="flex items-center gap-2 text-gray-400 text-xs">
+                  <div className="flex items-center gap-2 text-[var(--chat-muted)] text-xs">
                       <Spinner size={14} /> 
                       <span>Running...</span>
                   </div>
               )}
               {currentRunOutput && !currentIsRunning && (
-                  <div className="whitespace-pre-wrap font-mono text-gray-300 text-xs leading-relaxed">{currentRunOutput}</div> 
+                  <div className="whitespace-pre-wrap font-mono text-[var(--chat-text)] text-xs leading-relaxed">{currentRunOutput}</div> 
               )}
               {currentRunError && !currentIsRunning && (
                   <div className="whitespace-pre-wrap font-mono text-[var(--chat-danger)] text-xs leading-relaxed">{currentRunError}</div>

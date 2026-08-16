@@ -49,7 +49,7 @@ const DrawnCheckMark: React.FC<{ reduceMotion: boolean; optionId: string }> = ({
 }) => (
   <motion.span
     key={optionId}
-    className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-white text-black"
+    className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-[var(--chat-accent)] text-[var(--chat-on-accent)]"
     aria-hidden="true"
     initial={reduceMotion ? false : { scale: 0.25, opacity: 0 }}
     animate={{ scale: 1, opacity: 1 }}
@@ -306,7 +306,7 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
                     key={message.id}
                     className={`max-w-[92%] rounded-md px-3 py-2 text-[13px] leading-5 ${
                       message.sender === 'user'
-                        ? 'ml-auto bg-white/[0.08] text-[var(--chat-text)]'
+                        ? 'ml-auto bg-[var(--chat-control)] text-[var(--chat-text)]'
                         : 'mr-auto text-[var(--chat-muted)]'
                     }`}
                     style={
@@ -438,7 +438,7 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
                       className="flex flex-col items-center gap-1.5 rounded-lg px-2 py-3 text-[11px] text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
                       style={{ boxShadow: 'inset 0 0 0 1px var(--chat-border)' }}
                     >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-xs font-semibold text-black">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-[var(--chat-accent)] text-xs font-semibold text-[var(--chat-on-accent)]">
                         {action.id === 'linkedin'
                           ? 'in'
                           : action.id === 'facebook'
