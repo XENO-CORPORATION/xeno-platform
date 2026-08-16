@@ -8871,6 +8871,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 key={file.id}
                 className="group flex items-center gap-1 rounded-lg px-1.5 py-1.5 hover:bg-[var(--chat-hover)]"
               >
+                {/* Stays hand-written, and the blocker is `ListRow`'s shape rather than this
+                    row's. `ListRow` IS the row — leading, title, subtitle, trailing — and it renders
+                    as a `<button>` the moment it takes an `onSelect`. This row has an action beside
+                    it, the remove X two elements down, and putting that in `trailing` would nest a
+                    button inside a button. `Chip` solved the same problem by making its remove a
+                    SIBLING of the body rather than a slot in it; `ListRow` has no such split.
+                    So the row stays a div holding a clickable body and an action, which is the shape
+                    that works, and the component describes rows that have no actions. */}
                 <button
                   type="button"
                   onClick={() => {
@@ -13257,6 +13265,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 : 'hover:bg-[var(--chat-hover)]'
                             }`}
                           >
+                            {/* Stays hand-written — the recent-file row's shape exactly: a
+                                clickable body with an action beside it, where `ListRow` would want to
+                                be the whole row and renders its trailing slot inside its own button.
+                                This one also swaps its leading glyph for a checkbox while the catalog
+                                is selecting, which is a second thing the leading slot would have to
+                                carry a state for. */}
                             <button
                               type="button"
                               onClick={() => {
@@ -14620,6 +14634,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-xs font-medium text-[var(--chat-text)]">Appearance</span>
+                    {/* Stays hand-written, and it is the surface collision again (§9). At rest it
+                        is `quiet` to the letter; chosen, it holds the hover appearance — a
+                        `--chat-hover` fill at #404040 with the border kept. `quiet[data-selection=on]`
+                        would fill with `--chat-control`, and this menu panel is `--chat-elevated`,
+                        which is the SAME #262626 in dark. The fill would vanish and the border would
+                        go with it, leaving the chosen chip as bare text. The design already knew: it
+                        picked the one fill that reads on an elevated panel. */}
                     <button
                       type="button"
                       aria-pressed={chatTheme === 'system'}
@@ -14901,6 +14922,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             <span className="text-xs font-medium text-[var(--chat-text)]">
                               Appearance
                             </span>
+                            {/* Stays hand-written, and this copy is why the rule is not simply
+                                "check the surface". It is the SAME chip as the one in the theme menu,
+                                rendered into a second panel — and this panel is `--chat-canvas`,
+                                where a `--chat-control` fill would read perfectly well. Converting it
+                                and not its twin would give one chip a filled selection and the other
+                                a hover-tinted one, for a control the user reads as a single thing.
+                                A selection that depends on the surface cannot serve a control that
+                                appears on two of them. */}
                             <button
                               type="button"
                               aria-pressed={chatTheme === 'system'}

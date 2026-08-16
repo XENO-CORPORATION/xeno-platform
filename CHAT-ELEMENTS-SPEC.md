@@ -336,7 +336,11 @@ Re-deciding these costs more than it saves.
 
   It reads correctly on `--chat-canvas` (`#0a0a0a`) and `--chat-surface` (`#171717`), which is why
   the artifacts, scheduled, settings-page and skills families all converted cleanly. **Check what the
-  control sits on before using it.** The design system's own answer for a selection on an elevated
+  control sits on before using it — and note that "check the surface" is not a sufficient rule.** The
+  theme menu's System chip is rendered into TWO panels, one `--chat-elevated` and one
+  `--chat-canvas`. Converting the copy that would read and not its twin gives one chip a filled
+  selection and the other a hover-tinted one, for a control the user reads as a single thing. A
+  selection that depends on the surface cannot serve a control that appears on two of them. The design system's own answer for a selection on an elevated
   surface — brighten the outline, as `prefBtn` does — has no variant: `outline` is a normal border at
   full ink, and its brightening is a hover.
 
