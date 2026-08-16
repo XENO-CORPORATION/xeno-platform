@@ -97,7 +97,13 @@ async function applySchema() {
         .split(/^--\s*DOWN/im)[0]
         .replace(/^--\s*UP.*$/im, '');
       await pool.query(sql);
-      console.log(`  applied ${f}`);
+      // Count after EVERY file. "applied X" followed later by "(none)" told me
+      // tables were disappearing but not which file removed them, and each
+      // guess costs a CI round.
+      const { rows: t } = await pool.query(
+        "SELECT COUNT(*)::int n FROM information_schema.tables WHERE table_name LIKE 'forum_%'",
+      );
+      console.log(`  applied ${f}  (forum tables now: ${t[0].n})`);
     } catch (err) {
       // Say what DOES exist. "relation X does not exist" while applying
       // migrations in order means either the creating migration was skipped or
