@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { Button, IconButton, MenuItem, MessageBubble, Spinner, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
+import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
 // The palettes and the preference that picks one live outside this file now: the CSS at the entry
 // point, the resolution beside it. This component still OWNS the switcher — it is the only thing that
 // writes these keys — but owning a setting never meant being the only place allowed to read it.
@@ -12934,6 +12934,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               aria-label="Open conversation history"
               title="Open history"
             />
+            {/* Stays hand-written: a brand mark, not a control. It is set in the DISPLAY face at
+                1.05rem, and every button component here imposes the control font and the control
+                type scale — taking one would silently re-set the wordmark. The box is a 36px band
+                with 4px of side padding, which is no step on the scale either. */}
             <button
               type="button"
               onClick={() => {
@@ -13916,6 +13920,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   >
                     {description}
                   </p>
+                  {/* Stays hand-written: it has no box. No padding, no height, no fill, no
+                      border — muted text that underlines under the pointer, sitting directly under
+                      the paragraph it expands. Giving it a button's height and side padding would
+                      push it off the text it belongs to. The same call as the composer's token
+                      counter: text that happens to be clickable. */}
                   {hasLongDescription && (
                     <button
                       type="button"
@@ -13945,28 +13954,26 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         <h2 className="mt-7 mb-1 text-[12.5px] font-medium text-[var(--chat-muted)]">
                           Recents
                         </h2>
+                        {/* The first `<ListRow>` in this chat, and the row was already its shape: a
+                            leading glyph, a title that truncates, a date pinned to the end, and a
+                            hover that paints the whole row. `onSelect` is what makes it a full-width
+                            button rather than a div, which is what it was.
+                            The padding transposes, and that is the visible change: this row wrote
+                            12px vertical over 8px horizontal, and the component's rhythm is the other
+                            way round — 8 over 12 — so the row loses 8px of height and gains side
+                            room. That is the list rhythm the design system keeps, and a Recents list
+                            is exactly where it should be kept. */}
                         <div>
                           {projectChats.map((chat) => (
-                            <button
+                            <ListRow
                               key={chat.id}
-                              type="button"
-                              onClick={() => {
+                              leading={<MessageSquare size={15} aria-hidden="true" />}
+                              title={chat.title}
+                              trailing={formatProjectCardDate(chat.timestamp)}
+                              onSelect={() => {
                                 void handleLoadConversation(chat.id);
                               }}
-                              className="flex w-full items-center gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-[var(--chat-hover)]"
-                            >
-                              <MessageSquare
-                                size={15}
-                                className="flex-shrink-0 text-[var(--chat-muted)]"
-                                aria-hidden="true"
-                              />
-                              <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--chat-text)]">
-                                {chat.title}
-                              </span>
-                              <span className="flex-shrink-0 text-[11.5px] text-[var(--chat-muted)]">
-                                {formatProjectCardDate(chat.timestamp)}
-                              </span>
-                            </button>
+                            />
                           ))}
                         </div>
                       </>
