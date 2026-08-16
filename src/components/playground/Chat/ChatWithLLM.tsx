@@ -16634,8 +16634,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                     className="flex items-center justify-between border-t px-2.5 py-1.5"
                                     style={{ borderColor: 'var(--chat-border)' }}
                                   >
-                                    <button
-                                      type="button"
+                                    {/* `ghost xs`, both of these: no fill, no border, muted ink
+                                        coming up under the pointer. At ~21px tall with 6px padding
+                                        and 11px type they are under the scale, and xs is the nearest
+                                        step in every dimension — 24 / 8 / 12, which is three pixels,
+                                        two and one. Small enough to be the swap §3.3 asks for rather
+                                        than a resize wearing its clothes. */}
+                                    <Button
+                                      variant="ghost"
+                                      size="xs"
                                       onClick={() => {
                                         setProjectScheduledCreateSchedule(
                                           (prev) => ({
@@ -16645,12 +16652,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         );
                                         setIsProjectScheduleDateOpen(false);
                                       }}
-                                      className="rounded-md px-1.5 py-1 text-[11px] text-[var(--chat-muted)] transition-colors hover:text-[var(--chat-text)]"
                                     >
                                       Clear
-                                    </button>
-                                    <button
-                                      type="button"
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="xs"
                                       onClick={() => {
                                         const today = formatScheduleDateYmd(
                                           new Date(),
@@ -16666,10 +16673,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         );
                                         setIsProjectScheduleDateOpen(false);
                                       }}
-                                      className="rounded-md px-1.5 py-1 text-[11px] text-[var(--chat-muted)] transition-colors hover:text-[var(--chat-text)]"
                                     >
                                       Today
-                                    </button>
+                                    </Button>
                                   </div>
                                     </div>
                                   </div>
@@ -16694,6 +16700,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                 {SCHEDULE_WEEKDAYS.map((day, index) => {
                                   const active =
                                     projectScheduledCreateSchedule.weekday === index;
+                                  /* Stays hand-written, and it is off the scale in ONE dimension
+                                     while sitting on it in the other. The box is `h-8`, which is md
+                                     exactly; the type is 11px, which is below xs. Taking md would put
+                                     14px type into a seven-column grid of ~40px cells, and taking xs
+                                     would cut 8px off a row that is already the right height. In a
+                                     grid this narrow the type is the dimension that cannot move. */
                                   return (
                                     <button
                                       key={day}
