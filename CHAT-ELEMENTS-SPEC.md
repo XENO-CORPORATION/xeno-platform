@@ -382,11 +382,22 @@ Re-deciding these costs more than it saves.
   box: the library's position is that height is a surface-level variable, so an 18px control is a
   size this app has not declared rather than an override to write at six call sites.
 
-- **Panels that are not menus.** `MenuItem` renders `role="menuitem"`, which has to be owned by a
-  `role="menu"`. Four rows across the chat want it — the attach panel's two, and the search view's
-  model dropdown — and each sits in a plain `<div>` with a click-outside ref. **Eight sibling panels
-  in ChatWithLLM already run on `useMenu`**, so the shape is established and the fix is small; it is
-  keyboard behaviour rather than a control swap, which is why it is here and not in an iteration.
+- ~~**Panels that are not menus.**~~ **Closed.** Both panels run on `useMenu` + `useGooPill` now and
+  their four rows are `MenuItem`s. Measured on the model dropdown: focus lands on the first row when
+  it opens, Arrow Up/Down and Home/End walk, Escape closes, and the accordion row keeps the menu alive
+  because `expanded` reports `aria-expanded`, which `useMenu` treats as a disclosure rather than a
+  choice.
+
+  **What it cost to find:** the rows would not take focus, and the hook was not at fault.
+  `transition-all` on a panel that opens by flipping `visible`/`invisible` sweeps `visibility` INTO
+  the transition, and Chrome then keeps the panel hidden for longer than a frame — measured, still
+  hidden at 16ms and visible by 50. `useMenu` focuses the first row in the commit that opens the menu,
+  so it was aiming at a hidden subtree and the focus went nowhere. `transition-[opacity,transform]`
+  fixes it and keeps the fade and the scale. **Any panel that hides with `visibility` should name its
+  transitioned properties.**
+
+  Escape is not the hook's: it owns the arrows, Home/End and Tab, and hands dismissal back to whoever
+  owns the open state. Both panels got the listener every other menu in the chat already had.
 
 - **7 `ReferenceError`s** outside the chat — Office, AudioGeneration, ImageStudio. `npm run
   check:names` lists them with file and line. The fixes need their authors' intent (`smoothStroke`

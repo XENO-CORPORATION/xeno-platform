@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Button, IconButton, SegmentedControl, Spinner } from '@xenosystem/elements-react';
+import { Button, IconButton, MenuItem, SegmentedControl, Spinner, useGooPill, useMenu } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
 import { Send, Globe, ChevronDown, Eye, Check, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl, EditDecl, LightbulbDecl, GlobeDecl, BotDecl, BrainDecl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
@@ -211,6 +211,15 @@ const SearchChatInterface: React.FC = () => {
   const companyDropdownButtonRef = useRef<HTMLButtonElement>(null);
   const xenoBrowserRef = useRef<XenoBrowserRef>(null);
   const companyListContainerRef = useRef<HTMLDivElement>(null);
+  /* The model dropdown was a plain div with a click-outside ref: every row its own Tab stop,
+     arrows dead, Escape ignored. useMenu gives it the behaviour and useGooPill the travelling
+     highlight, both measuring the ref the click-outside handler already holds. */
+  const companyMenuGoo = useGooPill<HTMLDivElement>({ hostRef: companyListContainerRef });
+  const companyMenuKbd = useMenu<HTMLDivElement>({
+    open: isCompanyDropdownOpen,
+    onClose: () => { setIsCompanyDropdownOpen(false); },
+    menuRef: companyListContainerRef,
+  });
 
   // Load models on mount
   useEffect(() => {
@@ -290,6 +299,18 @@ const SearchChatInterface: React.FC = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  /* Escape closes it, which is the one thing `useMenu` deliberately does not do: the hook owns the
+     arrows, Home/End and Tab, and leaves dismissal to whoever owns the open state. Every other menu in
+     this chat pairs its click-outside effect with exactly this listener. */
+  useEffect(() => {
+    if (!isCompanyDropdownOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsCompanyDropdownOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isCompanyDropdownOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1394,75 +1415,58 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
             {/* Model Dropdown */}
             <div
-              ref={companyListContainerRef}
+              {...(() => { const { ref: _g, className: _c, ...handlers } = companyMenuGoo.hostProps; return handlers; })()}
+              {...companyMenuKbd.menuProps}
               className={`
+                ${companyMenuGoo.hostProps.className} chat-goo
                 absolute top-full mt-[10px] right-0 z-20
-                transition-all duration-200 ease-out origin-top-right
+                transition-[opacity,transform] duration-200 ease-out origin-top-right
                 ${isCompanyDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}
                 w-72 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg shadow-xl
                 max-h-[70vh] overflow-hidden flex flex-col
               `}
             >
+              {/* First child, so the pill paints behind the rows rather than over them. */}
+              {companyMenuGoo.pill}
               <div className="flex-1 overflow-y-auto">
                 {groupedModels.map((group) => {
                   const isExpanded = expandedCompanies.has(group.companyName);
                   const isActiveCompany = getCompanyNameFromModelId(selectedModel.id) === group.companyName;
                   return (
                     <div key={group.companyName}>
-                      {/* Stays hand-written, and the row it wants is `<MenuItem expanded>` — which
-                          draws exactly this: a label, a trailing chevron quarter-turned when open,
-                          and `aria-expanded` rather than `aria-haspopup`. Its sibling below wants
-                          `<MenuItem value>`, the right-aligned value in the UI face, which is the
-                          token count.
-                          What blocks both is semantics, not shape. `MenuItem` renders
-                          `role="menuitem"`, and a menuitem has to be owned by a `role="menu"`. This
-                          dropdown is a plain `<div>` with an accordion inside it, so dropping them
-                          in would scatter orphan menuitems across the tree. Making the panel a real
-                          menu is a behaviour change to a custom disclosure, not a control swap. */}
-                      <button
-                        onClick={() => {
-                          setExpandedCompanies(prev => {
-                            if (prev.has(group.companyName)) {
-                              return new Set();
-                            } else {
-                              return new Set([group.companyName]);
-                            }
-                          });
+                      {/* A DISCLOSURE, not a submenu: the models grow underneath this row rather
+                          than opening a panel beside it, and `expanded` is the component's word for
+                          that — the same chevron, quarter-turned, reporting `aria-expanded` instead
+                          of promising a popup. It is also what keeps the dropdown alive, because
+                          `useMenu` dismisses on any chosen row except one that reports it.
+                          `selected` marks the company the current model belongs to, which is what
+                          the brighter label said by hand. */}
+                      <MenuItem
+                        expanded={isExpanded}
+                        selected={isActiveCompany}
+                        onSelect={() => {
+                          setExpandedCompanies((prev) =>
+                            prev.has(group.companyName) ? new Set() : new Set([group.companyName]),
+                          );
                         }}
-                        className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
-                          isExpanded ? 'bg-[var(--chat-hover)]' : 'hover:bg-[var(--chat-hover)]'
-                        }`}
                       >
-                        <span className={`text-sm ${isActiveCompany ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'}`}>
-                          {group.companyName}
-                        </span>
-                        <ChevronDown size={14} className={`text-[var(--chat-muted)] transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-                      </button>
+                        {group.companyName}
+                      </MenuItem>
 
                       <div className={`overflow-hidden transition-all duration-200 ${isExpanded ? 'max-h-[400px]' : 'max-h-0'}`}>
                         <div className="pb-1">
-                          {/* Stays hand-written — the company row's sibling, same owning-menu
-                              blocker. */}
+                          {/* `value` is the right-aligned token count in the UI face — deliberately
+                              not `shortcut`, which sets mono and would make a number read as a key
+                              to press. `selected` draws the check the hand-written row drew. */}
                           {group.models.map((model) => (
-                            <button
+                            <MenuItem
                               key={model.id}
-                              onClick={() => handleModelSelect(model)}
-                              className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
-                                selectedModel.id === model.id ? 'bg-[var(--chat-control)]' : 'hover:bg-[var(--chat-hover)]'
-                              }`}
+                              selected={selectedModel.id === model.id}
+                              value={formatTokens(model.maxTokens)}
+                              onSelect={() => handleModelSelect(model)}
                             >
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <span className={`text-sm truncate ${selectedModel.id === model.id ? 'text-[var(--chat-text)]' : 'text-[var(--chat-muted)]'}`}>
-                                  {model.name}
-                                </span>
-                                <span className="text-[10px] text-[var(--chat-muted)] flex-shrink-0">
-                                  {formatTokens(model.maxTokens)}
-                                </span>
-                              </div>
-                              {selectedModel.id === model.id && (
-                                <Check size={14} className="text-[var(--chat-muted)] flex-shrink-0" />
-                              )}
-                            </button>
+                              {model.name}
+                            </MenuItem>
                           ))}
                         </div>
                       </div>

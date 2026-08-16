@@ -52,7 +52,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, PanelRightOpen, PanelRightClose, UserRoundX, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessageSquarePlus, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, PanelRightOpen, PanelRightClose, UserRoundX, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -4428,6 +4428,24 @@ interface QueueState {
 
     loadModels();
   }, []);
+
+  /* Escape closes the attach menu — the one thing `useMenu` deliberately leaves alone. The hook owns
+     the arrows, Home/End and Tab and hands dismissal back to whoever owns the open state, which is why
+     every other menu in this file pairs its click-outside effect with a listener like this one. */
+  useEffect(() => {
+    if (!isAttachMenuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      // The submenu first: Escape should take one step back, not close the whole thing at once.
+      if (isRecentFilesOpen) {
+        setIsRecentFilesOpen(false);
+        return;
+      }
+      setIsAttachMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isAttachMenuOpen, isRecentFilesOpen]);
 
   // Effect to handle clicks outside menus and tooltips
   useEffect(() => {
@@ -11289,6 +11307,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     onClose: () => { setRecentsFilterMenu(null); },
     menuRef: recentsFilterMenuRef,
   });
+  /* The attach panel was the last dropdown in this file still doing none of what a menu does — every
+     row its own Tab stop, arrows dead, Escape ignored. It reuses `attachMenuRef`, which the
+     click-outside handler already holds, so the pill, the keyboard and the outside-click all measure
+     the same element. */
+  const attachMenuGoo = useGooPill<HTMLDivElement>({ hostRef: attachMenuRef });
+  const attachMenuKbd = useMenu<HTMLDivElement>({
+    open: isAttachMenuOpen,
+    onClose: () => { setIsAttachMenuOpen(false); },
+    menuRef: attachMenuRef,
+  });
   const recentsSubmenuRef = useRef<HTMLDivElement | null>(null);
   const recentsSubmenuGoo = useGooPill<HTMLDivElement>({ hostRef: recentsSubmenuRef });
   const recentsSubmenuKbd = useMenu<HTMLDivElement>({
@@ -11593,43 +11621,40 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       />
                       {/* Attach Menu */}
                       <div 
-                          ref={attachMenuRef}
+                          {...(() => { const { ref: _g, className: _c, ...handlers } = attachMenuGoo.hostProps; return handlers; })()}
+                          {...attachMenuKbd.menuProps}
                           className={`
+                              ${attachMenuGoo.hostProps.className} chat-goo
                               absolute bottom-full left-0 z-30 mb-2 origin-bottom-left
                               w-64 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
-                              transition-all duration-200 ease-out
+                              transition-[opacity,transform] duration-200 ease-out
                               ${isAttachMenuOpen 
                                   ? 'opacity-100 scale-100 visible' 
                                   : 'opacity-0 scale-95 invisible' 
                               }
                           `}
                        >
+                           {/* First child, so the pill paints behind the rows rather than over them. */}
+                           {attachMenuGoo.pill}
                            <div className="space-y-1 p-2">
-                               {/* Stays hand-written, and so does its sibling below. Both are
-                                   `<MenuItem>` to the letter — a leading glyph, a label, a
-                                   `--chat-hover` fill on the row, and for Recent a trailing chevron
-                                   that says it leads somewhere, which is `submenu`.
-                                   What blocks them is that `MenuItem` renders `role="menuitem"`, and
-                                   a menuitem has to be owned by a `role="menu"`. This panel is a
-                                   plain div with a click-outside ref. EIGHT sibling panels in this
-                                   same file already run on `useMenu` — this is one of the few that
-                                   does not — so the fix is known and small, but it is keyboard
-                                   behaviour rather than a control swap, and it is not verifiable
-                                   against a mock with no files in it. */}
-                               <button onClick={handleUploadFile} className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] hover:bg-[var(--chat-hover)]">
-                                   <FolderUp size={18} className="text-[var(--chat-muted)]" />
-                                   <span>Upload a file</span>
-                               </button>
+                               <MenuItem leadingIcon={FolderUpDecl} onSelect={handleUploadFile}>
+                                   Upload a file
+                               </MenuItem>
                                <div className="mx-1 my-1 border-t border-[var(--chat-border)]"></div>
-                               {/* Stays hand-written — Upload a file's sibling, same owning-menu
-                                   blocker, plus the chevron that would be `submenu`. */}
-                               <button onClick={handleShowRecent} className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm text-[var(--chat-text)] hover:bg-[var(--chat-hover)]">
-                                   <div className="flex items-center gap-3">
-                                      <FileClock size={18} className="text-[var(--chat-muted)]" />
-                                      <span>Recent</span>
-                          </div>
-                                   <ChevronDown size={16} className="-rotate-90 transform text-[var(--chat-muted)]" /> 
-                            </button>
+                               {/* `submenu` AND `aria-expanded`, and both are true: the row promises a
+                                   panel and that panel is currently showing. The second is what keeps
+                                   this menu alive — `useMenu` dismisses on any chosen row except one
+                                   reporting `aria-expanded`, and the Recent panel is only visible
+                                   while `isAttachMenuOpen`, so closing here would destroy the thing
+                                   the click just asked for. */}
+                               <MenuItem
+                                   leadingIcon={FileClockDecl}
+                                   submenu
+                                   aria-expanded={isRecentFilesOpen}
+                                   onSelect={handleShowRecent}
+                               >
+                                   Recent
+                               </MenuItem>
                            </div>
                          </div>
                         {/* Recent Files Panel */}

@@ -255,6 +255,7 @@ export {
   GSend as SendDecl,
   GStop as StopCircleDecl,
   GFolderUp as FolderUpDecl,
+  GFileClock as FileClockDecl,
   GNextDismiss as NextDismissDecl,
   GPause as PauseDecl,
   GPlay as PlayDecl,
