@@ -181,13 +181,36 @@ test('the welcome email contains a checklist, a CTA and a working unsubscribe li
   // shell for paths that do not exist — a fetch would report every dead link as
   // healthy.
   const appSrc = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  const routes = [...appSrc.matchAll(/path="([^"]+)"/g)].map((m) => m[1]);
+
+  // 🔴 The CATCH-ALL is excluded, and that exclusion is the whole point.
+  //
+  // App.tsx registers path="*" — the 404 component. Left in the set it matches
+  // every string, so this gate would pass ANY link, including one that renders
+  // the not-found page. It would break OPEN: green forever, protecting nothing.
+  // (It also crashed outright — `new RegExp('^*$')` throws — which is the only
+  // reason the mistake was visible at all rather than silently useless.)
+  const routes = [...appSrc.matchAll(/path="([^"]+)"/g)]
+    .map((m) => m[1])
+    .filter((r) => r !== '*' && r !== '/*');
+
   const routeMatches = (p) => routes.some((r) => {
     if (r === p) return true;
-    // /product/:slug/download matches /product/hub/download; /overview/* matches /overview
-    const rx = new RegExp('^' + r.replace(/:[^/]+/g, '[^/]+').replace(/\/\*$/, '(/.*)?') + '$');
-    return rx.test(p);
+    // Escape regex metacharacters in the literal parts, then re-introduce the
+    // two React-Router wildcards deliberately:
+    //   :param  -> one path segment   (/product/:slug/download ~ /product/hub/download)
+    //   trailing /* -> optional subtree (/overview/* ~ /overview and /overview/chat)
+    const src = r
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/:[^/]+/g, '[^/]+')
+      .replace(/\/\*$/, '(/.*)?');
+    return new RegExp(`^${src}$`).test(p);
   });
+
+  // The matcher must be able to FAIL. A gate that cannot fail is not evidence,
+  // and this one is two characters away from matching everything.
+  assert.ok(!routeMatches('/definitely-not-a-route-9f3a'),
+    'the route matcher accepts anything — it is not actually checking');
+  assert.ok(routeMatches('/docs'), 'the route matcher rejects a route that exists');
 
   const internal = [...sent.html.matchAll(/href="https:\/\/xenostudio\.ai([^"]*)"/g)]
     .map((m) => m[1].split('?')[0] || '/')
