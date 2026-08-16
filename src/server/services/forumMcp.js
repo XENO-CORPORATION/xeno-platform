@@ -137,6 +137,43 @@ export const TOOLS = [
       properties: { since: { type: 'string', description: 'ISO timestamp; window is clamped to 30 days.' } },
     },
   },
+  {
+    name: 'forum_flag',
+    description:
+      'Flag a thread or a post for human review. This REMOVES NOTHING and hides nothing — it '
+      + 'creates work for a moderator. Agents flag; humans decide.',
+    auth: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        shortId: { type: 'string', description: 'The thread short id, e.g. "bf7ea994".' },
+        postPosition: {
+          type: 'number',
+          description: 'Optional: flag one POST in the thread, by the position forum_get_thread returned.',
+        },
+        reason: { type: 'string', enum: ['spam', 'abuse', 'off_topic', 'duplicate', 'low_quality', 'other'] },
+        detail: { type: 'string', description: 'What you observed. A flag without it costs a human a re-read.' },
+      },
+      required: ['shortId', 'reason'],
+    },
+  },
+  {
+    name: 'forum_mark_fixed',
+    description:
+      'Loop C: record that a shipped release fixed this thread. Posts the release note and '
+      + 'notifies everyone who reported it. Staff only — the service enforces that, and an '
+      + "agent is staff only if its owner is. Use the version you actually shipped.",
+    auth: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        shortId: { type: 'string' },
+        version: { type: 'string', description: 'The released version, e.g. "0.6.4".' },
+        note: { type: 'string', description: 'Optional: what changed.' },
+      },
+      required: ['shortId', 'version'],
+    },
+  },
 ];
 
 /** MCP content blocks. Text is what every client renders; JSON rides alongside. */
@@ -207,6 +244,43 @@ export async function callTool(db, actor, name, args = {}) {
         return ok(await write.subscribeTag(db, actor, args.tag));
       case 'forum_digest':
         return ok(await svc.getDigest(db, actor.id, { since: args.since }));
+      case 'forum_flag': {
+        // 🔴 THE AGENT SURFACE SPEAKS IN CITABLE IDS. `raiseFlag` takes a UUID,
+        // which an agent never has and cannot cite — every read tool here
+        // returns short ids and post POSITIONS, because those are what appear
+        // in a URL a human can be handed. Resolving here rather than widening
+        // `raiseFlag` keeps the internal id internal.
+        const t = await svc.getThreadByShortId(db, String(args.shortId || '').toLowerCase());
+        if (!t) return err('Thread not found');
+
+        // NOT `t.id` — the read payload has no `id`, by design. Asking for it
+        // explicitly is what makes that design safe to rely on.
+        let targetType = 'thread';
+        let targetId = await svc.getThreadIdByShortId(db, t.shortId);
+        if (!targetId) return err('Thread not found');
+        if (args.postPosition != null) {
+          const post = (t.posts || []).find((p) => Number(p.position) === Number(args.postPosition));
+          if (!post) return err(`No post at position ${args.postPosition} in ${args.shortId}`);
+          targetType = 'post';
+          targetId = post.id;
+        }
+
+        await write.raiseFlag(db, actor, {
+          targetType, targetId, reason: args.reason, detail: args.detail,
+        });
+        // Deliberately reports what did NOT happen: an agent told only "ok"
+        // may conclude the content is gone and stop reading it.
+        return ok({
+          flagged: true, target: targetType, shortId: t.shortId,
+          note: 'Queued for human review. Nothing was hidden or removed.',
+        });
+      }
+      case 'forum_mark_fixed': {
+        const r = await write.markThreadFixed(db, actor, String(args.shortId || '').toLowerCase(), {
+          version: args.version, note: args.note,
+        });
+        return ok({ ...r, url: `${SITE}/forum/t/${String(args.shortId || '').toLowerCase()}` });
+      }
       default:
         return err(`Unhandled tool: ${name}`);
     }
