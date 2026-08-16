@@ -425,6 +425,22 @@ A release is complete only when **every** applicable box is checked.
 - [ ] `curl -sI https://xenostudio.ai/product/<slug>` returns **200**.
 - [ ] Headless screenshot verified (hero, scroll, CTA, accents; `/docs/<slug>` if docs shipped).
 
+**Loop C — write the fix back to the Forum (whenever this release fixes a reported problem):**
+
+- [ ] For every Forum thread this version fixed, record it — from an agent session:
+      `forum_mark_fixed { shortId, version, note }` over MCP, or
+      `POST /api/forum/threads/<shortId>/fixed { "version": "<version>" }`.
+      Find the candidates with `forum_search`, or in the `waiting`/`rising` sections of
+      `forum_digest` for the product's tag.
+- [ ] Confirm the thread now reads **"Fixed in \<version\>"** and that the reporters were notified.
+
+🔴 **Why this is a checkbox and not a courtesy.** A user who reports a problem and never learns it
+mattered does not report a second time — and the archive fills with open threads describing bugs
+that shipped a fix a year ago, which misleads the next reader *and* every agent that searches it.
+`XENO FORUM - v1.0 RELEASE PLAN.md` §2 calls the write-back "the step everyone skips"; a step that
+depends on someone remembering is a step that is skipped. **Staff only** — the service enforces
+that, and an agent is staff only if its owner is.
+
 **The mandatory rule (never skip):** the release is not done until the product pages reflect it. If R2 or the live page does not show the new version, the release is incomplete — go back and finish it.
 
 ---

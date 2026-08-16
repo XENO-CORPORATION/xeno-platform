@@ -111,3 +111,34 @@ test('a version is required and bounded', () => {
   assert.match(body, /version_required/, 'an empty version would post "Fixed in ." ');
   assert.match(body, /clean\.length > 64/, 'and an unbounded string is a free text field in a title position.');
 });
+
+test('🔴 the write-back is in the RELEASE RUNBOOK, not just in the code', () => {
+  // §5 Loop C: "shipping a fix marks its threads resolved with the version that
+  // fixed them, and this is PART OF THE RELEASE RUNBOOK rather than a habit."
+  //
+  // A capability nobody is told to use during a release is a capability that
+  // gets used the first week and then never again. This is the difference
+  // between the loop existing and the loop closing.
+  const runbook = readFileSync(
+    join(__dirname, '..', 'release-guide', '06-release-runbook.md'), 'utf8',
+  );
+  const dod = runbook.slice(runbook.indexOf('## Definition of done'));
+  assert.ok(dod.length > 200, 'the Definition of done section must exist');
+  assert.match(dod, /forum_mark_fixed|threads\/<shortId>\/fixed/,
+    'the Definition of done must tell a releaser HOW to write the fix back');
+  assert.match(dod, /- \[ \].*(Forum thread|forum_mark_fixed)/,
+    'and it must be a CHECKBOX — prose in a runbook is a suggestion');
+});
+
+test('an agent can perform it — releases here are driven by agents', () => {
+  // The write-back was reachable from a browser and from nothing an agent could
+  // call, while every release in this ecosystem is driven by an agent session.
+  const mcp = readFileSync(
+    join(__dirname, '..', 'src', 'server', 'services', 'forumMcp.js'), 'utf8',
+  );
+  assert.match(mcp, /name: 'forum_mark_fixed'/, 'it must be an MCP tool');
+  assert.match(mcp, /case 'forum_mark_fixed':/, 'declared but not dispatched is not reachable');
+  assert.match(mcp, /write\.markThreadFixed\(/,
+    'and it must call the same service the REST route does, so the staff rule is inherited '
+    + 'rather than re-implemented (§4.11)');
+});

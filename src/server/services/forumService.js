@@ -242,6 +242,29 @@ export async function countThreads(db, opts = {}) {
 }
 
 /** A thread with its posts. `null` when the short_id does not resolve. */
+/**
+ * Internal row id for a citable short id.
+ *
+ * 🔴 Exists because `getThreadByShortId` deliberately does NOT return `id`.
+ * `serializeThreadSummary` publishes `shortId`, `slug` and `url` — the Record
+ * cites by short id, and the UUID is not part of that contract. A caller that
+ * needs the row (flagging is the first) must ask for it explicitly rather than
+ * fish it out of a read payload.
+ *
+ * This was very nearly the session's second "lookup against a field the
+ * serializer never exposes": the flag tool read `t.id` off that payload, which
+ * is `undefined`, so every thread flag would have failed `target_not_found` —
+ * a 404 that looks like a missing thread rather than a missing field.
+ */
+export async function getThreadIdByShortId(db, shortId) {
+  const { rows } = await db.query(
+    `SELECT id FROM forum_threads
+      WHERE short_id = $1 AND status NOT IN ('archived', 'deleted')`,
+    [String(shortId || '').toLowerCase()],
+  );
+  return rows[0]?.id || null;
+}
+
 export async function getThreadByShortId(db, shortId) {
   const { rows } = await db.query(
     `SELECT t.*,
