@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { IconButton, Switch, TextInput, useTabs } from '@xenosystem/elements-react';
-import { Check, Search, Settings, Trash2Decl, SearchDecl } from '@/lib/icons';
+import { Check, Settings, Trash2Decl, SearchDecl } from '@/lib/icons';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 import {
   deleteMemoryEntry,

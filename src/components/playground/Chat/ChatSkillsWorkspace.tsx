@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, IconButton, TextInput } from '@xenosystem/elements-react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Plus, Search, Trash2Decl, SearchDecl } from '@/lib/icons';
+import { ChevronLeft, ChevronRight, Plus, Trash2Decl, SearchDecl } from '@/lib/icons';
 import {
   addCatalogSkillToLibrary,
   addGlobalSkillToChat,

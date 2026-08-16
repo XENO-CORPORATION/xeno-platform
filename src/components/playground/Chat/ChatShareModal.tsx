@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button, IconButton, useDialog } from '@xenosystem/elements-react';
-import { Building, Check, Copy, Globe, Lock, X, XDecl } from '@/lib/icons';
+import { Building, CheckDecl, CopyDecl, Globe, Lock, XDecl } from '@/lib/icons';
 import {
   VISIBILITY_OPTIONS,
   buildSocialShareUrl,
@@ -336,6 +336,12 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
               {VISIBILITY_OPTIONS.map((option, index) => {
                 const selected = visibility === option.id;
                 return (
+                  /* Stays hand-written. `<RadioRow>` exists and is the right IDEA, but it draws a
+                     marker on the left and takes a single `label`, while this row leads with the
+                     option's own glyph and answers on the right with a check that draws itself.
+                     Adopting it would put two selection indicators on the row and drop the drawn
+                     check — a redesign wearing a component's name, not an adoption. It converts the
+                     day RadioRow has a leading slot and can be told where its mark goes. */
                   <button
                     key={option.id}
                     type="button"
@@ -397,19 +403,30 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
                 >
                   {link?.url}
                 </a>
-                <button
-                  type="button"
+                {/* One button with two faces, never two buttons: the ternary lives in `leadingIcon`
+                    so the check DRAWS itself over the copy mark. Swapping one element for another
+                    gives the glyph nothing to animate from.
+
+                    `ghost` is not a guess — muted ink that goes to full text on hover, over a
+                    `--chat-hover` fill, is what the eleven utility classes here spelled out. `lg`
+                    likewise: 14px padding, 14px font, both already the scale's.
+
+                    The two overrides are about the FIELD, not the control. This button is welded
+                    into a 44px joined field that clips its own corners, so it stretches and squares
+                    off — and both are said through the library's own variables rather than by
+                    out-specifying its stylesheet, which is the difference between composing with a
+                    component and wearing it. */}
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  iconSize={14}
+                  leadingIcon={copied ? CheckDecl : CopyDecl}
                   onClick={() => void handleCopy()}
                   data-selection={copied ? 'on' : 'off'}
-                  className="flex flex-shrink-0 items-center gap-1.5 border-l px-3.5 text-sm font-medium text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                  style={{
-                    borderColor: 'var(--chat-border)',
-                    backgroundColor: 'transparent',
-                  }}
+                  className="flex-shrink-0 border-l-[color:var(--chat-border)] [--xeno-h:100%] [--xeno-radius-control:0px]"
                 >
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
                   {copied ? 'Copied' : 'Copy'}
-                </button>
+                </Button>
               </div>
 
               <p className="text-[12px] leading-5 text-[var(--chat-muted)]">
@@ -430,6 +447,11 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
                 </p>
                 <div className="grid grid-cols-4 gap-2">
                   {SOCIAL_ACTIONS.map((action) => (
+                    /* Stays hand-written, for the same reason the XENO wordmark button does: what it
+                       holds is a BRAND mark — "in", "f", "r/", "X" set in the accent tile — and not a
+                       glyph the library draws or should. The shape disagrees too: a `Button` is a
+                       horizontal row with its icon beside the label, and this is a tile with the mark
+                       stacked above it. Two disagreements, neither of them the component's fault. */
                     <button
                       key={action.id}
                       type="button"

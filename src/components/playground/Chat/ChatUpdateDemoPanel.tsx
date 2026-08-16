@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '@xenosystem/elements-react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowUp, ChevronDown, Copy, ExternalLink, FileText, LayoutGrid, MessageSquare, CheckDecl, CopyDecl } from '@/lib/icons';
+import { ArrowUp, ChevronDown, ExternalLink, FileText, LayoutGrid, MessageSquare, CheckDecl, CopyDecl } from '@/lib/icons';
 import type { ChatUpdateDemoBody, ChatUpdateDemoLayout } from './ChatUpdateCarousel';
 
 interface ChatUpdateDemoPanelProps {

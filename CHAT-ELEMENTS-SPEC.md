@@ -30,6 +30,14 @@ That prints the per-file button count, the field count, and what is already adop
 with the **smallest non-zero count** first — small files finish, and a finished file is a result.
 `ChatWithLLM.tsx` is more than half the total and is worked last.
 
+The count is of buttons **still to decide**, not of `<button>` tags. A control that stays hand-written
+for a reason is finished work, so the board stops counting it — otherwise a file whose every
+remaining control has already been decided keeps coming up as the smallest, and an agent with no
+memory of the last iteration re-derives the same decisions forever.
+
+**How to mark one: a comment directly above the `<button>` opening with the words `Stays
+hand-written`,** then the reason. The phrase is the marker; the sentence after it is the point.
+
 ---
 
 ## 1. What one iteration is
@@ -283,8 +291,8 @@ Re-deciding these costs more than it saves.
 
 The chat is finished when:
 
-1. `node scripts/spec-status.mjs` reports **0** hand-written buttons and **0** convertible fields,
-   with the §8 exclusions accounted for by name;
+1. `node scripts/spec-status.mjs` reports **0 still to decide** and **0** convertible fields — every
+   remaining `<button>` carrying its `Stays hand-written` reason (§0), the §8 list among them;
 2. `npm run check:names` is clean for the chat;
 3. every probe in §6 passes;
 4. the light theme and two custom brightness stops read correctly on all three routes;

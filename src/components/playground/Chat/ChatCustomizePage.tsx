@@ -285,6 +285,12 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
               {formatUpdated(skill.updatedAt)}
             </span>
             <div className="w-[4.5rem] flex-shrink-0 text-right">
+              {/* Stays hand-written: a switch by ROLE, a button by shape. `<Switch>` is a 36 × 20
+                  track with a knob that slides; this is a 52px pill that spells the state out in
+                  words, and the word is what makes a row of skills readable at a glance. Taking the
+                  component would not be adopting it — it would be redrawing the control. One of the
+                  three such pills in the chat; the one real switch converted, in
+                  ChatGlobalSettingsPage, at exactly its own size. */}
               <button
                 type="button"
                 role="switch"
@@ -394,6 +400,16 @@ const ChatCustomizePage: React.FC<ChatCustomizePageProps> = ({
               aria-hidden="true"
             />
             <div className="relative ml-1 flex-shrink-0">
+              {/* Stays hand-written, and the reason is the BOX, not the mark.
+                  The mark is already in the library: `info` is a rounded square holding a dot and a
+                  stem, which is what a 6px-radius border around a 10px "i" draws. So this is not an
+                  unusual control — it is `<IconButton icon={InfoDecl}>` with one thing in the way.
+                  The box is 18 × 18 and the control scale starts at xs = 24. Six pixels in a header
+                  row that already sets its rhythm off an 18px Briefcase, so growing it is a visible
+                  change to this header, not a swap. `iconSize` reaches the glyph and deliberately not
+                  the box: the library's position is that height is a surface-level variable, so an
+                  18px control is a size token this app has not declared rather than an override to
+                  write at one call site. Convert when it has one. */}
               <button
                 type="button"
                 className={`${RADIUS} peer flex h-[18px] w-[18px] items-center justify-center border border-[var(--chat-border)] bg-transparent text-[10px] font-semibold leading-none text-[var(--chat-muted)] transition-colors hover:border-[var(--chat-muted)] hover:text-[var(--chat-text)] focus-visible:border-[var(--chat-muted)] focus-visible:text-[var(--chat-text)] focus-visible:outline-none`}

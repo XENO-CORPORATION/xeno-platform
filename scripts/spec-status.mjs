@@ -53,6 +53,27 @@ function expander(src) {
   };
 }
 
+/**
+ * Does a comment sitting immediately above this button explain why it is NOT a component?
+ *
+ * Without this the board cannot tell "nobody has looked at it yet" from "someone looked, decided, and
+ * wrote down why" — so an agent with no memory of the last iteration picks the same finished file
+ * again, re-derives the same two exclusions, and the loop never advances. Spec §10 makes the comment
+ * the actual finish line ("nothing is hand-written by accident"), which only works if the measurement
+ * can see one.
+ *
+ * The marker is the phrase, not the presence of a comment: plenty of buttons carry a comment about
+ * something else entirely.
+ */
+const MARKER = 'Stays hand-written';
+function documentedAbove(src, at) {
+  const before = src.slice(Math.max(0, at - 1200), at).trimEnd();
+  const tail = before.endsWith('*/}') ? before.slice(0, -1) : before;
+  if (!tail.endsWith('*/')) return false;
+  const open = tail.lastIndexOf('/*');
+  return open >= 0 && tail.slice(open).includes(MARKER);
+}
+
 function buttonsIn(file) {
   const src = readFileSync(file, 'utf8');
   const expand = expander(src);
@@ -80,6 +101,7 @@ function buttonsIn(file) {
       : stripped ? 'labelled' : 'mixed';
     out.push({
       line: src.slice(0, i).split('\n').length,
+      documented: documentedAbove(src, i),
       kind,
       glyphs: glyphs.length ? glyphs.join(',') : (anyGlyph.join(',') || '-'),
       text: text.slice(0, 18) || '-',
@@ -94,6 +116,36 @@ function buttonsIn(file) {
 
 const count = (needle) => files.reduce((n, f) => n + readFileSync(f, 'utf8').split(needle).length - 1, 0);
 
+/**
+ * Is `name` USED in this text, as opposed to merely appearing in it?
+ *
+ * A plain word-boundary test gets this wrong whenever an imported name is also an English word on
+ * screen: `Copy` survived a sweep because the button it used to draw is labelled `'Copy'`, so the
+ * tool reported a dead import as live. `Check`, `Search`, `Share` and `Settings` are all one UI
+ * string away from the same mistake.
+ *
+ * The fix is deliberately NOT a string/comment scanner. The first attempt was one, and it was worse
+ * than the bug: JSX text is full of apostrophes — "What's new" — so the scanner opened a string at
+ * the apostrophe and blanked the code that followed, reporting live imports as dead. In JSX you
+ * cannot tell a quote from a punctuation mark without parsing.
+ *
+ * What you CAN tell is the character in front. A use is `<Name`, `{Name}`, `= Name`, `(Name` — never
+ * `'Name'` and never `>Name<`. So reject a match whose neighbours are quotes, and one that follows a
+ * `>`, which is JSX text. A name mentioned in a COMMENT still counts as used; that keeps a dead
+ * import occasionally, which is the harmless direction to be wrong in.
+ */
+function isUsed(name, text) {
+  const re = new RegExp(`\\b${name}\\b`, 'g');
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    const before = m.index > 0 ? text[m.index - 1] : '\n';
+    const after = text[m.index + name.length] ?? '\n';
+    if (before === "'" || before === '"' || before === '>') continue;
+    if (after === "'" || after === '"') continue;
+    return true;
+  }
+  return false;
+}
+
 /* ── --file ─────────────────────────────────────────────────────────────────────────────────── */
 const fileArg = process.argv.includes('--file') ? process.argv[process.argv.indexOf('--file') + 1] : null;
 if (fileArg) {
@@ -103,9 +155,13 @@ if (fileArg) {
     process.exit(1);
   }
   const rows = buttonsIn(target);
-  console.log(`${path.basename(target)} — ${rows.length} hand-written button(s)\n`);
+  const open = rows.filter((r) => !r.documented);
+  console.log(
+    `${path.basename(target)} — ${rows.length} hand-written button(s), ${open.length} still to decide\n`,
+  );
   for (const r of rows) {
-    console.log(`  L${String(r.line).padEnd(6)} ${r.kind.padEnd(10)} ${r.glyphs.padEnd(20)} text=${r.text.padEnd(20)} h=${r.h.padEnd(3)} pad=${r.pad.padEnd(4)} ${r.cls}`);
+    const mark = r.documented ? 'DECIDED ' : '        ';
+    console.log(`  ${mark}L${String(r.line).padEnd(6)} ${r.kind.padEnd(10)} ${r.glyphs.padEnd(20)} text=${r.text.padEnd(20)} h=${r.h.padEnd(3)} pad=${r.pad.padEnd(4)} ${r.cls}`);
   }
   process.exit(0);
 }
@@ -123,7 +179,7 @@ if (process.argv.includes('--dead-imports')) {
       if (!m) continue;
       const names = m[1].replace(/\n/g, ' ').split(',').map((x) => x.trim()).filter(Boolean);
       const rest = src.slice(0, m.index) + src.slice(m.index + m[0].length);
-      const live = names.filter((n) => new RegExp(`\\b${n.split(' as ').pop()}\\b`).test(rest));
+      const live = names.filter((n) => isUsed(n.split(' as ').pop(), rest));
       if (live.length !== names.length) {
         total += names.length - live.length;
         console.log(`  ${path.basename(f).padEnd(28)} unused: ${names.filter((n) => !live.includes(n)).join(', ')}`);
@@ -140,17 +196,34 @@ if (process.argv.includes('--dead-imports')) {
 }
 
 /* ── default: the status board ──────────────────────────────────────────────────────────────── */
-const per = files.map((f) => ({ name: path.basename(f), rows: buttonsIn(f) })).filter((x) => x.rows.length);
-per.sort((a, b) => a.rows.length - b.rows.length);
+const per = files
+  .map((f) => {
+    const rows = buttonsIn(f);
+    return { name: path.basename(f), rows, open: rows.filter((r) => !r.documented) };
+  })
+  .filter((x) => x.open.length);
+/* Ordered by what is left to DECIDE, not by what is left as a `<button>`. A file whose remaining
+   controls all carry a reason is finished, even though its raw count never reaches zero. */
+per.sort((a, b) => a.open.length - b.open.length);
 
 const kinds = { 'icon-only': 0, labelled: 0, mixed: 0 };
-for (const { rows } of per) for (const r of rows) kinds[r.kind] += 1;
+let documented = 0;
+for (const f of files) {
+  for (const r of buttonsIn(f)) {
+    if (r.documented) documented += 1;
+    else kinds[r.kind] += 1;
+  }
+}
 const totalButtons = kinds['icon-only'] + kinds.labelled + kinds.mixed;
 
-console.log(`BUTTONS still hand-written: ${totalButtons}`);
-console.log(`  icon-only ${kinds['icon-only']}   labelled ${kinds.labelled}   mixed ${kinds.mixed}\n`);
+console.log(`BUTTONS still to decide: ${totalButtons}`);
+console.log(`  icon-only ${kinds['icon-only']}   labelled ${kinds.labelled}   mixed ${kinds.mixed}`);
+console.log(`  (+ ${documented} hand-written on purpose, with the reason written beside them)\n`);
 console.log('  work the smallest first:');
-for (const { name, rows } of per) console.log(`    ${name.padEnd(30)} ${rows.length}`);
+for (const { name, open, rows } of per) {
+  const note = rows.length > open.length ? `  (${rows.length - open.length} decided)` : '';
+  console.log(`    ${name.padEnd(30)} ${String(open.length).padEnd(4)}${note}`);
+}
 
 console.log(`\nFIELDS: <input> ${count('<input')}   <textarea> ${count('<textarea')}`);
 console.log('  (2 file pickers, 2 range sliders and 2 composer textareas are excluded — see spec §7)');

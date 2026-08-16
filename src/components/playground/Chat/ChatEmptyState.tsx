@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconButton } from '@xenosystem/elements-react';
-import { ArrowLeft, Bot, Code2, FolderUp, Library, MessageSquare, Plus, Search, Store, ArrowRightDecl, FolderUpDecl } from '@/lib/icons';
+import { Bot, Code2, FolderUp, Library, MessageSquare, Plus, Search, Store, ArrowRightDecl, FolderUpDecl } from '@/lib/icons';
 import ChatUpdateCarousel, { type ChatUpdate } from './ChatUpdateCarousel';
 import {
   AGENT_HUB_MOCK_ACTIONS,
