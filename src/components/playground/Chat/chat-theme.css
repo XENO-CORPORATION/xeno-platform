@@ -167,6 +167,31 @@
    truth the rotation is about. A second class would be a second place for the same fact to
    be wrong. The transition lives on the base rule so it plays in BOTH directions; put it
    on the open rule only and closing snaps. */
+/* ── A glyph that spins while it works ─────────────────────────────────────────────────
+   The refresh control, and the third class in this family after the mirror and the turn.
+   Same reason as both: `IconButton` owns the glyph element, so anything done TO the glyph
+   has to be a class the button wears.
+
+   `animation` here rather than `rotate`, because this one repeats — and it beats the
+   library's hover motion on purpose. That rule is written inside `:where(...)`, which
+   zeroes its specificity, so a working control keeps spinning while the pointer is over it
+   instead of being interrupted by a hover flourish. */
+@keyframes chat-icon-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+.chat-icon-spin .xeno-element {
+  transform-origin: center;
+  animation: chat-icon-spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-icon-spin .xeno-element {
+    animation: none;
+  }
+}
+
 /* The angle is a variable because two glyphs turn here and they do not agree: a plus becomes a
    close at 135°, a chevron flips at 180°. The default is the plus, since it came first.
 

@@ -52,7 +52,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, SquarePen, Check, RefreshCcw, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -14692,38 +14692,55 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               )}
 
               {/* Refresh / New chat / Search — multi-interface denser toolbar */}
+              {/* All three of this toolbar's controls are `quiet lg`: a `--chat-border` hairline
+                  with no fill, brightening its border and taking a `--chat-hover` tint when reached
+                  for. 36px is `lg` and the glyphs stay at 16 through `iconSize`.
+                  The spin needed a class, because `IconButton` owns the glyph element and
+                  `animate-spin` was sitting on the icon. `.chat-icon-spin` is the third member of the
+                  family that already holds the mirror and the turn. `busy` was not the answer: it
+                  sets `cursor: progress` and nothing visible. The opacity while refreshing is the
+                  availability axis instead of two utility classes. */}
               {isMultiInterface && activeConversationId && (
-                <button
-                    onClick={handleRefreshConversation}
-                    disabled={isRefreshing}
-                    className={`flex items-center justify-center border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-[var(--chat-text)]/80 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] transition-colors h-9 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    aria-label="Refresh conversation"
-                >
-                    <RefreshCcw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-                </button>
+                <IconButton
+                  icon={RefreshDecl}
+                  variant="quiet"
+                  size="lg"
+                  iconSize={16}
+                  className={isRefreshing ? 'chat-icon-spin' : undefined}
+                  busy={isRefreshing}
+                  disabled={isRefreshing}
+                  onClick={handleRefreshConversation}
+                  aria-label="Refresh conversation"
+                />
               )}
               {isMultiInterface && messages.length > 0 && (
-                <button
-                    onClick={handleNewChat}
-                    className="flex h-9 items-center justify-center rounded-lg border border-[var(--chat-border)] px-3 py-1.5 text-[var(--chat-text)]/80 transition-colors hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)]"
-                    aria-label="Start New Chat"
-                >
-                    <SquarePen size={16} />
-                </button>
+                <IconButton
+                  icon={EditDecl}
+                  variant="quiet"
+                  size="lg"
+                  iconSize={16}
+                  onClick={handleNewChat}
+                  aria-label="Start New Chat"
+                />
               )}
+              {/* Open used to brighten this one's border. That is the disclosure `quiet` already
+                  names — a quiet button is ON while the thing it opened is on screen — so it is
+                  `data-selection` now, and the panel it opens is reported with `aria-expanded`,
+                  which it never had. */}
               {isMultiInterface && messages.length > 0 && (
-                <button
+                <IconButton
+                  icon={SearchDecl}
+                  variant="quiet"
+                  size="lg"
+                  iconSize={16}
+                  data-selection={isMessageSearchOpen ? 'on' : 'off'}
+                  aria-expanded={isMessageSearchOpen}
                   onClick={() => {
                     setIsMessageSearchOpen(!isMessageSearchOpen);
                     if (isMessageSearchOpen) setMessageSearchQuery('');
                   }}
-                  className={`flex h-9 items-center justify-center rounded-lg border px-3 py-1.5 text-[var(--chat-text)]/80 transition-colors hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] ${
-                    isMessageSearchOpen ? 'border-[var(--chat-muted)]' : 'border-[var(--chat-border)]'
-                  }`}
                   aria-label="Search messages"
-                >
-                  <Search size={16} />
-                </button>
+                />
               )}
 
               {/* Main chat: Share + ⋯ */}
