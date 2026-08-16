@@ -52,6 +52,7 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 // Auth layout with shared video panel
 import AuthLayout from './components/layouts/AuthLayout';
 import AuthContent from './pages/AuthContent';
+import ActivateAccount from './pages/ActivateAccount';
 import DeviceAuthContent from './pages/DeviceAuthContent';
 import HelpContent from './pages/HelpContent';
 import ContactContent from './pages/ContactContent';
@@ -109,6 +110,7 @@ function App() {
           {/* Authentication Page */}
           <Route element={<AuthLayout />}>
             <Route path="/auth" element={<AuthContent />} />
+              <Route path="/auth/activate" element={<ActivateAccount />} />
           </Route>
 
           {/* Catch-all: redirect to chat */}
@@ -177,6 +179,7 @@ function App() {
             {/* Auth Layout Routes - Shared video panel, swappable right content */}
             <Route element={<AuthLayout />}>
               <Route path="/auth" element={<AuthContent />} />
+              <Route path="/auth/activate" element={<ActivateAccount />} />
               {/* Unified branded sign-in per app (XENO UNIFIED AUTH spec) */}
               <Route path="/auth/:app" element={<AuthContent />} />
               <Route path="/auth/:app/device" element={<DeviceAuthContent />} />

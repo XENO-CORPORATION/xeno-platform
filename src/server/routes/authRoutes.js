@@ -21,6 +21,8 @@ import {
   verifyActivationToken,
   activate as activateAccount,
   isActivated as isAccountActivated,
+  mintCode as mintActivationCode,
+  verifyCode as verifyActivationCode,
 } from '../services/accountActivation.js';
 import { describeClient } from '../utils/userAgent.js';
 import {
@@ -2177,26 +2179,168 @@ async function xmCheckHandleFree(db, handle) {
  * Redirects rather than returning JSON, because a human is on the other end of
  * this URL. A JSON blob in a browser tab reads as a broken link.
  */
+/**
+ * The interstitial the activation LINK lands on.
+ *
+ * Server-rendered rather than a redirect into the SPA, deliberately: this page
+ * is opened from a mail client, often in a webview with no session, and it must
+ * work with the app bundle unloaded and JavaScript disabled. It is a form and a
+ * button — nothing else — because the POST it submits is the entire security
+ * property (a scanner GETs, it does not submit forms).
+ *
+ * Inline styles: no external stylesheet exists at this URL and a flash of
+ * unstyled text on the one page that has to look trustworthy is the wrong
+ * trade.
+ */
+function activationPage({ site, ok, userId, token, title, body }) {
+  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+  return `<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>${esc(title)}</title></head>
+<body style="margin:0;background:#060608;color:#d8d8de;font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<div style="max-width:460px;margin:0 auto;padding:56px 20px;">
+  <div style="text-align:center;font-size:11px;font-weight:700;letter-spacing:.34em;color:#d8d8de;margin-bottom:28px;">XENO</div>
+  <div style="background:#111111;border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:24px;">
+    <h1 style="margin:0 0 8px;font-size:19px;font-weight:600;color:#fff;">${esc(title)}</h1>
+    <p style="margin:0 0 20px;color:#7f7f86;font-size:13px;">${esc(body)}</p>
+    ${ok ? `<form method="POST" action="${esc(site)}/api/auth/activate">
+      <input type="hidden" name="u" value="${esc(userId)}">
+      <input type="hidden" name="t" value="${esc(token)}">
+      <button type="submit" style="width:100%;padding:11px 14px;background:#e8e8ee;color:#111;border:0;border-radius:4px;font-size:13.5px;font-weight:600;cursor:pointer;">Activate my account</button>
+    </form>` : `<a href="${esc(site)}/auth" style="display:block;text-align:center;padding:11px 14px;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#d8d8de;text-decoration:none;font-size:13.5px;">Go to sign in</a>`}
+  </div>
+  <p style="margin:14px 0 0;text-align:center;color:#5d5d63;font-size:11px;">You can also enter the 6-digit code from the email instead.</p>
+</div></body></html>`;
+}
+
+/**
+ * 🔴 GET RENDERS. IT DOES NOT COMMIT. This is the whole point of v2.
+ *
+ * v1 activated on GET, and corporate mail security (Defender Safe Links,
+ * Proofpoint, Mimecast) PRE-FETCHES every URL in an inbound message — so a
+ * scanner activated accounts with no human involved, silently, defeating the
+ * only thing this gate exists to establish. Consumer clients prefetch too, for
+ * previews.
+ *
+ * So GET returns a page with a button. The POST behind that button is the
+ * click, and a scanner does not POST. One extra interaction, and it is the
+ * interaction that carries the intent.
+ */
 router.get('/activate', async (req, res) => {
   const site = process.env.PUBLIC_SITE_URL || 'https://xenostudio.ai';
-  try {
-    const userId = String(req.query.u || '').trim();
-    const token = String(req.query.t || '').trim();
+  const userId = String(req.query.u || '').trim();
+  const token = String(req.query.t || '').trim();
+  const valid = userId && token && verifyActivationToken(userId, token);
 
+  res.set('Cache-Control', 'no-store');
+  // Referrer-Policy so the token cannot ride out in a Referer header if the
+  // page ever links anywhere.
+  res.set('Referrer-Policy', 'no-referrer');
+
+  if (!valid) {
+    return res.status(400).type('html').send(activationPage({
+      site, ok: false, title: 'This link is not valid',
+      body: 'It may have been altered in transit, or it belongs to an account that no longer exists. Sign in and request a new one.',
+    }));
+  }
+  return res.type('html').send(activationPage({
+    site, ok: true, userId, token,
+    title: 'Activate your XENO account',
+    body: 'One click finishes setting up your account and unlocks the workspace.',
+  }));
+});
+
+/** POST /activate — the commit. A link scanner issues GET, never this. */
+router.post('/activate', async (req, res) => {
+  const site = process.env.PUBLIC_SITE_URL || 'https://xenostudio.ai';
+  try {
+    const userId = String(req.body?.u || req.query.u || '').trim();
+    const token = String(req.body?.t || req.query.t || '').trim();
     if (!userId || !token || !verifyActivationToken(userId, token)) {
       return res.redirect(302, `${site}/auth?activation=invalid`);
     }
-
-    // The account must still exist. A token for a deleted account is not an
-    // error worth explaining — it is simply not activatable.
     const { rows } = await req.db.query('SELECT id FROM users WHERE id = $1', [userId]);
     if (!rows.length) return res.redirect(302, `${site}/auth?activation=invalid`);
 
     await activateAccount(req.db, userId, { method: 'email_link', ip: clientIp(req) });
-    return res.redirect(302, `${site}/overview?activated=1`);
+    return res.redirect(302, `${site}/auth/activate?activated=1`);
   } catch (e) {
     console.error('[activate] error:', e?.message || e);
     return res.redirect(302, `${site}/auth?activation=error`);
+  }
+});
+
+/**
+ * POST /activate/code — the PRIMARY path.
+ *
+ * Authenticated: the code proves the person read the mail, the session proves
+ * which account is asking. Requiring both means a code leaked to a third party
+ * is useless without the account's session, and it removes any need to name an
+ * account in the request — so this endpoint cannot be used to probe which
+ * addresses exist.
+ */
+router.post('/activate/code', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
+
+    const result = await verifyActivationCode(
+      req.db, decoded.userId, req.body?.code, bcrypt, { ip: clientIp(req) },
+    );
+    if (result.ok) return res.json({ success: true, activated: true });
+
+    // Three different problems, three different messages. "Invalid" for all of
+    // them is what sends people to support instead of to the fix.
+    const messages = {
+      malformed: 'That code should be six digits.',
+      no_code: 'That code has expired. Ask for a new one.',
+      expired: 'That code has expired. Ask for a new one.',
+      too_many_attempts: 'Too many attempts. Ask for a new code.',
+      wrong: 'That code is not right.',
+    };
+    return res.status(400).json({
+      success: false,
+      error: messages[result.reason] || 'That code is not right.',
+      code: result.reason,
+      ...(result.attemptsLeft !== undefined ? { attemptsLeft: result.attemptsLeft } : {}),
+    });
+  } catch (e) {
+    if (e?.name === 'JsonWebTokenError' || e?.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    console.error('[activate/code] error:', e?.message || e);
+    return res.status(500).json({ success: false, error: 'Could not verify that code' });
+  }
+});
+
+/**
+ * GET /activation-status — what the waiting page polls.
+ *
+ * Exists so someone who clicks the link on their phone sees the desktop tab
+ * move on by itself. Cheap: one indexed lookup, and the page stops polling the
+ * moment it flips.
+ */
+router.get('/activation-status', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    const activated = await isAccountActivated(req.db, decoded.userId);
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, activated });
+  } catch (e) {
+    if (e?.name === 'JsonWebTokenError' || e?.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    console.error('[activation-status] error:', e?.message || e);
+    return res.status(500).json({ success: false, error: 'Could not read status' });
   }
 });
 

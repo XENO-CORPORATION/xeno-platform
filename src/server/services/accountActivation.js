@@ -123,3 +123,123 @@ export function requireActivated(req, res, next) {
 }
 
 export default requireActivated;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v2 — ACTIVATION CODES
+//
+// The link in v1 committed on GET, and mail-security appliances pre-fetch every
+// URL, so a scanner could activate an account with nobody involved. A code
+// cannot be typed by a scanner. It also keeps the secret out of a URL and lets
+// someone who signed up on a desktop finish from a phone without landing a
+// session on the wrong device.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CODE_TTL_MS = 15 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
+
+/**
+ * Six digits from a CSPRNG, uniformly distributed.
+ *
+ * `randomInt` rather than `% 1000000` on random bytes: the modulo introduces a
+ * small bias toward low values, and while the practical gain to an attacker is
+ * negligible, "negligible bias in a security token" is the kind of thing that
+ * is free to avoid and embarrassing to explain.
+ */
+function newCode() {
+  return String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+}
+
+/**
+ * Mint a code, invalidating any previous live one for this user.
+ *
+ * The invalidation and the insert are ONE statement pair inside a transaction
+ * because the partial unique index (`WHERE consumed_at IS NULL`) forbids two
+ * live codes — which is deliberate. Two live codes would mean a resend does not
+ * actually replace anything, and would double the guess surface for free.
+ *
+ * Returns the PLAINTEXT code. It exists in memory exactly long enough to be put
+ * in an email; only the hash is stored.
+ */
+export async function mintCode(db, userId, bcrypt) {
+  const code = newCode();
+  const hash = await bcrypt.hash(code, 10);
+  const expires = new Date(Date.now() + CODE_TTL_MS);
+
+  await db.query('BEGIN');
+  try {
+    await db.query(
+      'UPDATE account_activation_codes SET consumed_at = NOW() WHERE user_id = $1 AND consumed_at IS NULL',
+      [userId],
+    );
+    await db.query(
+      'INSERT INTO account_activation_codes (user_id, code_hash, expires_at) VALUES ($1, $2, $3)',
+      [userId, hash, expires],
+    );
+    await db.query('COMMIT');
+  } catch (e) {
+    await db.query('ROLLBACK');
+    throw e;
+  }
+  return code;
+}
+
+/**
+ * Verify a submitted code and, on success, activate.
+ *
+ * Returns a DISCRIMINATED result rather than a boolean, because the three
+ * failures need three different messages: a wrong code, an expired code and a
+ * burnt-out code are different problems and "invalid" sends all three to
+ * support.
+ *
+ * 🔴 The attempt counter is incremented BEFORE the comparison, and lives in the
+ * database. Incrementing after would let a crash mid-verify hand back a free
+ * guess, and an in-memory counter resets on restart — which is not a limit, it
+ * is a speed bump.
+ */
+export async function verifyCode(db, userId, submitted, bcrypt, { ip = null } = {}) {
+  const clean = String(submitted || '').replace(/[\s-]/g, '');
+  if (!/^\d{6}$/.test(clean)) return { ok: false, reason: 'malformed' };
+
+  const { rows } = await db.query(
+    `SELECT id, code_hash, expires_at, attempts
+       FROM account_activation_codes
+      WHERE user_id = $1 AND consumed_at IS NULL
+      ORDER BY created_at DESC LIMIT 1`,
+    [userId],
+  );
+  if (!rows.length) return { ok: false, reason: 'no_code' };
+
+  const row = rows[0];
+  if (new Date(row.expires_at) <= new Date()) {
+    await db.query('UPDATE account_activation_codes SET consumed_at = NOW() WHERE id = $1', [row.id]);
+    return { ok: false, reason: 'expired' };
+  }
+  if (row.attempts >= MAX_ATTEMPTS) {
+    await db.query('UPDATE account_activation_codes SET consumed_at = NOW() WHERE id = $1', [row.id]);
+    return { ok: false, reason: 'too_many_attempts' };
+  }
+
+  const { rows: after } = await db.query(
+    'UPDATE account_activation_codes SET attempts = attempts + 1 WHERE id = $1 RETURNING attempts',
+    [row.id],
+  );
+
+  // bcrypt.compare is constant-time for its own comparison, and being slow is a
+  // FEATURE here: it puts a hard floor under how fast six digits can be ground.
+  if (!(await bcrypt.compare(clean, row.code_hash))) {
+    const left = Math.max(0, MAX_ATTEMPTS - (after[0]?.attempts ?? MAX_ATTEMPTS));
+    if (left === 0) {
+      await db.query('UPDATE account_activation_codes SET consumed_at = NOW() WHERE id = $1', [row.id]);
+      return { ok: false, reason: 'too_many_attempts' };
+    }
+    return { ok: false, reason: 'wrong', attemptsLeft: left };
+  }
+
+  // Single-use: consume before activating, so a replay cannot re-enter here.
+  await db.query('UPDATE account_activation_codes SET consumed_at = NOW() WHERE id = $1', [row.id]);
+  await activate(db, userId, { method: 'email_link', ip });
+  return { ok: true };
+}
+
+export const ACTIVATION_CODE_TTL_MS = CODE_TTL_MS;
+export const ACTIVATION_MAX_ATTEMPTS = MAX_ATTEMPTS;

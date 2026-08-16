@@ -6,6 +6,10 @@ import App from './App.tsx';
 import './index.css';
 import { SiteGateProvider } from './contexts/SiteGateContext.tsx';
 import { SiteGateWrapper } from './components/auth/SiteGate.tsx';
+import { installActivationInterceptor } from './lib/activationInterceptor';
+
+// Installed before the first render so no early request can slip past it.
+installActivationInterceptor();
 
 const STRICT_MODE_ENABLED = import.meta.env.VITE_ENABLE_STRICT_MODE === 'true';
 
