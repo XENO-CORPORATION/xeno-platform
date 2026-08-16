@@ -35,10 +35,6 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
  */
 const KNOWN_RED = new Map([
   [
-    'test-chat-send-button-layout.mjs',
-    'slices the source at `{isLoading ?`, which the composer-polish pass (3d27aef) removed',
-  ],
-  [
     'test-chat-token-counter-layout.mjs',
     'same marker, same pass — its `controlsEnd` is `{isLoading ?`',
   ],

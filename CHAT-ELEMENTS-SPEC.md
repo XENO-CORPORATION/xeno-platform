@@ -449,6 +449,26 @@ Re-deciding these costs more than it saves.
   site does not justify a third override door; the pattern is what wants deciding, and it is the
   library's to decide.
 
+- **A test that fails on its first line stops describing anything.** `test-chat-send-button-layout`
+  sliced the composer out of the source at `{isLoading ?` and the composer-polish pass (3d27aef)
+  removed that marker, so it failed at the slice and none of its twelve assertions had run since.
+  Six were still true. Three described a chat that had deliberately moved on, and only reading them
+  after re-scoping the test showed which:
+  - the disabled send state was pinned as `border-white/10 bg-[#161618] text-zinc-600` — literal hex
+    and a Tailwind palette name, which cannot follow a light mode or a brightness slider. It is the
+    same three tokens now, pinned just as exactly, plus a new assertion that the button carries no
+    hard-coded colour at all.
+  - the send arrow was pinned by its raw path, `M12 19V5M5 12l7-7 7 7`. It was hand-drawn at stroke 2
+    with round caps while every other composer glyph came from the set at 1.75, and it could not
+    animate because there was nothing to animate against. It is the set's `ArrowUp` now.
+  - the size assertion was named "Send button should be optically smaller than the microphone" and
+    now asserts the opposite. Stop, Mic and Send are one box on purpose, through a shared constant a
+    sibling test already counts the uses of. **Send being smaller is not a property this chat wants
+    any more.**
+
+  The scope is a `<ChatEmptyState>` boundary rather than a conditional, because the failure mode is
+  the lesson: a test anchored to an implementation detail deletes itself silently.
+
 - **Six controls sit below the scale's floor.** The control scale starts at `xs` = 24px; the chat has
   six squares at 18–20px — the two attachment-chip remove badges, the customize page's "i", and
   three more. Each is a badge or a hint notched into something else, where six pixels of growth is six
