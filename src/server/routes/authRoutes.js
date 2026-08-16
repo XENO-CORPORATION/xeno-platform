@@ -2203,15 +2203,39 @@ router.get('/activate', async (req, res) => {
 /**
  * POST /resend-activation — authenticated, so it cannot be used to spray mail
  * at arbitrary addresses. Rate-limited by the global limiter.
+ *
+ * Resolves the bearer token INLINE rather than via authMiddleware, because that
+ * is this file's convention (`/me`, `/logout` and the rest do the same) — this
+ * router is mounted WITHOUT auth in index.js, so `authMiddleware` is not a
+ * symbol in scope here. Reaching for it compiled fine and threw
+ * `ReferenceError` at import time, taking every DB-backed suite down with it.
  */
-router.post('/resend-activation', authMiddleware, async (req, res) => {
+router.post('/resend-activation', async (req, res) => {
   try {
-    if (await isAccountActivated(req.db, req.user.id)) {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
+    const { rows } = await req.db.query(
+      'SELECT id, email, display_name, username FROM users WHERE id = $1', [decoded.userId],
+    );
+    if (!rows.length) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    if (await isAccountActivated(req.db, rows[0].id)) {
       return res.json({ success: true, alreadyActivated: true });
     }
-    sendWelcomeEmail(req.db, req.user);
+    sendWelcomeEmail(req.db, rows[0]);
     res.json({ success: true, sent: true });
   } catch (e) {
+    if (e?.name === 'JsonWebTokenError' || e?.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
     console.error('[resend-activation] error:', e?.message || e);
     res.status(500).json({ success: false, error: 'Could not resend' });
   }
