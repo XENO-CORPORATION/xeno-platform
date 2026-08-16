@@ -193,6 +193,95 @@ html, body, #root, #app {
   outline-offset: 2px;
 }
 
+/* ── .focus-self — opt OUT of the global ring ───────────────────────────────
+ *
+ * The rule above is the site-wide keyboard-focus indicator and must stay: a
+ * repo-wide check found real inputs (e.g. account/TeamPage) whose ONLY focus
+ * affordance is that outline, so removing it for `input` broadly would be a
+ * genuine accessibility regression, not a cleanup.
+ *
+ * But on a field that already paints its own focus state, it draws focus
+ * TWICE — the element's own border change, plus this outline floating 2px
+ * outside it. That is the doubled "stroke container" around the input, and
+ * `outline-none` does not win against it: Tailwind's `.outline-none` and
+ * `:focus-visible` have identical specificity (0,1,0), so source order decides
+ * and this file loads last.
+ *
+ * `.focus-self:focus-visible` is 0,2,0 and therefore wins regardless of order.
+ *
+ * ⚠️ Only ever put this on an element that VISIBLY changes on focus. On
+ * anything else it silently deletes the only indicator a keyboard user has.
+ * ─────────────────────────────────────────────────────────────────────────── */
+.focus-self:focus-visible {
+  outline: none;
+}
+
+/* ── Entrance motion, GLOBAL ────────────────────────────────────────────────
+ *
+ * `fadeSlideUp` / `.stagger-children` were defined in a <style> block INSIDE
+ * AuthLayout, which meant any page rendering outside that layout referenced
+ * classes that did not exist. ActivateAccount and Onboarding both sit outside
+ * it (they own the full viewport), so every `animate-fadeSlideUp` on those
+ * pages was a no-op — the markup said "animate" and nothing moved, which is
+ * exactly the "no motion, everything just appears" problem.
+ *
+ * A CSS class silently resolving to nothing is invisible: no error, no warning,
+ * the element simply renders in its final state. Defining them here makes the
+ * vocabulary available to every page rather than to one layout's subtree.
+ * ─────────────────────────────────────────────────────────────────────────── */
+@keyframes xenoRise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes xenoScaleIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* The curve the auth surface already uses — a decisive ease-out that settles
+   rather than bouncing. Kept identical so the two screens feel like one flow. */
+.xeno-rise {
+  opacity: 0;
+  animation: xenoRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.xeno-scale-in {
+  opacity: 0;
+  animation: xenoScaleIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Stagger by depth. Deliberately capped at 12: past roughly half a second of
+   accumulated delay a stagger stops reading as choreography and starts reading
+   as the page being slow. */
+.xeno-stagger > * { opacity: 0; animation: xenoRise 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.xeno-stagger > *:nth-child(1)  { animation-delay: 0.04s; }
+.xeno-stagger > *:nth-child(2)  { animation-delay: 0.09s; }
+.xeno-stagger > *:nth-child(3)  { animation-delay: 0.14s; }
+.xeno-stagger > *:nth-child(4)  { animation-delay: 0.19s; }
+.xeno-stagger > *:nth-child(5)  { animation-delay: 0.24s; }
+.xeno-stagger > *:nth-child(6)  { animation-delay: 0.29s; }
+.xeno-stagger > *:nth-child(7)  { animation-delay: 0.34s; }
+.xeno-stagger > *:nth-child(8)  { animation-delay: 0.38s; }
+.xeno-stagger > *:nth-child(9)  { animation-delay: 0.42s; }
+.xeno-stagger > *:nth-child(10) { animation-delay: 0.46s; }
+.xeno-stagger > *:nth-child(11) { animation-delay: 0.50s; }
+.xeno-stagger > *:nth-child(n+12) { animation-delay: 0.54s; }
+
+/* Motion is decoration here; the content is identical without it. Anyone who
+   has asked the OS to stop moving things gets the final state immediately —
+   and `opacity: 1` is required, or the reduced-motion user sees nothing at all
+   because the animation that was going to reveal it never runs. */
+@media (prefers-reduced-motion: reduce) {
+  .xeno-rise,
+  .xeno-scale-in,
+  .xeno-stagger > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 /* Hide browser's native password reveal icon */
 input[type="password"]::-ms-reveal,
 input[type="password"]::-ms-clear {

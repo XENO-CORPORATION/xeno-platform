@@ -414,7 +414,7 @@ const AuthContent = () => {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-colors duration-150 hover:border-white/15"
+                    className="focus-self w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-colors duration-150 hover:border-white/15"
                     placeholder="John Doe"
                   />
                 </div>
@@ -440,7 +440,7 @@ const AuthContent = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className={`w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border ${
+                  className={`focus-self w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border ${
                     emailError ? 'border-red-500/50 focus:border-red-500/70' : 'border-white/[0.08] focus:border-white/20'
                   } rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:bg-white/[0.06] transition-colors duration-150 hover:border-white/15`}
                   placeholder="you@example.com"
@@ -482,7 +482,7 @@ const AuthContent = () => {
                   onFocus={() => setPasswordFocused(true)}
                   onBlur={() => setPasswordFocused(false)}
                   required
-                  className={`w-full pl-11 pr-12 py-3.5 bg-white/[0.04] border ${
+                  className={`focus-self w-full pl-11 pr-12 py-3.5 bg-white/[0.04] border ${
                     passwordError ? 'border-red-500/50 focus:border-red-500/70' : 'border-white/[0.08] focus:border-white/20'
                   } rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:bg-white/[0.06] transition-colors duration-150 hover:border-white/15`}
                   placeholder="Enter your password"
