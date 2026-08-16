@@ -260,15 +260,16 @@ const SuiteCard: React.FC<{
           ? { transition: `transform ${ABSORB_MS}ms cubic-bezier(0.55,0,0.35,1), opacity ${ABSORB_MS}ms ease-in`, ...flightStyle }
           : { animation: 'xenoRise 0.6s cubic-bezier(0.16,1.02,0.3,1) forwards', animationDelay: `${0.06 + index * 0.07}s`, opacity: 0 }),
       }}
-      /* A portrait MINIMUM, not a fixed height: at ~285px wide (1240 / 4) a
-         9:16 card is ~500px, but content still decides the real height —
-         Developer carries 8 products and Office 4, and `items-stretch` on the
-         grid already matches all four to the tallest. A hard height would
-         either clip the fullest card or strand the emptiest.
-         Only applied at `lg`, where the row is actually four across; at two
-         columns a 500px floor is just a lot of empty plate. */
+      /* A portrait MINIMUM, not a fixed height. 500px (a true 9:16 at this
+         width) was too much — the tallest card already reaches ~430px on its
+         own, so the floor was adding empty plate rather than proportion. 420px
+         evens the row up without inventing space nothing fills.
+         Content still decides the real height: Developer carries 8 products
+         and Office 4, and `items-stretch` matches all four to the tallest, so
+         a hard height would either clip the fullest or strand the emptiest.
+         Only at `lg`, where the row is genuinely four across. */
       className={`focus-self group relative flex flex-col gap-[2px] rounded-[10px] border p-1.5 text-left
-                  lg:min-h-[500px]
+                  lg:min-h-[420px]
                   ${absorbing
                     ? ''
                     : 'transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform hover:-translate-y-[5px] active:translate-y-0'}

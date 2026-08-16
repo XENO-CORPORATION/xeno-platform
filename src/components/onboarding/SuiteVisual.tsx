@@ -43,7 +43,7 @@ const Frame: React.FC<{ children: React.ReactNode; className?: string }> = ({
 }) => (
   <div
     aria-hidden
-    className={`relative h-[132px] w-full overflow-hidden rounded-[8px] border border-white/[0.07] ${className}`}
+    className={`relative h-[116px] w-full overflow-hidden rounded-[8px] border border-white/[0.07] ${className}`}
     style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.045), rgba(0,0,0,0.35))' }}
   >
     {children}
