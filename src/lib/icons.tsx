@@ -244,6 +244,9 @@ export {
   GMessage as MessageSquareDecl,
   GBrain as BrainDecl,
   GSliders as SlidersDecl,
+  GSend as SendDecl,
+  GStop as StopCircleDecl,
+  GFolderUp as FolderUpDecl,
 };
 
 /* Different name, same meaning. */

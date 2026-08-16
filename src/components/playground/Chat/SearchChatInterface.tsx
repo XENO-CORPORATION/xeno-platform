@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { IconButton, Spinner } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Globe, X, ChevronDown, Eye, Brain, Check, SquarePen, StopCircle, Paperclip, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, ArrowLeft, Lightbulb, Trash2, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl } from '@/lib/icons';
+import { Send, Globe, X, ChevronDown, Eye, Brain, Check, SquarePen, StopCircle, Paperclip, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, ArrowLeft, Lightbulb, Trash2, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
@@ -1670,24 +1670,26 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               {/* Send Button */}
               <div className="flex items-center">
                 {isLoading || isSearching ? (
-                  <button
+                  <IconButton
+                    icon={StopCircleDecl}
+                    variant="ghost"
+                    size="lg"
+                    iconSize={18}
                     onClick={() => {
                       setIsLoading(false);
                       setIsSearching(false);
                     }}
-                    className="flex items-center justify-center w-10 h-10 rounded-lg bg-[var(--chat-control)] text-[var(--chat-muted)] hover:text-[var(--chat-text)] transition-colors"
                     title="Stop"
-                  >
-                    <StopCircle size={18} />
-                  </button>
+                  />
                 ) : (
-                  <button
+                  <IconButton
+                    icon={SendDecl}
+                    variant="ghost"
+                    size="lg"
+                    iconSize={18}
                     onClick={handleSubmit}
-                    className="flex items-center justify-center w-10 h-10 rounded-lg bg-[var(--chat-control)] text-[var(--chat-muted)] hover:text-[var(--chat-text)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     disabled={!inputValue.trim()}
-                  >
-                    <Send size={18} />
-                  </button>
+                  />
                 )}
               </div>
             </div>
@@ -1834,13 +1836,15 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                       <span>Agent Steps ({agentSteps.length})</span>
                       {isAgentWorking && <Spinner size={12} style={{ ["--xeno-spinner-track"]: "rgb(96 165 250 / 0.35)", ["--xeno-spinner-edge"]: "rgb(96 165 250)" } as React.CSSProperties} />}
                       {!isAgentWorking && (
-                        <button
+                        <IconButton
+                          icon={XDecl}
+                          variant="ghost"
+                          size="xs"
+                          iconSize={12}
+                          className="ml-auto"
                           onClick={() => setAgentSteps([])}
-                          className="ml-auto p-1 rounded hover:bg-[var(--chat-control)] text-[var(--chat-muted)] hover:text-[var(--chat-text)] transition-colors"
                           title="Clear steps"
-                        >
-                          <X size={12} />
-                        </button>
+                        />
                       )}
                     </div>
                     <div className="space-y-2">

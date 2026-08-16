@@ -10471,13 +10471,15 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
               <Download size={20} />
             </button>
           )}
-          <button
+          <IconButton
+            icon={XDecl}
+            variant="ghost"
+            size="lg"
+            iconSize={24}
+            className="relative z-10 ml-1 duration-150 ease-in-out"
             onClick={(e) => { e.stopPropagation(); onClose(); }}
-            className="relative z-10 p-2 ml-1 rounded-md text-[var(--chat-text)] hover:bg-[var(--chat-hover)] active:scale-95 transition-all duration-150 ease-in-out"
             title="Close Fullscreen"
-          >
-            <X size={24} />
-          </button>
+          />
         </div>
         <div
           className="relative flex h-[90vh] w-[90vw] items-center justify-center"
@@ -11666,14 +11668,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                      {/* Header */}
                                      <div className="mb-2 flex items-center justify-between px-1.5 pt-0.5">
                                        <span className="select-none text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--chat-muted)]">Recent</span>
-                                       <button
-                                         type="button"
+                                       <IconButton
+                                         icon={XDecl}
+                                         variant="ghost"
+                                         size="xs"
+                                         iconSize={13}
                                          onClick={() => setIsRecentFilesOpen(false)}
                                          aria-label="Close recent files"
-                                         className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
-                                       >
-                                         <X size={13} />
-                                       </button>
+                                       />
                                      </div>
                                      <div className="mx-1.5 mb-2 h-px bg-[var(--chat-border)]" />
                                      {/* Recent Files Search */}
@@ -14103,15 +14105,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                         </span>
                                       </button>
                                       {!isMockFile && (
-                                        <button
-                                          type="button"
+                                        <IconButton
+                                          icon={XDecl}
+                                          variant="ghost"
+                                          size="xs"
+                                          iconSize={11}
+                                          className="absolute right-0.5 top-0.5 opacity-0"
                                           onClick={() => handleRemoveProjectFile(project.id, file.id)}
-                                          className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded text-[var(--chat-muted)] opacity-0 transition-opacity hover:text-[var(--chat-danger)] group-hover/file:opacity-100"
                                           aria-label={`Remove ${file.name}`}
                                           title="Remove"
-                                        >
-                                          <X size={11} aria-hidden="true" />
-                                        </button>
+                                        />
                                       )}
                                     </div>
                                   );

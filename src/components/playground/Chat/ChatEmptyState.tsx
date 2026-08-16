@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconButton } from '@xenosystem/elements-react';
-import { ArrowLeft, Bot, Code2, FolderUp, Library, MessageSquare, Plus, Search, Store, ArrowRightDecl } from '@/lib/icons';
+import { ArrowLeft, Bot, Code2, FolderUp, Library, MessageSquare, Plus, Search, Store, ArrowRightDecl, FolderUpDecl } from '@/lib/icons';
 import ChatUpdateCarousel, { type ChatUpdate } from './ChatUpdateCarousel';
 import {
   AGENT_HUB_MOCK_ACTIONS,
@@ -93,18 +93,17 @@ export const ComposerRevealControls: React.FC = () => {
           reveal.isOpen ? 'w-8 opacity-100' : 'w-0 opacity-0'
         }`}
       >
-        <button
-          type="button"
-          data-composer-upload
+        <IconButton
+          icon={FolderUpDecl}
+          variant="quiet"
+          size="sm"
+          iconSize={15}
           onClick={reveal.onUploadFile}
           disabled={!reveal.canAnalyzeDocument}
           aria-label="Upload file"
           title="Upload file"
           tabIndex={reveal.isOpen ? 0 : -1}
-          className={`ml-1 ${revealButtonClassName}`}
-        >
-          <FolderUp size={15} aria-hidden="true" />
-        </button>
+        />
       </span>
     </>
   );
