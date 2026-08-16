@@ -25,6 +25,7 @@ import {
   verifyCode as verifyActivationCode,
 } from '../services/accountActivation.js';
 import { describeClient } from '../utils/userAgent.js';
+import { optOut } from '../services/emailPreferences.js';
 import {
   requireRegistrationOpen,
   assertRegistrationAllowed,
@@ -2469,6 +2470,148 @@ router.post('/register-with-handle', requireRegistrationOpen, async (req, res) =
     }
     console.error('[register-with-handle] error:', e.message);
     res.status(500).json({ success: false, error: 'Registration failed' });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * ONBOARDING
+ *
+ * Two endpoints. Both resolve the bearer token inline, for the same reason
+ * documented on /resend-activation above: this router is mounted without auth,
+ * so `authMiddleware` is not a symbol in scope and reaching for it throws
+ * ReferenceError at import time — which `node --check` does not catch.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Resolve the caller, or null. Shared by both onboarding routes. */
+async function resolveUser(req) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return null;
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) return null;
+    const { rows } = await req.db.query(
+      'SELECT id, email FROM users WHERE id = $1', [decoded.userId],
+    );
+    return rows[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * GET /onboarding — has this account finished onboarding?
+ *
+ * The client asks before routing, so a returning user is never shown the flow
+ * twice. Deliberately NOT part of /me: /me is on the hot path of every page
+ * load in every product, and onboarding state is read once per session.
+ */
+router.get('/onboarding', async (req, res) => {
+  const user = await resolveUser(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+  try {
+    const { rows } = await req.db.query(
+      `SELECT display_name, heard_from, role, interests, starting_point,
+              completed_at, skipped_at
+         FROM user_onboarding WHERE user_id = $1`,
+      [user.id],
+    );
+    const row = rows[0] || null;
+    res.json({
+      success: true,
+      // One boolean for the client to branch on. Skipping counts as done —
+      // re-presenting a flow somebody explicitly dismissed is nagging.
+      done: Boolean(row && (row.completed_at || row.skipped_at)),
+      onboarding: row,
+    });
+  } catch (err) {
+    console.error('[onboarding] read failed:', err.message);
+    // Fail OPEN, unlike the activation gate. The worst case here is that a
+    // user sees a skippable survey twice; failing closed would wall them out
+    // of the product over a survey table, which is far worse.
+    res.json({ success: true, done: true, onboarding: null, degraded: true });
+  }
+});
+
+/**
+ * POST /onboarding — save answers.
+ *
+ * Accepts a partial body and upserts, so each step can save as it is completed
+ * rather than the whole flow depending on the user reaching the end. Somebody
+ * who answers two steps and closes the tab has still told us two things.
+ */
+router.post('/onboarding', async (req, res) => {
+  const user = await resolveUser(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+  try {
+    const b = req.body || {};
+
+    // Bound every free-text field. These are user-controlled strings that end
+    // up in analytics queries and, eventually, on a dashboard — length limits
+    // here are cheaper than discovering a 40 KB "how did you hear about us".
+    const str = (v, max) =>
+      typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
+
+    const displayName = str(b.displayName, 120);
+    const heardFrom = str(b.heardFrom, 200);
+    const role = str(b.role, 60);
+    const startingPoint = str(b.startingPoint, 60);
+
+    // Interests: array of short strings, deduped, capped. Anything else is
+    // discarded rather than rejected — a malformed optional survey field
+    // should not fail a request that also carries good answers.
+    const interests = Array.isArray(b.interests)
+      ? [...new Set(b.interests.filter((s) => typeof s === 'string' && s.length <= 40))].slice(0, 20)
+      : [];
+
+    const completed = b.completed === true;
+    const skipped = b.skipped === true;
+
+    await req.db.query(
+      `INSERT INTO user_onboarding
+         (user_id, display_name, heard_from, role, interests, starting_point,
+          completed_at, skipped_at)
+       VALUES ($1, $2, $3, $4, $5, $6,
+               CASE WHEN $7::boolean THEN NOW() END,
+               CASE WHEN $8::boolean THEN NOW() END)
+       ON CONFLICT (user_id) DO UPDATE SET
+         -- COALESCE(new, existing): a later step posting only its own field
+         -- must not blank the answers given in an earlier one.
+         display_name   = COALESCE(EXCLUDED.display_name,   user_onboarding.display_name),
+         heard_from     = COALESCE(EXCLUDED.heard_from,     user_onboarding.heard_from),
+         role           = COALESCE(EXCLUDED.role,           user_onboarding.role),
+         starting_point = COALESCE(EXCLUDED.starting_point, user_onboarding.starting_point),
+         -- Interests are REPLACED, not merged: it is a multi-select, so
+         -- unticking something has to be able to remove it.
+         interests      = CASE WHEN array_length(EXCLUDED.interests, 1) IS NULL
+                               THEN user_onboarding.interests ELSE EXCLUDED.interests END,
+         completed_at   = COALESCE(user_onboarding.completed_at, EXCLUDED.completed_at),
+         skipped_at     = COALESCE(user_onboarding.skipped_at,   EXCLUDED.skipped_at),
+         updated_at     = NOW()`,
+      [user.id, displayName, heardFrom, role, interests, startingPoint, completed, skipped],
+    );
+
+    /* Marketing preference.
+     *
+     * ONLY ever writes an opt-OUT. Declining is an action; accepting is the
+     * default state and needs no row.
+     *
+     * The asymmetry is deliberate and load-bearing: `optIn()` DELETEs the
+     * opt-out row outright, with no category filter. So calling it when the
+     * box is ticked would silently resurrect somebody who had previously
+     * unsubscribed from EVERYTHING — turning "yes, product updates are fine"
+     * into "re-subscribe me to all mail I ever rejected". Never call it here.
+     */
+    if (b.marketingOptIn === false) {
+      await optOut(req.db, user.email, { reason: 'onboarding', category: 'marketing' })
+        .catch((e) => console.error('[onboarding] opt-out failed:', e.message));
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[onboarding] write failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not save' });
   }
 });
 

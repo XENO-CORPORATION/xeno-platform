@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Mail, User, MessageSquare, Send, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import AuthMark from '../components/auth/AuthMark';
 
 const ContactContent = () => {
   const [isVisible, setIsVisible] = useState(false);
@@ -35,17 +36,12 @@ const ContactContent = () => {
     <>
       {/* Header */}
       <header
-        className={`flex items-center justify-between p-6 lg:px-12 xl:px-20 lg:pt-12 xl:pt-16 transition-all duration-500 ease-out ${
+        className={`flex items-center justify-between gap-4 px-4 py-3 sm:px-5 sm:py-4 transition-all duration-500 ease-out ${
           isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
         }`}
         style={{ transitionDelay: '0.1s' }}
       >
-        <Link to="/" className="lg:hidden flex items-center gap-2 group">
-          <img src="/logo.svg" alt="Xeno" className="w-8 h-8 invert transition-transform duration-300 group-hover:scale-105" />
-          <span className="text-lg font-semibold transition-opacity duration-300 group-hover:opacity-80">Xeno</span>
-        </Link>
 
-        <div className="hidden lg:block" />
 
         <Link
           to="/"
@@ -54,9 +50,10 @@ const ContactContent = () => {
           <ArrowLeft size={14} className="transition-transform duration-300" />
           <span>Back to home</span>
         </Link>
+        <AuthMark />
       </header>
 
-      <div className="flex-1 flex flex-col px-6 pb-12 lg:px-12 xl:px-20 pt-20 lg:pt-20 xl:pt-28">
+      <div className="flex-1 flex flex-col px-6 pb-6 lg:px-12 xl:px-20 pt-6">
         <div
           className={`w-full max-w-[400px] mx-auto transition-all duration-700 ease-out ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
@@ -84,7 +81,7 @@ const ContactContent = () => {
                   isVisible && !submitTransition ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
                 }`}
               >
-                <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-white/10 flex items-center justify-center animate-bounce-subtle">
+                <div className="w-16 h-16 mx-auto mb-6 rounded-[3px] bg-white/10 flex items-center justify-center animate-bounce-subtle">
                   <CheckCircle size={32} className="text-green-400" />
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Message sent!</h3>
@@ -118,7 +115,7 @@ const ContactContent = () => {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       required
-                      className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15"
+                      className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15"
                       placeholder="Your name"
                     />
                   </div>
@@ -143,7 +140,7 @@ const ContactContent = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15"
+                      className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15"
                       placeholder="you@example.com"
                     />
                   </div>
@@ -168,7 +165,7 @@ const ContactContent = () => {
                       onChange={(e) => setMessage(e.target.value)}
                       required
                       rows={4}
-                      className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15 resize-none"
+                      className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15 resize-none"
                       placeholder="How can we help?"
                     />
                   </div>
@@ -178,13 +175,13 @@ const ContactContent = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`group w-full mt-6 py-4 bg-white text-black text-sm font-semibold rounded-xl flex items-center justify-center gap-0 transition-all duration-300 ease-out hover:bg-white/90 hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] overflow-hidden ${
+                  className={`group w-full mt-6 py-4 bg-white text-black text-sm font-semibold rounded-[6px] flex items-center justify-center gap-0 transition-all duration-300 ease-out hover:bg-white/90 hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] overflow-hidden ${
                     isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
                   } ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
                   style={{ transitionDelay: '0.4s' }}
                 >
                   {isSubmitting ? (
-                    <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                    <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-[3px] animate-spin" />
                   ) : (
                     <>
                       <span className="transition-transform duration-300 group-hover:-translate-x-1">Send Message</span>

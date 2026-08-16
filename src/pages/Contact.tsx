@@ -84,7 +84,7 @@ const Contact = () => {
       </div>
 
       {/* Right Side - Contact Form */}
-      <div className="flex-1 flex flex-col min-h-screen bg-[#0a0a0c]">
+      <div className="flex-1 flex flex-col min-h-screen bg-[#000000]">
         <header className="flex items-center justify-between p-6 lg:px-12 xl:px-20 lg:pt-12 xl:pt-16">
           <Link to="/" className="lg:hidden flex items-center gap-2">
             <img src="/logo.svg" alt="Xeno" className="w-8 h-8 invert" />

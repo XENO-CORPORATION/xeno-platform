@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, ChevronDown, Send } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import AuthMark from '../components/auth/AuthMark';
 
 const faqs = [
   {
@@ -55,17 +56,12 @@ const HelpContent = () => {
     <>
       {/* Header */}
       <header
-        className={`flex items-center justify-between p-6 lg:px-12 xl:px-20 lg:pt-12 xl:pt-16 transition-all duration-500 ease-out ${
+        className={`flex items-center justify-between gap-4 px-4 py-3 sm:px-5 sm:py-4 transition-all duration-500 ease-out ${
           isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
         }`}
         style={{ transitionDelay: '0.1s' }}
       >
-        <Link to="/" className="lg:hidden flex items-center gap-2 group">
-          <img src="/logo.svg" alt="Xeno" className="w-8 h-8 invert transition-transform duration-300 group-hover:scale-105" />
-          <span className="text-lg font-semibold transition-opacity duration-300 group-hover:opacity-80">Xeno</span>
-        </Link>
 
-        <div className="hidden lg:block" />
 
         <Link
           to="/"
@@ -74,6 +70,7 @@ const HelpContent = () => {
           <ArrowLeft size={14} className="transition-transform duration-300" />
           <span>Back to home</span>
         </Link>
+        <AuthMark />
       </header>
 
       <div className="flex-1 flex flex-col px-6 pb-12 lg:px-12 xl:px-20 pt-12 lg:pt-12 xl:pt-16 overflow-hidden">
@@ -99,7 +96,7 @@ const HelpContent = () => {
 
             {/* First FAQ Item - container stays, content fades, expands when chatMode */}
             <div
-              className={`border border-white/[0.08] rounded-xl overflow-hidden transition-all duration-300 ease-out ${
+              className={`border border-white/[0.08] rounded-[6px] overflow-hidden transition-all duration-300 ease-out ${
                 isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
               } ${chatMode ? 'flex-1' : ''}`}
               style={{ transitionDelay: '0.25s', minHeight: '56px' }}
@@ -149,7 +146,7 @@ const HelpContent = () => {
                 return (
                   <div
                     key={index}
-                    className={`border border-white/[0.08] rounded-xl overflow-hidden transition-all duration-500 ease-out hover:border-white/[0.12] ${
+                    className={`border border-white/[0.08] rounded-[6px] overflow-hidden transition-all duration-500 ease-out hover:border-white/[0.12] ${
                       isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                     }`}
                     style={{ transitionDelay: `${0.25 + index * 0.05}s` }}
@@ -191,7 +188,7 @@ const HelpContent = () => {
             >
               <button
                 onClick={toggleChat}
-                className="w-full flex items-center justify-center gap-2 py-4 bg-white/[0.04] border border-white/[0.08] rounded-xl text-sm font-medium text-white/70 hover:text-white hover:bg-white/[0.08] hover:border-white/[0.12] transition-all duration-300 ease-out group"
+                className="w-full flex items-center justify-center gap-2 py-4 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-sm font-medium text-white/70 hover:text-white hover:bg-white/[0.08] hover:border-white/[0.12] transition-all duration-300 ease-out group"
               >
                 <Send size={18} className="transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[-15deg]" />
                 <span>{chatMode ? 'Back to FAQ' : 'Chat with Support'}</span>

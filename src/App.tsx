@@ -53,6 +53,7 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import AuthLayout from './components/layouts/AuthLayout';
 import AuthContent from './pages/AuthContent';
 import ActivateAccount from './pages/ActivateAccount';
+import Onboarding from './pages/Onboarding';
 import DeviceAuthContent from './pages/DeviceAuthContent';
 import HelpContent from './pages/HelpContent';
 import ContactContent from './pages/ContactContent';
@@ -110,7 +111,6 @@ function App() {
           {/* Authentication Page */}
           <Route element={<AuthLayout />}>
             <Route path="/auth" element={<AuthContent />} />
-              <Route path="/auth/activate" element={<ActivateAccount />} />
           </Route>
 
           {/* Catch-all: redirect to chat */}
@@ -177,9 +177,18 @@ function App() {
             } />
 
             {/* Auth Layout Routes - Shared video panel, swappable right content */}
+            {/* Standalone, OUTSIDE AuthLayout: a confirmation step has nobody
+                left to persuade, so it gets no hero panel. */}
+            <Route path="/auth/activate" element={<ActivateAccount />} />
+
+            {/* Onboarding. Also outside AuthLayout, and for the same reason as
+                activation: it owns the whole viewport and imposes its own
+                chrome. It sits on the authenticated side of the funnel — the
+                page itself redirects anyone who has already finished. */}
+            <Route path="/onboarding" element={<Onboarding />} />
+
             <Route element={<AuthLayout />}>
               <Route path="/auth" element={<AuthContent />} />
-              <Route path="/auth/activate" element={<ActivateAccount />} />
               {/* Unified branded sign-in per app (XENO UNIFIED AUTH spec) */}
               <Route path="/auth/:app" element={<AuthContent />} />
               <Route path="/auth/:app/device" element={<DeviceAuthContent />} />

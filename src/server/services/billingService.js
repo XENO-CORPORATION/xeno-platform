@@ -119,15 +119,33 @@ export async function getConfig() {
 // SERVER-SIDE managed generation (capDimensions in entitlementGate) — it is NOT a
 // local-export gate.
 // deprecated (v2): watermarking retired; always false — never gate on this.
+/* ── `canUse` — the watch/use boundary ──────────────────────────────────────
+ *
+ * LOCKED 2026-08-16 by product decision: an account that has not paid may LOOK
+ * at everything and RUN nothing. Browsing the workspace, reading docs, opening
+ * the forum, watching a demo and reading the catalog all stay open; anything
+ * that consumes compute, writes a project, or launches an app requires a plan.
+ *
+ * It is a FIRST-CLASS FLAG, not something inferred from `inHouseDailyLimit`.
+ * A numeric quota answers "how much", and every call site that wants to know
+ * "may they act at all" then has to re-derive the answer from it — which is
+ * how one endpoint ends up reading `> 0`, another `!== null`, and a third
+ * forgetting to check. One boolean has one meaning.
+ *
+ * ⚠️ BLAST RADIUS — this is a change to a SHIPPED entitlement contract, not a
+ * new field nobody reads. Free accounts that could previously run 50 in-house
+ * generations a day can now run none. That is the intended product change, and
+ * it is one line to revert if it proves wrong.
+ * ─────────────────────────────────────────────────────────────────────────── */
 const PLAN_ENTITLEMENTS = {
-  free: { plan: 'free', commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0, cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
-  pro:  { plan: 'pro',  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0, cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
-  team: { plan: 'team', commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+  free: { plan: 'free', canUse: false, commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 0,    privateProjects: false, teamSeats: 0, cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
+  pro:  { plan: 'pro',  canUse: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0, cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
+  team: { plan: 'team', canUse: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
   // Staff / internal-service accounts (prod has real users with plan='internal').
   // NOT sellable — never in the CATALOG. All platform features enabled so internal
   // tooling and service accounts are never gated as free-tier. teamSeats 0: an
   // internal account is not itself a team container.
-  internal: { plan: 'internal', commercial: true, maxResolution: '4k', priority: true, inHouseDailyLimit: null, privateProjects: true, teamSeats: 0, cloudSync: true, crossApp: true, agents: true, collaboration: true, watermark: false },
+  internal: { plan: 'internal', canUse: true, commercial: true, maxResolution: '4k', priority: true, inHouseDailyLimit: null, privateProjects: true, teamSeats: 0, cloudSync: true, crossApp: true, agents: true, collaboration: true, watermark: false },
 };
 
 // Legacy/stray plan names seen in prod that must NOT silently fall back to free.

@@ -65,6 +65,12 @@ const UPGRADE_LADDER = ['free', 'pro', 'team'];
  * request, which is how a typo would otherwise become an open door.
  */
 const CAPABILITY_CONTEXT = {
+  /* The blanket watch/use boundary (product decision, 2026-08-16): an unpaid
+   * account may look at everything and run nothing. Distinct from the specific
+   * levers below — those refuse ONE paid feature to someone already using the
+   * product; this one refuses the product. It maps to the 'general' prompt
+   * because there is no single feature to name: the answer is "get a plan". */
+  canUse: 'general',
   cloudSync: 'cloudSync',
   crossApp: 'crossApp',
   agents: 'agents',
