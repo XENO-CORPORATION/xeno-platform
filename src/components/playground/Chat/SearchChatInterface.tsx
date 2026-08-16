@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { IconButton, Spinner } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
-import { Send, Globe, ChevronDown, Eye, Brain, Check, SquarePen, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Lightbulb, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl } from '@/lib/icons';
+import { Send, Globe, ChevronDown, Eye, Brain, Check, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl, EditDecl, LightbulbDecl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
@@ -1277,25 +1277,47 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-[var(--chat-canvas)]">
           {/* Left side - History & New Chat */}
           <div className="flex items-center gap-2">
-            <button
+            {/* Border plus a fill is `secondary`, `h-9` is `lg`. The voice view's top bar is the
+                same pair and converted the same way; the fill moves a step lighter with it, from
+                `--chat-surface` to the one control fill the variants carry.
+                Open used to brighten the BORDER. It is `data-selection` now, which the library
+                answers in ink — the same sentence in the grammar the rest of this chat speaks.
+                Both gain an `aria-label`: `IconButton` requires one, and a `title` is a tooltip, not
+                a name. Neither of these had a name before. */}
+            <IconButton
+              icon={LightbulbDecl}
+              variant="secondary"
+              size="lg"
+              iconSize={16}
+              data-selection={isHistoryOpen ? 'on' : 'off'}
               onClick={() => setIsHistoryOpen(!isHistoryOpen)}
-              className={`flex items-center justify-center bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-[var(--chat-text)]/80 hover:border-[var(--chat-muted)] transition-colors h-9 ${
-                isHistoryOpen ? 'border-[var(--chat-muted)]' : ''
-              }`}
+              aria-label="Search history"
               title="Search History"
-            >
-              <Lightbulb size={16} />
-            </button>
-            <button
+            />
+            <IconButton
+              icon={EditDecl}
+              variant="secondary"
+              size="lg"
+              iconSize={16}
               onClick={handleNewChat}
-              className="flex items-center justify-center bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-[var(--chat-text)]/80 hover:border-[var(--chat-muted)] transition-colors h-9"
+              aria-label="New search"
               title="New Search"
-            >
-              <SquarePen size={16} />
-            </button>
+            />
           </div>
 
           {/* Center - Engine Selector */}
+          {/* Stays hand-written, and the component that wants these EXISTS. `<SegmentedControl>` is
+              a single-select of connected options inside one bordered track, the chosen one floating
+              on an inset `--xeno-control` fill and the rest transparent muted labels — which is this
+              engine selector described exactly, container and all.
+              Two doors are missing. `SegmentedOption` is `{ value, label, disabled }` with no glyph
+              slot, and each of these leads with one; that half is a small addition, because
+              `.xeno-segmented-option` is already `inline-flex` with a `--xeno-gap`, so a leading
+              `<XenoElement>` would need no CSS at all. The second half is harder: the label here is
+              CONDITIONAL — it disappears when the results panel or the browser opens, leaving an
+              icon-only segment — and `label: string` is both the visible text and the accessible
+              name, so hiding one hides the other. That is a layout policy the component has no
+              opinion about, and inventing one at a call site is how a component starts drifting. */}
           <div className="flex items-center bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg p-1">
             <button
               onClick={() => setSearchEngine('xeno')}
@@ -1309,6 +1331,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               <Sparkles size={14} />
               {!(showResultsPanel || isBrowserOpen) && <span>Xeno</span>}
             </button>
+            {/* Stays hand-written — the Xeno segment's twin, same two missing doors. */}
             <button
               onClick={() => setSearchEngine('google')}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-all ${
@@ -1321,6 +1344,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               <Globe size={14} />
               {!(showResultsPanel || isBrowserOpen) && <span>Google</span>}
             </button>
+            {/* Stays hand-written — the Xeno segment's twin, same two missing doors. */}
             <button
               onClick={() => setSearchEngine('brave')}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-all ${

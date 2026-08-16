@@ -217,6 +217,7 @@ export {
   GGear as GearDecl,
   GPlus as PlusDecl,
   GDownload as DownloadDecl,
+  GLightbulb as LightbulbDecl,
   GBookmark as BookmarkDecl,
   GArchive as ArchiveDecl,
   GLayers as LayersDecl,
