@@ -267,7 +267,12 @@ artifacts, no scheduled tasks, no share link, and no updates**, and several bran
 
 ## 7. Fields — after the buttons
 
-**20 `<input>`** → `TextInput`, **14 `<textarea>`** → `Textarea`.
+**20 `<input>`** → `TextInput`, **14 `<textarea>`** → `Textarea`. **Done: 0 still to decide** — 22
+decided, 4 excluded as pickers and sliders. `node scripts/spec-status.mjs` reports the three buckets
+the way it does for §3's buttons; a raw tag count cannot tell a decided field from an untouched one.
+
+Nine converted. The rest stay hand-written, and the shape of that answer is the finding: almost none
+of them was blocked by anything local.
 
 Same rules, plus:
 
@@ -423,6 +428,17 @@ Re-deciding these costs more than it saves.
   inside a lighter panel. It is the same shape as the `primary` finding: a component that decides its
   own background can only be used on the one surface it assumed. A field is the case where it bites
   most, because a field is nearly always ON something.
+
+- **A field component that hard-codes its typography can only be used by a page that agrees.** Three
+  instances of one shape turned up in §7, each one property over from the last: `--xeno-font` welded
+  to the box step (closed — `TextInput.fontSize`), 15px written flat into `.xeno-textarea` (closed —
+  `Textarea.fontSize`), and `font: inherit` leaving no way to state a monospace face. The third is
+  the code editor in `CodeBlockWithHeader`, and it is the only field in the chat blocked by type
+  rather than fill — its `--chat-canvas` is exactly what the component paints. Handing `font-mono`
+  through `className` would leave two single-class rules deciding the face on stylesheet order, which
+  is the same coin-flip `leading-relaxed` posed against the component's own `line-height`. One call
+  site does not justify a third override door; the pattern is what wants deciding, and it is the
+  library's to decide.
 
 - **Six controls sit below the scale's floor.** The control scale starts at `xs` = 24px; the chat has
   six squares at 18–20px — the two attachment-chip remove badges, the customize page's "i", and

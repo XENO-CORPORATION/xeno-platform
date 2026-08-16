@@ -1919,6 +1919,13 @@ const ChatWithVoice: React.FC = () => {
                       {isUser ? (
                         editingMessageId === msg.id ? (
                           <div className="flex flex-col bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-2xl rounded-br-none p-3 max-w-[75%] w-full text-[var(--chat-text)]">
+                            {/* Stays hand-written — bare inside a box it does not own, not the
+                                composer field the count assumed. This is the voice route's
+                                edit-in-place: the `--chat-surface` bubble around it carries the
+                                border, the 2xl radius and the squared-off bottom-right corner that
+                                marks it as the user's, so the field is `bg-transparent`,
+                                `border-none`, `resize-none` and grows by having its overflow hidden.
+                                Same shape as the message editor in ChatWithLLM. */}
                             <textarea
                               ref={editInputRef}
                               value={editText}

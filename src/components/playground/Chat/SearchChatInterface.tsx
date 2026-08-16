@@ -1677,6 +1677,10 @@ Based on these search results, provide a helpful, accurate, and concise answer t
           }`}>
             {/* Textarea Row */}
             <div className="flex items-end relative">
+              {/* Stays hand-written — the second of the two composer fields §7 excludes by name, and
+                  the marker it was missing. Same shape as the one in ChatWithLLM: a ref-driven
+                  auto-grow capped at 150px, `resize-none`, `border-none`, and it is the top half of a
+                  rounded card whose bottom half is the controls row. The card owns the box. */}
               <textarea
                 ref={textareaRef}
                 placeholder={searchMode === 'web' ? "Search the web with AI..." : "Ask the agent to research..."}

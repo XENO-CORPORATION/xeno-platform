@@ -262,6 +262,14 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
         <div className="code-content-area">
             {isEditing ? (
               <div className="p-2">
+                {/* Stays hand-written, and this is the first field to be blocked by TYPE rather
+                    than by fill — the fill is `--chat-canvas`, which is exactly what the component
+                    paints. It is a CODE editor: `font-mono`. `.xeno-textarea` declares `font:
+                    inherit`, so a `font-mono` class handed to it through `className` would be two
+                    single-class rules deciding a monospace face on stylesheet order. `fontSize` was
+                    added to this component today for the same reason one property over; a third
+                    override for one call site is not the answer, and the pattern is recorded in §9
+                    instead. */}
                 <textarea
                   value={editingCode}
                   onChange={(e) => onEditCodeChange?.(e.target.value)}

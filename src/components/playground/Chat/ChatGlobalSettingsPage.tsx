@@ -321,6 +321,12 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                   <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
                     Global instructions
                   </span>
+                  {/* Stays hand-written for the fill, and the className reads as though it did
+                      not: `bg-transparent` is there, but the inline `backgroundColor` beside it wins
+                      and paints `--chat-surface`. The field is on a raised settings card, where
+                      `.xeno-textarea` hard-codes `--xeno-canvas`. Everything else would convert —
+                      `px-3 py-2.5` is the component's `10px 12px`, `resize-y` is its
+                      `resize: vertical`, and `fontSize={13}` now exists for the type. */}
                   <textarea
                     value={instructions}
                     onChange={(event) => setInstructions(event.target.value)}
