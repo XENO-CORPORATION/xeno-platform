@@ -97,6 +97,12 @@ export const WorkspaceChooser: React.FC<{
   const [barBox, setBarBox] = useState<DOMRect | null>(null);
   // The burst originates from this element's rect, so it needs a real handle.
   const barRef = useRef<HTMLButtonElement | null>(null);
+  /* The grid's box is the region particles must not paint over. One rect for
+   * all four cards rather than four: the gaps between them are 12px, and a
+   * particle threading a 12px gap between two cards reads as a glitch, not as
+   * precision. */
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const excludeRefs = useRef([gridRef]).current;
   const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'framed' : 'idle');
 
   const reduced = typeof window !== 'undefined'
@@ -231,7 +237,7 @@ export const WorkspaceChooser: React.FC<{
           ) : (
             <div className="absolute inset-0 bg-black/55" />
           )}
-          <EdgeParticles active={burst} originRef={barRef} />
+          <EdgeParticles active={burst} originRef={barRef} excludeRefs={excludeRefs} />
         </div>,
         document.body,
       )}
@@ -239,7 +245,7 @@ export const WorkspaceChooser: React.FC<{
       {/* No per-card dimming any more — the full-viewport scrim above covers
           these along with everything else, and doing both would double the
           darkening on exactly the elements it is least needed on. */}
-      <div className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div ref={gridRef} className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SUITES.map((suite, i) => (
           <SuiteCard
             key={suite.id}

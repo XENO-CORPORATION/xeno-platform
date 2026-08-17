@@ -78,7 +78,9 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
 export const EdgeParticles: React.FC<{
   active: boolean;
   originRef: React.RefObject<HTMLElement | null>;
-}> = ({ active, originRef }) => {
+  /** Regions particles must never paint over — the suite cards. */
+  excludeRefs?: React.RefObject<HTMLElement | null>[];
+}> = ({ active, originRef, excludeRefs }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const raf = useRef<number | undefined>(undefined);
   const particles = useRef<P[]>([]);
@@ -195,6 +197,38 @@ export const EdgeParticles: React.FC<{
       }
 
       ctx.clearRect(0, 0, w, h);
+
+      /* Punch the protected regions OUT of the drawable area.
+       *
+       * 🔴 Without this the bar's top edge fires straight into the suite cards
+       * sitting above it: particles crossed their borders and ran over the
+       * artwork, so the cards' strokes looked broken and the two elements
+       * appeared joined by streaks. An emitter cannot solve that by aiming —
+       * "up" is where the cards are, and refusing to emit upward would leave
+       * the bar shedding from three sides.
+       *
+       * So it is a CLIP, not an aim: the even-odd rule with a full-viewport
+       * rect plus each excluded rect leaves everything outside those regions
+       * paintable and everything inside them untouched. Particles fly toward
+       * the cards and cleanly disappear at the boundary, which reads as them
+       * passing behind — and no stroke is ever crossed.
+       *
+       * Re-measured each frame because the cards move: the entrance animation
+       * translates them, and a stale rect would clip the wrong rectangle for
+       * the whole first second. */
+      ctx.save();
+      if (excludeRefs?.length) {
+        ctx.beginPath();
+        ctx.rect(0, 0, w, h);
+        for (const r of excludeRefs) {
+          const b = r.current?.getBoundingClientRect();
+          // 1px of bleed so a particle never lands exactly on the border and
+          // leaves a half-pixel seam along the card edge.
+          if (b) ctx.rect(b.left - 1, b.top - 1, b.width + 2, b.height + 2);
+        }
+        ctx.clip('evenodd');
+      }
+
       ctx.fillStyle = CFG.color;
 
       const alive: P[] = [];
@@ -238,6 +272,7 @@ export const EdgeParticles: React.FC<{
       }
       particles.current = alive;
 
+      ctx.restore();
       ctx.globalAlpha = 1;
 
       // Keep going while anything is still in flight, so leaving the bar lets
@@ -277,7 +312,7 @@ export const EdgeParticles: React.FC<{
       window.removeEventListener('resize', resize);
       window.removeEventListener('pointermove', onMove);
     };
-  }, [originRef]);
+  }, [originRef, excludeRefs]);
 
   /* Kick the loop when emission begins. Separate from setup so turning
    * emission OFF tears nothing down — the loop notices `emitting` is false and
