@@ -14685,6 +14685,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         const isThemeStop = index === 0 || index === Math.floor(THEME_WAVEFORM_BAR_COUNT / 2) || index === THEME_WAVEFORM_BAR_COUNT - 1;
                         const isSelected = position === displayedThemeSliderPosition;
 
+                        /* `data-percentage` is Unread on purpose, and the reason is that the probe's
+                           two buckets do not fit it. It is classified as STATE because it is written
+                           as an expression, but `index * THEME_BRIGHTNESS_STEP` is fixed for the bar
+                           that carries it — it never changes for the life of that element. That makes
+                           it an ANCHOR whose value happens to be computed: `data-selected` beside it
+                           is the state, and it is the one that moves.
+
+                           It stays because it is the only way to name a bar by the vocabulary the
+                           theme is actually discussed in. probe-voicebright walks five stops — dark,
+                           dim, light, 30%, 65% — and a selector by percentage says which is which,
+                           where nth-child says the eleventh. Deleting it costs nothing today and the
+                           next probe that wants a stop has to count bars to find one. */
                         return (
                           <span
                             key={index}

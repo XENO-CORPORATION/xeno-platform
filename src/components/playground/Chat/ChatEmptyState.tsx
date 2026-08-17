@@ -800,6 +800,19 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   // Shell geometry must match empty + conversation:
   // parent owns container-type (stable cqw); shell grows left with self-end + outerWidthClass;
   // composer column stays ~100cqw so the rail sits beside content, never on top of it.
+  /*
+   * `data-rail-open` and `data-active-tool` below are Unread on purpose.
+   *
+   * Both mirror `LEGACY_HOVER_TOOL_RAIL`, which is a hardcoded `false`. So they are not unread STATE —
+   * they are constants, and always have been: the first resolves to `'false'` and the second to `''`
+   * on every render there has ever been.
+   *
+   * Deleting them is the wrong read of that. The `: boolean` annotation on the flag exists so
+   * TypeScript will not narrow it to `false` and call the branch dead — that is someone parking a
+   * feature deliberately, not forgetting one. Stripping its two state mirrors would leave the parked
+   * rail needing them written again by whoever un-parks it. Whether the legacy rail goes at all is a
+   * product call; until it is made, these stay and say why.
+   */
   const composerShell = (
     <div
       data-chat-composer-shell

@@ -47,19 +47,82 @@ const walk = (dir, out = []) => {
  */
 const files = [...walk(path.join(ROOT, 'src')), ...walk(path.join(ROOT, 'scripts'))]
   .filter((f) => !f.endsWith('probe-open-findings.mjs'));
-const texts = new Map(files.map((f) => [f, readFileSync(f, 'utf8')]));
+
+/*
+ * Blank out comment BODIES before counting references, keeping the file's length so every index still
+ * lines up.
+ *
+ * Same principle as excluding `probe-open-findings.mjs` above, and it bit in the same way: the moment
+ * a `Unread on purpose` reason was written beside the three state hooks, naming them in prose, the
+ * count read them as referenced and the bucket emptied — 3 to 0, by writing the sentence that says
+ * they are unread. A mention in a comment is not a consumer. It cannot break if the hook goes.
+ */
+const blankComments = (src) => {
+  const out = src.split('');
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === '`') {
+      const q = c;
+      i++;
+      while (i < src.length) {
+        if (src[i] === '\\') { i += 2; continue; }
+        if (src[i] === q) { i++; break; }
+        i++;
+      }
+      continue;
+    }
+    if (c === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
+      const block = src[i + 1] === '*';
+      const start = i;
+      i += 2;
+      while (i < src.length && (block ? !(src[i] === '*' && src[i + 1] === '/') : src[i] !== '\n')) i++;
+      i = block ? i + 2 : i;
+      for (let k = start; k < Math.min(i, src.length); k++) if (out[k] !== '\n') out[k] = ' ';
+      continue;
+    }
+    i++;
+  }
+  return out.join('');
+};
+
+const raw = new Map(files.map((f) => [f, readFileSync(f, 'utf8')]));
+const texts = new Map([...raw].map(([f, t]) => [f, blankComments(t)]));
+
+/*
+ * A third bucket, for the same reason §3 and §7 have one: a count of what is left to DECIDE is a
+ * finish line, and a count of what exists is not.
+ *
+ * `Unread on purpose` beside a declaration is the hook's version of `Stays hand-written`. Both of the
+ * answers this probe used to force — give it a consumer, or delete it — turned out to be wrong for
+ * all three of the state hooks it was reporting, and a bucket that cannot hold the right answer just
+ * keeps the number up forever.
+ *
+ * The window is generous (1500 chars) because these reasons sit above the enclosing `return (` or
+ * `const x = (`, never in attribute position — putting one there parses as a spread (§5.4b). One
+ * consequence is that a reason naming two adjacent hooks documents both. That is intended where the
+ * reason says so, and it is the reason's job to say so.
+ */
+const MARKER = 'Unread on purpose';
+const REASON_WINDOW = 1500;
 
 /* Declarations only: `data-foo` written as a JSX attribute, not inside a selector or a string. */
 const declared = new Map();
 const computed = new Set();
+const documented = new Set();
 for (const f of readdirSync(CHAT).filter((x) => x.endsWith('.tsx'))) {
-  const src = texts.get(path.join(CHAT, f)) ?? readFileSync(path.join(CHAT, f), 'utf8');
+  /* Declarations come from the BLANKED text, so a `data-foo` written inside a comment is not mistaken
+     for one; the reason lives in a comment, so its window has to come from the RAW text. `blankComments`
+     preserves length precisely so one index serves both. */
+  const src = texts.get(path.join(CHAT, f)) ?? blankComments(readFileSync(path.join(CHAT, f), 'utf8'));
+  const rawSrc = raw.get(path.join(CHAT, f)) ?? readFileSync(path.join(CHAT, f), 'utf8');
   for (const m of src.matchAll(/^\s*(data-[a-z0-9-]+)(=\{|="|\s*$)/gm)) {
     if (!declared.has(m[1])) declared.set(m[1], []);
     declared.get(m[1]).push(f);
     /* `=\{` means an expression: the value is recomputed on every render. That is the difference
        between a hook that WAITS to be selected and one that is doing work nobody collects. */
     if (m[2] === '={') computed.add(m[1]);
+    if (rawSrc.slice(Math.max(0, m.index - REASON_WINDOW), m.index).includes(MARKER)) documented.add(m[1]);
   }
 }
 
@@ -100,6 +163,10 @@ const states = dead.filter((d) => d.computed);
 console.log(`  unreferenced ANCHORS — constant, there to be selected: ${anchors.length}`);
 for (const d of anchors) console.log(`    ${d.hook.padEnd(36)} ${d.declaredIn}`);
 console.log(`\n  unreferenced STATE — recomputed every render, read by nothing: ${states.length}`);
-for (const d of states) console.log(`    ${d.hook.padEnd(36)} ${d.declaredIn}`);
+const explained = states.filter((d) => documented.has(d.hook));
+const open = states.filter((d) => !documented.has(d.hook));
+for (const d of explained) console.log(`    ${d.hook.padEnd(36)} ${d.declaredIn.padEnd(24)} Unread on purpose`);
+for (const d of open) console.log(`    ${d.hook.padEnd(36)} ${d.declaredIn.padEnd(24)} no reason written`);
+console.log(`\n  STILL TO DECIDE — no reason written: ${open.length}`);
 console.log('\nNeither list is a delete order. A hook can be read through a string built at runtime,');
 console.log('which no grep sees — and four hooks were lost the other way round (spec §5.5).');

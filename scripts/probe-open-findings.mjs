@@ -33,11 +33,26 @@ const hasOverlay = /--xeno-overlay\s*:/.test(libTheme);
 const blueClasses = (chatSrc.match(/(?:text|bg|border|ring|from|to)-blue-\d+(?:\/\d+)?/g) ?? []).length;
 const blueLiterals = (chatSrc.match(/rgba?\((?:59, 130, 246|96 165 250)[^)]*\)/g) ?? []).length;
 
-/* 3. The three data- state hooks recomputed every render and read by nothing. */
+/*
+ * 3. The three data- state hooks recomputed every render and read by nothing.
+ *
+ * The finding was posed as "these three should get a consumer or be deleted", and investigating it
+ * showed both answers are wrong for all three. Two mirror `LEGACY_HOVER_TOOL_RAIL`, a hardcoded
+ * `false` carrying a `: boolean` annotation so TypeScript will not call its branch dead — a feature
+ * parked on purpose, whose state mirrors would have to be written again by whoever un-parks it. The
+ * third, `data-percentage`, is an ANCHOR the two buckets could not hold: its value is computed, so it
+ * read as state, but `index * STEP` never changes for the bar carrying it.
+ *
+ * So the question is no longer "is it read" — it is "does it say why not". Counting occurrences is
+ * also what made this finding misreport: writing the reasons put the hook NAMES in prose, and two of
+ * the three dropped off this list for having been explained. A mention in a comment is not a use.
+ */
+const REASONED = /Unread on purpose/;
 const STATE_HOOKS = ['data-percentage', 'data-rail-open', 'data-active-tool'];
 const stillUnread = STATE_HOOKS.filter((h) => {
-  const uses = chatSrc.split(h).length - 1;
-  return uses > 0 && uses <= 2; // declared (once or twice), never read
+  const at = chatSrc.indexOf(`${h}=`);
+  if (at < 0) return false;
+  return !REASONED.test(chatSrc.slice(Math.max(0, at - 1500), at));
 });
 
 /* 4. The light-theme collision: `elevated` == `canvas`, so a floating panel has no fill contrast. */

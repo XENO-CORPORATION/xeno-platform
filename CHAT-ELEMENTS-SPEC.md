@@ -1280,6 +1280,34 @@ Re-deciding these costs more than it saves.
     exist. Recorded, not deleted; a runtime-built selector string is invisible to any grep, and the
     cost of being wrong here is a broken interaction rather than a stale rule.
 
+    **Closed — and neither answer the finding offered was the right one.** It asked for a consumer or
+    a deletion, and all three wanted a third thing:
+
+    - `data-rail-open` and `data-active-tool` mirror `LEGACY_HOVER_TOOL_RAIL`, which is a hardcoded
+      `false`. They are not unread state, they are **constants**: `'false'` and `''` on every render
+      there has ever been, and the 86-line branch beside them has never rendered. The flag carries a
+      `: boolean` annotation for the sole purpose of stopping TypeScript narrowing it to `false` and
+      calling that branch dead — someone parked a feature deliberately. Stripping its state mirrors
+      leaves them to be written again by whoever un-parks it. **Whether the legacy rail goes at all is
+      a product call, and it is a bigger one than this finding.**
+    - `data-percentage` is an **ANCHOR the two buckets could not hold**. It classified as STATE because
+      it is written as an expression, but `index * THEME_BRIGHTNESS_STEP` is fixed for the bar carrying
+      it — `data-selected` beside it is the state, and it is the one that moves. It is also the only
+      way to name a bar in the vocabulary the theme is discussed in: `probe-voicebright` walks five
+      stops, and a selector by percentage says which is which where `nth-child` says the eleventh.
+
+    So the finish line moved to where §3 and §7 already had it. A hook may be unread; it may not be
+    unread **by accident**. `Unread on purpose` beside a declaration is the hook's `Stays hand-written`,
+    `probe-dead-hooks` gained the third bucket to count it, and the gate is now **0 with no reason
+    written** rather than 0 unread.
+
+    Two things bit while closing it, both the same shape and both already in §6's table in another
+    form. Writing the reasons put the hook NAMES into prose, and the reference count read those
+    mentions as consumers — 3 unread became 0, by writing the sentence saying they are unread. **A
+    mention in a comment is not a use**; both probes blank comment bodies before counting now. And the
+    first attempt put the reason in JSX **attribute** position, where `{/* … */}` parses as a spread —
+    §5.4b trap 3, walked into by the person who wrote §5.4b.
+
   **One was neither, and it is gone.** `data-history-drag-shiftable` was not unused — it was a second
   copy of a live mechanism. The CSS reads the CLASS `history-drag-shiftable`, which the same elements
   already carry; the attribute drove nothing and would read to the next person as the thing the
@@ -1594,7 +1622,7 @@ Say these out loud rather than letting a green board imply them.
 |---|---|
 | `--chat-overlay` and `--chat-control-strong` have no variant member; closing it means adding palette | design system — `DESIGN_SYSTEM.md` is **LOCKED** and not this repo's to extend |
 | the blue cluster in `SearchChatInterface` (browser-agent overlay): 14 utility classes + 11 literal `rgb()`, none following the theme | design system — a mode that colours itself is a legitimate position, but it is a position someone has to take |
-| 3 `data-` state hooks recomputed every render and read by nothing | product — cheap, and a runtime-built selector is invisible to grep |
+| ~~3 `data-` state hooks recomputed every render and read by nothing~~ **closed** — each carries `Unread on purpose` and the reason it is not read; see §9 | — |
 | 7 `ReferenceError`s outside the chat (Office, AudioGeneration, ImageStudio) | out of scope here; reported, not fixed |
 | the send-path DB verification | blocked on the local API returning 401/500 |
 | `DESIGN_SYSTEM.md` §426 says panels "are NOT merged into a single container", which is what the chat does in two places | a contradiction to report, not to resolve |

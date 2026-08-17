@@ -37,12 +37,18 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROBES = [
   {
     file: 'probe-dead-hooks.mjs', needs: 'none',
-    verdict: /unreferenced ANCHORS[^:]*: (\d+)[\s\S]*?read by nothing: (\d+)/,
+    verdict: /unreferenced ANCHORS[^:]*: (\d+)[\s\S]*?read by nothing: (\d+)[\s\S]*?STILL TO DECIDE — no reason written: (\d+)/,
     /* 19, not 20: `probe-project-settings.mjs` selects on `data-project-settings-dialog`, so that
        anchor now HAS a consumer and left the unreferenced list. The anchors exist to be selected —
        one of them finally was, and the count moving is the convention paying off rather than a
-       regression. */
-    expect: ['19', '3'], describe: (m) => `${m[1]} anchors kept, ${m[2]} unread state`,
+       regression.
+
+       The gate is the THIRD number, not the second. `3 unread state hooks` is a fact about the chat
+       and it should never have had to reach zero — both answers this probe used to force, give it a
+       consumer or delete it, turned out wrong for all three. What must stay at zero is hooks with no
+       reason written, which is the finish line §3 and §7 already use: nothing unread by ACCIDENT. */
+    expect: ['19', '3', '0'],
+    describe: (m) => `${m[1]} anchors kept, ${m[2]} unread state each with its reason, ${m[3]} still to decide`,
   },
   {
     file: 'probe-tab-order.mjs', needs: 'chat',
@@ -126,7 +132,9 @@ const PROBES = [
        first delta already: 15 blue utility classes became 14 when the message editor's focus ring was
        themed. */
     verdict: /blue cluster the theme does not reach\s+(\d+) utility classes \+ (\d+) literal/,
-    expect: ['14', '11'], describe: (m) => `4 findings still open (${m[1]} blue classes + ${m[2]} literals)`,
+    /* 3, not 4: the state-hooks finding closed — not by getting the consumer it asked for, but by
+       each hook getting the reason it actually had. Both answers the finding offered were wrong. */
+    expect: ['14', '11'], describe: (m) => `3 findings still open (${m[1]} blue classes + ${m[2]} literals)`,
   },
   {
     file: 'probe-voice-thumb.mjs', needs: 'chat',
