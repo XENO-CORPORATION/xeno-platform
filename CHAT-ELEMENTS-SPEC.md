@@ -429,6 +429,14 @@ That number is a FLOOR and it conflates three things, which is why it is not a g
    visible button count *fell*: 94 → 91 → 83. Those panels are built from the controls that stayed
    hand-written, and opening one covers the composer controls behind it.
 3. **transient** — every `Spinner` counts 0 because nothing is loading at the moment of the count.
+4. **deliberately hidden markup** — and this is the one worth knowing about. The attach / recent-files
+   panel is `<div className="relative hidden">`: `display: none` unconditionally, kept for a tool rail
+   this route does not use. **No hover and no click can open it** — two iterations were spent trying
+   before reading the markup would have answered it in a minute.
+
+   One of the `TextInput`s converted during this adoption lives inside that block. The conversion is
+   correct and the control is unreachable, which is most of why the table reads `TextInput` 12 in
+   source and 0 rendered. **A control can be decided, converted, correct, and still never render.**
 
 **So the gap is (1) and (3), and (1) dominates.** The blind spot is the data-dependent branches, not
 closed menus — worth knowing before anyone spends an afternoon automating clicks to close it.

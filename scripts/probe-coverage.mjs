@@ -133,6 +133,12 @@ This is a FLOOR on coverage, not a census, and the gap conflates three different
      one covers the composer controls behind it. Interaction does not hide library components from
      this count.
   3. transient — every Spinner is 0 because nothing is loading at the moment of the count.
+  4. DELIBERATELY HIDDEN markup — the attach / recent-files panel carries the Tailwind class
+     "hidden", so display:none unconditionally, kept for a tool rail this route does not use. No
+     hover and no click can open it. One of the TextInputs converted during this adoption lives
+     inside it, which is most of why TextInput reads 12 in source and 0 rendered.
+     (No backticks in this block: it is inside a template literal, and quoting a class name in them
+     ends the literal. Same trap as the style block in ChatWithLLM, different file.)
 
 So the gap is (1) and (3), and (1) dominates: the blind spot is the data-dependent branches, not
 closed menus. Worth knowing before anyone spends an afternoon automating clicks to close it.
