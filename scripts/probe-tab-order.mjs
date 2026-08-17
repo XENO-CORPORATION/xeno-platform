@@ -58,6 +58,13 @@ const unreachable = await p.evaluate(() => {
       if (n.tagName === 'DIV' && n.classList.length && isTarget(n)) { nested = true; break; }
     }
     if (nested) continue;
+    /*
+     * The other false positive, found the same way as the nesting one: a CONTAINER that carries
+     * `cursor: pointer` while the thing you actually click is a focusable child. The history list's
+     * rows are the case — the div takes `onPointerDown` for dragging and the row's button sits
+     * inside it, already reachable. Flagging the wrapper reported a defect that was not there.
+     */
+    if (el.querySelector('button, [role="button"], a[href], [tabindex]')) continue;
     out.push({ w: +r.width.toFixed(0), h: +r.height.toFixed(0), label: (el.textContent || '').trim().slice(0, 30) });
   }
   return out;

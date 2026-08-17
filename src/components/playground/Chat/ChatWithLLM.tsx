@@ -15506,8 +15506,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            )}
 
                                            {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content) && (
-                                            <div
-                                                     className="ml-auto mr-0 flex max-w-[250px] cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 transition-colors hover:bg-[var(--chat-hover)]"
+                                            /* A BUTTON, not a `<div onClick>`. It opens the file in
+                                                the context panel, so a keyboard has to reach it —
+                                                and did not. `text-left` because a button centres its
+                                                content and this row is a filename that truncates.
+                                                Stays hand-written otherwise: it is a content row on
+                                                a message, where `ListRow` is the eventual answer and
+                                                would also decide how the message list is traversed. */
+                                            <button
+                                                     type="button"
+                                                     className="ml-auto mr-0 flex max-w-[250px] cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-left transition-colors hover:bg-[var(--chat-hover)]"
                                               onClick={() => {
                                                 if (message.userFileAttachment) {
                                                   if (message.userFileAttachment.file) {
@@ -15528,7 +15536,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                      <span className="truncate text-sm text-[var(--chat-text)]" title={message.userFileAttachment.name}>
                                                 {message.userFileAttachment.name}
                                               </span>
-                                            </div>
+                                            </button>
                                            )}
 
                                                    </>

@@ -645,9 +645,17 @@ Re-deciding these costs more than it saves.
   title, a count line and a favicon stack with its own colour logic.
 
   Measured before and after with real Tab presses: 67 stops → 68, one added where the header sits, and
-  distinct unreachable targets 3 → **2** — the attachment chip (182×38) and a suggestion row (247×33).
-  Both are content rows rather than chrome, so `ListRow` is the answer and it moves tab order inside
-  the message list. Recorded with the count so it is chosen, not inherited.
+  distinct unreachable targets 3 → 2.
+
+  **Now zero, and one of the two was never a defect.** The message's attached-file row was a real
+  `<div onClick>` that opens the file in the context panel; it is a `<button>` with `text-left`, and
+  tab stops went 68 → 69. The other was the probe's own false positive: the history list's rows carry
+  `cursor: pointer` on a drag container whose actual click target is a focusable child button. The
+  wrapper is not a target, and flagging it reported a defect that was not there.
+
+  So the probe now skips a container holding a focusable descendant — the second false positive of the
+  same family as the nesting one, and the second time this count came down by fixing the measurement
+  rather than the product. Both corrections are in `probe-tab-order.mjs` with the reason.
 
 - ~~**Panels that are not menus.**~~ **Closed.** Both panels run on `useMenu` + `useGooPill` now and
   their four rows are `MenuItem`s. Measured on the model dropdown: focus lands on the first row when
