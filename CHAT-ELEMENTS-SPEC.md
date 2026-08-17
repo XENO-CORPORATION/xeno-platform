@@ -432,6 +432,25 @@ The walk now samples DURING the action, at 350/700/1400ms. `Spinner` 0 → 1, `T
 **All four zeros are closed.** Every adopted component in this chat has now been rendered at least
 once for a probe, which was not true of any of them a few iterations ago.
 
+### The state map is now exhausted
+
+Every MOUNT gate it named has been tested, and the last two paid: the project file preview and the
+scheduled-task create dialog, both one click **inside** the project page rather than off it. The
+seeded project has carried a file and a task since two iterations ago, for exactly this.
+
+135 → **140**, `IconButton` 45 → 49, `Button` 41 → 42.
+
+The two that did not pay, and why, so nobody re-tests them:
+
+- **`isChatFilesModalMounted`** was already captured — `View files in chat` had been in the walk since
+  the menu was enumerated, and adds 1.
+- **`isPinnedSectionOpen` starts OPEN.** Clicking `Pinned` collapses the section: 50 → 49. The gate
+  was never shut, and a walk that clicked it would have measured *less*.
+
+That leaves `isMultiInterface`'s six behind a sign-in wall and `isRecentFilesOpen`'s two behind
+`display: none`. **The map is out of reachable gates**, which is a different thing from the number
+being finished — it means the next gain needs a fixture (a test account) rather than another path.
+
 ### `isMultiInterface` — the ceiling is the probes', not the app's
 
 The largest single gate in the state map is `isMultiInterface`, six controls including the whole
@@ -716,7 +735,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-135 rendered across the three routes — 53%.**
+140 rendered across the three routes — 55%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
@@ -823,7 +842,7 @@ PERCENTAGE — add twenty Buttons to the source and it falls with nothing broken
 the count, which only falls when a surface the walk used to reach stops being reachable. That is
 exactly a regression and nothing else.
 
-Floor 129 against 135 measured: enough headroom that a transient miss does not cry wolf, tight enough
+Floor 134 against 140 measured: enough headroom that a transient miss does not cry wolf, tight enough
 that losing a whole page shows. **The floor rises with the baseline** — a floor left behind drifts
 into meaninglessness, still green while a third of the walk has quietly stopped working. The runner
 gained a `{ min: n }` form for it, and both directions were verified before it was trusted: green at

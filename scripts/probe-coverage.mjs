@@ -274,6 +274,13 @@ for (const seg of ['llm', 'search', 'voice']) {
     ['Open all chats and tasks', 'Select', 'Seeded conversation 1'],
     ['View current-output.svg full size'],
     ['Projects'], ['Projects', PROJECT.name],
+    /*
+     * The last MOUNT gates in the state map, both one click INSIDE the project page rather than off
+     * it: `isProjectFilePreviewMounted` (open a seeded file) and the scheduled-task create dialog
+     * with its When/date pickers. The seeded project carries a file and a task for exactly this.
+     */
+    ['Projects', PROJECT.name, 'spec.txt'],
+    ['Projects', PROJECT.name, 'Add scheduled task'],
     /* `Edit code` puts a code block into edit mode, which is the ONLY place `Textarea` renders on
        these routes — the other three sit in dialogs. The demo thread supplies the code blocks. */
     ['Edit code'],
