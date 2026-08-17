@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Palette, FileText, Terminal, MessageSquare, Check, Sparkles } from 'lucide-react';
 import {
   SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts, type Suite,
@@ -46,94 +46,59 @@ export const WorkspaceChooser: React.FC<{
   value: string | null;
   onChange: (id: string) => void;
 }> = ({ value, onChange }) => {
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const gridRef = useRef<HTMLDivElement | null>(null);
-  const barRef = useRef<HTMLButtonElement | null>(null);
   const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'framed' : 'idle');
-  const [frameVars, setFrameVars] = useState<React.CSSProperties | null>(null);
 
   const reduced = typeof window !== 'undefined'
     && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   /**
-   * The frame DRAWS ITSELF around the cards, starting at the bar.
+   * The frame draws itself around the cards, from a single point.
    *
-   * A hairline appears at the centre of the bar, runs out to both edges, then
-   * climbs the sides and closes across the top. The shape of the motion is the
-   * meaning: the enclosure completing around the four cards.
+   * A dot appears at the bottom centre — directly under the bar — two lines
+   * run out from it to both edges, climb the sides, and close across the top.
+   * One origin, two travelling ends, one seam. That is what makes it read as
+   * being DRAWN rather than as a box appearing.
    *
-   * -- WHY clip-path AND NOT A SCALE TRANSFORM ------------------------------
+   * -- NOTHING IS MEASURED ---------------------------------------------------
    *
-   * The earlier version inverse-scaled a full-size frame onto the bar's box
-   * and released it. That was wrong for a frame, and I had the reason
-   * backwards in the code that shipped it: a transform scales the ENTIRE
-   * rendered output. Borders scale. Inset box-shadows scale. So the stroke
-   * started as a hairline and visibly thickened as it grew -- a frame whose
-   * line changes weight mid-animation.
+   * An earlier version measured the bar's vertical band and passed it in as
+   * CSS custom properties. It never needed to: the origin is the frame's own
+   * bottom centre, which sits under the bar by construction at every
+   * breakpoint and every column count. Geometry that does not have to be
+   * computed cannot be computed wrongly — and this had already been wrong
+   * once, by the 12px `-inset-3` offset between the frame's box and the
+   * wrapper's.
    *
-   * Clipping reveals a frame that is already full-size and correctly stroked,
-   * so the line holds ONE weight from first frame to last. It also gives
-   * per-side control, which a single transform cannot: left/right and top are
-   * independent insets, so they can be sequenced into two beats.
-   *
-   * -- WHAT IS MEASURED, AND WHY ---------------------------------------------
-   *
-   * Only the bar's vertical band, expressed as percentages of the frame's own
-   * box. The bar's position depends on the grid's height, the column count and
-   * the viewport, so a hardcoded start is correct at one breakpoint and wrong
-   * everywhere else. The horizontal start is a constant 50%/50% -- dead centre
-   * -- because that is where the expansion should originate regardless of
-   * anything.
+   * So this handler only switches state. The whole animation is one CSS class.
    */
   const expandFrame = useCallback(() => {
     if (phase !== 'idle') return;
 
-    const wrap = wrapRef.current;
-    const bar = barRef.current;
-    if (reduced || !wrap || !bar) { setPhase('framed'); onChange(EVERYTHING_ID); return; }
+    // Reduced motion still gets the OUTCOME, just not the drawing of it.
+    if (reduced) { setPhase('framed'); onChange(EVERYTHING_ID); return; }
 
-    // Measure BEFORE mutating anything: reading a box after a style change that
-    // triggers layout returns post-change geometry.
-    const w = wrap.getBoundingClientRect();
-    const b = bar.getBoundingClientRect();
-
-    // The frame element is -inset-3, so its box is 12px larger on every side
-    // than the wrapper. The clip percentages must be relative to THAT box, not
-    // the wrapper, or the start band sits 12px off the bar.
-    const INSET = 12;
-    const frameH = w.height + INSET * 2;
-    const barTop = (b.top - w.top) + INSET;
-    const barBottom = (b.bottom - w.top) + INSET;
-
-    setFrameVars({
-      '--f-top': `${((barTop / frameH) * 100).toFixed(3)}%`,
-      '--f-bottom': `${(((frameH - barBottom) / frameH) * 100).toFixed(3)}%`,
-    } as React.CSSProperties);
     setPhase('framing');
-
     window.setTimeout(() => { setPhase('framed'); onChange(EVERYTHING_ID); }, FRAME_MS + 40);
   }, [phase, reduced, onChange]);
 
   /** Picking one suite retracts the frame — the two answers are exclusive. */
   const collapseFrame = useCallback(() => {
     setPhase('idle');
-    setFrameVars(null);
   }, []);
 
   /* -- The choice -------------------------------------------------------- */
   const framed = phase === 'framed' || phase === 'framing';
 
   return (
-    <div ref={wrapRef} className="relative">
+    <div className="relative">
       {/* THE FRAME. Behind everything (z-0, cards are z-10) and outside the
           content box (-inset-3), so it reads as enclosing the grid rather than
           as another card in it. Pointer-events off: it is a statement, not a
           control — the bar underneath stays clickable through it. */}
-      {frameVars && (
+      {(phase === 'framing' || phase === 'framed') && (
         <div
           aria-hidden
           style={{
-            ...frameVars,
             boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.42), 0 24px 60px -30px rgba(0,0,0,0.9)',
             background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008))',
           }}
@@ -142,7 +107,6 @@ export const WorkspaceChooser: React.FC<{
       )}
 
       <div
-        ref={gridRef}
         className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4"
       >
         {SUITES.map((suite, i) => (
@@ -165,7 +129,6 @@ export const WorkspaceChooser: React.FC<{
       </div>
 
       <button
-        ref={barRef}
         type="button"
         onClick={expandFrame}
         disabled={phase !== 'idle'}
