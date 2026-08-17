@@ -484,6 +484,28 @@ Re-deciding these costs more than it saves.
   **The `style` prop is where a wrong variant choice hides.** It is closed in the types and open at
   runtime, so nothing failed and nothing said so.
 
+- **`data-` hooks: 82 declared, 59 referenced, 23 not — and the number is the wrong question.**
+  Seam (d), swept with `scripts/probe-dead-hooks.mjs`, which searches every `.tsx`, `.css`, `.mjs`
+  and `scripts/` file before calling anything unreferenced. §5.5 exists because four hooks were lost
+  during conversions, and a sweep in the other direction fails the same way.
+
+  The 23 split into two kinds that want **opposite** answers, which one number hides:
+
+  - **20 are ANCHORS** — `data-chat-share-dialog=""`, the dialog family, the preview family: constants
+    written once, there to BE selected. Unreferenced is their normal state. The ten chat tests are
+    built on exactly this affordance in the composer, so deleting the rest would remove the thing that
+    made the composer testable. **Keep.**
+  - **3 are STATE** — `data-percentage`, `data-rail-open`, `data-active-tool`: recomputed on every
+    render and read by nothing. A DOM write per render, claiming to drive something that does not
+    exist. Recorded, not deleted; a runtime-built selector string is invisible to any grep, and the
+    cost of being wrong here is a broken interaction rather than a stale rule.
+
+  **One was neither, and it is gone.** `data-history-drag-shiftable` was not unused — it was a second
+  copy of a live mechanism. The CSS reads the CLASS `history-drag-shiftable`, which the same elements
+  already carry; the attribute drove nothing and would read to the next person as the thing the
+  transition keys on. A duplicate is worse than an unused hook, which is the same lesson the
+  duplicated `!important` selector taught two seams ago.
+
 - ~~**Normalisation rules with nothing left to match.**~~ **Swept: 24 selectors → 11.** The block
   force-maps legacy hardcoded fills onto the chat tokens, keyed on Tailwind class SUBSTRINGS, so every
   conversion that replaced a hand-written control deleted one of those classes and left the rule that

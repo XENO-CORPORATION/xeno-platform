@@ -17834,7 +17834,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         key={convo.id}
                         data-goo-row=""
                         data-history-pinned-row={isPinnedRow ? convo.id : undefined}
-                        data-history-drag-shiftable={isPinnedRow ? 'true' : undefined}
                         data-pin-dragging={isDragging ? 'true' : undefined}
                         onPointerDown={
                           canDrag
@@ -18139,7 +18138,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               )}
                               {sortedHistory.some((convo) => !convo.isPinned) && (
                                 <div
-                                  data-history-drag-shiftable="true"
                                   className={`space-y-0.5 ${recentsShiftY ? 'history-drag-shiftable' : ''}`}
                                   style={
                                     recentsShiftY
