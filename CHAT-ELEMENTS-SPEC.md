@@ -484,6 +484,26 @@ Re-deciding these costs more than it saves.
   **The `style` prop is where a wrong variant choice hides.** It is closed in the types and open at
   runtime, so nothing failed and nothing said so.
 
+- ~~**Hand-written controls whose shape already IS a variant.**~~ **Swept, and clean — the last
+  seam.** Four of these were caught hiding behind an inline `style`, each a `ghost` overridden into
+  `secondary` or `danger`, so the same shapes written as plain Tailwind were the obvious last place.
+
+  `scripts/probe-variant-shapes.mjs` renders one of each variant into the live chat and compares
+  every hand-written button's resting fill / ink / border against them — both sides measured in the
+  same document, so nothing needs normalising. **One hit, and it is correctly hand-written.**
+
+  The hit is the model trigger, and WHY it matched is the useful part: `index.css` pins its whole chip
+  family with `!important`, so what the probe measured was the normalisation block's paint, not the
+  control's own intent. A computed shape cannot tell those apart. Its recorded reason names three
+  independent blockers and all three still hold — the gooey inline tray the library's `ModelPicker`
+  has no place for, that `!important` family which no size token would survive, and a face four
+  conditional glyphs deep.
+
+  Two things the probe now says out loud, because both would mislead silently: `quiet` and `danger`
+  compute **identically** at rest — transparent fill, muted ink, a hairline — and differ only on
+  hover, so it reports every matching variant rather than the first; and a match is a weak signal,
+  since resting shape knows nothing of hover, focus or a disabled branch.
+
 - **`data-` hooks: 82 declared, 59 referenced, 23 not — and the number is the wrong question.**
   Seam (d), swept with `scripts/probe-dead-hooks.mjs`, which searches every `.tsx`, `.css`, `.mjs`
   and `scripts/` file before calling anything unreferenced. §5.5 exists because four hooks were lost
