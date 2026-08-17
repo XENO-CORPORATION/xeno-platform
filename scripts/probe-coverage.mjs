@@ -200,27 +200,39 @@ for (const seg of ['llm', 'search', 'voice']) {
    * of the 74 unrendered Buttons between them. They need no seeding at all — just the sidebar open
    * and a click each. Naming where a blind spot lives is what made it reachable.
    */
-  for (const label of [
-    'Open conversation history', 'Conversation actions',
-    'Artifacts', 'Scheduled', 'Settings',
+  /*
+   * NESTED steps, not flat ones. A sequence of single clicks cannot reach a section INSIDE a page:
+   * `Settings` opens the global settings page, and by the time a later `Memory` click came round the
+   * page had been replaced by whatever the walk clicked next. The one real `<Switch>` in the chat
+   * stayed at zero because of the ORDER, not because it was unreachable.
+   *
+   * Each entry is now a path — click these in immediate succession — so a nested surface is reached
+   * while its parent is still open.
+   */
+  for (const step of [
+    ['Open conversation history'], ['Conversation actions'],
+    ['Artifacts'], ['Scheduled'],
+    ['Settings'], ['Settings', 'Memory'],
     /* `Share conversation` needs `messages.length > 0`, which the demo thread supplies — no seed.
        `ChatSkillsWorkspace` is not a page of its own: it is a SECTION of the chat settings modal, so
        it comes with whatever opens that. Reading where a component is mounted, rather than guessing a
        trigger for it, is what turned the last aggregate number into four points. */
-    'Share conversation',
-    'Projects', PROJECT.name,
+    ['Share conversation'],
+    ['Projects'], ['Projects', PROJECT.name],
     /* `Edit code` puts a code block into edit mode, which is the ONLY place `Textarea` renders on
        these routes — the other three sit in dialogs. The demo thread supplies the code blocks. */
-    'Edit code',
+    ['Edit code'],
   ]) {
-    await p.evaluate((x) => {
-      /* `title` as well as `aria-label` and text — the code block's Edit is titled, not labelled. */
-      const el = [...document.querySelectorAll('button,[role="button"]')].find((e) =>
-        ((e.getAttribute('aria-label') || e.getAttribute('title') || e.textContent || '').trim().replace(/\s+/g, ' ')).includes(x),
-      );
-      if (el && getComputedStyle(el).visibility !== 'hidden') { el.scrollIntoView({ block: 'center' }); el.click(); }
-    }, label);
-    await new Promise((r) => setTimeout(r, 1300));
+    for (const label of step) {
+      await p.evaluate((x) => {
+        /* `title` as well as `aria-label` and text — the code block's Edit is titled, not labelled. */
+        const el = [...document.querySelectorAll('button,[role="button"]')].find((e) =>
+          ((e.getAttribute('aria-label') || e.getAttribute('title') || e.textContent || '').trim().replace(/\s+/g, ' ')).includes(x),
+        );
+        if (el && getComputedStyle(el).visibility !== 'hidden') { el.scrollIntoView({ block: 'center' }); el.click(); }
+      }, label);
+      await new Promise((r) => setTimeout(r, 1300));
+    }
     observe(await p.evaluate(eval(IDENTIFY), SELECTOR));
   }
   observe(await p.evaluate(eval(IDENTIFY), SELECTOR));

@@ -411,6 +411,20 @@ empty.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
 
+### A flat walk cannot reach a section inside a page
+
+`Switch` — the one real switch in the chat, "Generate memory from chats" — read 0, and the walk was
+already opening the page it lives on. The problem was ORDER, not reach: the steps were a flat list of
+single clicks, so `Settings` opened the global settings page and by the time a later `Memory` click
+came round, the page had been replaced by whatever the walk clicked next.
+
+Clicking `Memory` immediately after `Settings` renders it. **Opening a page is not the same as
+visiting it**, and a sequence of single clicks quietly asserts that every surface is reachable from
+the top.
+
+The walk is a list of PATHS now — `['Settings', 'Memory']` — clicked in immediate succession, so a
+nested surface is reached while its parent is still open. `Switch` 0 → 1, 38% → 39%.
+
 ### Two components had never been rendered by any probe. Now they have
 
 `Textarea` and `ListRow` both read 0 for this entire programme. Both are now non-zero, and neither
@@ -531,7 +545,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-98 rendered across the three routes — 38%.**
+99 rendered across the three routes — 39%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
