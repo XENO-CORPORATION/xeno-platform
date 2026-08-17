@@ -484,6 +484,20 @@ Re-deciding these costs more than it saves.
   **The `style` prop is where a wrong variant choice hides.** It is closed in the types and open at
   runtime, so nothing failed and nothing said so.
 
+- ~~**Appearance classes surviving a conversion.**~~ **Swept, and clean.** §3.4 says `p-`, `h-`,
+  `rounded-`, `bg-` and friends come off when a control is converted, because the component owns its
+  box. A static grep finds nothing, but it can only see literal `className` strings — a conditional, a
+  shared const or an interpolation hides one completely. `scripts/probe-adopted-metrics.mjs` asks the
+  rendered page instead: **45 adopted controls, every one at the height its own `--xeno-h` declares
+  and every one at `--xeno-radius-control`.** Nothing survived.
+
+  It reported one drift first, and that was the probe: the composer's voice chevron rests at
+  `scale(0.92)` until the microphone is hovered, so 28 × 0.92 = 25.8 read as a control off its size
+  token and was a reveal doing its job. It measures `offsetHeight` now. **Third probe false positive
+  this session** — after children inheriting `cursor: pointer` and a container with a focusable child
+  — and they rhyme: a probe reading rendered geometry cannot tell intent from accident, so the
+  question has to be narrowed until it can.
+
   Two things the axis absorbed: `disabled:opacity-40 disabled:cursor-not-allowed` at two sites is the
   availability axis written out, and measured on the component it is opacity 0.4 with `not-allowed`
   from `disabled` alone. One colour moved on purpose — the share dialog's Done inked
