@@ -1,5 +1,5 @@
 import React, { useState, useMemo, memo } from 'react';
-import { Button, IconButton, Spinner } from '@xenosystem/elements-react';
+import { Button, IconButton, Spinner, Textarea } from '@xenosystem/elements-react';
 import { Copy, Check, Rows, XDecl, Maximize2Decl, Minimize2Decl, EditDecl, CheckDecl, CopyDecl, PlayDecl } from '@/lib/icons';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -262,18 +262,24 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
         <div className="code-content-area">
             {isEditing ? (
               <div className="p-2">
-                {/* Stays hand-written, and this is the first field to be blocked by TYPE rather
-                    than by fill — the fill is `--chat-canvas`, which is exactly what the component
-                    paints. It is a CODE editor: `font-mono`. `.xeno-textarea` declares `font:
-                    inherit`, so a `font-mono` class handed to it through `className` would be two
-                    single-class rules deciding a monospace face on stylesheet order. `fontSize` was
-                    added to this component today for the same reason one property over; a third
-                    override for one call site is not the answer, and the pattern is recorded in §9
-                    instead. */}
-                <textarea
+                {/* The field that was blocked by TYPE rather than by fill, and the argument against
+                    fixing it with a third override door held: the answer was a MODE. `--xeno-font-mono`
+                    had been declared in the library beside `--xeno-font-sans` and read by nothing, so
+                    `mono` asks for the family the system already names instead of smuggling one in
+                    through `className` and letting stylesheet order settle the face.
+                    Everything else was already the component: `--chat-canvas` is what it paints, the
+                    border and the focus colour are its own `--chat-border` / `--chat-muted` pair.
+                    `fontSize={14}` holds `text-sm` where the component's default is 15.
+                    `leading-relaxed` goes — the component owns line-height at 1.5, and leaving the
+                    class would be two rules fighting on cascade order, the same coin-flip the family
+                    posed. The focus RING goes too: `.xeno-textarea:focus` is the border alone, which
+                    is what every other converted field in this chat now does. */}
+                <Textarea
+                  mono
+                  fontSize={14}
                   value={editingCode}
                   onChange={(e) => onEditCodeChange?.(e.target.value)}
-                  className="w-full min-h-[200px] max-h-[500px] p-3 bg-[var(--chat-canvas)] border border-[var(--chat-border)] rounded-lg text-[var(--chat-text)] font-mono text-sm resize-y focus:outline-none focus:border-[var(--chat-muted)] focus:ring-1 focus:ring-[var(--chat-muted)] leading-relaxed"
+                  className="w-full min-h-[200px] max-h-[500px] resize-y"
                   placeholder="Edit code..."
                   autoFocus
                   spellCheck={false}

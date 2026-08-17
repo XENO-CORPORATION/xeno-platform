@@ -516,11 +516,18 @@ Re-deciding these costs more than it saves.
   to the box step (closed — `TextInput.fontSize`), 15px written flat into `.xeno-textarea` (closed —
   `Textarea.fontSize`), and `font: inherit` leaving no way to state a monospace face. The third is
   the code editor in `CodeBlockWithHeader`, and it is the only field in the chat blocked by type
-  rather than fill — its `--chat-canvas` is exactly what the component paints. Handing `font-mono`
-  through `className` would leave two single-class rules deciding the face on stylesheet order, which
-  is the same coin-flip `leading-relaxed` posed against the component's own `line-height`. One call
-  site does not justify a third override door; the pattern is what wants deciding, and it is the
-  library's to decide.
+  rather than fill — its `--chat-canvas` is exactly what the component paints.
+
+  **Closed, and the argument against a third door held.** The answer was not `fontFamily` but a MODE:
+  `--xeno-font-mono` had been declared in `fonts.css` beside `--xeno-font-sans` since the beginning
+  and was **read by nothing** — a family the system named and kept no promise about. `Textarea mono`
+  asks for it by name (elements-foundations 88bcbcd), and the editor converted.
+
+  Measured in the elements preview: default draws the sans stack, `mono` draws the mono stack, the
+  size token is untouched. One honest note carried in the probe — the `letter-spacing: normal` that
+  ships with the mode measured as a NO-OP there, because a bare `.xeno` host does not push Inter's
+  -0.006em into a form control. It is defensive, and it earns its keep where a product sets tracking
+  on a container the field sits in.
 
 - **A test that fails on its first line stops describing anything.** `test-chat-send-button-layout`
   sliced the composer out of the source at `{isLoading ?` and the composer-polish pass (3d27aef)
