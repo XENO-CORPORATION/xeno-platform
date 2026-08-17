@@ -1607,12 +1607,23 @@ Say these out loud rather than letting a green board imply them.
   source, 60 rendered across the three routes (`scripts/probe-coverage.mjs`). Those branches are
   *decided in the source* and *unmeasured in the browser*. **A green `probe:chat` covers a quarter of
   the adopted controls** — see §6 for what that number does and does not include.
-- **Most probes measure ONE theme.** `probe-voicebright` covers dark/dim/light and two custom stops
-  because that is what it is for; `probe-control-fill`, `probe-invisible-fills`,
-  `probe-adopted-metrics`, `probe-small-targets` and `probe-tab-order` all run on whatever theme the
-  browser starts in. A control that only misbehaves in light would pass every one of them. **`dim`
-  went unchecked on every route for as long as `probe-voicebright` existed**, and that is the shape
-  of gap to look for next.
+- ~~**Most probes measure ONE theme.**~~ **Closed, and the answer was not "loop them all".** Four
+  probes compare COLOUR and all four now run dark/dim/light: `probe-voicebright` (plus two custom
+  stops), `probe-control-fill`, `probe-invisible-fills` and — last, and the one that most needed it —
+  `probe-variant-shapes`. That one matches a hand-written control's painted fill/ink/border against
+  what each variant computes to, so a per-theme token collision breaks it in **both** directions: it
+  can hide a real match and it can invent one. Its verdict is now two numbers, ALL-THREE against SOME,
+  because a control matching in every theme is tracking that variant's tokens while a control matching
+  in one is sitting on that theme's collision, and converting the second fixes a theme and breaks two.
+  Measured: 1 all-three (the model trigger, already explained), **0 theme-only** — a confirmation, and
+  confirmations are results.
+
+  The other three stay single-theme **because that was measured too**, not assumed: §6 ran
+  `probe-adopted-metrics`, `probe-small-targets` and `probe-tab-order` dark against light and across
+  three same-theme runs, and metrics and target size came back identical. Geometry does not care what
+  colour it is. Looping them would have tripled their cost to re-measure a constant — which is the
+  more useful half of this entry: **"run everything in every theme" is not rigour, it is untargeted
+  cost.** Ask what the probe COMPARES first.
 - **A `Stays hand-written` reason is a decision, not a permanent fact.** Two of them outlived the gap
   they described, and read exactly like live ones until the doors in §3.3b were checked against them.
 

@@ -67,8 +67,13 @@ const PROBES = [
   },
   {
     file: 'probe-variant-shapes.mjs', needs: 'chat',
-    verdict: /already IS a variant: (\d+)/,
-    expect: ['1'], describe: (m) => `${m[1]} hit (the model trigger, painted by !important)`,
+    /* Two numbers, because they mean opposite things. ALL-THREE is a control tracking a variant's
+       tokens — a real conversion candidate. SOME is a control riding a token collision that exists in
+       one theme and not the others (§9: dark `elevated == control`, light `elevated == canvas`), and
+       converting one of those fixes a theme and breaks two. SOME rising above 0 is the regression. */
+    verdict: /matching a variant in ALL three themes: (\d+)[\s\S]*?matching in SOME themes only: (\d+)/,
+    expect: ['1', '0'],
+    describe: (m) => `${m[1]} hit in all three themes (the model trigger, painted by !important), ${m[2]} theme-only`,
   },
   {
     file: 'probe-control-fill.mjs', needs: 'chat',
