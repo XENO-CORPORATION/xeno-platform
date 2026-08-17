@@ -5,7 +5,7 @@
   "description": "XENO Platform - Monorepo for xenostudio studio and core libraries",
   "scripts": {
     "start": "vite --host 0.0.0.0 --port 5183",
-    "test": "npm run test:release-guard && npm run test:product-pages && npm run test:registration-gate && npm run test:activation && npm run test:deindex-gate && npm run test:forum-ranker && npm run test:forum-notify && npm run test:forum-edit-delete && npm run test:forum-moderation && npm run test:forum-throttle && npm run test:forum-writeback && npm run test:forum-report && npm run test:forum-digest && npm run test:forum-agents && npm run test:forum-seed && npm run test:forum-search && npm run test:forum-smoke-gates && npm run test:forum-mcp && npm run test:forum-widget && npm run test:forum-parity && npm run test:forum-xss && npm run test:forum-client-parity && npm run test:build-cache && npm run test:forum-columns && npm run test:sql-placeholders && npm run test:workspace-suites && npm run test:product-icons && npm run test:chrome-anatomy && npm run test:release-status && npm run test:typecheck-real && npm run test:watch-not-use && npm run test:entitlements && npm run test:email && npm run test:account",
+    "test": "npm run test:release-guard && npm run test:product-pages && npm run test:registration-gate && npm run test:activation && npm run test:deindex-gate && npm run test:forum-ranker && npm run test:forum-notify && npm run test:forum-edit-delete && npm run test:forum-moderation && npm run test:forum-throttle && npm run test:forum-writeback && npm run test:forum-report && npm run test:forum-digest && npm run test:forum-agents && npm run test:forum-seed && npm run test:forum-search && npm run test:forum-smoke-gates && npm run test:forum-mcp && npm run test:forum-widget && npm run test:forum-parity && npm run test:forum-xss && npm run test:forum-client-parity && npm run test:build-cache && npm run test:forum-columns && npm run test:sql-placeholders && npm run test:workspace-suites && npm run test:product-icons && npm run test:chrome-anatomy && npm run test:release-status && npm run test:typecheck-real && npm run test:inert-classes && npm run test:watch-not-use && npm run test:entitlements && npm run test:email && npm run test:account",
     "test:entitlements": "node --test scripts/entitlement-enforcement.test.mjs",
     "test:email": "node --test scripts/welcome-email.test.mjs",
     "test:account": "node --test scripts/spend-cap-enforcement.test.mjs scripts/security-events.test.mjs scripts/user-agent.test.mjs",
@@ -65,7 +65,8 @@
     "build:libs": "cd libs/xeno-lib && cargo build --release && cd ../xeno-edit/server && cargo build --release",
     "test:activation": "node --test scripts/account-activation.test.mjs",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
-    "test:typecheck-real": "node --test scripts/typecheck-is-real.test.mjs"
+    "test:typecheck-real": "node --test scripts/typecheck-is-real.test.mjs",
+    "test:inert-classes": "node --test scripts/inert-tailwind-classes.test.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.7",

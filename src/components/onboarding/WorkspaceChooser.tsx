@@ -43,6 +43,21 @@ type Phase = 'idle' | 'framing' | 'framed' | 'unframing';
 const FRAME_MS = 780;
 const ERASE_MS = 620;
 
+/* Durations are set INLINE, not with `duration-[420ms]`.
+ *
+ * That utility silently produces nothing in this build: the compiled stylesheet
+ * contains no `duration-[...]` selector at all, only the theme scale, while
+ * every other arbitrary value from this same file (max-w-[120px],
+ * min-h-[420px], rounded-[18px], transition-[flex-grow]) compiles fine. So the
+ * classes were there, the transitions ran at Tailwind's default 150ms, and the
+ * choreography was wrong in a way nothing reports — a missing utility class
+ * has no error, it just falls back.
+ *
+ * Inline values cannot be dropped by a build step, and they sit next to the
+ * transitionDelay values they have to stay in proportion with.
+ */
+const BAR_MS = 420;
+
 export const WorkspaceChooser: React.FC<{
   value: string | null;
   /** `null` clears the choice — the bar is a TOGGLE, so it has to be able to
@@ -159,7 +174,7 @@ export const WorkspaceChooser: React.FC<{
         onClick={toggleFrame}
         disabled={phase === 'framing' || phase === 'unframing'}
         style={{ animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: '0.34s', opacity: 0 }}
-        className={`focus-self group relative z-10 mt-3 flex w-full items-center gap-3.5 overflow-hidden
+        className={`focus-self group relative z-10 mt-3 flex w-full items-center overflow-hidden
                     rounded-[12px] border px-5 py-4 text-left transition-all duration-200 ease-out
                     will-change-transform disabled:cursor-default
                     ${framed
@@ -187,8 +202,9 @@ export const WorkspaceChooser: React.FC<{
             rather than `hidden`, because a display change cannot be
             transitioned and the square would pop in at full size. */}
         <span
+          style={{ transitionDuration: `${BAR_MS}ms` }}
           className={`relative grid shrink-0 place-items-center overflow-hidden rounded-[8px] border
-                      transition-all duration-[420ms] ease-out
+                      transition-all ease-out
                       ${framed
                         ? 'mr-3.5 h-9 w-9 scale-100 border-white/30 bg-white/[0.14] opacity-100'
                         : 'mr-0 h-9 w-0 scale-75 border-transparent bg-transparent opacity-0'}`}
@@ -205,8 +221,26 @@ export const WorkspaceChooser: React.FC<{
           )}
         </span>
 
-        <span className={`relative min-w-0 flex-1 ${framed ? 'text-left' : 'text-center'}`}>
-          <span className="block text-[14px] font-medium text-white">
+        {/* -- Centred to left-aligned, WITHOUT flipping text-align ---------
+            The obvious version toggles `text-center` -> `text-left`. That is
+            what caused the lurch: text-align flips on the FIRST frame, so the
+            label snapped hard left while the square was still 0 wide, and then
+            the growing square shoved it back right. Two opposing movements in
+            one gesture.
+
+            `flex-grow` is animatable, so a spacer does the job instead. Idle,
+            spacers on both sides grow equally and the label sits centred;
+            chosen, the left spacer collapses to 0 and the label slides over as
+            one continuous motion. Nothing is measured, nothing snaps, and the
+            label only ever travels in one direction. ------------------------ */}
+        <span
+          aria-hidden
+          style={{ transitionDuration: `${BAR_MS}ms` }}
+          className={`transition-[flex-grow] ease-out ${framed ? 'grow-0' : 'grow'}`}
+        />
+
+        <span className="relative min-w-0 shrink text-left">
+          <span className="block whitespace-nowrap text-[14px] font-medium text-white">
             {framed ? 'The full XENO workspace' : 'Or take the full XENO experience'}
           </span>
           <span className="mt-0.5 block text-[12.5px] text-white/40">
@@ -216,6 +250,11 @@ export const WorkspaceChooser: React.FC<{
           </span>
         </span>
 
+        {/* The right spacer always grows, so it absorbs whatever the left one
+            gives up. Without it the label would be pinned to the right edge in
+            the idle state rather than centred. */}
+        <span aria-hidden className="grow" />
+
         {/* Right slot -- the count is meaningless before a choice is made; it
             would be a number floating beside an invitation. Withheld until
             there is something for it to describe.
@@ -224,9 +263,12 @@ export const WorkspaceChooser: React.FC<{
             racing it, and immediate on the way OUT so a retract reads as
             decisive rather than as the bar reluctantly letting go. */}
         <span
-          style={{ transitionDelay: framed ? `${FRAME_MS * 0.86}ms` : '0ms' }}
+          style={{
+            transitionDuration: `${BAR_MS}ms`,
+            transitionDelay: framed ? `${FRAME_MS * 0.86}ms` : '0ms',
+          }}
           className={`relative shrink-0 overflow-hidden whitespace-nowrap text-[12px] tabular-nums text-white/30
-                      transition-all duration-[420ms] ease-out
+                      transition-all ease-out
                       ${framed ? 'ml-3 max-w-[120px] opacity-100' : 'ml-0 max-w-0 opacity-0'}`}
         >
           {allAvailableProducts().length} products
