@@ -166,6 +166,26 @@ export function aliasSiteOrigins() {
   return splitOrigins(process.env.XENO_ALIAS_SITE_ORIGINS);
 }
 
+/**
+ * Browser-extension origins allowed to call this API. Empty by default.
+ *
+ * An extension origin is `chrome-extension://<id>`, and the id is NOT a constant
+ * we can hardcode:
+ *   · unpacked dev load — Chrome derives the id from the FILESYSTEM PATH, so it
+ *     differs per machine and per checkout;
+ *   · Web Store build  — derived from the signing key: stable, but unknowable
+ *     until the item is created.
+ * So this is operator configuration (XENO_EXTENSION_ORIGINS), never a literal.
+ *
+ * 🔴 Deliberately NOT a `chrome-extension://*` wildcard. The CORS layer runs with
+ * `credentials: true`, so accepting every extension origin would let ANY
+ * extension the user has installed make credentialed requests to this API.
+ * List the ids you mean.
+ */
+export function extensionOrigins() {
+  return splitOrigins(process.env.XENO_EXTENSION_ORIGINS);
+}
+
 /** Additional API gateway origins to accept. Empty by default. */
 export function aliasApiOrigins() {
   return splitOrigins(process.env.XENO_API_ORIGINS_EXTRA);
@@ -260,6 +280,7 @@ export default {
   aliasApiOrigins,
   canonicalSiteOrigins,
   acceptedSiteOrigins,
+  extensionOrigins,
   acceptedApiOrigins,
   siteUrlVariants,
   siteUrl,
