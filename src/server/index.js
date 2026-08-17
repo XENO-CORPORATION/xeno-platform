@@ -73,6 +73,7 @@ import serviceLedgerRoutes from './routes/serviceLedgerRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
+import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
 import { oidcAuth } from './middleware/oidcAuth.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
@@ -561,6 +562,11 @@ if (process.env.OIDC_ENABLED === 'true') {
   app.use('/api/oauth2', databaseMiddleware, oauth2Routes);
   app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
   app.use('/api/v2/authz', databaseMiddleware, oidcAuth, v2AuthzRoutes);
+  // Per-product inference routing + the provider-key vault.
+  // 🔴 POST /api/v2/inference/credentials CARRIES A USER'S PROVIDER KEY.
+  // It must never be added to a request-body logger, and nothing under this
+  // mount returns plaintext. See `XENO CREDENTIAL HYGIENE - PLAYBOOK.md`.
+  app.use('/api/v2/inference', databaseMiddleware, oidcAuth, v2InferenceRoutes);
   // XENO handle registry (handle = login = identity = @xenostudio.ai address)
   app.use('/api/v2/handles', databaseMiddleware, oidcAuth, handleRoutes);
   app.get('/api/oauth2/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery()));

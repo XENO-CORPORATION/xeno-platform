@@ -60,6 +60,7 @@ import DownloadToolsInterface from '../components/playground/Download/DownloadTo
 import ProfilePage from '../components/account/ProfilePage';
 import SettingsPage from '../components/account/SettingsPage';
 import UsageAnalyticsPage from '../components/account/UsageAnalyticsPage';
+import InferenceRoutingPage from '../components/account/InferenceRoutingPage';
 import BillingPage from '../components/account/BillingPage';
 import TeamPage from '../components/account/TeamPage';
 // Import Content Creation pages
@@ -298,6 +299,8 @@ const OverviewContent: React.FC = () => {
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="usage-analytics" element={<UsageAnalyticsPage />} />
+            {/* Per-product inference routing + the provider-key vault. */}
+            <Route path="ai-keys" element={<InferenceRoutingPage />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="team" element={<TeamPage />} />
             <Route path="team/:tab" element={<TeamPage />} />
