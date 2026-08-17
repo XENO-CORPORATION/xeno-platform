@@ -53,8 +53,15 @@ const CFG = {
   maxParticles: 900,
   speedMin: 90,
   speedMax: 420,
-  /** Radians of spread either side of the edge normal. */
-  spread: 0.85,
+  /* Radians either side of the edge normal.
+   *
+   * 0.85 (~49 degrees, a ~98-degree cone) was too wide: particles leaving at
+   * that angle travel almost PARALLEL to the border, so they read as drifting
+   * along the bar rather than off it — and near the corners they cross into
+   * the space beside the container instead of leaving from it. 0.32 (~18
+   * degrees) keeps every particle visibly perpendicular to the edge it came
+   * from, which is what makes the border look like the source. */
+  spread: 0.32,
   ttlMin: 0.7,
   ttlMax: 1.9,
   sizeMin: 3,
@@ -143,6 +150,17 @@ export const EdgeParticles: React.FC<{
       const base = Math.atan2(ny, nx);
       const angle = base + rand(-CFG.spread, CFG.spread);
       const speed = rand(CFG.speedMin, CFG.speedMax);
+
+      /* Inset the corners.
+       *
+       * A particle born exactly at a corner belongs to two edges at once, and
+       * whichever one it is assigned to sends it out at 90 degrees to the
+       * other — a visible spray leaking diagonally past the container. Pulling
+       * spawns 6px in from each end means every particle leaves from a stretch
+       * of border that has one unambiguous outward direction. */
+      const CORNER_INSET = 6;
+      if (nx === 0) x = Math.min(Math.max(x, r.left + CORNER_INSET), r.right - CORNER_INSET);
+      else y = Math.min(Math.max(y, r.top + CORNER_INSET), r.bottom - CORNER_INSET);
 
       particles.current.push({
         x, y,

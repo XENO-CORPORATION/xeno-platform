@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Palette, FileText, Terminal, MessageSquare, Check } from 'lucide-react';
 import {
   SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts, type Suite,
@@ -144,43 +145,40 @@ export const WorkspaceChooser: React.FC<{
 
   return (
     <div className="relative">
-      {/* FULL-VIEWPORT overlay: a scrim that darkens everything, and the dot
-          field bursting out of the bar's edges across it.
-
-          `fixed inset-0` deliberately — the effect is about the whole screen
-          receding, so containing it to this component would be the version I
-          built first and it read as a texture inside a panel rather than as
-          the page giving way.
-
-          It sits at z-[60] with the bar lifted to z-[70], so the bar is the
-          one thing NOT dimmed. pointer-events-none throughout: the overlay
-          covers the bar's own hit area, and swallowing the click it exists to
-          advertise would be the worst possible bug here. */}
-      <div
-        aria-hidden
-        style={{ transitionDuration: `${BAR_MS}ms` }}
-        className={`pointer-events-none fixed inset-0 z-[60] transition-opacity ease-out
-                    ${burst ? 'opacity-100' : 'opacity-0'}`}
-      >
-        <div className="absolute inset-0 bg-black/72" />
-        <EdgeParticles active={burst} originRef={barRef} />
-      </div>
-
-      {/* THE FRAME. Behind everything (z-0, cards are z-10) and outside the
-          content box (-inset-3), so it reads as enclosing the grid rather than
-          as another card in it. Pointer-events off: it is a statement, not a
-          control — the bar underneath stays clickable through it. */}
-      {phase !== 'idle' && (
+      {/* FULL-VIEWPORT overlay, PORTALLED TO <body>.
+       *
+       * 🔴 The portal is not tidiness, it is the fix for a real bug. Two
+       * ancestors of this component carry a `transform`: the `.xeno-stagger`
+       * entrance animation (which retains `translateY(0) scale(1)` under
+       * `forwards`, so the transform never goes away) and the step container's
+       * `translateX` during transitions.
+       *
+       * A transformed ancestor becomes the containing block for `position:
+       * fixed` descendants. So `fixed inset-0` was resolving against the
+       * CHOOSER'S box rather than the viewport — the canvas element was laid
+       * out at the chooser's size and position while its drawing coordinates
+       * came from window.innerWidth/innerHeight. Every particle therefore
+       * landed offset and mis-scaled, which is exactly the "appearing away
+       * from the border" symptom.
+       *
+       * No amount of tuning the emitter would have fixed that; the geometry
+       * was right and the surface it painted onto was wrong. A portal to
+       * <body> escapes every transformed ancestor, and it is the only way to
+       * guarantee that at any nesting depth.
+       *
+       * It also puts the overlay outside `main`, so `main` no longer needs
+       * lifting above its siblings to cover the header and footer. */}
+      {createPortal(
         <div
           aria-hidden
-          style={{
-            boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.42), 0 24px 60px -30px rgba(0,0,0,0.9)',
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008))',
-          }}
-          className={`pointer-events-none absolute -inset-3 z-0 rounded-[18px] ${
-            phase === 'unframing' ? 'xeno-frame-erase' : 'xeno-frame-draw'
-          }`}
-        />
+          style={{ transitionDuration: `${BAR_MS}ms` }}
+          className={`pointer-events-none fixed inset-0 z-[60] transition-opacity ease-out
+                      ${burst ? 'opacity-100' : 'opacity-0'}`}
+        >
+          <div className="absolute inset-0 bg-black/72" />
+          <EdgeParticles active={burst} originRef={barRef} />
+        </div>,
+        document.body,
       )}
 
       {/* No per-card dimming any more — the full-viewport scrim above covers
