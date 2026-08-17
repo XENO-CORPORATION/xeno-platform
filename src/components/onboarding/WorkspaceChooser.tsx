@@ -48,49 +48,104 @@ export const WorkspaceChooser: React.FC<{
   value: string | null;
   onChange: (id: string) => void;
 }> = ({ value, onChange }) => {
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
+  const barRef = useRef<HTMLButtonElement | null>(null);
   const cardRefs = useRef<Record<string, HTMLElement | null>>({});
   const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'unified' : 'idle');
   const [flight, setFlight] = useState<Record<string, React.CSSProperties>>({});
+  const [shell, setShell] = useState<React.CSSProperties | null>(null);
 
   const reduced = typeof window !== 'undefined'
     && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  /** Fly every card into the grid's centre, then swap in the unified card. */
+  /**
+   * The bar EXPANDS to encompass the grid, and the cards fall into it.
+   *
+   * -- WHY IT IS A FLIP, NOT A HEIGHT ANIMATION -----------------------------
+   *
+   * The obvious implementation animates the shell's top/left/width/height from
+   * the bar's box out to the wrapper's. Those four properties are laid out on
+   * the main thread every frame, so a panel this size janks -- and it janks
+   * worst on the machines least able to hide it.
+   *
+   * So the shell is RENDERED at its final size (inset-0 of the wrapper) and
+   * then given the inverse transform that makes it look exactly like the bar.
+   * Releasing that transform to identity plays the expansion on the
+   * compositor: two properties, no layout, and no reflow of what is inside it.
+   *
+   * -- WHY IT MEASURES INSTEAD OF HARDCODING --------------------------------
+   *
+   * The bar's offset and the grid's height both change with the column count,
+   * the viewport and the number of suites. A canned keyframe is correct at one
+   * breakpoint and wrong at every other, and this is the first screen a new
+   * account sees on whatever machine they happen to have.
+   */
   const absorb = useCallback(() => {
     if (phase !== 'idle') return;
 
     if (reduced) { setPhase('unified'); onChange(EVERYTHING_ID); return; }
 
-    const grid = gridRef.current;
-    if (!grid) { setPhase('unified'); onChange(EVERYTHING_ID); return; }
+    const wrap = wrapRef.current;
+    const bar = barRef.current;
+    if (!wrap || !bar) { setPhase('unified'); onChange(EVERYTHING_ID); return; }
 
-    const g = grid.getBoundingClientRect();
-    const cx = g.left + g.width / 2;
-    const cy = g.top + g.height / 2;
+    // Measure BEFORE mutating anything. Reading a box after a style change that
+    // triggers layout returns post-change geometry, and the animation would
+    // then start from the wrong place.
+    const w = wrap.getBoundingClientRect();
+    const b = bar.getBoundingClientRect();
 
-    // Measure BEFORE mutating anything — reading a box after a style change
-    // that triggers layout gives you the post-change geometry, and the whole
-    // animation would then travel from the wrong place.
+    // Inverse transform: shrink the full-size shell down onto the bar's box.
+    const sx = b.width / w.width;
+    const sy = b.height / w.height;
+    const tx = (b.left + b.width / 2) - (w.left + w.width / 2);
+    const ty = (b.top + b.height / 2) - (w.top + w.height / 2);
+
+    // Cards are pulled toward the BAR, not the grid centre. They are being
+    // eaten by the thing below them, and travelling to a point they can see is
+    // what makes this read as absorption rather than two unrelated effects.
+    const bx = b.left + b.width / 2;
+    const by = b.top + b.height / 2;
     const next: Record<string, React.CSSProperties> = {};
-    for (const s of SUITES) {
-      const el = cardRefs.current[s.id];
+    for (const suite of SUITES) {
+      const el = cardRefs.current[suite.id];
       if (!el) continue;
       const r = el.getBoundingClientRect();
-      const dx = cx - (r.left + r.width / 2);
-      const dy = cy - (r.top + r.height / 2);
-      next[s.id] = {
-        transform: `translate(${dx}px, ${dy}px) scale(0.28)`,
+      const dx = bx - (r.left + r.width / 2);
+      const dy = by - (r.top + r.height / 2);
+      next[suite.id] = {
+        transform: `translate(${dx}px, ${dy}px) scale(0.16)`,
         opacity: 0,
-        // Cards nearest the centre arrive first, so the collapse reads as a
-        // gather rather than four things moving in lockstep.
-        transitionDelay: `${Math.min(90, Math.abs(dx) / 14)}ms`,
+        // Outer cards start first, so the row collapses inward toward the bar
+        // instead of four things moving in lockstep.
+        transitionDelay: `${Math.max(0, 70 - Math.abs(dx) / 12)}ms`,
       };
     }
 
     setFlight(next);
+
+    // Frame 1: shell sits exactly on the bar. Frame 2: released to identity.
+    // Both must actually paint, or the browser coalesces them into no
+    // animation at all -- a single rAF is the classic version of this bug.
+    setShell({
+      transform: `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`,
+      transition: 'none',
+    });
     setPhase('absorbing');
-    window.setTimeout(() => { setPhase('unified'); onChange(EVERYTHING_ID); }, ABSORB_MS);
+
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      setShell({
+        transform: 'translate(0px, 0px) scale(1, 1)',
+        transition: `transform ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.15, 1)`,
+      });
+    }));
+
+    window.setTimeout(() => {
+      setPhase('unified');
+      setShell(null);
+      onChange(EVERYTHING_ID);
+    }, ABSORB_MS + 60);
   }, [phase, reduced, onChange]);
 
   const reopen = () => { setPhase('idle'); setFlight({}); };
@@ -161,10 +216,14 @@ export const WorkspaceChooser: React.FC<{
     );
   }
 
-  /* ── The choice ────────────────────────────────────────────────────────── */
+  /* -- The choice -------------------------------------------------------- */
   return (
-    <div>
-      <div ref={gridRef} className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div ref={wrapRef} className="relative">
+      <div
+        ref={gridRef}
+        className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        style={phase === 'absorbing' ? { pointerEvents: 'none' } : undefined}
+      >
         {SUITES.map((suite, i) => (
           <SuiteCard
             key={suite.id}
@@ -181,10 +240,11 @@ export const WorkspaceChooser: React.FC<{
 
       {/* The refusal-to-choose, given equal weight to the grid above it. */}
       <button
+        ref={barRef}
         type="button"
         onClick={absorb}
         disabled={phase === 'absorbing'}
-        style={{ animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: '0.28s', opacity: 0 }}
+        style={{ animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: '0.34s', opacity: 0 }}
         className="focus-self group relative mt-3 flex w-full items-center gap-3.5 overflow-hidden rounded-[12px]
                    border border-white/[0.14] px-5 py-4 text-left transition-all duration-200 ease-out
                    will-change-transform hover:-translate-y-[3px] hover:border-white/35
@@ -203,13 +263,43 @@ export const WorkspaceChooser: React.FC<{
             Or take the full XENO experience
           </span>
           <span className="mt-0.5 block text-[12.5px] text-white/40">
-            Every suite in one workspace — you can narrow it later.
+            Every suite in one workspace &mdash; you can narrow it later.
           </span>
         </span>
         <span className="relative shrink-0 text-[12px] tabular-nums text-white/30">
           {allAvailableProducts().length} products
         </span>
       </button>
+
+      {/* The expanding shell. Rendered at FULL size and inverse-transformed
+          onto the bar, so releasing it to identity plays the growth on the
+          compositor. transformOrigin is centre because the inverse was
+          computed about the centre; any other origin makes it swing. */}
+      {phase === 'absorbing' && shell && (
+        <div
+          aria-hidden
+          style={{
+            ...shell,
+            transformOrigin: 'center center',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.085), rgba(255,255,255,0.02))',
+            boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.18), 0 30px 70px -28px rgba(0,0,0,0.95)',
+          }}
+          className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-[16px] border border-white/30"
+        >
+          <div
+            className="absolute inset-0"
+            style={{ background: 'radial-gradient(ellipse 45% 60% at 50% 0%, rgba(255,255,255,0.10), transparent 70%)' }}
+          />
+          {/* The mark fades up as the shell arrives, so the panel resolves INTO
+              the XENO card rather than cutting to it. */}
+          <div
+            className="absolute inset-0 grid place-items-center"
+            style={{ animation: `xenoScaleIn ${Math.round(ABSORB_MS * 0.6)}ms ease-out ${Math.round(ABSORB_MS * 0.45)}ms forwards`, opacity: 0 }}
+          >
+            <XenoGlyph className="h-10 w-10 text-white/90" />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -562,20 +562,37 @@ const Onboarding: React.FC = () => {
   );
 };
 
-/** Back / Skip / Next, laid out like the reference: the primary action first,
- *  then quiet text links beside it. */
+/**
+ * Step navigation.
+ *
+ * The primary action is anchored FAR RIGHT and the quiet ones sit left. That
+ * is the direction of travel in a left-to-right flow: forward belongs on the
+ * leading edge, and "leave" belongs where you came from. It also puts real
+ * distance between Continue and Skip, so the two are hard to confuse at speed
+ * — they sat side by side before, which is a misclick waiting to happen on the
+ * one screen where a wrong click costs somebody their whole answer.
+ *
+ * Skip stays plain text. A skip styled to compete with the primary action is a
+ * dark pattern in reverse.
+ */
 const Nav: React.FC<{
   onBack?: () => void; onNext?: () => void; onSkip?: () => void;
   nextLabel?: string; skipLabel?: string; nextDisabled?: boolean;
 }> = ({ onBack, onNext, onSkip, nextLabel, skipLabel, nextDisabled }) => (
-  <div className={cx('flex items-center gap-5', onNext ? 'pt-1' : 'pt-2')}>
-    {onNext && (
-      <PrimaryButton onClick={onNext} disabled={nextDisabled}>
-        {nextLabel || 'Continue'}
-      </PrimaryButton>
-    )}
+  <div className="flex items-center gap-5 pt-1">
     {onBack && <TextButton onClick={onBack}>Back</TextButton>}
     {onSkip && <TextButton onClick={onSkip}>{skipLabel || 'Skip'}</TextButton>}
+
+    {/* Pushes the primary action to the far edge whether or not the left-hand
+        links are present — `justify-between` would collapse it to the left on
+        a step that has neither. */}
+    {onNext && (
+      <div className="ml-auto">
+        <PrimaryButton onClick={onNext} disabled={nextDisabled}>
+          {nextLabel || 'Continue'}
+        </PrimaryButton>
+      </div>
+    )}
   </div>
 );
 
