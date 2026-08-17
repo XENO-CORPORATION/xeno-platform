@@ -1,5 +1,5 @@
 /*
- * One runner for the eleven standing probes, in the shape of `test-chat.mjs`.
+ * One runner for the twelve standing probes, in the shape of `test-chat.mjs`.
  *
  * Ten scripts that each have to be run by hand and read by eye is a check nobody runs. Worse, each
  * prints a different shape of answer — a count, a table, a list of OK/NO lines — so "are they still
@@ -26,7 +26,11 @@ const PROBES = [
   {
     file: 'probe-dead-hooks.mjs', needs: 'none',
     verdict: /unreferenced ANCHORS[^:]*: (\d+)[\s\S]*?read by nothing: (\d+)/,
-    expect: ['20', '3'], describe: (m) => `${m[1]} anchors kept, ${m[2]} unread state`,
+    /* 19, not 20: `probe-project-settings.mjs` selects on `data-project-settings-dialog`, so that
+       anchor now HAS a consumer and left the unreferenced list. The anchors exist to be selected —
+       one of them finally was, and the count moving is the convention paying off rather than a
+       regression. */
+    expect: ['19', '3'], describe: (m) => `${m[1]} anchors kept, ${m[2]} unread state`,
   },
   {
     file: 'probe-tab-order.mjs', needs: 'chat',
@@ -78,6 +82,11 @@ const PROBES = [
     file: 'probe-voicebright.mjs', needs: 'chat',
     verdict: /(both routes match chat on every stop|(\d+) stop\(s\) differ)/,
     expect: ['both routes match chat on every stop'], describe: () => 'voice + search match chat at 5 stops (dark/dim/light/30%/65%)',
+  },
+  {
+    file: 'probe-project-settings.mjs', needs: 'chat',
+    verdict: /reached in (\d+) theme\(s\), worst height drift: (\d+)/,
+    expect: ['2', '0'], describe: (m) => `project settings dialog reached in ${m[1]} themes, ${m[2]} height drift`,
   },
   {
     file: 'probe-voice-thumb.mjs', needs: 'chat',

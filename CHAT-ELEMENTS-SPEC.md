@@ -361,6 +361,32 @@ empty.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
 
+### Reaching a branch the mock has no data for — without editing the source
+
+§6 offers "temporarily feed a branch, screenshot, **revert**" for surfaces the mock cannot render.
+For the project settings dialog — the surface with the most decided controls — that turned out to be
+unnecessary, and the reason generalises: **`chatProjects` seeds itself from localStorage**
+(`chatProjects_playground`), so the branch can be fed from outside the app. No source edit, nothing
+to revert, no chance of a fixture surviving into a commit.
+
+**Check for a persisted state before editing source to reach a branch.** Several of this chat's
+states persist, and a persisted state is one a probe can write.
+
+Measured, in dark and light, identically: `Button` 2, `IconButton` 1, `TextInput` 1, `Textarea` 1,
+6 hand-written, **0 height drift**. First browser measurement of that dialog.
+
+Two things it cost, both worth keeping:
+
+- **A hittability check has to match the click method.** The first version rejected `Projects` for
+  `pointer-events: none` — but it dispatches a synthetic `el.click()`, which bypasses
+  `pointer-events` entirely. Several rail controls rest that way until hovered. A real
+  `page.click()` needs the strict check; the two are not interchangeable, and reusing the wrong one
+  reported "could not reach" for a control that had just been clicked successfully.
+- **Writing a probe that selects a hook changes the dead-hook count.** Adding this one took
+  `data-project-settings-dialog` out of the unreferenced-anchor list, 20 → 19, and `probe:chat`
+  caught it. The anchors exist to be selected; one finally was. That is the convention paying off,
+  not a regression — but the expectation still has to move in the same commit.
+
 ### How much do the probes actually see? — a quarter
 
 `npm run probe:chat` reporting 11/11 green is easy to read as "the chat is verified". It is not, and
