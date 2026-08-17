@@ -411,6 +411,24 @@ empty.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
 
+### The identity collapse was worth exactly one
+
+The `distinct` identity was the label alone, which merges two different source sites that share a
+word — a Cancel in the delete dialog and a Cancel in project settings counted once. That was the last
+known way the figure could be wrong, and it undercounts, so it was worth closing.
+
+Identity is now the nearest `data-` landmark plus the label. The chat is dense with those hooks
+marking dialogs and pages — it is what the twenty unreferenced anchors in `probe-dead-hooks` ARE —
+so the nearest one names the surface a control sits on.
+
+**It moved the number by one.** 93 → 94, stable across three runs, `Button` 29 → 30. The collapse
+that seemed like the main remaining source of error was costing a single entry.
+
+That is a result rather than a wasted pass, and the conclusion it licenses is the useful part: **the
+remaining 63% is not measurement error.** Refining the identity further is not where it lives. What
+is left is genuinely unrendered surfaces — the zeros, and the two thirds of `Button` and `IconButton`
+that sit behind states the walk has not reached.
+
 ### The number went DOWN, and that was the correction
 
 40% → **36%**, because the total had been taking the larger of `at once` and `distinct` per
@@ -495,7 +513,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-93 rendered across the three routes — 36%.**
+94 rendered across the three routes — 37%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,

@@ -122,11 +122,33 @@ const observe = (counts) => {
     for (const id of ids) seenIds[c].add(id);
   }
 };
+/*
+ * Identity is the label PLUS the nearest `data-` landmark, not the label alone.
+ *
+ * A label on its own collapses two different source sites that happen to share a word — a Cancel in
+ * the delete dialog and a Cancel in project settings are one entry, so the count under-reports. The
+ * chat is dense with `data-` hooks marking dialogs and pages (that is what the 20 unreferenced
+ * anchors in `probe-dead-hooks` ARE), so the nearest one names the surface a control sits on and
+ * separates them.
+ *
+ * Still a proxy: a control with no landmarked ancestor falls back to the label, and two sites sharing
+ * a label INSIDE one surface still collapse. It errs toward undercounting, which is the safe
+ * direction for a coverage figure.
+ */
 const IDENTIFY = `(sel) => {
+  const landmark = (el) => {
+    for (let n = el; n; n = n.parentElement) {
+      const hit = [...n.attributes || []].find((a) => a.name.startsWith('data-') && !/^data-(xeno|variant|availability|selection|glyph|motion)/.test(a.name));
+      if (hit) return hit.name;
+    }
+    return '';
+  };
   const out = {};
   for (const [name, s] of Object.entries(sel)) {
-    out[name] = [...document.querySelectorAll(s)].map((el, i) =>
-      (el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40) || 'anon' + i);
+    out[name] = [...document.querySelectorAll(s)].map((el, i) => {
+      const label = (el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40) || 'anon' + i;
+      return landmark(el) + '|' + label;
+    });
   }
   return out;
 }`;
