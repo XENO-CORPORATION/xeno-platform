@@ -585,12 +585,31 @@ Re-deciding these costs more than it saves.
   flat. The question it answers is about PAIRS: if a control and its selected twin both appear, the
   selection is invisible.
 
-- **Six controls sit below the scale's floor.** The control scale starts at `xs` = 24px; the chat has
-  six squares at 18–20px — the two attachment-chip remove badges, the customize page's "i", and
-  three more. Each is a badge or a hint notched into something else, where six pixels of growth is six
-  more pixels of what it sits on being covered. `iconSize` reaches the glyph and deliberately not the
-  box: the library's position is that height is a surface-level variable, so an 18px control is a
-  size this app has not declared rather than an override to write at six call sites.
+- **Six controls sit below the scale's floor — and the framing was incomplete.** The control scale
+  starts at `xs` = 24px; the chat has six squares at 18–20px, each a badge or a hint notched into
+  something else, where six pixels of growth is six more pixels of what it sits on being covered.
+  `iconSize` reaches the glyph and deliberately not the box: the library's position is that height is
+  a surface-level variable, so an 18px control is a size this app has not declared rather than an
+  override to write at six call sites. **That position still stands.**
+
+  What was missing is that "below the scale" and "too small" are different claims, and only the second
+  is a defect. WCAG 2.2 AA asks for 24×24 CSS px **or** enough spacing that a 24px circle centred on
+  the target meets no other target's circle. `scripts/probe-small-targets.mjs` measures both.
+
+  Measured on the empty chat: **one** sub-24px interactive target is reachable — the Recents section
+  heading at 73×21.6 — and it **passes on spacing**, nearest neighbour 95.6px. The other five live in
+  branches the mock cannot render (attachment chips, the customize page), so the probe says so rather
+  than implying they were checked.
+
+- **The chips are not keyboard-reachable at all, which is the bigger finding.** Looking for the
+  undersized badges turned up their hosts: the attachment chip's clickable box is a `<div onClick>`
+  with no `role` and no `tabIndex`. The probe counts **10** pointer-cursor `<div>`s in the default
+  chat with neither — the file chip, the Web Sources disclosure and its rows, the avatar cluster.
+  A mouse reaches all of them and a keyboard reaches none.
+
+  This is the PLATFORM's and it is not an adoption question: `ListRow` and `MenuItem` would answer it,
+  but changing what is focusable moves tab order across the composer, which is a deliberate change
+  rather than a sweep. Recorded here with the count so it is chosen, not inherited.
 
 - ~~**Panels that are not menus.**~~ **Closed.** Both panels run on `useMenu` + `useGooPill` now and
   their four rows are `MenuItem`s. Measured on the model dropdown: focus lands on the first row when
