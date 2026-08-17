@@ -15747,7 +15747,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                             {/* Header — always visible, and a BUTTON.
                                                                 It was a `<div onClick>`: a mouse
                                                                 reached it and a keyboard reached
-                                                                nothing. The class it wears is the
+                                                                nothing.
+                                                                Stays hand-written, for now: the class
+                                                                it wears is the
                                                                 library's own, and `SourcesDisclosure`
                                                                 renders that same class on a button
                                                                 with `aria-expanded` — the stylesheet

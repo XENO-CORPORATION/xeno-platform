@@ -924,14 +924,53 @@ Re-deciding these costs more than it saves.
 
 ## 10. Done
 
-The chat is finished when:
+**All five conditions are met.** They were:
 
-1. `node scripts/spec-status.mjs` reports **0 still to decide** and **0** convertible fields — every
-   remaining `<button>` carrying its `Stays hand-written` reason (§0), the §8 list among them;
-2. `npm run check:names` is clean for the chat;
-3. every probe in §6 passes;
-4. the light theme and two custom brightness stops read correctly on all three routes;
-5. every remaining hand-written control has a comment saying why.
+1. `spec-status.mjs` reports **0 buttons and 0 fields still to decide** — every remaining `<button>`
+   carrying its `Stays hand-written` reason;
+2. `check:names` clean for the chat;
+3. every probe in §6 passing;
+4. the themes reading correctly on all three routes;
+5. every remaining hand-written control carrying a comment saying why.
 
-Point 5 is the real finish line. "Everything is a component" was never the goal — "nothing is
-hand-written by accident" is.
+Point 5 was the real finish line. "Everything is a component" was never the goal — **"nothing is
+hand-written by accident"** is. Current: 82 `Button`, 94 `IconButton`, 38 `MenuItem`, 12 `Spinner`,
+12 `TextInput`, 4 `Switch`, 1 `MessageBubble` adopted; 48 buttons and 21 fields hand-written, each
+with its reason; 4 fields excluded as pickers and sliders.
+
+### What "done" does NOT mean
+
+Say these out loud rather than letting a green board imply them.
+
+- **The mock renders a fraction of the chat.** No projects, artifacts, scheduled tasks, share link,
+  attachments or customize page. Every browser probe measures what the default route paints, so those
+  branches are *decided in the source* and *unmeasured in the browser*. `probe-small-targets` prints
+  that limit itself; the others do not, and should be read with it in mind.
+- **Most probes measure ONE theme.** `probe-voicebright` covers dark/dim/light and two custom stops
+  because that is what it is for; `probe-control-fill`, `probe-invisible-fills`,
+  `probe-adopted-metrics`, `probe-small-targets` and `probe-tab-order` all run on whatever theme the
+  browser starts in. A control that only misbehaves in light would pass every one of them. **`dim`
+  went unchecked on every route for as long as `probe-voicebright` existed**, and that is the shape
+  of gap to look for next.
+- **A `Stays hand-written` reason is a decision, not a permanent fact.** Two of them outlived the gap
+  they described, and read exactly like live ones until the doors in §3.3b were checked against them.
+
+### What remains, and whose it is
+
+| | Owner |
+|---|---|
+| `--chat-overlay` and `--chat-control-strong` have no variant member; closing it means adding palette | design system — `DESIGN_SYSTEM.md` is **LOCKED** and not this repo's to extend |
+| the blue cluster in `SearchChatInterface` (browser-agent overlay): 15 utility classes + 11 literal `rgb()`, none following the theme | design system — a mode that colours itself is a legitimate position, but it is a position someone has to take |
+| 3 `data-` state hooks recomputed every render and read by nothing | product — cheap, and a runtime-built selector is invisible to grep |
+| 7 `ReferenceError`s outside the chat (Office, AudioGeneration, ImageStudio) | out of scope here; reported, not fixed |
+| the send-path DB verification | blocked on the local API returning 401/500 |
+| `DESIGN_SYSTEM.md` §426 says panels "are NOT merged into a single container", which is what the chat does in two places | a contradiction to report, not to resolve |
+
+### What NOT to re-derive
+
+- The six seams in §9 were swept and are recorded with their measurements. They found things a
+  file-by-file read did not; they do not need re-running from scratch, only re-checking if something
+  changes.
+- The five probe false positives in §6. Every one of them is a mistake the next probe will make.
+- The two open design questions above. They have been re-checked twice and the answer is the same:
+  they are not an agent's to close.
