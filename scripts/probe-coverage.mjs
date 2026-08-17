@@ -109,8 +109,10 @@ const b = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'], defa
  *   distinct the union of `component + accessible name` across the whole walk. Sees both states, but
  *            collapses controls that SHARE a label — which is why IconButton reads 41 distinct
  *            against 49 at once, the icon buttons being far more repetitive in naming than Buttons.
- * Reporting one would have been a cleaner number and a worse measurement. The total takes the larger
- * of the two per component and says so.
+ * The total counts DISTINCT. Taking the larger of the two flattered it: 41 icon buttons render on the
+ * chat route from 23 distinct labels, because one `<IconButton>` inside a `.map()` renders once per
+ * message. Instances answer "what is on screen"; this table asks "how many of the 255 source
+ * occurrences have we ever seen", and a repeat is one of those. `at once` stays as context.
  */
 const seenIds = Object.fromEntries(COMPONENTS.map((c) => [c, new Set()]));
 const seenMax = Object.fromEntries(COMPONENTS.map((c) => [c, 0]));
@@ -201,7 +203,16 @@ console.log('component        in source   at once   distinct   unmeasured');
 for (const c of COMPONENTS) {
   if (!inSource[c]) continue;
   src += inSource[c];
-  const best = Math.max(seenIds[c].size, seenMax[c]);
+  /*
+   * DISTINCT, not the larger of the two. Taking the max flattered the number: 41 icon buttons render
+   * on the chat route from 23 distinct labels, because one `<IconButton>` inside a `.map()` renders
+   * once per message. Counting instances answers "how many controls are on screen"; this table asks
+   * "how many of the 255 source occurrences have we ever seen", and for that a repeat is one.
+   *
+   * `at once` stays in the table as context — it is what a screenshot would show — but it is not what
+   * the total counts.
+   */
+  const best = seenIds[c].size;
   obs += Math.min(best, inSource[c]);
   const gap = Math.max(0, inSource[c] - best);
   console.log(`  ${c.padEnd(16)} ${String(inSource[c]).padStart(4)}     ${String(seenMax[c]).padStart(5)}     ${String(seenIds[c].size).padStart(6)}      ${String(gap).padStart(5)}`);

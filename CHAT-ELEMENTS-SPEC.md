@@ -411,6 +411,22 @@ empty.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
 
+### The number went DOWN, and that was the correction
+
+40% → **36%**, because the total had been taking the larger of `at once` and `distinct` per
+component, and `at once` counts instances.
+
+**41 icon buttons render on the chat route from 23 distinct labels.** One `<IconButton>` inside a
+`.map()` renders once per message, so instances measure what is on screen while this table asks how
+many of the 255 SOURCE occurrences have ever been seen. A repeat is one of those. The larger-of-two
+rule was flattering every component with a list in it.
+
+The premise it corrects is one this loop had been carrying forward: that the union *undercounts*
+IconButton. It does not — the max *overcounts* it. Both numbers stay in the table, and only `distinct`
+feeds the total.
+
+24 → 27 → 31 → 32 → 39 → 40 → **36**, and the drop is the most trustworthy movement in that list.
+
 ### A selector map is an assumption about another repo
 
 `probe-coverage` reported `MessageBubble` 0 rendered for this entire programme, while a demo thread
@@ -479,7 +495,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-101 rendered across the three routes — 40%.**
+93 rendered across the three routes — 36%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
