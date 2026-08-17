@@ -41,7 +41,10 @@ const SELECTOR = {
   TextInput: '.xeno-input',
   Textarea: '.xeno-textarea',
   Switch: '.xeno-switch',
-  MessageBubble: '.xeno-message-bubble',
+  /* `.xeno-message`, not `.xeno-message-bubble` — the component's class does not carry the word this
+     file is named after, and the wrong guess reported 0 rendered for the whole programme while a demo
+     thread sat on screen. A typo here and a coverage gap both print a zero. */
+  MessageBubble: '.xeno-message',
   ListRow: '.xeno-list-row',
   SegmentedControl: '.xeno-segmented',
   ToggleButton: '.xeno-toggle',
@@ -72,6 +75,33 @@ const PROJECT = {
  * two different source controls sharing a label collapse into one, and one source control rendered
  * per-row in a list counts once. It is a better proxy than a max and still a proxy.
  */
+/* Each selector must correspond to a rule the library actually ships. A class nobody styles is a typo
+   in this file, not an unrendered component, and the difference is invisible in the output — which is
+   exactly how `MessageBubble` reported 0 for this entire programme. */
+const LIBCSS = path.join(HERE, '../../xeno-elements-foundations/packages/elements-react/src');
+const libRules = (() => {
+  const out = [];
+  const walk = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith('.css')) out.push(readFileSync(full, 'utf8'));
+    }
+  };
+  try { walk(LIBCSS); } catch { /* library not checked out beside this repo — skip the guard */ }
+  return out.join('\n');
+})();
+if (libRules) {
+  const unknown = Object.entries(SELECTOR)
+    .map(([name, sel]) => [name, sel.match(/\.[a-z-]+/)[0]])
+    .filter(([, cls]) => !libRules.includes(cls));
+  if (unknown.length) {
+    console.error('SELECTOR entries matching no rule in the library — these are typos, not gaps:');
+    for (const [name, cls] of unknown) console.error(`  ${name}  ${cls}`);
+    process.exit(1);
+  }
+}
+
 const b = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'], defaultViewport: { width: 1400, height: 900 } });
 /*
  * BOTH aggregations, because neither is the truth on its own:

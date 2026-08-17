@@ -411,6 +411,24 @@ empty.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
 
+### A selector map is an assumption about another repo
+
+`probe-coverage` reported `MessageBubble` 0 rendered for this entire programme, while a demo thread
+with three message bubbles sat on screen. The component's class is `.xeno-message`; the probe looked
+for `.xeno-message-bubble`. **A typo in the selector map and a genuine coverage gap both print a
+zero**, and nothing distinguishes them in the output.
+
+It is now fully covered — 3 rendered, 0 unmeasured — and was the whole time.
+
+The guard that makes this class of bug impossible: every entry in `SELECTOR` is checked against the
+library's own stylesheets before the browser opens, and a class no rule mentions **exits non-zero**
+rather than reporting a gap. It caught the typo on the first run.
+
+Worth generalising: the map is an assumption about a second repo's internals, written from the
+component's NAME rather than read from its source. Three of the remaining zeros — `Textarea`,
+`Switch`, `ListRow` — now carry a little more weight, because the guard says their classes are at
+least real.
+
 ### Re-checking what was left open
 
 `scripts/probe-open-findings.mjs` asks the repo and the running chat whether the §9 findings deferred
@@ -461,7 +479,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-100 rendered across the three routes — 39%.**
+101 rendered across the three routes — 40%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
