@@ -563,7 +563,12 @@ const ChatUpdateCarousel: React.FC<ChatUpdateCarouselProps> = ({
                   disabled={isDissolving}
                   aria-label="Show previous update"
                 />
-                <span className="min-w-10 text-center text-[11px] tabular-nums text-[var(--chat-muted)]">
+                {/* `min-w-[40px]`, not `min-w-10`. The spacing scale for `min-w` arrived in Tailwind
+                    3.4 and this repo is on 3.3.0, so `min-w-10` generated no rule at all and this
+                    counter had no minimum width — it shifted every time the digit count changed,
+                    which is the exact thing `tabular-nums` beside it is here to prevent. An
+                    arbitrary value says the same 40px in a syntax 3.3 ships. */}
+                <span className="min-w-[40px] text-center text-[11px] tabular-nums text-[var(--chat-muted)]">
                   {currentIndex + 1} / {availableUpdates.length}
                 </span>
               </>

@@ -147,6 +147,17 @@ const PROBES = [
     expect: ['true'], describe: (m) => `hold-to-record inset even: ${m[1]}`,
   },
   {
+    /* Three of these had shipped before anything looked for them: `min-h-8` and `min-h-9` on the two
+       settings tablists, `min-w-10` on the update carousel's counter. All three are real Tailwind
+       classes from 3.4, and this repo is on 3.3.0 — so they are correct in the docs, correct in an
+       editor, and generate nothing. No type error, no build error, no failing test: the control is
+       just the wrong size, which reads as a design decision. */
+    file: 'probe-dead-classes.mjs', needs: 'chat',
+    verdict: /plain utilities written in the chat: (\d+)\s+written but NO rule generated: (\d+)/,
+    expect: [{ min: 500 }, '0'],
+    describe: (m) => `${m[1]} utilities checked, ${m[2]} generating no rule`,
+  },
+  {
     /* The first probe here that measures MOTION. Every other one reads a settled value — a height, a
        fill, a tab order — so the whole suite stayed green while a person watched the sidebar and saw
        nothing move. That gap is the reason this exists, not the bug it was written to chase: the

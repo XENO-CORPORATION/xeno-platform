@@ -368,6 +368,24 @@ thing to test and the markup is free to read.
 synthetic click reported "could not reach Projects" for a control that had just been clicked
 successfully — several of this chat's rail controls rest at `pointer-events: none` until hovered.
 
+**5.4e A Tailwind class can be VALID and still generate nothing.** Three had shipped: `min-h-8` on the
+project settings tablist, `min-h-9` on its narrow twin, `min-w-10` on the update carousel's counter.
+All three are real classes — they arrived in **Tailwind 3.4**, and this repo is on **3.3.0**. So they
+are correct in the docs, correct in an editor, and produce no rule at all.
+
+Nothing catches it. Not TypeScript, because a `className` is a string. Not the build, because an
+ungenerated class is absent rather than wrong. Not a test, and not a glance at the screen: `min-h-8`
+failing means a control is 26px instead of 32, which reads as somebody's design decision. The tablist
+carried it for the whole adoption and the number was quoted into this spec as evidence the control sat
+off the size scale — it did not; it was asking for `md` and being ignored.
+
+**The repair is the same value as an arbitrary one** — `min-h-8` → `min-h-[32px]` — which every 3.x
+generates. `npm run probe:chat` checks the family now (`probe-dead-classes.mjs`, 576 utilities, 0
+dead), and it asks the BROWSER, because only the browser has the generated stylesheet. Two limits are
+stated in the probe rather than assumed: variants are skipped, since `hover:x` generates a selector
+that does not contain `x`, and only known utility prefixes are checked — the first pass mined prose
+out of template literals and reported `the`, `way.` and `persona.id` as dead classes.
+
 **5.5 A hook dropped on a grep that only looked at `src/`.** Twice now: the carousel's
 `data-update-carousel-dismiss` / `data-update-nav-morph`, and the composer's
 `data-composer-upload`. Each time the conversion left a comment saying the attribute was referenced
