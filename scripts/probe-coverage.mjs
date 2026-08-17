@@ -212,7 +212,16 @@ for (const seg of ['llm', 'search', 'voice']) {
   for (const step of [
     ['Open conversation history'], ['Conversation actions'],
     ['Artifacts'], ['Scheduled'],
-    ['Settings'], ['Settings', 'Memory'],
+    /*
+     * All SIX sections of the global settings page, not just Memory. `SECTIONS` in
+     * `ChatGlobalSettingsPage` lists skills/instructions/personas/memory/connectors/plugins, and the
+     * walk was visiting one of them — the densest single surface in the chat by adopted-component
+     * count sits behind `Skills`, because `ChatSkillsWorkspace` (8 Buttons) is a section here rather
+     * than a page of its own.
+     */
+    ['Settings'],
+    ['Settings', 'Skills'], ['Settings', 'Instructions'], ['Settings', 'Personas'],
+    ['Settings', 'Memory'], ['Settings', 'Connectors'], ['Settings', 'Plugins'],
     /* `Share conversation` needs `messages.length > 0`, which the demo thread supplies — no seed.
        `ChatSkillsWorkspace` is not a page of its own: it is a SECTION of the chat settings modal, so
        it comes with whatever opens that. Reading where a component is mounted, rather than guessing a

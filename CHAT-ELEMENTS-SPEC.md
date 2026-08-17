@@ -107,7 +107,9 @@ node scripts/spec-status.mjs --file ChatSettingsModal
 ```
 
 Prints every remaining `<button>` in that file with its line, its glyphs, its label, its resolved
-class (shared `const` class strings are expanded), and its computed box.
+class (shared `const` class strings are expanded), and its computed box. Without `--file` it also
+reports the FIELD buckets — §7's `<input>` and `<textarea>` split the same three ways as §3's
+buttons — and the dead-import sweep (§4) is the same script with `--dead-imports`.
 
 **Read the code around each one before converting it.** The listing is a map, not a substitute.
 
@@ -239,7 +241,7 @@ node scripts/spec-status.mjs --dead-imports --fix
 
 ---
 
-## 5. The four traps, each of which has already happened
+## 5. The traps, each of which has already happened
 
 Every one was caught by a dry run before it shipped. They are listed so the next pass does not have
 to rediscover them.
@@ -561,7 +563,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-101 rendered across the three routes — 40%.**
+104 rendered across the three routes — 41%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
@@ -668,9 +670,11 @@ PERCENTAGE — add twenty Buttons to the source and it falls with nothing broken
 the count, which only falls when a surface the walk used to reach stops being reachable. That is
 exactly a regression and nothing else.
 
-Floor 95 against 101 measured: enough headroom that a transient miss does not cry wolf, tight enough
-that losing a whole page shows. The runner gained a `{ min: n }` expectation form for it, and both
-directions were verified before trusting it — 14/14 green at 95, exit 1 at 500.
+Floor 98 against 104 measured: enough headroom that a transient miss does not cry wolf, tight enough
+that losing a whole page shows. **The floor rises with the baseline** — a floor left behind drifts
+into meaninglessness, still green while a third of the walk has quietly stopped working. The runner
+gained a `{ min: n }` form for it, and both directions were verified before it was trusted: green at
+the floor, exit 1 above it, with the failure naming the delta rather than just reporting movement.
 
 ### Are the numbers stable? — three full runs, diffed
 
