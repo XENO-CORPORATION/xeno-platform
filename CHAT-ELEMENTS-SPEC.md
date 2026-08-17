@@ -432,6 +432,29 @@ The walk now samples DURING the action, at 350/700/1400ms. `Spinner` 0 → 1, `T
 **All four zeros are closed.** Every adopted component in this chat has now been rendered at least
 once for a probe, which was not true of any of them a few iterations ago.
 
+### `isMultiInterface` — the ceiling is the probes', not the app's
+
+The largest single gate in the state map is `isMultiInterface`, six controls including the whole
+system prompt panel. "A prop no click reaches" was the right answer to the wrong question — the real
+one is whether any REACHABLE route sets it.
+
+It comes from `MultiChatContainer`: `isMultiInterface={interfaces.length > 1}`. Three places mount
+that component, and none is reachable by a probe on this dev server:
+
+| | |
+|---|---|
+| `App.tsx` `/` | inside `<ProtectedRoute>` — the same sign-in wall the production build put round the chat |
+| `HeroSection` | lazy-loaded into the landing page hero |
+| `Dashboard.tsx` `/playground/chat/llm` | **the file is imported nowhere** — its routes never mount, which is why that URL renders the landing page |
+
+So those six controls are a ceiling **for the measurement**, not for the product: reachable by a
+signed-in user, unreachable by an unauthenticated probe. Worth stating precisely, because "unreachable"
+and "unreachable without credentials" call for different responses — the first is a dead end, the
+second is a fixture problem someone with a test account could solve.
+
+Incidental, and reported rather than acted on: `src/pages/Dashboard.tsx` is referenced by nothing. It
+carries route definitions that cannot fire. Not this spec's to remove.
+
 ### Three lines of enquiry that closed, and why that is worth writing down
 
 An iteration spent confirming that promising ideas do not work is cheaper than the same iteration
