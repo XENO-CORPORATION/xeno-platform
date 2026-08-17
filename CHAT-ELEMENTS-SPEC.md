@@ -461,7 +461,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-81 rendered across the three routes — 32%.**
+100 rendered across the three routes — 39%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
@@ -534,10 +534,14 @@ That number is a FLOOR and it conflates three things, which is why it is not a g
    visible button count *fell*: 94 → 91 → 83. Those panels are built from the controls that stayed
    hand-written, and opening one covers the composer controls behind it.
 3. **transient** — every `Spinner` counts 0 because nothing is loading at the moment of the count.
-4. **mutually exclusive branches of one surface** — the share dialog opens and renders **1 of its 4
-   Buttons**, because "Create share link" and "Delete link / Done" are two states of the same dialog
-   and only one exists at a time. No walk reaches both in one count. **This is a property of the code,
-   not the measurement: 100% is not the target, and the real ceiling has never been computed.**
+4. ~~**mutually exclusive branches of one surface**~~ — **this was the AGGREGATION, not the code.**
+   The share dialog's two states cannot both exist at once, so a per-step MAX can only ever see one.
+   Counting the UNION of what has ever rendered across the walk sees both. `Button` went 17 → 29 the
+   moment the question changed from "how many at once" to "how many distinct".
+
+   Neither aggregation is the truth alone, so the probe now reports **both**: `IconButton` reads 49
+   at once against 41 distinct, because icon buttons repeat their labels and a union keyed on the
+   accessible name collapses them. Reporting one number would have been cleaner and worse.
 5. **deliberately hidden markup** — and this is the one worth knowing about. The attach / recent-files
    panel is `<div className="relative hidden">`: `display: none` unconditionally, kept for a tool rail
    this route does not use. **No hover and no click can open it** — two iterations were spent trying

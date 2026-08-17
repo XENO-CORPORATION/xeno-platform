@@ -60,8 +60,44 @@ const PROJECT = {
   scheduledTasks: [{ id: 't1', title: 'Weekly check-in', cadence: 'Every Monday', mark: 'M' }],
 };
 
+/*
+ * UNION across the walk, not the max at any one step — and that change is the answer to the ceiling.
+ *
+ * Taking the largest simultaneous count is why mutually exclusive branches capped the number: the
+ * share dialog's "Create share link" and "Delete link / Done" are two states of one dialog, so a
+ * per-step max can only ever see one of them. What we actually want to know is how many distinct
+ * controls have EVER been rendered, which a union answers and a max cannot.
+ *
+ * Identity is `component + accessible name`, which is imperfect in two directions and worth saying:
+ * two different source controls sharing a label collapse into one, and one source control rendered
+ * per-row in a list counts once. It is a better proxy than a max and still a proxy.
+ */
 const b = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'], defaultViewport: { width: 1400, height: 900 } });
-const seen = Object.fromEntries(COMPONENTS.map((c) => [c, 0]));
+/*
+ * BOTH aggregations, because neither is the truth on its own:
+ *   atOnce   the largest simultaneous count. Cannot see two mutually exclusive states of one dialog.
+ *   distinct the union of `component + accessible name` across the whole walk. Sees both states, but
+ *            collapses controls that SHARE a label — which is why IconButton reads 41 distinct
+ *            against 49 at once, the icon buttons being far more repetitive in naming than Buttons.
+ * Reporting one would have been a cleaner number and a worse measurement. The total takes the larger
+ * of the two per component and says so.
+ */
+const seenIds = Object.fromEntries(COMPONENTS.map((c) => [c, new Set()]));
+const seenMax = Object.fromEntries(COMPONENTS.map((c) => [c, 0]));
+const observe = (counts) => {
+  for (const [c, ids] of Object.entries(counts)) {
+    seenMax[c] = Math.max(seenMax[c], ids.length);
+    for (const id of ids) seenIds[c].add(id);
+  }
+};
+const IDENTIFY = `(sel) => {
+  const out = {};
+  for (const [name, s] of Object.entries(sel)) {
+    out[name] = [...document.querySelectorAll(s)].map((el, i) =>
+      (el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40) || 'anon' + i);
+  }
+  return out;
+}`;
 for (const seg of ['llm', 'search', 'voice']) {
   const p = await b.newPage();
   /* Only the project list is seeded. `xeno-chat-projects-page-open` is NOT feedable — the app writes
@@ -96,12 +132,7 @@ for (const seg of ['llm', 'search', 'voice']) {
   /* Count AT REST first. The walk below clicks before it measures, so without this the resting state
      is never counted — and opening a panel covers the composer controls behind it, so the first click
      LOSES components. That cost a coverage point and read as the history seed's fault. */
-  const atRest = await p.evaluate((sel) => {
-    const o = {};
-    for (const [n, s] of Object.entries(sel)) o[n] = document.querySelectorAll(s).length;
-    return o;
-  }, SELECTOR);
-  for (const c of COMPONENTS) seen[c] = Math.max(seen[c], atRest[c]);
+  observe(await p.evaluate(eval(IDENTIFY), SELECTOR));
 
   /* Walk into the project surfaces where they exist. Synthetic clicks, so `pointer-events` does not
      apply — see the note in `probe-project-settings.mjs` about matching the check to the method. */
@@ -128,31 +159,22 @@ for (const seg of ['llm', 'search', 'voice']) {
       if (el && getComputedStyle(el).visibility !== 'hidden') { el.scrollIntoView({ block: 'center' }); el.click(); }
     }, label);
     await new Promise((r) => setTimeout(r, 1300));
-    const counts = await p.evaluate((sel) => {
-      const o = {};
-      for (const [n, s] of Object.entries(sel)) o[n] = document.querySelectorAll(s).length;
-      return o;
-    }, SELECTOR);
-    for (const c of COMPONENTS) seen[c] = Math.max(seen[c], counts[c]);
+    observe(await p.evaluate(eval(IDENTIFY), SELECTOR));
   }
-  const counts = await p.evaluate((sel) => {
-    const out = {};
-    for (const [name, s] of Object.entries(sel)) out[name] = document.querySelectorAll(s).length;
-    return out;
-  }, SELECTOR);
-  for (const c of COMPONENTS) seen[c] = Math.max(seen[c], counts[c]);
+  observe(await p.evaluate(eval(IDENTIFY), SELECTOR));
   await p.close();
 }
 await b.close();
 
 let src = 0, obs = 0;
-console.log('component        in source   rendered   unmeasured');
+console.log('component        in source   at once   distinct   unmeasured');
 for (const c of COMPONENTS) {
   if (!inSource[c]) continue;
   src += inSource[c];
-  obs += Math.min(seen[c], inSource[c]);
-  const gap = Math.max(0, inSource[c] - seen[c]);
-  console.log(`  ${c.padEnd(16)} ${String(inSource[c]).padStart(4)}      ${String(seen[c]).padStart(5)}      ${String(gap).padStart(5)}`);
+  const best = Math.max(seenIds[c].size, seenMax[c]);
+  obs += Math.min(best, inSource[c]);
+  const gap = Math.max(0, inSource[c] - best);
+  console.log(`  ${c.padEnd(16)} ${String(inSource[c]).padStart(4)}     ${String(seenMax[c]).padStart(5)}     ${String(seenIds[c].size).padStart(6)}      ${String(gap).padStart(5)}`);
 }
 /*
  * A LIMIT of this aggregation, worth knowing before reading a seed as worthless: `seen` is the MAX
