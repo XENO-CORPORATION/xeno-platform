@@ -13484,43 +13484,29 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       </div>
                     )}
                   </div>
-                  {/* Stays hand-written, and it is the reveal's MIRROR. The glyph sits on the
-                      right and travels the other way, so the box opens on its trailing edge —
-                      `iconReveal` places the glyph at `--xeno-padx` from the left and parks it to the
-                      right of where it lands, which is the leading half of the idea and the only half
-                      the library has. Two call sites wanted the leading one and it went in; this is
-                      the first that wants the other.
-                      It would still not convert today: the fill is `--chat-text` with `--chat-canvas`
-                      ink, the inverted emphasis §9 is about, so the trailing reveal and the chrome
-                      tokens are one job rather than two. */}
-                  <button
-                    type="button"
+                  {/* `primary sm` with the reveal's MIRROR — the last control in this chat that
+                      needed TWO library gaps closed before it could convert, and the reason its
+                      comment said "one job rather than two". The fill is `--chat-text` on
+                      `--chat-canvas`, which is `primary` now that the bridge carries the chrome
+                      tokens; the glyph waits under the end of the label and travels right, which is
+                      `iconReveal="trailing"`.
+                      Everything below was this button drawing both by hand: a `group` with an
+                      absolutely-placed glyph, `-translate-x-5` and `group-hover:` twins for the
+                      travel, `hover:pr-8` for the box, a label span given its own background so the
+                      glyph had something to hide behind, and two 600ms transitions written out. The
+                      600ms is the component's own `--xeno-btn-reveal-dur`.
+                      `iconSize={13}` keeps the glyph where it was — sm draws 16. */}
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    iconReveal="trailing"
+                    trailingIcon={FolderDecl}
+                    iconSize={13}
+                    className="flex-shrink-0"
                     onClick={() => openCreateProjectModal()}
-                    className={`group relative flex flex-shrink-0 items-center overflow-hidden rounded-lg py-1.5 pl-3 pr-3 text-[12.5px] font-medium hover:pr-8`}
-                    style={{
-                      backgroundColor: 'var(--chat-text)',
-                      color: 'var(--chat-canvas)',
-                      willChange: 'padding',
-                      transition: 'padding 600ms cubic-bezier(0.22, 1, 0.36, 1)',
-                    }}
                   >
-                    <Folder
-                      size={13}
-                      className="pointer-events-none absolute right-2.5 z-0 -translate-x-5 text-[var(--chat-canvas)] opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
-                      style={{
-                        willChange: 'opacity, transform',
-                        transition:
-                          'opacity 600ms cubic-bezier(0.22, 1, 0.36, 1), transform 600ms cubic-bezier(0.22, 1, 0.36, 1)',
-                      }}
-                      aria-hidden="true"
-                    />
-                    <span
-                      className="relative z-10 pr-0.5"
-                      style={{ backgroundColor: 'var(--chat-text)' }}
-                    >
-                      New project
-                    </span>
-                  </button>
+                    New project
+                  </Button>
                 </div>
 
                 <div className="flex-shrink-0 pb-5 md:pb-6">

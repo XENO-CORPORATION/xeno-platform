@@ -462,11 +462,20 @@ Re-deciding these costs more than it saves.
   The rest are still hand-written, including the composer's Send, which the normalisation block
   repaints with `!important` in both states.
 
-  **And it now has a companion.** The projects header's New project is an inverted button that also
-  reveals its glyph on the TRAILING edge — the mirror of `iconReveal`, which places the glyph at
-  `--xeno-padx` from the left. Three call sites wanted the leading reveal and it went into the
-  library; this is the first that wants the other. It is one job with the chrome tokens rather than
-  two, because the button cannot convert on either alone.
+  ~~**And it now has a companion.**~~ **Closed, and it was one job as predicted.** The projects
+  header's New project needed both the chrome tokens and the reveal's mirror, and could convert on
+  neither alone. `Button` carries `iconReveal="trailing"` now (elements-foundations 3f8d242) and the
+  button is `primary sm` with `trailingIcon`.
+
+  The park is negative, which is the idea rather than a sign flip: reflecting a reveal reverses the
+  direction the glyph comes FROM, and a positive park would have it arriving from outside the button
+  instead of out from under the label. One shared line changed with it — the base transition named
+  `padding-left`, so the mirror's `padding-right` would have snapped while the leading one animated.
+  A one-sided implementation hides that; the second side is where you find out the first was written
+  as a special case.
+
+  Measured in the elements preview with real CDP hover: at rest opacity 0 parked at -22px in a
+  clipped box; on hover opacity 1, translate 0, padding-right 12px → 34px while padding-left holds.
 
   **Closed: the destructive half has its solid reading.** `Button` carries `emphasis="solid"` now
   (elements-foundations 2ed1953), painted from `--xeno-danger` / `--xeno-danger-hover` — base tokens,
