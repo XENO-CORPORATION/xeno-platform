@@ -16,6 +16,7 @@
     "probe:chat": "node scripts/probe-chat.mjs",
     "probe:chat:full": "node scripts/probe-chat.mjs --full",
     "check:names": "node scripts/check-undefined-names.mjs",
+    "check:jsx-comments": "node scripts/check-jsx-comments.mjs",
     "build:prerender": "node scripts/prerender-products.mjs",
     "smoke:public-auth": "node scripts/smoke-public-auth.mjs",
     "smoke:public-api": "node scripts/smoke-public-api.mjs",

@@ -17992,14 +17992,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         className={`${historyNavGoo.hostProps.className} chat-goo chat-goo-sidebar flex-shrink-0 space-y-0.5 border-b border-[var(--chat-border)] px-1.5 py-2`}
                       >
                         {historyNavGoo.pill}
-                          /* Stays hand-written, and this is one decision covering all seven rows
-                             of this nav. The library's `Sidebar` is the WHOLE panel — sections, its
-                             own search field, and an `inert` closed state that takes the rows out of
-                             the tab order — and `SidebarItem` is a data shape it maps, not an element
-                             a call site can render. This sidebar is hand-built around a goo pill,
-                             project sub-rows and per-row menus, so taking the component would be
-                             replacing the panel rather than converting a row. The component exists at
-                             a different granularity than the thing that needs it. */
+                        {/* Stays hand-written, and this is one decision covering all seven rows
+                            of this nav. The library's `Sidebar` is the WHOLE panel — sections, its
+                            own search field, and an `inert` closed state that takes the rows out of
+                            the tab order — and `SidebarItem` is a data shape it maps, not an element
+                            a call site can render. This sidebar is hand-built around a goo pill,
+                            project sub-rows and per-row menus, so taking the component would be
+                            replacing the panel rather than converting a row. The component exists at
+                            a different granularity than the thing that needs it. */}
                                 <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(false)}
@@ -18010,7 +18010,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <Plus size={16} className="flex-shrink-0 text-[var(--chat-text)]" />
                           <span>New</span>
                                 </button>
-                          /* Stays hand-written — one of the seven nav rows decided above. */
+                        {/* Stays hand-written — one of the seven nav rows decided above. */}
                         <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'chats' && !isProjectsPageOpen)}
@@ -18036,7 +18036,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             <span>Archived conversations</span>
                           </button>
                         )}
-                          /* Stays hand-written — one of the seven nav rows decided above. */
+                        {/* Stays hand-written — one of the seven nav rows decided above. */}
                         <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'projects' || isProjectsPageOpen)}
@@ -18045,7 +18045,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <Folder size={16} className="flex-shrink-0" />
                           <span>Projects</span>
                         </button>
-                          /* Stays hand-written — one of the seven nav rows decided above. */
+                      {/* Stays hand-written — one of the seven nav rows decided above. */}
                       <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'artifacts' || isArtifactsPageOpen)}
@@ -18054,7 +18054,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <Shapes size={16} className="flex-shrink-0" />
                           <span>Artifacts</span>
                       </button>
-                          /* Stays hand-written — one of the seven nav rows decided above. */
+                      {/* Stays hand-written — one of the seven nav rows decided above. */}
                       <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'global_settings' || isGlobalSettingsPageOpen)}
@@ -18063,7 +18063,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           <Settings size={16} className="flex-shrink-0" />
                           <span>Settings</span>
                       </button>
-                          /* Stays hand-written — one of the seven nav rows decided above. */
+                      {/* Stays hand-written — one of the seven nav rows decided above. */}
                       <button
                           type="button"
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'scheduled' || isScheduledPageOpen)}
