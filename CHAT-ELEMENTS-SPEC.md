@@ -361,6 +361,29 @@ empty.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
 
+### Which probes need a theme loop, and which do not — measured, not assumed
+
+Three probes stayed single-theme on the reasoning that metrics, target size and tab order are not
+theme-dependent. That is a hypothesis, and this section is mostly a list of hypotheses about probes
+that turned out wrong, so it was measured: same page, dark against light, plus three runs of the same
+theme to separate a theme effect from noise.
+
+| | Result |
+|---|---|
+| adopted controls (45) and height drift (0) | **identical** across dark and light, and across three runs — no theme loop needed |
+| sub-24px targets (1) | **identical** likewise |
+| tab-stop COUNT | **unstable within one theme**: 72, 68, 68 |
+
+The count varies because the chat has transient controls — the diff named `Scroll to bottom`, which
+is present only when the message list is scrolled up. **It is not a theme effect and it is not a
+baseline.** `probe-chat.mjs` asserts on the number of keyboard-unreachable targets, which held at 0
+through every run; that was the right choice and it was not made deliberately.
+
+**Correcting an earlier claim in this repo:** commit messages here quote "67 stops → 68" and "68 →
+69" as evidence that a conversion added exactly one stop. The stops WERE added — a `<button>` where a
+`<div onClick>` had been — but the numbers were noise around a real change, not measurement of it.
+The unreachable count is what proved those.
+
 ### The probe is the thing most likely to be wrong
 
 Five probes in this loop reported a defect that did not exist, and one had two bugs at once. That is

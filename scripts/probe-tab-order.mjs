@@ -70,7 +70,16 @@ const unreachable = await p.evaluate(() => {
   return out;
 });
 
-console.log(`tab stops (first ${seq.length}):`);
+/*
+ * The COUNT is not a baseline. Measured three times on the same theme it gave 72, 68, 68 — the chat
+ * has transient controls (`Scroll to bottom` is the one that showed) which appear depending on where
+ * the message list happens to be, so the sequence length varies by up to four between identical runs.
+ *
+ * `probe-chat.mjs` therefore asserts on the UNREACHABLE count, which is stable, and not on this. Read
+ * the list below as a description of the order, not as a number to compare against a previous run —
+ * earlier commit messages in this repo quote stop deltas as if they were evidence, and they are not.
+ */
+console.log(`tab stops (first ${seq.length}, count varies run to run — see the note in this file):`);
 seq.forEach((d, i) => console.log(`  ${String(i + 1).padStart(2)}. ${d}`));
 console.log(`\ndistinct click targets a keyboard cannot reach: ${unreachable.length}`);
 for (const u of unreachable) console.log(`  ${u.w}x${u.h}  ${JSON.stringify(u.label)}`);
