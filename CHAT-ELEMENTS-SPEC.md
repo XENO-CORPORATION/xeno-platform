@@ -432,6 +432,27 @@ The walk now samples DURING the action, at 350/700/1400ms. `Spinner` 0 → 1, `T
 **All four zeros are closed.** Every adopted component in this chat has now been rendered at least
 once for a probe, which was not true of any of them a few iterations ago.
 
+### Three lines of enquiry that closed, and why that is worth writing down
+
+An iteration spent confirming that promising ideas do not work is cheaper than the same iteration
+spent by the next person. All three were measured, not reasoned about.
+
+**HOVER buys nothing for this metric.** The message action bars are hover-revealed, so the walk not
+hovering looked like an obvious gap. Hovering all three messages changed the counts by zero: the
+controls are in the DOM at rest and hidden by `opacity`, and `querySelectorAll` finds them either
+way. 41 icon buttons before, 41 after, 26 visible in both. **A visibility gate is not a mount gate**,
+and only the second kind moves this number.
+
+**The system prompt panel is unreachable on these routes.** Its trigger is missing at rest, missing
+after the composer reveal row, and missing with the demo off. The gate is `{isMultiInterface && (` —
+the prop the state map already flagged, and four of its six controls are this panel. **No click
+reaches a prop.**
+
+**Turning the demo off LOSES coverage.** With `xeno_chat_demo=off` the empty state renders 2 Buttons
+and 11 IconButtons against 6 and 41 with the thread. The seeded demo is the richest state on the
+route, not an obstacle to a purer one — worth knowing before someone disables it to "measure the real
+empty chat".
+
 ### Selection is a different capability from opening
 
 The catalog's action row stayed dark through several iterations of opening things. Its `Select all`,
