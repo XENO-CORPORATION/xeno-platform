@@ -8,6 +8,7 @@ import SuiteVisual from './SuiteVisual';
 import EdgeParticles from './EdgeParticles';
 import { productIcon } from '../../lib/productIcons';
 import { isUnreleased } from '../../lib/releaseStatus';
+import { useSelectionTreatment, TREATMENTS, type SelectionTreatment } from './selectionTheme';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * WORKSPACE CHOOSER — the first and most consequential step.
@@ -73,6 +74,8 @@ export const WorkspaceChooser: React.FC<{
 }> = ({ value, onChange, onEverythingHover }) => {
   const [barHover, setBarHover] = useState(false);
   const [barBox, setBarBox] = useState<DOMRect | null>(null);
+  // ⚠️ TEMPORARY — see selectionTheme.ts. Delete with the toggle once chosen.
+  const [treatment, setTreatment] = useSelectionTreatment();
   // The burst originates from this element's rect, so it needs a real handle.
   const barRef = useRef<HTMLButtonElement | null>(null);
   const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'framed' : 'idle');
@@ -217,6 +220,31 @@ export const WorkspaceChooser: React.FC<{
       {/* No per-card dimming any more — the full-viewport scrim above covers
           these along with everything else, and doing both would double the
           darkening on exactly the elements it is least needed on. */}
+      {/* ⚠️ TEMPORARY COMPARISON CONTROL — not a feature.
+          Two selected-state treatments, switchable live so they can be judged
+          against each other on real content rather than described. Delete this
+          block and selectionTheme.ts once one is chosen. */}
+      <div className="relative z-10 mb-3 flex items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/25">
+          Selected style
+        </span>
+        {(Object.keys(TREATMENTS) as SelectionTreatment[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTreatment(t)}
+            className={`focus-self rounded-[6px] border px-2.5 py-1 text-[11px] transition-colors duration-150 ${
+              treatment === t
+                ? 'border-white/40 bg-white/[0.10] text-white'
+                : 'border-white/[0.10] text-white/40 hover:border-white/25 hover:text-white/70'
+            }`}
+          >
+            {TREATMENTS[t].label}
+            <span className="ml-1.5 text-white/25">{TREATMENTS[t].note}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SUITES.map((suite, i) => (
           <SuiteCard
@@ -232,6 +260,7 @@ export const WorkspaceChooser: React.FC<{
             // still drawing, so it landed into an enclosure that did not exist
             // yet, which reads as two animations rather than a consequence.
             checkDelay={framed ? FRAME_MS * 0.86 + i * 95 : 0}
+            treatment={treatment}
             onSelect={() => { collapseFrame(); onChange(suite.id); }}
           />
         ))}
@@ -248,13 +277,20 @@ export const WorkspaceChooser: React.FC<{
         onFocus={() => { setBarBox(barRef.current?.getBoundingClientRect() ?? null); setBarHover(true); onEverythingHover?.(true); }}
         onBlur={() => { setBarHover(false); onEverythingHover?.(false); }}
         disabled={phase === 'framing' || phase === 'unframing'}
-        style={{ animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: '0.34s', opacity: 0 }}
+        style={{
+          animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards',
+          animationDelay: '0.34s',
+          opacity: 0,
+          // The bar follows the same treatment as the cards, or `edge` would
+          // keep four cards black and still light up the bar underneath them.
+          ...(framed ? { borderColor: TREATMENTS[treatment].border, background: TREATMENTS[treatment].barBg } : {}),
+        }}
         className={`focus-self group relative mt-3 flex w-full items-center overflow-hidden
                     ${burst ? 'z-[70]' : 'z-10'}
                     rounded-[12px] border px-5 py-4 text-left transition-all duration-200 ease-out
                     will-change-transform disabled:cursor-default
                     ${framed
-                      ? 'border-white/40 bg-white/[0.06]'
+                      ? ''
                       : 'border-white/[0.14] hover:-translate-y-[3px] hover:border-white/35 active:translate-y-0 active:scale-[0.995]'}`}
       >
         <span
@@ -355,8 +391,11 @@ const SuiteCard: React.FC<{
    *  A direct click stays at 0 — feedback for your own click must be immediate
    *  or it reads as lag. */
   checkDelay?: number;
+  /** ⚠️ TEMPORARY — which selected-state treatment to paint. */
+  treatment?: SelectionTreatment;
   onSelect: () => void;
-}> = ({ suite, index, selected, checkDelay = 0, onSelect }) => {
+}> = ({ suite, index, selected, checkDelay = 0, treatment = 'lift', onSelect }) => {
+  const T = TREATMENTS[treatment];
   const products = productsForSuite(suite);
 
   /* ── SHELL / PLATE ANATOMY ────────────────────────────────────────────────
@@ -385,9 +424,8 @@ const SuiteCard: React.FC<{
       aria-pressed={selected}
       style={{
         background: '#08080a',
-        boxShadow: selected
-          ? '0 20px 46px -18px rgba(0,0,0,0.92)'
-          : '0 10px 30px -16px rgba(0,0,0,0.8)',
+        boxShadow: selected ? T.shadow : '0 10px 30px -16px rgba(0,0,0,0.8)',
+        ...(selected ? { borderColor: T.border } : {}),
         animation: 'xenoRise 0.6s cubic-bezier(0.16,1.02,0.3,1) forwards',
         animationDelay: `${0.06 + index * 0.07}s`,
         opacity: 0,
@@ -404,12 +442,12 @@ const SuiteCard: React.FC<{
                   lg:min-h-[420px]
                   transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform
                   hover:-translate-y-[5px] active:translate-y-0
-                  ${selected ? 'border-white/40' : 'border-white/[0.07] hover:border-white/[0.22]'}`}
+                  ${selected ? '' : 'border-white/[0.07] hover:border-white/[0.22]'}`}
     >
       {/* ── Header plate ── */}
       <span
         className="flex shrink-0 items-center gap-2 rounded-t-[7px] px-3 py-2.5 transition-colors duration-200"
-        style={{ background: selected ? '#242424' : '#1a1a1a' }}
+        style={{ background: selected ? T.headerBg : '#1a1a1a' }}
       >
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">
