@@ -38,7 +38,13 @@ const read = async (url, theme, pos) => {
   return { out, errs };
 };
 
-const CASES = [['dark', null], ['light', null], ['custom', 30], ['custom', 65]];
+/*
+ * `dim` is a NAMED theme, not a slider position — `VISUAL_CHAT_THEME_OPTIONS` in `chatTheme.ts` lists
+ * dark/dim/light at 0/50/100. It was missing here for as long as this probe existed: the four stops
+ * covered both ends and two arbitrary points in between, and skipped the one the product actually
+ * ships a switch for. A theme with a name and no check is the easiest kind to break.
+ */
+const CASES = [['dark', null], ['dim', null], ['light', null], ['custom', 30], ['custom', 65]];
 const ROUTES = [['voice', 'voice'], ['search', 'search']];
 let bad = 0;
 for (const [name, seg] of ROUTES) {

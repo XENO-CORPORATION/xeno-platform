@@ -66,7 +66,7 @@ const PROBES = [
   {
     file: 'probe-voicebright.mjs', needs: 'chat',
     verdict: /(both routes match chat on every stop|(\d+) stop\(s\) differ)/,
-    expect: ['both routes match chat on every stop'], describe: () => 'voice + search match chat at 4 stops',
+    expect: ['both routes match chat on every stop'], describe: () => 'voice + search match chat at 5 stops (dark/dim/light/30%/65%)',
   },
   {
     file: 'probe-voice-thumb.mjs', needs: 'chat',

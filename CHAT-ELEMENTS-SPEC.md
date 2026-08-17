@@ -336,8 +336,15 @@ scratchpad/final.mjs       lucideLeft: []
 scratchpad/mixrow.mjs      every row adopted, h 32, r 6px, font 14
 scratchpad/lightchat.mjs   no near-white ink except the caption on the dark image
 scratchpad/custom.mjs      chat and search identical at 15/30/65/85 %
-scripts/probe-voicebright.mjs   voice AND search identical to chat at dark/light/30/65 %
+scripts/probe-voicebright.mjs   voice AND search identical to chat at dark/dim/light/30/65 %
 ```
+
+**`dim` was missing from it for as long as it existed.** `VISUAL_CHAT_THEME_OPTIONS` in
+`chatTheme.ts` lists dark/dim/light at slider positions 0/50/100 — three NAMED themes with a switch
+in the UI — and the probe covered both ends plus two arbitrary custom points, skipping the one in the
+middle that the product actually ships a control for. **A theme with a name and no check is the
+easiest kind to break.** Measured now: `dim` resolves to `#171718`, and voice and search match the
+chat route there as they do everywhere else.
 
 `voicebright.mjs` replaces a line that named `voice.mjs` for this. That file is an earlier
 diagnostic — it prints button and glyph counts and asserts nothing about brightness — so the entry
