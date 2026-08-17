@@ -15434,19 +15434,27 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            >
                                              Cancel
                                            </Button>
-                                           {/* Stays hand-written: a `--chat-accent` fill carrying
-                                               `--chat-on-accent` ink, which is the inverted emphasis
-                                               the variant set has no member for. Thirteenth control
-                                               in this chat filled that way, and the third Cancel/
-                                               confirm pair where only the Cancel can convert (§9). */}
-                                           <button
-                                             type="button"
+                                           {/* `primary sm`, and the pair is whole for the first
+                                               time — this was the Cancel/confirm where only the
+                                               Cancel could convert. The fill is an exact swap:
+                                               `--chat-accent` and `--chat-text` are the same value at
+                                               every theme stop (measured dark #fafafa, light #0a0a0a,
+                                               65% #f5f6f8), and `primary` paints `--chat-text` on
+                                               `--chat-on-accent` now that the bridge carries the
+                                               chrome tokens.
+                                               One thing does change, deliberately: the hover was
+                                               `opacity-90`, which fades the ink along with the fill.
+                                               The variant lays a `--chat-hover` tint over the fill
+                                               instead, so the label stays at full strength. 13px type
+                                               is sm's own, matching the Cancel beside it. */}
+                                           <Button
+                                             variant="primary"
+                                             size="sm"
                                              onClick={() => void handleSaveEdit()}
-                                             className="rounded-md bg-[var(--chat-accent)] px-3 py-1 text-[13px] font-medium text-[var(--chat-on-accent)] transition-opacity hover:opacity-90"
                                              aria-label="Save changes"
                                            >
-                                                   Save
-                                               </button>
+                                             Save
+                                           </Button>
                                            </div>
                                        </div>
                                   ) : (
@@ -15636,18 +15644,19 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             >
                                               Cancel
                                             </Button>
-                                            {/* Stays hand-written — a `--chat-accent` fill with
-                                                `--chat-on-accent` ink, the inverted emphasis §9 is
-                                                about. Fourteenth in this chat, and the FOURTH
-                                                Cancel/confirm pair where only the Cancel converts.
-                                                Four pairs is not four call sites being awkward; it is
-                                                one missing variant, counted. */}
-                                            <button
+                                            {/* `primary md`, matching the `ghost md` Cancel it
+                                                stands next to. It had been ~28px against that
+                                                Cancel's 32 — the pair now has one height as well as
+                                                one grammar, which is what a Cancel/confirm pair is
+                                                supposed to look like. Same exact-swap fill and same
+                                                deliberate hover change as its twin above. */}
+                                            <Button
+                                              variant="primary"
+                                              size="md"
                                               onClick={handleSaveAiEdit}
-                                              className="rounded-md bg-[var(--chat-accent)] px-4 py-1.5 text-sm font-semibold text-[var(--chat-on-accent)] transition-opacity hover:opacity-90"
                                             >
                                               Save
-                                            </button>
+                                            </Button>
                                           </div>
                                         </div>
                                       ) : (

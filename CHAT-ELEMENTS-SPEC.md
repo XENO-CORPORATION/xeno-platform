@@ -448,8 +448,19 @@ Re-deciding these costs more than it saves.
   measured, both #0a0a0a. If the chat should wear the separated reading instead, `chat-theme.css` is
   the one place that changes.
 
-  **The eleven controls are still hand-written.** `primary` is usable now; converting them is a §3
-  pass with its own before/after.
+  **Three converted, on the first pass after the door opened.** The three Cancel/confirm pairs where
+  only the Cancel could convert are whole: the two message-editor Saves and the voice route's. The
+  fill is an exact swap — `--chat-accent` and `--chat-text` are the same value at every theme stop
+  (dark #fafafa, light #0a0a0a, 65% #f5f6f8), measured. Rendered `primary` at both sizes: 28px and
+  32px, #fafafa on #0a0a0a in dark and #0a0a0a on #ffffff in light.
+
+  Two changes were made deliberately rather than carried over. The hover was `opacity-90`, which
+  fades the LABEL along with the fill; the variant lays a `--chat-hover` tint over the fill and leaves
+  the ink at full strength. And the voice route's Save filled `--chat-muted` — a grey — where the
+  other three fill accent. Three sites agreeing and one not is the one being corrected.
+
+  The rest are still hand-written, including the composer's Send, which the normalisation block
+  repaints with `!important` in both states.
 
   **And it now has a companion.** The projects header's New project is an inverted button that also
   reveals its glyph on the TRAILING edge — the mirror of `iconReveal`, which places the glyph at

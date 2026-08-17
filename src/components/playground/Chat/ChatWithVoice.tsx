@@ -1940,18 +1940,21 @@ const ChatWithVoice: React.FC = () => {
                               <Button variant="ghost" size="md" onClick={handleCancelEdit} aria-label="Cancel edit">
                                 Cancel
                               </Button>
-                              {/* Stays hand-written, and `primary` is the reason rather than the
-                                  answer. This is an inverted button — a `--chat-muted` fill carrying
-                                  `--chat-on-accent` ink — which is `primary`'s shape, and `primary`
-                                  reads `--xeno-chrome-btn-primary-bg`. That token is declared on
-                                  `:root` by the chrome files, so it COMPUTES there, before this
-                                  chat's bridge has said anything: measured live inside `.chat-themed`
-                                  it is #2b2b2b on #d8d8de — the library's own palette, not this
-                                  chat's. `primary` is unusable here until the bridge carries the
-                                  chrome tokens too (spec §9). */}
-                              <button onClick={handleSaveEdit} className="text-sm bg-[var(--chat-muted)] text-[var(--chat-on-accent)] px-3 py-1 rounded-md font-semibold hover:bg-[var(--chat-hover)] transition-colors" aria-label="Save changes">
+                              {/* `primary md`, matching its `ghost md` Cancel. The bridge carries
+                                  the chrome tokens now, so the reason recorded here is answered.
+                                  This one is NOT an exact swap and the difference is the point: it
+                                  filled `--chat-muted`, a grey, where the other three Save buttons in
+                                  this chat fill `--chat-accent`. Three sites agreeing and one not is
+                                  the one being corrected — the same call made for the search field
+                                  whose focus ring was accent where every other field's was muted. */}
+                              <Button
+                                variant="primary"
+                                size="md"
+                                onClick={handleSaveEdit}
+                                aria-label="Save changes"
+                              >
                                 Save
-                              </button>
+                              </Button>
                             </div>
                           </div>
                         ) : (
