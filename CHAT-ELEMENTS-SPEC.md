@@ -461,11 +461,27 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-68 rendered across the three routes — 27%.**
+79 rendered across the three routes — 31%.**
 
-It was 24% before the project seed. Seeding `chatProjects` from localStorage and walking into the
-projects page buys **three points**, which is a fair measure of how much of the blind spot one
-data-dependent branch accounts for: not much, individually. There are five more.
+24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
+three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
+and the answer was not "scattered":
+
+| file | Button | IconButton |
+|---|---|---|
+| ChatWithLLM | 36 | 64 |
+| ChatSkillsWorkspace | 8 | 1 |
+| CodeBlockWithHeader | 6 | 1 |
+| ChatScheduledPage · ChatGlobalSettingsPage · ChatArtifactsPage | 5 each | 0–2 |
+| ChatShareModal · ChatSettingsModal | 4 · 3 | 1 each |
+
+**Whole pages.** Artifacts, Scheduled, Settings and Customize are boolean-state pages behind the
+history sidebar holding 16 Buttons between them, and they need no seeding at all — the sidebar open
+and one click each. `Button` went 8 → 16 and `TextInput` rendered for the first time in this whole
+programme, 0 → 2.
+
+Naming where a blind spot lives is what made it reachable. Two iterations of localStorage seeding
+bought three points; one afternoon of `grep -c "<Button" per file` bought four.
 
 One key looked feedable and is not. `xeno-chat-projects-page-open` persists, but the app WRITES it on
 mount, so a seeded `'true'` reads back `'false'` — the page is opened by clicking instead. **A seed

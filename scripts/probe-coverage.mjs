@@ -105,7 +105,17 @@ for (const seg of ['llm', 'search', 'voice']) {
 
   /* Walk into the project surfaces where they exist. Synthetic clicks, so `pointer-events` does not
      apply — see the note in `probe-project-settings.mjs` about matching the check to the method. */
-  for (const label of ['Open conversation history', 'Conversation actions', 'Projects', PROJECT.name]) {
+  /*
+   * The biggest per-component gaps turned out to be whole PAGES, not scattered controls: Artifacts,
+   * Scheduled, Settings and Customize are boolean-state pages behind the history sidebar, holding 16
+   * of the 74 unrendered Buttons between them. They need no seeding at all — just the sidebar open
+   * and a click each. Naming where a blind spot lives is what made it reachable.
+   */
+  for (const label of [
+    'Open conversation history', 'Conversation actions',
+    'Artifacts', 'Scheduled', 'Settings',
+    'Projects', PROJECT.name,
+  ]) {
     await p.evaluate((x) => {
       const el = [...document.querySelectorAll('button,[role="button"]')].find((e) =>
         ((e.getAttribute('aria-label') || e.textContent || '').trim().replace(/\s+/g, ' ')).includes(x),
