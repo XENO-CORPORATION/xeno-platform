@@ -450,27 +450,51 @@ const SuiteCard: React.FC<{
       <span
         aria-hidden
         style={{
-          /* The transform is INLINE, not built from Tailwind utilities.
+          /* ── WHY IT OVERLAPS BOTH ENDS ─────────────────────────────────
            *
-           * `-translate-x-1/2` and `scale-y-*` are both transform utilities,
-           * and Tailwind composes them through shared CSS variables — one
-           * `transform:` line referencing --tw-translate-x, --tw-scale-y and
-           * four others. That works, but it means two classes silently share
-           * one declaration, and anything that resets or fails to define one
-           * variable takes the WHOLE transform with it, including the
-           * centring. One explicit string cannot half-apply.
+           * A line drawn exactly from the card's bottom edge to the bar's top
+           * edge shows a hairline gap at one end or both. The card's height
+           * comes from `items-stretch`, the bar's offset from a rem margin,
+           * and the whole page is scaled by devicePixelRatio — so both joins
+           * land on fractional device pixels and round independently. There is
+           * no value that closes it, because the error changes with zoom and
+           * display.
            *
-           * scaleY is also what makes this grow UPWARD out of the bar rather
-           * than downward out of the card: with `transform-origin: bottom`
-           * the fixed end is the one nearest the bar, which is the source. */
+           * So it does not try to meet the edges: it goes THROUGH them. One
+           * pixel up into the card's own border, three down into the bar. The
+           * bar is later in the DOM at the same z-index, so it paints over
+           * that lower overlap and the line terminates exactly at its edge —
+           * clipped by the thing it is connecting to, which cannot leave a
+           * gap no matter how the fractions fall.
+           *
+           * ── TRANSFORM IS ONE INLINE STRING ────────────────────────────
+           *
+           * `-translate-x-1/2` and `scale-y-*` are both Tailwind transform
+           * utilities, composed through shared CSS variables into a single
+           * declaration. Two classes sharing one declaration means anything
+           * that fails to define one variable takes the WHOLE transform with
+           * it, centring included. One explicit string cannot half-apply.
+           *
+           * `transform-origin: bottom` makes it grow UPWARD out of the bar
+           * rather than downward out of the card — the bar is the source.
+           *
+           * The curve overshoots slightly and settles, which is the same idea
+           * as xeno-elements' goo pill: its own note says a rectangle that
+           * only slides reads as a scrollbar, and one that deforms reads as
+           * something with mass. (That component squashes a travelling pill;
+           * there is no reusable filter there, so this borrows the principle,
+           * not the code.)
+           */
+          top: 'calc(100% - 1px)',
+          height: 'calc(0.75rem + 4px)',
           transform: `translateX(-50%) scaleY(${selected ? 1 : 0})`,
           transformOrigin: 'bottom center',
           transitionProperty: 'transform',
-          transitionTimingFunction: 'cubic-bezier(0.3, 0, 0.2, 1)',
+          transitionTimingFunction: 'cubic-bezier(0.34, 0.6, 0.2, 1.28)',
           transitionDelay: `${checkDelay}ms`,
           transitionDuration: `${CONNECT_MS}ms`,
         }}
-        className="pointer-events-none absolute left-1/2 top-full h-3 w-[2px] bg-white/70"
+        className="pointer-events-none absolute left-1/2 w-[2px] bg-white/70"
       />
 
       {/* ── Header plate ── */}
