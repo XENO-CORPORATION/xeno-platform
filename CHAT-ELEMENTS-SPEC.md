@@ -361,6 +361,20 @@ empty.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
 
+### Are the numbers stable? — three full runs, diffed
+
+Finding one flaky number is a reason to distrust the rest, not to assume they are fine. The whole
+suite was run three times and the verdict lines diffed: **byte-identical on all eleven, every run.**
+
+So the asserted numbers are stable, and the one unstable number — the tab-stop count — is a printed
+DIAGNOSTIC that nothing asserts on. That distinction is the useful part: a probe can print something
+noisy without the gate becoming noisy, and here it does, by accident rather than design.
+
+**It takes about four minutes** (237–246s measured), because it drives a real browser eleven times.
+§0 asks for it every iteration and that is a real cost, so the runner prints its own elapsed time.
+`npm run test:chat` is the seconds-long gate; this is the slow one. Knowing which is which is what
+stops someone quietly dropping the slow one.
+
 ### Which probes need a theme loop, and which do not — measured, not assumed
 
 Three probes stayed single-theme on the reasoning that metrics, target size and tab order are not

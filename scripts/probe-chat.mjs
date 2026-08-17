@@ -97,6 +97,11 @@ const reachable = (url) => {
 
 const up = { chat: reachable('http://localhost:5183/'), preview: reachable('http://localhost:5223/'), none: true };
 
+/* Report the wall clock. This suite drives a real browser eleven times and takes about four minutes,
+   which is long enough that §0 asking for it every iteration is a genuine cost — better to see that
+   number than be surprised by it. `npm run test:chat` is the seconds-long gate; this is the slow one,
+   and knowing which is which is what stops someone quietly dropping it. */
+const startedAt = Date.now();
 const results = [];
 for (const probe of PROBES) {
   if (!up[probe.needs]) {
@@ -131,7 +136,10 @@ for (const r of results) {
 
 const failed = results.filter((r) => r.state === 'FAIL');
 const skipped = results.filter((r) => r.state === 'skip');
-console.log(`\n${results.length - failed.length - skipped.length}/${results.length} green, ${failed.length} failing, ${skipped.length} skipped.`);
+console.log(
+  `\n${results.length - failed.length - skipped.length}/${results.length} green, ${failed.length} failing, ` +
+    `${skipped.length} skipped — ${Math.round((Date.now() - startedAt) / 1000)}s.`,
+);
 
 if (skipped.length) {
   console.error('\nSkipped is not passed. Start what they need and run again:');
