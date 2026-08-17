@@ -429,6 +429,22 @@ The walk now samples DURING the action, at 350/700/1400ms. `Spinner` 0 → 1, `T
 **All four zeros are closed.** Every adopted component in this chat has now been rendered at least
 once for a probe, which was not true of any of them a few iterations ago.
 
+### A path whose first step is missing looks exactly like an unreachable surface
+
+The chat settings MODAL — distinct from the settings PAGE, two surfaces whose controls both say
+"Settings" — holds `ChatSkillsWorkspace`, the densest single surface in this chat at 8 Buttons.
+
+Adding `['Chat settings']` as a path bought **zero**, which read as the modal having nothing new. The
+control does not exist in the DOM at rest: it is a `MenuItem` inside `More chat options`. **A path
+whose first step is absent fails silently and identically to a surface that is genuinely unreachable
+— both move the total by nothing.**
+
+`['More chat options', 'Settings', 'Skills']` bought **seventeen**: 104 → 121, 41% → 47%, the largest
+single jump in this programme. `MenuItem` 19 → 29 and `TextInput` 2 → 4 alongside.
+
+The lesson is the same shape as §5.4c and worth stating as its sibling: **check the first step
+resolves before concluding anything from a path that bought nothing.**
+
 ### A flat walk cannot reach a section inside a page
 
 `Switch` — the one real switch in the chat, "Generate memory from chats" — read 0, and the walk was
@@ -563,7 +579,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-104 rendered across the three routes — 41%.**
+121 rendered across the three routes — 47%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
@@ -670,7 +686,7 @@ PERCENTAGE — add twenty Buttons to the source and it falls with nothing broken
 the count, which only falls when a surface the walk used to reach stops being reachable. That is
 exactly a regression and nothing else.
 
-Floor 98 against 104 measured: enough headroom that a transient miss does not cry wolf, tight enough
+Floor 115 against 121 measured: enough headroom that a transient miss does not cry wolf, tight enough
 that losing a whole page shows. **The floor rises with the baseline** — a floor left behind drifts
 into meaninglessness, still green while a third of the walk has quietly stopped working. The runner
 gained a `{ min: n }` form for it, and both directions were verified before it was trusted: green at

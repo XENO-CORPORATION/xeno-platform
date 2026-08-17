@@ -227,6 +227,18 @@ for (const seg of ['llm', 'search', 'voice']) {
        it comes with whatever opens that. Reading where a component is mounted, rather than guessing a
        trigger for it, is what turned the last aggregate number into four points. */
     ['Share conversation'],
+    /*
+     * The chat settings MODAL, which is not the settings PAGE — two surfaces, two controls, both
+     * saying "Settings". `ChatSkillsWorkspace` (8 Buttons, the densest single surface in this chat)
+     * is a section of the modal.
+     *
+     * The path runs through `More chat options`, because the modal's own `Chat settings` control does
+     * not exist in the DOM at rest — it is a `MenuItem` inside that menu. A path whose first step is
+     * absent fails exactly like a surface that is unreachable, and looks the same in the total: this
+     * one bought zero until the menu was opened first.
+     */
+    ['More chat options'], ['More chat options', 'Settings'],
+    ['More chat options', 'Settings', 'Skills'], ['More chat options', 'Settings', 'Personas'],
     ['Projects'], ['Projects', PROJECT.name],
     /* `Edit code` puts a code block into edit mode, which is the ONLY place `Textarea` renders on
        these routes — the other three sit in dialogs. The demo thread supplies the code blocks. */
