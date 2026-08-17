@@ -16,13 +16,23 @@ repo disagree, the repo is right and this document is stale.
 cd C:/code-dev/xeno-platform
 node scripts/check-undefined-names.mjs src/components/playground/Chat   # must be clean before starting
 npm run test:chat                                                       # must be green before starting
+npm run probe:chat                                                      # must be green before starting
 git status --short                                                      # must be clean before starting
 ```
 
-`test:chat` runs all ten `test-chat-*.mjs` and knows which are already red and why, so a failure it
-reports is a failure this iteration caused. It went in after six of the ten were found failing at
-once — four of them from conversions that dropped a `data-` hook or moved a `<style>` block out from
-under a test that read it. **Green before you start, green before you commit.**
+`test:chat` runs all ten `test-chat-*.mjs`. Its KNOWN_RED list is **empty** — every test passes — so
+anything it reports is yours. It went in after six of the ten were found failing at once, four of
+them from conversions that dropped a `data-` hook or moved a `<style>` block out from under a test
+that read it. The other three were red for over a month because they sliced the source at a marker a
+later pass deleted, so they failed on their FIRST LINE and none of their assertions had run since.
+**A test that fails early stops describing anything** — that is why the list is empty rather than
+tolerated.
+
+`probe:chat` runs the ten browser probes and checks each one's number against a recorded expectation.
+Same rule, and one more: **if you change what a probe measures, update its `expect` in the same
+commit**. An expectation edited later than the change it describes is how a baseline rots.
+
+**Green before you start, green before you commit.**
 
 If `git status` shows changes you did not make, **stop and report**. Someone else works in this repo.
 
@@ -198,11 +208,18 @@ ready for that call site: stop and add the door, do not convert around it.**
 
 **5.4 Dead imports.** §4.
 
-**5.4b A `{/* … */}` comment as the first thing inside `{cond && ( … )}` is a syntax error.** It has
-happened twice in this loop. `{cond && ( {/* why */} <Button/> )}` is two expressions where one is
-allowed, and esbuild says `Expected ")" but found ...`. Put the comment ABOVE the `{cond &&` line, or
-above the `return (`. Same for a comment as the sole child of a `return (`. The build gate catches
-it, which is why the build gate runs before the commit and not after.
+**5.4b Three ways a COMMENT breaks the build, all of them walked into more than once.** The build
+gate catches all three, which is why it runs before the commit and not after.
+
+1. **`{/* … */}` as the first thing inside `{cond && ( … )}`.** `{cond && ( {/* why */} <Button/> )}`
+   is two expressions where one is allowed. Put a BARE `/* … */` above the `{cond &&` line or above
+   the `return (`. Same for a comment as the sole child of a `return (`.
+2. **A backtick inside the `<style>{` … `}</style>` literal.** Quoting a token or a filename in
+   backticks ends the template and takes the whole route down with a 500 — and a probe pointed at it
+   just times out looking for a root that never mounts, which tells you nothing. Write those comments
+   without backticks; the ones already in that block say so.
+3. **`{/* … */}` in a JSX ATTRIBUTE position.** `<button data-x {/* why */} onClick=…>` parses as a
+   spread. Put it above the element, or fold it into the prop's doc comment.
 
 **5.5 A hook dropped on a grep that only looked at `src/`.** Twice now: the carousel's
 `data-update-carousel-dismiss` / `data-update-nav-morph`, and the composer's
@@ -285,6 +302,33 @@ empty.
 ```js
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
+
+### The probe is the thing most likely to be wrong
+
+Five probes in this loop reported a defect that did not exist, and one had two bugs at once. That is
+a higher failure rate than the code they were measuring. **Check a probe's own logic before believing
+its answer**, and when its number moves, suspect the probe first.
+
+The five, because they rhyme and the next one will too:
+
+| It reported | It was actually |
+|---|---|
+| 10 unreachable click targets | 1 disclosure header; children INHERIT `cursor: pointer`, so its title, count line and favicon stack each counted |
+| another unreachable target | a drag container whose real click target is a focusable child already in the tab order |
+| a control 2px off its size token | a reveal at `scale(0.92)`; `getBoundingClientRect` includes transforms, `offsetHeight` does not |
+| a `mono` field failing to draw mono | a font stack authored `'Inter'` and computed `"Inter"` — same list, different quoting |
+| every dead normalisation rule as live | the class always appears once, inside the SELECTOR naming it; the check compared against zero |
+
+The shape is always the same: **a probe reads what is rendered, and what is rendered contains intent
+and accident in the same value.** Narrow the question until the two cannot both satisfy it. And
+normalise before comparing anything — authored hex against computed `rgb()`, single-quoted font
+stacks against double-quoted computed ones, a token read with `getPropertyValue` against the same
+token resolved on an element.
+
+One more, since it cost an hour: **a rule can be in the built bundle, match the element, and still
+not apply.** The dev server on :5183 serves a stale copy of the library CSS, so a NEW library rule
+has to be verified against the elements preview on :5223. `matches()` returning true while the rule
+is absent from the page's CSSOM is what that looks like.
 
 ### Seeing it
 
