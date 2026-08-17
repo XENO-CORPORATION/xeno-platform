@@ -402,6 +402,23 @@ mount, so a seeded `'true'` reads back `'false'` — the page is opened by click
 that silently does nothing is worse than no seed**, because the probe still reports a number and the
 number now implies coverage it did not buy. Check the value survives the mount before trusting it.
 
+**Three ways a seed goes quietly empty**, all met here, and worth checking in this order before
+writing one:
+
+| | |
+|---|---|
+| the app **overwrites** the key on mount | `xeno-chat-projects-page-open` — read it back after load |
+| the value is **filtered** on read | `recentFiles_*` drops anything older than seven days, so a baked-in timestamp ages out; compute `Date.now()` inside the page |
+| the key is **already set** to what you wanted | `xeno_chat_mock` and `xeno_chat_demo` are ON by default in dev — seeding them buys exactly nothing, and they are what produces the demo thread the probes have been measuring all along |
+
+The last one is worth dwelling on: two keys that looked like the highest-leverage things to feed were
+already feeding everything the probes see. **A seed's value is the delta it buys, and the delta can be
+zero for a key that works perfectly.**
+
+`recentFiles_default` seeds cleanly and mounts 2–4 more components, but its panel opens from a hover
+tool rail that a synthetic click does not reach, so its contents stay unmeasured. Recorded rather
+than left as an open question someone re-derives.
+
 That number is a FLOOR and it conflates three things, which is why it is not a gate:
 
 1. **unreachable without data** — projects, artifacts, scheduled tasks, a share link, attachments,

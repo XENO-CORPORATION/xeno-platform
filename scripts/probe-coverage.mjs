@@ -69,6 +69,14 @@ for (const seg of ['llm', 'search', 'voice']) {
      coverage without buying any. The page is opened by clicking, like a user would. */
   await p.evaluateOnNewDocument((proj) => {
     localStorage.setItem('chatProjects_playground', JSON.stringify([proj]));
+    /* Recent files are filtered by `lastUsed > sevenDaysAgo`, so the timestamp has to be computed
+       HERE rather than baked into a constant — a fixed date would age out and the seed would go
+       silently empty, which is the same trap as a key the app overwrites on mount. */
+    const now = Date.now();
+    localStorage.setItem('recentFiles_default', JSON.stringify([
+      { id: 'rf1', name: 'seeded-spec.txt', type: 'text/plain', size: 2048, lastUsed: now - 1000 },
+      { id: 'rf2', name: 'seeded-notes.md', type: 'text/markdown', size: 900, lastUsed: now - 2000 },
+    ]));
   }, PROJECT);
   await p.goto(`http://localhost:5183/overview/chat/${seg}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await p.waitForSelector('.chat-themed', { timeout: 60000 });
