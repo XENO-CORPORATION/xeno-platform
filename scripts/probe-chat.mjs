@@ -1,5 +1,5 @@
 /*
- * One runner for the ten standing probes, in the shape of `test-chat.mjs`.
+ * One runner for the eleven standing probes, in the shape of `test-chat.mjs`.
  *
  * Ten scripts that each have to be run by hand and read by eye is a check nobody runs. Worse, each
  * prints a different shape of answer — a count, a table, a list of OK/NO lines — so "are they still
@@ -65,6 +65,11 @@ const PROBES = [
     file: 'probe-small-targets.mjs', needs: 'chat',
     verdict: /(\d+) of (\d+) fail the target-size minimum outright/,
     expect: ['0', null], describe: (m) => `${m[1]} of ${m[2]} fail WCAG 2.2 target size`,
+  },
+  {
+    file: 'probe-light-ink.mjs', needs: 'chat',
+    verdict: /light-canvas near-white ink, worst route: (\d+)/,
+    expect: ['1'], describe: (m) => `${m[1]} near-white ink on a light canvas (the caption over a dark image)`,
   },
   {
     file: 'probe-voicebright.mjs', needs: 'chat',

@@ -307,7 +307,7 @@ than assuming the code is wrong.
 npm run probe:chat
 ```
 
-Ten probes, one command, one verdict line each. It grew because ten scripts that each had to be run
+Eleven probes, one command, one verdict line each. It grew because ten scripts that each had to be run
 by hand and read by eye is a check nobody runs — and each printed a different shape of answer, so
 "are they still green" was a question only someone who had read all ten could answer.
 
@@ -334,7 +334,7 @@ scratchpad/audit3.mjs      67 hosts, 67 moving, 0 STILL
 scratchpad/menusweep.mjs   page errors: none
 scratchpad/final.mjs       lucideLeft: []
 scratchpad/mixrow.mjs      every row adopted, h 32, r 6px, font 14
-scratchpad/lightchat.mjs   no near-white ink except the caption on the dark image
+scripts/probe-light-ink.mjs     near-white ink on a LIGHT canvas, all three routes + dim
 scratchpad/custom.mjs      chat and search identical at 15/30/65/85 %
 scripts/probe-voicebright.mjs   voice AND search identical to chat at dark/dim/light/30/65 %
 ```
