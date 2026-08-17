@@ -487,9 +487,17 @@ const SuiteCard: React.FC<{
            * there is no reusable filter there, so this borrows the principle,
            * not the code.)
            */
-          top: '100%',
-          // Exactly the `mt-3` gap between the grid and the bar — no more.
-          height: '0.75rem',
+          /* Starts ONE PIXEL below the card's outer edge, and the height
+             loses that same pixel so the bottom still lands exactly on the
+             bar's top edge.
+   
+             Both halves are required. Shifting down without shortening would
+             push the bottom 1px into the bar — reintroducing at that end
+             precisely the breach just removed from this one, and it would not
+             be hidden: the bar's fill is translucent, so nothing occludes an
+             overlap here. */
+          top: 'calc(100% + 1px)',
+          height: 'calc(0.75rem - 1px)',
           transform: `translateX(-50%) scaleY(${selected ? 1 : 0})`,
           transformOrigin: 'bottom center',
           transitionProperty: 'transform',
