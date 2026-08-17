@@ -47,13 +47,50 @@ const SELECTOR = {
   ToggleButton: '.xeno-toggle',
 };
 
+/*
+ * SEEDED, because an unseeded count measures the mock rather than the chat. `chatProjects` reads from
+ * localStorage, and `files` and `scheduledTasks` hang off the project object, so one write reaches
+ * the projects page, the project file list and the scheduled cards. The projects page is opened by
+ * its own persisted flag rather than by clicking.
+ */
+const PROJECT = {
+  id: 'coverage-project', name: 'Coverage project', description: 'seeded', createdAt: 1755000000000,
+  updatedAt: 1755000000000, instructions: 'Think step by step.',
+  files: [{ id: 'f1', name: 'spec.txt', type: 'text/plain', size: 2048, addedAt: 1755000000000, encoding: 'text', content: 'seeded' }],
+  scheduledTasks: [{ id: 't1', title: 'Weekly check-in', cadence: 'Every Monday', mark: 'M' }],
+};
+
 const b = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'], defaultViewport: { width: 1400, height: 900 } });
 const seen = Object.fromEntries(COMPONENTS.map((c) => [c, 0]));
 for (const seg of ['llm', 'search', 'voice']) {
   const p = await b.newPage();
+  /* Only the project list is seeded. `xeno-chat-projects-page-open` is NOT feedable — the app writes
+     it on mount and a seeded 'true' reads back as 'false', so setting it would have looked like
+     coverage without buying any. The page is opened by clicking, like a user would. */
+  await p.evaluateOnNewDocument((proj) => {
+    localStorage.setItem('chatProjects_playground', JSON.stringify([proj]));
+  }, PROJECT);
   await p.goto(`http://localhost:5183/overview/chat/${seg}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await p.waitForSelector('.chat-themed', { timeout: 60000 });
   await new Promise((r) => setTimeout(r, 4200));
+
+  /* Walk into the project surfaces where they exist. Synthetic clicks, so `pointer-events` does not
+     apply — see the note in `probe-project-settings.mjs` about matching the check to the method. */
+  for (const label of ['Projects', PROJECT.name]) {
+    await p.evaluate((x) => {
+      const el = [...document.querySelectorAll('button,[role="button"]')].find((e) =>
+        ((e.getAttribute('aria-label') || e.textContent || '').trim().replace(/\s+/g, ' ')).includes(x),
+      );
+      if (el && getComputedStyle(el).visibility !== 'hidden') { el.scrollIntoView({ block: 'center' }); el.click(); }
+    }, label);
+    await new Promise((r) => setTimeout(r, 1300));
+    const counts = await p.evaluate((sel) => {
+      const o = {};
+      for (const [n, s] of Object.entries(sel)) o[n] = document.querySelectorAll(s).length;
+      return o;
+    }, SELECTOR);
+    for (const c of COMPONENTS) seen[c] = Math.max(seen[c], counts[c]);
+  }
   const counts = await p.evaluate((sel) => {
     const out = {};
     for (const [name, s] of Object.entries(sel)) out[name] = document.querySelectorAll(s).length;

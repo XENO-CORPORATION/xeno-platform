@@ -21,6 +21,11 @@ import { createRequire } from 'node:module';
 const req = createRequire('C:/code-dev/xeno-platform/package.json');
 const puppeteer = (await import(pathToFileURL(req.resolve('puppeteer')).href)).default;
 
+/*
+ * A FULLY POPULATED project, not a bare one. `files` and `scheduledTasks` hang off the project object
+ * itself, so one seed reaches three surfaces the mock otherwise has no data for — the settings
+ * dialog, the project file list and the scheduled-task cards — without a single extra click.
+ */
 const PROJECT = {
   id: 'probe-project',
   name: 'Probe project',
@@ -28,6 +33,13 @@ const PROJECT = {
   createdAt: 1755000000000,
   updatedAt: 1755000000000,
   instructions: 'Think step by step.',
+  files: [
+    { id: 'probe-file-1', name: 'summariser-spec.txt', type: 'text/plain', size: 2048, addedAt: 1755000000000, encoding: 'text', content: 'seeded by a probe' },
+    { id: 'probe-file-2', name: 'notes.md', type: 'text/markdown', size: 512, addedAt: 1755000000000, encoding: 'text', content: 'seeded by a probe' },
+  ],
+  scheduledTasks: [
+    { id: 'probe-task-1', title: 'Weekly condition check-in', cadence: 'Every Monday', mark: 'M' },
+  ],
 };
 
 const b = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'], defaultViewport: { width: 1400, height: 900 } });

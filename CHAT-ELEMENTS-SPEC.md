@@ -389,9 +389,18 @@ Two things it cost, both worth keeping:
 
 ### How much do the probes actually see? — a quarter
 
-`npm run probe:chat` reporting 11/11 green is easy to read as "the chat is verified". It is not, and
+`npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-60 rendered across the three routes — 24%.**
+68 rendered across the three routes — 27%.**
+
+It was 24% before the project seed. Seeding `chatProjects` from localStorage and walking into the
+projects page buys **three points**, which is a fair measure of how much of the blind spot one
+data-dependent branch accounts for: not much, individually. There are five more.
+
+One key looked feedable and is not. `xeno-chat-projects-page-open` persists, but the app WRITES it on
+mount, so a seeded `'true'` reads back `'false'` — the page is opened by clicking instead. **A seed
+that silently does nothing is worse than no seed**, because the probe still reports a number and the
+number now implies coverage it did not buy. Check the value survives the mount before trusting it.
 
 That number is a FLOOR and it conflates three things, which is why it is not a gate:
 
