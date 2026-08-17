@@ -75,6 +75,31 @@ const CFG = {
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
+/**
+ * A rounded rectangle as a PATH, hand-built rather than via `ctx.roundRect`.
+ *
+ * roundRect is Chrome 99+ / Safari 16.4+, and this one is not decorative — it
+ * cuts the hole the bar shows through. On an engine without it the whole
+ * screen would go flat black over the bar, which is a far worse failure than
+ * square particle corners. Arcs are universally supported.
+ */
+function roundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number,
+) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.arcTo(x + w, y, x + w, y + rr, rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.arcTo(x + w, y + h, x + w - rr, y + h, rr);
+  ctx.lineTo(x + rr, y + h);
+  ctx.arcTo(x, y + h, x, y + h - rr, rr);
+  ctx.lineTo(x, y + rr);
+  ctx.arcTo(x, y, x + rr, y, rr);
+  ctx.closePath();
+}
+
 export const EdgeParticles: React.FC<{
   active: boolean;
   originRef: React.RefObject<HTMLElement | null>;
@@ -198,36 +223,62 @@ export const EdgeParticles: React.FC<{
 
       ctx.clearRect(0, 0, w, h);
 
-      /* Punch the protected regions OUT of the drawable area.
+      /* ── The scrim is painted HERE, not by a sibling div ──────────────────
        *
-       * 🔴 Without this the bar's top edge fires straight into the suite cards
-       * sitting above it: particles crossed their borders and ran over the
-       * artwork, so the cards' strokes looked broken and the two elements
-       * appeared joined by streaks. An emitter cannot solve that by aiming —
-       * "up" is where the cards are, and refusing to emit upward would leave
-       * the bar shedding from three sides.
+       * 🔴 It used to be a `bg-black/72` div inside the same portal. The
+       * portal is a child of <body>, so it paints over the ENTIRE app — the
+       * bar included. The bar was being darkened along with everything it was
+       * supposed to stand out from, and the particles were painting across its
+       * border, which is the "breaches the border lines" symptom. Raising the
+       * bar's z-index cannot fix that: it lives inside `main`, and no
+       * z-index inside a stacking context can lift an element above a sibling
+       * of that context's ROOT.
        *
-       * So it is a CLIP, not an aim: the even-odd rule with a full-viewport
-       * rect plus each excluded rect leaves everything outside those regions
-       * paintable and everything inside them untouched. Particles fly toward
-       * the cards and cleanly disappear at the boundary, which reads as them
-       * passing behind — and no stroke is ever crossed.
-       *
-       * Re-measured each frame because the cards move: the entrance animation
-       * translates them, and a stale rect would clip the wrong rectangle for
-       * the whole first second. */
+       * Painting the scrim on this canvas makes the hole possible. Even-odd
+       * with a full-viewport rect plus the bar's rect fills everything EXCEPT
+       * the bar, so the bar keeps its own colours and its own border, untouched
+       * by anything above it.
+       * ─────────────────────────────────────────────────────────────────── */
+      const barRect = originRef.current?.getBoundingClientRect() ?? null;
+
       ctx.save();
-      if (excludeRefs?.length) {
-        ctx.beginPath();
-        ctx.rect(0, 0, w, h);
-        for (const r of excludeRefs) {
-          const b = r.current?.getBoundingClientRect();
-          // 1px of bleed so a particle never lands exactly on the border and
-          // leaves a half-pixel seam along the card edge.
-          if (b) ctx.rect(b.left - 1, b.top - 1, b.width + 2, b.height + 2);
-        }
-        ctx.clip('evenodd');
+      ctx.beginPath();
+      ctx.rect(0, 0, w, h);
+      if (barRect) {
+        // Radius-matched inset so the corners of the hole follow the bar's own
+        // 12px rounding instead of leaving four dark right-angle nicks.
+        roundedRectPath(ctx, barRect.left, barRect.top, barRect.width, barRect.height, 12);
       }
+      ctx.clip('evenodd');
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+
+      /* ── Particles: excluded from the cards AND from the bar ──────────────
+       *
+       * The cards, because the bar sits below them and its top edge fires
+       * straight into them — particles crossed their strokes and the two
+       * elements appeared joined by streaks. An emitter cannot fix that by
+       * aiming: "up" is where the cards are, and not emitting upward would
+       * leave the bar shedding from three sides.
+       *
+       * The bar, because a particle is BORN on its border and would otherwise
+       * paint over the stroke it just left.
+       *
+       * Both re-measured every frame: the cards move during the entrance
+       * animation, and a stale rect clips the wrong rectangle for a full
+       * second. */
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, w, h);
+      if (barRect) roundedRectPath(ctx, barRect.left, barRect.top, barRect.width, barRect.height, 12);
+      for (const r of excludeRefs || []) {
+        const b = r.current?.getBoundingClientRect();
+        // 1px of bleed so a particle never lands exactly on a border and
+        // leaves a half-pixel seam along the edge.
+        if (b) ctx.rect(b.left - 1, b.top - 1, b.width + 2, b.height + 2);
+      }
+      ctx.clip('evenodd');
 
       ctx.fillStyle = CFG.color;
 

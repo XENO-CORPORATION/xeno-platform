@@ -94,7 +94,6 @@ export const WorkspaceChooser: React.FC<{
   onEverythingHover?: (hovering: boolean) => void;
 }> = ({ value, onChange, onEverythingHover }) => {
   const [barHover, setBarHover] = useState(false);
-  const [barBox, setBarBox] = useState<DOMRect | null>(null);
   // The burst originates from this element's rect, so it needs a real handle.
   const barRef = useRef<HTMLButtonElement | null>(null);
   /* The grid's box is the region particles must not paint over. One rect for
@@ -204,39 +203,17 @@ export const WorkspaceChooser: React.FC<{
           className={`pointer-events-none fixed inset-0 z-[60] transition-opacity ease-out
                       ${burst ? 'opacity-100' : 'opacity-0'}`}
         >
-          {/* SPOTLIGHT, not a flat scrim.
-           *
-           * 🔴 The portal broke the layering this component previously relied
-           * on. The bar was lifted to z-[70] to sit above the overlay, but
-           * z-index only orders siblings within one stacking context — and the
-           * bar is nested inside a TRANSFORMED ancestor while the overlay is
-           * now a child of <body>. Its 70 cannot outrank the portal's 60, so
-           * the scrim was covering the bar as well, dimming the one element
-           * the effect exists to highlight.
-           *
-           * Fixed by inverting the geometry instead of fighting the stacking
-           * order: a transparent element sits exactly over the bar and casts a
-           * 9999px spread shadow, so the darkness fills the viewport and the
-           * bar's own rectangle stays clear. Nothing needs to out-rank
-           * anything.
-           *
-           * Falls back to a flat scrim if the rect was never measured (focus
-           * arriving before layout, say) — a slightly-too-dark bar beats no
-           * dimming at all. */}
-          {barBox ? (
-            <div
-              className="absolute rounded-[12px]"
-              style={{
-                top: barBox.top,
-                left: barBox.left,
-                width: barBox.width,
-                height: barBox.height,
-                boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)',
-              }}
-            />
-          ) : (
-            <div className="absolute inset-0 bg-black/55" />
-          )}
+          {/* The scrim is painted BY the canvas below, with the bar punched
+              out of it — see EdgeParticles.
+    
+              A DOM spotlight (a transparent box over the bar casting a 9999px
+              spread shadow) also solves the stacking problem and was tried
+              here first. The canvas won for one reason: it re-measures the
+              bar EVERY FRAME. A DOM version has to hold the rect in state, and
+              that rect is stale exactly when it matters — during the entrance
+              animation the bar is still moving, and on resize it moves again.
+              Two surfaces would also have to agree on one number; one surface
+              cannot disagree with itself. */}
           <EdgeParticles active={burst} originRef={barRef} excludeRefs={excludeRefs} />
         </div>,
         document.body,
@@ -269,11 +246,11 @@ export const WorkspaceChooser: React.FC<{
         ref={barRef}
         type="button"
         onClick={toggleFrame}
-        onPointerEnter={() => { setBarBox(barRef.current?.getBoundingClientRect() ?? null); setBarHover(true); onEverythingHover?.(true); }}
+        onPointerEnter={() => { setBarHover(true); onEverythingHover?.(true); }}
         onPointerLeave={() => { setBarHover(false); onEverythingHover?.(false); }}
         // Focus mirrors hover so a keyboard user gets the same state. Without
         // it the bar lights up for a mouse and stays dead for a tab key.
-        onFocus={() => { setBarBox(barRef.current?.getBoundingClientRect() ?? null); setBarHover(true); onEverythingHover?.(true); }}
+        onFocus={() => { setBarHover(true); onEverythingHover?.(true); }}
         onBlur={() => { setBarHover(false); onEverythingHover?.(false); }}
         disabled={phase === 'framing' || phase === 'unframing'}
         style={{
@@ -284,8 +261,7 @@ export const WorkspaceChooser: React.FC<{
           // keep four cards black and still light up the bar underneath them.
           ...(framed ? { borderColor: SELECTED.border, background: SELECTED.barBg } : {}),
         }}
-        className={`focus-self group relative mt-3 flex w-full items-center overflow-hidden
-                    ${burst ? 'z-[70]' : 'z-10'}
+        className={`focus-self group relative z-10 mt-3 flex w-full items-center overflow-hidden
                     rounded-[12px] border px-5 py-4 text-left transition-all duration-200 ease-out
                     will-change-transform disabled:cursor-default
                     ${framed
