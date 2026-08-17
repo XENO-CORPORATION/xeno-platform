@@ -449,10 +449,28 @@ const SuiteCard: React.FC<{
           from a point under the bar. */}
       <span
         aria-hidden
-        style={{ transitionDelay: `${checkDelay}ms`, transitionDuration: `${CONNECT_MS}ms` }}
-        className={`pointer-events-none absolute left-1/2 top-full h-3 w-px origin-bottom
-                    -translate-x-1/2 bg-white/45 transition-transform ease-out
-                    ${selected ? 'scale-y-100' : 'scale-y-0'}`}
+        style={{
+          /* The transform is INLINE, not built from Tailwind utilities.
+           *
+           * `-translate-x-1/2` and `scale-y-*` are both transform utilities,
+           * and Tailwind composes them through shared CSS variables — one
+           * `transform:` line referencing --tw-translate-x, --tw-scale-y and
+           * four others. That works, but it means two classes silently share
+           * one declaration, and anything that resets or fails to define one
+           * variable takes the WHOLE transform with it, including the
+           * centring. One explicit string cannot half-apply.
+           *
+           * scaleY is also what makes this grow UPWARD out of the bar rather
+           * than downward out of the card: with `transform-origin: bottom`
+           * the fixed end is the one nearest the bar, which is the source. */
+          transform: `translateX(-50%) scaleY(${selected ? 1 : 0})`,
+          transformOrigin: 'bottom center',
+          transitionProperty: 'transform',
+          transitionTimingFunction: 'cubic-bezier(0.3, 0, 0.2, 1)',
+          transitionDelay: `${checkDelay}ms`,
+          transitionDuration: `${CONNECT_MS}ms`,
+        }}
+        className="pointer-events-none absolute left-1/2 top-full h-3 w-[2px] bg-white/70"
       />
 
       {/* ── Header plate ── */}
