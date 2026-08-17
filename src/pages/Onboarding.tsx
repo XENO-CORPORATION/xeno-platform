@@ -284,8 +284,15 @@ const Onboarding: React.FC = () => {
      * place to GO. Recommending a product that cannot be opened is the one
      * case where showing scope becomes a dead end. `.filter(Boolean)` also
      * drops non-catalog extras like Forum, which have no product page. */
+    /* `.filter(Boolean)` does NOT narrow the type — TypeScript still sees
+     * (Product | undefined)[], which is why every downstream read of `p` was
+     * an error. A type predicate is the narrowing form, and it is not
+     * cosmetic: without it the compiler cannot warn when a genuinely missing
+     * product reaches the render. */
     const pool = suite
-      ? availableForSuite(suite).map((p) => PRODUCTS.find((c) => c.slug === p.slug)).filter(Boolean)
+      ? availableForSuite(suite)
+          .map((p) => PRODUCTS.find((c) => c.slug === p.slug))
+          .filter((p): p is (typeof PRODUCTS)[number] => Boolean(p))
       : PRODUCTS.filter((p) => p.status !== 'coming-soon');
     return [...pool].sort((a, b) => rank(a.status) - rank(b.status)).slice(0, 5);
   }, [answers.workspace]);

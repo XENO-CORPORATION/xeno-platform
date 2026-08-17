@@ -3,7 +3,6 @@ import { Palette, FileText, Terminal, MessageSquare, Check, Sparkles } from 'luc
 import {
   SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts, type Suite,
 } from '../../lib/workspaceSuites';
-import XenoGlyph from '../auth/XenoGlyph';
 import SuiteVisual from './SuiteVisual';
 import { productIcon } from '../../lib/productIcons';
 import { isUnreleased } from '../../lib/releaseStatus';
@@ -40,7 +39,7 @@ const SUITE_ICON: Record<string, React.ReactNode> = {
   connect:   <MessageSquare className="h-[18px] w-[18px]" />,
 };
 
-type Phase = 'idle' | 'absorbing' | 'unified';
+type Phase = 'idle' | 'framing' | 'framed';
 
 const ABSORB_MS = 620;
 
@@ -52,254 +51,159 @@ export const WorkspaceChooser: React.FC<{
   const gridRef = useRef<HTMLDivElement | null>(null);
   const barRef = useRef<HTMLButtonElement | null>(null);
   const cardRefs = useRef<Record<string, HTMLElement | null>>({});
-  const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'unified' : 'idle');
-  const [flight, setFlight] = useState<Record<string, React.CSSProperties>>({});
-  const [shell, setShell] = useState<React.CSSProperties | null>(null);
+  const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'framed' : 'idle');
+  const [frame, setFrame] = useState<React.CSSProperties | null>(null);
 
   const reduced = typeof window !== 'undefined'
     && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   /**
-   * The bar EXPANDS to encompass the grid, and the cards fall into it.
+   * A stroke frame grows out of the bar and closes around the cards.
    *
-   * -- WHY IT IS A FLIP, NOT A HEIGHT ANIMATION -----------------------------
+   * -- WHAT THIS DELIBERATELY IS NOT ----------------------------------------
    *
-   * The obvious implementation animates the shell's top/left/width/height from
-   * the bar's box out to the wrapper's. Those four properties are laid out on
-   * the main thread every frame, so a panel this size janks -- and it janks
-   * worst on the machines least able to hide it.
+   * The previous version replaced the four cards with a single "full XENO
+   * workspace" panel. That was the wrong idea: it DELETED the thing the user
+   * was looking at and put a summary in its place, so choosing everything felt
+   * like losing the grid rather than gaining it.
    *
-   * So the shell is RENDERED at its final size (inset-0 of the wrapper) and
-   * then given the inverse transform that makes it look exactly like the bar.
-   * Releasing that transform to identity plays the expansion on the
-   * compositor: two properties, no layout, and no reflow of what is inside it.
+   * The cards stay exactly where they are. A frame expands BEHIND them until
+   * it encloses all four, which is the literal statement being made — these
+   * are all yours, together, as one workspace.
    *
-   * -- WHY IT MEASURES INSTEAD OF HARDCODING --------------------------------
+   * -- FLIP, FOR THE SAME REASON AS EVERY OTHER MOTION HERE ------------------
    *
-   * The bar's offset and the grid's height both change with the column count,
-   * the viewport and the number of suites. A canned keyframe is correct at one
-   * breakpoint and wrong at every other, and this is the first screen a new
-   * account sees on whatever machine they happen to have.
+   * The frame is rendered at its FINAL size and inverse-transformed onto the
+   * bar's box; releasing that to identity plays the growth on the compositor.
+   * Animating top/left/width/height instead would lay out every frame, and it
+   * janks worst on the machines least able to hide it.
+   *
+   * `border` scales with the element, so a 2px stroke inverse-scaled onto the
+   * bar would start ~14x too thin vertically and visibly thicken as it grows.
+   * The stroke is drawn with an inset box-shadow instead, which does not
+   * scale, so the line keeps one weight across the whole animation.
    */
-  const absorb = useCallback(() => {
+  const expandFrame = useCallback(() => {
     if (phase !== 'idle') return;
-
-    if (reduced) { setPhase('unified'); onChange(EVERYTHING_ID); return; }
 
     const wrap = wrapRef.current;
     const bar = barRef.current;
-    if (!wrap || !bar) { setPhase('unified'); onChange(EVERYTHING_ID); return; }
+    if (reduced || !wrap || !bar) { setPhase('framed'); onChange(EVERYTHING_ID); return; }
 
-    // Measure BEFORE mutating anything. Reading a box after a style change that
-    // triggers layout returns post-change geometry, and the animation would
-    // then start from the wrong place.
+    // Measure BEFORE mutating anything: reading a box after a style change that
+    // triggers layout returns post-change geometry, and the frame would then
+    // start from the wrong place.
     const w = wrap.getBoundingClientRect();
     const b = bar.getBoundingClientRect();
 
-    // Inverse transform: shrink the full-size shell down onto the bar's box.
     const sx = b.width / w.width;
     const sy = b.height / w.height;
     const tx = (b.left + b.width / 2) - (w.left + w.width / 2);
     const ty = (b.top + b.height / 2) - (w.top + w.height / 2);
 
-    // Cards are pulled toward the BAR, not the grid centre. They are being
-    // eaten by the thing below them, and travelling to a point they can see is
-    // what makes this read as absorption rather than two unrelated effects.
-    const bx = b.left + b.width / 2;
-    const by = b.top + b.height / 2;
-    const next: Record<string, React.CSSProperties> = {};
-    for (const suite of SUITES) {
-      const el = cardRefs.current[suite.id];
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      const dx = bx - (r.left + r.width / 2);
-      const dy = by - (r.top + r.height / 2);
-      next[suite.id] = {
-        transform: `translate(${dx}px, ${dy}px) scale(0.16)`,
-        opacity: 0,
-        // Outer cards start first, so the row collapses inward toward the bar
-        // instead of four things moving in lockstep.
-        transitionDelay: `${Math.max(0, 70 - Math.abs(dx) / 12)}ms`,
-      };
-    }
-
-    setFlight(next);
-
-    // Frame 1: shell sits exactly on the bar. Frame 2: released to identity.
-    // Both must actually paint, or the browser coalesces them into no
-    // animation at all -- a single rAF is the classic version of this bug.
-    setShell({
-      transform: `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`,
-      transition: 'none',
-    });
-    setPhase('absorbing');
+    // Frame 1 sits on the bar, frame 2 releases. BOTH must paint — a single
+    // rAF gets coalesced and the transition never runs, which is the classic
+    // silent version of this bug.
+    setFrame({ transform: `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`, transition: 'none', opacity: 1 });
+    setPhase('framing');
 
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      setShell({
+      setFrame({
         transform: 'translate(0px, 0px) scale(1, 1)',
-        transition: `transform ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.15, 1)`,
+        opacity: 1,
+        transition: `transform ${ABSORB_MS}ms cubic-bezier(0.34, 0.02, 0.16, 1)`,
       });
     }));
 
-    window.setTimeout(() => {
-      setPhase('unified');
-      setShell(null);
-      onChange(EVERYTHING_ID);
-    }, ABSORB_MS + 60);
+    window.setTimeout(() => { setPhase('framed'); onChange(EVERYTHING_ID); }, ABSORB_MS + 40);
   }, [phase, reduced, onChange]);
 
-  const reopen = () => { setPhase('idle'); setFlight({}); };
-
-  /* ── The assembled state ───────────────────────────────────────────────── */
-  if (phase === 'unified') {
-    const all = allAvailableProducts();
-    return (
-      <div className="xeno-scale-in">
-        <div
-          className="relative overflow-hidden rounded-[16px] border border-white/30 p-7"
-          style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02))',
-            boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.18), 0 30px 70px -28px rgba(0,0,0,0.95)',
-          }}
-        >
-          {/* A single soft bloom behind the mark — the light the pieces
-              collapsed into. Decorative, so it never eats a click. */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{ background: 'radial-gradient(ellipse 45% 60% at 50% 0%, rgba(255,255,255,0.09), transparent 70%)' }}
-          />
-
-          <div className="relative flex items-start gap-4">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[10px] border border-white/25 bg-white/[0.10]">
-              <XenoGlyph className="h-6 w-6 text-white" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[17px] font-semibold text-white">The full XENO workspace</span>
-                <span className="rounded-[5px] border border-white/25 px-2 py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.12em] text-white/80">
-                  Everything
-                </span>
-              </div>
-              <p className="mt-1 text-[13px] text-white/45">
-                Every suite, every app, one workspace. {all.length} products available today.
-              </p>
-            </div>
-            <Check className="mt-1 h-5 w-5 shrink-0 text-white" strokeWidth={2.5} />
-          </div>
-
-          {/* The suites that just collapsed in, listed so the card is a
-              summary of what was chosen rather than an opaque "everything". */}
-          <div className="relative mt-6 grid gap-2.5 sm:grid-cols-4">
-            {SUITES.map((s) => (
-              <div key={s.id} className="rounded-[9px] border border-white/[0.10] bg-white/[0.03] px-3 py-2.5">
-                <span className="flex items-center gap-2 text-[12.5px] font-medium text-white/80">
-                  <span className="text-white/50">{SUITE_ICON[s.id]}</span>
-                  {s.name}
-                </span>
-                <span className="mt-0.5 block text-[11px] tabular-nums text-white/30">
-                  {productsForSuite(s).length} products
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={reopen}
-          className="focus-self mt-4 text-[12.5px] text-white/35 transition-colors hover:text-white/70"
-        >
-          Pick a single workspace instead
-        </button>
-      </div>
-    );
-  }
+  /** Picking one suite retracts the frame — the two answers are exclusive. */
+  const collapseFrame = useCallback(() => {
+    setPhase('idle');
+    setFrame(null);
+  }, []);
 
   /* -- The choice -------------------------------------------------------- */
+  const framed = phase === 'framed' || phase === 'framing';
+
   return (
     <div ref={wrapRef} className="relative">
+      {/* THE FRAME. Behind everything (z-0, cards are z-10) and outside the
+          content box (-inset-3), so it reads as enclosing the grid rather than
+          as another card in it. Pointer-events off: it is a statement, not a
+          control — the bar underneath stays clickable through it. */}
+      {frame && (
+        <div
+          aria-hidden
+          style={{
+            ...frame,
+            transformOrigin: 'center center',
+            // Stroke via inset shadow, not `border`: a border scales with the
+            // transform and would start hairline-thin then thicken visibly.
+            boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.42), 0 24px 60px -30px rgba(0,0,0,0.9)',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008))',
+          }}
+          className="pointer-events-none absolute -inset-3 z-0 rounded-[18px]"
+        />
+      )}
+
       <div
         ref={gridRef}
-        className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4"
-        style={phase === 'absorbing' ? { pointerEvents: 'none' } : undefined}
+        className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4"
       >
         {SUITES.map((suite, i) => (
           <SuiteCard
             key={suite.id}
             suite={suite}
             index={i}
-            selected={value === suite.id}
-            absorbing={phase === 'absorbing'}
-            flightStyle={flight[suite.id]}
-            onSelect={() => onChange(suite.id)}
+            // Inside the frame every suite is included, so they all read as
+            // chosen — the frame is the selection, not four separate ones.
+            selected={framed || value === suite.id}
+            onSelect={() => { collapseFrame(); onChange(suite.id); }}
             registerRef={(el) => { cardRefs.current[suite.id] = el; }}
           />
         ))}
       </div>
 
-      {/* The refusal-to-choose, given equal weight to the grid above it. */}
       <button
         ref={barRef}
         type="button"
-        onClick={absorb}
-        disabled={phase === 'absorbing'}
+        onClick={expandFrame}
+        disabled={phase !== 'idle'}
         style={{ animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: '0.34s', opacity: 0 }}
-        className="focus-self group relative mt-3 flex w-full items-center gap-3.5 overflow-hidden rounded-[12px]
-                   border border-white/[0.14] px-5 py-4 text-left transition-all duration-200 ease-out
-                   will-change-transform hover:-translate-y-[3px] hover:border-white/35
-                   active:translate-y-0 active:scale-[0.995] disabled:cursor-default"
+        className={`focus-self group relative z-10 mt-3 flex w-full items-center gap-3.5 overflow-hidden
+                    rounded-[12px] border px-5 py-4 text-left transition-all duration-200 ease-out
+                    will-change-transform disabled:cursor-default
+                    ${framed
+                      ? 'border-white/40 bg-white/[0.06]'
+                      : 'border-white/[0.14] hover:-translate-y-[3px] hover:border-white/35 active:translate-y-0 active:scale-[0.995]'}`}
       >
         <span
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
           style={{ background: 'radial-gradient(ellipse 60% 140% at 50% 50%, rgba(255,255,255,0.07), transparent 70%)' }}
         />
-        <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border border-white/20 bg-white/[0.07]">
-          <Sparkles className="h-[18px] w-[18px] text-white/85" />
+        <span className={`relative grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border transition-colors duration-200
+                          ${framed ? 'border-white/30 bg-white/[0.14]' : 'border-white/20 bg-white/[0.07]'}`}>
+          {framed
+            ? <Check className="h-[18px] w-[18px] text-white" strokeWidth={2.5} />
+            : <Sparkles className="h-[18px] w-[18px] text-white/85" />}
         </span>
         <span className="relative min-w-0 flex-1">
           <span className="block text-[14px] font-medium text-white">
-            Or take the full XENO experience
+            {framed ? 'The full XENO workspace' : 'Or take the full XENO experience'}
           </span>
           <span className="mt-0.5 block text-[12.5px] text-white/40">
-            Every suite in one workspace &mdash; you can narrow it later.
+            {framed
+              ? 'All four suites, together. Pick a single card to narrow it.'
+              : 'Every suite in one workspace \u2014 you can narrow it later.'}
           </span>
         </span>
         <span className="relative shrink-0 text-[12px] tabular-nums text-white/30">
           {allAvailableProducts().length} products
         </span>
       </button>
-
-      {/* The expanding shell. Rendered at FULL size and inverse-transformed
-          onto the bar, so releasing it to identity plays the growth on the
-          compositor. transformOrigin is centre because the inverse was
-          computed about the centre; any other origin makes it swing. */}
-      {phase === 'absorbing' && shell && (
-        <div
-          aria-hidden
-          style={{
-            ...shell,
-            transformOrigin: 'center center',
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.085), rgba(255,255,255,0.02))',
-            boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.18), 0 30px 70px -28px rgba(0,0,0,0.95)',
-          }}
-          className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-[16px] border border-white/30"
-        >
-          <div
-            className="absolute inset-0"
-            style={{ background: 'radial-gradient(ellipse 45% 60% at 50% 0%, rgba(255,255,255,0.10), transparent 70%)' }}
-          />
-          {/* The mark fades up as the shell arrives, so the panel resolves INTO
-              the XENO card rather than cutting to it. */}
-          <div
-            className="absolute inset-0 grid place-items-center"
-            style={{ animation: `xenoScaleIn ${Math.round(ABSORB_MS * 0.6)}ms ease-out ${Math.round(ABSORB_MS * 0.45)}ms forwards`, opacity: 0 }}
-          >
-            <XenoGlyph className="h-10 w-10 text-white/90" />
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -310,11 +214,9 @@ const SuiteCard: React.FC<{
   suite: Suite;
   index: number;
   selected: boolean;
-  absorbing: boolean;
-  flightStyle?: React.CSSProperties;
   onSelect: () => void;
   registerRef: (el: HTMLElement | null) => void;
-}> = ({ suite, index, selected, absorbing, flightStyle, onSelect, registerRef }) => {
+}> = ({ suite, index, selected, onSelect, registerRef }) => {
   const products = productsForSuite(suite);
 
   /* ── SHELL / PLATE ANATOMY ────────────────────────────────────────────────
@@ -347,9 +249,9 @@ const SuiteCard: React.FC<{
         boxShadow: selected
           ? '0 20px 46px -18px rgba(0,0,0,0.92)'
           : '0 10px 30px -16px rgba(0,0,0,0.8)',
-        ...(absorbing
-          ? { transition: `transform ${ABSORB_MS}ms cubic-bezier(0.55,0,0.35,1), opacity ${ABSORB_MS}ms ease-in`, ...flightStyle }
-          : { animation: 'xenoRise 0.6s cubic-bezier(0.16,1.02,0.3,1) forwards', animationDelay: `${0.06 + index * 0.07}s`, opacity: 0 }),
+        animation: 'xenoRise 0.6s cubic-bezier(0.16,1.02,0.3,1) forwards',
+        animationDelay: `${0.06 + index * 0.07}s`,
+        opacity: 0,
       }}
       /* A portrait MINIMUM, not a fixed height. 500px (a true 9:16 at this
          width) was too much — the tallest card already reaches ~430px on its
@@ -361,9 +263,8 @@ const SuiteCard: React.FC<{
          Only at `lg`, where the row is genuinely four across. */
       className={`focus-self group relative flex flex-col gap-[2px] rounded-[10px] border p-1.5 text-left
                   lg:min-h-[420px]
-                  ${absorbing
-                    ? ''
-                    : 'transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform hover:-translate-y-[5px] active:translate-y-0'}
+                  transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform
+                  hover:-translate-y-[5px] active:translate-y-0
                   ${selected ? 'border-white/40' : 'border-white/[0.07] hover:border-white/[0.22]'}`}
     >
       {/* ── Header plate ── */}

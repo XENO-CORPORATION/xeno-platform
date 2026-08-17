@@ -15,6 +15,30 @@ const AuthContent = () => {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
+  const authApp = getAuthApp(appSlug);
+  const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [isVisible, setIsVisible] = useState(false);
+
+  /* These MUST stay below the useState block above.
+   *
+   * They were originally written at the top of the component, reading
+   * `password` and `activeTab` about ten lines BEFORE those states are
+   * declared. `const` is hoisted but not initialised, so that is a temporal
+   * dead zone error -- ReferenceError: Cannot access 'password' before
+   * initialization -- thrown on EVERY render of the sign-in page.
+   *
+   * It survived because the only "typecheck" available in this worktree was
+   * `npx tsc` resolving to a squatter package that prints a banner and exits
+   * 0, and vite strips types without checking them. The build stayed green
+   * over a page that could not render.
+   */
   /**
    * Password rules, evaluated live.
    *
@@ -33,16 +57,6 @@ const AuthContent = () => {
     { label: 'At least one special character', met: /[^A-Za-z0-9]/.test(password) },
   ];
   const showPasswordRules = activeTab === 'signup' && (passwordFocused || password.length > 0);
-  const authApp = getAuthApp(appSlug);
-  const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [isVisible, setIsVisible] = useState(false);
   const [tabTransition, setTabTransition] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
