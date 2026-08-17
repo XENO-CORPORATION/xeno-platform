@@ -10,6 +10,54 @@ repo disagree, the repo is right and this document is stale.
 
 ---
 
+## Where this stands
+
+**The adoption is finished. The measurement programme has reached the end of what it can reach.**
+
+Read this before the detail; the sections below are the working record and are longer than the state
+they describe.
+
+### What is done
+
+Every `<button>` and every field in the chat is either a `@xenosystem/elements-react` component or
+hand-written **with the reason beside it**. §3 and §7 both report **0 still to decide** — 243 adopted
+components in the source, 72 buttons and 21 fields hand-written on purpose, 4 fields excluded as
+pickers and sliders.
+
+`npm run test:chat` is 10/10 with an empty KNOWN_RED. `npm run probe:chat` is 12 browser probes in
+~170s; `probe:chat:full` adds two slow ones and takes ~510s.
+
+**Six doors were cut into the library** because a call site could not say something (§3.3b), each
+with a test: `iconSize`, `fontSize`, `mono`, `emphasis="solid"`, `iconReveal="trailing"`,
+`selectionStyle="ring"`. 894 library tests green on `feat/soft-chrome`.
+
+### What is left, and whose it is
+
+Four §9 findings are the **owner's**, re-checked every run by `probe-open-findings`: two chat surface
+roles with no variant member, a blue cluster the theme does not reach, three unread `data-` state
+hooks, and the per-theme token collisions. Closing the first means adding palette, and
+`DESIGN_SYSTEM.md` is LOCKED.
+
+Coverage is **55%** — 140 of 255 adopted components rendered. The remainder is not measurement error
+(§6): `isMultiInterface`'s six controls sit behind a sign-in wall and `isRecentFilesOpen`'s two behind
+`display: none`. **The next gain needs a test account, not another path.**
+
+### What this cost, and the part worth keeping
+
+The measurement was wrong more often than the code was. **Seven probe false positives**, tabulated in
+§6 — including one repeat of a trap I had written into that very table two iterations earlier, and one
+selector typo that reported a component as never-rendered for the entire programme while three of it
+sat on screen.
+
+Coverage went 24 → 27 → 31 → 32 → 39 → 40 → **36** → 37 → 38 → 39 → 40 → 41 → 47 → 48 → 49 → 53 → 55.
+The drop to 36 is the most trustworthy number in that list: every rise came from reaching further into
+the app, and that one came from asking what the number was counting.
+
+**If you are picking this up:** run §0's four commands first and trust their output over any summary,
+including this one. The board has contradicted a confident prose claim at least once.
+
+---
+
 ## 0. Orient — run this first, every time
 
 ```bash
