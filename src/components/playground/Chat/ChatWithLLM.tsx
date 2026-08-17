@@ -8373,15 +8373,26 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   >
                     {PROJECT_SETTINGS_SECTIONS.map((section) => {
                       const isActive = activeSection === section.id;
-                      /* Stays hand-written, and it is the third place this chat marks a selection
-                         with a RING rather than a fill: an inset hairline of `--chat-muted` at 55%,
-                         with no background at all. The library says chosen by FILLING and dropping
-                         the outline, which is the opposite move — `quiet[data-selection=on]` would
-                         put a `--chat-control` plate where this design deliberately has none.
-                         Eight ringed states across the chat now. The settings dialog's four
-                         preference groups were the first, the catalog row's Select all the second,
-                         and this tablist and its narrow twin make it a pattern rather than a
-                         preference. §9 carries the count. */
+                      /* Stays hand-written — and the reason has CHANGED, which is the point of
+                         re-reading these rather than trusting them.
+
+                         What used to block it was semantics and presentation: this marks selection
+                         with a ring where the library only knew how to fill, and `ToggleButton` was
+                         the only thing wearing `selectionStyle="ring"` — but a tab is not a toggle.
+                         Both are closed now. The library has `<Tab>`, a tab ROW for a tablist the
+                         product drives, which exists because of this exact pair: two tablists, wide
+                         and narrow, over one shared panel, on `useTabs` from that same library. It
+                         carries `selectionStyle="ring"` and spreads `tabProps` last so the hook
+                         still wins.
+
+                         What blocks it now is METRICS, and §3 says a swap and a resize are two
+                         edits. This tab is h32 / padding 8 / font 11.5, which is no step on the
+                         scale: `md` is 32/12/14 and `xs` is 24/8/12, so it borrows a height from one
+                         and a padding from the other and undercuts both on type. Adopting at `md`
+                         widens every tab and grows the label, and this list WRAPS — it would re-flow
+                         to a different number of rows. That is a visible change to a settings
+                         dialog, and it is a decision to take deliberately rather than as a side
+                         effect of a conversion. */
                       return (
                         <button
                           key={section.id}
@@ -8427,7 +8438,12 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             >
               {PROJECT_SETTINGS_SECTIONS.map((section) => {
                 const isActive = activeSection === section.id;
-                /* Stays hand-written — the wide tablist's narrow twin, same ringed selection. */
+                /* Stays hand-written — the wide tablist's narrow twin, same ringed selection, and
+                   blocked on the same metrics for a DIFFERENT reason, which is worth knowing before
+                   someone converts one and assumes the other follows. This one is h36 / padding 12 /
+                   font 12: `lg` is 36/14/14 and `md` is 32/12/14, so it takes lg's height, md's
+                   padding and neither's type. The two twins are off the scale in two different
+                   directions, so there is no single size token that adopts both. */
                 return (
                   <button
                     key={section.id}

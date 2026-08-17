@@ -27,7 +27,7 @@ pickers and sliders.
 `npm run test:chat` is 10/10 with an empty KNOWN_RED. `npm run probe:chat` is 12 browser probes in
 ~170s; `probe:chat:full` adds two slow ones and takes ~510s.
 
-**Six doors were cut into the library** because a call site could not say something (§3.3b), each
+**Seven doors were cut into the library** because a call site could not say something (§3.3b), each
 with a test: `iconSize`, `fontSize`, `mono`, `emphasis="solid"`, `iconReveal="trailing"`,
 `selectionStyle="ring"`. 894 library tests green on `feat/soft-chrome`.
 
@@ -213,7 +213,7 @@ should not silently be both. `iconSize` exists for exactly this.
 
 ### 3.3b The doors — before deciding a control cannot convert
 
-Six of these were added during this adoption, each because a call site could not say something. Check
+Seven of these were added during this adoption, each because a call site could not say something. Check
 the list before writing a `Stays hand-written` reason, and check it again before believing one you
 find: **two controls stayed hand-written for a whole pass on a reason that a door had already
 answered.**
@@ -225,7 +225,8 @@ answered.**
 | this field is code | `mono` on `Textarea` — uses `--xeno-font-mono`, which the system already declares |
 | this destructive action is the confirm, not the affordance | `emphasis="solid"` on `Button` |
 | the glyph reveals from under the label | `iconReveal` — `true`/`"leading"`, or `"trailing"` for the mirror |
-| chosen is a RING, not a fill | `selectionStyle="ring"` on `ToggleButton` — the fill has a surface precondition; a hairline does not |
+| chosen is a RING, not a fill | `selectionStyle="ring"` on `ToggleButton` / `Tab` — the fill has a surface precondition; a hairline does not |
+| I drive my own tablist and only need the ROW | `<Tab>` — `<Tabs>` owns the panel and the keys, which is unusable when two tablists share one panel. Spreads `tabProps` last, so `useTabs` still wins |
 
 If a control needs something not on this list, **add the door and a test in the library** rather than
 converting around it (§5.3). Prefer a MODE that reaches a token the system already declares over
@@ -1099,18 +1100,40 @@ Re-deciding these costs more than it saves.
   declared. **The eight call sites are still hand-written, and measuring them showed the door does not
   fit any of them yet** — which is worth knowing before someone tries:
 
-  - **Two are tabs.** The project settings tablist and its narrow twin run on `useTabs`, so they carry
-    `role="tab"` and `aria-selected`. `ToggleButton` carries `role="button"` and `aria-pressed`. A tab
-    is not a toggle, and the ring is not worth the semantics.
+  - ~~**Two are tabs.**~~ **Door cut, and the blocker moved.** The project settings tablist and its
+    narrow twin run on `useTabs`, so they carry `role="tab"` and `aria-selected` where `ToggleButton`
+    carries `role="button"` and `aria-pressed` — a tab is not a toggle. The library has **`<Tab>`**
+    now, a tab ROW for a tablist the product drives, and this pair is why it exists: `<Tabs>` owns the
+    selection, the keys and the PANEL, and these are two tablists over ONE shared panel, which two
+    `<Tabs>` instances cannot express — they would mint two panels and two id namespaces and fight for
+    the selection. `<Tab>` spreads `tabProps` last so the hook still wins, and carries
+    `selectionStyle="ring"` under the same attribute name `Button` and `ToggleButton` use.
+
+    **What blocks them now is METRICS, and §3 says a swap and a resize are two edits.** Measured, they
+    are off the scale in two DIFFERENT directions, so there is no one token that adopts both:
+
+    | | height | padding | font | nearest steps |
+    |---|---|---|---|---|
+    | wide tablist | 32 | 8 | 11.5 | `md` 32/12/14 · `xs` 24/8/12 |
+    | narrow twin | 36 | 12 | 12 | `lg` 36/14/14 · `md` 32/12/14 |
+
+    Each borrows a height from one step and a padding from another and undercuts both on type. The
+    wide list also WRAPS, so adopting at `md` re-flows it to a different number of rows — a visible
+    change to a settings dialog, and one to take deliberately rather than as a side effect.
   - **One is not a selection.** The catalog's Select all is an action, and its ring is `--chat-accent`
     over a `--chat-control` fill — a filled control wearing an accent ring, where `ring` means an
     empty box with a muted border. Wrong on both counts.
-  - **Four are tiles.** The persona and style groups stack a name over a two-line description at 68px
-    and fill with `--chat-surface` as well as brightening the border. `ring` deliberately has no fill,
-    and a `Button` is a centred inline row.
+  - ~~**Four are tiles.**~~ **One is a tile, and the count was the error.** Re-measured: `chat-settings-row`
+    has exactly **one** call site. The four was `personas.map` INSTANCES counted as sites — the same
+    conflation the coverage metric made and corrected once already (§6). It is a real shape — a 68px
+    card stacking a name over a two-line clamped description, selected by brightening the border and
+    filling with `--chat-surface` — and the library has nothing like it: its `Tile` is a square glyph
+    box, `Card` is a container, `ListRow` is a row. **But a component invented from one example fits
+    one example.** Not cut. If a second site appears, the shape is written down here ready.
 
-  A presentation without a component to wear it is still progress — it is the fill's precondition that
-  was doing the damage, and that is now stated — but the conversion is a `Tab` and a `Tile` away.
+  A presentation without a component to wear it was still progress — it is the fill's precondition that
+  was doing the damage, and that is stated. The tabs now have their component and want a size decision;
+  the tile wants a second call site before it earns one.
 
 - **`quiet[data-selection=on]` has a surface precondition, and nothing states it.** It says "chosen"
   by filling with `--xeno-control` and dropping the outline. In the dark theme `--chat-control` and
