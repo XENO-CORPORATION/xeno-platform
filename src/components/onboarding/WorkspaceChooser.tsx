@@ -15,21 +15,20 @@ import { isUnreleased } from '../../lib/releaseStatus';
  * suites side by side, each showing the real products inside it, and one way
  * to refuse the choice entirely and take the whole ecosystem.
  *
- * ── THE ABSORB ─────────────────────────────────────────────────────────────
+ * ── THE FRAME ──────────────────────────────────────────────────────────────
  *
- * "Everything" does not just select a fifth option. The four cards fly INTO
- * the centre, shrink and dissolve, and a single XENO card grows out of where
- * they landed — the ecosystem visibly assembling itself out of its parts.
+ * "Everything" is not a fifth tile, and it is NOT a replacement panel — an
+ * earlier version swapped the four cards for a single summary card, which made
+ * choosing everything feel like losing the grid rather than gaining it.
  *
- * It is done with FLIP-style measured transforms, not a canned keyframe: each
- * card's travel is computed at click time from its own box to the grid centre,
- * so the motion is correct at any column count, any viewport, any number of
- * suites. A hardcoded set of translations would be wrong the moment the grid
- * reflows to two columns on a laptop.
+ * Instead a stroke frame grows out of the bar and closes BEHIND the cards
+ * until it encloses all four. The cards never move. Then the checks fall into
+ * place one by one, left to right, and the bar's own tick lands last — it is
+ * the summary, so it arrives after the thing it summarises.
  *
- * `prefers-reduced-motion` skips straight to the assembled state. The choice
- * is what matters; the animation is how it feels, and someone who has asked
- * the OS to stop moving things still has to be able to make it.
+ * `prefers-reduced-motion` goes straight to the framed state. The choice is
+ * what matters; the animation is how it feels, and someone who asked the OS to
+ * stop moving things still has to be able to make it.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const SUITE_ICON: Record<string, React.ReactNode> = {
@@ -160,6 +159,10 @@ export const WorkspaceChooser: React.FC<{
             // Inside the frame every suite is included, so they all read as
             // chosen — the frame is the selection, not four separate ones.
             selected={framed || value === suite.id}
+            // Cascade only when the frame made the selection. Starts as the
+            // frame finishes closing, so the ticks land INTO an enclosure that
+            // already exists rather than racing it.
+            checkDelay={framed ? ABSORB_MS * 0.55 + i * 95 : 0}
             onSelect={() => { collapseFrame(); onChange(suite.id); }}
             registerRef={(el) => { cardRefs.current[suite.id] = el; }}
           />
@@ -186,9 +189,18 @@ export const WorkspaceChooser: React.FC<{
         />
         <span className={`relative grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border transition-colors duration-200
                           ${framed ? 'border-white/30 bg-white/[0.14]' : 'border-white/20 bg-white/[0.07]'}`}>
-          {framed
-            ? <Check className="h-[18px] w-[18px] text-white" strokeWidth={2.5} />
-            : <Sparkles className="h-[18px] w-[18px] text-white/85" />}
+          {framed ? (
+            /* The bar's own tick lands LAST, after all four cards — it is the
+               summary of what just happened, so it should arrive after the
+               thing it summarises. */
+            <Check
+              style={{ animationDelay: `${ABSORB_MS * 0.55 + SUITES.length * 95}ms` }}
+              className="xeno-check-drop h-[18px] w-[18px] text-white"
+              strokeWidth={2.5}
+            />
+          ) : (
+            <Sparkles className="h-[18px] w-[18px] text-white/85" />
+          )}
         </span>
         <span className="relative min-w-0 flex-1">
           <span className="block text-[14px] font-medium text-white">
@@ -214,9 +226,14 @@ const SuiteCard: React.FC<{
   suite: Suite;
   index: number;
   selected: boolean;
+  /** ms before this card's check lands. Non-zero only when the FRAME selected
+   *  everything, so the four ticks cascade instead of appearing as one block.
+   *  A direct click stays at 0 — feedback for your own click must be immediate
+   *  or it reads as lag. */
+  checkDelay?: number;
   onSelect: () => void;
   registerRef: (el: HTMLElement | null) => void;
-}> = ({ suite, index, selected, onSelect, registerRef }) => {
+}> = ({ suite, index, selected, checkDelay = 0, onSelect, registerRef }) => {
   const products = productsForSuite(suite);
 
   /* ── SHELL / PLATE ANATOMY ────────────────────────────────────────────────
@@ -281,7 +298,15 @@ const SuiteCard: React.FC<{
             pieces of metadata in a header this small compete, and once chosen
             the count is no longer the thing you need to know. */}
         {selected ? (
-          <span aria-hidden className="grid h-[17px] w-[17px] shrink-0 place-items-center rounded-[4px] bg-white">
+          /* Rendered CONDITIONALLY on purpose. Toggling classes on a
+             permanently-mounted element replays nothing — a CSS animation runs
+             once, on mount. Mounting the check when it becomes selected is
+             what makes it drop each time rather than only on first paint. */
+          <span
+            aria-hidden
+            style={{ animationDelay: `${checkDelay}ms` }}
+            className="xeno-check-drop grid h-[17px] w-[17px] shrink-0 place-items-center rounded-[4px] bg-white"
+          >
             <Check className="h-3 w-3 text-black" strokeWidth={3} />
           </span>
         ) : (

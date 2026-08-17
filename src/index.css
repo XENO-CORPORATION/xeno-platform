@@ -239,6 +239,21 @@ html, body, #root, #app {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* A check DROPPING into its box.
+ *
+ * Falls from above, overshoots slightly, settles — the overshoot is what makes
+ * it read as landing rather than fading in. A pure decelerate arrives and
+ * stops dead, which at this size is indistinguishable from an opacity change.
+ *
+ * The mark itself is scaled separately from the box so the tick appears to be
+ * stamped INTO the plate rather than the whole plate growing. */
+@keyframes xenoCheckDrop {
+  0%   { opacity: 0; transform: translateY(-9px) scale(0.4); }
+  55%  { opacity: 1; transform: translateY(1.5px) scale(1.06); }
+  78%  { transform: translateY(0) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 @keyframes xenoScaleIn {
   from { opacity: 0; transform: translateY(10px) scale(0.94); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -249,6 +264,11 @@ html, body, #root, #app {
 .xeno-rise {
   opacity: 0;
   animation: xenoRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.xeno-check-drop {
+  opacity: 0;
+  animation: xenoCheckDrop 0.42s cubic-bezier(0.3, 1.4, 0.5, 1) forwards;
 }
 
 .xeno-scale-in {
@@ -283,6 +303,7 @@ html, body, #root, #app {
 @media (prefers-reduced-motion: reduce) {
   .xeno-rise,
   .xeno-scale-in,
+  .xeno-check-drop,
   .xeno-stagger > * {
     animation: none !important;
     opacity: 1 !important;
