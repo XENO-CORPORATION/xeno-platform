@@ -442,22 +442,32 @@ const SuiteCard: React.FC<{
            * no value that closes it, because the error changes with zoom and
            * display.
            *
-           * So it overlaps at the BOTTOM only, and stops dead at the top.
+           * So it overlaps NEITHER end. It spans exactly the gap.
            *
-           * 🔴 It used to overlap both ends — `calc(100% - 1px)`, one pixel up
-           * into the card. That was wrong, and visibly so: the card's border
-           * is 1px, so a 2px white line starting one pixel early painted
-           * straight OVER the stroke and punched through it. The overlap was
-           * meant to hide a sub-pixel seam and instead broke the one edge it
-           * was protecting.
+           * 🔴 Two wrong versions preceded this, and the second is the more
+           * interesting mistake.
            *
-           * The two ends are not symmetric, which is why one rule cannot serve
-           * both. At the BOTTOM the bar paints over the line (later in the DOM,
-           * same z-index), so an overlap there is swallowed and the line
-           * terminates exactly at the bar's edge no matter how the fractions
-           * fall. At the TOP nothing paints over it, so any overlap is simply
-           * visible — and a hairline gap is a far smaller sin than a line
-           * crossing a border.
+           * v1 overlapped both ends — `calc(100% - 1px)`, one pixel up into
+           * the card. The card's border is 1px, so a 2px line starting one
+           * pixel early painted straight over that stroke.
+           *
+           * v2 kept a 4px overlap at the BOTTOM, on the reasoning that the bar
+           * is later in the DOM at the same z-index and would paint over it.
+           * The paint order is correct — and it does not help, because the
+           * bar's fill is TRANSLUCENT (`bg-white/[0.06]`). A surface you can
+           * see through does not hide what is beneath it; the overlap showed
+           * straight through the bar's top stroke.
+           *
+           * That is the general lesson: "a later sibling covers it" is only
+           * true for an OPAQUE later sibling. On this design system almost
+           * every surface is a white-alpha wash over the page, so nothing
+           * covers anything — an element must not be drawn where it should not
+           * be seen.
+           *
+           * The line now runs from the card's outer bottom edge to the bar's
+           * outer top edge and touches both borders without entering either.
+           * Height is the gap itself, so it cannot breach whatever the two
+           * ends round to.
            *
            * ── TRANSFORM IS ONE INLINE STRING ────────────────────────────
            *
@@ -478,7 +488,8 @@ const SuiteCard: React.FC<{
            * not the code.)
            */
           top: '100%',
-          height: 'calc(0.75rem + 4px)',
+          // Exactly the `mt-3` gap between the grid and the bar — no more.
+          height: '0.75rem',
           transform: `translateX(-50%) scaleY(${selected ? 1 : 0})`,
           transformOrigin: 'bottom center',
           transitionProperty: 'transform',
