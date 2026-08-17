@@ -432,6 +432,29 @@ The walk now samples DURING the action, at 350/700/1400ms. `Spinner` 0 → 1, `T
 **All four zeros are closed.** Every adopted component in this chat has now been rendered at least
 once for a probe, which was not true of any of them a few iterations ago.
 
+### Asking the source which states hide the controls
+
+The gap moved inside `ChatWithLLM`, where there are no more doors to open. Rather than hunt, ask the
+file: for each unrendered `<Button>` and `<IconButton>`, what is the nearest enclosing conditional?
+
+```
+6  isMultiInterface          3  isFullScreenImageMounted   2  isProjectFilePreviewMounted
+4  isSystemPromptOpen        2  isRecentFilesOpen          2  isProjectScheduledWhenMounted
+3  isChatFilesModalMounted   2  isChatsCatalogOpen         2  isPinnedSectionOpen
+```
+
+That is the map the last several iterations were feeling around for. `isMultiInterface` is a PROP —
+six controls no click will ever reach on this route, which is worth knowing before trying.
+
+Two states added, both triggers verified present at rest first: the chats catalog and the fullscreen
+image viewer. 123 → 126, `IconButton` 42 → 45.
+
+**The catalog opens and its action row does not.** `Select all`, the `primary` New and the
+solid-danger Delete are gated on `selectedCount > 0` — a state one level below "the panel is open",
+reached by selecting a row rather than by opening anything. Three conversions from this adoption live
+there. The walk models paths through surfaces; it does not model *selection*, and that is the next
+distinct thing it would have to learn.
+
 ### Enumerating a menu instead of guessing its paths
 
 `More chat options` holds **twelve** items and the walk was using one. Listing them cost a single
@@ -630,7 +653,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-123 rendered across the three routes — 48%.**
+126 rendered across the three routes — 49%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
@@ -737,7 +760,7 @@ PERCENTAGE — add twenty Buttons to the source and it falls with nothing broken
 the count, which only falls when a surface the walk used to reach stops being reachable. That is
 exactly a regression and nothing else.
 
-Floor 117 against 123 measured: enough headroom that a transient miss does not cry wolf, tight enough
+Floor 120 against 126 measured: enough headroom that a transient miss does not cry wolf, tight enough
 that losing a whole page shows. **The floor rises with the baseline** — a floor left behind drifts
 into meaninglessness, still green while a third of the walk has quietly stopped working. The runner
 gained a `{ min: n }` form for it, and both directions were verified before it was trusted: green at

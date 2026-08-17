@@ -251,6 +251,17 @@ for (const seg of ['llm', 'search', 'voice']) {
     ['More chat options', 'Theme'],
     ['More chat options', 'View files in chat'],
     ['More chat options', 'Search messages'],
+    /*
+     * States INSIDE the main chat, found by asking the source which conditionals wrap the unrendered
+     * controls rather than hunting for more doors. The top gates by control count were
+     * `isMultiInterface` (a prop, not reachable by clicking), `isSystemPromptOpen`,
+     * `isChatFilesModalMounted`, `isFullScreenImageMounted` and `isChatsCatalogOpen`.
+     *
+     * The catalog is the valuable one: its action row holds the `primary` New, the solid-danger
+     * Delete and the ringed Select all, three of the conversions made during this adoption.
+     */
+    ['Open all chats and tasks'],
+    ['View current-output.svg full size'],
     ['Projects'], ['Projects', PROJECT.name],
     /* `Edit code` puts a code block into edit mode, which is the ONLY place `Textarea` renders on
        these routes — the other three sit in dialogs. The demo thread supplies the code blocks. */
