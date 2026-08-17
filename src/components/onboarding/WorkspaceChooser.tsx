@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Palette, FileText, Terminal, MessageSquare, Check, Sparkles } from 'lucide-react';
+import { Palette, FileText, Terminal, MessageSquare, Check } from 'lucide-react';
 import {
   SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts, type Suite,
 } from '../../lib/workspaceSuites';
@@ -171,22 +171,41 @@ export const WorkspaceChooser: React.FC<{
           className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
           style={{ background: 'radial-gradient(ellipse 60% 140% at 50% 50%, rgba(255,255,255,0.07), transparent 70%)' }}
         />
-        <span className={`relative grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border transition-colors duration-200
-                          ${framed ? 'border-white/30 bg-white/[0.14]' : 'border-white/20 bg-white/[0.07]'}`}>
-          {framed ? (
-            /* The bar's own tick lands LAST, after all four cards — it is the
-               summary of what just happened, so it should arrive after the
-               thing it summarises. */
+        {/* -- The bar composes itself on selection ------------------------
+            Idle it is one centred line of text: no icon, no count, nothing
+            competing with the invitation. Choosing it makes the bar BUILD --
+            the square grows in from the left, the text slides over to make
+            room, the check lands in the square, and the product count arrives
+            on the right.
+
+            The text is not animated directly. It sits in a `flex-1` between
+            the two slots, so it moves because they take space. One width
+            transition drives the whole rearrangement, which means the three
+            parts can never disagree about where the text should be. ------ */}
+
+        {/* Left slot -- zero-width until chosen. `w-0` + overflow-hidden
+            rather than `hidden`, because a display change cannot be
+            transitioned and the square would pop in at full size. */}
+        <span
+          className={`relative grid shrink-0 place-items-center overflow-hidden rounded-[8px] border
+                      transition-all duration-[420ms] ease-out
+                      ${framed
+                        ? 'mr-3.5 h-9 w-9 scale-100 border-white/30 bg-white/[0.14] opacity-100'
+                        : 'mr-0 h-9 w-0 scale-75 border-transparent bg-transparent opacity-0'}`}
+        >
+          {framed && (
+            /* The bar's own tick lands LAST -- after all four cards, and after
+               the square holding it has finished opening. It is the summary of
+               what happened, so it arrives after the thing it summarises. */
             <Check
               style={{ animationDelay: `${FRAME_MS * 0.86 + SUITES.length * 95}ms` }}
               className="xeno-check-drop h-[18px] w-[18px] text-white"
               strokeWidth={2.5}
             />
-          ) : (
-            <Sparkles className="h-[18px] w-[18px] text-white/85" />
           )}
         </span>
-        <span className="relative min-w-0 flex-1">
+
+        <span className={`relative min-w-0 flex-1 ${framed ? 'text-left' : 'text-center'}`}>
           <span className="block text-[14px] font-medium text-white">
             {framed ? 'The full XENO workspace' : 'Or take the full XENO experience'}
           </span>
@@ -196,7 +215,20 @@ export const WorkspaceChooser: React.FC<{
               : 'Every suite in one workspace \u2014 you can narrow it later.'}
           </span>
         </span>
-        <span className="relative shrink-0 text-[12px] tabular-nums text-white/30">
+
+        {/* Right slot -- the count is meaningless before a choice is made; it
+            would be a number floating beside an invitation. Withheld until
+            there is something for it to describe.
+
+            Delayed on the way IN so it arrives with the check rather than
+            racing it, and immediate on the way OUT so a retract reads as
+            decisive rather than as the bar reluctantly letting go. */}
+        <span
+          style={{ transitionDelay: framed ? `${FRAME_MS * 0.86}ms` : '0ms' }}
+          className={`relative shrink-0 overflow-hidden whitespace-nowrap text-[12px] tabular-nums text-white/30
+                      transition-all duration-[420ms] ease-out
+                      ${framed ? 'ml-3 max-w-[120px] opacity-100' : 'ml-0 max-w-0 opacity-0'}`}
+        >
           {allAvailableProducts().length} products
         </span>
       </button>
