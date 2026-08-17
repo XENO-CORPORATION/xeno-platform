@@ -470,6 +470,20 @@ Re-deciding these costs more than it saves.
   strips types without checking them. A variant that has to be overridden to look right is the wrong
   variant.
 
+  **That turned out to be a seam worth grepping, not a coincidence.** Every library component in the
+  chat carrying a `style` prop was a variant reproducing another variant by hand: two `ghost lg`
+  buttons and a `ghost md` `IconButton` painting `--chat-control` with text ink, which is `secondary`
+  word for word, and the share dialog's Delete link — a `ghost` with an inset hairline, which is
+  `danger` at rest, exactly.
+
+  Measured on the running chat: `danger` rests at no fill, `rgb(163,163,163)` ink and a hairline, and
+  on hover turns ink AND border `rgb(239,68,68)`; `secondary` rests at `rgb(38,38,38)` with
+  `rgb(250,250,250)` ink. The hover is the correction the last one gains — a button labelled *Delete
+  link* used to brighten to neutral, and now says what it does when you reach for it.
+
+  **The `style` prop is where a wrong variant choice hides.** It is closed in the types and open at
+  runtime, so nothing failed and nothing said so.
+
   Two things the axis absorbed: `disabled:opacity-40 disabled:cursor-not-allowed` at two sites is the
   availability axis written out, and measured on the component it is opacity 0.4 with `not-allowed`
   from `disabled` alone. One colour moved on purpose — the share dialog's Done inked

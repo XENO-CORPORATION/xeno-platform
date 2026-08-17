@@ -503,12 +503,18 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
             </Button>
           ) : (
             <div className="flex w-full gap-2 sm:w-auto">
+              {/* `danger`, which this was drawing by hand: a `ghost` is muted ink with no box, and
+                  the inline hairline made it bordered-and-muted — the library's `danger` at rest,
+                  exactly. The `style` prop is one `ButtonProps` omits on purpose, so an override that
+                  reproduces a variant is a variant that was not chosen.
+                  Hover moves, and it is the correction: this used to brighten to neutral text, where
+                  `danger` turns both ink and border red. A button labelled "Delete link" should say
+                  so when you reach for it — that is the variant's whole argument. */}
               <Button
-                variant="ghost"
+                variant="danger"
                 size="lg"
                 className="flex-1 sm:flex-none"
                 onClick={() => void handleDelete()}
-                style={{ boxShadow: 'inset 0 0 0 1px var(--chat-border)' }}
               >
                 Delete link
               </Button>

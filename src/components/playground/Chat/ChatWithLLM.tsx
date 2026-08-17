@@ -8564,22 +8564,20 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           >
             {activeSection === 'danger' ? (
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="lg"
                 className="w-full sm:min-h-0 sm:w-auto sm:py-2"
                 onClick={closeProjectSettings}
-                style={{ backgroundColor: 'var(--chat-control)', color: 'var(--chat-text)' }}
               >
                 Close
               </Button>
             ) : (
               <>
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   size="lg"
                   className="w-full sm:min-h-0 sm:w-auto sm:py-2"
                   onClick={closeProjectSettings}
-                  style={{ backgroundColor: 'var(--chat-control)', color: 'var(--chat-text)' }}
                 >
                   Cancel
                 </Button>
@@ -13144,14 +13142,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       )}
                       <IconButton
                         icon={XDecl}
-                        variant="ghost"
+                        variant="secondary"
                         size="md"
                         iconSize={14}
                         onClick={exitCatalogSelection}
-                        style={{
-                          backgroundColor: 'var(--chat-control)',
-                          color: 'var(--chat-text)',
-                        }}
                         aria-label="Exit selection"
                         title="Close"
                       />
