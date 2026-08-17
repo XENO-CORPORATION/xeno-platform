@@ -89,6 +89,16 @@ services:
       # here breaks channel connection loudly instead of quietly regressing.
       # ⚠ Losing the value makes every sealed token unrecoverable.
       - SECRET_BOX_KEY=${SECRET_BOX_KEY}
+      # Per-product inference routing + the provider-key vault
+      # (`XENO INFERENCE ROUTING - SPEC.md`). FAILS CLOSED: anything other than
+      # the exact string "true" — unset, empty, "TRUE", "1" — leaves BYOK off and
+      # /api/ai/chat behaving exactly as it does today.
+      #
+      # Declared here rather than only in the box's .env ON PURPOSE. The two
+      # lines above this block existed ONLY on xeno-platform-001 for months and
+      # a `git reset --hard` would have silently unset them. A flag that governs
+      # customer credentials must not be able to vanish the same way.
+      - BYOK_ENABLED=${BYOK_ENABLED:-}
       - LEDGER_SERVICE_TOKEN=${LEDGER_SERVICE_TOKEN}
       - BACKEND_PORT=8080
       - PORT=8080
