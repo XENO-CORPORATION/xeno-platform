@@ -33,7 +33,20 @@ const walk = (dir, out = []) => {
   return out;
 };
 
-const files = [...walk(path.join(ROOT, 'src')), ...walk(path.join(ROOT, 'scripts'))];
+/*
+ * `probe-open-findings.mjs` is excluded, and the distinction it forces is worth stating.
+ *
+ * A test or a probe that ASSERTS on a hook is a real consumer — §5.5 exists because conversions
+ * dropped hooks that `scripts/test-*.mjs` was reaching for, and the tests went red. Those references
+ * must count.
+ *
+ * But a probe that merely LISTS a hook as an open finding is not a consumer; breaking that hook would
+ * not break it. Counting those references made all three unread state hooks look referenced the
+ * moment the finding was written down — 3 to 0 — which would have retired the finding by observing
+ * it. The observer has to be outside the population it counts.
+ */
+const files = [...walk(path.join(ROOT, 'src')), ...walk(path.join(ROOT, 'scripts'))]
+  .filter((f) => !f.endsWith('probe-open-findings.mjs'));
 const texts = new Map(files.map((f) => [f, readFileSync(f, 'utf8')]));
 
 /* Declarations only: `data-foo` written as a JSX attribute, not inside a selector or a string. */

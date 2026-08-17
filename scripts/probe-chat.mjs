@@ -1,5 +1,5 @@
 /*
- * One runner for the twelve standing probes, in the shape of `test-chat.mjs`.
+ * One runner for the thirteen standing probes, in the shape of `test-chat.mjs`.
  *
  * Ten scripts that each have to be run by hand and read by eye is a check nobody runs. Worse, each
  * prints a different shape of answer — a count, a table, a list of OK/NO lines — so "are they still
@@ -87,6 +87,16 @@ const PROBES = [
     file: 'probe-project-settings.mjs', needs: 'chat',
     verdict: /reached in (\d+) theme\(s\), worst height drift: (\d+)/,
     expect: ['2', '0'], describe: (m) => `project settings dialog reached in ${m[1]} themes, ${m[2]} height drift`,
+  },
+  {
+    file: 'probe-open-findings.mjs', needs: 'chat',
+    /* Unlike `probe-coverage`, this one is a gate. Its numbers move only when an OPEN FINDING changes
+       state — a blue class added or removed, a token collision appearing, the library gaining a
+       palette member — and that is precisely what someone should be told about. It caught its own
+       first delta already: 15 blue utility classes became 14 when the message editor's focus ring was
+       themed. */
+    verdict: /blue cluster the theme does not reach\s+(\d+) utility classes \+ (\d+) literal/,
+    expect: ['14', '11'], describe: (m) => `4 findings still open (${m[1]} blue classes + ${m[2]} literals)`,
   },
   {
     file: 'probe-voice-thumb.mjs', needs: 'chat',

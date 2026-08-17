@@ -326,6 +326,16 @@ Adding `probe-project-settings.mjs` took `data-project-settings-dialog` out of t
 20 → 19, and `probe:chat` failed on the change. That is the convention working, not a regression —
 but the expectation moves in the same commit.
 
+**Then the same corollary bit harder, and sharpened into a rule.** `probe-open-findings.mjs` re-checks
+the §9 findings, and one of them is "three `data-` state hooks read by nothing". Naming those three
+hooks in the re-check made all three look referenced — the count went **3 → 0**, and the finding
+would have been retired *by the act of writing it down*.
+
+**The observer has to be outside the population it counts.** `probe-dead-hooks.mjs` now excludes
+that one file, and the distinction it forces is worth keeping: a probe that ASSERTS on a hook is a
+real consumer (breaking it breaks the probe, which is exactly why §5.5 exists), while a probe that
+merely LISTS a hook as a finding is not. Only the second kind gets excluded.
+
 ---
 
 ## 6. Verification — what counts as done
@@ -400,6 +410,26 @@ empty.
 ```js
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
+
+### Re-checking what was left open
+
+`scripts/probe-open-findings.mjs` asks the repo and the running chat whether the §9 findings deferred
+to the owner are still true. An open finding decays two ways and both are silent: someone fixes it and
+nobody closes the entry, or it gets worse and nobody notices because it was already "known".
+
+All four confirmed open, and one number had already moved — 15 blue utility classes were 14, because
+the message editor's focus ring was themed. That is the check earning its place: the count is live
+rather than copied forward.
+
+| | |
+|---|---|
+| no variant member for `--chat-overlay` / `--chat-control-strong` | library declares neither; closing it is palette, and `DESIGN_SYSTEM.md` is LOCKED |
+| the blue cluster in `SearchChatInterface` | 14 utility classes + 11 literal `rgb()` |
+| three `data-` state hooks read by nothing | `data-percentage`, `data-rail-open`, `data-active-tool` |
+| surface tokens colliding | dark `elevated==control` · dim none · light `elevated==canvas` |
+
+It is a gate, unlike `probe-coverage`: its numbers move only when a finding changes state, which is
+precisely what someone should be told about.
 
 ### Reaching a branch the mock has no data for — without editing the source
 
