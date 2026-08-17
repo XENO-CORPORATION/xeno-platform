@@ -468,8 +468,16 @@ Re-deciding these costs more than it saves.
   library; this is the first that wants the other. It is one job with the chrome tokens rather than
   two, because the button cannot convert on either alone.
 
-  **The same gap has a destructive half.** Two dialog confirms are a SOLID `--chat-danger` fill going
-  to `--chat-danger-hover`; the library's `danger` is the opposite reading — a neutral hairline with
+  **Closed: the destructive half has its solid reading.** `Button` carries `emphasis="solid"` now
+  (elements-foundations 2ed1953), painted from `--xeno-danger` / `--xeno-danger-hover` — base tokens,
+  not chrome, so it is one file rather than two and a product's theme reaches it. Both confirms
+  converted, and each gave up an inline fill and TWO mouse handlers standing in for a `:hover` rule;
+  the catalog's also gave up a literal `#ffffff` that no chat token named, which had been white ink on
+  red in light mode where the rest of the chat inverts. Measured in the elements preview: quiet keeps
+  no fill and muted ink, solid fills rgb(239,68,68), inks from text and drops its border. In the chat
+  the rule is present in the built bundle; :5183 serves stale library CSS, per §6.
+
+  ~~The library's `danger` is the opposite reading~~ — a neutral hairline with
   muted ink that turns red only when reached for. That is the right position for a Delete sitting in
   a row (and three of those converted to it), but not for the confirm INSIDE the dialog that asks. A
   quiet last-chance button is quiet in the wrong place. Neither half is a call site's to improvise.

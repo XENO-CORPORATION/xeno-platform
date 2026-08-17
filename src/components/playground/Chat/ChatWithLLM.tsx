@@ -8701,30 +8701,22 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                     <Button variant="secondary" size="md" onClick={handleCancelDelete}>
                         Cancel
                     </Button>
-                    {/* Stays hand-written — the same missing emphasis as Create project, in the
-                        destructive key. This is a SOLID `--chat-danger` fill going to
-                        `--chat-danger-hover`; the library's `danger` is the opposite reading, a
-                        neutral hairline with muted ink that turns red only when you reach for it.
-                        That is a deliberate position on destructive controls and the right one for a
-                        Delete sitting in a row, but this button is the confirm INSIDE the dialog
-                        that asks — the last thing between the user and the deletion — and quiet is
-                        not what it should be. Two of these exist here. */}
-                    <button
-                        type="button"
+                    {/* `danger solid md`, matching the `secondary md` Cancel beside it. The
+                        reason recorded here — that the library's `danger` is the quiet reading, right
+                        for a Delete in a row and wrong for the confirm inside the dialog that asks —
+                        is answered rather than removed: the destructive key carries both readings
+                        now, as the neutral one always did with `secondary` and `primary`.
+                        What leaves is the interesting part: an inline fill and TWO mouse handlers
+                        that hand-painted the hover on enter and leave. A `:hover` rule is one line,
+                        and it works for keyboard focus and touch, which the handlers never did. */}
+                    <Button
+                        variant="danger"
+                        emphasis="solid"
+                        size="md"
                         onClick={handleConfirm}
-                        className="rounded-md px-4 py-1.5 text-sm font-medium text-[var(--chat-text)] transition-colors"
-                        style={{
-                          backgroundColor: 'var(--chat-danger)',
-                        }}
-                        onMouseEnter={(event) => {
-                          event.currentTarget.style.backgroundColor = 'var(--chat-danger-hover)';
-                        }}
-                        onMouseLeave={(event) => {
-                          event.currentTarget.style.backgroundColor = 'var(--chat-danger)';
-                        }}
                     >
                         Delete
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>
@@ -13129,13 +13121,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       >
                         Select all
                       </button>
-                      {/* Stays hand-written — a SOLID danger fill, where the library variant of that
-                          name is the quiet reading. Third of this row's four emphases, and note the
-                          #ffffff: a literal white that no chat token names, which is its own small
-                          thing to fix. */}
+                      {/* `danger solid md`, at the size its converted row-mates already use. The
+                          `#ffffff` goes with it — a literal white that no chat token named, which
+                          this comment had flagged as its own small thing to fix. The variant inks
+                          from `--xeno-text`, so it follows the theme: in light mode that literal was
+                          white ink on a red fill where the rest of the chat had inverted. */}
                       {selectedCount > 0 && (
-                        <button
-                          type="button"
+                        <Button
+                          variant="danger"
+                          emphasis="solid"
+                          size="md"
                           onClick={() => {
                             const ids = [...chatsCatalogSelectedIds];
                             void (async () => {
@@ -13145,20 +13140,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               exitCatalogSelection();
                             })();
                           }}
-                          className={catalogControlBtn}
-                          style={{
-                            backgroundColor: 'var(--chat-danger)',
-                            color: '#ffffff',
-                          }}
-                          onMouseEnter={(event) => {
-                            event.currentTarget.style.backgroundColor = 'var(--chat-danger-hover)';
-                          }}
-                          onMouseLeave={(event) => {
-                            event.currentTarget.style.backgroundColor = 'var(--chat-danger)';
-                          }}
                         >
                           Delete
-                        </button>
+                        </Button>
                       )}
                       <IconButton
                         icon={XDecl}
