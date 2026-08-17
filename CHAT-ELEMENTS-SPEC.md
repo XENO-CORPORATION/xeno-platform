@@ -361,6 +361,28 @@ empty.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
 
+### How much do the probes actually see? — a quarter
+
+`npm run probe:chat` reporting 11/11 green is easy to read as "the chat is verified". It is not, and
+`scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
+60 rendered across the three routes — 24%.**
+
+That number is a FLOOR and it conflates three things, which is why it is not a gate:
+
+1. **unreachable without data** — projects, artifacts, scheduled tasks, a share link, attachments,
+   the customize page. The mock has none, so those controls are decided in source and will never
+   render for a probe. **This is the genuine blind spot.**
+2. **not mounted until interaction** — a menu's items exist only while it is open, a dialog's only
+   while it is up.
+3. **transient** — every `Spinner` counts 0 because nothing is loading at the moment of the count.
+
+Separating them means driving the UI. A first attempt at clicking panels open moved none of the
+counts, so the split is **not claimed** — the probe says so rather than guessing a breakdown.
+
+It is deliberately **not** in `probe:chat`: its number moves whenever a component is added, which is
+normal development rather than a regression, and a gate that fires on healthy change teaches people
+to ignore gates.
+
 ### Are the numbers stable? — three full runs, diffed
 
 Finding one flaky number is a reason to distrust the rest, not to assume they are fine. The whole
@@ -1006,10 +1028,11 @@ with its reason; 4 fields excluded as pickers and sliders.
 
 Say these out loud rather than letting a green board imply them.
 
-- **The mock renders a fraction of the chat.** No projects, artifacts, scheduled tasks, share link,
-  attachments or customize page. Every browser probe measures what the default route paints, so those
-  branches are *decided in the source* and *unmeasured in the browser*. `probe-small-targets` prints
-  that limit itself; the others do not, and should be read with it in mind.
+- **The mock renders a fraction of the chat, and the fraction is now measured: 24%.** No projects,
+  artifacts, scheduled tasks, share link, attachments or customize page. 255 adopted components in the
+  source, 60 rendered across the three routes (`scripts/probe-coverage.mjs`). Those branches are
+  *decided in the source* and *unmeasured in the browser*. **A green `probe:chat` covers a quarter of
+  the adopted controls** — see §6 for what that number does and does not include.
 - **Most probes measure ONE theme.** `probe-voicebright` covers dark/dim/light and two custom stops
   because that is what it is for; `probe-control-fill`, `probe-invisible-fills`,
   `probe-adopted-metrics`, `probe-small-targets` and `probe-tab-order` all run on whatever theme the
