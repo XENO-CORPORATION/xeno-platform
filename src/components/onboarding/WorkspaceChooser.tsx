@@ -72,6 +72,7 @@ export const WorkspaceChooser: React.FC<{
   onEverythingHover?: (hovering: boolean) => void;
 }> = ({ value, onChange, onEverythingHover }) => {
   const [barHover, setBarHover] = useState(false);
+  const [barBox, setBarBox] = useState<DOMRect | null>(null);
   // The burst originates from this element's rect, so it needs a real handle.
   const barRef = useRef<HTMLButtonElement | null>(null);
   const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'framed' : 'idle');
@@ -175,7 +176,39 @@ export const WorkspaceChooser: React.FC<{
           className={`pointer-events-none fixed inset-0 z-[60] transition-opacity ease-out
                       ${burst ? 'opacity-100' : 'opacity-0'}`}
         >
-          <div className="absolute inset-0 bg-black/72" />
+          {/* SPOTLIGHT, not a flat scrim.
+           *
+           * 🔴 The portal broke the layering this component previously relied
+           * on. The bar was lifted to z-[70] to sit above the overlay, but
+           * z-index only orders siblings within one stacking context — and the
+           * bar is nested inside a TRANSFORMED ancestor while the overlay is
+           * now a child of <body>. Its 70 cannot outrank the portal's 60, so
+           * the scrim was covering the bar as well, dimming the one element
+           * the effect exists to highlight.
+           *
+           * Fixed by inverting the geometry instead of fighting the stacking
+           * order: a transparent element sits exactly over the bar and casts a
+           * 9999px spread shadow, so the darkness fills the viewport and the
+           * bar's own rectangle stays clear. Nothing needs to out-rank
+           * anything.
+           *
+           * Falls back to a flat scrim if the rect was never measured (focus
+           * arriving before layout, say) — a slightly-too-dark bar beats no
+           * dimming at all. */}
+          {barBox ? (
+            <div
+              className="absolute rounded-[12px]"
+              style={{
+                top: barBox.top,
+                left: barBox.left,
+                width: barBox.width,
+                height: barBox.height,
+                boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)',
+              }}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-black/55" />
+          )}
           <EdgeParticles active={burst} originRef={barRef} />
         </div>,
         document.body,
@@ -208,11 +241,11 @@ export const WorkspaceChooser: React.FC<{
         ref={barRef}
         type="button"
         onClick={toggleFrame}
-        onPointerEnter={() => { setBarHover(true); onEverythingHover?.(true); }}
+        onPointerEnter={() => { setBarBox(barRef.current?.getBoundingClientRect() ?? null); setBarHover(true); onEverythingHover?.(true); }}
         onPointerLeave={() => { setBarHover(false); onEverythingHover?.(false); }}
         // Focus mirrors hover so a keyboard user gets the same state. Without
         // it the bar lights up for a mouse and stays dead for a tab key.
-        onFocus={() => { setBarHover(true); onEverythingHover?.(true); }}
+        onFocus={() => { setBarBox(barRef.current?.getBoundingClientRect() ?? null); setBarHover(true); onEverythingHover?.(true); }}
         onBlur={() => { setBarHover(false); onEverythingHover?.(false); }}
         disabled={phase === 'framing' || phase === 'unframing'}
         style={{ animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: '0.34s', opacity: 0 }}
