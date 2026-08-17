@@ -114,6 +114,11 @@ for (const seg of ['llm', 'search', 'voice']) {
   for (const label of [
     'Open conversation history', 'Conversation actions',
     'Artifacts', 'Scheduled', 'Settings',
+    /* `Share conversation` needs `messages.length > 0`, which the demo thread supplies — no seed.
+       `ChatSkillsWorkspace` is not a page of its own: it is a SECTION of the chat settings modal, so
+       it comes with whatever opens that. Reading where a component is mounted, rather than guessing a
+       trigger for it, is what turned the last aggregate number into four points. */
+    'Share conversation',
     'Projects', PROJECT.name,
   ]) {
     await p.evaluate((x) => {
@@ -171,6 +176,11 @@ This is a FLOOR on coverage, not a census, and the gap conflates three different
      one covers the composer controls behind it. Interaction does not hide library components from
      this count.
   3. transient — every Spinner is 0 because nothing is loading at the moment of the count.
+  5. MUTUALLY EXCLUSIVE branches of one surface. The share dialog opens and renders 1 of its 4
+     Buttons, because "Create share link" and "Delete link / Done" are two states of the same dialog
+     and only one exists at a time. No amount of walking reaches both in a single count. This is a
+     property of the code, not of the measurement, and it means 100% is not the target — the number
+     has a ceiling well below it that nobody has computed.
   4. DELIBERATELY HIDDEN markup — the attach / recent-files panel carries the Tailwind class
      "hidden", so display:none unconditionally, kept for a tool rail this route does not use. No
      hover and no click can open it. One of the TextInputs converted during this adoption lives
