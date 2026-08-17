@@ -44,10 +44,10 @@ Coverage is **55%** — 140 of 255 adopted components rendered. The remainder is
 
 ### What this cost, and the part worth keeping
 
-The measurement was wrong more often than the code was. **Seven probe false positives**, tabulated in
-§6 — including one repeat of a trap I had written into that very table two iterations earlier, and one
+The measurement was wrong more often than the code was. **Nine probe false positives**, tabulated in
+§6 — including one repeat of a trap I had written into that very table two iterations earlier, one
 selector typo that reported a component as never-rendered for the entire programme while three of it
-sat on screen.
+sat on screen, and three in a row chasing a reported hover regression where nothing was broken.
 
 Coverage went 24 → 27 → 31 → 32 → 39 → 40 → **36** → 37 → 38 → 39 → 40 → 41 → 47 → 48 → 49 → 53 → 55.
 The drop to 36 is the most trustworthy number in that list: every rise came from reaching further into
@@ -120,7 +120,8 @@ starting new work. Do not start a second conversion while a build is unverified.
 
 ### The shape of an iteration
 
-1. `git status` clean, `check:names` clean, `test:chat` and `probe:chat` green (§0)
+1. `git status` clean, `check:names` and `check:jsx-comments` clean, `test:chat` and `probe:chat`
+   green (§0)
 2. Read the buttons in the target file (§2)
 3. Convert 3–6 of them by hand (§3)
 4. Export any missing `*Decl` from `src/lib/icons.tsx`, wire the imports
@@ -311,8 +312,9 @@ ready for that call site: stop and add the door, do not convert around it.**
 
 **5.4 Dead imports.** §4.
 
-**5.4b Three ways a COMMENT breaks the build, all of them walked into more than once.** The build
-gate catches all three, which is why it runs before the commit and not after.
+**5.4b Four ways a COMMENT breaks the app, all of them walked into more than once.** The build gate
+catches the first three, which is why it runs before the commit and not after. **It cannot catch the
+fourth** — read that one before applying the advice in the first.
 
 1. **`{/* … */}` as the first thing inside `{cond && ( … )}`.** `{cond && ( {/* why */} <Button/> )}`
    is two expressions where one is allowed. Put a BARE `/* … */` above the `{cond &&` line or above
@@ -330,6 +332,28 @@ gate catches all three, which is why it runs before the commit and not after.
    mounts, which tells you nothing about the cause.
 3. **`{/* … */}` in a JSX ATTRIBUTE position.** `<button data-x {/* why */} onClick=…>` parses as a
    spread. Put it above the element, or fold it into the prop's doc comment.
+4. **A BARE `/* … */` in JSX CHILDREN position renders as a visible paragraph.** This is rule 1's
+   advice applied one line too far, and it is the dangerous one, because **it is valid syntax**. It
+   compiles, `check:names` is clean, `test:chat` is 10/10 and every probe is green — while six
+   paragraphs of `Stays hand-written` prose sit down the sidebar between the nav rows, in the running
+   app. Which it is depends only on the character BEFORE it:
+
+   ```jsx
+   {cond && (
+     /* correct — a JS expression slot; `{…}` here would be an empty object literal */
+     <Thing />
+   )}
+
+   </button>
+   /* WRONG — JSX children, where anything not an element or a `{}` container is TEXT */
+   <button>
+   ```
+
+   So the rule cannot be "always brace" or "never brace"; it is decided per site. **`npm run
+   check:jsx-comments`** decides it mechanically — `>` or `}` before the comment and a `<` after it
+   means children, means it leaks. Ten of the fourteen probes ran green over this bug because a probe
+   measures ELEMENTS, and a leaked comment is a text node with no element to find. Verified the only
+   way a gate is worth trusting: run it against the broken commit and watch it report exactly six.
 
 **5.4c Read the markup before automating an interaction.** Two iterations went into opening the
 recent-files panel — synthetic clicks, then a real `page.hover()` — before reading the JSX, which
@@ -949,8 +973,17 @@ The five, because they rhyme and the next one will too:
 | a `mono` field failing to draw mono | a font stack authored `'Inter'` and computed `"Inter"` — same list, different quoting |
 | every dead normalisation rule as live | the class always appears once, inside the SELECTOR naming it; the check compared against zero |
 | zero control fills on `--chat-control` | authored `#262626` compared against computed `rgb(38, 38, 38)` — **the row above this one, made again by the person who wrote it**, two iterations later |
+| the sidebar hover pill dead on all six rows | the sidebar was CLOSED: it rests at `left: -260px` with `pointerEvents: 'none'`, so `el.hover()` reached nothing. §5.4d again — opening it is the probe |
+| zero `.xeno-icon-hosts` rules loaded, so the icon motion "was never wired" | the walk read `if (r.cssRules) { recurse; continue }`, and in current Chrome **every** `CSSStyleRule` has a `cssRules` list for nesting — an empty one, which is truthy. It skipped every style rule in the document. Read `selectorText` FIRST, then recurse |
+| every icon animation dead on hover | **headless Chrome defaults to `prefers-reduced-motion: reduce`**, and the chat correctly honours it. Measured three ways: unset → 0 animations, `reduce` → 0, `no-preference` → 2. Emulate the media feature explicitly or the probe measures the browser's accessibility default and calls it a regression |
 
-Six now, and the last is the one worth dwelling on: it is the normalisation trap listed directly
+Nine now, and the last three came from a single report — *"the icons lost their hover animation"* — where
+**nothing was broken**. The pill travels, lands within 0.4px of its row, and all six glyphs animate. Three
+consecutive measurements said otherwise, each for its own reason, and each looked like a confirmed bug
+until the next layer was checked. Two of them were failures to make the app do the thing before measuring
+whether it did the thing; the third was reading the CSSOM with a walk that skipped what it was counting.
+
+The one worth dwelling on is still the sixth: it is the normalisation trap listed directly
 above it, repeated by the person who had just written that table. **Knowing a trap is not the same as
 not falling into it** — which is the argument for the probes being committed with their reasons
 inline rather than trusted to memory.
@@ -1527,14 +1560,14 @@ Re-deciding these costs more than it saves.
 
 1. `spec-status.mjs` reports **0 buttons and 0 fields still to decide** — every remaining `<button>`
    carrying its `Stays hand-written` reason;
-2. `check:names` clean for the chat;
+2. `check:names` and `check:jsx-comments` clean for the chat;
 3. every probe in §6 passing;
 4. the themes reading correctly on all three routes;
 5. every remaining hand-written control carrying a comment saying why.
 
 Point 5 was the real finish line. "Everything is a component" was never the goal — **"nothing is
 hand-written by accident"** is. Current: 82 `Button`, 94 `IconButton`, 38 `MenuItem`, 12 `Spinner`,
-12 `TextInput`, 4 `Switch`, 1 `MessageBubble` adopted; 48 buttons and 21 fields hand-written, each
+12 `TextInput`, 4 `Switch`, 1 `MessageBubble` adopted; 72 buttons and 21 fields hand-written, each
 with its reason; 4 fields excluded as pickers and sliders.
 
 ### What "done" does NOT mean
@@ -1560,7 +1593,7 @@ Say these out loud rather than letting a green board imply them.
 | | Owner |
 |---|---|
 | `--chat-overlay` and `--chat-control-strong` have no variant member; closing it means adding palette | design system — `DESIGN_SYSTEM.md` is **LOCKED** and not this repo's to extend |
-| the blue cluster in `SearchChatInterface` (browser-agent overlay): 15 utility classes + 11 literal `rgb()`, none following the theme | design system — a mode that colours itself is a legitimate position, but it is a position someone has to take |
+| the blue cluster in `SearchChatInterface` (browser-agent overlay): 14 utility classes + 11 literal `rgb()`, none following the theme | design system — a mode that colours itself is a legitimate position, but it is a position someone has to take |
 | 3 `data-` state hooks recomputed every render and read by nothing | product — cheap, and a runtime-built selector is invisible to grep |
 | 7 `ReferenceError`s outside the chat (Office, AudioGeneration, ImageStudio) | out of scope here; reported, not fixed |
 | the send-path DB verification | blocked on the local API returning 401/500 |
@@ -1571,6 +1604,6 @@ Say these out loud rather than letting a green board imply them.
 - The six seams in §9 were swept and are recorded with their measurements. They found things a
   file-by-file read did not; they do not need re-running from scratch, only re-checking if something
   changes.
-- The five probe false positives in §6. Every one of them is a mistake the next probe will make.
+- The nine probe false positives in §6. Every one of them is a mistake the next probe will make.
 - The two open design questions above. They have been re-checked twice and the answer is the same:
   they are not an agent's to close.

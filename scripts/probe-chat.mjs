@@ -133,6 +133,16 @@ const PROBES = [
     verdict: /inset matches at both ends: (true|false)/,
     expect: ['true'], describe: (m) => `hold-to-record inset even: ${m[1]}`,
   },
+  {
+    /* The first probe here that measures MOTION. Every other one reads a settled value — a height, a
+       fill, a tab order — so the whole suite stayed green while a person watched the sidebar and saw
+       nothing move. That gap is the reason this exists, not the bug it was written to chase: the
+       animations turned out to be fine, and headless Chrome's reduced-motion default was the thing
+       reporting them dead. Both traps are written into the probe's own header. */
+    file: 'probe-hover-motion.mjs', needs: 'chat',
+    verdict: /rows measured: (\d+)[\s\S]*?every row moves: (true|false)/,
+    expect: [{ min: 6 }, 'true'], describe: (m) => `${m[1]} sidebar rows: pill travels and every glyph animates`,
+  },
 ];
 
 const reachable = (url) => {
