@@ -36,6 +36,7 @@ import {
   Briefcase,
   LogOut,
   BarChart3,
+  KeyRound,
   HelpCircle,
   ChevronRight,
   ChevronDown,
@@ -1232,7 +1233,11 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
               { icon: Coins, label: 'Billing', path: '/overview/billing' },
               ...(isTeam ? [{ icon: Building2, label: 'Team', path: '/overview/team' }] : []),
               { icon: BarChart3, label: 'Usage', path: '/overview/usage-analytics' },
+              { icon: KeyRound, label: 'AI & Keys', path: '/overview/ai-keys' },
               { icon: Settings, label: 'Settings', path: '/overview/settings' },
+              // ⚠️ /overview/api-keys has NO route defined in Overview.tsx — this
+              // entry has been a dead link. It is XENO-ISSUED keys (a different
+              // thing from the provider keys above) and still needs its page.
               { icon: Code, label: 'API Keys', path: '/overview/api-keys' },
             ].map(item => (
               <button
