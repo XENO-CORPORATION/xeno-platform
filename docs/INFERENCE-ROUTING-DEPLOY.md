@@ -10,6 +10,13 @@ them and only adds what is different).
 
 **Branch:** `feat/inference-routing` · **Commit:** `59e5349`
 
+**Hosts touched: `xeno-platform-001` ONLY.**
+`xeno-private-api-001` receives **nothing in this pass**, and that is a fact
+about scope, not an oversight — the gateway code for BYOK (**P3**) is not
+written, so there is no artifact to ship there. Deploying "nothing" to a second
+host to make a plan look complete is theatre. See §10 for what the API box
+genuinely needs, and when.
+
 ---
 
 ## 0. The two things that make this deploy different
@@ -270,3 +277,32 @@ Stated so nobody reports it as a regression:
   blocked behind products adopting the account SDK.
 - **10 of 14 products have never signed in**, so most rows will read "never
   signed in". That is accurate, not a bug.
+
+---
+
+## 10. `xeno-private-api-001` — what it needs, and when
+
+Not this deploy. But the feature is not finished without it, so here is the
+scope, measured on the box 2026-08-17.
+
+| Work | Host | Phase |
+|---|---|---|
+| Grant exchange in `xeno-api-proxy` — BYOK for products that call `api.xenostudio.ai` **directly** (agent-cli, extension, browser, SDKs) | `xeno-private-api-001` | **P3** |
+| Tracking view in `xeno-api-platform/portal` (Next.js, own Postgres, auth federated to the platform) | `xeno-private-api-001` | **P5** |
+| `surface` carrying the real `client_id` instead of the `xeno_api` bucket | both | **P4** |
+
+**🔴 The one rule to carry into P3.** `xeno-api-proxy` already contains code for
+a direct pooled connection to the platform Postgres (`PLATFORM_DATABASE_URL`),
+and it is **not configured in production** — verified: the running process has 90
+environment variables and none of them is that one, nor `SECRET_BOX_KEY`, which
+is **absent from the whole box**.
+
+So the fastest P3 is to set both and let the gateway `SELECT secret_encrypted`
+and decrypt it in place. **Refuse that.** It puts the decryption key for every
+customer's provider credential on a second host, makes the secret readable in two
+services, and replaces a logged, bounded, revocable grant exchange with an
+unlogged `SELECT`. `SECRET_BOX_KEY` never leaves `xeno-platform-001`.
+
+`PLATFORM_DATABASE_URL` on the gateway may be legitimate on its own, for usage
+recording — that is what the dormant pool is for. **The two must never be enabled
+as one change.** Spec §6.1.
