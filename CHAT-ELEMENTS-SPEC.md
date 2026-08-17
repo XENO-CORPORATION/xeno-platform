@@ -265,12 +265,31 @@ gate catches all three, which is why it runs before the commit and not after.
 1. **`{/* … */}` as the first thing inside `{cond && ( … )}`.** `{cond && ( {/* why */} <Button/> )}`
    is two expressions where one is allowed. Put a BARE `/* … */` above the `{cond &&` line or above
    the `return (`. Same for a comment as the sole child of a `return (`.
-2. **A backtick inside the `<style>{` … `}</style>` literal.** Quoting a token or a filename in
-   backticks ends the template and takes the whole route down with a 500 — and a probe pointed at it
-   just times out looking for a root that never mounts, which tells you nothing. Write those comments
-   without backticks; the ones already in that block say so.
+2. **A backtick inside ANY template literal you are writing prose into.** Originally this said "the
+   `<style>{` … `}</style>` literal", and that narrowness is exactly why it failed to warn: the third
+   occurrence was in `probe-coverage.mjs`, a plain `console.log(\`…\`)` explaining the coverage
+   categories, where quoting a class name in backticks ended the literal and broke the script. A file
+   with no JSX in it at all.
+
+   The rule is about the DELIMITER, not the location. If you are typing an explanation inside
+   backticks — a style block, a long `console.log`, a heredoc-ish template — do not quote code in
+   backticks inside it. In a `<style>` block the failure is worse than a broken script: it takes the
+   whole route down with a 500, and a probe aimed at it times out looking for a root that never
+   mounts, which tells you nothing about the cause.
 3. **`{/* … */}` in a JSX ATTRIBUTE position.** `<button data-x {/* why */} onClick=…>` parses as a
    spread. Put it above the element, or fold it into the prop's doc comment.
+
+**5.4c Read the markup before automating an interaction.** Two iterations went into opening the
+recent-files panel — synthetic clicks, then a real `page.hover()` — before reading the JSX, which
+answers it in a minute: the panel is `<div className="relative hidden">`, `display: none`
+unconditionally. **A switched-off branch and a hard-to-drive hover fail identically from the
+outside.** Check `display`, `visibility` and the class list first; the interaction is the expensive
+thing to test and the markup is free to read.
+
+**5.4d Match a hittability check to the click method.** A synthetic `el.click()` bypasses
+`pointer-events` entirely; a real `page.click()` does not. Reusing the strict check with the
+synthetic click reported "could not reach Projects" for a control that had just been clicked
+successfully — several of this chat's rail controls rest at `pointer-events: none` until hovered.
 
 **5.5 A hook dropped on a grep that only looked at `src/`.** Twice now: the carousel's
 `data-update-carousel-dismiss` / `data-update-nav-morph`, and the composer's
@@ -285,6 +304,27 @@ there because this went unnoticed for days.
 When a test asserts the OLD mechanism — `h-8`, `h-9 rounded-lg`, an inline `style.color` — move the
 assertion to the new one rather than deleting it. `data-xeno-size="md"` is the same 32px said in the
 scale's vocabulary, and it is the stricter statement of the two.
+
+**5.5b The same mistake in the opposite direction: DELETING a hook because nothing seems to use it.**
+Sweeping for unreferenced `data-` attributes fails exactly the way §5.5 failed, and the fix is the
+same shape — search everywhere, `.css` and `scripts/` included, before believing "unused".
+
+But the deeper trap is different: **unreferenced is the NORMAL state for an anchor.**
+`data-chat-share-dialog=""` is a constant written once, there to BE selected; the ten chat tests are
+built on precisely that affordance in the composer. Deleting the rest would remove the thing that
+made the composer testable. `probe-dead-hooks.mjs` therefore splits the report in two — anchors
+(constant, keep) from state (`data-melting={…}`, recomputed every render and read by nothing) — and
+still calls neither a delete order.
+
+**Only one hook was removed in this whole pass, and not for being unused.** `data-history-drag-shiftable`
+duplicated a live mechanism: the CSS transition keys on the CLASS `history-drag-shiftable`, which the
+same elements already carry. A duplicate does not merely sit there — it misdirects, and the next
+reader takes the dead one for the working one.
+
+A late corollary, found by writing a probe: **selecting a hook from a probe makes it referenced.**
+Adding `probe-project-settings.mjs` took `data-project-settings-dialog` out of the unreferenced list,
+20 → 19, and `probe:chat` failed on the change. That is the convention working, not a regression —
+but the expectation moves in the same commit.
 
 ---
 
