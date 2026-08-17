@@ -442,12 +442,22 @@ const SuiteCard: React.FC<{
            * no value that closes it, because the error changes with zoom and
            * display.
            *
-           * So it does not try to meet the edges: it goes THROUGH them. One
-           * pixel up into the card's own border, three down into the bar. The
-           * bar is later in the DOM at the same z-index, so it paints over
-           * that lower overlap and the line terminates exactly at its edge —
-           * clipped by the thing it is connecting to, which cannot leave a
-           * gap no matter how the fractions fall.
+           * So it overlaps at the BOTTOM only, and stops dead at the top.
+           *
+           * 🔴 It used to overlap both ends — `calc(100% - 1px)`, one pixel up
+           * into the card. That was wrong, and visibly so: the card's border
+           * is 1px, so a 2px white line starting one pixel early painted
+           * straight OVER the stroke and punched through it. The overlap was
+           * meant to hide a sub-pixel seam and instead broke the one edge it
+           * was protecting.
+           *
+           * The two ends are not symmetric, which is why one rule cannot serve
+           * both. At the BOTTOM the bar paints over the line (later in the DOM,
+           * same z-index), so an overlap there is swallowed and the line
+           * terminates exactly at the bar's edge no matter how the fractions
+           * fall. At the TOP nothing paints over it, so any overlap is simply
+           * visible — and a hairline gap is a far smaller sin than a line
+           * crossing a border.
            *
            * ── TRANSFORM IS ONE INLINE STRING ────────────────────────────
            *
@@ -467,7 +477,7 @@ const SuiteCard: React.FC<{
            * there is no reusable filter there, so this borrows the principle,
            * not the code.)
            */
-          top: 'calc(100% - 1px)',
+          top: '100%',
           height: 'calc(0.75rem + 4px)',
           transform: `translateX(-50%) scaleY(${selected ? 1 : 0})`,
           transformOrigin: 'bottom center',
