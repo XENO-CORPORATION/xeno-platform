@@ -21,7 +21,19 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 /* `needs` is the surface a probe measures on — `chat` is the product dev server on :5183, `preview`
    is the elements preview on :5223, which is where LIBRARY css has to be checked because :5183
-   serves a stale copy of it. `none` reads the source only. */
+   serves a stale copy of it. `none` reads the source only.
+ *
+ * `slow: true` keeps a probe out of the default run. Timed individually, two of the fourteen are 60%
+ * of the wall clock — `probe-coverage` 148s and `probe-voicebright` 112s of 432s — because one walks
+ * every surface it can reach and the other loads ten pages. Everything else together is ~137s.
+ *
+ * They are not less important; they guard a different KIND of thing. The fast gate catches
+ * correctness regressions, which is what an iteration can break by accident. Coverage and theme
+ * parity move only when someone changes the walk, the tokens or the bridge — deliberate acts, and
+ * `npm run probe:chat:full` belongs to those commits.
+ *
+ * The split exists because a seven-minute gate stops being run, and a gate nobody runs is worth less
+ * than a slower one that is. */
 const PROBES = [
   {
     file: 'probe-dead-hooks.mjs', needs: 'none',
@@ -79,7 +91,7 @@ const PROBES = [
     expect: ['1'], describe: (m) => `${m[1]} near-white ink on a light canvas (the caption over a dark image)`,
   },
   {
-    file: 'probe-voicebright.mjs', needs: 'chat',
+    file: 'probe-voicebright.mjs', needs: 'chat', slow: true,
     verdict: /(both routes match chat on every stop|(\d+) stop\(s\) differ)/,
     expect: ['both routes match chat on every stop'], describe: () => 'voice + search match chat at 5 stops (dark/dim/light/30%/65%)',
   },
@@ -89,7 +101,7 @@ const PROBES = [
     expect: ['2', '0'], describe: (m) => `project settings dialog reached in ${m[1]} themes, ${m[2]} height drift`,
   },
   {
-    file: 'probe-coverage.mjs', needs: 'chat',
+    file: 'probe-coverage.mjs', needs: 'chat', slow: true,
     /*
      * A gate at last, and the shape matters: a floor on the COUNT, not the percentage.
      *
@@ -139,8 +151,10 @@ const up = { chat: reachable('http://localhost:5183/'), preview: reachable('http
    number than be surprised by it. `npm run test:chat` is the seconds-long gate; this is the slow one,
    and knowing which is which is what stops someone quietly dropping it. */
 const startedAt = Date.now();
+const FULL = process.argv.includes('--full');
+const selected = PROBES.filter((p) => FULL || !p.slow);
 const results = [];
-for (const probe of PROBES) {
+for (const probe of selected) {
   if (!up[probe.needs]) {
     results.push({ probe, state: 'skip', note: probe.needs === 'chat' ? 'dev server :5183 is down' : 'elements preview :5223 is down' });
     continue;
@@ -185,7 +199,12 @@ const failed = results.filter((r) => r.state === 'FAIL');
 const skipped = results.filter((r) => r.state === 'skip');
 console.log(
   `\n${results.length - failed.length - skipped.length}/${results.length} green, ${failed.length} failing, ` +
-    `${skipped.length} skipped — ${Math.round((Date.now() - startedAt) / 1000)}s.`,
+    `${skipped.length} skipped — ${Math.round((Date.now() - startedAt) / 1000)}s.` +
+    /* Name what was held back, in the run's own output. A split remembered only in a spec is a split
+       that quietly becomes "the suite passes" for someone who never learns two probes did not run. */
+    (PROBES.length - selected.length
+      ? `  (${PROBES.length - selected.length} slow probe(s) held back — npm run probe:chat:full)`
+      : ''),
 );
 
 if (skipped.length) {

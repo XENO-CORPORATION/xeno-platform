@@ -16,7 +16,7 @@ repo disagree, the repo is right and this document is stale.
 cd C:/code-dev/xeno-platform
 node scripts/check-undefined-names.mjs src/components/playground/Chat   # must be clean before starting
 npm run test:chat                                                       # must be green before starting
-npm run probe:chat                                                      # must be green before starting
+npm run probe:chat                                                      # must be green before starting (~170s)
 git status --short                                                      # must be clean before starting
 ```
 
@@ -28,7 +28,9 @@ later pass deleted, so they failed on their FIRST LINE and none of their asserti
 **A test that fails early stops describing anything** — that is why the list is empty rather than
 tolerated.
 
-`probe:chat` runs the ten browser probes and checks each one's number against a recorded expectation.
+`probe:chat` runs the twelve fast browser probes and checks each one's number against a recorded
+expectation. `probe:chat:full` adds the two slow ones — run it on any commit that touches the walk,
+the theme tokens or the bridge.
 Same rule, and one more: **if you change what a probe measures, update its `expect` in the same
 commit**. An expectation edited later than the change it describes is how a baseline rots.
 
@@ -359,7 +361,8 @@ than assuming the code is wrong.
 npm run probe:chat
 ```
 
-Eleven probes, one command, one verdict line each. It grew because ten scripts that each had to be run
+Fourteen probes, two commands. `probe:chat` runs twelve of them in ~170s; `probe:chat:full` adds the
+two slow ones and takes ~430s. It grew because ten scripts that each had to be run
 by hand and read by eye is a check nobody runs — and each printed a different shape of answer, so
 "are they still green" was a question only someone who had read all ten could answer.
 
@@ -428,6 +431,33 @@ The walk now samples DURING the action, at 350/700/1400ms. `Spinner` 0 → 1, `T
 
 **All four zeros are closed.** Every adopted component in this chat has now been rendered at least
 once for a probe, which was not true of any of them a few iterations ago.
+
+### Splitting the suite — measured, not guessed
+
+At 432s the suite had passed the point where it gets run every iteration, and **a gate nobody runs is
+worth less than a slower one that is**. Timing each probe individually rather than estimating:
+
+```
+probe-coverage      148s     probe-light-ink       36s     probe-tab-order        8s
+probe-voicebright   112s     probe-project-set.    24s     probe-adopted-metr.    8s
+                             probe-control-fill    21s     probe-dead-norm.       8s
+                             probe-invisible-f.    21s     probe-variant-shapes   9s
+                             probe-open-findings   21s     probe-small-targets    9s
+                                                           probe-voice-thumb      7s
+                                                           probe-dead-hooks       1s
+```
+
+**Two probes are 60% of the wall clock.** Everything else together is ~137s. The estimate that
+prompted this put coverage at ~90s and suspected `probe-light-ink` — it is 148s, and light-ink at 36s
+was never the problem.
+
+`probe:chat` → 172s, twelve probes. `probe:chat:full` → everything.
+
+The two held back are not less important; they guard a different KIND of thing. The fast gate catches
+correctness regressions, which is what an iteration breaks by accident. **Coverage and theme parity
+move only when someone changes the walk, the tokens or the bridge** — deliberate acts, and the full
+run belongs to those commits. The runner prints how many were held back, so the split is visible in
+its own output rather than remembered.
 
 ### A path whose first step is missing looks exactly like an unreachable surface
 
