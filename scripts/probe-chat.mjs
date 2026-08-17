@@ -55,8 +55,11 @@ const PROBES = [
   },
   {
     file: 'probe-invisible-fills.mjs', needs: 'chat',
-    verdict: /controls whose fill matches the surface under them: (\d+)/,
-    expect: ['11'], describe: (m) => `${m[1]} flat-on-surface (resting tray rows are meant to be)`,
+    /* The `worst:` line, not the first per-theme count. This probe runs dark/dim/light and each theme
+       collapses a DIFFERENT pair of tokens, so a verdict reading the first number would report dark
+       and stay silent about the other two. */
+    verdict: /per theme: ([^\n]+)\nworst: (\d+)/,
+    expect: [null, '11'], describe: (m) => `${m[1]} — flat-on-surface (a resting tray row is meant to be)`,
   },
   {
     file: 'probe-small-targets.mjs', needs: 'chat',

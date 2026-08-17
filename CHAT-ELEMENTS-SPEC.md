@@ -632,6 +632,27 @@ Re-deciding these costs more than it saves.
   hover, so it reports every matching variant rather than the first; and a match is a weak signal,
   since resting shape knows nothing of hover, focus or a disabled branch.
 
+- **Each theme collapses a DIFFERENT pair of surface tokens, and only `dim` collapses none.**
+  Measured on all three, which is the point — `probe-invisible-fills` had been running on whatever
+  theme the browser started in, and a collision is exactly the kind of thing that is theme-specific:
+
+  | | canvas | surface | elevated | control | control-strong |
+  |---|---|---|---|---|---|
+  | dark | `#0a0a0a` | `#171717` | **`#262626`** | **`#262626`** | `#404040` |
+  | dim | `#171718` | `#1b1b1d` | `#212124` | `#2a2a2e` | `#36363b` |
+  | light | **`#ffffff`** | `#fafafa` | **`#ffffff`** | `#f5f5f5` | `#e5e5e5` |
+
+  Controls whose fill matches the surface beneath them: **dark 11, dim 4, light 8.**
+
+  The dark collision is the one already recorded — `elevated` == `control`, which is what gives
+  `quiet[data-selection=on]` its unstated precondition. **The light one is different and was not
+  recorded: `elevated` == `canvas`**, so a floating panel has no fill contrast with the page it
+  floats over. The model tray and the attach panel rely entirely on their border and shadow there.
+
+  That may well be intended — white-on-white with a shadow is a real idiom — but it had never been
+  measured, and it means the `--chat-elevated` token does no work in light. **A design-system
+  question, same family as the two above: which token should differ is not an agent's call.**
+
 - **`data-` hooks: 82 declared, 59 referenced, 23 not — and the number is the wrong question.**
   Seam (d), swept with `scripts/probe-dead-hooks.mjs`, which searches every `.tsx`, `.css`, `.mjs`
   and `scripts/` file before calling anything unreferenced. §5.5 exists because four hooks were lost
