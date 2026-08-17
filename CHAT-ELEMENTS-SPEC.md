@@ -472,6 +472,25 @@ mount, so a seeded `'true'` reads back `'false'` — the page is opened by click
 that silently does nothing is worse than no seed**, because the probe still reports a number and the
 number now implies coverage it did not buy. Check the value survives the mount before trusting it.
 
+**The history store keys off a different id.** `chatHistory_playground`, not `chatHistory_default` —
+it uses `sharedInterfaceId = 'playground'`, a constant deliberately separate from the `interfaceId`
+prop that names `recentFiles_*`, so all interfaces share one history. Two stores, two ids, and the
+difference is invisible unless you read both.
+
+**A gain can be real and still not move the total.** `probe-coverage` takes the MAX across the three
+routes, so seeding conversations and opening a row menu — `MenuItem` 2 → 7 on the chat route, five
+components no probe had ever rendered — leaves the reported number unchanged, because search already
+showed 12. The per-route gain is real; the total understates it. Read the table, not just the
+percentage.
+
+Two smaller things that cost time here, both recorded in the probe:
+
+- **It was not counting the resting state at all.** The walk clicked before it measured, so the first
+  click's cost (a panel covers the composer controls behind it) was counted and its benefit was not.
+- **69 vs 70 was noise**, chased as if it were the history seed's doing. Disabling the seed gave 69
+  too. The tab-stop lesson applies to every count here: re-run before building a story on a delta of
+  one.
+
 **Three ways a seed goes quietly empty**, all met here, and worth checking in this order before
 writing one:
 

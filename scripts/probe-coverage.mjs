@@ -77,14 +77,35 @@ for (const seg of ['llm', 'search', 'voice']) {
       { id: 'rf1', name: 'seeded-spec.txt', type: 'text/plain', size: 2048, lastUsed: now - 1000 },
       { id: 'rf2', name: 'seeded-notes.md', type: 'text/markdown', size: 900, lastUsed: now - 2000 },
     ]));
+    /* `chatHistory_playground`, NOT `chatHistory_default` — the history store keys off
+       `sharedInterfaceId = 'playground'`, a different constant from the `interfaceId` prop that names
+       the recent-files store. Two stores, two ids, one letter of difference in the code that reads
+       them. Seeded with a pinned, an unread and an archived conversation so the row variants render. */
+    const convo = (i, extra) => Object.assign({
+      id: 'seed-' + i, title: 'Seeded conversation ' + i, timestamp: now - i * 1000,
+      messages: [{ id: 'm' + i, role: 'user', content: 'hello ' + i }],
+    }, extra || {});
+    localStorage.setItem('chatHistory_playground', JSON.stringify([
+      convo(1, { isPinned: true, pinOrder: 0 }), convo(2, { isUnread: true }), convo(3, {}), convo(4, { isArchived: true }),
+    ]));
   }, PROJECT);
   await p.goto(`http://localhost:5183/overview/chat/${seg}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await p.waitForSelector('.chat-themed', { timeout: 60000 });
   await new Promise((r) => setTimeout(r, 4200));
 
+  /* Count AT REST first. The walk below clicks before it measures, so without this the resting state
+     is never counted — and opening a panel covers the composer controls behind it, so the first click
+     LOSES components. That cost a coverage point and read as the history seed's fault. */
+  const atRest = await p.evaluate((sel) => {
+    const o = {};
+    for (const [n, s] of Object.entries(sel)) o[n] = document.querySelectorAll(s).length;
+    return o;
+  }, SELECTOR);
+  for (const c of COMPONENTS) seen[c] = Math.max(seen[c], atRest[c]);
+
   /* Walk into the project surfaces where they exist. Synthetic clicks, so `pointer-events` does not
      apply — see the note in `probe-project-settings.mjs` about matching the check to the method. */
-  for (const label of ['Projects', PROJECT.name]) {
+  for (const label of ['Open conversation history', 'Conversation actions', 'Projects', PROJECT.name]) {
     await p.evaluate((x) => {
       const el = [...document.querySelectorAll('button,[role="button"]')].find((e) =>
         ((e.getAttribute('aria-label') || e.textContent || '').trim().replace(/\s+/g, ' ')).includes(x),
@@ -118,6 +139,13 @@ for (const c of COMPONENTS) {
   const gap = Math.max(0, inSource[c] - seen[c]);
   console.log(`  ${c.padEnd(16)} ${String(inSource[c]).padStart(4)}      ${String(seen[c]).padStart(5)}      ${String(gap).padStart(5)}`);
 }
+/*
+ * A LIMIT of this aggregation, worth knowing before reading a seed as worthless: `seen` is the MAX
+ * across the three routes, so a gain on one route is invisible if another already exceeded it.
+ * Seeding conversations and opening a row menu takes MenuItem from 2 to 7 on the chat route — five
+ * components no probe had ever rendered — and the reported number does not move, because search
+ * already showed 12. The per-route gain is real and this total understates it.
+ */
 const pct = Math.round((obs / src) * 100);
 console.log(`\nadopted components: ${src} in source, ${obs} rendered on the three routes — ${pct}% seen by the probes.`);
 console.log(`
