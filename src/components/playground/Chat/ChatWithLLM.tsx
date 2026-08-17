@@ -12173,19 +12173,18 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             --xeno-goo-radius: 6px;
           }
           .chat-themed [class*="bg-[var(--chat-canvas)]"] { background-color: var(--chat-canvas) !important; }
-          .chat-themed [class*="bg-[var(--chat-surface)]"],
-          .chat-themed [class*="bg-[#0f0f11]"],
-          .chat-themed [class*="bg-[#111113]"],
-          .chat-themed [class*="bg-[#121214]"] { background-color: var(--chat-surface) !important; }
-          .chat-themed [class*="bg-[var(--chat-elevated)]"],
-          .chat-themed [class*="bg-[#161618]"],
-          .chat-themed [class*="bg-[#18181a]"],
-          .chat-themed [class*="bg-[#18171b]"],
-          .chat-themed [class*="bg-[#0c0c0e]"] { background-color: var(--chat-elevated) !important; }
-          .chat-themed [class*="bg-[#1e1e21]"],
-          .chat-themed [class*="bg-[#232021]"],
-          .chat-themed [class*="bg-[var(--chat-control)]"],
-          .chat-themed [class*="bg-[#252527]"] { background-color: var(--chat-control) !important; }
+          /* Ten legacy-hex selectors used to ride along here, one group per token — the fills this
+             chat had before it had tokens. Every class they named is gone from the source, so each
+             rule was matching nothing while making the block look like it was holding the chat
+             together. That mattered: the duplicate below was found by reading a block whose SIZE
+             implied every line was load-bearing. scripts/probe-dead-normalisation.mjs counts what
+             each selector matches on the running chat and greps the class out of the source, which
+             is what separates a dead rule from one whose branch the mock cannot render.
+             No backticks in here: this comment lives inside a style template literal (spec 5.4b),
+             and that trap has now been walked into twice. */
+          .chat-themed [class*="bg-[var(--chat-surface)]"] { background-color: var(--chat-surface) !important; }
+          .chat-themed [class*="bg-[var(--chat-elevated)]"] { background-color: var(--chat-elevated) !important; }
+          .chat-themed [class*="bg-[var(--chat-control)]"] { background-color: var(--chat-control) !important; }
           /* The bg-[var(--chat-control)] selector was named here TOO, at the same specificity as the
              rule above, so the later one won and every hand-written control fill in the chat painted
              #404040 while its own class said #262626. Measured before removal: 10 of the 11 such
@@ -12362,10 +12361,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           .chat-themed [data-chat-composer-shell] [class*="placeholder:text-zinc"]::placeholder {
             color: var(--chat-surface-muted) !important;
           }
-          .chat-themed [class*="text-[#f6b98b]"] { color: var(--chat-text) !important; }
-          .chat-themed [class*="border-white"],
-          .chat-themed [class*="border-[var(--chat-border)]"],
-          .chat-themed [class*="border-[#232021]"],
+          /* The border-[var(--chat-border)] selector was listed TWICE in this one rule — harmless,
+             since both copies said the same thing, but it is the same copy-paste that produced the
+             --chat-control duplicate two rules up, where the two copies DISAGREED and one of them
+             repainted every control fill in the chat. Worth deleting for that reason alone. */
           .chat-themed [class*="border-[var(--chat-border)]"] { border-color: var(--chat-border) !important; }
           .chat-themed [class*="hover:bg-black"]:hover,
           .chat-themed [class*="hover:bg-[var(--chat-control)]"]:hover,

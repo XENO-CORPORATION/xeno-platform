@@ -484,6 +484,26 @@ Re-deciding these costs more than it saves.
   **The `style` prop is where a wrong variant choice hides.** It is closed in the types and open at
   runtime, so nothing failed and nothing said so.
 
+- ~~**Normalisation rules with nothing left to match.**~~ **Swept: 24 selectors → 11.** The block
+  force-maps legacy hardcoded fills onto the chat tokens, keyed on Tailwind class SUBSTRINGS, so every
+  conversion that replaced a hand-written control deleted one of those classes and left the rule that
+  named it behind. Thirteen selectors named classes that appear **nowhere in any chat file** — ten
+  legacy hexes, `text-[#f6b98b]`, `border-white`, `border-[#232021]`.
+
+  Dead weight, and worse than that: **the duplicate that repainted every control fill in the chat was
+  found by reading a block whose size implied every line was load-bearing.** A rule matching nothing
+  makes the rest look necessary. Removing them also turned up a second duplication —
+  `border-[var(--chat-border)]` listed twice in one rule, harmless because both copies agreed, and the
+  same copy-paste as the one where they did not.
+
+  `scripts/probe-dead-normalisation.mjs` is the check: it counts what each selector matches on the
+  running chat AND greps the class out of the source, because a zero alone cannot tell a dead rule
+  from one whose branch the mock never renders. One selector is dormant rather than dead —
+  `bg-black/` still has a call site, in a branch that does not render by default — and the probe says
+  which is which. **Its first two versions were both wrong**: the regex missed the last selector of
+  every rule, and the live/dead column compared against zero when the class always appears once, in
+  the selector naming it.
+
 - ~~**Appearance classes surviving a conversion.**~~ **Swept, and clean.** §3.4 says `p-`, `h-`,
   `rounded-`, `bg-` and friends come off when a control is converted, because the component owns its
   box. A static grep finds nothing, but it can only see literal `className` strings — a conditional, a
