@@ -297,38 +297,28 @@ export const WorkspaceChooser: React.FC<{
           )}
         </span>
 
-        {/* -- Centred to left-aligned, WITHOUT flipping text-align ---------
-            The obvious version toggles `text-center` -> `text-left`. That is
-            what caused the lurch: text-align flips on the FIRST frame, so the
-            label snapped hard left while the square was still 0 wide, and then
-            the growing square shoved it back right. Two opposing movements in
-            one gesture.
+        {/* Equal spacers either side, always growing, so the label stays
+            CENTRED between whatever flanks it. It shifts slightly left as the
+            square and the count take up space, which is motion for free —
+            driven entirely by their widths, with nothing to keep in sync.
 
-            `flex-grow` is animatable, so a spacer does the job instead. Idle,
-            spacers on both sides grow equally and the label sits centred;
-            chosen, the left spacer collapses to 0 and the label slides over as
-            one continuous motion. Nothing is measured, nothing snaps, and the
-            label only ever travels in one direction. ------------------------ */}
-        <span
-          aria-hidden
-          style={{ transitionDuration: `${BAR_MS}ms` }}
-          className={`transition-[flex-grow] ease-out ${framed ? 'grow-0' : 'grow'}`}
-        />
+            An earlier version collapsed the left spacer to pin the label left
+            once chosen. Centred throughout is calmer and, more to the point,
+            it means the label never moves for a reason the user did not
+            cause. */}
+        <span aria-hidden className="grow" />
 
-        <span className="relative min-w-0 shrink text-left">
+        <span className="relative min-w-0 shrink text-center">
           <span className="block whitespace-nowrap text-[14px] font-medium text-white">
-            {framed ? 'The full XENO workspace' : 'Or take the full XENO experience'}
+            Complete XENO Experience
           </span>
           <span className="mt-0.5 block text-[12.5px] text-white/40">
             {framed
-              ? 'All four suites, together. Click again to undo, or pick a single card.'
-              : 'Every suite in one workspace \u2014 you can narrow it later.'}
+              ? 'All four suites are yours. Click again to undo.'
+              : 'Every suite, every app, in one workspace.'}
           </span>
         </span>
 
-        {/* The right spacer always grows, so it absorbs whatever the left one
-            gives up. Without it the label would be pinned to the right edge in
-            the idle state rather than centred. */}
         <span aria-hidden className="grow" />
 
         {/* Right slot -- the count is meaningless before a choice is made; it
