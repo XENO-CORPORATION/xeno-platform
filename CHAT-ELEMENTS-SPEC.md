@@ -585,6 +585,28 @@ Re-deciding these costs more than it saves.
   flat. The question it answers is about PAIRS: if a control and its selected twin both appear, the
   selection is invisible.
 
+- **A blue cluster the theme does not reach.** Sweeping for the pattern that produced the disclosure
+  defect — a library STYLESHEET adopted while its behaviour was left behind — turned up a different
+  kind of borrowing instead: Tailwind's blue palette, in a chat whose own tests assert a monochrome
+  reading elsewhere (`test-chat-voice-controls` asserts the voice popover contains no `blue`).
+
+  Counted: **15 blue utility classes** and **11 literal blue `rgb()`/`rgba()` values**, across two
+  files. None of them follows the theme, so they hold still through light mode and every brightness
+  stop while everything around them moves.
+
+  **One was unambiguous and is fixed.** The message editor's focus ring was `ring-blue-500/25` on the
+  same element whose border is `border-[var(--chat-accent)]` — the box had already decided which token
+  it uses, and one property had been left behind. It is `ring-[var(--chat-accent)]/25` now.
+
+  **The rest is deliberately not repainted.** The remainder is one coherent surface: the browser-agent
+  overlay in `SearchChatInterface` — pulse rings, a cursor badge, a `scroll` chip, an "Agent
+  controlling browser" banner and two `Spinner`s overridden through `--xeno-spinner-track` /
+  `-edge`. A mode that colours itself is a legitimate design position, and `DESIGN_SYSTEM.md` is the
+  visual authority for that call and is **LOCKED**. This is the measurement, not the verdict.
+
+  Worth noting either way: the two spinners use the library's own custom-property door correctly. What
+  is passed THROUGH it is a literal, which is a call-site question rather than a component one.
+
 - **Six controls sit below the scale's floor — and the framing was incomplete.** The control scale
   starts at `xs` = 24px; the chat has six squares at 18–20px, each a badge or a hint notched into
   something else, where six pixels of growth is six more pixels of what it sits on being covered.

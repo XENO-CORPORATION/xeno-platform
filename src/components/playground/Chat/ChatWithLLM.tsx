@@ -15370,7 +15370,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                      <div
                                          className="chat-message-editor flex w-full max-w-[90%] flex-col gap-2 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-[var(--chat-text)] md:max-w-[75%]"
                                      >
-                                         <div className="rounded-lg border border-[var(--chat-accent)]/70 bg-[var(--chat-canvas)]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-accent)] focus-within:ring-1 focus-within:ring-blue-500/25">
+                                         <div className="rounded-lg border border-[var(--chat-accent)]/70 bg-[var(--chat-canvas)]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-accent)] focus-within:ring-1 focus-within:ring-[var(--chat-accent)]/25">
                                          {/* Stays hand-written — bare inside a box it does not
                                              own. The `--chat-canvas`/40 plate around it carries the
                                              border, the radius and a `focus-within` ring that
