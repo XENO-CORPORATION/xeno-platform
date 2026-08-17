@@ -311,6 +311,19 @@ html, body, #root, #app {
   animation: xenoFrameDraw 0.78s cubic-bezier(0.35, 0.05, 0.2, 1) forwards;
 }
 
+/* Retracting — the same four beats, run backwards, so the frame opens at the
+   top, the sides descend, and the two lines converge back into the point they
+   came from.
+
+   `direction: reverse` rather than a second keyframe. One definition means the
+   two directions cannot drift apart: edit the draw and the erase follows. It
+   also reverses the easing, which is what makes the retract decelerate INTO
+   the origin point instead of slamming into it. */
+.xeno-frame-erase {
+  opacity: 1;
+  animation: xenoFrameDraw 0.62s cubic-bezier(0.35, 0.05, 0.2, 1) reverse forwards;
+}
+
 @keyframes xenoCheckDrop {
   0%   { opacity: 0; transform: translateY(-9px) scale(0.4); }
   55%  { opacity: 1; transform: translateY(1.5px) scale(1.06); }
@@ -369,6 +382,7 @@ html, body, #root, #app {
   .xeno-scale-in,
   .xeno-check-drop,
   .xeno-frame-draw,
+  .xeno-frame-erase,
   .xeno-stagger > * {
     animation: none !important;
     opacity: 1 !important;

@@ -2559,6 +2559,20 @@ router.post('/onboarding', async (req, res) => {
     const startingPoint = str(b.startingPoint, 60);
     const workspace = str(b.workspace, 40);
 
+    /* The workspace choice is the one field that can be UNSET.
+     *
+     * Every other answer only ever moves forward, so COALESCE(new, existing)
+     * is right for them — a later step posting its own field must not blank an
+     * earlier one. But the "full XENO workspace" bar is a TOGGLE: clicking it
+     * again clears the choice, and COALESCE would silently keep the old value,
+     * so an explicit un-choice would never reach the database.
+     *
+     * So absence and null are distinguished. A body with no `workspace` key
+     * leaves the stored value alone; a body that carries `workspace: null`
+     * clears it. `hasOwnProperty` rather than `!== undefined`, because JSON
+     * cannot express undefined and the key's PRESENCE is the signal. */
+    const workspaceProvided = Object.prototype.hasOwnProperty.call(b, 'workspace');
+
     // Interests: array of short strings, deduped, capped. Anything else is
     // discarded rather than rejected — a malformed optional survey field
     // should not fail a request that also carries good answers.
@@ -2584,7 +2598,9 @@ router.post('/onboarding', async (req, res) => {
          heard_from     = COALESCE(EXCLUDED.heard_from,     user_onboarding.heard_from),
          role           = COALESCE(EXCLUDED.role,           user_onboarding.role),
          starting_point = COALESCE(EXCLUDED.starting_point, user_onboarding.starting_point),
-         workspace      = COALESCE(EXCLUDED.workspace,      user_onboarding.workspace),
+         -- $10 true = the client sent the key, so its value wins even when null.
+         workspace      = CASE WHEN $10::boolean THEN EXCLUDED.workspace
+                               ELSE COALESCE(EXCLUDED.workspace, user_onboarding.workspace) END,
          -- Interests are REPLACED, not merged: it is a multi-select, so
          -- unticking something has to be able to remove it.
          interests      = CASE WHEN array_length(EXCLUDED.interests, 1) IS NULL
@@ -2592,7 +2608,7 @@ router.post('/onboarding', async (req, res) => {
          completed_at   = COALESCE(user_onboarding.completed_at, EXCLUDED.completed_at),
          skipped_at     = COALESCE(user_onboarding.skipped_at,   EXCLUDED.skipped_at),
          updated_at     = NOW()`,
-      [user.id, displayName, heardFrom, role, interests, startingPoint, completed, skipped, workspace],
+      [user.id, displayName, heardFrom, role, interests, startingPoint, completed, skipped, workspace, workspaceProvided],
     );
 
     /* Marketing preference.

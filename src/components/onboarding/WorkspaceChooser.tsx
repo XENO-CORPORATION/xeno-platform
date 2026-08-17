@@ -38,13 +38,16 @@ const SUITE_ICON: Record<string, React.ReactNode> = {
   connect:   <MessageSquare className="h-[18px] w-[18px]" />,
 };
 
-type Phase = 'idle' | 'framing' | 'framed';
+type Phase = 'idle' | 'framing' | 'framed' | 'unframing';
 
-const FRAME_MS = 720;
+const FRAME_MS = 780;
+const ERASE_MS = 620;
 
 export const WorkspaceChooser: React.FC<{
   value: string | null;
-  onChange: (id: string) => void;
+  /** `null` clears the choice — the bar is a TOGGLE, so it has to be able to
+   *  hand back "nothing selected", not just a different id. */
+  onChange: (id: string | null) => void;
 }> = ({ value, onChange }) => {
   const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'framed' : 'idle');
 
@@ -71,12 +74,29 @@ export const WorkspaceChooser: React.FC<{
    *
    * So this handler only switches state. The whole animation is one CSS class.
    */
-  const expandFrame = useCallback(() => {
-    if (phase !== 'idle') return;
+  const toggleFrame = useCallback(() => {
+    // Mid-animation clicks are ignored rather than queued. Interrupting a draw
+    // to start an erase leaves the frame at whatever clip it had reached, and
+    // the reverse would then play from the wrong place.
+    if (phase === 'framing' || phase === 'unframing') return;
 
+    // ── retract ──
+    if (phase === 'framed') {
+      // The selection clears IMMEDIATELY, before the animation. The checks
+      // unmount on the same frame the retract begins, which is the correct
+      // reverse order — the cards are released, then the frame lets them go.
+      // Deferring it would leave four ticks sitting inside a frame that is
+      // visibly opening, which reads as a lag rather than a sequence.
+      onChange(null);
+      if (reduced) { setPhase('idle'); return; }
+      setPhase('unframing');
+      window.setTimeout(() => setPhase('idle'), ERASE_MS + 40);
+      return;
+    }
+
+    // ── draw ──
     // Reduced motion still gets the OUTCOME, just not the drawing of it.
     if (reduced) { setPhase('framed'); onChange(EVERYTHING_ID); return; }
-
     setPhase('framing');
     window.setTimeout(() => { setPhase('framed'); onChange(EVERYTHING_ID); }, FRAME_MS + 40);
   }, [phase, reduced, onChange]);
@@ -87,6 +107,10 @@ export const WorkspaceChooser: React.FC<{
   }, []);
 
   /* -- The choice -------------------------------------------------------- */
+  /* `framing` counts as framed so the checks are already scheduled while the
+   * frame draws; `unframing` does NOT, so they unmount the instant a retract
+   * begins. The asymmetry is the point — the enclosure arrives before the
+   * ticks and leaves after them. */
   const framed = phase === 'framed' || phase === 'framing';
 
   return (
@@ -95,14 +119,16 @@ export const WorkspaceChooser: React.FC<{
           content box (-inset-3), so it reads as enclosing the grid rather than
           as another card in it. Pointer-events off: it is a statement, not a
           control — the bar underneath stays clickable through it. */}
-      {(phase === 'framing' || phase === 'framed') && (
+      {phase !== 'idle' && (
         <div
           aria-hidden
           style={{
             boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.42), 0 24px 60px -30px rgba(0,0,0,0.9)',
             background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008))',
           }}
-          className="xeno-frame-draw pointer-events-none absolute -inset-3 z-0 rounded-[18px]"
+          className={`pointer-events-none absolute -inset-3 z-0 rounded-[18px] ${
+            phase === 'unframing' ? 'xeno-frame-erase' : 'xeno-frame-draw'
+          }`}
         />
       )}
 
@@ -130,8 +156,8 @@ export const WorkspaceChooser: React.FC<{
 
       <button
         type="button"
-        onClick={expandFrame}
-        disabled={phase !== 'idle'}
+        onClick={toggleFrame}
+        disabled={phase === 'framing' || phase === 'unframing'}
         style={{ animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: '0.34s', opacity: 0 }}
         className={`focus-self group relative z-10 mt-3 flex w-full items-center gap-3.5 overflow-hidden
                     rounded-[12px] border px-5 py-4 text-left transition-all duration-200 ease-out
@@ -166,7 +192,7 @@ export const WorkspaceChooser: React.FC<{
           </span>
           <span className="mt-0.5 block text-[12.5px] text-white/40">
             {framed
-              ? 'All four suites, together. Pick a single card to narrow it.'
+              ? 'All four suites, together. Click again to undo, or pick a single card.'
               : 'Every suite in one workspace \u2014 you can narrow it later.'}
           </span>
         </span>
