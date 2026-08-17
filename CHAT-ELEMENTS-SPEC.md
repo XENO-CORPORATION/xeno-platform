@@ -411,6 +411,22 @@ empty.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
 
+### The last zero was mistimed, not unreachable
+
+`Spinner` read 0 for this entire programme — 12 in source, never once seen. The suggested fix was
+network interception, and it needed none: **typing into the composer and pressing Enter renders two
+spinners at 400ms, and they are gone by 900ms.** Every sample this probe took was at 4200ms.
+
+The component was rendering the whole time, in a window narrower than the settle delay. **A transient
+component is not unreachable, it is mistimed** — and a probe that samples once, after everything has
+settled, is built to miss exactly this class of thing.
+
+The walk now samples DURING the action, at 350/700/1400ms. `Spinner` 0 → 1, `Textarea` 1 → 2, 39% →
+40%.
+
+**All four zeros are closed.** Every adopted component in this chat has now been rendered at least
+once for a probe, which was not true of any of them a few iterations ago.
+
 ### A flat walk cannot reach a section inside a page
 
 `Switch` — the one real switch in the chat, "Generate memory from chats" — read 0, and the walk was
@@ -545,7 +561,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-99 rendered across the three routes — 39%.**
+101 rendered across the three routes — 40%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,

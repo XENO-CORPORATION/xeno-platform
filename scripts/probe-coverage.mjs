@@ -235,6 +235,24 @@ for (const seg of ['llm', 'search', 'voice']) {
     }
     observe(await p.evaluate(eval(IDENTIFY), SELECTOR));
   }
+  /*
+   * A TRANSIENT state has to be sampled during the action, not after it.
+   *
+   * `Spinner` read 0 for the whole programme and needed no network interception at all: typing into
+   * the composer and pressing Enter renders two of them on the search route — at 400ms. By 900ms they
+   * are gone, and every sample this probe took was at 4200ms. The component was rendering all along,
+   * in a window narrower than the settle delay.
+   */
+  const composer = await p.$('textarea');
+  if (composer) {
+    await composer.type('what is a transcript summariser');
+    await p.keyboard.press('Enter');
+    for (const delay of [350, 700, 1400]) {
+      await new Promise((r) => setTimeout(r, delay === 350 ? 350 : delay - 350));
+      observe(await p.evaluate(eval(IDENTIFY), SELECTOR));
+    }
+  }
+
   observe(await p.evaluate(eval(IDENTIFY), SELECTOR));
   await p.close();
 }
@@ -280,7 +298,10 @@ This is a FLOOR on coverage, not a census, and the gap conflates three different
      94 -> 91 -> 83. Those panels are built from the controls that stayed hand-written, and opening
      one covers the composer controls behind it. Interaction does not hide library components from
      this count.
-  3. transient — every Spinner is 0 because nothing is loading at the moment of the count.
+  3. transient — a state narrower than the settle delay. This read "every Spinner is 0" for the whole
+     programme, and the fix was not network interception: typing into the composer and pressing Enter
+     renders two spinners at 400ms, gone by 900ms, while every sample was taken at 4200ms. The walk
+     now samples DURING the action. A transient component is not unreachable, it is mistimed.
   5. MUTUALLY EXCLUSIVE branches of one surface. The share dialog opens and renders 1 of its 4
      Buttons, because "Create share link" and "Delete link / Done" are two states of the same dialog
      and only one exists at a time. No amount of walking reaches both in a single count. This is a
