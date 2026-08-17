@@ -13,6 +13,7 @@
     "dev": "concurrently \"npm run server\" \"npm run start\"",
     "build": "vite build && node scripts/prerender-products.mjs",
     "test:chat": "node scripts/test-chat.mjs",
+    "probe:chat": "node scripts/probe-chat.mjs",
     "check:names": "node scripts/check-undefined-names.mjs",
     "build:prerender": "node scripts/prerender-products.mjs",
     "smoke:public-auth": "node scripts/smoke-public-auth.mjs",

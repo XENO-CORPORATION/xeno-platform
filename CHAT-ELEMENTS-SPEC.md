@@ -235,6 +235,32 @@ than assuming the code is wrong.
 
 ### The standing probes
 
+```bash
+npm run probe:chat
+```
+
+Ten probes, one command, one verdict line each. It grew because ten scripts that each had to be run
+by hand and read by eye is a check nobody runs — and each printed a different shape of answer, so
+"are they still green" was a question only someone who had read all ten could answer.
+
+Each probe declares an EXPECTED number in `scripts/probe-chat.mjs`. The runner exits non-zero when
+one moves, and distinguishes two things that mean opposite things:
+
+- **FAIL** — the probe ran and its number changed. A regression, or a deliberate change; if
+  deliberate, update its `expect` **in the same commit as the change**. An expectation edited later
+  than the change it describes is how a baseline rots.
+- **skip** — the probe could not run. `chat` probes need the dev server on :5183; `preview` probes
+  need the elements preview on :5223, because :5183 serves a **stale copy of the library CSS**.
+  A skip is printed loudly and never counts as a pass.
+
+It also fails when a probe's output no longer contains the line its verdict reads — a verdict that
+silently stops matching is a green light nobody is holding.
+
+Verified both ways before being trusted: a moved number exits 1, and a dead server reports 9 skipped
+rather than 9 passed.
+
+The originals, for running one at a time when something fails:
+
 ```
 scratchpad/audit3.mjs      67 hosts, 67 moving, 0 STILL
 scratchpad/menusweep.mjs   page errors: none
