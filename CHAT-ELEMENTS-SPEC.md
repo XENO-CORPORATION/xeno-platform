@@ -376,6 +376,12 @@ The five, because they rhyme and the next one will too:
 | a control 2px off its size token | a reveal at `scale(0.92)`; `getBoundingClientRect` includes transforms, `offsetHeight` does not |
 | a `mono` field failing to draw mono | a font stack authored `'Inter'` and computed `"Inter"` — same list, different quoting |
 | every dead normalisation rule as live | the class always appears once, inside the SELECTOR naming it; the check compared against zero |
+| zero control fills on `--chat-control` | authored `#262626` compared against computed `rgb(38, 38, 38)` — **the row above this one, made again by the person who wrote it**, two iterations later |
+
+Six now, and the last is the one worth dwelling on: it is the normalisation trap listed directly
+above it, repeated by the person who had just written that table. **Knowing a trap is not the same as
+not falling into it** — which is the argument for the probes being committed with their reasons
+inline rather than trusted to memory.
 
 The shape is always the same: **a probe reads what is rendered, and what is rendered contains intent
 and accident in the same value.** Narrow the question until the two cannot both satisfy it. And

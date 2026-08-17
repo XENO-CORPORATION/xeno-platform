@@ -50,8 +50,11 @@ const PROBES = [
   },
   {
     file: 'probe-control-fill.mjs', needs: 'chat',
-    verdict: /"rgb\(38, 38, 38\)": (\d+)/,
-    expect: ['10'], describe: (m) => `${m[1]} hand-written control fills at #262626`,
+    /* Reads the normalised per-theme line, not a hardcoded `rgb(38, 38, 38)`. The old verdict named
+       dark's colour literally, so it would have gone silent the moment the probe learned to run in
+       light — a verdict that only works in one theme is the same gap the probe was extended to close. */
+    verdict: /dark hand-written fills on --chat-control: (\d+)/,
+    expect: ['10'], describe: (m) => `${m[1]} hand-written control fills on --chat-control, in all three themes`,
   },
   {
     file: 'probe-invisible-fills.mjs', needs: 'chat',
