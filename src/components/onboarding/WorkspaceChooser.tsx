@@ -1,10 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Palette, FileText, Terminal, MessageSquare, Check } from 'lucide-react';
 import {
   SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts, type Suite,
 } from '../../lib/workspaceSuites';
 import SuiteVisual from './SuiteVisual';
-import DotMatrix from './DotMatrix';
+import DotBurst from './DotBurst';
 import { productIcon } from '../../lib/productIcons';
 import { isUnreleased } from '../../lib/releaseStatus';
 
@@ -71,6 +71,8 @@ export const WorkspaceChooser: React.FC<{
   onEverythingHover?: (hovering: boolean) => void;
 }> = ({ value, onChange, onEverythingHover }) => {
   const [barHover, setBarHover] = useState(false);
+  // The burst originates from this element's rect, so it needs a real handle.
+  const barRef = useRef<HTMLButtonElement | null>(null);
   const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'framed' : 'idle');
 
   const reduced = typeof window !== 'undefined'
@@ -135,8 +137,35 @@ export const WorkspaceChooser: React.FC<{
    * ticks and leaves after them. */
   const framed = phase === 'framed' || phase === 'framing';
 
+  /* The burst only makes sense before a choice exists: once the frame is
+   * drawing or drawn, darkening the viewport would fight the thing the user
+   * just triggered. */
+  const burst = barHover && phase === 'idle';
+
   return (
     <div className="relative">
+      {/* FULL-VIEWPORT overlay: a scrim that darkens everything, and the dot
+          field bursting out of the bar's edges across it.
+
+          `fixed inset-0` deliberately — the effect is about the whole screen
+          receding, so containing it to this component would be the version I
+          built first and it read as a texture inside a panel rather than as
+          the page giving way.
+
+          It sits at z-[60] with the bar lifted to z-[70], so the bar is the
+          one thing NOT dimmed. pointer-events-none throughout: the overlay
+          covers the bar's own hit area, and swallowing the click it exists to
+          advertise would be the worst possible bug here. */}
+      <div
+        aria-hidden
+        style={{ transitionDuration: `${BAR_MS}ms` }}
+        className={`pointer-events-none fixed inset-0 z-[60] transition-opacity ease-out
+                    ${burst ? 'opacity-100' : 'opacity-0'}`}
+      >
+        <div className="absolute inset-0 bg-black/72" />
+        <DotBurst active={burst} originRef={barRef} />
+      </div>
+
       {/* THE FRAME. Behind everything (z-0, cards are z-10) and outside the
           content box (-inset-3), so it reads as enclosing the grid rather than
           as another card in it. Pointer-events off: it is a statement, not a
@@ -154,16 +183,10 @@ export const WorkspaceChooser: React.FC<{
         />
       )}
 
-      {/* The individual choices recede while the everything-bar is hovered.
-          Dimming the alternatives is what makes the bar read as the other
-          path rather than as a footnote under the grid. Kept subtle — at a
-          heavier value it looks like the cards are disabled. */}
-      <div
-        style={{ transitionDuration: `${BAR_MS}ms` }}
-        className={`relative z-10 grid items-stretch gap-3 transition-opacity ease-out
-                    sm:grid-cols-2 lg:grid-cols-4
-                    ${barHover && phase === 'idle' ? 'opacity-45' : 'opacity-100'}`}
-      >
+      {/* No per-card dimming any more — the full-viewport scrim above covers
+          these along with everything else, and doing both would double the
+          darkening on exactly the elements it is least needed on. */}
+      <div className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SUITES.map((suite, i) => (
           <SuiteCard
             key={suite.id}
@@ -184,6 +207,7 @@ export const WorkspaceChooser: React.FC<{
       </div>
 
       <button
+        ref={barRef}
         type="button"
         onClick={toggleFrame}
         onPointerEnter={() => { setBarHover(true); onEverythingHover?.(true); }}
@@ -194,21 +218,18 @@ export const WorkspaceChooser: React.FC<{
         onBlur={() => { setBarHover(false); onEverythingHover?.(false); }}
         disabled={phase === 'framing' || phase === 'unframing'}
         style={{ animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: '0.34s', opacity: 0 }}
-        className={`focus-self group relative z-10 mt-3 flex w-full items-center overflow-hidden
+        className={`focus-self group relative mt-3 flex w-full items-center overflow-hidden
+                    ${burst ? 'z-[70]' : 'z-10'}
                     rounded-[12px] border px-5 py-4 text-left transition-all duration-200 ease-out
                     will-change-transform disabled:cursor-default
                     ${framed
                       ? 'border-white/40 bg-white/[0.06]'
                       : 'border-white/[0.14] hover:-translate-y-[3px] hover:border-white/35 active:translate-y-0 active:scale-[0.995]'}`}
       >
-        {/* Texture first, wash on top of it, content above both. The wash
-            keeps the label readable over a field of moving cells — without it
-            the sweep passes behind the text and the copy flickers. */}
-        <DotMatrix active={barHover && phase === 'idle'} />
         <span
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-          style={{ background: 'radial-gradient(ellipse 60% 140% at 50% 50%, rgba(0,0,0,0.55), transparent 72%)' }}
+          style={{ background: 'radial-gradient(ellipse 60% 140% at 50% 50%, rgba(255,255,255,0.07), transparent 70%)' }}
         />
         {/* -- The bar composes itself on selection ------------------------
             Idle it is one centred line of text: no icon, no count, nothing

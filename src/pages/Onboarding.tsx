@@ -329,7 +329,17 @@ const Onboarding: React.FC = () => {
           column, centred in the viewport — a wrapper card adds two borders and
           a padding well between the user and the task, and steals the width
           that makes the whole thing breathe. */}
-      <main className="relative z-10 min-h-0 flex-1 overflow-y-auto">
+      {/* `main` outranks the header and footer while the everything-bar is
+          hovered. Its scrim is `fixed inset-0`, but a fixed child cannot paint
+          above an ANCESTOR'S SIBLING at the same z-index — header, main and
+          footer were all z-10, so the mark and the progress dots would have
+          stayed lit above a viewport that was supposed to be dark. Raising
+          main lifts its whole stacking context, scrim included. */}
+      <main
+        className={`relative min-h-0 flex-1 overflow-y-auto ${
+          everythingHover ? 'z-[60]' : 'z-10'
+        }`}
+      >
         <div className="flex min-h-full items-center justify-center px-6 py-6">
           {/* `key={step}` remounts on step change, replaying the entrance
               animation. Without it React reuses the subtree and the finished
