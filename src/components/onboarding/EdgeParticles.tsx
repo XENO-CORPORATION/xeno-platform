@@ -151,21 +151,39 @@ export const EdgeParticles: React.FC<{
     // the loop that means every frame. Resolved once.
     const hasRoundRect = typeof ctx.roundRect === 'function';
 
-    /** Born on the perimeter, moving along that edge's outward normal. */
+    /**
+     * Born on the perimeter, moving along that edge's outward normal.
+     *
+     * -- THE TOP EDGE DOES NOT EMIT ------------------------------------------
+     *
+     * The suite cards sit directly above the bar, separated by a ~12px band.
+     * Particles leaving the top edge had nowhere to go: they were clipped the
+     * instant they reached the cards, so all that ever rendered was a short
+     * stub in that band — a row of vertical ticks under each card, which read
+     * as stray lines rather than as emission.
+     *
+     * Clipping could not fix that, because the particles were legitimately
+     * inside the only unclipped region. Nor could a shorter lifetime: they
+     * would still be in the band, just fainter. The edge itself is the
+     * problem — an emitter pointed at a wall 12px away has no room to read as
+     * anything.
+     *
+     * So the bar sheds DOWN, LEFT and RIGHT, into space that is actually open.
+     * The top stays quiet, which also keeps the boundary between the bar and
+     * the cards clean instead of stitching the two together with streaks.
+     */
     const spawn = (r: DOMRect) => {
-      // Weighted by edge length so a wide bar sheds mostly from top and bottom
-      // rather than equally from four sides — otherwise the short left/right
-      // edges emit as densely as the long ones and look like jets.
-      const perim = 2 * (r.width + r.height);
+      // Weighted by edge length, minus the top: a wide bar should shed mostly
+      // from its long bottom edge rather than equally from the two short ends,
+      // which would look like jets.
+      const perim = r.width + 2 * r.height;
       let pick = Math.random() * perim;
       let x: number;
       let y: number;
       let nx: number;
       let ny: number;
 
-      if (pick < r.width) {                      // top
-        x = r.left + pick; y = r.top; nx = 0; ny = -1;
-      } else if ((pick -= r.width) < r.width) {  // bottom
+      if (pick < r.width) {                      // bottom
         x = r.left + pick; y = r.bottom; nx = 0; ny = 1;
       } else if ((pick -= r.width) < r.height) { // left
         x = r.left; y = r.top + pick; nx = -1; ny = 0;
@@ -184,7 +202,7 @@ export const EdgeParticles: React.FC<{
        * whichever one it is assigned to sends it out at 90 degrees to the
        * other — a visible spray leaking diagonally past the container. Pulling
        * spawns 6px in from each end means every particle leaves from a stretch
-       * of border that has one unambiguous outward direction. */
+       * of border with one unambiguous outward direction. */
       const CORNER_INSET = 6;
       if (nx === 0) x = Math.min(Math.max(x, r.left + CORNER_INSET), r.right - CORNER_INSET);
       else y = Math.min(Math.max(y, r.top + CORNER_INSET), r.bottom - CORNER_INSET);
