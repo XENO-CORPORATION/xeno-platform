@@ -8,7 +8,6 @@ import SuiteVisual from './SuiteVisual';
 import EdgeParticles from './EdgeParticles';
 import { productIcon } from '../../lib/productIcons';
 import { isUnreleased } from '../../lib/releaseStatus';
-import { useSelectionTreatment, TREATMENTS, type SelectionTreatment } from './selectionTheme';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * WORKSPACE CHOOSER — the first and most consequential step.
@@ -43,6 +42,28 @@ const SUITE_ICON: Record<string, React.ReactNode> = {
 
 type Phase = 'idle' | 'framing' | 'framed' | 'unframing';
 
+/* The selected state, settled after comparing three treatments live.
+ *
+ * `lift` (#242424 plates, bright surfaces) washed the screen out: with all
+ * four suites chosen at once, four cards brightening together stops the page
+ * reading as black. `edge` (surfaces untouched, border only) held the black
+ * but made selection almost invisible on a single card.
+ *
+ * This is between them. The plate lifts just enough to register as a state
+ * change on one card, and stays dark enough that four of them together do not
+ * become the brightest thing on screen. Brightness is the scarcest signal on
+ * a dark UI; most of the work is done by the BORDER, which costs none of it.
+ */
+const SELECTED = {
+  headerBg: '#1f1f1f',
+  barBg: 'rgba(255,255,255,0.028)',
+  border: 'rgba(255,255,255,0.50)',
+  shadow: '0 16px 38px -18px rgba(0,0,0,0.9)',
+};
+
+/** How long a connector takes to draw before its card's check lands. */
+const CONNECT_MS = 190;
+
 const FRAME_MS = 780;
 const ERASE_MS = 620;
 
@@ -74,8 +95,6 @@ export const WorkspaceChooser: React.FC<{
 }> = ({ value, onChange, onEverythingHover }) => {
   const [barHover, setBarHover] = useState(false);
   const [barBox, setBarBox] = useState<DOMRect | null>(null);
-  // ⚠️ TEMPORARY — see selectionTheme.ts. Delete with the toggle once chosen.
-  const [treatment, setTreatment] = useSelectionTreatment();
   // The burst originates from this element's rect, so it needs a real handle.
   const barRef = useRef<HTMLButtonElement | null>(null);
   const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'framed' : 'idle');
@@ -220,31 +239,6 @@ export const WorkspaceChooser: React.FC<{
       {/* No per-card dimming any more — the full-viewport scrim above covers
           these along with everything else, and doing both would double the
           darkening on exactly the elements it is least needed on. */}
-      {/* ⚠️ TEMPORARY COMPARISON CONTROL — not a feature.
-          Two selected-state treatments, switchable live so they can be judged
-          against each other on real content rather than described. Delete this
-          block and selectionTheme.ts once one is chosen. */}
-      <div className="relative z-10 mb-3 flex items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/25">
-          Selected style
-        </span>
-        {(Object.keys(TREATMENTS) as SelectionTreatment[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTreatment(t)}
-            className={`focus-self rounded-[6px] border px-2.5 py-1 text-[11px] transition-colors duration-150 ${
-              treatment === t
-                ? 'border-white/40 bg-white/[0.10] text-white'
-                : 'border-white/[0.10] text-white/40 hover:border-white/25 hover:text-white/70'
-            }`}
-          >
-            {TREATMENTS[t].label}
-            <span className="ml-1.5 text-white/25">{TREATMENTS[t].note}</span>
-          </button>
-        ))}
-      </div>
-
       <div className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SUITES.map((suite, i) => (
           <SuiteCard
@@ -260,7 +254,6 @@ export const WorkspaceChooser: React.FC<{
             // still drawing, so it landed into an enclosure that did not exist
             // yet, which reads as two animations rather than a consequence.
             checkDelay={framed ? FRAME_MS * 0.86 + i * 95 : 0}
-            treatment={treatment}
             onSelect={() => { collapseFrame(); onChange(suite.id); }}
           />
         ))}
@@ -283,7 +276,7 @@ export const WorkspaceChooser: React.FC<{
           opacity: 0,
           // The bar follows the same treatment as the cards, or `edge` would
           // keep four cards black and still light up the bar underneath them.
-          ...(framed ? { borderColor: TREATMENTS[treatment].border, background: TREATMENTS[treatment].barBg } : {}),
+          ...(framed ? { borderColor: SELECTED.border, background: SELECTED.barBg } : {}),
         }}
         className={`focus-self group relative mt-3 flex w-full items-center overflow-hidden
                     ${burst ? 'z-[70]' : 'z-10'}
@@ -326,7 +319,7 @@ export const WorkspaceChooser: React.FC<{
                the square holding it has finished opening. It is the summary of
                what happened, so it arrives after the thing it summarises. */
             <Check
-              style={{ animationDelay: `${FRAME_MS * 0.86 + SUITES.length * 95}ms` }}
+              style={{ animationDelay: `${FRAME_MS * 0.86 + SUITES.length * 95 + CONNECT_MS}ms` }}
               className="xeno-check-drop h-[18px] w-[18px] text-white"
               strokeWidth={2.5}
             />
@@ -391,11 +384,8 @@ const SuiteCard: React.FC<{
    *  A direct click stays at 0 — feedback for your own click must be immediate
    *  or it reads as lag. */
   checkDelay?: number;
-  /** ⚠️ TEMPORARY — which selected-state treatment to paint. */
-  treatment?: SelectionTreatment;
   onSelect: () => void;
-}> = ({ suite, index, selected, checkDelay = 0, treatment = 'lift', onSelect }) => {
-  const T = TREATMENTS[treatment];
+}> = ({ suite, index, selected, checkDelay = 0, onSelect }) => {
   const products = productsForSuite(suite);
 
   /* ── SHELL / PLATE ANATOMY ────────────────────────────────────────────────
@@ -424,8 +414,8 @@ const SuiteCard: React.FC<{
       aria-pressed={selected}
       style={{
         background: '#08080a',
-        boxShadow: selected ? T.shadow : '0 10px 30px -16px rgba(0,0,0,0.8)',
-        ...(selected ? { borderColor: T.border } : {}),
+        boxShadow: selected ? SELECTED.shadow : '0 10px 30px -16px rgba(0,0,0,0.8)',
+        ...(selected ? { borderColor: SELECTED.border } : {}),
         animation: 'xenoRise 0.6s cubic-bezier(0.16,1.02,0.3,1) forwards',
         animationDelay: `${0.06 + index * 0.07}s`,
         opacity: 0,
@@ -444,10 +434,31 @@ const SuiteCard: React.FC<{
                   hover:-translate-y-[5px] active:translate-y-0
                   ${selected ? '' : 'border-white/[0.07] hover:border-white/[0.22]'}`}
     >
+      {/* CONNECTOR — the line the frame runs up from the bar to this card,
+          immediately before the card's check lands.
+
+          Anchored to the card's OWN bottom edge (`top-full`, `left-1/2`), so
+          it is centred under the card at any column count and any viewport
+          with nothing measured. A line positioned from the grid's geometry
+          would need re-measuring on every reflow and would be wrong the moment
+          the layout changed.
+
+          `origin-bottom` + scaleY is what makes it GROW UPWARD out of the bar
+          rather than downward out of the card. The bar is the source, so the
+          motion has to start there — the same reason the frame itself draws
+          from a point under the bar. */}
+      <span
+        aria-hidden
+        style={{ transitionDelay: `${checkDelay}ms`, transitionDuration: `${CONNECT_MS}ms` }}
+        className={`pointer-events-none absolute left-1/2 top-full h-3 w-px origin-bottom
+                    -translate-x-1/2 bg-white/45 transition-transform ease-out
+                    ${selected ? 'scale-y-100' : 'scale-y-0'}`}
+      />
+
       {/* ── Header plate ── */}
       <span
         className="flex shrink-0 items-center gap-2 rounded-t-[7px] px-3 py-2.5 transition-colors duration-200"
-        style={{ background: selected ? T.headerBg : '#1a1a1a' }}
+        style={{ background: selected ? SELECTED.headerBg : '#1a1a1a' }}
       >
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">
@@ -464,7 +475,7 @@ const SuiteCard: React.FC<{
              what makes it drop each time rather than only on first paint. */
           <span
             aria-hidden
-            style={{ animationDelay: `${checkDelay}ms` }}
+            style={{ animationDelay: `${checkDelay + CONNECT_MS}ms` }}
             className="xeno-check-drop grid h-[17px] w-[17px] shrink-0 place-items-center rounded-[4px] bg-white"
           >
             <Check className="h-3 w-3 text-black" strokeWidth={3} />
