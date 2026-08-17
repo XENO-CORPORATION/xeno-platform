@@ -185,6 +185,10 @@ const Onboarding: React.FC = () => {
   });
   const [billing, setBilling] = useState<{ enabled: boolean; currency: string; catalog: CatalogItem[] } | null>(null);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
+  /* Raised by the workspace step's everything-bar. The nav drops away while it
+   * is hovered, so the bar has the screen to itself for the moment somebody is
+   * considering it. */
+  const [everythingHover, setEverythingHover] = useState(false);
 
   /* Holds the outgoing step in the DOM long enough to animate it out. Without
    * it `key={step}` only ever animates the INCOMING subtree — React has already
@@ -356,6 +360,7 @@ const Onboarding: React.FC = () => {
                 />
 
                 <WorkspaceChooser
+                  onEverythingHover={setEverythingHover}
                   value={answers.workspace}
                   onChange={(id) => {
                     const next = { ...answers, workspace: id };
@@ -369,6 +374,7 @@ const Onboarding: React.FC = () => {
                   onSkip={skipAll}
                   nextLabel="Continue"
                   nextDisabled={!answers.workspace}
+                  hidden={everythingHover}
                 />
               </>
             )}
@@ -585,8 +591,18 @@ const Onboarding: React.FC = () => {
 const Nav: React.FC<{
   onBack?: () => void; onNext?: () => void; onSkip?: () => void;
   nextLabel?: string; skipLabel?: string; nextDisabled?: boolean;
-}> = ({ onBack, onNext, onSkip, nextLabel, skipLabel, nextDisabled }) => (
-  <div className="flex items-center gap-5 pt-1">
+  /** Drops the whole row away — used while the everything-bar is hovered. */
+  hidden?: boolean;
+}> = ({ onBack, onNext, onSkip, nextLabel, skipLabel, nextDisabled, hidden }) => (
+  /* Falls DOWN and out rather than fading. A row that merely fades is still
+     occupying its space and still reads as present-but-greyed; falling out of
+     the frame reads as making way. `pointer-events-none` while gone, so a
+     Continue that is visually absent cannot still be clicked. */
+  <div
+    style={{ transitionDuration: '260ms' }}
+    className={`flex items-center gap-5 pt-1 transition-all ease-out
+                ${hidden ? 'pointer-events-none translate-y-3 opacity-0' : 'translate-y-0 opacity-100'}`}
+  >
     {onBack && <TextButton onClick={onBack}>Back</TextButton>}
     {onSkip && <TextButton onClick={onSkip}>{skipLabel || 'Skip'}</TextButton>}
 

@@ -4,6 +4,7 @@ import {
   SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts, type Suite,
 } from '../../lib/workspaceSuites';
 import SuiteVisual from './SuiteVisual';
+import DotMatrix from './DotMatrix';
 import { productIcon } from '../../lib/productIcons';
 import { isUnreleased } from '../../lib/releaseStatus';
 
@@ -63,7 +64,13 @@ export const WorkspaceChooser: React.FC<{
   /** `null` clears the choice — the bar is a TOGGLE, so it has to be able to
    *  hand back "nothing selected", not just a different id. */
   onChange: (id: string | null) => void;
-}> = ({ value, onChange }) => {
+  /** Raised while the everything-bar is hovered, so the step's own navigation
+   *  can get out of the way. Lifted to the parent rather than handled here
+   *  because Continue/Skip live outside this component — a shared visual
+   *  state has to be owned above both of the things it affects. */
+  onEverythingHover?: (hovering: boolean) => void;
+}> = ({ value, onChange, onEverythingHover }) => {
+  const [barHover, setBarHover] = useState(false);
   const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'framed' : 'idle');
 
   const reduced = typeof window !== 'undefined'
@@ -147,8 +154,15 @@ export const WorkspaceChooser: React.FC<{
         />
       )}
 
+      {/* The individual choices recede while the everything-bar is hovered.
+          Dimming the alternatives is what makes the bar read as the other
+          path rather than as a footnote under the grid. Kept subtle — at a
+          heavier value it looks like the cards are disabled. */}
       <div
-        className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        style={{ transitionDuration: `${BAR_MS}ms` }}
+        className={`relative z-10 grid items-stretch gap-3 transition-opacity ease-out
+                    sm:grid-cols-2 lg:grid-cols-4
+                    ${barHover && phase === 'idle' ? 'opacity-45' : 'opacity-100'}`}
       >
         {SUITES.map((suite, i) => (
           <SuiteCard
@@ -172,6 +186,12 @@ export const WorkspaceChooser: React.FC<{
       <button
         type="button"
         onClick={toggleFrame}
+        onPointerEnter={() => { setBarHover(true); onEverythingHover?.(true); }}
+        onPointerLeave={() => { setBarHover(false); onEverythingHover?.(false); }}
+        // Focus mirrors hover so a keyboard user gets the same state. Without
+        // it the bar lights up for a mouse and stays dead for a tab key.
+        onFocus={() => { setBarHover(true); onEverythingHover?.(true); }}
+        onBlur={() => { setBarHover(false); onEverythingHover?.(false); }}
         disabled={phase === 'framing' || phase === 'unframing'}
         style={{ animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards', animationDelay: '0.34s', opacity: 0 }}
         className={`focus-self group relative z-10 mt-3 flex w-full items-center overflow-hidden
@@ -181,10 +201,14 @@ export const WorkspaceChooser: React.FC<{
                       ? 'border-white/40 bg-white/[0.06]'
                       : 'border-white/[0.14] hover:-translate-y-[3px] hover:border-white/35 active:translate-y-0 active:scale-[0.995]'}`}
       >
+        {/* Texture first, wash on top of it, content above both. The wash
+            keeps the label readable over a field of moving cells — without it
+            the sweep passes behind the text and the copy flickers. */}
+        <DotMatrix active={barHover && phase === 'idle'} />
         <span
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-          style={{ background: 'radial-gradient(ellipse 60% 140% at 50% 50%, rgba(255,255,255,0.07), transparent 70%)' }}
+          style={{ background: 'radial-gradient(ellipse 60% 140% at 50% 50%, rgba(0,0,0,0.55), transparent 72%)' }}
         />
         {/* -- The bar composes itself on selection ------------------------
             Idle it is one centred line of text: no icon, no count, nothing
