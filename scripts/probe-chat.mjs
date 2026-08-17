@@ -1,5 +1,5 @@
 /*
- * One runner for the thirteen standing probes, in the shape of `test-chat.mjs`.
+ * One runner for the fourteen standing probes, in the shape of `test-chat.mjs`.
  *
  * Ten scripts that each have to be run by hand and read by eye is a check nobody runs. Worse, each
  * prints a different shape of answer — a count, a table, a list of OK/NO lines — so "are they still
@@ -89,6 +89,23 @@ const PROBES = [
     expect: ['2', '0'], describe: (m) => `project settings dialog reached in ${m[1]} themes, ${m[2]} height drift`,
   },
   {
+    file: 'probe-coverage.mjs', needs: 'chat',
+    /*
+     * A gate at last, and the shape matters: a floor on the COUNT, not the percentage.
+     *
+     * This was deliberately kept out of the runner because its number moves whenever a component is
+     * added, and a gate that fires on healthy change teaches people to ignore gates. That reasoning
+     * applied to the PERCENTAGE — add twenty Buttons to the source and it falls with nothing broken.
+     * The count only falls when a surface the walk used to reach stops being reachable, which is
+     * exactly a regression.
+     *
+     * 95, against 101 measured: enough headroom that a transient miss does not cry wolf, tight enough
+     * that losing a whole page shows.
+     */
+    verdict: /(\d+) rendered on the three routes/,
+    expect: [{ min: 95 }], describe: (m) => `${m[1]} of 255 adopted components rendered (floor 95)`,
+  },
+  {
     file: 'probe-open-findings.mjs', needs: 'chat',
     /* Unlike `probe-coverage`, this one is a gate. Its numbers move only when an OPEN FINDING changes
        state — a blue class added or removed, a token collision appearing, the library gaining a
@@ -142,8 +159,18 @@ for (const probe of PROBES) {
     results.push({ probe, state: 'FAIL', note: 'verdict line not found in output — the probe changed shape' });
     continue;
   }
+  /* `expect` entries compare for equality; `min` entries are FLOORS. A floor is the right shape for a
+     number that should only ever grow — it catches a regression without firing every time the thing
+     it measures legitimately improves. */
   const bad = probe.expect
-    .map((want, i) => (want === null || m[i + 1] === want ? null : `#${i + 1} expected ${want}, got ${m[i + 1]}`))
+    .map((want, i) => {
+      const got = m[i + 1];
+      if (want === null) return null;
+      if (typeof want === 'object' && want.min !== undefined) {
+        return Number(got) >= want.min ? null : `#${i + 1} expected at least ${want.min}, got ${got}`;
+      }
+      return got === want ? null : `#${i + 1} expected ${want}, got ${got}`;
+    })
     .filter(Boolean);
   results.push({ probe, state: bad.length ? 'FAIL' : 'pass', note: bad.length ? bad.join('; ') : probe.describe(m) });
 }

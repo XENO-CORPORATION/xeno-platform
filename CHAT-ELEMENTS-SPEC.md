@@ -660,9 +660,17 @@ reveal row, and `[aria-label*="Attach"]` measures 0×0. **A click that lands on 
 like a click that changes nothing** — check the element is hittable before concluding from a null
 result.
 
-It is deliberately **not** in `probe:chat`: its number moves whenever a component is added, which is
-normal development rather than a regression, and a gate that fires on healthy change teaches people
-to ignore gates.
+**It is a gate now, and the shape is the point: a floor on the COUNT, not the percentage.**
+
+It was kept out of the runner because its number moves whenever a component is added, and a gate that
+fires on healthy change teaches people to ignore gates. That reasoning was right about the
+PERCENTAGE — add twenty Buttons to the source and it falls with nothing broken. It was wrong about
+the count, which only falls when a surface the walk used to reach stops being reachable. That is
+exactly a regression and nothing else.
+
+Floor 95 against 101 measured: enough headroom that a transient miss does not cry wolf, tight enough
+that losing a whole page shows. The runner gained a `{ min: n }` expectation form for it, and both
+directions were verified before trusting it — 14/14 green at 95, exit 1 at 500.
 
 ### Are the numbers stable? — three full runs, diffed
 
