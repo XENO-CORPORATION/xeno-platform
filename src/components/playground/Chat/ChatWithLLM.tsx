@@ -15749,9 +15749,26 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
 
                                                     return (
                                                         <>
-                                                            {/* Header - always visible */}
-                                                            <div
+                                                            {/* Header — always visible, and a BUTTON.
+                                                                It was a `<div onClick>`: a mouse
+                                                                reached it and a keyboard reached
+                                                                nothing. The class it wears is the
+                                                                library's own, and `SourcesDisclosure`
+                                                                renders that same class on a button
+                                                                with `aria-expanded` — the stylesheet
+                                                                had been adopted and the behaviour left
+                                                                behind, which is the one kind of
+                                                                borrowing that looks finished and is
+                                                                not. Taking the component whole is the
+                                                                eventual answer; it owns the content
+                                                                model too, and this header carries a
+                                                                title, a count line and a favicon stack
+                                                                with its own colour logic. */}
+                                                            <button
+                                                                type="button"
                                                                 className="xeno-sources-header"
+                                                                aria-expanded={isExpanded ? true : false}
+                                                                aria-controls={`sources-panel-${message.id}`}
                                                                 onClick={() => setExpandedSourcesMap(prev => ({ ...prev, [message.id]: !prev[message.id] }))}
                                                             >
                                                                 <div className="flex items-center gap-3">
@@ -15787,11 +15804,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                     </div>
                                                                     <ChevronDown size={16} className={`text-[var(--chat-muted)] transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                                                                 </div>
-                                                            </div>
+                                                            </button>
 
                                                             {/* Expanded sources list */}
                                                             {isExpanded && (
-                                                                <div className="xeno-sources-list">
+                                                                <div className="xeno-sources-list" id={`sources-panel-${message.id}`}>
                                                                     {sources.map((source, idx) => {
                                                                         const actualUrl = extractActualUrl(source.uri);
                                                                         const favicon = sourceMetadataCache[actualUrl]?.favicon;

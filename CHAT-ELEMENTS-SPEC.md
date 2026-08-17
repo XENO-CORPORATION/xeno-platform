@@ -601,15 +601,24 @@ Re-deciding these costs more than it saves.
   branches the mock cannot render (attachment chips, the customize page), so the probe says so rather
   than implying they were checked.
 
-- **The chips are not keyboard-reachable at all, which is the bigger finding.** Looking for the
-  undersized badges turned up their hosts: the attachment chip's clickable box is a `<div onClick>`
-  with no `role` and no `tabIndex`. The probe counts **10** pointer-cursor `<div>`s in the default
-  chat with neither — the file chip, the Web Sources disclosure and its rows, the avatar cluster.
-  A mouse reaches all of them and a keyboard reaches none.
+- **Some click targets are not keyboard-reachable, and the first count of them was wrong.** Looking
+  for the undersized badges turned up their hosts: click boxes written as `<div onClick>` with no
+  `role` and no `tabIndex`. The count recorded here was **10**, and that number was inflated — a click
+  target's children INHERIT `cursor: pointer`, so one disclosure header containing a title, a count
+  line and a favicon stack reported as nine separate targets. `probe-tab-order.mjs` counts outermost
+  ones only now. The honest before-figure was **three**, not ten.
 
-  This is the PLATFORM's and it is not an adoption question: `ListRow` and `MenuItem` would answer it,
-  but changing what is focusable moves tab order across the composer, which is a deliberate change
-  rather than a sweep. Recorded here with the count so it is chosen, not inherited.
+  **One is fixed.** The Web Sources header is a `<button>` with `aria-expanded` and `aria-controls`,
+  and the reason it is worth naming: the class it wears is `xeno-sources-header`, the library's own,
+  and `SourcesDisclosure` renders that same class **on a button**. The stylesheet had been adopted and
+  the behaviour left behind — the one kind of borrowing that looks finished and is not. Taking the
+  component whole is the eventual answer; it owns the content model too, and this header carries a
+  title, a count line and a favicon stack with its own colour logic.
+
+  Measured before and after with real Tab presses: 67 stops → 68, one added where the header sits, and
+  distinct unreachable targets 3 → **2** — the attachment chip (182×38) and a suggestion row (247×33).
+  Both are content rows rather than chrome, so `ListRow` is the answer and it moves tab order inside
+  the message list. Recorded with the count so it is chosen, not inherited.
 
 - ~~**Panels that are not menus.**~~ **Closed.** Both panels run on `useMenu` + `useGooPill` now and
   their four rows are `MenuItem`s. Measured on the model dropdown: focus lands on the first row when
