@@ -261,6 +261,17 @@ for (const seg of ['llm', 'search', 'voice']) {
      * Delete and the ringed Select all, three of the conversions made during this adoption.
      */
     ['Open all chats and tasks'],
+    /*
+     * SELECTION, which is a different capability from opening a surface and the reason the catalog's
+     * action row stayed dark. Its `Select all`, `primary` New and solid-danger Delete — three
+     * conversions from this adoption — are gated on `selectedCount > 0`, and a row only toggles
+     * selection while the catalog is in selecting MODE. So the path is three deep: open, switch mode,
+     * pick a row. Opening the panel was never going to be enough.
+     *
+     * The row is named because the walk seeds it: `Seeded conversation 1` exists because
+     * `chatHistory_playground` is written above.
+     */
+    ['Open all chats and tasks', 'Select', 'Seeded conversation 1'],
     ['View current-output.svg full size'],
     ['Projects'], ['Projects', PROJECT.name],
     /* `Edit code` puts a code block into edit mode, which is the ONLY place `Textarea` renders on

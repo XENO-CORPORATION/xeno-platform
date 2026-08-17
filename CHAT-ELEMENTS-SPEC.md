@@ -432,6 +432,25 @@ The walk now samples DURING the action, at 350/700/1400ms. `Spinner` 0 → 1, `T
 **All four zeros are closed.** Every adopted component in this chat has now been rendered at least
 once for a probe, which was not true of any of them a few iterations ago.
 
+### Selection is a different capability from opening
+
+The catalog's action row stayed dark through several iterations of opening things. Its `Select all`,
+`primary` New and solid-danger Delete are gated on `selectedCount > 0` — and a row only toggles
+selection while the catalog is in selecting MODE, so the path is three deep: **open, switch mode, pick
+a row.** Opening the panel was never going to be enough, however many panels were opened.
+
+`['Open all chats and tasks', 'Select', 'Seeded conversation 1']` — the row is nameable because the
+walk seeds `chatHistory_playground` itself.
+
+126 → **135**, the second-largest jump in this programme, and **`MenuItem` is now fully covered**:
+29 → 41 distinct against 38 in source, zero unmeasured. Selection mode swaps every row's leading glyph
+for a checkbox and brings its per-row menu into reach, so one path lit up a component wholesale.
+
+The general lesson is worth more than the points: **a walk models the moves it was built from.** This
+one modelled *navigation*, so it could open anything and select nothing, and every unrendered control
+behind a selection looked like an unreachable surface. Asking what KIND of move is missing beat
+looking for another door.
+
 ### Asking the source which states hide the controls
 
 The gap moved inside `ChatWithLLM`, where there are no more doors to open. Rather than hunt, ask the
@@ -653,7 +672,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-126 rendered across the three routes — 49%.**
+135 rendered across the three routes — 53%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
@@ -760,7 +779,7 @@ PERCENTAGE — add twenty Buttons to the source and it falls with nothing broken
 the count, which only falls when a surface the walk used to reach stops being reachable. That is
 exactly a regression and nothing else.
 
-Floor 120 against 126 measured: enough headroom that a transient miss does not cry wolf, tight enough
+Floor 129 against 135 measured: enough headroom that a transient miss does not cry wolf, tight enough
 that losing a whole page shows. **The floor rises with the baseline** — a floor left behind drifts
 into meaninglessness, still green while a third of the walk has quietly stopped working. The runner
 gained a `{ min: n }` form for it, and both directions were verified before it was trusted: green at
