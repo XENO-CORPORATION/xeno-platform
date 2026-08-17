@@ -432,6 +432,27 @@ The walk now samples DURING the action, at 350/700/1400ms. `Spinner` 0 → 1, `T
 **All four zeros are closed.** Every adopted component in this chat has now been rendered at least
 once for a probe, which was not true of any of them a few iterations ago.
 
+### Enumerating a menu instead of guessing its paths
+
+`More chat options` holds **twelve** items and the walk was using one. Listing them cost a single
+run: View files in chat · Pin chat · Archive · Delete · Theme · Temporary chat · Customize · Search
+messages · Settings · New chat · Upload a file · Recent.
+
+Five were worth adding, and each was checked to land before being believed. The result is honest and
+smaller than the count suggests — 121 → 123, `Button` 39 → 41:
+
+| path | new library components |
+|---|---|
+| `Delete` | +2 — the confirm dialog, whose `danger emphasis="solid"` button had never rendered for a probe |
+| `View files in chat` | +1 |
+| `Customize` · `Theme` | 0 — reached, and thin: `ChatCustomizePage` holds 1 Button, and the theme menu is hand-written |
+
+**Those surfaces are reached, not missing.** `Upload a file` and `Recent` were left out deliberately:
+they lead to the `hidden` attach panel.
+
+The remaining gap is now concentrated where it always was — `ChatWithLLM` itself, 36 Buttons and 64
+IconButtons in source, behind states inside the main chat rather than behind doors off it.
+
 ### Splitting the suite — measured, not guessed
 
 At 432s the suite had passed the point where it gets run every iteration, and **a gate nobody runs is
@@ -609,7 +630,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-121 rendered across the three routes — 47%.**
+123 rendered across the three routes — 48%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
@@ -716,7 +737,7 @@ PERCENTAGE — add twenty Buttons to the source and it falls with nothing broken
 the count, which only falls when a surface the walk used to reach stops being reachable. That is
 exactly a regression and nothing else.
 
-Floor 115 against 121 measured: enough headroom that a transient miss does not cry wolf, tight enough
+Floor 117 against 123 measured: enough headroom that a transient miss does not cry wolf, tight enough
 that losing a whole page shows. **The floor rises with the baseline** — a floor left behind drifts
 into meaninglessness, still green while a third of the walk has quietly stopped working. The runner
 gained a `{ min: n }` form for it, and both directions were verified before it was trusted: green at

@@ -239,6 +239,18 @@ for (const seg of ['llm', 'search', 'voice']) {
      */
     ['More chat options'], ['More chat options', 'Settings'],
     ['More chat options', 'Settings', 'Skills'], ['More chat options', 'Settings', 'Personas'],
+    /*
+     * The rest of that menu, enumerated rather than guessed one path at a time — it holds twelve
+     * items and the walk was using one. `Delete` opens the confirm dialog whose solid-danger button
+     * was converted during this adoption and had never been rendered for a probe; `Customize` and
+     * `Theme` are surfaces of their own; `View files in chat` and `Search messages` open panels.
+     * `Upload a file` and `Recent` are deliberately absent: they lead to the `hidden` attach panel.
+     */
+    ['More chat options', 'Delete'],
+    ['More chat options', 'Customize'],
+    ['More chat options', 'Theme'],
+    ['More chat options', 'View files in chat'],
+    ['More chat options', 'Search messages'],
     ['Projects'], ['Projects', PROJECT.name],
     /* `Edit code` puts a code block into edit mode, which is the ONLY place `Textarea` renders on
        these routes — the other three sit in dialogs. The demo thread supplies the code blocks. */

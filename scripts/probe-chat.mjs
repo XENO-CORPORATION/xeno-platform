@@ -111,12 +111,12 @@ const PROBES = [
      * The count only falls when a surface the walk used to reach stops being reachable, which is
      * exactly a regression.
      *
-     * 115, against 121 measured: enough headroom that a transient miss does not cry wolf, tight enough
+     * 117, against 123 measured: enough headroom that a transient miss does not cry wolf, tight enough
      * that losing a whole page shows. The floor RISES with the baseline — otherwise it drifts into
      * meaninglessness, still green while a third of the walk has quietly stopped working.
      */
     verdict: /(\d+) rendered on the three routes/,
-    expect: [{ min: 115 }], describe: (m) => `${m[1]} of 255 adopted components rendered (floor 115)`,
+    expect: [{ min: 117 }], describe: (m) => `${m[1]} of 255 adopted components rendered (floor 117)`,
   },
   {
     file: 'probe-open-findings.mjs', needs: 'chat',
