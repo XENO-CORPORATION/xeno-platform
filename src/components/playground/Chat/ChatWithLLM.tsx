@@ -8276,29 +8276,22 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
               <Button variant="secondary" size="md" onClick={closeCreateProjectModal}>
                 Cancel
               </Button>
-              {/* Stays hand-written, and its sibling in the delete dialog stays for the same reason:
-                  the variant set has no SOLID emphasis. This is inverted — a `--chat-text` fill
-                  carrying `--chat-canvas` ink — which is `primary`'s shape and, in the Soft
-                  construction, `primary`'s literal definition (`--xeno-chrome-btn-primary-bg:
-                  var(--xeno-text)`). It still cannot be used: that token is declared on `:root` by
-                  the chrome files, and a custom property computes where it is DECLARED, so it
-                  resolves against the library's own base tokens before `.chat-themed` says anything.
-                  Measured inside the chat, `primary` is #2b2b2b on #d8d8de.
-                  Eleven controls across this chat are filled this way. One line per chrome token in
-                  the bridge would convert all of them, and that is §9's entry rather than a call
-                  site's to improvise. */}
-              <button
-                type="button"
+              {/* `primary md`, matching the `secondary md` Cancel beside it. The reason that stood
+                  here was true when it was written and is not any more — it said `primary` could not
+                  be used because the chrome tokens compute on `:root`, and the bridge carries them
+                  now, so the variant paints exactly the `--chat-text` on `--chat-canvas` this was
+                  drawing by hand.
+                  The disabled branch goes with the inline fill: `disabled:opacity-40` and
+                  `disabled:cursor-not-allowed` are the availability axis spelled out, and the
+                  component carries both from `disabled` alone. */}
+              <Button
+                variant="primary"
+                size="md"
                 onClick={submitCreateProjectModal}
                 disabled={!canCreate}
-                className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                style={{
-                  backgroundColor: 'var(--chat-text)',
-                  color: 'var(--chat-canvas)',
-                }}
               >
                 Create project
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -8590,12 +8583,17 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 >
                   Cancel
                 </Button>
+                {/* `primary`, where this was a `ghost` with the fill hand-painted over it through
+                    an inline `style` — and `ButtonProps` omits `style` deliberately. It only worked
+                    because the build strips types without checking them and the object rode in on the
+                    prop spread. A variant that had to be overridden to look right was the wrong
+                    variant; now the two colours come from the same place every other `primary` in
+                    this chat reads. */}
                 <Button
-                  variant="ghost"
+                  variant="primary"
                   size="lg"
                   className="w-full sm:min-h-0 sm:w-auto sm:py-2"
                   onClick={saveProjectSettings}
-                  style={{ backgroundColor: 'var(--chat-text)', color: 'var(--chat-canvas)' }}
                 >
                   Save changes
                 </Button>
@@ -13228,25 +13226,21 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           </div>
                         )}
                       </div>
-                      {/* Stays hand-written — inverted, which is the shape of primary and unusable
-                          until the bridge carries the chrome tokens (§9). The twelfth control in
-                          this chat filled that way. */}
-                      <button
-                        type="button"
+                      {/* `primary md`, at the size its row-mates already use. The bridge carries the
+                          chrome tokens, so the reason recorded here is answered — this row's four
+                          emphases are now three variants and one ring. */}
+                      <Button
+                        variant="primary"
+                        size="md"
                         onClick={() => {
                           handleNewChat();
                           setIsChatsCatalogOpen(false);
                           exitCatalogSelection();
                           setIsChatsCatalogFilterOpen(false);
                         }}
-                        className={`${catalogControlBtn} font-medium`}
-                        style={{
-                          backgroundColor: 'var(--chat-text)',
-                          color: 'var(--chat-canvas)',
-                        }}
                       >
                         New
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -17075,18 +17069,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         inverted emphasis. Fifteenth in this chat and the FIFTH Cancel/confirm pair
                         split by the same missing variant (§9). Its disabled branch is the
                         availability axis written out, which the component would carry. */}
-                    <button
-                      type="button"
+                    <Button
+                      variant="primary"
+                      size="md"
                       onClick={submitProjectScheduledCreate}
                       disabled={!projectScheduledCreateTitle.trim()}
-                      className="rounded-lg px-3.5 py-2 text-[13px] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                      style={{
-                        backgroundColor: 'var(--chat-text)',
-                        color: 'var(--chat-canvas)',
-                      }}
                     >
                       Add
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>

@@ -459,6 +459,23 @@ Re-deciding these costs more than it saves.
   the ink at full strength. And the voice route's Save filled `--chat-muted` — a grey — where the
   other three fill accent. Three sites agreeing and one not is the one being corrected.
 
+  **Five more on the next pass, found by re-reading the reasons rather than the code.** Two of them
+  still said "unusable until the bridge carries the chrome tokens", which had been true when written
+  and was not any more — a reason that outlives its cause reads exactly like a live one. Create
+  project, the catalog's New, the scheduled Add, project settings' Save changes, and the share
+  dialog's Done.
+
+  Two of the five were already `<Button variant="ghost">` with the fill painted over them through an
+  inline `style` — the prop `ButtonProps` **omits deliberately**, which passed only because the build
+  strips types without checking them. A variant that has to be overridden to look right is the wrong
+  variant.
+
+  Two things the axis absorbed: `disabled:opacity-40 disabled:cursor-not-allowed` at two sites is the
+  availability axis written out, and measured on the component it is opacity 0.4 with `not-allowed`
+  from `disabled` alone. One colour moved on purpose — the share dialog's Done inked
+  `--chat-elevated` (#262626), the dialog's own surface, where `primary` inks `--chat-on-accent`
+  (#0a0a0a); a light fill wants the deepest ink, and every other inverted control already used canvas.
+
   The rest are still hand-written, including the composer's Send, which the normalisation block
   repaints with `!important` in both states.
 

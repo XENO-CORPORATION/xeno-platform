@@ -512,15 +512,18 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
               >
                 Delete link
               </Button>
+              {/* `primary`, where this was a `ghost` with an inline fill painted over it — the
+                  same override `ButtonProps` omits `style` to prevent, which passed only because the
+                  build strips types without checking.
+                  One colour moves and it is worth naming: the ink was `--chat-elevated` (#262626),
+                  the dialog's own surface, and `primary` inks `--chat-on-accent` (#0a0a0a). A light
+                  fill wants the deepest ink rather than a mid grey, and every other inverted control
+                  in this chat already used canvas. */}
               <Button
-                variant="ghost"
+                variant="primary"
                 size="lg"
                 className="flex-1 sm:flex-none"
                 onClick={onClose}
-                style={{
-                  backgroundColor: 'var(--chat-text)',
-                  color: 'var(--chat-elevated)',
-                }}
               >
                 Done
               </Button>
