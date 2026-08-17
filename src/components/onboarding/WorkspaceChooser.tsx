@@ -61,6 +61,29 @@ const SELECTED = {
   shadow: '0 16px 38px -18px rgba(0,0,0,0.9)',
 };
 
+/**
+ * The distance between the grid and the bar, in px.
+ *
+ * 🔴 This single number creates the gap AND sizes the connector that spans it.
+ * It used to be two independent values — `mt-3` on the bar and a `0.75rem`
+ * height on the line — that merely happened to agree. Nothing enforced that,
+ * so changing the spacing at any breakpoint would have left the connector
+ * short of the bar or buried in it, silently, with no error anywhere.
+ *
+ * Derived rather than MEASURED on purpose. A runtime measurement of the two
+ * edges would also be correct, but it has to be re-read on resize and on every
+ * frame of the entrance animation (the cards are still moving), and a stale
+ * rect is exactly how this kind of line ends up drawn to the wrong place. A
+ * shared constant cannot go stale — the gap and the line are the same fact
+ * expressed once.
+ */
+const BAR_GAP_PX = 12;
+
+/** How far below the card's edge the connector starts, so it never sits on the
+ *  card's 1px border. Subtracted from the height, never added to the offset
+ *  alone — see the note on the connector. */
+const CONNECTOR_OFFSET_PX = 1;
+
 /** How long a connector takes to draw before its card's check lands. */
 const CONNECT_MS = 190;
 
@@ -254,6 +277,9 @@ export const WorkspaceChooser: React.FC<{
         onBlur={() => { setBarHover(false); onEverythingHover?.(false); }}
         disabled={phase === 'framing' || phase === 'unframing'}
         style={{
+          // The gap is set HERE, from the same constant the connector's height
+          // is derived from — `mt-3` would be a second source for one fact.
+          marginTop: BAR_GAP_PX,
           animation: 'xenoRise 0.5s cubic-bezier(0.22,1,0.36,1) forwards',
           animationDelay: '0.34s',
           opacity: 0,
@@ -261,7 +287,7 @@ export const WorkspaceChooser: React.FC<{
           // keep four cards black and still light up the bar underneath them.
           ...(framed ? { borderColor: SELECTED.border, background: SELECTED.barBg } : {}),
         }}
-        className={`focus-self group relative z-10 mt-3 flex w-full items-center overflow-hidden
+        className={`focus-self group relative z-10 flex w-full items-center overflow-hidden
                     rounded-[12px] border px-5 py-4 text-left transition-all duration-200 ease-out
                     will-change-transform disabled:cursor-default
                     ${framed
@@ -496,8 +522,10 @@ const SuiteCard: React.FC<{
              precisely the breach just removed from this one, and it would not
              be hidden: the bar's fill is translucent, so nothing occludes an
              overlap here. */
-          top: 'calc(100% + 1px)',
-          height: 'calc(0.75rem - 1px)',
+          top: `calc(100% + ${CONNECTOR_OFFSET_PX}px)`,
+          // The distance it must span, less the pixel it starts late by, so the
+          // bottom lands exactly on the bar's top edge however the gap changes.
+          height: BAR_GAP_PX - CONNECTOR_OFFSET_PX,
           transform: `translateX(-50%) scaleY(${selected ? 1 : 0})`,
           transformOrigin: 'bottom center',
           transitionProperty: 'transform',
