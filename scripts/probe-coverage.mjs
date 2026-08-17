@@ -82,11 +82,15 @@ This is a FLOOR on coverage, not a census, and the gap conflates three different
      the customize page. The mock has none of these, so those controls are decided in source and
      will never render here.
   2. not mounted until interaction — a menu's items exist only while it is open, a dialog's controls
-     only while it is up. Reachable, just not at rest.
+     only while it is up. MEASURED, and it is near zero: driving the composer's reveal row and then
+     the model tray left the library count flat at 45 while the total VISIBLE button count FELL,
+     94 -> 91 -> 83. Those panels are built from the controls that stayed hand-written, and opening
+     one covers the composer controls behind it. Interaction does not hide library components from
+     this count.
   3. transient — every Spinner is 0 because nothing is loading at the moment of the count.
 
-Only (1) is a genuine blind spot. Separating them means driving the UI, which this does not do; a
-first attempt at clicking things open moved none of the numbers, so the split is not claimed here.
+So the gap is (1) and (3), and (1) dominates: the blind spot is the data-dependent branches, not
+closed menus. Worth knowing before anyone spends an afternoon automating clicks to close it.
 
 Deliberately NOT wired into 'npm run probe:chat'. Its number moves whenever a component is added or
 removed, which is normal development rather than a regression — a gate that fires on healthy change

@@ -372,12 +372,20 @@ That number is a FLOOR and it conflates three things, which is why it is not a g
 1. **unreachable without data** — projects, artifacts, scheduled tasks, a share link, attachments,
    the customize page. The mock has none, so those controls are decided in source and will never
    render for a probe. **This is the genuine blind spot.**
-2. **not mounted until interaction** — a menu's items exist only while it is open, a dialog's only
-   while it is up.
+2. **not mounted until interaction** — and this turned out to be **near zero**. Driving the
+   composer's reveal row and then the model tray left the library count flat at 45 while the total
+   visible button count *fell*: 94 → 91 → 83. Those panels are built from the controls that stayed
+   hand-written, and opening one covers the composer controls behind it.
 3. **transient** — every `Spinner` counts 0 because nothing is loading at the moment of the count.
 
-Separating them means driving the UI. A first attempt at clicking panels open moved none of the
-counts, so the split is **not claimed** — the probe says so rather than guessing a breakdown.
+**So the gap is (1) and (3), and (1) dominates.** The blind spot is the data-dependent branches, not
+closed menus — worth knowing before anyone spends an afternoon automating clicks to close it.
+
+Finding that out needed one diagnostic first: the earlier attempt clicked nothing because
+`[data-chat-model-trigger]` rests at `visibility: hidden; pointer-events: none` inside the collapsed
+reveal row, and `[aria-label*="Attach"]` measures 0×0. **A click that lands on nothing looks exactly
+like a click that changes nothing** — check the element is hittable before concluding from a null
+result.
 
 It is deliberately **not** in `probe:chat`: its number moves whenever a component is added, which is
 normal development rather than a regression, and a gate that fires on healthy change teaches people
