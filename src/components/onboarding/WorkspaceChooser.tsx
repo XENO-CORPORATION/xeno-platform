@@ -4,7 +4,7 @@ import {
   SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts, type Suite,
 } from '../../lib/workspaceSuites';
 import SuiteVisual from './SuiteVisual';
-import DotBurst from './DotBurst';
+import EdgeParticles from './EdgeParticles';
 import { productIcon } from '../../lib/productIcons';
 import { isUnreleased } from '../../lib/releaseStatus';
 
@@ -163,7 +163,7 @@ export const WorkspaceChooser: React.FC<{
                     ${burst ? 'opacity-100' : 'opacity-0'}`}
       >
         <div className="absolute inset-0 bg-black/72" />
-        <DotBurst active={burst} originRef={barRef} />
+        <EdgeParticles active={burst} originRef={barRef} />
       </div>
 
       {/* THE FRAME. Behind everything (z-0, cards are z-10) and outside the
