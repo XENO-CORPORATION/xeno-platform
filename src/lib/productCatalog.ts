@@ -91,7 +91,7 @@ export function slugify(label: string): string {
 
 export const PRODUCTS: Product[] = [
   // ── Flagship ──────────────────────────────────────────────
-  { slug: 'hub', name: 'XENO Hub', tagline: 'The all-in-one launcher for every XENO app, agent and credit.', category: 'Platform', status: 'shipping', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-hub' },
+  { slug: 'hub', name: 'XENO Hub', tagline: 'The all-in-one launcher for every XENO app, agent and credit.', category: 'Platform', status: 'shipping', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-hub' },
 
   // ── Generate (web, in-app) ────────────────────────────────
   { slug: 'image', name: 'XENO Image', tagline: 'Generate images from a prompt with 20+ frontier models.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/auth' },

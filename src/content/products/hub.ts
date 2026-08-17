@@ -5,7 +5,7 @@ import type { ProductContent } from './_types';
  * marketplaceStore, updater). Shipping desktop launcher (v0.5.x). Honest note:
  * a couple of panels (OS/containers, home Showcase) are still preview/mock.
  * PLATFORMS: only a Windows installer is published — every release in the R2
- * feed is windows-only. Do not claim macOS/Linux until those builds ship. */
+ * feed publishes Windows and Linux. Do not claim macOS until that build ships. */
 const hub: ProductContent = {
   slug: 'hub',
   hero: {
@@ -13,7 +13,7 @@ const hub: ProductContent = {
     sub: 'XENO Hub installs, updates, and launches the whole XENO stack from a single window — your creative apps, a built-in agent, a marketplace of apps, agents and models, and one credit balance that follows you everywhere.',
     media: { type: 'mockup', src: 'hub-hero', alt: 'XENO Hub desktop launcher — the Studio app list with Pixel, Motion, Sound install/launch states, credits and auto-update in the title bar' },
     badges: ['Windows desktop', 'Free', 'Auto-updating', 'Marketplace built in'],
-    note: 'Free desktop app for Windows · signs in with your XENO account. macOS and Linux builds are not out yet. A few panels (OS/containers, Showcase) are still preview.',
+    note: 'Free desktop app for Windows and Linux · signs in with your XENO account. macOS is not out yet. On Linux the LaTeX compiler is unavailable and the UI Asset Extractor uses your system python3. A few panels (OS/containers, Showcase) are still preview.',
   },
   trust: ['Part of the XENO platform — one sign-in', 'Local-first: your ~/.xeno cache works offline', 'Electron · React 19 · open update feed'],
   highlights: [
@@ -136,7 +136,7 @@ const hub: ProductContent = {
   faq: [
     { q: 'What is XENO Hub?', a: 'It’s the desktop launcher for the whole XENO ecosystem — one window to install, update and launch every XENO app, run a built-in agent and tools, browse the marketplace, and manage your credits.' },
     { q: 'Is it free?', a: 'Yes, the Hub itself is a free download. Some cloud AI features spend credits, and paid marketplace items (agents, models, subscriptions) meter on your credit balance.' },
-    { q: 'Which platforms are supported?', a: 'Windows today — that’s the only build we publish. macOS and Linux are planned; the download page lists every build and past version we actually ship, so it will show them as soon as they exist.' },
+    { q: 'Which platforms are supported?', a: 'Windows and Linux — a Windows installer and a 64-bit AppImage, built from the same commit for every release. macOS is planned. Two features are Windows-only for now: the bundled LaTeX compiler, and the UI Asset Extractor, which on Linux uses your system python3 instead of a bundled one. Hub detects both at runtime and tells you rather than failing oddly. The download page lists every build and past version we actually ship.' },
     { q: 'How do updates work?', a: 'The Hub checks the XENO update feed in the background and updates itself, and it detects when your installed apps have a new version — you update with one click and a restart. It’s the same open version feed the website reads.' },
     { q: 'What’s in the marketplace?', a: 'One store with shelves for native XENO apps, sandboxed community apps, agents (Minds and swarms), workbench panels & plugins, and inference models — each tagged Official, Verified or Community, with capability consent before anything gets access.' },
     { q: 'Does it work offline?', a: 'The Hub is local-first: your settings, workspaces and agent chats live in ~/.xeno and stay authoritative offline. Cloud features (models, marketplace, sign-in) reconnect when you’re back online.' },
