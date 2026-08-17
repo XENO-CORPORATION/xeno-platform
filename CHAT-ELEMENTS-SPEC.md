@@ -20,8 +20,8 @@ they describe.
 ### What is done
 
 Every `<button>` and every field in the chat is either a `@xenosystem/elements-react` component or
-hand-written **with the reason beside it**. §3 and §7 both report **0 still to decide** — 243 adopted
-components in the source, 72 buttons and 21 fields hand-written on purpose, 4 fields excluded as
+hand-written **with the reason beside it**. §3 and §7 both report **0 still to decide** — 235 adopted
+components in the source, 70 buttons and 21 fields hand-written on purpose, 4 fields excluded as
 pickers and sliders.
 
 `npm run test:chat` is 10/10 with an empty KNOWN_RED. `npm run probe:chat` is 12 browser probes in
@@ -38,13 +38,13 @@ roles with no variant member, a blue cluster the theme does not reach, three unr
 hooks, and the per-theme token collisions. Closing the first means adding palette, and
 `DESIGN_SYSTEM.md` is LOCKED.
 
-Coverage is **55%** — 140 of 255 adopted components rendered. The remainder is not measurement error
+Coverage is **56%** — 138 of 245 adopted components rendered. The remainder is not measurement error
 (§6): `isMultiInterface`'s six controls sit behind a sign-in wall and `isRecentFilesOpen`'s two behind
 `display: none`. **The next gain needs a test account, not another path.**
 
 ### What this cost, and the part worth keeping
 
-The measurement was wrong more often than the code was. **Nine probe false positives**, tabulated in
+The measurement was wrong more often than the code was. **Ten measurement errors**, tabulated in
 §6 — including one repeat of a trap I had written into that very table two iterations earlier, one
 selector typo that reported a component as never-rendered for the entire programme while three of it
 sat on screen, and three in a row chasing a reported hover regression where nothing was broken.
@@ -807,8 +807,8 @@ Two things it cost, both worth keeping:
 ### How much do the probes actually see? — a quarter
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
-`scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-140 rendered across the three routes — 55%.**
+`scripts/probe-coverage.mjs` puts a number on the difference: **245 adopted components in the source,
+138 rendered across the three routes — 56%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
@@ -977,8 +977,11 @@ The five, because they rhyme and the next one will too:
 | the sidebar hover pill dead on all six rows | the sidebar was CLOSED: it rests at `left: -260px` with `pointerEvents: 'none'`, so `el.hover()` reached nothing. §5.4d again — opening it is the probe |
 | zero `.xeno-icon-hosts` rules loaded, so the icon motion "was never wired" | the walk read `if (r.cssRules) { recurse; continue }`, and in current Chrome **every** `CSSStyleRule` has a `cssRules` list for nesting — an empty one, which is truthy. It skipped every style rule in the document. Read `selectorText` FIRST, then recurse |
 | every icon animation dead on hover | **headless Chrome defaults to `prefers-reduced-motion: reduce`**, and the chat correctly honours it. Measured three ways: unset → 0 animations, `reduce` → 0, `no-preference` → 2. Emulate the media feature explicitly or the probe measures the browser's accessibility default and calls it a regression |
+| 4 adopted `Switch`, 94 `IconButton`, 243 components, a 255 coverage denominator | **the board was counting its own prose.** `src.split('<' + name)` counts a name wherever it appears, and this chat explains itself: sixty-odd `Stays hand-written` reasons NAME the component they are declining. Three of the four `<Switch` matches were inside reasons saying *why the control is not a Switch*. Real total 235, not 243 — and the better the reasons got, the higher the number climbed. `<Tab` also swallowed `<Tabs`. Both fixed in `lib/blank-comments.mjs`; the coverage numerator was never affected because it is counted in the browser, so the correction moved coverage UP |
 
-Nine now, and the last three came from a single report — *"the icons lost their hover animation"* — where
+Ten now, and the last one is the worst of the family because it was not a probe at all — it was the
+BOARD, the instrument every other number in this document is quoted from, and it had been wrong since
+the first iteration. Three of them came from a single report — *"the icons lost their hover animation"* — where
 **nothing was broken**. The pill travels, lands within 0.4px of its row, and all six glyphs animate. Three
 consecutive measurements said otherwise, each for its own reason, and each looked like a confirmed bug
 until the next layer was checked. Two of them were failures to make the app do the thing before measuring
@@ -1617,19 +1620,20 @@ Re-deciding these costs more than it saves.
 5. every remaining hand-written control carrying a comment saying why.
 
 Point 5 was the real finish line. "Everything is a component" was never the goal — **"nothing is
-hand-written by accident"** is. Current: 82 `Button`, 94 `IconButton`, 38 `MenuItem`, 12 `Spinner`,
-12 `TextInput`, 4 `Switch`, 1 `MessageBubble` adopted; 72 buttons and 21 fields hand-written, each
+hand-written by accident"** is. Current: 79 `Button`, 91 `IconButton`, 37 `MenuItem`, 12 `Spinner`,
+12 `TextInput`, 2 `Tab`, 1 `Switch`, 1 `MessageBubble` adopted; 70 buttons and 21 fields hand-written, each
 with its reason; 4 fields excluded as pickers and sliders.
 
 ### What "done" does NOT mean
 
 Say these out loud rather than letting a green board imply them.
 
-- **The mock renders a fraction of the chat, and the fraction is now measured: 24%.** No projects,
-  artifacts, scheduled tasks, share link, attachments or customize page. 255 adopted components in the
-  source, 60 rendered across the three routes (`scripts/probe-coverage.mjs`). Those branches are
-  *decided in the source* and *unmeasured in the browser*. **A green `probe:chat` covers a quarter of
-  the adopted controls** — see §6 for what that number does and does not include.
+- **The mock renders a fraction of the chat, and the fraction is measured: 56%.** No projects,
+  artifacts, scheduled tasks, share link, attachments or customize page. 245 adopted components in the
+  source, 138 rendered across the three routes (`scripts/probe-coverage.mjs`). Those branches are
+  *decided in the source* and *unmeasured in the browser*. **A green `probe:chat` leaves 107 adopted
+  controls never watched rendering** — see §6 for what that number does and does not include, and for
+  why the denominator moved down: it had been counting the prose that explains the conversions.
 - ~~**Most probes measure ONE theme.**~~ **Closed, and the answer was not "loop them all".** Four
   probes compare COLOUR and all four now run dark/dim/light: `probe-voicebright` (plus two custom
   stops), `probe-control-fill`, `probe-invisible-fills` and — last, and the one that most needed it —
@@ -1666,6 +1670,6 @@ Say these out loud rather than letting a green board imply them.
 - The six seams in §9 were swept and are recorded with their measurements. They found things a
   file-by-file read did not; they do not need re-running from scratch, only re-checking if something
   changes.
-- The nine probe false positives in §6. Every one of them is a mistake the next probe will make.
+- The ten measurement errors in §6. Every one of them is a mistake the next probe will make.
 - The two open design questions above. They have been re-checked twice and the answer is the same:
   they are not an agent's to close.

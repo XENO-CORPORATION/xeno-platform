@@ -18,6 +18,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { blankComments } from './lib/blank-comments.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -57,35 +58,6 @@ const files = [...walk(path.join(ROOT, 'src')), ...walk(path.join(ROOT, 'scripts
  * count read them as referenced and the bucket emptied — 3 to 0, by writing the sentence that says
  * they are unread. A mention in a comment is not a consumer. It cannot break if the hook goes.
  */
-const blankComments = (src) => {
-  const out = src.split('');
-  let i = 0;
-  while (i < src.length) {
-    const c = src[i];
-    if (c === '"' || c === "'" || c === '`') {
-      const q = c;
-      i++;
-      while (i < src.length) {
-        if (src[i] === '\\') { i += 2; continue; }
-        if (src[i] === q) { i++; break; }
-        i++;
-      }
-      continue;
-    }
-    if (c === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
-      const block = src[i + 1] === '*';
-      const start = i;
-      i += 2;
-      while (i < src.length && (block ? !(src[i] === '*' && src[i + 1] === '/') : src[i] !== '\n')) i++;
-      i = block ? i + 2 : i;
-      for (let k = start; k < Math.min(i, src.length); k++) if (out[k] !== '\n') out[k] = ' ';
-      continue;
-    }
-    i++;
-  }
-  return out.join('');
-};
-
 const raw = new Map(files.map((f) => [f, readFileSync(f, 'utf8')]));
 const texts = new Map([...raw].map(([f, t]) => [f, blankComments(t)]));
 

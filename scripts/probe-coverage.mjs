@@ -19,17 +19,36 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { countUses } from './lib/blank-comments.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CHAT = path.join(HERE, '../src/components/playground/Chat');
 const req = createRequire('C:/code-dev/xeno-platform/package.json');
 const puppeteer = (await import(pathToFileURL(req.resolve('puppeteer')).href)).default;
 
-const COMPONENTS = ['Button', 'IconButton', 'MenuItem', 'Spinner', 'TextInput', 'Textarea', 'Switch', 'MessageBubble', 'ListRow', 'SegmentedControl', 'ToggleButton'];
+const COMPONENTS = ['Button', 'IconButton', 'MenuItem', 'Spinner', 'TextInput', 'Textarea', 'Switch', 'MessageBubble', 'ListRow', 'SegmentedControl', 'ToggleButton', 'Tab'];
+
+/*
+ * The DENOMINATOR, and it was wrong for the whole programme.
+ *
+ * This counted `src.split('<' + name)`, which counts a component's name wherever it appears — and this
+ * chat explains itself in prose. Sixty-odd `Stays hand-written` reasons name the component they are
+ * declining, so `<Switch>` inside "a switch by ROLE, a button by shape — `<Switch>` is 36 x 20" was
+ * counted as an adopted Switch. Measured on the same source: 4 raw matches, 3 of them in reasons
+ * explaining why the control is NOT one. The better the reasons, the higher the coverage denominator.
+ *
+ * `<Tab` also collided with `<Tabs`, which is why `countUses` requires the name to be followed by
+ * something that ends a tag. Both halves live in `lib/blank-comments.mjs` now, shared with
+ * `spec-status` and `probe-dead-hooks`, which had each grown their own copy of the same fix.
+ *
+ * The numerator was never affected — it is counted in the BROWSER, off rendered elements, which cannot
+ * be fooled by a sentence. So this correction moves coverage UP: the same measured components over a
+ * denominator that has stopped counting prose.
+ */
 const inSource = Object.fromEntries(COMPONENTS.map((c) => [c, 0]));
 for (const f of readdirSync(CHAT).filter((x) => x.endsWith('.tsx'))) {
   const src = readFileSync(path.join(CHAT, f), 'utf8');
-  for (const c of COMPONENTS) inSource[c] += src.split(`<${c}`).length - 1;
+  for (const c of COMPONENTS) inSource[c] += countUses(src, c);
 }
 
 /* The DOM class each component renders, so the browser side counts the same things. */
@@ -48,6 +67,10 @@ const SELECTOR = {
   ListRow: '.xeno-list-row',
   SegmentedControl: '.xeno-segmented',
   ToggleButton: '.xeno-toggle',
+  /* `<Tabs>` renders `<Tab>` too, so this would double-count where both are used. The chat has no
+     `<Tabs>` — it drives its own tablists through `useTabs`, which is why `<Tab>` exists — so the
+     count is exact here and would need a `:not(.xeno-tablist > *)` the day that changes. */
+  Tab: '.xeno-tab',
 };
 
 /*

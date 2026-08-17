@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
-import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, Textarea, TextInput, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
+import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, Tab, Textarea, TextInput, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
 // The palettes and the preference that picks one live outside this file now: the CSS at the entry
 // point, the resolution beside it. This component still OWNS the switcher — it is the only thing that
 // writes these keys — but owning a setting never meant being the only place allowed to read it.
@@ -8373,48 +8373,43 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   >
                     {PROJECT_SETTINGS_SECTIONS.map((section) => {
                       const isActive = activeSection === section.id;
-                      /* Stays hand-written — and the reason has CHANGED, which is the point of
-                         re-reading these rather than trusting them.
-
-                         What used to block it was semantics and presentation: this marks selection
-                         with a ring where the library only knew how to fill, and `ToggleButton` was
-                         the only thing wearing `selectionStyle="ring"` — but a tab is not a toggle.
-                         Both are closed now. The library has `<Tab>`, a tab ROW for a tablist the
-                         product drives, which exists because of this exact pair: two tablists, wide
-                         and narrow, over one shared panel, on `useTabs` from that same library. It
-                         carries `selectionStyle="ring"` and spreads `tabProps` last so the hook
-                         still wins.
-
-                         What blocks it now is METRICS, and §3 says a swap and a resize are two
-                         edits. This tab is h32 / padding 8 / font 11.5, which is no step on the
-                         scale: `md` is 32/12/14 and `xs` is 24/8/12, so it borrows a height from one
-                         and a padding from the other and undercuts both on type. Adopting at `md`
-                         widens every tab and grows the label, and this list WRAPS — it would re-flow
-                         to a different number of rows. That is a visible change to a settings
-                         dialog, and it is a decision to take deliberately rather than as a side
-                         effect of a conversion. */
+                      /* Converted, and the size was not a choice — it was a repair.
+                       *
+                       * This carried `min-h-8`, asking for 32px. It rendered at **26**. `min-h-8`
+                       * arrived in Tailwind 3.4 and this repo is on 3.3.0, so the class was never
+                       * generated: `min-height` computed to `auto` and no rule naming it exists
+                       * anywhere in the document. The author asked for 32 and got whatever the
+                       * 11.5px line plus `py-1` came to. Its narrow twin says `min-h-9` and is dead
+                       * the same way — those two are the only `min-h-<number>` classes in the whole
+                       * chat above `min-h-0`, which is the one size 3.3 does ship.
+                       *
+                       * So `size="md"` is 32px: the height this asked for, delivered. That is why
+                       * this is not the two-edit case §3 warns about — the swap and the resize are
+                       * the same edit here, because the intended size was already on the scale and
+                       * only the class expressing it was missing.
+                       *
+                       * What genuinely moves: padding 8 → 12, type 11.5 → 14, and the ring from
+                       * `--chat-muted` at 55% to `--xeno-muted` straight. The last is the library's
+                       * position, stated where the ring is declared — the weight of a hairline is a
+                       * chrome token's business, not a call site's.
+                       *
+                       * `<Tab>` and not `<Tabs>`: `<Tabs>` owns the panel and the keys, and this is
+                       * one of TWO tablists over a single shared panel driven by `useTabs`. The
+                       * `tabProps` spread lands after every default here, so the hook still owns the
+                       * roving tabIndex and the arrows. The hover plate stays as a class because it
+                       * is this product's reading, not something the component decided against. */
                       return (
-                        <button
+                        <Tab
                           key={section.id}
-                          type="button"
+                          size="md"
+                          selectionStyle="ring"
+                          selected={isActive}
                           {...projectTabsWide.tabProps(section.id)}
                           onClick={() => setActiveSection(section.id)}
-                          className={`min-h-8 rounded-md px-2 py-1 text-[11.5px] font-medium transition-colors ${
-                            isActive
-                              ? 'text-[var(--chat-text)]'
-                              : 'text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
-                          }`}
-                          style={
-                            isActive
-                              ? {
-                                  boxShadow:
-                                    'inset 0 0 0 1px color-mix(in srgb, var(--chat-muted) 55%, transparent)',
-                                }
-                              : undefined
-                          }
+                          className="hover:bg-[var(--chat-hover)]"
                         >
                           {section.label}
-                        </button>
+                        </Tab>
                       );
                     })}
                   </nav>
@@ -8438,34 +8433,26 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             >
               {PROJECT_SETTINGS_SECTIONS.map((section) => {
                 const isActive = activeSection === section.id;
-                /* Stays hand-written — the wide tablist's narrow twin, same ringed selection, and
-                   blocked on the same metrics for a DIFFERENT reason, which is worth knowing before
-                   someone converts one and assumes the other follows. This one is h36 / padding 12 /
-                   font 12: `lg` is 36/14/14 and `md` is 32/12/14, so it takes lg's height, md's
-                   padding and neither's type. The two twins are off the scale in two different
-                   directions, so there is no single size token that adopts both. */
+                /* The wide tablist's narrow twin, converted with it and for the same reason: it said
+                   `min-h-9` — 36px — and Tailwind 3.3 ships no such class, so it rendered at whatever
+                   its 12px line and `py-1.5` came to. `size="lg"` is 36. The two are the only dead
+                   `min-h-<number>` classes in the chat, and they were these two tablists.
+
+                   `flex-shrink-0` stays: this list scrolls horizontally rather than wrapping, and a
+                   tab allowed to shrink would squeeze instead of overflowing. That is layout the
+                   parent owns, which is why it is a class here and not a component decision. */
                 return (
-                  <button
+                  <Tab
                     key={section.id}
-                    type="button"
+                    size="lg"
+                    selectionStyle="ring"
+                    selected={isActive}
                     {...projectTabsNarrow.tabProps(section.id)}
                     onClick={() => setActiveSection(section.id)}
-                    className={`min-h-9 flex-shrink-0 rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                      isActive
-                        ? 'text-[var(--chat-text)]'
-                        : 'text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
-                    }`}
-                    style={
-                      isActive
-                        ? {
-                            boxShadow:
-                              'inset 0 0 0 1px color-mix(in srgb, var(--chat-muted) 55%, transparent)',
-                          }
-                        : undefined
-                    }
+                    className="flex-shrink-0 hover:bg-[var(--chat-hover)]"
                   >
                     {section.label}
-                  </button>
+                  </Tab>
                 );
               })}
             </nav>

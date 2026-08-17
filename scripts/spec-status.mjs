@@ -15,6 +15,7 @@
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { countUses } from './lib/blank-comments.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CHAT = path.join(ROOT, 'src', 'components', 'playground', 'Chat');
@@ -223,6 +224,24 @@ function buttonsIn(file) {
   return out;
 }
 
+/*
+ * Count JSX USES of a component, not appearances of its name.
+ *
+ * The plain `split('<' + name)` this used to be got two things wrong, and `Tab` surfaced both at once
+ * the day it was added:
+ *
+ *   - it counted PROSE. A reason written beside a conversion, explaining `<Tab>` and not `<Tabs>`,
+ *     added itself to the tally. That is the third time in this repo a measurement has counted the
+ *     sentence describing it — the same shape as `probe-dead-hooks` reading its own reasons as
+ *     consumers, and as `probe-open-findings` retiring a finding by naming it.
+ *   - it collided on PREFIX. `<Tab` matches `<Tabs` and would match `<Table`; `Tab` read 5 with two
+ *     call sites on screen. Every other name on the board is one shared prefix away from the same.
+ *
+ * So: comment bodies blanked first, then the name has to be followed by something that ends a JSX tag
+ * name — whitespace, `>`, or `/`. Self-closing and multi-line opens both survive that.
+ */
+const countAdopted = (name) =>
+  files.reduce((n, f) => n + countUses(readFileSync(f, 'utf8'), name), 0);
 const count = (needle) => files.reduce((n, f) => n + readFileSync(f, 'utf8').split(needle).length - 1, 0);
 
 /**
@@ -347,7 +366,7 @@ console.log(
 for (const r of openFields) console.log(`    ${r.file}:${r.line}  <${r.kind}>`);
 
 console.log('\nADOPTED:');
-for (const c of ['IconButton', 'MenuItem', 'Button', 'Spinner', 'TextInput', 'MessageBubble', 'Switch']) {
-  console.log(`  ${c.padEnd(16)} ${count('<' + c)}`);
+for (const c of ['IconButton', 'MenuItem', 'Button', 'Spinner', 'TextInput', 'MessageBubble', 'Switch', 'Tab']) {
+  console.log(`  ${c.padEnd(16)} ${countAdopted(c)}`);
 }
 console.log(`\nNext: node scripts/spec-status.mjs --file ${path.basename(per[0]?.name ?? '', '.tsx')}`);
