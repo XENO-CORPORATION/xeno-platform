@@ -70,16 +70,33 @@ starting new work. Do not start a second conversion while a build is unverified.
 
 ### The shape of an iteration
 
-1. `git status` clean, `check:names` clean (§0)
+1. `git status` clean, `check:names` clean, `test:chat` and `probe:chat` green (§0)
 2. Read the buttons in the target file (§2)
 3. Convert 3–6 of them by hand (§3)
 4. Export any missing `*Decl` from `src/lib/icons.tsx`, wire the imports
 5. `node scripts/check-undefined-names.mjs src/components/playground/Chat` — must be clean
 6. Sweep dead imports (§4)
 7. `npm run build` — must print `✓ built`
-8. Verify (§6)
+8. Verify (§6): `npm run probe:chat`, plus a targeted measurement of what you changed
 9. Commit, push
 10. Stop. The next iteration re-measures.
+
+**Step 7 comes before step 8, and that ordering is not cosmetic.** A syntax error takes the route
+down, and a probe pointed at a dead route times out looking for a root that never mounts — several
+minutes to learn nothing, where the build says it in one line. Build, then measure.
+
+### When there is nothing left to convert
+
+§3 and §7 both reached zero, so an iteration is now one of these instead, and the same rules apply —
+one per iteration, measured before and after:
+
+- **Close a §9 finding**, or re-check one and record why it stays open. Saying so *with the
+  measurement* is a result, and so is correcting an earlier measurement.
+- **Sweep a seam** — a place where a wrong decision hides in a shape rather than in a file. The six
+  swept are listed in §9; each found something the file-by-file read had not.
+- **Consolidate** — a probe runner, a spec section that has gone stale, a memory file that predates
+  the work. The spec is read by an agent with no memory of the last iteration, so a stale instruction
+  in §§0–5 costs more than a stale comment in the source.
 
 ---
 
@@ -111,11 +128,24 @@ class (shared `const` class strings are expanded), and its computed box.
 |---|---|
 | a fill of `--chat-accent` or `--chat-text`, with inverted ink | `primary` |
 | a border **and** a fill of `--chat-control` / `--chat-surface` / `--chat-elevated` | `secondary` |
-| a border and no fill | `quiet` |
+| a border, no fill, ink at full strength | `outline` |
+| a border, no fill, MUTED ink | `quiet` |
 | no border, no fill | `ghost` |
-| anything reaching for `--chat-danger` | `danger` |
+| a border, muted ink, going RED when reached for | `danger` |
+| a solid `--chat-danger` fill | `danger` + `emphasis="solid"` |
 
 This is not a taste call. If the mapping is unclear, the button is unusual — leave it and say so.
+
+Two rows that used to be wrong here, both fixed by measuring rather than reading:
+
+- **`danger` is the QUIET reading**, not a red slab: a neutral hairline with muted ink that turns red
+  only on hover. This table used to say "anything reaching for `--chat-danger`", which would put a
+  hairline where a delete dialog's confirm belongs. `emphasis="solid"` is the other reading.
+- **`quiet` and `danger` are identical at rest** — transparent fill, muted ink, a hairline — and
+  differ only on hover. A resting screenshot cannot tell them apart; the label and the hover can.
+
+`primary` was unusable in this chat until the bridge carried the chrome tokens, and older comments in
+the source still say so. It works now; treat that sentence as expired wherever it appears.
 
 ### 3.3 Which size — from the box it already occupies
 
@@ -128,11 +158,32 @@ The control scale is **xs 24 · sm 28 · md 32 · lg 36**, glyphs 15/16/16/18.
 **Keep the current glyph px with `iconSize`.** A component swap and a resize are two edits; the swap
 should not silently be both. `iconSize` exists for exactly this.
 
+### 3.3b The doors — before deciding a control cannot convert
+
+Six of these were added during this adoption, each because a call site could not say something. Check
+the list before writing a `Stays hand-written` reason, and check it again before believing one you
+find: **two controls stayed hand-written for a whole pass on a reason that a door had already
+answered.**
+
+| The call site needs to say | Prop |
+|---|---|
+| this glyph is drawn at N px, not the size token's | `iconSize` on `Button` / `IconButton` / `TextInput` / `SegmentedControl` |
+| this field's TYPE is N px, not the size token's | `fontSize` on `TextInput` / `Textarea` |
+| this field is code | `mono` on `Textarea` — uses `--xeno-font-mono`, which the system already declares |
+| this destructive action is the confirm, not the affordance | `emphasis="solid"` on `Button` |
+| the glyph reveals from under the label | `iconReveal` — `true`/`"leading"`, or `"trailing"` for the mirror |
+| chosen is a RING, not a fill | `selectionStyle="ring"` on `ToggleButton` — the fill has a surface precondition; a hairline does not |
+
+If a control needs something not on this list, **add the door and a test in the library** rather than
+converting around it (§5.3). Prefer a MODE that reaches a token the system already declares over
+another override prop — `mono` is the example, and it is why there is no `fontFamily`.
+
 ### 3.4 What to carry over, and what to drop
 
 | Keep | Drop |
 |---|---|
-| every prop that is not `className` or `type` | `type="button"` — the component sets it |
+| every prop that is not `className`, `type` or `style` | `type="button"` — the component sets it |
+| — | **`style` — never pass it.** `ButtonProps` omits it deliberately; it rides in on the prop spread because the build strips types without checking. EVERY component in this chat found wearing one was a variant reproducing another by hand |
 | LAYOUT classes: `flex-1`, `w-full`, `min-w-*`, `max-w-*`, `ml-*`, `self-*`, `order-*`, `absolute`, `z-*`, all `sm:`/`md:`/`lg:` | APPEARANCE classes: `p-*`, `h-*`, `w-*` (when square), `rounded-*`, `text-*`, `bg-*`, `border*`, `hover:*`, `transition*` |
 | product hooks: `data-*`, `chat-*` class names that CSS or JS targets | `data-*` hooks nothing references — grep first, **`scripts/` and `*.css` included** |
 | the accessible name | a visually-hidden `<span className="sr-only">` — becomes `aria-label` |
