@@ -40,7 +40,7 @@ const SUITE_ICON: Record<string, React.ReactNode> = {
 
 type Phase = 'idle' | 'framing' | 'framed';
 
-const ABSORB_MS = 620;
+const FRAME_MS = 720;
 
 export const WorkspaceChooser: React.FC<{
   value: string | null;
@@ -49,38 +49,41 @@ export const WorkspaceChooser: React.FC<{
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const barRef = useRef<HTMLButtonElement | null>(null);
-  const cardRefs = useRef<Record<string, HTMLElement | null>>({});
   const [phase, setPhase] = useState<Phase>(value === EVERYTHING_ID ? 'framed' : 'idle');
-  const [frame, setFrame] = useState<React.CSSProperties | null>(null);
+  const [frameVars, setFrameVars] = useState<React.CSSProperties | null>(null);
 
   const reduced = typeof window !== 'undefined'
     && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   /**
-   * A stroke frame grows out of the bar and closes around the cards.
+   * The frame DRAWS ITSELF around the cards, starting at the bar.
    *
-   * -- WHAT THIS DELIBERATELY IS NOT ----------------------------------------
+   * A hairline appears at the centre of the bar, runs out to both edges, then
+   * climbs the sides and closes across the top. The shape of the motion is the
+   * meaning: the enclosure completing around the four cards.
    *
-   * The previous version replaced the four cards with a single "full XENO
-   * workspace" panel. That was the wrong idea: it DELETED the thing the user
-   * was looking at and put a summary in its place, so choosing everything felt
-   * like losing the grid rather than gaining it.
+   * -- WHY clip-path AND NOT A SCALE TRANSFORM ------------------------------
    *
-   * The cards stay exactly where they are. A frame expands BEHIND them until
-   * it encloses all four, which is the literal statement being made — these
-   * are all yours, together, as one workspace.
+   * The earlier version inverse-scaled a full-size frame onto the bar's box
+   * and released it. That was wrong for a frame, and I had the reason
+   * backwards in the code that shipped it: a transform scales the ENTIRE
+   * rendered output. Borders scale. Inset box-shadows scale. So the stroke
+   * started as a hairline and visibly thickened as it grew -- a frame whose
+   * line changes weight mid-animation.
    *
-   * -- FLIP, FOR THE SAME REASON AS EVERY OTHER MOTION HERE ------------------
+   * Clipping reveals a frame that is already full-size and correctly stroked,
+   * so the line holds ONE weight from first frame to last. It also gives
+   * per-side control, which a single transform cannot: left/right and top are
+   * independent insets, so they can be sequenced into two beats.
    *
-   * The frame is rendered at its FINAL size and inverse-transformed onto the
-   * bar's box; releasing that to identity plays the growth on the compositor.
-   * Animating top/left/width/height instead would lay out every frame, and it
-   * janks worst on the machines least able to hide it.
+   * -- WHAT IS MEASURED, AND WHY ---------------------------------------------
    *
-   * `border` scales with the element, so a 2px stroke inverse-scaled onto the
-   * bar would start ~14x too thin vertically and visibly thicken as it grows.
-   * The stroke is drawn with an inset box-shadow instead, which does not
-   * scale, so the line keeps one weight across the whole animation.
+   * Only the bar's vertical band, expressed as percentages of the frame's own
+   * box. The bar's position depends on the grid's height, the column count and
+   * the viewport, so a hardcoded start is correct at one breakpoint and wrong
+   * everywhere else. The horizontal start is a constant 50%/50% -- dead centre
+   * -- because that is where the expansion should originate regardless of
+   * anything.
    */
   const expandFrame = useCallback(() => {
     if (phase !== 'idle') return;
@@ -90,37 +93,31 @@ export const WorkspaceChooser: React.FC<{
     if (reduced || !wrap || !bar) { setPhase('framed'); onChange(EVERYTHING_ID); return; }
 
     // Measure BEFORE mutating anything: reading a box after a style change that
-    // triggers layout returns post-change geometry, and the frame would then
-    // start from the wrong place.
+    // triggers layout returns post-change geometry.
     const w = wrap.getBoundingClientRect();
     const b = bar.getBoundingClientRect();
 
-    const sx = b.width / w.width;
-    const sy = b.height / w.height;
-    const tx = (b.left + b.width / 2) - (w.left + w.width / 2);
-    const ty = (b.top + b.height / 2) - (w.top + w.height / 2);
+    // The frame element is -inset-3, so its box is 12px larger on every side
+    // than the wrapper. The clip percentages must be relative to THAT box, not
+    // the wrapper, or the start band sits 12px off the bar.
+    const INSET = 12;
+    const frameH = w.height + INSET * 2;
+    const barTop = (b.top - w.top) + INSET;
+    const barBottom = (b.bottom - w.top) + INSET;
 
-    // Frame 1 sits on the bar, frame 2 releases. BOTH must paint — a single
-    // rAF gets coalesced and the transition never runs, which is the classic
-    // silent version of this bug.
-    setFrame({ transform: `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`, transition: 'none', opacity: 1 });
+    setFrameVars({
+      '--f-top': `${((barTop / frameH) * 100).toFixed(3)}%`,
+      '--f-bottom': `${(((frameH - barBottom) / frameH) * 100).toFixed(3)}%`,
+    } as React.CSSProperties);
     setPhase('framing');
 
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      setFrame({
-        transform: 'translate(0px, 0px) scale(1, 1)',
-        opacity: 1,
-        transition: `transform ${ABSORB_MS}ms cubic-bezier(0.34, 0.02, 0.16, 1)`,
-      });
-    }));
-
-    window.setTimeout(() => { setPhase('framed'); onChange(EVERYTHING_ID); }, ABSORB_MS + 40);
+    window.setTimeout(() => { setPhase('framed'); onChange(EVERYTHING_ID); }, FRAME_MS + 40);
   }, [phase, reduced, onChange]);
 
   /** Picking one suite retracts the frame — the two answers are exclusive. */
   const collapseFrame = useCallback(() => {
     setPhase('idle');
-    setFrame(null);
+    setFrameVars(null);
   }, []);
 
   /* -- The choice -------------------------------------------------------- */
@@ -132,18 +129,15 @@ export const WorkspaceChooser: React.FC<{
           content box (-inset-3), so it reads as enclosing the grid rather than
           as another card in it. Pointer-events off: it is a statement, not a
           control — the bar underneath stays clickable through it. */}
-      {frame && (
+      {frameVars && (
         <div
           aria-hidden
           style={{
-            ...frame,
-            transformOrigin: 'center center',
-            // Stroke via inset shadow, not `border`: a border scales with the
-            // transform and would start hairline-thin then thicken visibly.
+            ...frameVars,
             boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.42), 0 24px 60px -30px rgba(0,0,0,0.9)',
             background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008))',
           }}
-          className="pointer-events-none absolute -inset-3 z-0 rounded-[18px]"
+          className="xeno-frame-draw pointer-events-none absolute -inset-3 z-0 rounded-[18px]"
         />
       )}
 
@@ -159,12 +153,13 @@ export const WorkspaceChooser: React.FC<{
             // Inside the frame every suite is included, so they all read as
             // chosen — the frame is the selection, not four separate ones.
             selected={framed || value === suite.id}
-            // Cascade only when the frame made the selection. Starts as the
-            // frame finishes closing, so the ticks land INTO an enclosure that
-            // already exists rather than racing it.
-            checkDelay={framed ? ABSORB_MS * 0.55 + i * 95 : 0}
+            // Cascade only when the frame made the selection, and only once
+            // the frame has CLOSED (86% — the top edge completes at 100%).
+            // Starting earlier put the first tick on screen while the top was
+            // still drawing, so it landed into an enclosure that did not exist
+            // yet, which reads as two animations rather than a consequence.
+            checkDelay={framed ? FRAME_MS * 0.86 + i * 95 : 0}
             onSelect={() => { collapseFrame(); onChange(suite.id); }}
-            registerRef={(el) => { cardRefs.current[suite.id] = el; }}
           />
         ))}
       </div>
@@ -194,7 +189,7 @@ export const WorkspaceChooser: React.FC<{
                summary of what just happened, so it should arrive after the
                thing it summarises. */
             <Check
-              style={{ animationDelay: `${ABSORB_MS * 0.55 + SUITES.length * 95}ms` }}
+              style={{ animationDelay: `${FRAME_MS * 0.86 + SUITES.length * 95}ms` }}
               className="xeno-check-drop h-[18px] w-[18px] text-white"
               strokeWidth={2.5}
             />
@@ -232,8 +227,7 @@ const SuiteCard: React.FC<{
    *  or it reads as lag. */
   checkDelay?: number;
   onSelect: () => void;
-  registerRef: (el: HTMLElement | null) => void;
-}> = ({ suite, index, selected, checkDelay = 0, onSelect, registerRef }) => {
+}> = ({ suite, index, selected, checkDelay = 0, onSelect }) => {
   const products = productsForSuite(suite);
 
   /* ── SHELL / PLATE ANATOMY ────────────────────────────────────────────────
@@ -257,7 +251,6 @@ const SuiteCard: React.FC<{
    * ───────────────────────────────────────────────────────────────────────── */
   return (
     <button
-      ref={registerRef as React.Ref<HTMLButtonElement>}
       type="button"
       onClick={onSelect}
       aria-pressed={selected}

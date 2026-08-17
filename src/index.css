@@ -247,6 +247,52 @@ html, body, #root, #app {
  *
  * The mark itself is scaled separately from the box so the tick appears to be
  * stamped INTO the plate rather than the whole plate growing. */
+/* The workspace frame drawing itself.
+ *
+ * Three beats, and the shape of the motion IS the meaning: it starts as a
+ * hairline at the centre of the bar, runs out to both edges, then climbs the
+ * sides and closes across the top — the enclosure completing around the cards.
+ *
+ * ── WHY clip-path AND NOT A SCALE TRANSFORM ────────────────────────────────
+ *
+ * A scale transform scales the ENTIRE rendered output, stroke included. A
+ * frame inverse-scaled onto the bar therefore starts with a hairline border
+ * that visibly thickens as it grows — the line changes weight mid-animation,
+ * which is exactly what a frame must not do. (An inset box-shadow scales too;
+ * nothing drawn by the element survives a transform unscaled.)
+ *
+ * Clipping reveals a frame that is already full-size and correctly stroked, so
+ * the line has ONE weight from the first frame to the last. It also gives
+ * per-side control, which a single transform cannot: left/right and top are
+ * separate insets, so they can be sequenced.
+ *
+ * The start geometry is measured and passed in as custom properties, because
+ * the bar's position depends on the grid's height, the column count and the
+ * viewport. Hardcoding it would be right at one breakpoint only.
+ */
+@keyframes xenoFrameDraw {
+  0% {
+    opacity: 0;
+    clip-path: inset(var(--f-top) 50% var(--f-bottom) 50% round 18px);
+  }
+  12% { opacity: 1; }
+  /* Beat 1 — run out to both edges, still only as tall as the bar. */
+  48% {
+    opacity: 1;
+    clip-path: inset(var(--f-top) 0% var(--f-bottom) 0% round 18px);
+  }
+  /* Beat 2 — climb the sides and close across the top. */
+  100% {
+    opacity: 1;
+    clip-path: inset(0% 0% 0% 0% round 18px);
+  }
+}
+
+.xeno-frame-draw {
+  opacity: 0;
+  animation: xenoFrameDraw 0.72s cubic-bezier(0.32, 0.06, 0.18, 1) forwards;
+}
+
 @keyframes xenoCheckDrop {
   0%   { opacity: 0; transform: translateY(-9px) scale(0.4); }
   55%  { opacity: 1; transform: translateY(1.5px) scale(1.06); }
@@ -304,10 +350,14 @@ html, body, #root, #app {
   .xeno-rise,
   .xeno-scale-in,
   .xeno-check-drop,
+  .xeno-frame-draw,
   .xeno-stagger > * {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+    /* Without this the frame keeps the animation's 0% clip and is invisible —
+       "no animation" must mean the END state, never the start one. */
+    clip-path: none !important;
   }
 }
 
