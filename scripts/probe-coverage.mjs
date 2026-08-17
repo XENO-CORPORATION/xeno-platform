@@ -177,6 +177,10 @@ for (const seg of ['llm', 'search', 'voice']) {
     }, extra || {});
     localStorage.setItem('chatHistory_playground', JSON.stringify([
       convo(1, { isPinned: true, pinOrder: 0 }), convo(2, { isUnread: true }), convo(3, {}), convo(4, { isArchived: true }),
+      /* Linked to the seeded project by `projectId`. The project rail renders its chats through
+         `projectChats.map(...)`, which is the only place `<ListRow>` appears outside the conversation
+         selector — a project with no conversations shows the rail and none of its rows. */
+      convo(5, { projectId: proj.id }),
     ]));
   }, PROJECT);
   await p.goto(`http://localhost:5183/overview/chat/${seg}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
@@ -205,10 +209,14 @@ for (const seg of ['llm', 'search', 'voice']) {
        trigger for it, is what turned the last aggregate number into four points. */
     'Share conversation',
     'Projects', PROJECT.name,
+    /* `Edit code` puts a code block into edit mode, which is the ONLY place `Textarea` renders on
+       these routes — the other three sit in dialogs. The demo thread supplies the code blocks. */
+    'Edit code',
   ]) {
     await p.evaluate((x) => {
+      /* `title` as well as `aria-label` and text — the code block's Edit is titled, not labelled. */
       const el = [...document.querySelectorAll('button,[role="button"]')].find((e) =>
-        ((e.getAttribute('aria-label') || e.textContent || '').trim().replace(/\s+/g, ' ')).includes(x),
+        ((e.getAttribute('aria-label') || e.getAttribute('title') || e.textContent || '').trim().replace(/\s+/g, ' ')).includes(x),
       );
       if (el && getComputedStyle(el).visibility !== 'hidden') { el.scrollIntoView({ block: 'center' }); el.click(); }
     }, label);

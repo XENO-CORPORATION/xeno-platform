@@ -411,6 +411,24 @@ empty.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 ```
 
+### Two components had never been rendered by any probe. Now they have
+
+`Textarea` and `ListRow` both read 0 for this entire programme. Both are now non-zero, and neither
+needed anything clever:
+
+- **`Textarea`** renders only when a code block is in EDIT mode. One click on the demo thread's own
+  code block — and the probe had to learn to match on `title` as well as `aria-label`, because that
+  control is titled `Edit code` and labelled nothing. **A walk that only reads `aria-label` is blind
+  to every titled control in the app.**
+- **`ListRow`** renders through `projectChats.map(...)`, so a project with **no conversations** shows
+  the rail and none of its rows. One seeded conversation carrying `projectId` was the whole fix.
+
+37% → 38%, `Button` 30 → 32 alongside them.
+
+Two zeros left, and they are the honest kind: `Spinner` (12 in source) needs a loading state that
+does not exist while a mock answers instantly, and `Switch` (4) lives in Customize, GlobalSettings and
+SkillsWorkspace — pages the walk opens but whose sections it does not.
+
 ### The identity collapse was worth exactly one
 
 The `distinct` identity was the label alone, which merges two different source sites that share a
@@ -513,7 +531,7 @@ Two things it cost, both worth keeping:
 
 `npm run probe:chat` reporting green is easy to read as "the chat is verified". It is not, and
 `scripts/probe-coverage.mjs` puts a number on the difference: **255 adopted components in the source,
-94 rendered across the three routes — 37%.**
+98 rendered across the three routes — 38%.**
 
 24% → 27% → **31%**, and the last jump came from asking a better question. Chasing the aggregate got
 three points at a time; asking **where the 74 unrendered Buttons actually live** got four in one step,
