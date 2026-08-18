@@ -120,8 +120,8 @@ starting new work. Do not start a second conversion while a build is unverified.
 
 ### The shape of an iteration
 
-1. `git status` clean, `check:names` and `check:jsx-comments` clean, `test:chat` and `probe:chat`
-   green (§0)
+1. `git status` clean, `check:names`, `check:jsx-comments` and `check:types` clean, `test:chat` and
+   `probe:chat` green (§0)
 2. Read the buttons in the target file (§2)
 3. Convert 3–6 of them by hand (§3)
 4. Export any missing `*Decl` from `src/lib/icons.tsx`, wire the imports
@@ -385,6 +385,28 @@ dead), and it asks the BROWSER, because only the browser has the generated style
 stated in the probe rather than assumed: variants are skipped, since `hover:x` generates a selector
 that does not contain `x`, and only known utility prefixes are checked — the first pass mined prose
 out of template literals and reported `the`, `way.` and `persona.id` as dead classes.
+
+**5.4f There was no typechecker, and asking for one returned a clean bill of health.** `typescript` was
+not in `devDependencies`. So `npx tsc --noEmit` fetched a **joke package** published under that name,
+which prints a banner, reports nothing, and **exits 0** — the first attempt to typecheck this repo came
+back *"0 errors"* and was very nearly written down as a result. **A tool that cannot fail is worse than
+no tool:** it answers the question wrongly instead of not at all, and it looks like the answer everyone
+wants.
+
+With the real compiler: **556 errors, 77 of them in the chat**. That is not a sweep for an adoption
+pass to take on — it is a decision about how much of this repo's typing is worth repairing. What is not
+a decision is whether the number may quietly GROW, so `npm run check:types` is a **ratchet**: it fails
+if the count rises and says to lower the baseline when it falls. Verified in both directions — one
+injected `const x: number = 'str'` took it to 561 and exit 1.
+
+**The bigger half is what the ratchet cannot see.** `tsconfig.json` maps only `@/*`, while
+`vite.config.ts` also aliases `@xenosystem/*` to the element library's SOURCE. tsc resolves none of it
+— 15 `TS2307`s in the chat alone — so **every prop passed to every adopted component in this whole
+adoption has been an untyped `any`.** `iconSize`, `selectionStyle`, `emphasis`, `size`: none of them
+were ever checked. That is precisely why `check-undefined-names.mjs` had to be invented, and §5.4's
+"the build strips types without checking" is a stronger statement than it reads — there were no types
+to strip. Adding the path mapping is the real repair and it will RAISE the count before it lowers it,
+because those imports stop being `any`. Owner's call.
 
 **5.5 A hook dropped on a grep that only looked at `src/`.** Twice now: the carousel's
 `data-update-carousel-dismiss` / `data-update-nav-morph`, and the composer's

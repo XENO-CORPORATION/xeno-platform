@@ -127,7 +127,10 @@ const PROBES = [
      * meaninglessness, still green while a third of the walk has quietly stopped working.
      */
     verdict: /(\d+) rendered on the three routes/,
-    expect: [{ min: 134 }], describe: (m) => `${m[1]} of 255 adopted components rendered (floor 134)`,
+    /* The denominator is NOT hardcoded here any more. It read `of 255` for a while after the source
+       count was corrected to 245 — a literal typed into a description is a number nobody re-measures,
+       which is the same failure as a count quoted in prose. The probe prints the real one. */
+    expect: [{ min: 134 }], describe: (m) => `${m[1]} adopted components rendered (floor 134)`,
   },
   {
     file: 'probe-open-findings.mjs', needs: 'chat',

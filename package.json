@@ -17,6 +17,8 @@
     "probe:chat:full": "node scripts/probe-chat.mjs --full",
     "check:names": "node scripts/check-undefined-names.mjs",
     "check:jsx-comments": "node scripts/check-jsx-comments.mjs",
+    "check:types": "node scripts/check-types.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "build:prerender": "node scripts/prerender-products.mjs",
     "smoke:public-auth": "node scripts/smoke-public-auth.mjs",
     "smoke:public-api": "node scripts/smoke-public-api.mjs",
@@ -146,6 +148,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwindcss": "^3.3.0",
+    "typescript": "^5.9.3",
     "uuid": "^11.1.0",
     "vite": "^6.2.1"
   }
