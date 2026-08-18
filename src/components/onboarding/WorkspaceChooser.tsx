@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Palette, FileText, Terminal, MessageSquare, Check } from 'lucide-react';
 import {
-  SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts,
+  SUITES, EVERYTHING_ID, productsForSuite, availableForSuite,
   parseWorkspace, serializeWorkspace, isEverything, type Suite,
 } from '../../lib/workspaceSuites';
 import SuiteVisual from './SuiteVisual';
@@ -344,41 +344,19 @@ export const WorkspaceChooser: React.FC<{
             transition drives the whole rearrangement, which means the three
             parts can never disagree about where the text should be. ------ */}
 
-        {/* Left slot -- zero-width until chosen. `w-0` + overflow-hidden
-            rather than `hidden`, because a display change cannot be
-            transitioned and the square would pop in at full size. */}
-        <span
-          style={{ transitionDuration: `${BAR_MS}ms` }}
-          className={`relative grid shrink-0 place-items-center overflow-hidden rounded-[8px] border
-                      transition-all ease-out
-                      ${framed
-                        ? 'mr-3.5 h-9 w-9 scale-100 border-white/30 bg-white/[0.14] opacity-100'
-                        : 'mr-0 h-9 w-0 scale-75 border-transparent bg-transparent opacity-0'}`}
-        >
-          {framed && (
-            /* The bar's own tick lands LAST -- after all four cards, and after
-               the square holding it has finished opening. It is the summary of
-               what happened, so it arrives after the thing it summarises. */
-            <Check
-              style={{ animationDelay: `${FRAME_MS * 0.86 + SUITES.length * 95 + CONNECT_MS}ms` }}
-              className="xeno-check-drop h-[18px] w-[18px] text-white"
-              strokeWidth={2.5}
-            />
-          )}
-        </span>
-
-        {/* Equal spacers either side, always growing, so the label stays
-            CENTRED between whatever flanks it. It shifts slightly left as the
-            square and the count take up space, which is motion for free —
-            driven entirely by their widths, with nothing to keep in sync.
-
-            An earlier version collapsed the left spacer to pin the label left
-            once chosen. Centred throughout is calmer and, more to the point,
-            it means the label never moves for a reason the user did not
-            cause. */}
-        <span aria-hidden className="grow" />
-
-        <span className="relative min-w-0 shrink text-center">
+        {/* Just the label, centred.
+    
+            The bar used to carry a check square on the left and a product
+            count on the right, both animating in on selection. Both are gone:
+            the count restated a number already on every card, and the check
+            was a THIRD place the same fact was being reported — the frame is
+            drawn, the four cards have their own ticks, and the copy below
+            says it in words. State said four ways is not four times as clear.
+    
+            With nothing flanking it the label needs no spacers and no
+            flex-grow choreography either; it is simply centred, and it stays
+            centred, so it never moves for a reason the user did not cause. */}
+        <span className="relative min-w-0 flex-1 text-center">
           <span className="block whitespace-nowrap text-[14px] font-medium text-white">
             Complete XENO Experience
           </span>
@@ -387,27 +365,6 @@ export const WorkspaceChooser: React.FC<{
               ? 'All four suites are yours. Click again to undo.'
               : 'Every suite, every app, in one workspace.'}
           </span>
-        </span>
-
-        <span aria-hidden className="grow" />
-
-        {/* Right slot -- the count is meaningless before a choice is made; it
-            would be a number floating beside an invitation. Withheld until
-            there is something for it to describe.
-
-            Delayed on the way IN so it arrives with the check rather than
-            racing it, and immediate on the way OUT so a retract reads as
-            decisive rather than as the bar reluctantly letting go. */}
-        <span
-          style={{
-            transitionDuration: `${BAR_MS}ms`,
-            transitionDelay: framed ? `${FRAME_MS * 0.86}ms` : '0ms',
-          }}
-          className={`relative shrink-0 overflow-hidden whitespace-nowrap text-[12px] tabular-nums text-white/30
-                      transition-all ease-out
-                      ${framed ? 'ml-3 max-w-[120px] opacity-100' : 'ml-0 max-w-0 opacity-0'}`}
-        >
-          {allAvailableProducts().length} products
         </span>
       </button>
     </div>
