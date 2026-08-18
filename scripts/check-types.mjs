@@ -34,9 +34,26 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
 
-/* Measured 2026-08-18 with TypeScript 5.9.3 against tsconfig.json. */
-const BASELINE = 556;
-const CHAT_BASELINE = 77;
+/*
+ * Measured 2026-08-18 with TypeScript 5.9.3 against tsconfig.json.
+ *
+ * These are LOWER than the first reading (556 / 77) while checking far MORE, which is worth stating
+ * because the two numbers are not comparable as counts. The first was taken with `@xenosystem/*`
+ * unresolved: every adopted component was an `any`, so none of its props were checked at all. Adding
+ * the path mapping took it to 676 / 296 — the honest cost of looking — and then two things came out:
+ *
+ *   15 real defects, fixed. Twelve `IconButton`s with no `aria-label` at all (the library makes it
+ *   REQUIRED precisely to prevent an icon-only button with no accessible name, and the requirement had
+ *   never reached a call site), and three `aria-label={{searchPlaceholder}}` — a doubled brace, so an
+ *   OBJECT, rendering `aria-label="[object Object]"` on three search fields.
+ *
+ *   244 from ONE cause. The library resolves `@types/react` 19 from its own node_modules; this app has
+ *   18.2.66. Two structurally different `ReactNode`s, so every library component was "cannot be used
+ *   as a JSX component". Pinning `react` / `react-dom` in `paths` is the type-level twin of the
+ *   `dedupe` that `vite.config.ts` already does at runtime, and it collapses all 244.
+ */
+const BASELINE = 456;
+const CHAT_BASELINE = 20;
 
 /* The compiler's own entry point, run by node — not `npx tsc` through a shell. `npx` is exactly how
    this repo ended up believing it had zero type errors: with `typescript` absent it fetched a joke

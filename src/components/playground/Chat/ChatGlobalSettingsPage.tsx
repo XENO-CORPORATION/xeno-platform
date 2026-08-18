@@ -486,7 +486,7 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                           size="lg"
                           type="search"
                           className="w-full sm:w-[12rem]"
-                          aria-label={{searchPlaceholder}}
+                          aria-label={searchPlaceholder}
                           value={query}
                           onChange={(event) => setQuery(event.target.value)}
                           placeholder="Search"
@@ -613,7 +613,7 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                             size="lg"
                             type="search"
                             className="w-full sm:w-[12rem]"
-                            aria-label={{searchPlaceholder}}
+                            aria-label={searchPlaceholder}
                             value={query}
                             onChange={(event) =>
                                 setQuery(event.target.value)
@@ -704,7 +704,7 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                           size="lg"
                           type="search"
                           className="w-full sm:w-[12rem]"
-                          aria-label={{searchPlaceholder}}
+                          aria-label={searchPlaceholder}
                           value={query}
                           onChange={(event) => setQuery(event.target.value)}
                           placeholder="Search"

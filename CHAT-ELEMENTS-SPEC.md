@@ -399,14 +399,39 @@ a decision is whether the number may quietly GROW, so `npm run check:types` is a
 if the count rises and says to lower the baseline when it falls. Verified in both directions — one
 injected `const x: number = 'str'` took it to 561 and exit 1.
 
-**The bigger half is what the ratchet cannot see.** `tsconfig.json` maps only `@/*`, while
-`vite.config.ts` also aliases `@xenosystem/*` to the element library's SOURCE. tsc resolves none of it
-— 15 `TS2307`s in the chat alone — so **every prop passed to every adopted component in this whole
-adoption has been an untyped `any`.** `iconSize`, `selectionStyle`, `emphasis`, `size`: none of them
-were ever checked. That is precisely why `check-undefined-names.mjs` had to be invented, and §5.4's
-"the build strips types without checking" is a stronger statement than it reads — there were no types
-to strip. Adding the path mapping is the real repair and it will RAISE the count before it lowers it,
-because those imports stop being `any`. Owner's call.
+**The bigger half was what the ratchet could not see, and closing it was worth more than the ratchet.**
+`tsconfig.json` mapped only `@/*`, while `vite.config.ts` also aliases `@xenosystem/*` to the element
+library's SOURCE. tsc resolved none of it — 15 `TS2307`s in the chat alone — so **every prop passed to
+every adopted component in this whole adoption was an untyped `any`.** `iconSize`, `selectionStyle`,
+`emphasis`, `size`: not one was ever checked. That is precisely why `check-undefined-names.mjs` had to
+be invented, and it makes §5.4's "the build strips types without checking" a stronger sentence than it
+reads — there were no types to strip.
+
+Mapped. The count went **556 → 676**, the honest cost of looking, and then two things fell out.
+
+**15 real defects, and the accessibility ones are the reason this mattered.** Twelve `IconButton`s with
+**no `aria-label` at all** — the library makes it REQUIRED exactly so an icon-only button cannot ship
+without an accessible name, and the requirement had never once reached a call site. Plus three
+`aria-label={{searchPlaceholder}}`: a doubled brace, so an OBJECT, rendering
+`aria-label="[object Object]"` on three search fields. **None of this is visible on screen, in a test,
+or in a probe** — every one of those buttons looks and behaves correctly to anyone using a mouse.
+
+**244 from ONE cause.** The library resolves `@types/react` **19** from its own `node_modules`; this app
+has **18.2.66**. Two structurally different `ReactNode`s, so every single library component came back
+`TS2786: cannot be used as a JSX component`. The fix is four lines pinning `react` / `react-dom` in
+`paths` — **the type-level twin of the `dedupe: ['react', 'react-dom']` that `vite.config.ts` already
+does at runtime**, whose comment warns in so many words that linking a package from outside the tree
+gives you two copies of React. The runtime half had been solved and written up; the type half had no
+equivalent because nothing was typechecking.
+
+**Net: 556 → 456 total, 77 → 20 in the chat, while checking far more than before.** The two numbers are
+not comparable as counts — the first was taken with the library invisible. Of the 20 left, 18 are
+pre-existing app-logic types (`ChatMessage.modelId`, the `XenoSource` shapes, `BrowserAction`) and
+**2 are `style` props on adopted components**, which §3.4 forbids and which nothing could catch until
+now: a `danger` Button forcing its border red at rest, and an `IconButton` carrying a per-instance
+`animationDelay`. The first is a variant reproducing another by hand; the second is a genuine gap —
+a staggered entrance has no door, and `useGooPill` solved the same problem by having the component
+write the custom property itself. Both are visual decisions, so they are recorded rather than changed.
 
 **5.5 A hook dropped on a grep that only looked at `src/`.** Twice now: the carousel's
 `data-update-carousel-dismiss` / `data-update-nav-morph`, and the composer's

@@ -19,7 +19,37 @@
     "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+
+      // The XENO element library, mirroring `vite.config.ts`. Without these tsc resolved NONE of them
+      // — every adopted component was an untyped `any`, so `iconSize`, `selectionStyle`, `emphasis`
+      // and `size` were never checked at any of the 235 call sites this adoption created. That is the
+      // gap `scripts/check-undefined-names.mjs` was invented to cover from the runtime side.
+      //
+      // Order matters here for the same reason it does in the Vite config: the deeper specifiers must
+      // come first, or the bare `@xenosystem/elements` swallows `@xenosystem/elements/tokens`.
+      //
+      // These point at the sibling repo's SOURCE, which is a development arrangement — see the note in
+      // `vite.config.ts`. When the library becomes a versioned package, both lists go together.
+      "@xenosystem/elements/schema": ["../xeno-elements-foundations/packages/elements/src/schema.ts"],
+      "@xenosystem/elements/tokens": ["../xeno-elements-foundations/packages/elements/src/tokens/index.ts"],
+      "@xenosystem/elements/elements/*": ["../xeno-elements-foundations/packages/elements/src/elements/*"],
+      "@xenosystem/elements": ["../xeno-elements-foundations/packages/elements/src/index.ts"],
+      "@xenosystem/generate": ["../xeno-elements-foundations/packages/generate/src/index.ts"],
+      "@xenosystem/elements-react": ["../xeno-elements-foundations/packages/elements-react/src/index.ts"],
+
+      // The TYPE-level twin of `dedupe: ['react', 'react-dom']` in `vite.config.ts`.
+      //
+      // That dedupe exists because linking a package from outside the tree gives you two copies of
+      // React at RUNTIME. Nothing was doing the same for the types: the library resolves
+      // `@types/react` 19 from its own `node_modules` while this app has 18.2.66, so `ReactNode` was
+      // two structurally different types and every single library component came back as
+      // "cannot be used as a JSX component" — 244 errors from one cause.
+      //
+      // Pinning the specifier here makes both sides compile against ONE copy, which is the same
+      // contract the dedupe makes one layer down.
+      "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx"],

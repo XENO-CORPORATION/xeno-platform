@@ -1215,6 +1215,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
             size="sm"
             iconSize={16}
             onClick={() => setIsHistoryOpen(false)}
+            aria-label="Close search history"
           />
         </div>
 
@@ -1285,6 +1286,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     iconSize={14}
                     className="opacity-0"
                     onClick={(e) => deleteConversation(conv.id, e)}
+                    aria-label="Delete conversation"
                   />
                 </div>
               ))}
@@ -1703,6 +1705,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   size="lg"
                   iconSize={18}
                   title="Attach file"
+                  aria-label="Attach file"
                 />
 
                 {/* Mode Toggle Buttons */}
@@ -1738,6 +1741,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                       setIsLoading(false);
                       setIsSearching(false);
                     }}
+                    aria-label="Stop searching"
                     title="Stop"
                   />
                 ) : (
@@ -1748,6 +1752,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     iconSize={18}
                     onClick={handleSubmit}
                     disabled={!inputValue.trim()}
+                    aria-label="Send"
                   />
                 )}
               </div>
@@ -1903,6 +1908,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                           className="ml-auto"
                           onClick={() => setAgentSteps([])}
                           title="Clear steps"
+                          aria-label="Clear steps"
                         />
                       )}
                     </div>

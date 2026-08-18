@@ -1835,6 +1835,7 @@ const ChatWithVoice: React.FC = () => {
               iconSize={22}
               onClick={() => setShowDetailedChat(true)}
               title="View Chat History"
+              aria-label="View chat history"
             />
           </div>
         </div>

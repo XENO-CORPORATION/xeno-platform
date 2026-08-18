@@ -10445,6 +10445,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             className="relative z-10 ml-1 duration-150 ease-in-out"
             onClick={(e) => { e.stopPropagation(); onClose(); }}
             title="Close Fullscreen"
+            aria-label="Close fullscreen"
           />
         </div>
         <div
@@ -11472,6 +11473,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   size="xs"
                   iconSize={16}
                   onClick={toggleQueueExpansion}
+                  aria-label={queue.isExpanded ? 'Collapse queued messages' : 'Expand queued messages'}
                 />
               </div>
               
@@ -11501,6 +11503,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         size="xs"
                         iconSize={14}
                         onClick={() => removeFromQueue(queuedMessage.id)}
+                        aria-label="Remove from queue"
                       />
                     </div>
                   ))}
@@ -11850,6 +11853,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             e.stopPropagation();
                             setIsReasonToggled(prev => !prev);
                           }}
+                          aria-label={isReasonToggled ? 'Turn off extended reasoning' : 'Turn on extended reasoning'}
                         />
                       )}
               </div>
@@ -11864,6 +11868,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         iconSize={16}
                         onClick={addToQueue}
                         title="Add this message to the queue"
+                        aria-label="Add this message to the queue"
                       />
                     ) : (
                       /* Stays hand-written, and the reason is a pair rather than this button.
