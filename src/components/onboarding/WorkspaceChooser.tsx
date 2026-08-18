@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Palette, FileText, Terminal, MessageSquare, Check } from 'lucide-react';
 import {
   SUITES, EVERYTHING_ID, productsForSuite, availableForSuite,
-  parseWorkspace, serializeWorkspace, isEverything, type Suite,
+  parseWorkspace, serializeWorkspace, isEverything, isRecommended, type Suite,
 } from '../../lib/workspaceSuites';
 import SuiteVisual from './SuiteVisual';
 import EdgeParticles from './EdgeParticles';
@@ -108,6 +108,8 @@ const BAR_MS = 420;
 
 export const WorkspaceChooser: React.FC<{
   value: string | null;
+  /** The role given on the previous step, used to badge one card. */
+  role?: string | null;
   /** `null` clears the choice — the bar is a TOGGLE, so it has to be able to
    *  hand back "nothing selected", not just a different id. */
   onChange: (id: string | null) => void;
@@ -116,7 +118,7 @@ export const WorkspaceChooser: React.FC<{
    *  because Continue/Skip live outside this component — a shared visual
    *  state has to be owned above both of the things it affects. */
   onEverythingHover?: (hovering: boolean) => void;
-}> = ({ value, onChange, onEverythingHover }) => {
+}> = ({ value, role, onChange, onEverythingHover }) => {
   /* The selection is derived from `value` rather than mirrored in state.
    * A local copy would have to be kept in sync with the prop, and the two
    * disagree the moment anything else writes the answer — the parent restoring
@@ -287,6 +289,7 @@ export const WorkspaceChooser: React.FC<{
              * ecosystem, and drawing a line from a single card to the bar would
              * claim a relationship that is not being asserted. */
             connected={framed}
+            recommended={isRecommended(suite.id, role)}
             // Cascade only when the frame made the selection, and only once
             // the frame has CLOSED (86% — the top edge completes at 100%).
             // Starting earlier put the first tick on screen while the top was
@@ -381,13 +384,17 @@ const SuiteCard: React.FC<{
    *  can be chosen on its own without being part of the whole ecosystem, and
    *  only the latter is a connection to the bar. */
   connected: boolean;
+  /** Marks the card the role suggested. Also distinct from `selected`: it is
+   *  pre-selected, so without the badge the choice would look like something
+   *  the user made and forgot. */
+  recommended?: boolean;
   /** ms before this card's check lands. Non-zero only when the FRAME selected
    *  everything, so the four ticks cascade instead of appearing as one block.
    *  A direct click stays at 0 — feedback for your own click must be immediate
    *  or it reads as lag. */
   checkDelay?: number;
   onSelect: () => void;
-}> = ({ suite, index, selected, connected, checkDelay = 0, onSelect }) => {
+}> = ({ suite, index, selected, connected, recommended, checkDelay = 0, onSelect }) => {
   const products = productsForSuite(suite);
 
   /* ── SHELL / PLATE ANATOMY ────────────────────────────────────────────────
@@ -529,6 +536,19 @@ const SuiteCard: React.FC<{
         }}
         className="pointer-events-none absolute left-1/2 w-[2px] bg-white/70"
       />
+
+      {recommended && (
+        /* Sits on the shell's top edge as a ribbon, the same treatment the
+           plan card's badge uses — a shared vocabulary for "this is the one we
+           are pointing at", rather than a second invention.
+
+           It is what makes the pre-selection honest: the card arrives already
+           chosen, and without this the user would find an answer they did not
+           give and could not explain. */
+        <span className="absolute -top-[8px] left-4 z-10 rounded-[5px] border border-white/25 bg-[#0e0e0e] px-2 py-[3px] text-[9px] font-semibold uppercase tracking-[0.12em] text-white/80">
+          Recommended
+        </span>
+      )}
 
       {/* ── Header plate ── */}
       <span

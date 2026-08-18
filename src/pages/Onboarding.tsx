@@ -1,15 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, Loader2, Sparkles, PenTool, Code2, Clapperboard,
+  Loader2, Sparkles, PenTool, Code2, Clapperboard,
   Megaphone, Building2, GraduationCap, MoreHorizontal,
-  Palette, Layers, Boxes, Terminal, FileText, MessageSquare, Wand2, Library, Globe,
 } from 'lucide-react';
-import { PRODUCTS } from '../lib/productCatalog';
 import AuthMark from '../components/auth/AuthMark';
 import WorkspaceChooser from '../components/onboarding/WorkspaceChooser';
 import useStepTransition from '../components/onboarding/useStepTransition';
-import { SUITES, availableForSuite, suiteLabel, parseWorkspace, isEverything } from '../lib/workspaceSuites';
+import { recommendedWorkspace } from '../lib/workspaceSuites';
 import {
   StepHeading, SelectTile, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress,
   INPUT_CLS, cx,
@@ -47,7 +45,7 @@ import {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const API = '/api/auth';
-const STEPS = 5;
+const STEPS = 4;
 
 /** Roles, each with a mark. Ordered most→least common rather than
  *  alphabetically: the list is scanned, and burying the likeliest answer taxes
@@ -62,20 +60,6 @@ const ROLES: Array<{ label: string; icon: React.ReactNode }> = [
   { label: 'Education',        icon: <GraduationCap className="h-[18px] w-[18px]" /> },
   { label: 'Other',            icon: <MoreHorizontal className="h-[18px] w-[18px]" /> },
 ];
-
-/** A mark per catalog category. Falls back rather than throwing: a category
- *  added to the catalog tomorrow gets a generic icon, never a hole in the grid. */
-const CATEGORY_ICON: Record<string, React.ReactNode> = {
-  Create:   <Palette className="h-[18px] w-[18px]" />,
-  Design:   <Layers className="h-[18px] w-[18px]" />,
-  Build:    <Boxes className="h-[18px] w-[18px]" />,
-  Develop:  <Terminal className="h-[18px] w-[18px]" />,
-  Office:   <FileText className="h-[18px] w-[18px]" />,
-  Connect:  <MessageSquare className="h-[18px] w-[18px]" />,
-  Generate: <Wand2 className="h-[18px] w-[18px]" />,
-  Library:  <Library className="h-[18px] w-[18px]" />,
-  Platform: <Globe className="h-[18px] w-[18px]" />,
-};
 
 type Answers = {
   workspace: string | null;
@@ -280,32 +264,6 @@ const Onboarding: React.FC = () => {
   /* Recommendations follow the WORKSPACE they chose. That is a far stronger
    * signal than a category multi-select, and it is the choice they actually
    * made — so the last screen is visibly a consequence of the first. */
-  const recommended = useMemo(() => {
-    const rank = (s: string) => (s === 'shipping' ? 0 : s === 'beta' ? 1 : 2);
-
-    /* The workspace answer is a SET now, so recommendations come from the union
-     * of everything chosen — and are DEDUPED, because suites can be picked in
-     * any combination and a product must not appear twice just because two of
-     * them were selected. */
-    const ids = parseWorkspace(answers.workspace);
-    const chosen = SUITES.filter((x) => ids.includes(x.id));
-
-    const bySlug = new Map<string, (typeof PRODUCTS)[number]>();
-    for (const suite of chosen) {
-      for (const p of availableForSuite(suite)) {
-        const full = PRODUCTS.find((c) => c.slug === p.slug);
-        // Non-catalog extras (Forum) have no product page to send anyone to.
-        if (full && !bySlug.has(full.slug)) bySlug.set(full.slug, full);
-      }
-    }
-
-    const pool = bySlug.size
-      ? [...bySlug.values()]
-      : PRODUCTS.filter((p) => p.status !== 'coming-soon');
-
-    return pool.sort((a, b) => rank(a.status) - rank(b.status)).slice(0, 5);
-  }, [answers.workspace]);
-
   if (checking) {
     return (
       <div className="h-screen h-[100dvh] grid place-items-center" style={{ background: '#060606' }}>
@@ -352,44 +310,16 @@ const Onboarding: React.FC = () => {
               // Only stagger on the way IN. Running the entrance while the
               // container is sliding out fights itself and reads as a stutter.
               t.phase === 'in' && 'xeno-stagger',
-              t.rendered === 0 ? 'max-w-[1240px]' : 'max-w-[620px]',
+              t.rendered === 2 ? 'max-w-[1240px]' : 'max-w-[620px]',
             )}
           >
 
-            {/* ── 0 · Workspace — the choice that shapes the platform ──── */}
+            {/* ── 0 · About you — who are you ─────────────────────────────── */}
             {t.rendered === 0 && (
               <>
                 <StepHeading
-                  title="Choose your workspace"
-                  sub="This decides how XENO is laid out for you. You can change it any time."
-                />
-
-                <WorkspaceChooser
-                  onEverythingHover={setEverythingHover}
-                  value={answers.workspace}
-                  onChange={(id) => {
-                    const next = { ...answers, workspace: id };
-                    setAnswers(next);
-                    save(next);
-                  }}
-                />
-
-                <Nav
-                  onNext={() => setStep(1)}
-                  onSkip={skipAll}
-                  nextLabel="Continue"
-                  nextDisabled={!answers.workspace}
-                  hidden={everythingHover}
-                />
-              </>
-            )}
-
-            {/* ── 1 · About you ───────────────────────────────────────────── */}
-            {t.rendered === 1 && (
-              <>
-                <StepHeading
-                  title={`Set up ${suiteLabel(answers.workspace)}`}
-                  sub="Two short questions. Both optional — skip and nothing breaks."
+                  title="Let's get to know you"
+                  sub="Two short questions, so the rest of this is about you rather than about us."
                 />
 
                 <div className="space-y-5">
@@ -427,16 +357,15 @@ const Onboarding: React.FC = () => {
                 </div>
 
                 <Nav
-                  onBack={() => setStep(0)}
-                  onNext={() => { save(answers); setStep(2); }}
-                  onSkip={() => setStep(2)}
+                  onNext={() => { save(answers); setStep(1); }}
+                  onSkip={skipAll}
                   nextLabel="Continue"
                 />
               </>
             )}
 
-            {/* ── 2 · Role ────────────────────────────────────────────────── */}
-            {t.rendered === 2 && (
+            {/* ── 1 · Role — what do you do ────────────────────────────────── */}
+            {t.rendered === 1 && (
               <>
                 <StepHeading
                   title={answers.displayName ? `Nice to meet you, ${answers.displayName}` : 'A bit about you'}
@@ -452,18 +381,63 @@ const Onboarding: React.FC = () => {
                       selected={answers.role === r.label}
                       style={wave(i)}
                       onClick={() => {
-                        const next = { ...answers, role: r.label };
-                        setAnswers(next); save(next); setStep(3);
+                        /* Pre-select the workspace this role suggests — but
+                         * only if nothing has been chosen yet. Overwriting an
+                         * existing answer would undo a deliberate choice every
+                         * time somebody stepped Back and changed their role,
+                         * which is the one moment they are most likely to have
+                         * already picked. */
+                        const rec = recommendedWorkspace(r.label);
+                        const next = {
+                          ...answers,
+                          role: r.label,
+                          workspace: answers.workspace ?? rec,
+                        };
+                        setAnswers(next); save(next); setStep(2);
                       }}
                     />
                   ))}
                 </div>
 
-                <Nav onBack={() => setStep(1)} onSkip={() => setStep(3)} />
+                <Nav onBack={() => setStep(0)} onSkip={() => setStep(2)} />
               </>
             )}
 
-            {/* ── 3 · Plan ────────────────────────────────────────────────── */}
+            {/* ── 2 · Workspace — now we can RECOMMEND one ─────────────────── */}
+            {t.rendered === 2 && (
+              <>
+                <StepHeading
+                  title={recommendedWorkspace(answers.role)
+                    ? 'Here’s the workspace we’d start you in'
+                    : 'Choose your workspace'}
+                  sub={recommendedWorkspace(answers.role)
+                    ? 'Based on what you told us. Change it, add to it, or take everything.'
+                    : 'This decides how XENO is laid out for you. You can change it any time.'}
+                />
+
+                <WorkspaceChooser
+                  role={answers.role}
+                  onEverythingHover={setEverythingHover}
+                  value={answers.workspace}
+                  onChange={(id) => {
+                    const next = { ...answers, workspace: id };
+                    setAnswers(next);
+                    save(next);
+                  }}
+                />
+
+                <Nav
+                  onBack={() => setStep(1)}
+                  onNext={() => setStep(3)}
+                  onSkip={() => setStep(3)}
+                  nextLabel="Continue"
+                  nextDisabled={!answers.workspace}
+                  hidden={everythingHover}
+                />
+              </>
+            )}
+
+            {/* ── 3 · Plan — the last step ─────────────────────────────────── */}
             {t.rendered === 3 && (
               <>
                 <StepHeading
@@ -514,61 +488,10 @@ const Onboarding: React.FC = () => {
                   </div>
                 )}
 
-                <Nav onBack={() => setStep(2)} onSkip={() => setStep(4)} skipLabel="Skip for now" />
+                <Nav onBack={() => setStep(2)} onSkip={() => finish()} skipLabel="Skip for now" />
               </>
             )}
 
-            {/* ── 4 · Where to start ──────────────────────────────────────── */}
-            {t.rendered === 4 && (
-              <>
-                <StepHeading
-                  title="Here's where to start"
-                  sub={answers.workspace && !isEverything(parseWorkspace(answers.workspace))
-                    ? `From ${suiteLabel(answers.workspace)}. Everything else stays one click away.`
-                    : 'The products that are furthest along. Everything else is in your workspace.'}
-                />
-
-                <div className="space-y-2.5">
-                  {recommended.map((p, i) => (
-                    <button
-                      key={p.slug}
-                      type="button"
-                      onClick={() => finish(p)}
-                      disabled={saving}
-                      style={wave(i, 0.10, 0.045)}
-                      className="focus-self group flex w-full items-center gap-3.5 rounded-[10px] border border-white/[0.09]
-                                 bg-white/[0.015] px-4 py-3.5 text-left transition-all duration-200
-                                 hover:border-white/25 hover:bg-white/[0.04] active:scale-[0.99] disabled:opacity-50"
-                    >
-                      <span className="shrink-0 text-white/40 transition-colors group-hover:text-white/80">
-                        {CATEGORY_ICON[p.category] || <Boxes className="h-[18px] w-[18px]" />}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className="text-[14px] font-medium text-white">{p.name}</span>
-                          {/* Status shown, not hidden. Sending somebody to a
-                              beta without saying so is how a first impression
-                              becomes "it's broken". */}
-                          {p.status === 'beta' && (
-                            <span className="rounded-[4px] border border-white/12 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-white/35">
-                              Beta
-                            </span>
-                          )}
-                        </span>
-                        <span className="mt-1 block truncate text-[12.5px] text-white/35">{p.tagline}</span>
-                      </span>
-                      <ArrowRight className="h-4 w-4 shrink-0 text-white/15 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-white/60" />
-                    </button>
-                  ))}
-                </div>
-
-                <Nav
-                  onBack={() => setStep(3)}
-                  onNext={() => finish()}
-                  nextLabel={saving ? 'Saving…' : 'Go to my workspace'}
-                />
-              </>
-            )}
           </div>
         </div>
       </main>

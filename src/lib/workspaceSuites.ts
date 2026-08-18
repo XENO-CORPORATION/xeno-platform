@@ -210,3 +210,58 @@ export function serializeWorkspace(ids: string[]): string | null {
 export function isEverything(ids: string[]): boolean {
   return ids.length > 0 && ids.length === SUITES.length;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * ROLE → RECOMMENDED WORKSPACE
+ *
+ * The flow asks what somebody does BEFORE offering the suites, so the suite
+ * step can answer rather than interrogate: "here is the one for you", not
+ * "pick from four".
+ *
+ * ── IT SUGGESTS, IT DOES NOT DECIDE ────────────────────────────────────────
+ *
+ * The recommendation is pre-selected and LABELLED as a recommendation. Both
+ * halves matter. Pre-selecting without saying so silently answers a question
+ * on the user's behalf and they discover it later; labelling without
+ * pre-selecting makes them do the work anyway. Marked and applied, it reads as
+ * a considered default — which is what it is — and one click undoes it.
+ *
+ * ── ROLES WITH NO OBVIOUS HOME GET NOTHING ─────────────────────────────────
+ *
+ * "Personal use" and "Other" map to null on purpose. A guess dressed as a
+ * recommendation is worse than no recommendation: it is confidently wrong at
+ * exactly the moment the product is claiming to understand you. Those roles
+ * simply see the four cards unselected.
+ *
+ * "Studio or agency" maps to everything because an agency genuinely spans the
+ * suites — that is the one role for which the whole ecosystem IS the answer.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+const ROLE_WORKSPACE: Record<string, string | null> = {
+  'Personal use': null,
+  Designer: 'creative',
+  Developer: 'developer',
+  Creator: 'creative',
+  Marketer: 'connect',
+  'Studio or agency': EVERYTHING_ID,
+  Education: 'office',
+  Other: null,
+};
+
+/** The workspace value to pre-select for a role, or null if none fits. */
+export function recommendedWorkspace(role: string | null | undefined): string | null {
+  if (!role) return null;
+  const rec = ROLE_WORKSPACE[role];
+  if (!rec) return null;
+  // Guard against a suite id that no longer exists — a renamed suite would
+  // otherwise pre-select nothing while still claiming a recommendation.
+  if (rec !== EVERYTHING_ID && !SUITES.some((s) => s.id === rec)) return null;
+  return rec;
+}
+
+/** Is this suite the one recommended for the role? Used to badge the card. */
+export function isRecommended(suiteId: string, role: string | null | undefined): boolean {
+  const rec = recommendedWorkspace(role);
+  // `everything` is not a card, so it badges nothing — the bar is its own
+  // affordance and does not need a marker pointing at it.
+  return rec !== null && rec !== EVERYTHING_ID && rec === suiteId;
+}
