@@ -24,6 +24,11 @@ import { readFileSync } from 'node:fs';
 const SURFACES = [
   ['src/components/onboarding/WorkspaceChooser.tsx', 'suite card'],
   ['src/components/onboarding/OnboardingPieces.tsx', 'plan card'],
+  // Added when the role step was rebuilt to the same anatomy. A surface built
+  // to the standard and left OUT of the gate is the one that drifts — nothing
+  // would report it, and two adjacent steps at two standards is exactly the
+  // inconsistency this flow already had once.
+  ['src/components/onboarding/RoleCard.tsx', 'role card'],
 ];
 
 /**

@@ -7,9 +7,10 @@ import {
 import AuthMark from '../components/auth/AuthMark';
 import WorkspaceChooser from '../components/onboarding/WorkspaceChooser';
 import useStepTransition from '../components/onboarding/useStepTransition';
+import RoleCard from '../components/onboarding/RoleCard';
 import { recommendedWorkspace } from '../lib/workspaceSuites';
 import {
-  StepHeading, SelectTile, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress,
+  StepHeading, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress,
   INPUT_CLS, cx,
 } from '../components/onboarding/OnboardingPieces';
 
@@ -310,7 +311,11 @@ const Onboarding: React.FC = () => {
               // Only stagger on the way IN. Running the entrance while the
               // container is sliding out fights itself and reads as a stutter.
               t.phase === 'in' && 'xeno-stagger',
-              t.rendered === 2 ? 'max-w-[1240px]' : 'max-w-[620px]',
+              /* Width follows the step: the workspace grid is four tall cards and
+                 needs the full row; the role grid is four short ones and wants
+                 less; the forms stay a readable measure. One width for all
+                 three would have to be wrong for two of them. */
+              t.rendered === 2 ? 'max-w-[1240px]' : t.rendered === 1 ? 'max-w-[980px]' : 'max-w-[620px]',
             )}
           >
 
@@ -372,14 +377,18 @@ const Onboarding: React.FC = () => {
                   sub="Which one describes you best?"
                 />
 
-                <div className="grid gap-2.5 sm:grid-cols-2">
+                {/* Four across on a wide screen, two on a laptop. The cards
+                    carry a header and a body now, so at two columns eight of
+                    them run past the fold — and a step that scrolls hides the
+                    Back and Skip a user is most likely to want here. */}
+                <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
                   {ROLES.map((r, i) => (
-                    <SelectTile
+                    <RoleCard
                       key={r.label}
                       icon={r.icon}
                       label={r.label}
                       selected={answers.role === r.label}
-                      style={wave(i)}
+                      style={wave(i, 0.06, 0.045)}
                       onClick={() => {
                         /* Pre-select the workspace this role suggests — but
                          * only if nothing has been chosen yet. Overwriting an
