@@ -158,8 +158,55 @@ export function emptySuites(): string[] {
   return SUITES.filter((s) => availableForSuite(s).length === 0).map((s) => s.id);
 }
 
-/** The name to show for a stored choice, including the everything case. */
-export function suiteLabel(id: string | null): string {
-  if (id === EVERYTHING_ID) return 'the full XENO workspace';
-  return SUITES.find((s) => s.id === id)?.name || 'your workspace';
+/** The name to show for a stored choice — one suite, several, or all. */
+export function suiteLabel(value: string | null): string {
+  const ids = parseWorkspace(value);
+  if (ids.length === 0) return 'your workspace';
+  if (ids.length === SUITES.length) return 'the full XENO workspace';
+  const names = ids.map((id) => SUITES.find((s) => s.id === id)?.name).filter(Boolean);
+  if (names.length === 1) return names[0] as string;
+  // "Creative and Office" reads better than a bare list, and at three it stays
+  // short enough not to need truncating — four is `everything` by definition.
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * THE STORED VALUE IS A SET, NOT ONE ID
+ *
+ * Suites are individually selectable and individually un-selectable, so the
+ * answer is "which suites", not "which suite". Selecting every one of them is
+ * the SAME answer as pressing the everything bar, and it collapses to
+ * `everything` — one canonical value, so two routes to the same choice cannot
+ * be stored as two different things and later read as two different answers.
+ *
+ * Serialised as a comma-joined list because `user_onboarding.workspace` is a
+ * single TEXT column and the alternative is a migration plus a join table for
+ * at most four ids. The widest non-everything case is three suites
+ * ("creative,developer,connect", 26 chars) against a 40-char cap in the route
+ * — all four never reaches that path, because all four IS `everything`.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Stored value → the suite ids it means. `everything` expands to all of them. */
+export function parseWorkspace(value: string | null | undefined): string[] {
+  if (!value) return [];
+  if (value === EVERYTHING_ID) return SUITES.map((s) => s.id);
+  const known = new Set(SUITES.map((s) => s.id));
+  // Unknown ids are dropped rather than kept: a suite removed from the catalog
+  // would otherwise keep a stored selection alive that nothing can render, and
+  // the count would disagree with what is on screen.
+  return value.split(',').map((v) => v.trim()).filter((v) => known.has(v));
+}
+
+/** Suite ids → the value to store. All of them collapses to `everything`. */
+export function serializeWorkspace(ids: string[]): string | null {
+  const known = SUITES.map((s) => s.id);
+  const picked = known.filter((id) => ids.includes(id)); // canonical order
+  if (picked.length === 0) return null;
+  if (picked.length === known.length) return EVERYTHING_ID;
+  return picked.join(',');
+}
+
+/** Does this selection cover every suite? */
+export function isEverything(ids: string[]): boolean {
+  return ids.length > 0 && ids.length === SUITES.length;
 }

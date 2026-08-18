@@ -9,7 +9,7 @@ import { PRODUCTS } from '../lib/productCatalog';
 import AuthMark from '../components/auth/AuthMark';
 import WorkspaceChooser from '../components/onboarding/WorkspaceChooser';
 import useStepTransition from '../components/onboarding/useStepTransition';
-import { SUITES, EVERYTHING_ID, availableForSuite, suiteLabel } from '../lib/workspaceSuites';
+import { SUITES, availableForSuite, suiteLabel, parseWorkspace, isEverything } from '../lib/workspaceSuites';
 import {
   StepHeading, SelectTile, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress,
   INPUT_CLS, cx,
@@ -282,23 +282,28 @@ const Onboarding: React.FC = () => {
    * made — so the last screen is visibly a consequence of the first. */
   const recommended = useMemo(() => {
     const rank = (s: string) => (s === 'shipping' ? 0 : s === 'beta' ? 1 : 2);
-    const suite = SUITES.find((x) => x.id === answers.workspace);
-    /* availableForSuite, NOT productsForSuite: the card shows unshipped
-     * products to describe the workspace, but this step hands somebody a
-     * place to GO. Recommending a product that cannot be opened is the one
-     * case where showing scope becomes a dead end. `.filter(Boolean)` also
-     * drops non-catalog extras like Forum, which have no product page. */
-    /* `.filter(Boolean)` does NOT narrow the type — TypeScript still sees
-     * (Product | undefined)[], which is why every downstream read of `p` was
-     * an error. A type predicate is the narrowing form, and it is not
-     * cosmetic: without it the compiler cannot warn when a genuinely missing
-     * product reaches the render. */
-    const pool = suite
-      ? availableForSuite(suite)
-          .map((p) => PRODUCTS.find((c) => c.slug === p.slug))
-          .filter((p): p is (typeof PRODUCTS)[number] => Boolean(p))
+
+    /* The workspace answer is a SET now, so recommendations come from the union
+     * of everything chosen — and are DEDUPED, because suites can be picked in
+     * any combination and a product must not appear twice just because two of
+     * them were selected. */
+    const ids = parseWorkspace(answers.workspace);
+    const chosen = SUITES.filter((x) => ids.includes(x.id));
+
+    const bySlug = new Map<string, (typeof PRODUCTS)[number]>();
+    for (const suite of chosen) {
+      for (const p of availableForSuite(suite)) {
+        const full = PRODUCTS.find((c) => c.slug === p.slug);
+        // Non-catalog extras (Forum) have no product page to send anyone to.
+        if (full && !bySlug.has(full.slug)) bySlug.set(full.slug, full);
+      }
+    }
+
+    const pool = bySlug.size
+      ? [...bySlug.values()]
       : PRODUCTS.filter((p) => p.status !== 'coming-soon');
-    return [...pool].sort((a, b) => rank(a.status) - rank(b.status)).slice(0, 5);
+
+    return pool.sort((a, b) => rank(a.status) - rank(b.status)).slice(0, 5);
   }, [answers.workspace]);
 
   if (checking) {
@@ -518,7 +523,7 @@ const Onboarding: React.FC = () => {
               <>
                 <StepHeading
                   title="Here's where to start"
-                  sub={answers.workspace && answers.workspace !== EVERYTHING_ID
+                  sub={answers.workspace && !isEverything(parseWorkspace(answers.workspace))
                     ? `From ${suiteLabel(answers.workspace)}. Everything else stays one click away.`
                     : 'The products that are furthest along. Everything else is in your workspace.'}
                 />

@@ -2,7 +2,8 @@ import React, { useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Palette, FileText, Terminal, MessageSquare, Check } from 'lucide-react';
 import {
-  SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts, type Suite,
+  SUITES, EVERYTHING_ID, productsForSuite, availableForSuite, allAvailableProducts,
+  parseWorkspace, serializeWorkspace, isEverything, type Suite,
 } from '../../lib/workspaceSuites';
 import SuiteVisual from './SuiteVisual';
 import EdgeParticles from './EdgeParticles';
@@ -116,6 +117,13 @@ export const WorkspaceChooser: React.FC<{
    *  state has to be owned above both of the things it affects. */
   onEverythingHover?: (hovering: boolean) => void;
 }> = ({ value, onChange, onEverythingHover }) => {
+  /* The selection is derived from `value` rather than mirrored in state.
+   * A local copy would have to be kept in sync with the prop, and the two
+   * disagree the moment anything else writes the answer — the parent restoring
+   * a saved workspace, say. One source. */
+  const picked = parseWorkspace(value);
+  const everything = isEverything(picked);
+
   const [barHover, setBarHover] = useState(false);
   // The burst originates from this element's rect, so it needs a real handle.
   const barRef = useRef<HTMLButtonElement | null>(null);
@@ -157,7 +165,7 @@ export const WorkspaceChooser: React.FC<{
     if (phase === 'framing' || phase === 'unframing') return;
 
     // ── retract ──
-    if (phase === 'framed') {
+    if (phase === 'framed' || everything) {
       // The selection clears IMMEDIATELY, before the animation. The checks
       // unmount on the same frame the retract begins, which is the correct
       // reverse order — the cards are released, then the frame lets them go.
@@ -175,12 +183,34 @@ export const WorkspaceChooser: React.FC<{
     if (reduced) { setPhase('framed'); onChange(EVERYTHING_ID); return; }
     setPhase('framing');
     window.setTimeout(() => { setPhase('framed'); onChange(EVERYTHING_ID); }, FRAME_MS + 40);
-  }, [phase, reduced, onChange]);
+  }, [phase, reduced, onChange, everything]);
 
-  /** Picking one suite retracts the frame — the two answers are exclusive. */
-  const collapseFrame = useCallback(() => {
-    setPhase('idle');
-  }, []);
+  /**
+   * Toggle one suite.
+   *
+   * Selecting the LAST missing suite is the same answer as pressing the
+   * everything bar, so it runs the frame animation too — arriving at a state
+   * by a different route must not produce a different-looking state. Removing
+   * one from a complete set retracts it for the same reason.
+   */
+  const toggleSuite = useCallback((id: string) => {
+    if (phase === 'framing' || phase === 'unframing') return;
+
+    const next = picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id];
+    const nowEverything = isEverything(next);
+
+    onChange(serializeWorkspace(next));
+
+    if (nowEverything && phase === 'idle') {
+      if (reduced) { setPhase('framed'); return; }
+      setPhase('framing');
+      window.setTimeout(() => setPhase('framed'), FRAME_MS + 40);
+    } else if (!nowEverything && phase === 'framed') {
+      if (reduced) { setPhase('idle'); return; }
+      setPhase('unframing');
+      window.setTimeout(() => setPhase('idle'), ERASE_MS + 40);
+    }
+  }, [phase, picked, reduced, onChange]);
 
   /* -- The choice -------------------------------------------------------- */
   /* `framing` counts as framed so the checks are already scheduled while the
@@ -251,16 +281,19 @@ export const WorkspaceChooser: React.FC<{
             key={suite.id}
             suite={suite}
             index={i}
-            // Inside the frame every suite is included, so they all read as
-            // chosen — the frame is the selection, not four separate ones.
-            selected={framed || value === suite.id}
+            selected={picked.includes(suite.id)}
+            /* The connector belongs to the EVERYTHING state, not to selection.
+             * Picking one suite is a different answer from taking the whole
+             * ecosystem, and drawing a line from a single card to the bar would
+             * claim a relationship that is not being asserted. */
+            connected={framed}
             // Cascade only when the frame made the selection, and only once
             // the frame has CLOSED (86% — the top edge completes at 100%).
             // Starting earlier put the first tick on screen while the top was
             // still drawing, so it landed into an enclosure that did not exist
             // yet, which reads as two animations rather than a consequence.
             checkDelay={framed ? FRAME_MS * 0.86 + i * 95 : 0}
-            onSelect={() => { collapseFrame(); onChange(suite.id); }}
+            onSelect={() => toggleSuite(suite.id)}
           />
         ))}
       </div>
@@ -387,13 +420,17 @@ const SuiteCard: React.FC<{
   suite: Suite;
   index: number;
   selected: boolean;
+  /** Whether the line to the bar is drawn. Distinct from `selected`: a suite
+   *  can be chosen on its own without being part of the whole ecosystem, and
+   *  only the latter is a connection to the bar. */
+  connected: boolean;
   /** ms before this card's check lands. Non-zero only when the FRAME selected
    *  everything, so the four ticks cascade instead of appearing as one block.
    *  A direct click stays at 0 — feedback for your own click must be immediate
    *  or it reads as lag. */
   checkDelay?: number;
   onSelect: () => void;
-}> = ({ suite, index, selected, checkDelay = 0, onSelect }) => {
+}> = ({ suite, index, selected, connected, checkDelay = 0, onSelect }) => {
   const products = productsForSuite(suite);
 
   /* ── SHELL / PLATE ANATOMY ────────────────────────────────────────────────
@@ -526,7 +563,7 @@ const SuiteCard: React.FC<{
           // The distance it must span, less the pixel it starts late by, so the
           // bottom lands exactly on the bar's top edge however the gap changes.
           height: BAR_GAP_PX - CONNECTOR_OFFSET_PX,
-          transform: `translateX(-50%) scaleY(${selected ? 1 : 0})`,
+          transform: `translateX(-50%) scaleY(${connected ? 1 : 0})`,
           transformOrigin: 'bottom center',
           transitionProperty: 'transform',
           transitionTimingFunction: 'cubic-bezier(0.34, 0.6, 0.2, 1.28)',
