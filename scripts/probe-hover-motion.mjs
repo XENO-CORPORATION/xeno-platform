@@ -30,6 +30,7 @@
  */
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { CHAT_URL } from './lib/chat-origin.mjs';
 const req = createRequire('C:/code-dev/xeno-platform/package.json');
 const puppeteer = (await import(pathToFileURL(req.resolve('puppeteer')).href)).default;
 
@@ -38,7 +39,7 @@ const p = await b.newPage();
 await p.setViewport({ width: 1440, height: 900 });
 /* Trap 2. Not a preference — the condition under which these animations are SUPPOSED to run. */
 await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
-await p.goto('http://localhost:5183/overview/chat/llm', { waitUntil: 'domcontentloaded', timeout: 90000 });
+await p.goto(CHAT_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
 await new Promise((r) => setTimeout(r, 5000));
 
 const opener = await p.$('[aria-label="Open conversation history"]');

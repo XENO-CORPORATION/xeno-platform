@@ -11,6 +11,7 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { CHAT_URL } from './lib/chat-origin.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CHAT = path.join(HERE, '../src/components/playground/Chat');
@@ -61,7 +62,7 @@ const tokens = {};
 for (const theme of ['dark', 'dim', 'light']) {
   const p = await b.newPage();
   await p.evaluateOnNewDocument((t) => localStorage.setItem('xeno-chat-theme', t), theme);
-  await p.goto('http://localhost:5183/overview/chat/llm', { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await p.goto(CHAT_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await p.waitForSelector('.chat-themed', { timeout: 60000 });
   await new Promise((r) => setTimeout(r, 4000));
   tokens[theme] = await p.evaluate(() => {

@@ -16,6 +16,7 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CHAT_ORIGIN } from './lib/chat-origin.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -181,7 +182,7 @@ const reachable = (url) => {
   } catch { return false; }
 };
 
-const up = { chat: reachable('http://localhost:5183/'), preview: reachable('http://localhost:5223/'), none: true };
+const up = { chat: reachable(`${CHAT_ORIGIN}/`), preview: reachable('http://localhost:5223/'), none: true };
 
 /* Report the wall clock. This suite drives a real browser eleven times and takes about four minutes,
    which is long enough that §0 asking for it every iteration is a genuine cost — better to see that
@@ -193,7 +194,7 @@ const selected = PROBES.filter((p) => FULL || !p.slow);
 const results = [];
 for (const probe of selected) {
   if (!up[probe.needs]) {
-    results.push({ probe, state: 'skip', note: probe.needs === 'chat' ? 'dev server :5183 is down' : 'elements preview :5223 is down' });
+    results.push({ probe, state: 'skip', note: probe.needs === 'chat' ? `chat server ${CHAT_ORIGIN} is down` : 'elements preview :5223 is down' });
     continue;
   }
   let out = '';
@@ -248,6 +249,13 @@ if (skipped.length) {
   console.error('\nSkipped is not passed. Start what they need and run again:');
   console.error('  chat     npm run dev            (the user\'s server on :5183 — do not restart it)');
   console.error('  preview  cd ../xeno-elements-foundations/packages/preview && npx vite --port 5223');
+  /* The escape hatch, because "do not restart it" leaves nowhere to go when it is the thing that is
+     broken — which happened: installing a devDependency moved Vite's optimize-dep hash and the running
+     server kept serving the old one, so the chat root stopped mounting while the route still answered
+     200. A second Vite with its OWN cacheDir does not touch the first one's. */
+  console.error('\n  Or run against a second server, leaving theirs alone:');
+  console.error('    npx vite --config vite.probe.config.ts');
+  console.error('    CHAT_ORIGIN=http://localhost:5199 npm run probe:chat');
 }
 if (failed.length) {
   console.error(`\n${failed.length} probe(s) moved. Run the one that failed directly for the detail.`);

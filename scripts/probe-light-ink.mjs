@@ -12,6 +12,7 @@
  */
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { CHAT_ORIGIN } from './lib/chat-origin.mjs';
 const req = createRequire('C:/code-dev/xeno-platform/package.json');
 const puppeteer = (await import(pathToFileURL(req.resolve('puppeteer')).href)).default;
 const b = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'], defaultViewport: { width: 1500, height: 950 } });
@@ -26,7 +27,7 @@ const inkOn = async (theme, seg) => {
     localStorage.setItem('xeno-chat-theme', t);
     localStorage.setItem('xeno-chat-theme-brightness', '100');
   }, theme);
-  await p.goto(`http://localhost:5183/overview/chat/${seg}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await p.goto(`${CHAT_ORIGIN}/overview/chat/${seg}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await p.waitForSelector('.chat-themed', { timeout: 60000 });
   await new Promise((r) => setTimeout(r, 3800));
 

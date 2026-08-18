@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { countUses } from './lib/blank-comments.mjs';
+import { CHAT_ORIGIN } from './lib/chat-origin.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CHAT = path.join(HERE, '../src/components/playground/Chat');
@@ -206,7 +207,7 @@ for (const seg of ['llm', 'search', 'voice']) {
       convo(5, { projectId: proj.id }),
     ]));
   }, PROJECT);
-  await p.goto(`http://localhost:5183/overview/chat/${seg}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await p.goto(`${CHAT_ORIGIN}/overview/chat/${seg}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await p.waitForSelector('.chat-themed', { timeout: 60000 });
   await new Promise((r) => setTimeout(r, 4200));
 

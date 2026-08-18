@@ -7,6 +7,7 @@
  */
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { CHAT_URL, CHAT_ORIGIN } from './lib/chat-origin.mjs';
 const req = createRequire('C:/code-dev/xeno-platform/package.json');
 const puppeteer = (await import(pathToFileURL(req.resolve('puppeteer')).href)).default;
 const b = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'], defaultViewport: { width: 1400, height: 900, deviceScaleFactor: 2 } });
@@ -49,8 +50,8 @@ const ROUTES = [['voice', 'voice'], ['search', 'search']];
 let bad = 0;
 for (const [name, seg] of ROUTES) {
   for (const [theme, pos] of CASES) {
-    const other = await read(`http://localhost:5183/overview/chat/${seg}`, theme, pos);
-    const chat = await read('http://localhost:5183/overview/chat/llm', theme, pos);
+    const other = await read(`${CHAT_ORIGIN}/overview/chat/${seg}`, theme, pos);
+    const chat = await read(CHAT_URL, theme, pos);
     const same = JSON.stringify(other.out) === JSON.stringify(chat.out);
     if (!same) bad += 1;
     const label = pos === null ? theme : `${theme} ${pos}%`;

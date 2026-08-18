@@ -13,12 +13,13 @@
  */
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { CHAT_URL } from './lib/chat-origin.mjs';
 const req = createRequire('C:/code-dev/xeno-platform/package.json');
 const puppeteer = (await import(pathToFileURL(req.resolve('puppeteer')).href)).default;
 const b = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'], defaultViewport: { width: 1400, height: 900 } });
 const p = await b.newPage();
 await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
-await p.goto('http://localhost:5183/overview/chat/llm', { waitUntil: 'domcontentloaded', timeout: 90000 });
+await p.goto(CHAT_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
 await p.waitForSelector('.chat-themed', { timeout: 60000 });
 await new Promise((r) => setTimeout(r, 4200));
 

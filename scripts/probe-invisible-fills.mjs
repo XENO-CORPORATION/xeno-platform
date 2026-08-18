@@ -11,6 +11,7 @@
  */
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { CHAT_URL } from './lib/chat-origin.mjs';
 const req = createRequire('C:/code-dev/xeno-platform/package.json');
 const puppeteer = (await import(pathToFileURL(req.resolve('puppeteer')).href)).default;
 /*
@@ -31,7 +32,7 @@ const measure = async (theme) => {
   await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
   // Seed BEFORE any script runs — the chat persists its theme on mount and would clobber a later write.
   await p.evaluateOnNewDocument((t) => localStorage.setItem('xeno-chat-theme', t), theme);
-  await p.goto('http://localhost:5183/overview/chat/llm', { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await p.goto(CHAT_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await p.waitForSelector('.chat-themed', { timeout: 60000 });
   await new Promise((r) => setTimeout(r, 4200));
 

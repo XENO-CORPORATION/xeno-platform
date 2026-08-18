@@ -12,6 +12,7 @@
  */
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { CHAT_URL } from './lib/chat-origin.mjs';
 const req = createRequire('C:/code-dev/xeno-platform/package.json');
 const puppeteer = (await import(pathToFileURL(req.resolve('puppeteer')).href)).default;
 /*
@@ -27,7 +28,7 @@ const p = await b.newPage();
 await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 // Seed BEFORE any script runs — the chat persists its theme on mount and clobbers a later write.
 await p.evaluateOnNewDocument((t) => localStorage.setItem('xeno-chat-theme', t), theme);
-await p.goto('http://localhost:5183/overview/chat/llm', { waitUntil: 'domcontentloaded', timeout: 90000 });
+await p.goto(CHAT_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
 // The themed root mounts after the route resolves; waiting for the selector rather than a fixed
 // delay keeps this from failing on a slow first compile after an edit.
 await p.waitForSelector('.chat-themed', { timeout: 60000 });

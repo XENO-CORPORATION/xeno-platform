@@ -433,6 +433,29 @@ now: a `danger` Button forcing its border red at rest, and an `IconButton` carry
 a staggered entrance has no door, and `useGooPill` solved the same problem by having the component
 write the custom property itself. Both are visual decisions, so they are recorded rather than changed.
 
+**5.4g "Do not restart the user's server" leaves nowhere to go when the server is what broke.** Running
+`npm install typescript` changed `node_modules`, which moved Vite's optimize-dep hash. The already-running
+server on :5183 kept serving the old one, so every request for `react-dom_client` came back
+**`504 Outdated Optimize Dep`**, the chat root stopped mounting, and **twelve probes reported a crash on
+code that was fine** — the route still answered 200 and the module still compiled. A reload does not
+clear it; only a restart does, and that server is not this agent's to restart.
+
+Two things came out of being stuck there. Seventeen scripts had `http://localhost:5183` typed into them,
+so there was nowhere else to point; they read **`CHAT_ORIGIN`** now (`lib/chat-origin.mjs`, default
+unchanged). And `vite.probe.config.ts` starts a SECOND server whose **`cacheDir` is its own** — a second
+Vite on the default cache would re-optimize into the very `node_modules/.vite` the first is reading,
+"fixing" the problem by writing underneath a running process.
+
+```
+npx vite --config vite.probe.config.ts
+CHAT_ORIGIN=http://localhost:5199 npm run probe:chat
+```
+
+One more trap inside the fix: the first run against :5199 reported **all thirteen browser probes
+skipped**. The server was still pre-bundling when the runner's 8-second reachability check ran. **A cold
+server and a dead one are indistinguishable from a single probe** — the same shape as §5.4d, and the
+reason a skip must never be read as a pass.
+
 **5.5 A hook dropped on a grep that only looked at `src/`.** Twice now: the carousel's
 `data-update-carousel-dismiss` / `data-update-nav-morph`, and the composer's
 `data-composer-upload`. Each time the conversion left a comment saying the attribute was referenced
