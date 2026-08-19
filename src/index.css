@@ -193,6 +193,20 @@ html, body, #root, #app {
   outline-offset: 2px;
 }
 
+/* Rounded surfaces need a rounded ring.
+ *
+ * `outline` follows the element's border-radius in every current engine, but
+ * only if a radius is actually set on the focused element — and the onboarding
+ * cards set theirs, so the ring traces the card instead of boxing it. Stated
+ * here because the first instinct on seeing a square ring is to replace the
+ * outline with a box-shadow, which on these cards would collide with the inline
+ * shadow that gives them their depth. */
+.rounded-\[10px\]:focus-visible,
+.rounded-\[12px\]:focus-visible,
+.rounded-\[14px\]:focus-visible {
+  outline-offset: 3px;
+}
+
 /* ── .focus-self — opt OUT of the global ring ───────────────────────────────
  *
  * The rule above is the site-wide keyboard-focus indicator and must stay: a

@@ -345,7 +345,7 @@ export const WorkspaceChooser: React.FC<{
           // keep four cards black and still light up the bar underneath them.
           ...(framed ? { borderColor: SELECTED.border, background: SELECTED.barBg } : {}),
         }}
-        className={`focus-self group relative z-10 flex w-full items-center overflow-hidden
+        className={`group relative z-10 flex w-full items-center overflow-hidden
                     rounded-[12px] border px-5 py-4 text-left transition-all duration-200 ease-out
                     will-change-transform disabled:cursor-default
                     ${framed
@@ -464,7 +464,7 @@ const SuiteCard = React.forwardRef<HTMLButtonElement, {
          and Office 4, and `items-stretch` matches all four to the tallest, so
          a hard height would either clip the fullest or strand the emptiest.
          Only at `lg`, where the row is genuinely four across. */
-      className={`focus-self group relative flex flex-col gap-[2px] rounded-[10px] border p-1.5 text-left
+      className={`group relative flex flex-col gap-[2px] rounded-[10px] border p-1.5 text-left
                   lg:min-h-[420px]
                   transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform
                   hover:-translate-y-[5px] active:translate-y-0

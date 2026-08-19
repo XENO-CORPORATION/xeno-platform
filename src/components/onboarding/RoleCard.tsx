@@ -79,7 +79,7 @@ export const RoleCard = React.forwardRef<HTMLButtonElement, {
         : '0 8px 24px -14px rgba(0,0,0,0.8)',
       ...style,
     }}
-    className={`focus-self group relative flex flex-col gap-[2px] rounded-[10px] border p-1.5 text-left
+    className={`group relative flex flex-col gap-[2px] rounded-[10px] border p-1.5 text-left
                 transition-[border-color,transform,box-shadow] duration-200 ease-out will-change-transform
                 hover:-translate-y-[3px] active:translate-y-0
                 ${selected ? 'border-white/40' : 'border-white/[0.07] hover:border-white/[0.22]'}`}
