@@ -60,11 +60,30 @@ test('the column count is measured, not hardcoded', () => {
   assert.doesNotMatch(hook, /(cols|columns)\s*=\s*4\b/, 'the column count is hardcoded');
 });
 
+test('a first arrow press claims the grid without a Tab', () => {
+  // Without this, pressing Right does nothing until you have tabbed in — the
+  // feature looks broken before it has been used, on a step whose entire
+  // content IS the grid.
+  assert.match(hook, /window\.addEventListener\('keydown'/, 'no window-level arrow listener');
+  assert.match(
+    hook, /containerRef\.current\.contains\(el\)/,
+    'the listener cannot tell whether focus is already inside the grid — it would ' +
+    'move twice on every press once focus is in there',
+  );
+  // Arrows inside a field move the caret; inside a select they change the value.
+  for (const tag of ['INPUT', 'TEXTAREA', 'SELECT']) {
+    assert.ok(hook.includes(`'${tag}'`), `the window listener steals arrows from <${tag.toLowerCase()}>`);
+  }
+});
+
 test('both grids use it, and are labelled for a screen reader', () => {
   assert.match(page, /role="radiogroup"/, 'the role grid is not a radiogroup');
-  assert.match(page, /roleGrid\.onKeyDown/, 'the role grid is not wired to the hook');
+  assert.match(page, /roleGrid\.containerProps/, 'the role grid is not wired to the hook');
   // Suites are independently selectable, so `group` — not radiogroup.
   assert.match(chooser, /role="group"/, 'the suite grid has no group role');
-  assert.match(chooser, /suiteGrid\.onKeyDown/, 'the suite grid is not wired to the hook');
+  assert.match(chooser, /suiteGrid\.containerProps/, 'the suite grid is not wired to the hook');
+  // The suite grid's node has two owners; dropping either fails silently.
+  assert.match(chooser, /suiteGrid\.containerProps\.ref\(el\)/, 'the composed ref lost the roving hook');
+  assert.match(chooser, /gridRef\.current = el/, 'the composed ref lost the particle-clip rect');
   for (const src of [page, chooser]) assert.match(src, /aria-label="/, 'a grid has no accessible name');
 });

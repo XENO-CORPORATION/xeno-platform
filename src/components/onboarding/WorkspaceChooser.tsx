@@ -292,10 +292,17 @@ export const WorkspaceChooser: React.FC<{
           on the container, so the handler exists once instead of on all four
           children. */}
       <div
-        ref={gridRef}
+        /* Two owners need this node: the particle canvas clips against the
+           grid's rect, and the roving hook needs to know whether focus is
+           inside it. Composed rather than replaced — dropping either leaves a
+           feature that fails silently. */
+        ref={(el) => {
+          gridRef.current = el;
+          suiteGrid.containerProps.ref(el);
+        }}
         role="group"
         aria-label="Workspaces"
-        onKeyDown={suiteGrid.onKeyDown}
+        onKeyDown={suiteGrid.containerProps.onKeyDown}
         className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4"
       >
         {SUITES.map((suite, i) => (

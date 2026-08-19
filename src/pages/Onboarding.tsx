@@ -509,7 +509,7 @@ const Onboarding: React.FC = () => {
                 <div
                   role="radiogroup"
                   aria-label="Which one describes you best?"
-                  onKeyDown={roleGrid.onKeyDown}
+                  {...roleGrid.containerProps}
                   className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4"
                 >
                   {ROLES.map((r, i) => (

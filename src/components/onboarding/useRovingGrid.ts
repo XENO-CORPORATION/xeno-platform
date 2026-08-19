@@ -32,6 +32,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export function useRovingGrid(count: number, onChoose: (index: number) => void) {
   const [active, setActive] = useState(0);
   const refs = useRef<Array<HTMLElement | null>>([]);
+  const containerRef = useRef<HTMLElement | null>(null);
   // Focus only follows a KEYBOARD move. Without this the grid would steal
   // focus on mount and on every re-render, yanking it away from whatever the
   // user was actually doing.
@@ -102,6 +103,46 @@ export function useRovingGrid(count: number, onChoose: (index: number) => void) 
     }
   }, [active, columns, count, move, onChoose]);
 
+  /* ── ARROWS CLAIM THE GRID WITHOUT A TAB FIRST ───────────────────────────
+   *
+   * A roving tabindex still requires you to REACH the grid before the arrows
+   * mean anything, and on a step whose entire content is the grid that first
+   * Tab is a toll for no reason — you press Right, nothing moves, and the
+   * feature looks broken before it has been used.
+   *
+   * So an arrow pressed while focus is OUTSIDE the grid pulls focus into it and
+   * acts on that same keypress. From then on the container's own handler has
+   * focus and takes over; this listener only ever fires for the FIRST arrow.
+   *
+   * ── WHAT IT REFUSES TO CLAIM ─────────────────────────────────────────────
+   *
+   * Arrows inside a text field move the caret, and inside a select they change
+   * the value. Stealing them there would break typing on a step that has text
+   * inputs one screen away — so an editable target is left completely alone.
+   * ─────────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    const onWindowKey = (e: KeyboardEvent) => {
+      if (!['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+
+      // Already inside: the container handler owns it, and running both would
+      // move twice per press.
+      if (containerRef.current && el && containerRef.current.contains(el)) return;
+
+      const target = refs.current[active];
+      if (!target) return;
+      e.preventDefault();
+      shouldFocus.current = true;
+      target.focus();
+    };
+    window.addEventListener('keydown', onWindowKey);
+    return () => window.removeEventListener('keydown', onWindowKey);
+  }, [active]);
+
   /** Props for item `i`. Only the active item is tabbable. */
   const itemProps = useCallback((i: number) => ({
     ref: (el: HTMLElement | null) => { refs.current[i] = el; },
@@ -111,7 +152,14 @@ export function useRovingGrid(count: number, onChoose: (index: number) => void) 
     onFocus: () => setActive(i),
   }), [active]);
 
-  return { active, onKeyDown, itemProps };
+  /** Props for the grid container — the ref is what lets the window listener
+   *  tell "focus is already in here" from "focus is elsewhere". */
+  const containerProps = {
+    ref: (el: HTMLElement | null) => { containerRef.current = el; },
+    onKeyDown,
+  };
+
+  return { active, onKeyDown, itemProps, containerProps };
 }
 
 export default useRovingGrid;
