@@ -127,7 +127,21 @@ export const WorkspaceChooser: React.FC<{
   const picked = parseWorkspace(value);
   const everything = isEverything(picked);
 
-  const suiteGrid = useRovingGrid(SUITES.length, (i) => toggleSuiteRef.current(SUITES[i].id));
+  /* The bar is the LAST item of the roving grid, not a separate control.
+   *
+   * It sits directly under the cards and is the fifth thing you would reach by
+   * looking down, so ArrowDown has to land on it — a keyboard user who cannot
+   * reach "everything" without tabbing out of the grid is being told the two
+   * choices are unrelated, when the whole screen argues they are the same
+   * question.
+   *
+   * The column count is measured from the first row, so ArrowDown from any
+   * card is +4 and clamps onto the bar. Nothing special-cases it. */
+  const BAR_INDEX = SUITES.length;
+  const suiteGrid = useRovingGrid(SUITES.length + 1, (i) => {
+    if (i === BAR_INDEX) toggleFrameRef.current();
+    else toggleSuiteRef.current(SUITES[i].id);
+  });
 
   const [barHover, setBarHover] = useState(false);
   // The burst originates from this element's rect, so it needs a real handle.
@@ -223,6 +237,8 @@ export const WorkspaceChooser: React.FC<{
    * keyboard would toggle against a stale selection. */
   const toggleSuiteRef = useRef(toggleSuite);
   toggleSuiteRef.current = toggleSuite;
+  const toggleFrameRef = useRef(toggleFrame);
+  toggleFrameRef.current = toggleFrame;
 
   /* -- The choice -------------------------------------------------------- */
   /* `framing` counts as framed so the checks are already scheduled while the
@@ -237,7 +253,11 @@ export const WorkspaceChooser: React.FC<{
   const burst = barHover && phase === 'idle';
 
   return (
-    <div className="relative">
+    /* The key handler and the focus-containment ref sit on the WRAPPER, not
+       the grid: the bar lives outside the grid element, so a handler on the
+       grid would never see a keypress made while the bar had focus — ArrowUp
+       out of it would do nothing. */
+    <div className="relative" {...suiteGrid.containerProps}>
       {/* FULL-VIEWPORT overlay, PORTALLED TO <body>.
        *
        * 🔴 The portal is not tidiness, it is the fix for a real bug. Two
@@ -296,13 +316,9 @@ export const WorkspaceChooser: React.FC<{
            grid's rect, and the roving hook needs to know whether focus is
            inside it. Composed rather than replaced — dropping either leaves a
            feature that fails silently. */
-        ref={(el) => {
-          gridRef.current = el;
-          suiteGrid.containerProps.ref(el);
-        }}
+        ref={gridRef}
         role="group"
         aria-label="Workspaces"
-        onKeyDown={suiteGrid.containerProps.onKeyDown}
         className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4"
       >
         {SUITES.map((suite, i) => (
@@ -325,20 +341,37 @@ export const WorkspaceChooser: React.FC<{
             checkDelay={framed ? FRAME_MS * 0.86 + i * 95 : 0}
             onSelect={() => toggleSuite(suite.id)}
             {...suiteGrid.itemProps(i)}
-            {...suiteGrid.itemProps(i)}
           />
         ))}
       </div>
 
       <button
-        ref={barRef}
+        /* THREE owners on this node, all silent if dropped:
+             barRef        — the particle burst's origin rect
+             roving ref    — so ArrowDown can move focus onto the bar
+             roving onFocus — records the active index
+           plus the bar's own onFocus, which raises the hover state.
+
+           Composed rather than spread, because a spread would let whichever
+           came last quietly win: put itemProps after and the burst never
+           fires on focus; put it before and arrowing loses its place. */
+        ref={(el) => {
+          barRef.current = el;
+          suiteGrid.itemProps(BAR_INDEX).ref(el);
+        }}
+        tabIndex={suiteGrid.itemProps(BAR_INDEX).tabIndex}
         type="button"
         onClick={toggleFrame}
+        onFocus={() => {
+          suiteGrid.itemProps(BAR_INDEX).onFocus();
+          setBarHover(true);
+          onEverythingHover?.(true);
+        }}
         onPointerEnter={() => { setBarHover(true); onEverythingHover?.(true); }}
         onPointerLeave={() => { setBarHover(false); onEverythingHover?.(false); }}
-        // Focus mirrors hover so a keyboard user gets the same state. Without
-        // it the bar lights up for a mouse and stays dead for a tab key.
-        onFocus={() => { setBarHover(true); onEverythingHover?.(true); }}
+        // Focus mirrors hover, so arrowing onto the bar shows the same burst a
+        // pointer gets. Without it the bar lights up for a mouse and stays dead
+        // for the keyboard — the one route that just gained a way to reach it.
         onBlur={() => { setBarHover(false); onEverythingHover?.(false); }}
         disabled={phase === 'framing' || phase === 'unframing'}
         style={{

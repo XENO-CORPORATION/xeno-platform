@@ -76,14 +76,53 @@ test('a first arrow press claims the grid without a Tab', () => {
   }
 });
 
+test('ArrowDown reaches the everything bar, and focusing it shows the burst', () => {
+  // The bar sits directly under the cards and is the fifth thing you reach by
+  // looking down. A keyboard user who cannot get to it without tabbing OUT of
+  // the grid is being told the two choices are unrelated, when the whole
+  // screen argues they are the same question.
+  assert.match(chooser, /SUITES\.length \+ 1/, 'the bar is not part of the roving grid');
+  assert.match(chooser, /const BAR_INDEX/, 'the bar has no index in the grid');
+  assert.match(chooser, /itemProps\(BAR_INDEX\)/, 'the bar does not take roving props');
+
+  // Three owners on that node; each fails silently if a spread overwrites it.
+  assert.match(chooser, /barRef\.current = el;/, 'the composed ref lost the particle origin');
+  assert.match(chooser, /itemProps\(BAR_INDEX\)\.ref\(el\)/, 'the composed ref lost the roving handle');
+  /* Extract the onFocus BODY by slicing, not by matching near it.
+   *
+   * The first version used a proximity regex and its own mutation check
+   * passed when it should have failed: `onPointerEnter` sits a few lines away
+   * and also calls setBarHover(true), so the pattern matched the NEIGHBOUR.
+   * A gate that adjacent code can satisfy is not a gate.
+   *
+   * Sliced rather than re-matched because the replacement regex then had to
+   * span newlines, and every attempt at escaping that in tooling mangled it.
+   * indexOf cannot be escaped wrongly. */
+  const fStart = chooser.indexOf('onFocus={() => {');
+  assert.ok(fStart !== -1, 'the bar has no multi-statement onFocus');
+  const focusBody = chooser.slice(fStart, chooser.indexOf('}}', fStart));
+  assert.ok(
+    focusBody.includes('setBarHover(true)'),
+    'focusing the bar does not raise the burst — arrowing onto it would show nothing',
+  );
+  assert.ok(focusBody.includes('onEverythingHover?.(true)'), 'focusing the bar does not drop the nav');
+});
+
+test('the key handler sits where it can see the bar', () => {
+  // On the GRID it would never see a keypress made while the bar had focus,
+  // so ArrowUp out of the bar would do nothing.
+  assert.match(
+    chooser, /className="relative" \{\.\.\.suiteGrid\.containerProps\}/,
+    'the roving handler is not on the wrapper that contains both the grid AND the bar',
+  );
+});
+
 test('both grids use it, and are labelled for a screen reader', () => {
   assert.match(page, /role="radiogroup"/, 'the role grid is not a radiogroup');
   assert.match(page, /roleGrid\.containerProps/, 'the role grid is not wired to the hook');
   // Suites are independently selectable, so `group` — not radiogroup.
   assert.match(chooser, /role="group"/, 'the suite grid has no group role');
   assert.match(chooser, /suiteGrid\.containerProps/, 'the suite grid is not wired to the hook');
-  // The suite grid's node has two owners; dropping either fails silently.
-  assert.match(chooser, /suiteGrid\.containerProps\.ref\(el\)/, 'the composed ref lost the roving hook');
-  assert.match(chooser, /gridRef\.current = el/, 'the composed ref lost the particle-clip rect');
+  assert.match(chooser, /ref=\{gridRef\}/, 'the grid lost the particle-clip rect');
   for (const src of [page, chooser]) assert.match(src, /aria-label="/, 'a grid has no accessible name');
 });

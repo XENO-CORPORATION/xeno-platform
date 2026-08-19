@@ -208,32 +208,16 @@ export const Checkbox: React.FC<{ checked: boolean; onChange: (v: boolean) => vo
  */
 export const PrimaryButton: React.FC<{
   onClick: () => void; disabled?: boolean; children: React.ReactNode;
-  /** Shows the ⏎ hint. Only where Enter really is bound to this button. */
-  enterHint?: boolean;
-}> = ({ onClick, disabled, children, enterHint }) => (
+}> = ({ onClick, disabled, children }) => (
   <button
     type="button"
     onClick={onClick}
     disabled={disabled}
-    className="focus-self group/btn inline-flex items-center gap-2.5 rounded-[9px] bg-white px-6 py-3
-               text-[14px] font-semibold text-black transition-all duration-200 hover:bg-white/90
-               active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-20"
+    className="focus-self rounded-[9px] bg-white px-6 py-3 text-[14px] font-semibold text-black
+               transition-all duration-200 hover:bg-white/90 active:scale-[0.98]
+               disabled:cursor-not-allowed disabled:opacity-20"
   >
     {children}
-    {enterHint && (
-      /* The glyph is the discovery mechanism — a keyboard route nobody knows
-         about is not a keyboard route. Hidden while disabled, because
-         advertising a shortcut that does nothing is worse than not
-         advertising it. */
-      <span
-        aria-hidden
-        className={`grid h-[18px] min-w-[18px] place-items-center rounded-[4px] border border-black/15
-                    px-1 text-[11px] leading-none text-black/45 transition-opacity duration-200
-                    ${disabled ? 'opacity-0' : 'opacity-100'}`}
-      >
-        &#8629;
-      </span>
-    )}
   </button>
 );
 

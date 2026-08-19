@@ -481,7 +481,6 @@ const Onboarding: React.FC = () => {
                   onNext={() => primaryAction()?.()}
                   onSkip={skipAll}
                   nextLabel="Continue"
-                  enterHint
                 />
               </>
             )}
@@ -559,7 +558,6 @@ const Onboarding: React.FC = () => {
                   nextLabel="Continue"
                   nextDisabled={!answers.workspace}
                   hidden={everythingHover}
-                  enterHint
                 />
               </>
             )}
@@ -648,9 +646,7 @@ const Nav: React.FC<{
   nextLabel?: string; skipLabel?: string; nextDisabled?: boolean;
   /** Drops the whole row away — used while the everything-bar is hovered. */
   hidden?: boolean;
-  /** Whether Enter is bound to this step's Continue. */
-  enterHint?: boolean;
-}> = ({ onBack, onNext, onSkip, nextLabel, skipLabel, nextDisabled, hidden, enterHint }) => (
+}> = ({ onBack, onNext, onSkip, nextLabel, skipLabel, nextDisabled, hidden }) => (
   /* Falls DOWN and out rather than fading. A row that merely fades is still
      occupying its space and still reads as present-but-greyed; falling out of
      the frame reads as making way. `pointer-events-none` while gone, so a
@@ -668,7 +664,7 @@ const Nav: React.FC<{
         a step that has neither. */}
     {onNext && (
       <div className="ml-auto">
-        <PrimaryButton onClick={onNext} disabled={nextDisabled} enterHint={enterHint}>
+        <PrimaryButton onClick={onNext} disabled={nextDisabled}>
           {nextLabel || 'Continue'}
         </PrimaryButton>
       </div>
