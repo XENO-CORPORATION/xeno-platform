@@ -76,6 +76,40 @@ canonical at **`security-guide/SKILL.md`**, installed at `~/.claude/skills/xeno-
 Still open (operator): Cloudflare Access wall, Google Search Console removal request, the
 purge decision, and a "signups are closed" state in the signup UI (the form currently 403s).
 
+## 🔐 Account activation — the signup gate (v1 LIVE, v2 queued)
+
+`account_activations` + `services/accountActivation.js` + `GET /api/auth/activate`
+(added 2026-08-16). Presence of the row is the fact; `requireActivated` gates
+generation/media/workspaces and **deliberately not** login, `/me`, `/api/email`,
+the public Forum Record, or billing — a gate on login reads as *"your account is
+broken"*, not *"confirm your email"*.
+
+🔴 **Do NOT gate on `users.email_verified`.** The OAuth insert **hardcodes it
+`true`**, so every Google signup is verified before anything is verified — it
+answers a different question. 🔴 **Do NOT gate on `workspace_activated_at`**
+either: `v2MeRoutes` sets it on the first `/api/v2/me` call from any product, so
+gating on it corrupts a traction metric AND auto-satisfies the gate.
+
+⚠️ **v1 commits on GET, and that is a known flaw** — corporate mail scanners
+(Defender Safe Links, Proofpoint, Mimecast) pre-fetch every URL, so a scanner can
+activate an account with no human involved, silently. The agreed v2 is
+**code-first with the link rendering a confirm page and committing on POST**.
+📕 Full spec, security rules and checklist: root
+**`XENO ACCOUNT ACTIVATION - SPEC & PLAN.md`** — read it before touching this.
+**Queued behind the XENO Hub auth fix.**
+
+🔴 **The welcome email is LOAD-BEARING now** — it carries the only way into the
+platform for a new account. A send lost to a transient error costs the user their
+account, which is why `sendWelcomeEmail` retries.
+
+🔴 **Deleting a user does NOT revoke their credentials.** Twenty tables carry a
+`user_id` UUID with **no foreign key**; the 2026-08-16 purge left 9 active API
+keys and 24 valid refresh tokens behind for accounts that no longer existed
+(cleaned manually; the constraints are still missing). Every new table gets
+`ON DELETE CASCADE`. ⚠️ The credit ledger is **append-only** — `credit_transactions`
+has an immutability trigger that correctly aborts blanket cleanups. An orphaned
+credential is a way in; an orphaned ledger row is a historical fact. Leave it.
+
 ## 🤖 Agent identity lives HERE and other products consume it
 
 `agent_identities` + `services/agentIdentity.js` + `/api/v2/agents` (added 2026-08-11) is a
@@ -113,19 +147,8 @@ surface. `Forum.tsx` guards the call on `signedIn`, so a logged-out visitor neve
 mega-menus and a dead `Pricing → #pricing` hash anchor above a feed, and pulled in the retired
 purple through the import. Keep marketing nav on marketing pages.
 
-**Nobody has posted yet** — ⚠️ but "0 threads" was wrong: verified 2026-08-16 the corpus is
-**9 threads and 18 posts, every one of them seeded**. `0 posts by REAL USERS` is the true and
-important half. Also 0 moderators, 0 agent identities and 0 predicates, so the moderation queue
-and Loop D have no live participants — which is exactly why both shipped broken and nobody
-noticed. Spec: root `XENO FORUM - SPEC.md`; plan of record: root
-`XENO FORUM - v1.0 RELEASE PLAN.md`.
-
-**Proofs live in `scripts/`** and each runs against the real database inside a transaction that is
-always rolled back — `proof:forum-push`, `proof:forum-report`, `proof:forum-throttle`,
-`proof:forum-moderation`, `proof:forum-erasure`, `proof:forum-agent-surface`,
-`proof:forum-notify-email`, plus `smoke:forum` and `smoke:forum-ui` against the live site.
-🔴 **Run the proof before believing a Forum feature works.** Eleven features here have been
-built, unit-tested and unreachable.
+**Nobody has posted yet** — 0 threads and 0 posts by real users; the only content is 5 seeded
+engineering-log threads. Spec: root `XENO FORUM - SPEC.md`.
 
 ## Related references
 
