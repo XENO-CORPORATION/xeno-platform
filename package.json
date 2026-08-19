@@ -1,6 +1,14 @@
 {
   "name": "xeno-platform",
   "version": "1.0.0",
+  "allowScripts": {
+    "@google/genai@2.12.0": true,
+    "bufferutil@4.1.0": true,
+    "core-js": true,
+    "esbuild": true,
+    "protobufjs": true,
+    "puppeteer@24.8.2": true
+  },
   "private": true,
   "description": "XENO Platform - Monorepo for xenostudio studio and core libraries",
   "scripts": {
