@@ -130,10 +130,14 @@ export const PlanCard: React.FC<{
 
       <button
         type="button"
+        // The plan step is a card step like the others, so its action joins the
+        // same arrow navigation. Same reason `focus-self` is gone: this paints
+        // hover, never focus.
+        data-roving="action"
         disabled={!available || busy}
         onClick={onSelect}
         className={cx(
-          'focus-self mt-5 w-full rounded-[8px] px-4 py-2.5 text-[13.5px] font-semibold',
+          'mt-5 w-full rounded-[8px] px-4 py-2.5 text-[13.5px] font-semibold',
           'transition-all duration-200 active:scale-[0.99]',
           'disabled:cursor-not-allowed disabled:opacity-25',
           highlighted
@@ -211,9 +215,20 @@ export const PrimaryButton: React.FC<{
 }> = ({ onClick, disabled, children }) => (
   <button
     type="button"
+    /* Joins the step's arrow navigation. Continue is a place people want to
+       ARRIVE at, not only a thing to press: someone who has just chosen their
+       cards with the keyboard should be able to keep going with the keyboard,
+       rather than being told the one remaining control needs a Tab. */
+    data-roving="action"
     onClick={onClick}
     disabled={disabled}
-    className="focus-self rounded-[9px] bg-white px-6 py-3 text-[14px] font-semibold text-black
+    /* 🔴 `focus-self` was here and had to go. That class opts OUT of the global
+       focus ring, and its own rule says to use it ONLY on something that paints
+       its own focus state — this paints hover and nothing else. So keyboard
+       focus on the primary action of the entire flow was INVISIBLE. It went
+       unnoticed while Continue was reachable only by Tab; it is unmissable now
+       that arrows land here. */
+    className="rounded-[9px] bg-white px-6 py-3 text-[14px] font-semibold text-black
                transition-all duration-200 hover:bg-white/90 active:scale-[0.98]
                disabled:cursor-not-allowed disabled:opacity-20"
   >
@@ -228,9 +243,12 @@ export const TextButton: React.FC<{
 }> = ({ onClick, children, className = '' }) => (
   <button
     type="button"
+    data-roving="action"
     onClick={onClick}
     className={cx(
-      'focus-self text-[13.5px] text-white/35 transition-colors hover:text-white/80',
+      // No `focus-self` — see PrimaryButton. Quiet does not mean invisible:
+      // Back is the only way out of a step for a keyboard user.
+      'text-[13.5px] text-white/35 transition-colors hover:text-white/80',
       className,
     )}
   >

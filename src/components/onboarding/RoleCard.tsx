@@ -52,25 +52,25 @@ function leadsTo(role: string): string {
   return name || 'You choose';
 }
 
-export const RoleCard = React.forwardRef<HTMLButtonElement, {
+export const RoleCard: React.FC<{
   label: string;
   icon: React.ReactNode;
   selected: boolean;
   onClick: () => void;
   style?: React.CSSProperties;
-  tabIndex?: number;
-  onFocus?: () => void;
-}>(({ label, icon, selected, onClick, style, tabIndex, onFocus }, ref) => (
-  /* forwardRef so the roving-tabindex hook can focus this card. Without a real
-     DOM handle the hook can set tabIndex but never move focus, and arrow keys
-     would silently do nothing — the failure would look like the keys are not
-     bound at all. */
+}> = ({ label, icon, selected, onClick, style }) => (
+  /* No ref, no tabIndex, no onFocus.
+   *
+   * The card used to take all three so the roving-tabindex hook could drive it
+   * by index. That coupling is what kept Back and Continue OUT of the arrow
+   * navigation: they live in a different component, so including them meant
+   * threading indices across a boundary and keeping two files agreeing about
+   * how many things exist. The hook now finds its items in the DOM, so a card
+   * joins by saying so and nothing counts anything. */
   <button
-    ref={ref}
+    data-roving=""
     type="button"
     onClick={onClick}
-    tabIndex={tabIndex}
-    onFocus={onFocus}
     /* `aria-pressed`, not `radio`. Roles are multi-select — people are more
        than one thing, and a designer who also markets should be able to say
        so. A radio would announce "one of eight" and a screen reader user would
@@ -132,8 +132,6 @@ export const RoleCard = React.forwardRef<HTMLButtonElement, {
       </span>
     </span>
   </button>
-));
-
-RoleCard.displayName = 'RoleCard';
+);
 
 export default RoleCard;

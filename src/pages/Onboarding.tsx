@@ -385,10 +385,23 @@ const Onboarding: React.FC = () => {
     save(next);
   };
 
-  const roleGrid = useRovingGrid(
-    ROLES.length,
-    (i) => chooseRole(ROLES[i].label),
-    () => primaryAction()?.(),
+  /* ── ONE grid for the whole step, not one per question ────────────────────
+   *
+   * It is mounted on the wrapper that holds the step's content AND its Back /
+   * Continue, so everything on screen is reachable with the arrows. That was
+   * impossible while the grid lived on the card row: Back and Continue are
+   * siblings of that row, so no handler on it could ever see them.
+   *
+   * Enter still means "continue" wherever the highlight happens to be. The
+   * last step ends the flow rather than advancing it, so it supplies its own
+   * action — `primaryAction` is null there by design, and without this Enter
+   * would quietly do nothing on the one screen people most want to leave.
+   *
+   * `step` is the reset key: each step opens with the highlight on its first
+   * item rather than wherever the previous one left it. */
+  const stepGrid = useRovingGrid(
+    () => (step === STEPS - 1 ? finish() : primaryAction()?.()),
+    step,
   );
 
 
@@ -408,7 +421,10 @@ const Onboarding: React.FC = () => {
    * Enter only appears when primaryAction returns something. */
   const stepKeys = (() => {
     const canContinue = Boolean(primaryAction());
-    const grid = step === 1 || step === 2;
+    // Every step past the intro is a card step: cards, then Back and
+    // Continue, all in one arrow-navigable run. The intro is two text fields,
+    // where arrows belong to the caret.
+    const grid = step > 0;
     return [
       ...(grid ? [{ key: '←→', label: 'Move' }, { key: 'Space', label: 'Select' }] : []),
       ...(canContinue ? [{ key: 'Enter', label: 'Continue' }] : []),
@@ -458,6 +474,7 @@ const Onboarding: React.FC = () => {
           <div
             key={t.rendered}
             style={t.style}
+            {...stepGrid.containerProps}
             className={cx(
               'w-full space-y-8',
               // Only stagger on the way IN. Running the entrance while the
@@ -540,7 +557,6 @@ const Onboarding: React.FC = () => {
                 <div
                   role="group"
                   aria-label="Which of these describe you?"
-                  {...roleGrid.containerProps}
                   className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4"
                 >
                   {ROLES.map((r, i) => (
@@ -551,7 +567,6 @@ const Onboarding: React.FC = () => {
                       selected={parseRoles(answers.role).includes(r.label)}
                       style={wave(i, 0.06, 0.045)}
                       onClick={() => chooseRole(r.label)}
-                      {...roleGrid.itemProps(i)}
                     />
                   ))}
                 </div>
@@ -579,7 +594,6 @@ const Onboarding: React.FC = () => {
 
                 <WorkspaceChooser
                   role={answers.role}
-                  onEnter={() => primaryAction()?.()}
                   onEverythingHover={setEverythingHover}
                   value={answers.workspace}
                   onChange={(id) => {

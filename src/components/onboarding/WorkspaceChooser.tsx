@@ -6,7 +6,6 @@ import {
   parseWorkspace, serializeWorkspace, isEverything, isRecommended, type Suite,
 } from '../../lib/workspaceSuites';
 import SuiteVisual from './SuiteVisual';
-import useRovingGrid from './useRovingGrid';
 import EdgeParticles from './EdgeParticles';
 import { productIcon } from '../../lib/productIcons';
 import { isUnreleased } from '../../lib/releaseStatus';
@@ -120,8 +119,7 @@ export const WorkspaceChooser: React.FC<{
    *  state has to be owned above both of the things it affects. */
   onEverythingHover?: (hovering: boolean) => void;
   /** Enter inside the grid. The step decides what forward means. */
-  onEnter?: () => void;
-}> = ({ value, role, onChange, onEverythingHover, onEnter }) => {
+}> = ({ value, role, onChange, onEverythingHover }) => {
   /* The selection is derived from `value` rather than mirrored in state.
    * A local copy would have to be kept in sync with the prop, and the two
    * disagree the moment anything else writes the answer — the parent restoring
@@ -129,29 +127,19 @@ export const WorkspaceChooser: React.FC<{
   const picked = parseWorkspace(value);
   const everything = isEverything(picked);
 
-  /* The bar is the LAST item of the roving grid, not a separate control.
+  /* ── This component does NOT own the arrow navigation ────────────────────
    *
-   * It sits directly under the cards and is the fifth thing you would reach by
-   * looking down, so ArrowDown has to land on it — a keyboard user who cannot
-   * reach "everything" without tabbing out of the grid is being told the two
-   * choices are unrelated, when the whole screen argues they are the same
-   * question.
+   * It used to run its own roving grid over the four cards plus the bar. That
+   * grid could never include Back or Continue: they are rendered by the step,
+   * one level up, so reaching them meant handing indices across a component
+   * boundary and keeping two files agreeing about how many items exist.
    *
-   * The column count is measured from the first row, so ArrowDown from any
-   * card is +4 and clamps onto the bar. Nothing special-cases it. */
-  const BAR_INDEX = SUITES.length;
-  const suiteGrid = useRovingGrid(
-    SUITES.length + 1,
-    (i) => {
-      if (i === BAR_INDEX) toggleFrameRef.current();
-      else toggleSuiteRef.current(SUITES[i].id);
-    },
-    // Enter continues; the step owns what that means, so the page passes it in.
-    () => onEnterRef.current?.(),
-  );
-
-  const onEnterRef = useRef(onEnter);
-  onEnterRef.current = onEnter;
+   * The step owns one grid for everything it renders, and every item here just
+   * carries `data-roving`. The bar still sits last in document order, directly
+   * under the cards, so ArrowDown from the bottom row lands on it exactly as
+   * before — that ordering now falls out of the markup instead of out of an
+   * index constant that had to be kept correct by hand.
+   * ─────────────────────────────────────────────────────────────────────── */
 
   const [barHover, setBarHover] = useState(false);
   // The burst originates from this element's rect, so it needs a real handle.
@@ -267,7 +255,7 @@ export const WorkspaceChooser: React.FC<{
        the grid: the bar lives outside the grid element, so a handler on the
        grid would never see a keypress made while the bar had focus — ArrowUp
        out of it would do nothing. */
-    <div className="relative" {...suiteGrid.containerProps}>
+    <div className="relative">
       {/* FULL-VIEWPORT overlay, PORTALLED TO <body>.
        *
        * 🔴 The portal is not tidiness, it is the fix for a real bug. Two
@@ -350,33 +338,21 @@ export const WorkspaceChooser: React.FC<{
             // yet, which reads as two animations rather than a consequence.
             checkDelay={framed ? FRAME_MS * 0.86 + i * 95 : 0}
             onSelect={() => toggleSuite(suite.id)}
-            {...suiteGrid.itemProps(i)}
           />
         ))}
       </div>
 
       <button
-        /* THREE owners on this node, all silent if dropped:
-             barRef        — the particle burst's origin rect
-             roving ref    — so ArrowDown can move focus onto the bar
-             roving onFocus — records the active index
-           plus the bar's own onFocus, which raises the hover state.
-
-           Composed rather than spread, because a spread would let whichever
-           came last quietly win: put itemProps after and the burst never
-           fires on focus; put it before and arrowing loses its place. */
-        ref={(el) => {
-          barRef.current = el;
-          suiteGrid.itemProps(BAR_INDEX).ref(el);
-        }}
-        tabIndex={suiteGrid.itemProps(BAR_INDEX).tabIndex}
+        /* One owner again. This node used to carry three — its own ref, the
+           roving hook's ref, and the hook's onFocus — composed by hand because
+           a spread would let whichever came last silently win. Now the only
+           handle it needs is the particle burst's origin rect; the arrow
+           navigation reads `data-roving` off the DOM. */
+        ref={barRef}
+        data-roving=""
         type="button"
         onClick={toggleFrame}
-        onFocus={() => {
-          suiteGrid.itemProps(BAR_INDEX).onFocus();
-          setBarHover(true);
-          onEverythingHover?.(true);
-        }}
+        onFocus={() => { setBarHover(true); onEverythingHover?.(true); }}
         onPointerEnter={() => { setBarHover(true); onEverythingHover?.(true); }}
         onPointerLeave={() => { setBarHover(false); onEverythingHover?.(false); }}
         // Focus mirrors hover, so arrowing onto the bar shows the same burst a
@@ -466,9 +442,7 @@ const SuiteCard = React.forwardRef<HTMLButtonElement, {
    *  or it reads as lag. */
   checkDelay?: number;
   onSelect: () => void;
-  tabIndex?: number;
-  onFocus?: () => void;
-}>(({ suite, index, selected, connected, recommended, checkDelay = 0, onSelect, tabIndex, onFocus }, ref) => {
+}>(({ suite, index, selected, connected, recommended, checkDelay = 0, onSelect }, ref) => {
   const products = productsForSuite(suite);
 
   /* ── SHELL / PLATE ANATOMY ────────────────────────────────────────────────
@@ -495,8 +469,7 @@ const SuiteCard = React.forwardRef<HTMLButtonElement, {
       ref={ref}
       type="button"
       onClick={onSelect}
-      tabIndex={tabIndex}
-      onFocus={onFocus}
+      data-roving=""
       aria-pressed={selected}
       style={{
         background: '#08080a',

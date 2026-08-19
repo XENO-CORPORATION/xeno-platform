@@ -1,148 +1,163 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * ROVING TAB INDEX for a card grid.
+ * ROVING TAB INDEX over a whole step.
  *
- * Arrow keys move a highlight between cards; Enter or Space chooses one. The
- * whole grid is ONE tab stop rather than eight, which is the actual point:
- * without it, tabbing through this flow means eight presses to cross a single
- * question, and a keyboard user pays that on every step.
+ * Arrows move a highlight, Space activates whatever is highlighted, Enter
+ * continues. The step is ONE tab stop rather than a dozen.
+ *
+ * ── ITEMS ARE DISCOVERED, NOT DECLARED ─────────────────────────────────────
+ *
+ * An earlier version took a `count` and handed every item an index, a ref and
+ * an onFocus through props. That worked for the card grid and could not reach
+ * Continue or Back — they live in a different component, so including them
+ * meant threading indices across a boundary and keeping two components
+ * agreeing about how many things exist.
+ *
+ * Now the hook queries its container for `[data-roving]`. Anything inside can
+ * join by adding one attribute, wherever it lives, and there is no count to
+ * keep in sync — the DOM already knows. Adding a control to a step cannot
+ * silently leave it unreachable.
+ *
+ * ── SPACE ACTIVATES, IT DOES NOT "CHOOSE" ──────────────────────────────────
+ *
+ * Space calls .click() on the focused element, so every item behaves exactly
+ * as it does under a mouse: a card toggles, Continue continues, Back goes
+ * back. No handler is duplicated for the keyboard, which is what stopped the
+ * two routes drifting apart in the first place.
  *
  * ── ARROWS MOVE, THEY DO NOT SELECT ────────────────────────────────────────
  *
- * The ARIA radiogroup pattern normally selects as you arrow. Here it must not:
- * choosing a role ADVANCES THE STEP, so arrowing would fire the flow forward
- * on the first keypress and the user would never see the other options. The
- * spec allows manual selection precisely when selection has side effects, and
- * this is that case.
- *
- * ── THE COLUMN COUNT IS MEASURED, NOT ASSUMED ──────────────────────────────
- *
- * Up and Down move by a row, so they need to know the row width — and the grid
- * is 4 columns on a wide screen, 2 on a laptop, 1 on a phone. Reading the
- * breakpoints back in JS would restate the layout in a second place and drift
- * the moment the CSS changes.
- *
- * Instead it counts how many items share the first item's `offsetTop`. That is
- * the row width by definition, whatever produced it, so this stays correct
- * through any grid change and any breakpoint nobody remembered to tell it
- * about.
+ * The ARIA pattern normally selects as you arrow. Here it must not: some of
+ * these items ADVANCE THE STEP, so arrowing would fire the flow forward before
+ * the user had seen the options. The spec allows manual selection precisely
+ * when selection has side effects.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-export function useRovingGrid(
-  count: number,
-  /** Space — toggles the focused item. */
-  onChoose: (index: number) => void,
-  /** Enter — the step's forward move. Optional: a grid on a step with no
-   *  primary action simply ignores Enter rather than inventing one. */
-  onEnter?: () => void,
-) {
-  const [active, setActive] = useState(0);
-  const refs = useRef<Array<HTMLElement | null>>([]);
+export function useRovingGrid(onEnter?: () => void, resetKey?: unknown) {
   const containerRef = useRef<HTMLElement | null>(null);
-  // Focus only follows a KEYBOARD move. Without this the grid would steal
-  // focus on mount and on every re-render, yanking it away from whatever the
-  // user was actually doing.
+  const [active, setActive] = useState(0);
+  // Focus only follows a KEYBOARD move; otherwise the step would steal focus
+  // on mount and on every re-render.
   const shouldFocus = useRef(false);
 
-  useEffect(() => {
-    if (!shouldFocus.current) return;
-    shouldFocus.current = false;
-    refs.current[active]?.focus();
-  }, [active]);
+  /* The highlight returns to the first item whenever the step changes.
+   *
+   * One grid serves every step, because only one step is mounted at a time and
+   * each renders its cards and its Back/Continue inside the same wrapper. What
+   * that shares is the ACTIVE INDEX — arrive at a 7-item step holding index 9
+   * from a 10-item one and the clamp drops you onto Continue, so the step opens
+   * with the highlight past all of its content. Clamping keeps it in range; only
+   * a reset puts it back at the beginning. */
+  useEffect(() => { setActive(0); }, [resetKey]);
 
-  /** Items per row, from the rendered layout. */
-  const columns = useCallback(() => {
-    const items = refs.current.filter(Boolean) as HTMLElement[];
-    if (items.length === 0) return 1;
-    const top = items[0].offsetTop;
-    const n = items.filter((el) => el.offsetTop === top).length;
-    return Math.max(1, n);
+  const items = useCallback((): HTMLElement[] => {
+    const root = containerRef.current;
+    if (!root) return [];
+    return Array.from(root.querySelectorAll<HTMLElement>('[data-roving]'))
+      // A disabled Continue is not a place the highlight should be able to
+      // rest — arrowing onto a dead control reads as the keys breaking.
+      .filter((el) => !(el as HTMLButtonElement).disabled);
   }, []);
 
-  const move = useCallback((next: number) => {
+  /* One tab stop: only the active item is tabbable.
+   *
+   * Applied after every render because the item LIST changes — Continue
+   * enables once something is chosen, and the everything-bar comes and goes.
+   * A tabIndex assigned once would leave a stale item as the entry point. */
+  useEffect(() => {
+    const els = items();
+    if (els.length === 0) return;
+    const i = Math.min(active, els.length - 1);
+    els.forEach((el, n) => { el.tabIndex = n === i ? 0 : -1; });
+    if (shouldFocus.current) {
+      shouldFocus.current = false;
+      els[i]?.focus();
+    }
+  });
+
+  /** Items per row, from the rendered layout — never from the breakpoints.
+   *  Reading those back in JS would restate the grid in a second place. */
+  const columns = useCallback((els: HTMLElement[]) => {
+    if (els.length === 0) return 1;
+    const top = els[0].offsetTop;
+    return Math.max(1, els.filter((el) => el.offsetTop === top).length);
+  }, []);
+
+  const go = useCallback((next: number, els: HTMLElement[]) => {
     shouldFocus.current = true;
-    setActive(Math.max(0, Math.min(count - 1, next)));
-  }, [count]);
+    setActive(Math.max(0, Math.min(els.length - 1, next)));
+  }, []);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent) => {
-    const cols = columns();
+    const els = items();
+    if (els.length === 0) return;
+    const i = Math.min(active, els.length - 1);
+    const cols = columns(els);
+
     switch (e.key) {
       case 'ArrowRight':
-        e.preventDefault();
-        // Wraps, because a row's end and the next row's start are adjacent to
-        // the eye — stopping dead there feels like the grid is broken.
-        shouldFocus.current = true;
-        setActive((i) => (i + 1) % count);
+        // Wraps: a row's end and the next row's start are adjacent to the eye.
+        e.preventDefault(); shouldFocus.current = true;
+        setActive((i + 1) % els.length);
         break;
       case 'ArrowLeft':
-        e.preventDefault();
-        shouldFocus.current = true;
-        setActive((i) => (i - 1 + count) % count);
+        e.preventDefault(); shouldFocus.current = true;
+        setActive((i - 1 + els.length) % els.length);
         break;
       case 'ArrowDown':
-        e.preventDefault();
-        // Clamped, not wrapped: wrapping vertically jumps the eye across the
-        // whole grid, which reads as a glitch rather than as navigation.
-        move(active + cols);
+        // Clamps: wrapping vertically jumps the eye across the whole step.
+        e.preventDefault(); go(i + cols, els);
         break;
       case 'ArrowUp':
-        e.preventDefault();
-        move(active - cols);
+        e.preventDefault(); go(i - cols, els);
         break;
-      case 'Home':
-        e.preventDefault();
-        move(0);
-        break;
-      case 'End':
-        e.preventDefault();
-        move(count - 1);
-        break;
+      case 'Home': e.preventDefault(); go(0, els); break;
+      case 'End': e.preventDefault(); go(els.length - 1, els); break;
       case ' ':
-        /* SPACE selects. Enter does not — see below.
-         *
-         * preventDefault is required, not tidiness: these items are <button>s,
-         * and Space on a button natively fires a click on keyUP. Without it the
-         * item would toggle twice per press — once here, once natively — which
-         * on a toggle means nothing appears to happen at all. */
+        /* preventDefault is required, not tidiness: these are <button>s, and
+           Space natively fires a click on keyUP. Without it the item would
+           activate TWICE — which on a toggle looks like nothing happening. */
         e.preventDefault();
-        onChoose(active);
+        els[i]?.click();
         break;
-      case 'Enter':
-        /* ENTER advances; it does not select.
+      case 'Enter': {
+        /* Enter CONTINUES from a choice, and ACTIVATES a navigation control.
          *
-         * Splitting the two is what makes a multi-select grid usable from the
-         * keyboard: Space to pick as many as you want, Enter when satisfied.
-         * With both bound to select, there was no key left to move forward —
-         * and on a single-select grid Enter silently did two things at once.
+         * "Enter always continues" is simpler to describe and sets a trap:
+         * arrow onto Back, press Enter, and the flow moves FORWARD. Pressing
+         * Enter on a focused button activating that button is about as strong
+         * an expectation as the keyboard has, and no legend overrides it.
          *
-         * preventDefault stops the native button click, which would otherwise
-         * select the focused item on the way out of the step. */
+         * So the distinction is carried on the item itself. A card or the
+         * everything bar is a CHOICE — Enter there means "done choosing", which
+         * is the shortcut worth having. Back, Continue and Select plan are
+         * ACTIONS, and Enter does exactly what it looks like it does. On
+         * Continue the two rules agree, which is why the trap was easy to miss. */
+        const el = els[i];
+        if (el?.dataset.roving === 'action') {
+          e.preventDefault();
+          el.click();
+          return;
+        }
         if (!onEnter) return;
         e.preventDefault();
         onEnter();
         break;
+      }
       default:
     }
-  }, [active, columns, count, move, onChoose, onEnter]);
+  }, [active, columns, go, items, onEnter]);
 
-  /* ── ARROWS CLAIM THE GRID WITHOUT A TAB FIRST ───────────────────────────
+  /* A first arrow claims the step without a Tab.
    *
-   * A roving tabindex still requires you to REACH the grid before the arrows
-   * mean anything, and on a step whose entire content is the grid that first
-   * Tab is a toll for no reason — you press Right, nothing moves, and the
-   * feature looks broken before it has been used.
+   * A roving tabindex still requires REACHING the container before the arrows
+   * mean anything — you press Right, nothing moves, and it looks broken before
+   * it has been used. Once focus is inside, the container handler owns it, so
+   * this only ever fires for the first press.
    *
-   * So an arrow pressed while focus is OUTSIDE the grid pulls focus into it and
-   * acts on that same keypress. From then on the container's own handler has
-   * focus and takes over; this listener only ever fires for the FIRST arrow.
-   *
-   * ── WHAT IT REFUSES TO CLAIM ─────────────────────────────────────────────
-   *
-   * Arrows inside a text field move the caret, and inside a select they change
-   * the value. Stealing them there would break typing on a step that has text
-   * inputs one screen away — so an editable target is left completely alone.
-   * ─────────────────────────────────────────────────────────────────────── */
+   * Editable targets are left alone: arrows move a caret in a field and change
+   * the value in a select. */
   useEffect(() => {
     const onWindowKey = (e: KeyboardEvent) => {
       if (!['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
@@ -151,38 +166,31 @@ export function useRovingGrid(
       const el = document.activeElement as HTMLElement | null;
       const tag = el?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
-
-      // Already inside: the container handler owns it, and running both would
-      // move twice per press.
       if (containerRef.current && el && containerRef.current.contains(el)) return;
 
-      const target = refs.current[active];
-      if (!target) return;
+      const els = items();
+      if (els.length === 0) return;
       e.preventDefault();
       shouldFocus.current = true;
-      target.focus();
+      els[Math.min(active, els.length - 1)]?.focus();
     };
     window.addEventListener('keydown', onWindowKey);
     return () => window.removeEventListener('keydown', onWindowKey);
-  }, [active]);
+  }, [active, items]);
 
-  /** Props for item `i`. Only the active item is tabbable. */
-  const itemProps = useCallback((i: number) => ({
-    ref: (el: HTMLElement | null) => { refs.current[i] = el; },
-    tabIndex: i === active ? 0 : -1,
-    // A pointer user who clicks card 6 should then be able to arrow from card
-    // 6, not from wherever the keyboard last was.
-    onFocus: () => setActive(i),
-  }), [active]);
-
-  /** Props for the grid container — the ref is what lets the window listener
-   *  tell "focus is already in here" from "focus is elsewhere". */
+  /** Spread onto the element that CONTAINS every roving item. */
   const containerProps = {
     ref: (el: HTMLElement | null) => { containerRef.current = el; },
     onKeyDown,
   };
 
-  return { active, onKeyDown, itemProps, containerProps };
+  return { containerProps };
 }
+
+/** Spread onto a CHOICE — a card, a toggle. Enter there means "done choosing". */
+export const ROVING = { 'data-roving': '' } as const;
+
+/** Spread onto an ACTION — Back, Continue, Select plan. Enter activates it. */
+export const ROVING_ACTION = { 'data-roving': 'action' } as const;
 
 export default useRovingGrid;
