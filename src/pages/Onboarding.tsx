@@ -11,7 +11,7 @@ import RoleCard from '../components/onboarding/RoleCard';
 import useRovingGrid from '../components/onboarding/useRovingGrid';
 import { recommendedWorkspace } from '../lib/workspaceSuites';
 import {
-  StepHeading, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress,
+  StepHeading, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress, KeyLegend,
   INPUT_CLS, cx,
 } from '../components/onboarding/OnboardingPieces';
 
@@ -309,6 +309,7 @@ const Onboarding: React.FC = () => {
    */
   const primaryAction = (): (() => void) | null => {
     if (step === 0) return () => { save(answers); setStep(1); };
+    if (step === 1) return answers.role ? () => setStep(2) : null;
     if (step === 2) return answers.workspace ? () => setStep(3) : null;
     return null;
   };
@@ -363,10 +364,19 @@ const Onboarding: React.FC = () => {
     };
     setAnswers(next);
     save(next);
-    setStep(2);
+    /* Deliberately does NOT advance.
+     *
+     * It used to, which made choosing and continuing the same act — fine for a
+     * mouse, impossible for a keyboard: with Space and Enter both selecting,
+     * there was no key left to move forward, and no chance to change your mind
+     * before the step vanished. */
   };
 
-  const roleGrid = useRovingGrid(ROLES.length, (i) => chooseRole(ROLES[i].label));
+  const roleGrid = useRovingGrid(
+    ROLES.length,
+    (i) => chooseRole(ROLES[i].label),
+    () => primaryAction()?.(),
+  );
 
   const skipAll = async () => {
     await save({ ...answers, skipped: true }, { wait: true });
@@ -381,6 +391,21 @@ const Onboarding: React.FC = () => {
   /* Recommendations follow the WORKSPACE they chose. That is a far stronger
    * signal than a category multi-select, and it is the choice they actually
    * made — so the last screen is visibly a consequence of the first. */
+  /* The keys THIS step actually responds to.
+   *
+   * Per step, not fixed: a legend that advertises Space on a form with nothing
+   * to select, or "Enter to continue" where Continue is disabled, is a hint
+   * that lies — and once one line is wrong the reader stops trusting the rest.
+   * Enter only appears when primaryAction returns something. */
+  const stepKeys = (() => {
+    const canContinue = Boolean(primaryAction());
+    const grid = step === 1 || step === 2;
+    return [
+      ...(grid ? [{ key: '←→', label: 'Move' }, { key: 'Space', label: 'Select' }] : []),
+      ...(canContinue ? [{ key: 'Enter', label: 'Continue' }] : []),
+    ];
+  })();
+
   if (checking) {
     return (
       <div className="h-screen h-[100dvh] grid place-items-center" style={{ background: '#060606' }}>
@@ -524,7 +549,13 @@ const Onboarding: React.FC = () => {
                   ))}
                 </div>
 
-                <Nav onBack={() => back(0)} onSkip={() => setStep(2)} />
+                <Nav
+                  onBack={() => back(0)}
+                  onNext={() => primaryAction()?.()}
+                  onSkip={() => setStep(2)}
+                  nextLabel="Continue"
+                  nextDisabled={!answers.role}
+                />
               </>
             )}
 
@@ -542,6 +573,7 @@ const Onboarding: React.FC = () => {
 
                 <WorkspaceChooser
                   role={answers.role}
+                  onEnter={() => primaryAction()?.()}
                   onEverythingHover={setEverythingHover}
                   value={answers.workspace}
                   onChange={(id) => {
@@ -621,7 +653,14 @@ const Onboarding: React.FC = () => {
         </div>
       </main>
 
-      <footer className="relative z-10 shrink-0 pb-9 pt-4">
+      <footer className="relative z-10 shrink-0 space-y-3 pb-8 pt-4">
+        {/* Legend above the progress, because it describes what you can do NOW
+            and the progress describes where you are — the actionable line sits
+            nearer the content it acts on. Reserves its height so the footer
+            does not jump between steps that have different key sets. */}
+        <div className="min-h-[19px]">
+          {stepKeys.length > 0 && <KeyLegend keys={stepKeys} />}
+        </div>
         <Progress step={step} total={STEPS} />
       </footer>
     </div>

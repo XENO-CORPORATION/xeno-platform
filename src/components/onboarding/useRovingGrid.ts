@@ -29,7 +29,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * about.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-export function useRovingGrid(count: number, onChoose: (index: number) => void) {
+export function useRovingGrid(
+  count: number,
+  /** Space — toggles the focused item. */
+  onChoose: (index: number) => void,
+  /** Enter — the step's forward move. Optional: a grid on a step with no
+   *  primary action simply ignores Enter rather than inventing one. */
+  onEnter?: () => void,
+) {
   const [active, setActive] = useState(0);
   const refs = useRef<Array<HTMLElement | null>>([]);
   const containerRef = useRef<HTMLElement | null>(null);
@@ -91,17 +98,33 @@ export function useRovingGrid(count: number, onChoose: (index: number) => void) 
         e.preventDefault();
         move(count - 1);
         break;
-      case 'Enter':
       case ' ':
-        // Selection is MANUAL — see the note above. Space is included because
-        // a button natively answers to it, and losing that would make the grid
-        // behave unlike every other control on the page.
+        /* SPACE selects. Enter does not — see below.
+         *
+         * preventDefault is required, not tidiness: these items are <button>s,
+         * and Space on a button natively fires a click on keyUP. Without it the
+         * item would toggle twice per press — once here, once natively — which
+         * on a toggle means nothing appears to happen at all. */
         e.preventDefault();
         onChoose(active);
         break;
+      case 'Enter':
+        /* ENTER advances; it does not select.
+         *
+         * Splitting the two is what makes a multi-select grid usable from the
+         * keyboard: Space to pick as many as you want, Enter when satisfied.
+         * With both bound to select, there was no key left to move forward —
+         * and on a single-select grid Enter silently did two things at once.
+         *
+         * preventDefault stops the native button click, which would otherwise
+         * select the focused item on the way out of the step. */
+        if (!onEnter) return;
+        e.preventDefault();
+        onEnter();
+        break;
       default:
     }
-  }, [active, columns, count, move, onChoose]);
+  }, [active, columns, count, move, onChoose, onEnter]);
 
   /* ── ARROWS CLAIM THE GRID WITHOUT A TAB FIRST ───────────────────────────
    *

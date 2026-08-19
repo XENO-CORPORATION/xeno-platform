@@ -238,16 +238,18 @@ export const TextButton: React.FC<{
   </button>
 );
 
-/* ── Progress ────────────────────────────────────────────────────────────── */
+/* ── Progress + key legend ───────────────────────────────────────────────── */
 
 /**
- * Pinned to the bottom of the viewport, centred — out of the content's way,
- * exactly like the reference. The active step is a wide pill and the rest are
- * dots, so position is readable at a glance without counting.
+ * Step progress.
+ *
+ * Rectangles with a 2px radius, not pills. `DESIGN_SYSTEM.md` forbids circles
+ * and pills outright, and `rounded-full` on a 5px bar is a pill — the rule was
+ * being broken at a size small enough that nobody looked twice.
  */
 export const Progress: React.FC<{ step: number; total: number }> = ({ step, total }) => (
   <div
-    className="flex items-center justify-center gap-[7px]"
+    className="flex items-center justify-center gap-[6px]"
     role="progressbar"
     aria-valuenow={step + 1} aria-valuemin={1} aria-valuemax={total}
     aria-label={`Step ${step + 1} of ${total}`}
@@ -256,10 +258,45 @@ export const Progress: React.FC<{ step: number; total: number }> = ({ step, tota
       <span
         key={i}
         className={cx(
-          'h-[5px] rounded-full transition-all duration-500 ease-out',
-          i === step ? 'w-8 bg-white/85' : 'w-[5px] bg-white/20',
+          'h-[5px] rounded-[2px] transition-all duration-500 ease-out',
+          i === step ? 'w-8 bg-white/85' : i < step ? 'w-[14px] bg-white/35' : 'w-[14px] bg-white/[0.12]',
         )}
       />
     ))}
   </div>
 );
+
+/**
+ * The key legend, in the manner of a game's control hint.
+ *
+ * ── WHY IT IS SHOWN AT ALL ─────────────────────────────────────────────────
+ *
+ * Every keyboard affordance on this flow is invisible: arrows move a highlight,
+ * Space selects, Enter continues. None of that is discoverable by looking, and
+ * a keyboard route nobody knows about is not a keyboard route — which is why
+ * the ⏎ glyph was on the button in the first place. This says the same thing
+ * once, in the corner, for the whole flow rather than for one control.
+ *
+ * ── IT DESCRIBES THE CURRENT STEP, NOT THE FLOW ────────────────────────────
+ *
+ * Keys are passed in per step. A fixed legend would advertise Space on the
+ * two form steps that have nothing to select, and "Enter to continue" on a
+ * step whose Continue is disabled — a hint that lies is worse than none,
+ * because the reader stops trusting the rest of it.
+ */
+export const KeyLegend: React.FC<{ keys: Array<{ key: string; label: string }> }> = ({ keys }) => (
+  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+    {keys.map(({ key, label }) => (
+      <span key={label} className="flex items-center gap-1.5">
+        <kbd
+          className="grid h-[19px] min-w-[19px] place-items-center rounded-[3px] border border-white/[0.14]
+                     bg-white/[0.05] px-1.5 font-sans text-[10.5px] leading-none text-white/55"
+        >
+          {key}
+        </kbd>
+        <span className="text-[10.5px] text-white/25">{label}</span>
+      </span>
+    ))}
+  </div>
+);
+

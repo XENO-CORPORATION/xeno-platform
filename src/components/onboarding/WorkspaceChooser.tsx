@@ -119,7 +119,9 @@ export const WorkspaceChooser: React.FC<{
    *  because Continue/Skip live outside this component — a shared visual
    *  state has to be owned above both of the things it affects. */
   onEverythingHover?: (hovering: boolean) => void;
-}> = ({ value, role, onChange, onEverythingHover }) => {
+  /** Enter inside the grid. The step decides what forward means. */
+  onEnter?: () => void;
+}> = ({ value, role, onChange, onEverythingHover, onEnter }) => {
   /* The selection is derived from `value` rather than mirrored in state.
    * A local copy would have to be kept in sync with the prop, and the two
    * disagree the moment anything else writes the answer — the parent restoring
@@ -138,10 +140,18 @@ export const WorkspaceChooser: React.FC<{
    * The column count is measured from the first row, so ArrowDown from any
    * card is +4 and clamps onto the bar. Nothing special-cases it. */
   const BAR_INDEX = SUITES.length;
-  const suiteGrid = useRovingGrid(SUITES.length + 1, (i) => {
-    if (i === BAR_INDEX) toggleFrameRef.current();
-    else toggleSuiteRef.current(SUITES[i].id);
-  });
+  const suiteGrid = useRovingGrid(
+    SUITES.length + 1,
+    (i) => {
+      if (i === BAR_INDEX) toggleFrameRef.current();
+      else toggleSuiteRef.current(SUITES[i].id);
+    },
+    // Enter continues; the step owns what that means, so the page passes it in.
+    () => onEnterRef.current?.(),
+  );
+
+  const onEnterRef = useRef(onEnter);
+  onEnterRef.current = onEnter;
 
   const [barHover, setBarHover] = useState(false);
   // The burst originates from this element's rect, so it needs a real handle.

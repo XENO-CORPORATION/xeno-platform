@@ -33,17 +33,40 @@ test('all four arrows, Home and End are handled', () => {
   }
 });
 
+test('Space selects and Enter advances — they are not the same key', () => {
+  // With both bound to select there is no key left to move forward, and a
+  // multi-select grid becomes uncompletable from the keyboard.
+  const spaceCase = hook.slice(hook.indexOf("case ' ':"), hook.indexOf("case 'Enter':"));
+  assert.ok(spaceCase.includes('onChoose(active)'), 'Space does not select');
+  assert.ok(!spaceCase.includes('onEnter'), 'Space advances the step as well as selecting');
+
+  const enterCase = hook.slice(hook.indexOf("case 'Enter':"));
+  assert.ok(enterCase.includes('onEnter()'), 'Enter does not advance');
+  assert.ok(!enterCase.includes('onChoose('), 'Enter selects as well as advancing');
+
+  // Both are <button>s: without preventDefault the native click fires too, so
+  // Space would toggle twice (appearing to do nothing) and Enter would select
+  // on its way out of the step.
+  assert.ok(spaceCase.includes('preventDefault'), 'Space does not stop the native click');
+  assert.ok(enterCase.includes('preventDefault'), 'Enter does not stop the native click');
+});
+
 test('arrows move but do NOT select', () => {
   // onChoose may appear only under Enter/Space. If an arrow branch calls it,
   // the flow advances while someone is still looking around.
-  const arrowSection = hook.slice(hook.indexOf("'ArrowRight'"), hook.indexOf("case 'Enter'"));
+  /* Ends at the SPACE case, not at Enter.
+   *
+   * It used to end at Enter, and when Space gained its own branch — which
+   * legitimately calls onChoose — that branch fell inside the slice and the
+   * test failed on correct code. A boundary defined by "the next thing that
+   * exists today" breaks the moment something is inserted before it. */
+  const arrowSection = hook.slice(hook.indexOf("'ArrowRight'"), hook.indexOf("case ' ':"));
   assert.doesNotMatch(
     arrowSection, /onChoose\(/,
     'an arrow branch calls onChoose — arrowing would advance the step before the ' +
     'user has seen the other options',
   );
-  const enterSection = hook.slice(hook.indexOf("case 'Enter'"));
-  assert.match(enterSection, /onChoose\(active\)/, 'Enter does not choose the active item');
+  // Selection now lives on Space; asserted in its own test above.
 });
 
 test('exactly one item is tabbable', () => {

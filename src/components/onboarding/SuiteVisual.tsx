@@ -168,7 +168,7 @@ const ConnectVisual: React.FC = () => (
       <div className="mb-1.5 flex shrink-0 items-center gap-1">
         <div className="flex gap-[3px]">
           {[0.3, 0.2, 0.14].map((o, i) => (
-            <div key={i} className="h-[4px] w-[4px] rounded-full" style={{ background: `rgba(255,255,255,${o})` }} />
+            <div key={i} className="h-[4px] w-[4px] rounded-[1px]" style={{ background: `rgba(255,255,255,${o})` }} />
           ))}
         </div>
         <div className="ml-1 h-[9px] flex-1 rounded-[3px] border border-white/[0.07]" style={{ background: 'rgba(255,255,255,0.04)' }} />
@@ -186,7 +186,7 @@ const ConnectVisual: React.FC = () => (
         </div>
         <div className="flex items-center gap-[3px] self-start pl-1">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-[3px] w-[3px] rounded-full bg-white/30" />
+            <div key={i} className="h-[3px] w-[3px] rounded-[1px] bg-white/30" />
           ))}
         </div>
       </div>
