@@ -292,6 +292,63 @@ const Onboarding: React.FC = () => {
     setStep(to);
   };
 
+  /**
+   * The primary action for the current step, or null if it has none.
+   *
+   * Declared as data rather than wired into the Enter handler directly, so the
+   * keyboard and the Continue button invoke the SAME thing. Two code paths for
+   * one action is how a keyboard route quietly stops matching the button it is
+   * meant to mirror.
+   *
+   * Steps 1 and 3 return null on purpose. The role step has no Continue —
+   * choosing IS advancing — and on the plan step the only forward actions are
+   * "Skip for now" and starting a CHECKOUT. Binding Enter to either would be a
+   * keystroke that either dismisses a paywall or opens a payment flow, and
+   * neither is something to do by accident.
+   */
+  const primaryAction = (): (() => void) | null => {
+    if (step === 0) return () => { save(answers); setStep(1); };
+    if (step === 2) return answers.workspace ? () => setStep(3) : null;
+    return null;
+  };
+
+  /* Enter advances. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter') return;
+      // Plain Enter only. Ctrl/Cmd+Enter is a submit-everything convention
+      // elsewhere and Shift+Enter is a newline; neither should mean "next".
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      // An IME composition ends with Enter. Advancing on it would eat the
+      // keystroke that was confirming a character.
+      if (e.isComposing) return;
+
+      /* Never steal Enter from something that already handles it.
+       *
+       * Every card and tile here is a <button>, and Enter on a focused button
+       * activates it natively. Hijacking that would make the keyboard route
+       * do the WRONG thing precisely when someone is navigating by keyboard —
+       * they would tab to a suite card, press Enter, and skip the step instead
+       * of selecting it. */
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'BUTTON' || tag === 'A' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (el?.isContentEditable) return;
+
+      const act = primaryAction();
+      if (!act) return;
+      e.preventDefault();
+      act();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // No dependency array, deliberately: the handler closes over `step` and
+    // `answers`, and re-registering each render is what keeps that closure
+    // current. A dep list here would be one more thing to keep in sync with
+    // whatever primaryAction happens to read, and getting it wrong means Enter
+    // silently acts on a stale answer.
+  });
+
   const skipAll = async () => {
     await save({ ...answers, skipped: true }, { wait: true });
     navigate('/overview', { replace: true });
@@ -402,9 +459,10 @@ const Onboarding: React.FC = () => {
                 </div>
 
                 <Nav
-                  onNext={() => { save(answers); setStep(1); }}
+                  onNext={() => primaryAction()?.()}
                   onSkip={skipAll}
                   nextLabel="Continue"
+                  enterHint
                 />
               </>
             )}
@@ -477,11 +535,12 @@ const Onboarding: React.FC = () => {
 
                 <Nav
                   onBack={() => back(1)}
-                  onNext={() => setStep(3)}
+                  onNext={() => primaryAction()?.()}
                   onSkip={() => setStep(3)}
                   nextLabel="Continue"
                   nextDisabled={!answers.workspace}
                   hidden={everythingHover}
+                  enterHint
                 />
               </>
             )}
@@ -570,7 +629,9 @@ const Nav: React.FC<{
   nextLabel?: string; skipLabel?: string; nextDisabled?: boolean;
   /** Drops the whole row away — used while the everything-bar is hovered. */
   hidden?: boolean;
-}> = ({ onBack, onNext, onSkip, nextLabel, skipLabel, nextDisabled, hidden }) => (
+  /** Whether Enter is bound to this step's Continue. */
+  enterHint?: boolean;
+}> = ({ onBack, onNext, onSkip, nextLabel, skipLabel, nextDisabled, hidden, enterHint }) => (
   /* Falls DOWN and out rather than fading. A row that merely fades is still
      occupying its space and still reads as present-but-greyed; falling out of
      the frame reads as making way. `pointer-events-none` while gone, so a
@@ -588,7 +649,7 @@ const Nav: React.FC<{
         a step that has neither. */}
     {onNext && (
       <div className="ml-auto">
-        <PrimaryButton onClick={onNext} disabled={nextDisabled}>
+        <PrimaryButton onClick={onNext} disabled={nextDisabled} enterHint={enterHint}>
           {nextLabel || 'Continue'}
         </PrimaryButton>
       </div>
