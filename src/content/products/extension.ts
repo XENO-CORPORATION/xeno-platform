@@ -150,7 +150,7 @@ const extension: ProductContent = {
       { feature: 'Reads & summarizes the page', xeno: true, them: true },
       { feature: 'Clicks, types & fills forms for you', xeno: true, them: 'Some' },
       { feature: 'Plan / Agent / Chat modes', xeno: true, them: false },
-      { feature: 'Bring your own model / run local', xeno: 'Grok · Ollama', them: 'One provider' },
+      { feature: 'Your account or fully local', xeno: 'XENO account · Ollama', them: 'One provider' },
       { feature: 'Permission prompts + site blocklist', xeno: true, them: 'Varies' },
       { feature: 'Multi-tab context (@-mention tabs)', xeno: true, them: false },
       { feature: 'Established web-store presence & reviews', xeno: 'Not listed yet', them: true },
@@ -184,7 +184,7 @@ const extension: ProductContent = {
    * available to install". */
   seo: {
     title: 'XENO Extension — the AI browser agent for Chrome & Edge',
-    description: 'A Manifest V3 side-panel agent that reads the page and acts on it — clicks, types, fills forms and navigates across tabs, in Plan / Agent / Chat mode, gated by a permission prompt. Bring your own model or run local. A 1.1.0 tester build is available to load unpacked; the Chrome Web Store listing is not live yet.',
+    description: 'A Manifest V3 side-panel agent that reads the page and acts on it — clicks, types, fills forms and navigates across tabs, in Plan / Agent / Chat mode, gated by a permission prompt. Inference runs on your XENO account or a local Ollama. A 1.2.0 tester build is available to load unpacked; the Chrome Web Store listing is not live yet.',
   },
   /* Mirrors ../../../xeno-extension/PRIVACY.md — that file is what a web-store
    * reviewer reads, this is the public URL the listing points at. Keep the two in
