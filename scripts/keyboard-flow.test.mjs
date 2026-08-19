@@ -58,14 +58,22 @@ test('only PLAIN Enter advances', () => {
   assert.match(src, /isComposing/, 'Enter does not guard against IME composition');
 });
 
-test('the hint is only shown where Enter is actually bound', () => {
-  // primaryAction returns null on the role and plan steps, so those Navs must
-  // not advertise a shortcut that does nothing.
-  const hints = (src.match(/enterHint\b/g) || []).length;
-  assert.ok(hints >= 2, 'the Enter hint is not passed to the steps that have a primary action');
-  assert.doesNotMatch(
-    src, /skipLabel="Skip for now"[^/]*enterHint/,
-    'the plan step advertises Enter — its only forward actions are dismissing a ' +
-    'paywall and opening a payment flow, neither of which should have a keystroke',
+test('no step advertises a shortcut it does not have', () => {
+  /* The ⏎ glyph on Continue was removed by request.
+   *
+   * This assertion used to require it on the steps that bind Enter. Inverted
+   * rather than deleted, because the underlying risk did not go away — it
+   * only changed direction. A hint reintroduced later must still not appear
+   * on the role or plan steps, where primaryAction returns null and Enter
+   * does nothing.
+   *
+   * ⚠️ This gate went RED on the commit that removed the glyph, and the
+   * commit shipped anyway. A gate asserting a feature exists becomes wrong
+   * the moment the feature is deliberately removed — the test is part of the
+   * change, not a separate chore. */
+  assert.ok(
+    !src.includes('enterHint'),
+    'the Enter hint is back; if that is intended, assert it only reaches the ' +
+    'steps where primaryAction returns non-null',
   );
 });
