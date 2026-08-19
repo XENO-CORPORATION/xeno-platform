@@ -238,65 +238,90 @@ export const TextButton: React.FC<{
   </button>
 );
 
-/* ── Progress + key legend ───────────────────────────────────────────────── */
+/* ── Flow controls ───────────────────────────────────────────────────────── */
 
 /**
- * Step progress.
+ * The footer bar: where you are, and what the keys do.
  *
- * Rectangles with a 2px radius, not pills. `DESIGN_SYSTEM.md` forbids circles
- * and pills outright, and `rounded-full` on a 5px bar is a pill — the rule was
- * being broken at a size small enough that nobody looked twice.
+ * ── ONE OBJECT, NOT TWO STACKED ROWS ───────────────────────────────────────
+ *
+ * Progress and the key legend were two loose rows floating on the page ground.
+ * Both are chrome ABOUT the flow rather than part of it, and leaving them
+ * unhoused made them read as content that had lost its container — which on a
+ * screen where everything else is a card is precisely how a thing looks
+ * unfinished.
+ *
+ * Housed together they become one status bar, and the relationship is stated:
+ * position on the left, controls on the right, one hairline between them.
+ *
+ * ── SAME ANATOMY AS EVERY OTHER SURFACE HERE ───────────────────────────────
+ *
+ * Shell of page background carrying a plate, per
+ * `XENO CHROME - CONSTRUCTION PLAYBOOK.md` — the same construction as the
+ * suite, role and plan cards. A footer built to a different standard is the
+ * two-standards problem this flow has already had twice.
+ *
+ * `inline-flex` so the bar is only as wide as its contents. Stretched across
+ * the viewport it would read as a toolbar the flow is docked inside, which
+ * claims far more importance than "you are on step 2 of 4".
  */
-export const Progress: React.FC<{ step: number; total: number }> = ({ step, total }) => (
-  <div
-    className="flex items-center justify-center gap-[6px]"
-    role="progressbar"
-    aria-valuenow={step + 1} aria-valuemin={1} aria-valuemax={total}
-    aria-label={`Step ${step + 1} of ${total}`}
-  >
-    {Array.from({ length: total }).map((_, i) => (
-      <span
-        key={i}
-        className={cx(
-          'h-[5px] rounded-[2px] transition-all duration-500 ease-out',
-          i === step ? 'w-8 bg-white/85' : i < step ? 'w-[14px] bg-white/35' : 'w-[14px] bg-white/[0.12]',
-        )}
-      />
-    ))}
-  </div>
-);
-
-/**
- * The key legend, in the manner of a game's control hint.
- *
- * ── WHY IT IS SHOWN AT ALL ─────────────────────────────────────────────────
- *
- * Every keyboard affordance on this flow is invisible: arrows move a highlight,
- * Space selects, Enter continues. None of that is discoverable by looking, and
- * a keyboard route nobody knows about is not a keyboard route — which is why
- * the ⏎ glyph was on the button in the first place. This says the same thing
- * once, in the corner, for the whole flow rather than for one control.
- *
- * ── IT DESCRIBES THE CURRENT STEP, NOT THE FLOW ────────────────────────────
- *
- * Keys are passed in per step. A fixed legend would advertise Space on the
- * two form steps that have nothing to select, and "Enter to continue" on a
- * step whose Continue is disabled — a hint that lies is worse than none,
- * because the reader stops trusting the rest of it.
- */
-export const KeyLegend: React.FC<{ keys: Array<{ key: string; label: string }> }> = ({ keys }) => (
-  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-    {keys.map(({ key, label }) => (
-      <span key={label} className="flex items-center gap-1.5">
-        <kbd
-          className="grid h-[19px] min-w-[19px] place-items-center rounded-[3px] border border-white/[0.14]
-                     bg-white/[0.05] px-1.5 font-sans text-[10.5px] leading-none text-white/55"
+export const FlowControls: React.FC<{
+  step: number;
+  total: number;
+  keys: Array<{ key: string; label: string }>;
+}> = ({ step, total, keys }) => (
+  <div className="flex justify-center">
+    <div
+      className="inline-flex rounded-[10px] border border-white/[0.07] p-1.5"
+      style={{ background: '#08080a' }}
+    >
+      <div
+        className="flex items-center gap-3 rounded-[7px] px-3 py-2"
+        style={{ background: '#111111' }}
+      >
+        {/* Position. Rectangles with a 2px radius — DESIGN_SYSTEM forbids pills
+            and circles, and `rounded-full` on a 5px bar is a pill. */}
+        <div
+          className="flex items-center gap-[5px]"
+          role="progressbar"
+          aria-valuenow={step + 1} aria-valuemin={1} aria-valuemax={total}
+          aria-label={`Step ${step + 1} of ${total}`}
         >
-          {key}
-        </kbd>
-        <span className="text-[10.5px] text-white/25">{label}</span>
-      </span>
-    ))}
+          {Array.from({ length: total }).map((_, i) => (
+            <span
+              key={i}
+              className={cx(
+                'h-[5px] rounded-[2px] transition-all duration-500 ease-out',
+                i === step ? 'w-7 bg-white/80' : i < step ? 'w-[10px] bg-white/30' : 'w-[10px] bg-white/[0.10]',
+              )}
+            />
+          ))}
+        </div>
+
+        {keys.length > 0 && (
+          <>
+            {/* A hairline, not a gap. The two halves say different kinds of
+                thing — where you are, and what you can press — and a divider
+                is what stops the keys reading as a continuation of the bars. */}
+            <span aria-hidden className="h-4 w-px shrink-0 bg-white/[0.09]" />
+
+            <div className="flex items-center gap-3">
+              {keys.map(({ key, label }) => (
+                <span key={label} className="flex items-center gap-1.5">
+                  <kbd
+                    className="grid h-[18px] min-w-[18px] place-items-center rounded-[4px] border
+                               border-white/[0.10] px-1.5 font-sans text-[10px] leading-none text-white/60"
+                    style={{ background: '#1a1a1a' }}
+                  >
+                    {key}
+                  </kbd>
+                  <span className="text-[10.5px] leading-none text-white/30">{label}</span>
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   </div>
 );
-

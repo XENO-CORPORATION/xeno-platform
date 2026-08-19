@@ -11,7 +11,7 @@ import RoleCard from '../components/onboarding/RoleCard';
 import useRovingGrid from '../components/onboarding/useRovingGrid';
 import { recommendedWorkspace, parseRoles, serializeRoles } from '../lib/workspaceSuites';
 import {
-  StepHeading, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress, KeyLegend,
+  StepHeading, PlanCard, Field, Checkbox, PrimaryButton, TextButton, FlowControls,
   INPUT_CLS, cx,
 } from '../components/onboarding/OnboardingPieces';
 
@@ -665,15 +665,8 @@ const Onboarding: React.FC = () => {
         </div>
       </main>
 
-      <footer className="relative z-10 shrink-0 space-y-3 pb-8 pt-4">
-        {/* Legend above the progress, because it describes what you can do NOW
-            and the progress describes where you are — the actionable line sits
-            nearer the content it acts on. Reserves its height so the footer
-            does not jump between steps that have different key sets. */}
-        <div className="min-h-[19px]">
-          {stepKeys.length > 0 && <KeyLegend keys={stepKeys} />}
-        </div>
-        <Progress step={step} total={STEPS} />
+      <footer className="relative z-10 shrink-0 pb-8 pt-4">
+        <FlowControls step={step} total={STEPS} keys={stepKeys} />
       </footer>
     </div>
   );
