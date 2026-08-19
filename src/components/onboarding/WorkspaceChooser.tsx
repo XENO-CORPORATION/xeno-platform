@@ -6,6 +6,7 @@ import {
   parseWorkspace, serializeWorkspace, isEverything, isRecommended, type Suite,
 } from '../../lib/workspaceSuites';
 import SuiteVisual from './SuiteVisual';
+import useRovingGrid from './useRovingGrid';
 import EdgeParticles from './EdgeParticles';
 import { productIcon } from '../../lib/productIcons';
 import { isUnreleased } from '../../lib/releaseStatus';
@@ -126,6 +127,8 @@ export const WorkspaceChooser: React.FC<{
   const picked = parseWorkspace(value);
   const everything = isEverything(picked);
 
+  const suiteGrid = useRovingGrid(SUITES.length, (i) => toggleSuiteRef.current(SUITES[i].id));
+
   const [barHover, setBarHover] = useState(false);
   // The burst originates from this element's rect, so it needs a real handle.
   const barRef = useRef<HTMLButtonElement | null>(null);
@@ -214,6 +217,13 @@ export const WorkspaceChooser: React.FC<{
     }
   }, [phase, picked, reduced, onChange]);
 
+  /* The roving grid is created ABOVE toggleSuite (hooks cannot be conditional
+   * or reordered), so its callback reaches the handler through a ref. Capturing
+   * `toggleSuite` directly would freeze the first render's closure and the
+   * keyboard would toggle against a stale selection. */
+  const toggleSuiteRef = useRef(toggleSuite);
+  toggleSuiteRef.current = toggleSuite;
+
   /* -- The choice -------------------------------------------------------- */
   /* `framing` counts as framed so the checks are already scheduled while the
    * frame draws; `unframing` does NOT, so they unmount the instant a retract
@@ -277,7 +287,17 @@ export const WorkspaceChooser: React.FC<{
       {/* No per-card dimming any more — the full-viewport scrim above covers
           these along with everything else, and doing both would double the
           darkening on exactly the elements it is least needed on. */}
-      <div ref={gridRef} className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* `group`, not `radiogroup`: suites are independently selectable, so
+          each card is its own toggle rather than one-of-many. The keydown sits
+          on the container, so the handler exists once instead of on all four
+          children. */}
+      <div
+        ref={gridRef}
+        role="group"
+        aria-label="Workspaces"
+        onKeyDown={suiteGrid.onKeyDown}
+        className="relative z-10 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      >
         {SUITES.map((suite, i) => (
           <SuiteCard
             key={suite.id}
@@ -297,6 +317,8 @@ export const WorkspaceChooser: React.FC<{
             // yet, which reads as two animations rather than a consequence.
             checkDelay={framed ? FRAME_MS * 0.86 + i * 95 : 0}
             onSelect={() => toggleSuite(suite.id)}
+            {...suiteGrid.itemProps(i)}
+            {...suiteGrid.itemProps(i)}
           />
         ))}
       </div>
@@ -376,7 +398,7 @@ export const WorkspaceChooser: React.FC<{
 
 /* ── SuiteCard ───────────────────────────────────────────────────────────── */
 
-const SuiteCard: React.FC<{
+const SuiteCard = React.forwardRef<HTMLButtonElement, {
   suite: Suite;
   index: number;
   selected: boolean;
@@ -394,7 +416,9 @@ const SuiteCard: React.FC<{
    *  or it reads as lag. */
   checkDelay?: number;
   onSelect: () => void;
-}> = ({ suite, index, selected, connected, recommended, checkDelay = 0, onSelect }) => {
+  tabIndex?: number;
+  onFocus?: () => void;
+}>(({ suite, index, selected, connected, recommended, checkDelay = 0, onSelect, tabIndex, onFocus }, ref) => {
   const products = productsForSuite(suite);
 
   /* ── SHELL / PLATE ANATOMY ────────────────────────────────────────────────
@@ -418,8 +442,11 @@ const SuiteCard: React.FC<{
    * ───────────────────────────────────────────────────────────────────────── */
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onSelect}
+      tabIndex={tabIndex}
+      onFocus={onFocus}
       aria-pressed={selected}
       style={{
         background: '#08080a',
@@ -632,6 +659,8 @@ const SuiteCard: React.FC<{
       </span>
     </button>
   );
-};
+});
+
+SuiteCard.displayName = 'SuiteCard';
 
 export default WorkspaceChooser;

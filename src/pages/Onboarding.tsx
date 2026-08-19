@@ -8,6 +8,7 @@ import AuthMark from '../components/auth/AuthMark';
 import WorkspaceChooser from '../components/onboarding/WorkspaceChooser';
 import useStepTransition from '../components/onboarding/useStepTransition';
 import RoleCard from '../components/onboarding/RoleCard';
+import useRovingGrid from '../components/onboarding/useRovingGrid';
 import { recommendedWorkspace } from '../lib/workspaceSuites';
 import {
   StepHeading, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress,
@@ -349,6 +350,24 @@ const Onboarding: React.FC = () => {
     // silently acts on a stale answer.
   });
 
+  /** Choosing a role — from a click or from Enter on the roving grid. */
+  const chooseRole = (label: string) => {
+    /* Pre-select the workspace this role suggests, but only if nothing has been
+     * chosen yet. Overwriting would undo a deliberate choice every time
+     * somebody stepped Back and changed their role — the one moment they are
+     * most likely to have already picked. */
+    const next = {
+      ...answers,
+      role: label,
+      workspace: answers.workspace ?? recommendedWorkspace(label),
+    };
+    setAnswers(next);
+    save(next);
+    setStep(2);
+  };
+
+  const roleGrid = useRovingGrid(ROLES.length, (i) => chooseRole(ROLES[i].label));
+
   const skipAll = async () => {
     await save({ ...answers, skipped: true }, { wait: true });
     navigate('/overview', { replace: true });
@@ -479,7 +498,20 @@ const Onboarding: React.FC = () => {
                     carry a header and a body now, so at two columns eight of
                     them run past the fold — and a step that scrolls hides the
                     Back and Skip a user is most likely to want here. */}
-                <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                {/* One tab stop, arrows within. Without a roving tabindex,
+                    crossing this question costs eight Tab presses — a cost a
+                    keyboard user pays on every visit while a mouse user pays
+                    nothing.
+
+                    `radiogroup` because the options are mutually exclusive and
+                    exactly one can hold. The keydown sits on the container, so
+                    the handler exists once rather than on all eight children. */}
+                <div
+                  role="radiogroup"
+                  aria-label="Which one describes you best?"
+                  onKeyDown={roleGrid.onKeyDown}
+                  className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4"
+                >
                   {ROLES.map((r, i) => (
                     <RoleCard
                       key={r.label}
@@ -487,21 +519,8 @@ const Onboarding: React.FC = () => {
                       label={r.label}
                       selected={answers.role === r.label}
                       style={wave(i, 0.06, 0.045)}
-                      onClick={() => {
-                        /* Pre-select the workspace this role suggests — but
-                         * only if nothing has been chosen yet. Overwriting an
-                         * existing answer would undo a deliberate choice every
-                         * time somebody stepped Back and changed their role,
-                         * which is the one moment they are most likely to have
-                         * already picked. */
-                        const rec = recommendedWorkspace(r.label);
-                        const next = {
-                          ...answers,
-                          role: r.label,
-                          workspace: answers.workspace ?? rec,
-                        };
-                        setAnswers(next); save(next); setStep(2);
-                      }}
+                      onClick={() => chooseRole(r.label)}
+                      {...roleGrid.itemProps(i)}
                     />
                   ))}
                 </div>

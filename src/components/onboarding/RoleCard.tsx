@@ -48,17 +48,30 @@ function leadsTo(role: string): string {
   return name || 'You choose';
 }
 
-export const RoleCard: React.FC<{
+export const RoleCard = React.forwardRef<HTMLButtonElement, {
   label: string;
   icon: React.ReactNode;
   selected: boolean;
   onClick: () => void;
   style?: React.CSSProperties;
-}> = ({ label, icon, selected, onClick, style }) => (
+  tabIndex?: number;
+  onFocus?: () => void;
+}>(({ label, icon, selected, onClick, style, tabIndex, onFocus }, ref) => (
+  /* forwardRef so the roving-tabindex hook can focus this card. Without a real
+     DOM handle the hook can set tabIndex but never move focus, and arrow keys
+     would silently do nothing — the failure would look like the keys are not
+     bound at all. */
   <button
+    ref={ref}
     type="button"
     onClick={onClick}
-    aria-pressed={selected}
+    tabIndex={tabIndex}
+    onFocus={onFocus}
+    /* `radio`, not `aria-pressed`: these are mutually exclusive and exactly one
+       can hold, which is what a radio means. aria-pressed described eight
+       independent toggles and would have been read out that way. */
+    role="radio"
+    aria-checked={selected}
     style={{
       background: '#08080a',
       boxShadow: selected
@@ -115,6 +128,8 @@ export const RoleCard: React.FC<{
       </span>
     </span>
   </button>
-);
+));
+
+RoleCard.displayName = 'RoleCard';
 
 export default RoleCard;
