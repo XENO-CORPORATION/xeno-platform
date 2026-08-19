@@ -252,6 +252,46 @@ const Onboarding: React.FC = () => {
     navigate(to, { replace: true });
   };
 
+  /**
+   * Go BACK, clearing the answer of the step being returned to.
+   *
+   * ── WHY BACK INVALIDATES, RATHER THAN PRESERVING ──────────────────────────
+   *
+   * Pressing Back means "that answer was wrong", so landing on the step with
+   * the wrong answer still highlighted is the one thing it cannot do. Worse,
+   * it hid a real bug: the workspace is PRE-SELECTED from the role, and that
+   * pre-selection deliberately only applies when nothing is chosen yet — so
+   * going back and picking a DIFFERENT role kept the old recommendation. The
+   * flow silently stopped listening at the exact moment the user was changing
+   * their mind.
+   *
+   * Clearing the role therefore clears the workspace too. It is derived from
+   * the role; leaving it behind would leave a recommendation with nothing
+   * recommending it.
+   *
+   * ── SELECTIONS RESET, TYPED TEXT DOES NOT ────────────────────────────────
+   *
+   * Step 0 keeps its name and heard-from. Re-picking a tile costs one click;
+   * re-typing a name you already gave is a punishment for navigating, and the
+   * request was that a step not arrive with a stale SELECTION — which text
+   * fields do not have.
+   */
+  const back = (to: number) => {
+    // Computed OUTSIDE the state updater. React may invoke an updater twice
+    // (StrictMode does, deliberately), and a network call inside one is
+    // therefore a double POST — a side effect belongs in the event handler,
+    // never in the reducer.
+    const next = { ...answers };
+    if (to <= 1) { next.role = null; next.workspace = null; }
+    if (to <= 2) { next.workspace = null; }
+
+    setAnswers(next);
+    // Persisted so a cleared answer does not survive a reload — the route
+    // distinguishes an absent key from an explicit null for exactly this.
+    save(next);
+    setStep(to);
+  };
+
   const skipAll = async () => {
     await save({ ...answers, skipped: true }, { wait: true });
     navigate('/overview', { replace: true });
@@ -408,7 +448,7 @@ const Onboarding: React.FC = () => {
                   ))}
                 </div>
 
-                <Nav onBack={() => setStep(0)} onSkip={() => setStep(2)} />
+                <Nav onBack={() => back(0)} onSkip={() => setStep(2)} />
               </>
             )}
 
@@ -436,7 +476,7 @@ const Onboarding: React.FC = () => {
                 />
 
                 <Nav
-                  onBack={() => setStep(1)}
+                  onBack={() => back(1)}
                   onNext={() => setStep(3)}
                   onSkip={() => setStep(3)}
                   nextLabel="Continue"
@@ -497,7 +537,7 @@ const Onboarding: React.FC = () => {
                   </div>
                 )}
 
-                <Nav onBack={() => setStep(2)} onSkip={() => finish()} skipLabel="Skip for now" />
+                <Nav onBack={() => back(2)} onSkip={() => finish()} skipLabel="Skip for now" />
               </>
             )}
 
