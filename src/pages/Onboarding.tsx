@@ -9,7 +9,7 @@ import WorkspaceChooser from '../components/onboarding/WorkspaceChooser';
 import useStepTransition from '../components/onboarding/useStepTransition';
 import RoleCard from '../components/onboarding/RoleCard';
 import useRovingGrid from '../components/onboarding/useRovingGrid';
-import { recommendedWorkspace } from '../lib/workspaceSuites';
+import { recommendedWorkspace, parseRoles, serializeRoles } from '../lib/workspaceSuites';
 import {
   StepHeading, PlanCard, Field, Checkbox, PrimaryButton, TextButton, Progress, KeyLegend,
   INPUT_CLS, cx,
@@ -309,7 +309,7 @@ const Onboarding: React.FC = () => {
    */
   const primaryAction = (): (() => void) | null => {
     if (step === 0) return () => { save(answers); setStep(1); };
-    if (step === 1) return answers.role ? () => setStep(2) : null;
+    if (step === 1) return parseRoles(answers.role).length ? () => setStep(2) : null;
     if (step === 2) return answers.workspace ? () => setStep(3) : null;
     return null;
   };
@@ -317,6 +317,19 @@ const Onboarding: React.FC = () => {
   /* Enter advances. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      /* Esc goes back a step.
+       *
+       * Paired with Enter deliberately: forward and back on the two keys every
+       * dialog in every OS already uses, so the flow needs no learning. It goes
+       * through the same `back()` as the button, which also clears the step it
+       * returns to — a shortcut that skipped that would leave a stale answer
+       * highlighted only when you used the keyboard. */
+      if (e.key === 'Escape') {
+        if (step === 0) return; // nothing behind the first step
+        e.preventDefault();
+        back(step - 1);
+        return;
+      }
       if (e.key !== 'Enter') return;
       // Plain Enter only. Ctrl/Cmd+Enter is a submit-everything convention
       // elsewhere and Shift+Enter is a newline; neither should mean "next".
@@ -351,25 +364,25 @@ const Onboarding: React.FC = () => {
     // silently acts on a stale answer.
   });
 
-  /** Choosing a role — from a click or from Enter on the roving grid. */
+  /** Toggle a role. Multi-select: people are more than one thing. */
   const chooseRole = (label: string) => {
-    /* Pre-select the workspace this role suggests, but only if nothing has been
-     * chosen yet. Overwriting would undo a deliberate choice every time
-     * somebody stepped Back and changed their role — the one moment they are
-     * most likely to have already picked. */
-    const next = {
-      ...answers,
-      role: label,
-      workspace: answers.workspace ?? recommendedWorkspace(label),
-    };
+    const current = parseRoles(answers.role);
+    const nextRoles = current.includes(label)
+      ? current.filter((r) => r !== label)
+      : [...current, label];
+    const role = serializeRoles(nextRoles);
+
+    /* The recommendation is RE-DERIVED on every change, not applied once.
+     *
+     * With one role, applying it only when the workspace was empty was right —
+     * it protected a deliberate choice. With several, that same guard freezes
+     * the recommendation at whatever the FIRST role suggested, so adding
+     * "Developer" to "Designer" would silently not widen it. Re-deriving keeps
+     * the suggestion honest; the workspace step is where it can be overridden,
+     * and stepping Back clears it anyway. */
+    const next = { ...answers, role, workspace: recommendedWorkspace(role) };
     setAnswers(next);
     save(next);
-    /* Deliberately does NOT advance.
-     *
-     * It used to, which made choosing and continuing the same act — fine for a
-     * mouse, impossible for a keyboard: with Space and Enter both selecting,
-     * there was no key left to move forward, and no chance to change your mind
-     * before the step vanished. */
   };
 
   const roleGrid = useRovingGrid(
@@ -378,10 +391,6 @@ const Onboarding: React.FC = () => {
     () => primaryAction()?.(),
   );
 
-  const skipAll = async () => {
-    await save({ ...answers, skipped: true }, { wait: true });
-    navigate('/overview', { replace: true });
-  };
 
   const subscriptions = useMemo(
     () => (billing?.catalog || []).filter((i) => i.kind === 'subscription' && i.plan !== 'internal'),
@@ -403,6 +412,8 @@ const Onboarding: React.FC = () => {
     return [
       ...(grid ? [{ key: '←→', label: 'Move' }, { key: 'Space', label: 'Select' }] : []),
       ...(canContinue ? [{ key: 'Enter', label: 'Continue' }] : []),
+      // Nothing is behind the first step, so Esc is not offered there.
+      ...(step > 0 ? [{ key: 'Esc', label: 'Back' }] : []),
     ];
   })();
 
@@ -502,11 +513,7 @@ const Onboarding: React.FC = () => {
                   </label>
                 </div>
 
-                <Nav
-                  onNext={() => primaryAction()?.()}
-                  onSkip={skipAll}
-                  nextLabel="Continue"
-                />
+                <Nav onNext={() => primaryAction()?.()} nextLabel="Continue" />
               </>
             )}
 
@@ -515,7 +522,7 @@ const Onboarding: React.FC = () => {
               <>
                 <StepHeading
                   title={answers.displayName ? `Nice to meet you, ${answers.displayName}` : 'A bit about you'}
-                  sub="Which one describes you best?"
+                  sub="Pick as many as apply — it decides what we set up for you."
                 />
 
                 {/* Four across on a wide screen, two on a laptop. The cards
@@ -531,8 +538,8 @@ const Onboarding: React.FC = () => {
                     exactly one can hold. The keydown sits on the container, so
                     the handler exists once rather than on all eight children. */}
                 <div
-                  role="radiogroup"
-                  aria-label="Which one describes you best?"
+                  role="group"
+                  aria-label="Which of these describe you?"
                   {...roleGrid.containerProps}
                   className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4"
                 >
@@ -541,7 +548,7 @@ const Onboarding: React.FC = () => {
                       key={r.label}
                       icon={r.icon}
                       label={r.label}
-                      selected={answers.role === r.label}
+                      selected={parseRoles(answers.role).includes(r.label)}
                       style={wave(i, 0.06, 0.045)}
                       onClick={() => chooseRole(r.label)}
                       {...roleGrid.itemProps(i)}
@@ -552,9 +559,8 @@ const Onboarding: React.FC = () => {
                 <Nav
                   onBack={() => back(0)}
                   onNext={() => primaryAction()?.()}
-                  onSkip={() => setStep(2)}
                   nextLabel="Continue"
-                  nextDisabled={!answers.role}
+                  nextDisabled={parseRoles(answers.role).length === 0}
                 />
               </>
             )}
@@ -586,7 +592,6 @@ const Onboarding: React.FC = () => {
                 <Nav
                   onBack={() => back(1)}
                   onNext={() => primaryAction()?.()}
-                  onSkip={() => setStep(3)}
                   nextLabel="Continue"
                   nextDisabled={!answers.workspace}
                   hidden={everythingHover}
@@ -645,7 +650,14 @@ const Onboarding: React.FC = () => {
                   </div>
                 )}
 
-                <Nav onBack={() => back(2)} onSkip={() => finish()} skipLabel="Skip for now" />
+                {/* No Skip here either — but the flow still has to END somewhere.
+                    Continue leads into the workspace WITHOUT a plan, and that
+                    is not a hole in the paywall: the gate is server-side on
+                    `canUse`, so an unpaid account can look and cannot run.
+                    Trapping people on this screen would strand every single
+                    one of them today, because no plan is purchasable until
+                    Stripe is configured. */}
+                <Nav onBack={() => back(2)} onNext={() => finish()} nextLabel="Continue" />
               </>
             )}
 
@@ -681,11 +693,11 @@ const Onboarding: React.FC = () => {
  * dark pattern in reverse.
  */
 const Nav: React.FC<{
-  onBack?: () => void; onNext?: () => void; onSkip?: () => void;
-  nextLabel?: string; skipLabel?: string; nextDisabled?: boolean;
+  onBack?: () => void; onNext?: () => void;
+  nextLabel?: string; nextDisabled?: boolean;
   /** Drops the whole row away — used while the everything-bar is hovered. */
   hidden?: boolean;
-}> = ({ onBack, onNext, onSkip, nextLabel, skipLabel, nextDisabled, hidden }) => (
+}> = ({ onBack, onNext, nextLabel, nextDisabled, hidden }) => (
   /* Falls DOWN and out rather than fading. A row that merely fades is still
      occupying its space and still reads as present-but-greyed; falling out of
      the frame reads as making way. `pointer-events-none` while gone, so a
@@ -696,8 +708,6 @@ const Nav: React.FC<{
                 ${hidden ? 'pointer-events-none translate-y-3 opacity-0' : 'translate-y-0 opacity-100'}`}
   >
     {onBack && <TextButton onClick={onBack}>Back</TextButton>}
-    {onSkip && <TextButton onClick={onSkip}>{skipLabel || 'Skip'}</TextButton>}
-
     {/* Pushes the primary action to the far edge whether or not the left-hand
         links are present — `justify-between` would collapse it to the left on
         a step that has neither. */}

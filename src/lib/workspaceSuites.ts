@@ -247,21 +247,66 @@ const ROLE_WORKSPACE: Record<string, string | null> = {
   Other: null,
 };
 
-/** The workspace value to pre-select for a role, or null if none fits. */
-export function recommendedWorkspace(role: string | null | undefined): string | null {
-  if (!role) return null;
-  const rec = ROLE_WORKSPACE[role];
-  if (!rec) return null;
-  // Guard against a suite id that no longer exists — a renamed suite would
-  // otherwise pre-select nothing while still claiming a recommendation.
-  if (rec !== EVERYTHING_ID && !SUITES.some((s) => s.id === rec)) return null;
-  return rec;
+/* ── ROLES ARE A SET TOO ─────────────────────────────────────────────────────
+ *
+ * People are more than one thing — a designer who also markets, an agency that
+ * does both. Forcing one answer makes the recommendation that follows narrower
+ * than the person it is for.
+ *
+ * Serialised the same way workspaces are: comma-joined, canonical order,
+ * unknown values dropped. Order comes from ROLE_WORKSPACE's key order, so the
+ * stored string is stable regardless of the sequence they were clicked in —
+ * two users who picked the same roles store the same value, which is what
+ * makes the field aggregatable.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+const ROLE_ORDER = Object.keys(ROLE_WORKSPACE);
+
+/** Stored value → the roles it means. */
+export function parseRoles(value: string | null | undefined): string[] {
+  if (!value) return [];
+  const known = new Set(ROLE_ORDER);
+  return value.split(',').map((v) => v.trim()).filter((v) => known.has(v));
 }
 
-/** Is this suite the one recommended for the role? Used to badge the card. */
-export function isRecommended(suiteId: string, role: string | null | undefined): boolean {
-  const rec = recommendedWorkspace(role);
+/** Roles → the value to store, in canonical order. */
+export function serializeRoles(roles: string[]): string | null {
+  const picked = ROLE_ORDER.filter((r) => roles.includes(r));
+  return picked.length ? picked.join(',') : null;
+}
+
+/**
+ * The workspace value to pre-select for the roles chosen.
+ *
+ * The UNION of what each role suggests, because someone who is both a designer
+ * and a developer wants both workspaces — recommending only the first would
+ * quietly discard half of what they just told us.
+ *
+ * Roles that map to nothing contribute nothing rather than blocking: picking
+ * "Other" alongside "Designer" should still recommend Creative.
+ */
+export function recommendedWorkspace(value: string | null | undefined): string | null {
+  const roles = parseRoles(value);
+  if (roles.length === 0) return null;
+
+  const ids: string[] = [];
+  for (const role of roles) {
+    const rec = ROLE_WORKSPACE[role];
+    if (!rec) continue;
+    // One role asking for everything settles it — there is nothing to add.
+    if (rec === EVERYTHING_ID) return EVERYTHING_ID;
+    // Guard against a suite id that no longer exists: a renamed suite would
+    // otherwise pre-select nothing while still claiming a recommendation.
+    if (SUITES.some((s) => s.id === rec) && !ids.includes(rec)) ids.push(rec);
+  }
+  return serializeWorkspace(ids);
+}
+
+/** Is this suite among the ones recommended? Used to badge the card. */
+export function isRecommended(suiteId: string, value: string | null | undefined): boolean {
+  const rec = recommendedWorkspace(value);
   // `everything` is not a card, so it badges nothing — the bar is its own
   // affordance and does not need a marker pointing at it.
-  return rec !== null && rec !== EVERYTHING_ID && rec === suiteId;
+  if (rec === null || rec === EVERYTHING_ID) return false;
+  return parseWorkspace(rec).includes(suiteId);
 }

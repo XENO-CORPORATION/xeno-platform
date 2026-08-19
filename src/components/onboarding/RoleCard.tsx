@@ -38,7 +38,11 @@ const ROLE_BLURB: Record<string, string> = {
   Other: 'Something else entirely',
 };
 
-/** The line under the blurb: where this role will be pointed next. */
+/** The line under the blurb: where this role points on its own.
+ *
+ *  Per-CARD, so it describes THAT role rather than the current selection —
+ *  the card has to say the same thing whether or not anything else is picked,
+ *  or the grid would rewrite itself under the reader as they choose. */
 function leadsTo(role: string): string {
   const rec = recommendedWorkspace(role);
   if (rec === EVERYTHING_ID) return 'Everything';
@@ -67,11 +71,11 @@ export const RoleCard = React.forwardRef<HTMLButtonElement, {
     onClick={onClick}
     tabIndex={tabIndex}
     onFocus={onFocus}
-    /* `radio`, not `aria-pressed`: these are mutually exclusive and exactly one
-       can hold, which is what a radio means. aria-pressed described eight
-       independent toggles and would have been read out that way. */
-    role="radio"
-    aria-checked={selected}
+    /* `aria-pressed`, not `radio`. Roles are multi-select — people are more
+       than one thing, and a designer who also markets should be able to say
+       so. A radio would announce "one of eight" and a screen reader user would
+       stop after the first. */
+    aria-pressed={selected}
     style={{
       background: '#08080a',
       boxShadow: selected

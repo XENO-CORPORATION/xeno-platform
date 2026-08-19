@@ -2555,7 +2555,13 @@ router.post('/onboarding', async (req, res) => {
 
     const displayName = str(b.displayName, 120);
     const heardFrom = str(b.heardFrom, 200);
-    const role = str(b.role, 60);
+    /* 60 was the cap when `role` held ONE answer. It is now a comma-joined
+     * set, and all eight roles serialise to 81 characters — so the old cap
+     * silently truncated the answer mid-word and stored a value that parses
+     * back to fewer roles than the user chose. Sized with headroom against the
+     * real maximum rather than to it, so adding a role does not reintroduce
+     * the same silent loss. */
+    const role = str(b.role, 200);
     const startingPoint = str(b.startingPoint, 60);
     const workspace = str(b.workspace, 40);
 

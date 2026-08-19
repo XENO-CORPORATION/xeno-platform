@@ -48,6 +48,26 @@ test('Enter is ignored while an interactive element has focus', () => {
   assert.match(src, /isContentEditable/, 'Enter does not exempt contenteditable');
 });
 
+test('Esc goes back, through the same path as the button', () => {
+  // Forward and back on the two keys every OS dialog already uses, so the flow
+  // needs no learning.
+  assert.match(src, /e\.key === 'Escape'/, 'Esc is not handled');
+  assert.match(
+    src, /back\(step - 1\)/,
+    'Esc does not go through back() — a shortcut that skipped it would leave the ' +
+    'returned-to step showing a stale answer, but only for keyboard users',
+  );
+  assert.match(src, /if \(step === 0\) return;/, 'Esc is offered on the first step, where there is nothing behind it');
+});
+
+test('the flow has no Skip left', () => {
+  // Removed by request. Every step now ends in Continue, and the plan step's
+  // Continue leads onward WITHOUT a plan — the paywall is server-side, and
+  // trapping people here would strand all of them while Stripe is unconfigured.
+  assert.ok(!src.includes('onSkip'), 'a Skip control is back');
+  assert.ok(!src.includes('skipAll'), 'skipAll survived as dead code');
+});
+
 test('only PLAIN Enter advances', () => {
   // Ctrl/Cmd+Enter is submit-everything elsewhere and Shift+Enter is a newline.
   for (const mod of ['ctrlKey', 'metaKey', 'altKey', 'shiftKey']) {

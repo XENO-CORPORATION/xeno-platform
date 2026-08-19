@@ -141,11 +141,23 @@ test('the key handler sits where it can see the bar', () => {
 });
 
 test('both grids use it, and are labelled for a screen reader', () => {
-  assert.match(page, /role="radiogroup"/, 'the role grid is not a radiogroup');
+  /* `group`, NOT `radiogroup`.
+   *
+   * Roles became multi-select — people are more than one thing. A radiogroup
+   * announces "one of eight" and a screen-reader user would stop after the
+   * first, having been told the rest are alternatives. The items must carry
+   * aria-pressed to match. */
+  assert.match(page, /role="group"/, 'the role grid is not a group');
+  assert.doesNotMatch(page, /role="radiogroup"/, 'the role grid still claims one-of-many');
   assert.match(page, /roleGrid\.containerProps/, 'the role grid is not wired to the hook');
   // Suites are independently selectable, so `group` — not radiogroup.
   assert.match(chooser, /role="group"/, 'the suite grid has no group role');
   assert.match(chooser, /suiteGrid\.containerProps/, 'the suite grid is not wired to the hook');
   assert.match(chooser, /ref=\{gridRef\}/, 'the grid lost the particle-clip rect');
   for (const src of [page, chooser]) assert.match(src, /aria-label="/, 'a grid has no accessible name');
+
+  // Both grids are multi-select, so both must announce their items as toggles.
+  const role = readFileSync('src/components/onboarding/RoleCard.tsx', 'utf8');
+  assert.match(role, /aria-pressed=\{selected\}/, 'role cards do not announce as toggles');
+  assert.doesNotMatch(role, /role="radio"/, 'role cards still claim one-of-many');
 });
