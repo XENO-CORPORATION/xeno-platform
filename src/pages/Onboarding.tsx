@@ -9,7 +9,10 @@ import WorkspaceChooser from '../components/onboarding/WorkspaceChooser';
 import useStepTransition from '../components/onboarding/useStepTransition';
 import RoleCard from '../components/onboarding/RoleCard';
 import useRovingGrid from '../components/onboarding/useRovingGrid';
-import { recommendedWorkspace, parseRoles, serializeRoles } from '../lib/workspaceSuites';
+import {
+  recommendedWorkspace, parseRoles, serializeRoles,
+  SUITES, parseWorkspace, isEverything,
+} from '../lib/workspaceSuites';
 import {
   StepHeading, PlanCard, Field, Checkbox, PrimaryButton, TextButton, FlowControls,
   INPUT_CLS, cx,
@@ -139,6 +142,23 @@ function featuresFor(e?: Entitlements, baseline?: { label: string; entitlements?
   return [`Everything in ${baseline.label}`, ...added].slice(0, 6);
 }
 
+/**
+ * What a cheaper tier does NOT grant, relative to a better one.
+ *
+ * Derived by subtraction from the same entitlement table `requireEntitlement`
+ * reads, never written by hand. The day free gains a small generation
+ * allowance, this list loses that line by itself — where a typed one would
+ * keep selling against a product we had stopped shipping.
+ *
+ * Capped, and capped at the TOP: these are ordered with the things people
+ * actually decide on first, so a truncated list keeps the strongest argument.
+ */
+function lockedFor(mine?: Entitlements, better?: Entitlements): string[] {
+  if (!better) return [];
+  const have = new Set(allFeatures(mine));
+  return allFeatures(better).filter((f) => !have.has(f)).slice(0, 6);
+}
+
 /** Money in the server's currency. Intl rather than a '$' template: the anchor
  *  price is set in EUR, and a hardcoded dollar sign in front of a euro amount
  *  is an error customers find before we do. */
@@ -169,7 +189,13 @@ const Onboarding: React.FC = () => {
   const [answers, setAnswers] = useState<Answers>({
     workspace: null, displayName: '', heardFrom: '', role: null, marketingOptIn: true,
   });
-  const [billing, setBilling] = useState<{ enabled: boolean; currency: string; catalog: CatalogItem[] } | null>(null);
+  const [billing, setBilling] = useState<{
+    enabled: boolean; currency: string; catalog: CatalogItem[];
+    /* The free tier, served from the same entitlement table the gate reads.
+     * The pricing step argues from the DIFFERENCE between free and paid, and a
+     * difference needs both sides — see the note on getConfig(). */
+    freePlan?: { plan: string; label: string; price: number; entitlements?: Entitlements };
+  } | null>(null);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
   /* Raised by the workspace step's everything-bar. The nav drops away while it
    * is hovered, so the bar has the screen to itself for the moment somebody is
@@ -208,7 +234,10 @@ const Onboarding: React.FC = () => {
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled && d?.success) {
-          setBilling({ enabled: Boolean(d.enabled), currency: d.currency || 'usd', catalog: d.catalog || [] });
+          setBilling({
+            enabled: Boolean(d.enabled), currency: d.currency || 'usd',
+            catalog: d.catalog || [], freePlan: d.freePlan,
+          });
         }
       })
       .catch(() => undefined);
@@ -409,6 +438,35 @@ const Onboarding: React.FC = () => {
     () => (billing?.catalog || []).filter((i) => i.kind === 'subscription' && i.plan !== 'internal'),
     [billing],
   );
+
+  /* The tier free is measured against: the CHEAPEST sellable one.
+   *
+   * Not `plan === 'pro'`. What a free user is deciding is whether to pay at
+   * all, so the honest comparison is against the least they could pay — and
+   * naming a plan here would quietly become wrong the day the ladder gains a
+   * rung below it, in a list whose whole job is to be accurate about what is
+   * withheld. Pro still carries the visual emphasis; that is a separate
+   * decision, and it is allowed to be an opinion. */
+  const anchor = useMemo(
+    () => [...subscriptions].sort((a, b) => a.price - b.price)[0],
+    [subscriptions],
+  );
+
+  /* What they chose, said back to them.
+   *
+   * The pitch lands harder against something concrete: someone who picked
+   * Creative and Office should read those words, not "your workspace". It is
+   * also the only thing connecting this step to the one before it — without
+   * it the flow asks three questions and then changes the subject to money. */
+  const workspaceSummary = useMemo(() => {
+    const picked = parseWorkspace(answers.workspace);
+    if (!picked.length) return '';
+    if (isEverything(picked)) return 'The full XENO workspace';
+    const names = SUITES.filter((s) => picked.includes(s.id)).map((s) => s.name);
+    if (!names.length) return '';
+    if (names.length === 1) return `Your ${names[0]} workspace`;
+    return `Your ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} workspace`;
+  }, [answers.workspace]);
 
   /* Recommendations follow the WORKSPACE they chose. That is a far stronger
    * signal than a category multi-select, and it is the choice they actually
@@ -617,18 +675,57 @@ const Onboarding: React.FC = () => {
             {t.rendered === 3 && (
               <>
                 <StepHeading
-                  title="Do more with XENO"
-                  sub="Browsing stays free. Generation, agents and cloud projects need a plan."
+                  title="Everything&rsquo;s ready. Choose how you run it."
+                  /* Names what they picked, then draws the one line that
+                     matters: the apps genuinely open on free, and the compute
+                     is what costs. Both halves are true, which is why it can be
+                     said this plainly - `requireEntitlement('canUse')` gates
+                     the spending routes and nothing else. */
+                  sub={workspaceSummary
+                    ? `${workspaceSummary} installs and opens for free. Running it — generation, agents, cloud projects — is what a plan is for.`
+                    : 'Browsing stays free. Generation, agents and cloud projects need a plan.'}
                 />
 
                 {subscriptions.length > 0 ? (
-                  <div className="grid gap-3.5 sm:grid-cols-2">
+                  /* THREE tiers, side by side, free included.
+                   *
+                   * Free was not on this screen before, and its absence was the
+                   * whole problem: "Pro, €24" sitting alone answers "how much"
+                   * and never answers "instead of what". The decision being made
+                   * here is not which paid plan — it is whether to pay at all,
+                   * and that comparison cannot be drawn with one side missing.
+                   *
+                   * It is also the honest way to show `canUse: false`. Free is
+                   * not a crippled trial we are hiding; it is a real tier that
+                   * genuinely opens every app, and the one thing it will not do
+                   * is spend compute. Said plainly it is a fair offer. Left off
+                   * the page it looks like something being concealed. */
+                  <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                    {billing?.freePlan && (
+                      <PlanCard
+                        key="free"
+                        label={billing.freePlan.label}
+                        price={formatPrice(billing.freePlan.price, billing.currency)}
+                        interval=""
+                        note="No card, no expiry."
+                        /* Free grants nothing in the entitlement table, so this
+                           is empty by design and the card is carried entirely by
+                           its locked list. Derived rather than assumed: give free
+                           an allowance tomorrow and the line appears by itself. */
+                        features={featuresFor(billing.freePlan.entitlements)}
+                        locked={lockedFor(billing.freePlan.entitlements, anchor?.entitlements)}
+                        current
+                        style={wave(0, 0.10, 0.07)}
+                      />
+                    )}
+
                     {subscriptions.map((item, i) => (
                       <PlanCard
                         key={item.id}
                         label={item.label}
                         price={formatPrice(item.price, billing?.currency)}
-                        interval={`${item.interval || 'month'}${item.perSeat ? ' · seat' : ''}`}
+                        interval={item.interval || 'month'}
+                        note={item.perSeat ? 'Per seat, billed monthly.' : 'Billed monthly. Cancel any time.'}
                         // Compare against the cheapest OTHER subscription, so
                         // the rollup names a real plan rather than a hardcoded
                         // one — reordering or renaming the catalog cannot make
@@ -646,7 +743,7 @@ const Onboarding: React.FC = () => {
                         available={Boolean(item.available)}
                         busy={checkingOut === item.id}
                         onSelect={() => startCheckout(item.id)}
-                        style={wave(i, 0.10, 0.07)}
+                        style={wave(i + 1, 0.10, 0.07)}
                       />
                     ))}
                   </div>

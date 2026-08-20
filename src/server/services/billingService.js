@@ -124,7 +124,23 @@ export async function getPublicCatalog() {
 }
 
 export async function getConfig() {
-  return { enabled: isEnabled(), publishableKey: PUBLISHABLE, currency: CURRENCY, catalog: await getPublicCatalog() };
+  return {
+    enabled: isEnabled(), publishableKey: PUBLISHABLE, currency: CURRENCY,
+    catalog: await getPublicCatalog(),
+    /* The FREE tier, shipped alongside the sellable ones.
+     *
+     * It is not in the CATALOG and must not be — nothing about it is
+     * purchasable. But the pricing step's whole argument is the DIFFERENCE
+     * between free and paid, and a difference needs both sides. Without this
+     * the client would have to hand-write what free withholds, which is
+     * exactly the drift `entitlements` on the catalog items exists to stop:
+     * the day someone grants free a small generation allowance, a hand-typed
+     * "no generation" line keeps selling against a product we no longer ship.
+     *
+     * Same table `requireEntitlement` reads, so the card and the gate cannot
+     * disagree in either direction. */
+    freePlan: { plan: 'free', label: 'Free', price: 0, entitlements: entitlementsFor('free') },
+  };
 }
 
 // ── Plans & entitlements (v2) ────────────────────────────────────────────────

@@ -42,3 +42,9 @@ export function Step({ cards = 4, canContinue = true, step = 1 }) {
     </div>
   );
 }
+
+/* The pricing card, for the real-DOM half of scripts/pricing.test.mjs. */
+import { PlanCard } from '../../src/components/onboarding/OnboardingPieces';
+export function Tier(props: React.ComponentProps<typeof PlanCard>) {
+  return <PlanCard {...props} />;
+}

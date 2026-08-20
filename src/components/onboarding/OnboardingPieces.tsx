@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check } from 'lucide-react';
+import { Check, Lock } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Onboarding building blocks.
@@ -69,22 +69,33 @@ export const PlanCard: React.FC<{
   price: string;
   interval: string;
   features: string[];
+  /** What this tier does NOT grant. Free's whole argument lives here. */
+  locked?: string[];
+  /** Small line under the price — "per seat", "you are on this now". */
+  note?: string;
   badge?: string;
   highlighted?: boolean;
-  available: boolean;
+  /** The plan the account already has. Shows its state instead of a button. */
+  current?: boolean;
+  available?: boolean;
   busy?: boolean;
-  onSelect: () => void;
+  onSelect?: () => void;
   style?: React.CSSProperties;
-}> = ({ label, price, interval, features, badge, highlighted, available, busy, onSelect, style }) => (
-  /* Shell + plates, same anatomy as the suite cards and per
-     `XENO CHROME - CONSTRUCTION PLAYBOOK.md`: the shell carries page
-     background and the plates float on it with a 2px gap. Header LIGHTER than
-     body is deliberate — it is what makes the body read as a recessed well. */
+}> = ({
+  label, price, interval, features, locked = [], note, badge,
+  highlighted, current, available, busy, onSelect, style,
+}) => (
+  /* Shell + THREE plates, per `XENO CHROME - CONSTRUCTION PLAYBOOK.md`: the
+     shell carries page background and the plates float on it with 2px gaps.
+     Header LIGHTER than body is what makes the body read as a recessed well,
+     and the action gets its own plate rather than sitting loose at the bottom
+     of the body — a footer plate is what stops the card reading as a flat box
+     with a button drawn on it. */
   <div
     style={{
       background: '#08080a',
       boxShadow: highlighted
-        ? '0 20px 48px -18px rgba(0,0,0,0.95)'
+        ? '0 24px 56px -18px rgba(0,0,0,0.95)'
         : '0 10px 30px -16px rgba(0,0,0,0.85)',
       ...style,
     }}
@@ -101,52 +112,98 @@ export const PlanCard: React.FC<{
       </span>
     )}
 
-    {/* ── Header plate ── */}
+    {/* ── Header plate — the name and the number being decided on ── */}
     <div
-      className="flex shrink-0 items-baseline justify-between gap-2 rounded-t-[8px] px-4 py-3"
+      className="flex shrink-0 flex-col gap-1.5 rounded-t-[8px] px-4 py-3.5"
       style={{ background: highlighted ? '#242424' : '#1a1a1a' }}
     >
-      <span className={cx('text-[14.5px] font-semibold', highlighted ? 'text-white' : 'text-white/85')}>
+      <span className={cx('text-[13px] font-semibold uppercase tracking-[0.10em]',
+                          highlighted ? 'text-white/90' : 'text-white/45')}>
         {label}
       </span>
-      <span className="flex items-baseline gap-1">
-        <span className="text-[22px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-white">
+      <span className="flex items-baseline gap-1.5">
+        <span className={cx('text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums',
+                            highlighted ? 'text-white' : 'text-white/80')}>
           {price}
         </span>
-        <span className="text-[11.5px] text-white/35">/{interval}</span>
+        {interval && <span className="text-[12px] text-white/35">/{interval}</span>}
       </span>
+      {/* Reserved whether or not it is filled, so three cards in a row keep
+          their plate heights aligned — a header that grows on one card alone
+          drags its body out of line with the others. */}
+      <span className="min-h-[15px] text-[11.5px] leading-tight text-white/35">{note}</span>
     </div>
 
-    {/* ── Body plate ── */}
+    {/* ── Body plate — what you get, then what you do not ── */}
     <div className="flex flex-1 flex-col rounded-b-[8px] px-4 py-4" style={{ background: '#111111' }}>
-      <ul className="flex-1 space-y-2.5">
-        {features.map((f) => (
-          <li key={f} className="flex items-start gap-2.5">
-            <Check className="mt-[3px] h-[13px] w-[13px] shrink-0 text-white/55" strokeWidth={2.5} />
-            <span className="text-[12.5px] leading-snug text-white/60">{f}</span>
-          </li>
-        ))}
-      </ul>
+      {features.length > 0 && (
+        <ul className="space-y-2.5">
+          {features.map((f) => (
+            <li key={f} className="flex items-start gap-2.5">
+              <Check className="mt-[3px] h-[13px] w-[13px] shrink-0 text-white/55" strokeWidth={2.5} />
+              <span className="text-[12.5px] leading-snug text-white/60">{f}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
-      <button
-        type="button"
-        // The plan step is a card step like the others, so its action joins the
-        // same arrow navigation. Same reason `focus-self` is gone: this paints
-        // hover, never focus.
-        data-roving="action"
-        disabled={!available || busy}
-        onClick={onSelect}
-        className={cx(
-          'mt-5 w-full rounded-[8px] px-4 py-2.5 text-[13.5px] font-semibold',
-          'transition-all duration-200 active:scale-[0.99]',
-          'disabled:cursor-not-allowed disabled:opacity-25',
-          highlighted
-            ? 'bg-white text-black hover:bg-white/90'
-            : 'border border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/[0.06]',
-        )}
-      >
-        {busy ? 'Opening checkout…' : available ? 'Select plan' : 'Not yet available'}
-      </button>
+      {locked.length > 0 && (
+        /* THE reason this step exists.
+         *
+         * A pricing card normally lists only what a tier grants, and for a
+         * paid tier that is right. For the tier somebody is already on, it
+         * says nothing at all — free's granted list is genuinely empty, so a
+         * grants-only card would be a blank box next to two full ones, which
+         * reads as "free is fine" rather than "free cannot run anything".
+         *
+         * Shown dimmed with a lock rather than struck through: struck text
+         * reads as something taken away, and nothing has been taken away —
+         * it was never included. */
+        <>
+          {features.length > 0 && <div className="my-3.5 h-px bg-white/[0.06]" />}
+          <p className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-white/25">
+            Locked on this plan
+          </p>
+          <ul className="space-y-2.5">
+            {locked.map((f) => (
+              <li key={f} className="flex items-start gap-2.5">
+                <Lock className="mt-[2px] h-[12px] w-[12px] shrink-0 text-white/20" strokeWidth={2.2} />
+                <span className="text-[12.5px] leading-snug text-white/28">{f}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+
+    {/* ── Footer plate — the action, or the state ── */}
+    <div className="shrink-0 rounded-b-[8px] p-1.5" style={{ background: '#141414' }}>
+      {current ? (
+        /* No button. "Stay on Free" would be a second control doing exactly
+           what Continue already does, two tab stops apart — and a button is a
+           promise that something happens. Nothing happens: this is the plan
+           the account is already on. */
+        <p className="py-2 text-center text-[12px] font-medium text-white/40">
+          Your plan right now
+        </p>
+      ) : (
+        <button
+          type="button"
+          data-roving="action"
+          disabled={!available || busy}
+          onClick={onSelect}
+          className={cx(
+            'w-full rounded-[7px] px-4 py-2.5 text-[13.5px] font-semibold',
+            'transition-all duration-200 active:scale-[0.99]',
+            'disabled:cursor-not-allowed disabled:opacity-25',
+            highlighted
+              ? 'bg-white text-black hover:bg-white/90'
+              : 'border border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/[0.06]',
+          )}
+        >
+          {busy ? 'Opening checkout…' : available ? `Choose ${label}` : 'Not yet available'}
+        </button>
+      )}
     </div>
   </div>
 );
