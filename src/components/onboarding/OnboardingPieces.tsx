@@ -71,8 +71,10 @@ export const PlanCard: React.FC<{
   features: string[];
   /** What this tier does NOT grant. Free's whole argument lives here. */
   locked?: string[];
-  /** Small line under the price — "per seat", "you are on this now". */
+  /** Small line under the price — "per seat", "billed monthly". */
   note?: string;
+  /** The measured app count in the workspace they chose, and what happens to it. */
+  unlock?: { count: number; verdict: string };
   badge?: string;
   highlighted?: boolean;
   /** The plan the account already has. Shows its state instead of a button. */
@@ -82,66 +84,157 @@ export const PlanCard: React.FC<{
   onSelect?: () => void;
   style?: React.CSSProperties;
 }> = ({
-  label, price, interval, features, locked = [], note, badge,
+  label, price, interval, features, locked = [], note, unlock, badge,
   highlighted, current, available, busy, onSelect, style,
 }) => (
-  /* Shell + THREE plates, per `XENO CHROME - CONSTRUCTION PLAYBOOK.md`: the
-     shell carries page background and the plates float on it with 2px gaps.
-     Header LIGHTER than body is what makes the body read as a recessed well,
-     and the action gets its own plate rather than sitting loose at the bottom
-     of the body — a footer plate is what stops the card reading as a flat box
-     with a button drawn on it. */
+  /* ═══════════════════════════════════════════════════════════════════════
+   * THE PAYMENT CARD.
+   *
+   * Shell + three plates, per `XENO CHROME - CONSTRUCTION PLAYBOOK.md`: the
+   * shell carries page background and the plates float on it with 2px gaps.
+   * Header LIGHTER than body is what makes the body read as a recessed well,
+   * and the action gets its OWN plate rather than sitting loose at the bottom
+   * of the body — a footer plate is what stops a card reading as a flat box
+   * with a button drawn on it.
+   *
+   * ── Emphasis comes from SURFACE, never from hue ───────────────────────
+   *
+   * The recommended tier is lifted, lit along its top edge, given a brighter
+   * border and a bigger number. Every one of those is lightness or geometry.
+   * `DESIGN_SYSTEM.md` is monochromatic and the retired purple is not coming
+   * back to mark a "popular" plan — on a dark chrome, a lifted lighter plate
+   * reads as nearer, which is exactly the hierarchy an accent colour is
+   * usually reached for.
+   * ═══════════════════════════════════════════════════════════════════════ */
   <div
     style={{
       background: '#08080a',
       boxShadow: highlighted
-        ? '0 24px 56px -18px rgba(0,0,0,0.95)'
+        ? '0 28px 64px -20px rgba(0,0,0,0.98), 0 0 0 1px rgba(255,255,255,0.04)'
         : '0 10px 30px -16px rgba(0,0,0,0.85)',
       ...style,
     }}
     className={cx(
-      'relative flex flex-col gap-[2px] rounded-[12px] border p-1.5 transition-colors duration-200',
-      highlighted ? 'border-white/35' : 'border-white/[0.08] hover:border-white/20',
+      'group relative flex flex-col gap-[2px] rounded-[12px] border p-1.5',
+      'transition-[transform,border-color,box-shadow] duration-300 ease-out',
+      // Lifted, and lifts further on hover. The un-recommended tiers lift too,
+      // just less — a card that does nothing under the pointer reads as an
+      // image of a card rather than something you can take.
+      highlighted
+        ? 'border-white/35 lg:-translate-y-2 hover:border-white/55 hover:lg:-translate-y-3'
+        : 'border-white/[0.08] hover:border-white/25 hover:-translate-y-1',
     )}
   >
+    {highlighted && (
+      <>
+        {/* A light along the top edge — the card catching the page's own
+            ambient wash. Sits on the SHELL, above the plates, so it reads as
+            falling on the object rather than being printed inside it. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-6 -top-px h-px"
+          style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)' }}
+        />
+        {/* A slow sheen. Long and low-contrast on purpose: this is the one
+            card that should feel awake, and anything faster becomes a banner
+            ad on a screen where somebody is deciding to spend money.
+            Written INLINE, not as `animate-[...]` — an arbitrary Tailwind
+            animation utility compiles to nothing in this build, the same way
+            `duration-[420ms]` did, and the failure is silent. */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[12px]">
+          <div
+            className="absolute inset-y-0 w-1/3"
+            style={{
+              background: 'linear-gradient(100deg, transparent, rgba(255,255,255,0.05), transparent)',
+              animation: 'xenoSheen 6.5s cubic-bezier(0.45,0,0.25,1) infinite',
+            }}
+          />
+        </div>
+      </>
+    )}
+
     {badge && (
       /* Sits ON the shell's top edge rather than inside a plate, so it reads as
          a ribbon on the card instead of a first list item. */
-      <span className="absolute -top-[9px] left-4 z-10 rounded-[5px] border border-white/25 bg-[#0e0e0e] px-2 py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.12em] text-white/85">
+      <span className={cx(
+        'absolute -top-[9px] left-4 z-10 rounded-[5px] border px-2 py-[3px]',
+        'text-[9.5px] font-semibold uppercase tracking-[0.12em]',
+        highlighted
+          ? 'border-white/45 bg-white text-black'
+          : 'border-white/25 bg-[#0e0e0e] text-white/85',
+      )}>
         {badge}
       </span>
     )}
 
-    {/* ── Header plate — the name and the number being decided on ── */}
+    {/* ── Header plate — the number being decided on ── */}
     <div
-      className="flex shrink-0 flex-col gap-1.5 rounded-t-[8px] px-4 py-3.5"
+      className="relative flex shrink-0 flex-col gap-2 rounded-t-[8px] px-4 pb-4 pt-4"
       style={{ background: highlighted ? '#242424' : '#1a1a1a' }}
     >
-      <span className={cx('text-[13px] font-semibold uppercase tracking-[0.10em]',
-                          highlighted ? 'text-white/90' : 'text-white/45')}>
+      <span className={cx('text-[11px] font-semibold uppercase tracking-[0.14em]',
+                          highlighted ? 'text-white/70' : 'text-white/40')}>
         {label}
       </span>
       <span className="flex items-baseline gap-1.5">
-        <span className={cx('text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums',
-                            highlighted ? 'text-white' : 'text-white/80')}>
+        <span
+          className={cx('font-semibold leading-none tracking-[-0.035em] tabular-nums',
+                        highlighted ? 'text-[40px] text-white' : 'text-[30px] text-white/80')}
+        >
           {price}
         </span>
-        {interval && <span className="text-[12px] text-white/35">/{interval}</span>}
+        {interval && (
+          <span className={cx(highlighted ? 'text-[13px] text-white/45' : 'text-[12px] text-white/35')}>
+            /{interval}
+          </span>
+        )}
       </span>
-      {/* Reserved whether or not it is filled, so three cards in a row keep
-          their plate heights aligned — a header that grows on one card alone
-          drags its body out of line with the others. */}
+      {/* Height reserved whether or not it is filled, so three cards in a row
+          keep their plate heights aligned — a header that grows on one card
+          alone drags its body out of line with the other two. */}
       <span className="min-h-[15px] text-[11.5px] leading-tight text-white/35">{note}</span>
     </div>
 
-    {/* ── Body plate — what you get, then what you do not ── */}
+    {/* ── Body plate — what happens to their workspace, then the detail ── */}
     <div className="flex flex-1 flex-col rounded-b-[8px] px-4 py-4" style={{ background: '#111111' }}>
+      {unlock && (
+        /* THE line that connects the money to the thing they just chose.
+         *
+         * A feature list is abstract — "cross-app workflows" is a phrase, not
+         * a picture. "All 12, fully running" is the workspace they built two
+         * steps ago, with a number they can check. It is MEASURED, from the
+         * release probe, so it is also the one claim on this card that could
+         * embarrass us if it were guessed. */
+        <div
+          className="mb-4 rounded-[7px] border px-3 py-2.5"
+          style={{
+            background: highlighted ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.022)',
+            borderColor: highlighted ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)',
+          }}
+        >
+          <p className="text-[9.5px] font-semibold uppercase tracking-[0.13em] text-white/30">
+            In your workspace
+          </p>
+          <p className={cx('mt-1 text-[13px] font-medium leading-snug',
+                           highlighted ? 'text-white/90' : 'text-white/55')}>
+            {unlock.verdict}
+          </p>
+        </div>
+      )}
+
       {features.length > 0 && (
         <ul className="space-y-2.5">
           {features.map((f) => (
             <li key={f} className="flex items-start gap-2.5">
-              <Check className="mt-[3px] h-[13px] w-[13px] shrink-0 text-white/55" strokeWidth={2.5} />
-              <span className="text-[12.5px] leading-snug text-white/60">{f}</span>
+              <Check
+                className={cx('mt-[3px] h-[13px] w-[13px] shrink-0',
+                              highlighted ? 'text-white/75' : 'text-white/50')}
+                strokeWidth={2.5}
+              />
+              <span className={cx('text-[12.5px] leading-snug',
+                                  highlighted ? 'text-white/75' : 'text-white/60')}>
+                {f}
+              </span>
             </li>
           ))}
         </ul>
@@ -156,9 +249,9 @@ export const PlanCard: React.FC<{
          * grants-only card would be a blank box next to two full ones, which
          * reads as "free is fine" rather than "free cannot run anything".
          *
-         * Shown dimmed with a lock rather than struck through: struck text
-         * reads as something taken away, and nothing has been taken away —
-         * it was never included. */
+         * Dimmed with a lock rather than struck through: struck text reads as
+         * something taken away, and nothing has been taken away — it was
+         * never included. */
         <>
           {features.length > 0 && <div className="my-3.5 h-px bg-white/[0.06]" />}
           <p className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-white/25">
@@ -177,7 +270,7 @@ export const PlanCard: React.FC<{
     </div>
 
     {/* ── Footer plate — the action, or the state ── */}
-    <div className="shrink-0 rounded-b-[8px] p-1.5" style={{ background: '#141414' }}>
+    <div className="shrink-0 rounded-b-[8px] p-1.5" style={{ background: highlighted ? '#191919' : '#141414' }}>
       {current ? (
         /* No button. "Stay on Free" would be a second control doing exactly
            what Continue already does, two tab stops apart — and a button is a
@@ -187,22 +280,33 @@ export const PlanCard: React.FC<{
           Your plan right now
         </p>
       ) : (
-        <button
-          type="button"
-          data-roving="action"
-          disabled={!available || busy}
-          onClick={onSelect}
-          className={cx(
-            'w-full rounded-[7px] px-4 py-2.5 text-[13.5px] font-semibold',
-            'transition-all duration-200 active:scale-[0.99]',
-            'disabled:cursor-not-allowed disabled:opacity-25',
-            highlighted
-              ? 'bg-white text-black hover:bg-white/90'
-              : 'border border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/[0.06]',
-          )}
-        >
-          {busy ? 'Opening checkout…' : available ? `Choose ${label}` : 'Not yet available'}
-        </button>
+        <>
+          <button
+            type="button"
+            data-roving="action"
+            disabled={!available || busy}
+            onClick={onSelect}
+            className={cx(
+              'w-full rounded-[7px] px-4 text-[13.5px] font-semibold',
+              'transition-all duration-200 active:scale-[0.99]',
+              'disabled:cursor-not-allowed disabled:opacity-25',
+              // The recommended action is physically bigger, not differently
+              // coloured. Same reason as everything else on this card.
+              highlighted
+                ? 'py-3 bg-white text-black hover:bg-white/90'
+                : 'py-2.5 border border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/[0.06]',
+            )}
+          >
+            {busy ? 'Opening checkout…' : available ? `Choose ${label}` : 'Not yet available'}
+          </button>
+          <p className="pb-0.5 pt-2 text-center text-[10.5px] leading-tight text-white/25">
+            {/* Says what is true in the state the product is ACTUALLY in.
+                Stripe is not configured yet, and "Cancel any time" under a
+                button that cannot charge is the kind of small lie that makes
+                a reader distrust the rest of the page. */}
+            {available ? 'Cancel any time · Secure checkout' : 'Payments open shortly · nothing to do yet'}
+          </p>
+        </>
       )}
     </div>
   </div>

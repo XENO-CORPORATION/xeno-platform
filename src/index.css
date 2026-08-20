@@ -253,6 +253,32 @@ html, body, #root, #app {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* A slow sheen across the recommended plan.
+ *
+ * Long, low-contrast, and mostly OFF-CARD: the travel is 260% of the card's
+ * width for a band a third that wide, so the lit moment is brief and the rest
+ * of the cycle is still. That ratio is the whole design — a sheen that is
+ * visible most of the time stops reading as light and starts reading as an
+ * animated advertisement, on the one screen where somebody is deciding to
+ * spend money.
+ *
+ * Rests at the start and end (0-8% and 92-100% sit at the same offset) so it
+ * never appears to bounce back. */
+@keyframes xenoSheen {
+  0%, 8%    { transform: translateX(-130%); }
+  92%, 100% { transform: translateX(360%); }
+}
+
+/* Motion is a preference, and a looping ambient effect is exactly the kind
+ * that triggers vestibular discomfort. Everything else on this page is a
+ * one-shot entrance; this is the only thing that repeats, so it is the only
+ * thing that has to stop. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes xenoSheen {
+    0%, 100% { transform: translateX(-130%); }
+  }
+}
+
 /* A check DROPPING into its box.
  *
  * Falls from above, overshoots slightly, settles — the overshoot is what makes

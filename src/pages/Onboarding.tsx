@@ -11,7 +11,7 @@ import RoleCard from '../components/onboarding/RoleCard';
 import useRovingGrid from '../components/onboarding/useRovingGrid';
 import {
   recommendedWorkspace, parseRoles, serializeRoles,
-  SUITES, parseWorkspace, isEverything,
+  SUITES, parseWorkspace, isEverything, availableForSuite,
 } from '../lib/workspaceSuites';
 import {
   StepHeading, PlanCard, Field, Checkbox, PrimaryButton, TextButton, FlowControls,
@@ -452,6 +452,25 @@ const Onboarding: React.FC = () => {
     [subscriptions],
   );
 
+  /* How many apps their workspace actually contains, MEASURED.
+   *
+   * `availableForSuite` filters through the release probe rather than the
+   * catalog's `status`, so this counts what a person can genuinely open today
+   * — three products were marked `coming-soon` while shipping, and this is the
+   * single number on the payment card that could embarrass us if it were
+   * guessed. Deduped by slug: a product reachable from two suites is one app.
+   *
+   * The count is what makes the price concrete. "Cross-app workflows" is a
+   * phrase; "all 12, fully running" is the thing they built two steps ago,
+   * with a number they can go and check. */
+  const workspaceApps = useMemo(() => {
+    const picked = parseWorkspace(answers.workspace);
+    const chosen = isEverything(picked) || !picked.length
+      ? SUITES
+      : SUITES.filter((s) => picked.includes(s.id));
+    return new Set(chosen.flatMap((s) => availableForSuite(s).map((p) => p.slug))).size;
+  }, [answers.workspace]);
+
   /* What they chose, said back to them.
    *
    * The pitch lands harder against something concrete: someone who picked
@@ -714,6 +733,12 @@ const Onboarding: React.FC = () => {
                            an allowance tomorrow and the line appears by itself. */
                         features={featuresFor(billing.freePlan.entitlements)}
                         locked={lockedFor(billing.freePlan.entitlements, anchor?.entitlements)}
+                        /* The same number, twice, saying opposite things. That
+                           symmetry is the argument: free is not a smaller
+                           XENO, it is the whole of XENO with the engine off. */
+                        unlock={workspaceApps
+                          ? { count: workspaceApps, verdict: `All ${workspaceApps} open. None of them run.` }
+                          : undefined}
                         current
                         style={wave(0, 0.10, 0.07)}
                       />
@@ -738,6 +763,9 @@ const Onboarding: React.FC = () => {
                         // so it carries the emphasis. Derived from the plan, not
                         // from position, so reordering the catalog cannot move
                         // the highlight onto the wrong card.
+                        unlock={workspaceApps
+                          ? { count: workspaceApps, verdict: `All ${workspaceApps}, fully running.` }
+                          : undefined}
                         highlighted={item.plan === 'pro'}
                         badge={item.plan === 'pro' ? 'Most popular' : item.badge}
                         available={Boolean(item.available)}
