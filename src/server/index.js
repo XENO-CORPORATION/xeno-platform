@@ -12,7 +12,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 import express from 'express';
 import cors from 'cors';
-import { apiOrigin, acceptedSiteOrigins } from './config/hosts.js';
+import { apiOrigin, acceptedSiteOrigins, extensionOrigins } from './config/hosts.js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
@@ -337,9 +337,15 @@ app.use((req, res, next) => {
 // DUAL-HOMING: to accept a second domain, add it to XENO_ALIAS_SITE_ORIGINS —
 // do NOT move XENO_SITE_ORIGIN. Widening this allowlist is additive and
 // individually revertible; moving the canonical origin is not.
-const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
-  : [...acceptedSiteOrigins(), 'http://localhost:5173', 'http://localhost:4040'];
+// Extension origins are appended rather than folded into the CORS_ORIGINS
+// branch: setting CORS_ORIGINS replaces the site list, and an operator narrowing
+// that should not silently un-authorise the browser extension as a side effect.
+const ALLOWED_ORIGINS = [
+  ...(process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+    : [...acceptedSiteOrigins(), 'http://localhost:5173', 'http://localhost:4040']),
+  ...extensionOrigins(),
+];
 
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
@@ -349,7 +355,15 @@ app.use(cors({
           callback(null, true);
         } else {
           console.warn(`[CORS] Blocked request from unlisted origin: ${origin}`);
-          callback(new Error('CORS: origin not allowed'), false);
+          // Deny WITHOUT an Error. Passing one makes cors call next(err), which
+          // reaches the Express error handler and answers 500 {"error":"Internal
+          // server error"} — so a policy decision was reported to the caller as
+          // our server breaking. The browser extension hit exactly this: sign-in
+          // failed with "Internal server error" and nothing was actually broken.
+          // callback(null, false) omits the CORS headers, which is what a denial
+          // IS: the browser blocks it with a real CORS message, and a non-browser
+          // client gets the normal response instead of a fake fault.
+          callback(null, false);
         }
       }
     : true, // Allow all origins in development

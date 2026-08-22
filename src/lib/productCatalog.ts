@@ -195,7 +195,7 @@ export const PRODUCTS: Product[] = [
   // STAYS 'soon': flipping it to 'desktop' would route the page at the installer
   // R2 convention (version.json, per-OS download page) that this product does not
   // use, and would render a dead "All platforms & versions" link.
-  { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'beta', delivery: 'soon', operatingSystem: 'Chrome, Edge, Brave (Chromium)', r2: 'extension', repo: 'xeno-extension', signing: 'none', externalUrl: 'https://updates.xenostudio.ai/apps/extension/extension-stable-v1.1.0/xeno-browser-agent-stable-1.1.0.zip', externalLabel: 'Download 1.1.0 — load unpacked' },
+  { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'beta', delivery: 'soon', operatingSystem: 'Chrome, Edge, Brave (Chromium)', r2: 'extension', repo: 'xeno-extension', signing: 'none', externalUrl: 'https://updates.xenostudio.ai/apps/extension/extension-stable-v1.2.0/xeno-browser-agent-stable-1.2.0.zip', externalLabel: 'Download 1.2.0 — load unpacked' },
 
   // ── Build ─────────────────────────────────────────────────
   { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-engine' },
