@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, KeyRound, Mail, User, Eye, EyeOff, Github, ArrowRight } from 'lucide-react';
+import { ArrowLeft, KeyRound, Mail, User, Eye, EyeOff, Github, ArrowRight, ChevronDown, Check, X } from 'lucide-react';
 import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
+import AuthMark from '../components/auth/AuthMark';
 import { useAuth } from '../contexts/AuthContext';
 import { getAuthApp } from '../lib/authApps';
 
@@ -11,6 +12,9 @@ function safeReturnUrl(raw: string | null): string | null {
 
 const AuthContent = () => {
   const { app: appSlug } = useParams();
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+
   const authApp = getAuthApp(appSlug);
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
   const [showPassword, setShowPassword] = useState(false);
@@ -21,6 +25,38 @@ const AuthContent = () => {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isVisible, setIsVisible] = useState(false);
+
+  /* These MUST stay below the useState block above.
+   *
+   * They were originally written at the top of the component, reading
+   * `password` and `activeTab` about ten lines BEFORE those states are
+   * declared. `const` is hoisted but not initialised, so that is a temporal
+   * dead zone error -- ReferenceError: Cannot access 'password' before
+   * initialization -- thrown on EVERY render of the sign-in page.
+   *
+   * It survived because the only "typecheck" available in this worktree was
+   * `npx tsc` resolving to a squatter package that prints a banner and exits
+   * 0, and vite strips types without checking them. The build stayed green
+   * over a page that could not render.
+   */
+  /**
+   * Password rules, evaluated live.
+   *
+   * Shown only while the field is focused OR partly filled — a list of things
+   * you have failed, displayed before you have typed anything, is a telling-off
+   * for a crime not yet committed. It appears when it becomes relevant and
+   * stays while there is progress to report.
+   *
+   * `letters` counts LENGTH, matching the copy ("Minimum 8 letters"). If the
+   * label and the predicate disagree the list is worse than useless — it says
+   * you failed a rule you passed.
+   */
+  const passwordRules = [
+    { label: 'Minimum 8 letters', met: password.length >= 8 },
+    { label: 'At least one number', met: /\d/.test(password) },
+    { label: 'At least one special character', met: /[^A-Za-z0-9]/.test(password) },
+  ];
+  const showPasswordRules = activeTab === 'signup' && (passwordFocused || password.length > 0);
   const [tabTransition, setTabTransition] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -127,6 +163,15 @@ const AuthContent = () => {
           window.location.href = returnUrl;
           return;
         }
+        // A NEW account goes to activation, not into the workspace. It would
+        // get there anyway — the first gated call 403s and the interceptor
+        // redirects — but arriving at a half-working workspace and being
+        // bounced out of it reads as a fault. Send them to the step that is
+        // actually next.
+        if (activeTab === 'signup') {
+          navigate('/auth/activate', { replace: true });
+          return;
+        }
         const from = (location.state as any)?.from?.pathname || '/overview';
         navigate(from, { replace: true });
       } else {
@@ -148,17 +193,12 @@ const AuthContent = () => {
     <>
       {/* Header with staggered animation */}
       <header
-        className={`flex items-center justify-between p-6 lg:px-12 xl:px-20 lg:pt-12 xl:pt-16 transition-all duration-500 ease-out ${
+        className={`flex items-center justify-between gap-4 px-4 py-3 sm:px-5 sm:py-4 transition-all duration-500 ease-out ${
           isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
         }`}
         style={{ transitionDelay: '0.1s' }}
       >
-        <Link to="/" className="lg:hidden flex items-center gap-2 group">
-          <img src="/logo.svg" alt="Xeno" className="w-8 h-8 invert transition-transform duration-300 group-hover:scale-105" />
-          <span className="text-lg font-semibold transition-opacity duration-300 group-hover:opacity-80">Xeno</span>
-        </Link>
 
-        <div className="hidden lg:block" />
 
         <Link
           to="/"
@@ -167,9 +207,16 @@ const AuthContent = () => {
           <ArrowLeft size={14} className="transition-transform duration-300 group-hover:-translate-x-1" />
           <span>Back to home</span>
         </Link>
+
+        <AuthMark />
+
       </header>
 
-      <div className="flex-1 flex flex-col px-6 pb-12 lg:px-12 xl:px-20 pt-20 lg:pt-20 xl:pt-28">
+      {/* justify-center: the block sits in the MIDDLE of the viewport rather
+          than starting under the header. min-h-0 so it can still shrink and
+          scroll on a short window instead of being clipped by the shell's
+          overflow-hidden. */}
+      <div className="flex-1 min-h-0 flex flex-col justify-center px-6 pb-6 lg:px-12 xl:px-20 pt-6">
         <div
           className={`w-full max-w-[400px] mx-auto transition-all duration-700 ease-out ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
@@ -178,24 +225,8 @@ const AuthContent = () => {
         >
           {/* CLI/Hub session finalize status */}
           {cliStatus && (
-            <div className="mb-4 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/70">
+            <div className="mb-4 rounded-[4px] border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/70">
               {cliStatus === 'authorizing' ? 'Authorizing — returning you to the app…' : cliStatus}
-            </div>
-          )}
-
-          {/* Per-app authorize banner (unified /auth/:app surface) */}
-          {authApp && (
-            <div className="mb-6 flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
-              <span
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-bold"
-                style={{ backgroundColor: `${authApp.accent}22`, color: authApp.accent }}
-              >
-                {authApp.displayName.replace(/^XENO\s+/, '').charAt(0)}
-              </span>
-              <div className="min-w-0">
-                <div className="text-sm font-semibold leading-tight">Authorize {authApp.displayName}</div>
-                <div className="truncate text-xs text-white/40">{authApp.tagline}</div>
-              </div>
             </div>
           )}
 
@@ -205,11 +236,49 @@ const AuthContent = () => {
               tabTransition ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
             }`}
           >
-            <h2 className="text-3xl font-bold tracking-tight mb-2">
+            <h2 className="text-3xl font-bold tracking-tight mb-2 text-center">
               {activeTab === 'signin' ? 'Welcome back' : 'Get started'}
             </h2>
-            <p className="text-white/40">
-              {activeTab === 'signin'
+            {/*
+              "You are signing into ___" REPLACES the generic subtitle rather
+              than adding a line, and sits here rather than in a corner or under
+              the legal text, because it is a CONSENT signal: you must know what
+              you are authorising BEFORE you type credentials, not after you
+              have pressed the button. Under the terms line it would be the last
+              thing read, below the submit — which is the wrong order for the
+              one fact that protects against authorising the wrong client.
+
+              It also costs nothing: "Enter your credentials to access your
+              account" is filler, and the app name is real information.
+
+              Monochrome — DESIGN_SYSTEM.md §2 is white-alpha only, and the
+              registry's per-app accent is retired hue.
+            */}
+            <p className="text-white/40 text-center">
+              {authApp ? (
+                <>
+                  You are signing into{' '}
+                  {authApp.productPath ? (
+                    <a
+                      href={authApp.productPath}
+                      // New tab: navigating away mid-flow would discard the
+                      // sign-in the person came here to finish.
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      // Same weight as the sentence around it, no underline —
+                      // the app name is part of the line, not a call to action.
+                      // Hover lifts the colour only; the cursor already says it
+                      // is clickable, and a rule under it would make a consent
+                      // sentence read like a form field.
+                      className="text-white/40 hover:text-white transition-colors duration-300"
+                    >
+                      {authApp.displayName}
+                    </a>
+                  ) : (
+                    <span>{authApp.displayName}</span>
+                  )}
+                </>
+              ) : activeTab === 'signin'
                 ? 'Enter your credentials to access your account'
                 : 'Create your account and start creating'}
             </p>
@@ -217,13 +286,13 @@ const AuthContent = () => {
 
           {/* Tabs with smooth indicator */}
           <div
-            className={`flex gap-1 p-1 mb-8 rounded-xl bg-white/[0.04] border border-white/[0.06] transition-all duration-500 ease-out ${
+            className={`flex gap-1 p-1 mb-8 rounded-[6px] bg-white/[0.04] border border-white/[0.06] transition-all duration-500 ease-out ${
               isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
             }`}
             style={{ transitionDelay: '0.2s' }}
           >
             <button
-              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ease-out ${
+              className={`flex-1 py-2.5 text-sm font-medium rounded-[4px] transition-all duration-300 ease-out ${
                 activeTab === 'signin'
                   ? 'bg-white text-black shadow-lg scale-[1.02]'
                   : 'text-white/50 hover:text-white/80 hover:bg-white/[0.02]'
@@ -233,7 +302,7 @@ const AuthContent = () => {
               Sign In
             </button>
             <button
-              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ease-out ${
+              className={`flex-1 py-2.5 text-sm font-medium rounded-[4px] transition-all duration-300 ease-out ${
                 activeTab === 'signup'
                   ? 'bg-white text-black shadow-lg scale-[1.02]'
                   : 'text-white/50 hover:text-white/80 hover:bg-white/[0.02]'
@@ -267,7 +336,7 @@ const AuthContent = () => {
                     || (location.state as any)?.from?.pathname || '/overview';
                   window.location.href = `/api/auth/${social.provider}?returnUrl=${encodeURIComponent(returnUrl)}`;
                 }}
-                className={`flex items-center justify-center py-3 rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.08] hover:border-white/[0.15] hover:scale-105 active:scale-95 transition-all duration-300 ease-out group ${
+                className={`flex items-center justify-center py-3 rounded-[6px] border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.08] hover:border-white/[0.15] hover:scale-105 active:scale-95 transition-all duration-300 ease-out group ${
                   isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                 }`}
                 style={{ transitionDelay: social.delay }}
@@ -290,7 +359,19 @@ const AuthContent = () => {
             ))}
           </div>
 
-          {/* Divider */}
+          {/*
+            The divider is now a DISCLOSURE.
+
+            Email/password starts collapsed because it is the minority path —
+            most people here use a provider — and a form that is open before it
+            is wanted is four fields of visual weight above the button almost
+            everyone actually presses. xAI does the same thing with "Login with
+            email"; ElevenLabs keeps its form open, but it only offers three
+            providers and no tabs, so it has room this page does not.
+
+            It stays a real button with aria-expanded rather than a styled span,
+            so it is reachable by keyboard and announced as what it is.
+          */}
           <div
             className={`relative my-6 transition-all duration-500 ease-out ${
               isVisible ? 'opacity-100' : 'opacity-0'
@@ -301,13 +382,35 @@ const AuthContent = () => {
               <div className="w-full border-t border-white/[0.08]" />
             </div>
             <div className="relative flex justify-center">
-              <span className="px-4 text-xs text-white/30 bg-[#0a0a0c] uppercase tracking-wider">
-                or continue with email
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowEmailForm((v) => !v)}
+                aria-expanded={showEmailForm}
+                aria-controls="email-auth-form"
+                className="group flex items-center gap-1.5 px-4 text-xs uppercase tracking-wider bg-[#000000] text-white/30 hover:text-white/60 transition-colors duration-300 cursor-pointer"
+              >
+                {showEmailForm ? 'hide email sign-in' : 'or continue with email'}
+                <ChevronDown
+                  size={13}
+                  className={`transition-transform duration-300 ${showEmailForm ? 'rotate-180' : ''}`}
+                />
+              </button>
             </div>
           </div>
 
-          {/* Form with animated fields */}
+          {/*
+            grid-rows 0fr -> 1fr animates to height:auto without a magic
+            max-height. A max-height guess either clips a taller state (the
+            sign-up tab has an extra field) or leaves dead easing time on a
+            shorter one.
+          */}
+          <div
+            id="email-auth-form"
+            className={`grid transition-all duration-500 ease-out ${
+              showEmailForm ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+            }`}
+          >
+            <div className="overflow-hidden">
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Full Name - with smooth transition */}
             <div className={`transition-all duration-400 ease-out overflow-hidden ${
@@ -325,7 +428,7 @@ const AuthContent = () => {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15"
+                    className="focus-self w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 focus:bg-white/[0.06] transition-colors duration-150 hover:border-white/15"
                     placeholder="John Doe"
                   />
                 </div>
@@ -351,9 +454,9 @@ const AuthContent = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className={`w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border ${
+                  className={`focus-self w-full pl-11 pr-4 py-3.5 bg-white/[0.04] border ${
                     emailError ? 'border-red-500/50 focus:border-red-500/70' : 'border-white/[0.08] focus:border-white/20'
-                  } rounded-xl text-white placeholder-white/30 focus:outline-none focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15`}
+                  } rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:bg-white/[0.06] transition-colors duration-150 hover:border-white/15`}
                   placeholder="you@example.com"
                 />
               </div>
@@ -390,10 +493,12 @@ const AuthContent = () => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
                   required
-                  className={`w-full pl-11 pr-12 py-3.5 bg-white/[0.04] border ${
+                  className={`focus-self w-full pl-11 pr-12 py-3.5 bg-white/[0.04] border ${
                     passwordError ? 'border-red-500/50 focus:border-red-500/70' : 'border-white/[0.08] focus:border-white/20'
-                  } rounded-xl text-white placeholder-white/30 focus:outline-none focus:bg-white/[0.06] transition-all duration-300 hover:border-white/15`}
+                  } rounded-[6px] text-white placeholder-white/30 focus:outline-none focus:bg-white/[0.06] transition-colors duration-150 hover:border-white/15`}
                   placeholder="Enter your password"
                 />
                 <button
@@ -410,6 +515,42 @@ const AuthContent = () => {
                   </div>
                 </button>
               </div>
+
+              {/*
+                grid-rows 0fr -> 1fr so the block animates to its real height
+                and the form LIFTS as it opens, rather than jumping by a
+                hard-coded max-height that would clip when a rule wraps to two
+                lines on a narrow screen.
+
+                Each row carries its own transitionDelay, so they arrive one
+                after another instead of as a single slab. 60ms apart is enough
+                to read as sequential without feeling slow.
+              */}
+              <div
+                className={`grid transition-all duration-300 ease-out ${
+                  showPasswordRules ? 'grid-rows-[1fr] opacity-100 mt-3' : 'grid-rows-[0fr] opacity-0 mt-0'
+                }`}
+                aria-live="polite"
+              >
+                <div className="overflow-hidden space-y-1.5">
+                  {passwordRules.map((rule, i) => (
+                    <div
+                      key={rule.label}
+                      className={`flex items-center gap-2 text-[12.5px] transition-all duration-300 ease-out ${
+                        showPasswordRules ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1'
+                      } ${rule.met ? 'text-[#3fb26b]' : 'text-white/35'}`}
+                      style={{ transitionDelay: showPasswordRules ? `${i * 60}ms` : '0ms' }}
+                    >
+                      {/* Semantic colour only — DESIGN_SYSTEM.md §2 permits it
+                          for meaning, and "this rule is satisfied" is meaning.
+                          The ICON changes too, so the state does not rely on
+                          colour alone. */}
+                      {rule.met ? <Check size={13} className="shrink-0" /> : <X size={13} className="shrink-0" />}
+                      <span>{rule.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className={`overflow-hidden transition-all duration-300 ease-out ${passwordError ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
                 <p className="text-sm text-red-400">{passwordError}</p>
               </div>
@@ -419,13 +560,13 @@ const AuthContent = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`group w-full mt-6 py-4 bg-white text-black text-sm font-semibold rounded-xl flex items-center justify-center gap-0 transition-all duration-300 ease-out hover:bg-white/90 hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] overflow-hidden ${
+              className={`group w-full mt-6 py-4 bg-white text-black text-sm font-semibold rounded-[6px] flex items-center justify-center gap-0 transition-all duration-300 ease-out hover:bg-white/90 hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] overflow-hidden ${
                 isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
               } ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
               style={{ transitionDelay: '0.6s' }}
             >
               {isSubmitting ? (
-                <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-[3px] animate-spin" />
               ) : (
                 <>
                   <span className="transition-transform duration-300 group-hover:-translate-x-1">{activeTab === 'signin' ? 'Sign In' : 'Create Account'}</span>
@@ -438,6 +579,8 @@ const AuthContent = () => {
               )}
             </button>
           </form>
+            </div>
+          </div>
 
           {/* Terms */}
           <p

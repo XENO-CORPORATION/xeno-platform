@@ -117,7 +117,7 @@ const Help = () => {
       </div>
 
       {/* Right Side - Help Content */}
-      <div className="flex-1 flex flex-col min-h-screen bg-[#0a0a0c]">
+      <div className="flex-1 flex flex-col min-h-screen bg-[#000000]">
         <header className="flex items-center justify-between p-6 lg:px-12 xl:px-20 lg:pt-12 xl:pt-16">
           <Link to="/" className="lg:hidden flex items-center gap-2">
             <img src="/logo.svg" alt="Xeno" className="w-8 h-8 invert" />
@@ -204,7 +204,7 @@ const Help = () => {
       {chatOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div
-            className={`w-full max-w-md bg-[#0a0a0c] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 ${
+            className={`w-full max-w-md bg-[#000000] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 ${
               chatOpen ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
             }`}
           >

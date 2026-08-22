@@ -10,6 +10,7 @@ import { estimateChatCostMicro, estimateMessageTokens } from '../utils/creditCos
 import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured } from '../utils/xenoChat.js';
 import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
+import requireEntitlement from '../middleware/requireEntitlement.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -108,7 +109,13 @@ async function callInhouse(baseUrl, model, messages, temperature, max_tokens, ex
  *   path='inhouse': xeno-rt open/local        → never metered
  * Auth is enforced at the mount (index.js: databaseMiddleware, authMiddleware).
  */
-router.post('/chat', async (req, res) => {
+/* canUse: the watch/use boundary. Mounted per-route, NOT on the router, because
+   /models and /local-model-catalog below are browsing endpoints — gating the
+   whole router would wall off the catalog an unpaid account is meant to be able
+   to read, which is the half of the product decision that says "let them look".
+   /chat/estimate is deliberately open too: telling somebody what a request WOULD
+   cost is how they decide to buy, and it spends nothing to answer. */
+router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
   const { model, messages, temperature = 0.7, max_tokens = 4096, path: reqPath, requestId, tools, tool_choice } = req.body;
 
   if (!model || !Array.isArray(messages) || messages.length === 0) {
@@ -212,7 +219,7 @@ router.post('/chat', async (req, res) => {
  * so far OR void the hold. The hold is never left open and never double-settled
  * (meterPremiumChatStream's single-shot controller). byok/inhouse are 501 for now.
  */
-router.post('/chat/stream', async (req, res) => {
+router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const {
     model, messages, reasoning, conversationId, systemPrompt,
     path: reqPath, requestId, temperature = 0.7, max_tokens = 4096,

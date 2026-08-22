@@ -153,7 +153,7 @@ const Auth = () => {
       </div>
 
       {/* Right Side - Auth Form */}
-      <div className="flex-1 flex flex-col min-h-screen bg-[#0a0a0c]">
+      <div className="flex-1 flex flex-col min-h-screen bg-[#000000]">
         {/* Header - Same height alignment as left panel logo */}
         <header className="flex items-center justify-between p-6 lg:px-12 xl:px-20 lg:pt-12 xl:pt-16">
           {/* Mobile Logo */}
@@ -244,7 +244,7 @@ const Auth = () => {
                 <div className="w-full border-t border-white/[0.08]" />
               </div>
               <div className="relative flex justify-center">
-                <span className="px-4 text-xs text-white/30 bg-[#0a0a0c] uppercase tracking-wider">
+                <span className="px-4 text-xs text-white/30 bg-[#000000] uppercase tracking-wider">
                   or continue with email
                 </span>
               </div>

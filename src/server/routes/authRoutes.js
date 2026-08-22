@@ -21,8 +21,11 @@ import {
   verifyActivationToken,
   activate as activateAccount,
   isActivated as isAccountActivated,
+  mintCode as mintActivationCode,
+  verifyCode as verifyActivationCode,
 } from '../services/accountActivation.js';
 import { describeClient } from '../utils/userAgent.js';
+import { optOut } from '../services/emailPreferences.js';
 import {
   requireRegistrationOpen,
   assertRegistrationAllowed,
@@ -2177,26 +2180,168 @@ async function xmCheckHandleFree(db, handle) {
  * Redirects rather than returning JSON, because a human is on the other end of
  * this URL. A JSON blob in a browser tab reads as a broken link.
  */
+/**
+ * The interstitial the activation LINK lands on.
+ *
+ * Server-rendered rather than a redirect into the SPA, deliberately: this page
+ * is opened from a mail client, often in a webview with no session, and it must
+ * work with the app bundle unloaded and JavaScript disabled. It is a form and a
+ * button — nothing else — because the POST it submits is the entire security
+ * property (a scanner GETs, it does not submit forms).
+ *
+ * Inline styles: no external stylesheet exists at this URL and a flash of
+ * unstyled text on the one page that has to look trustworthy is the wrong
+ * trade.
+ */
+function activationPage({ site, ok, userId, token, title, body }) {
+  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+  return `<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>${esc(title)}</title></head>
+<body style="margin:0;background:#060608;color:#d8d8de;font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<div style="max-width:460px;margin:0 auto;padding:56px 20px;">
+  <div style="text-align:center;font-size:11px;font-weight:700;letter-spacing:.34em;color:#d8d8de;margin-bottom:28px;">XENO</div>
+  <div style="background:#111111;border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:24px;">
+    <h1 style="margin:0 0 8px;font-size:19px;font-weight:600;color:#fff;">${esc(title)}</h1>
+    <p style="margin:0 0 20px;color:#7f7f86;font-size:13px;">${esc(body)}</p>
+    ${ok ? `<form method="POST" action="${esc(site)}/api/auth/activate">
+      <input type="hidden" name="u" value="${esc(userId)}">
+      <input type="hidden" name="t" value="${esc(token)}">
+      <button type="submit" style="width:100%;padding:11px 14px;background:#e8e8ee;color:#111;border:0;border-radius:4px;font-size:13.5px;font-weight:600;cursor:pointer;">Activate my account</button>
+    </form>` : `<a href="${esc(site)}/auth" style="display:block;text-align:center;padding:11px 14px;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#d8d8de;text-decoration:none;font-size:13.5px;">Go to sign in</a>`}
+  </div>
+  <p style="margin:14px 0 0;text-align:center;color:#5d5d63;font-size:11px;">You can also enter the 6-digit code from the email instead.</p>
+</div></body></html>`;
+}
+
+/**
+ * 🔴 GET RENDERS. IT DOES NOT COMMIT. This is the whole point of v2.
+ *
+ * v1 activated on GET, and corporate mail security (Defender Safe Links,
+ * Proofpoint, Mimecast) PRE-FETCHES every URL in an inbound message — so a
+ * scanner activated accounts with no human involved, silently, defeating the
+ * only thing this gate exists to establish. Consumer clients prefetch too, for
+ * previews.
+ *
+ * So GET returns a page with a button. The POST behind that button is the
+ * click, and a scanner does not POST. One extra interaction, and it is the
+ * interaction that carries the intent.
+ */
 router.get('/activate', async (req, res) => {
   const site = process.env.PUBLIC_SITE_URL || 'https://xenostudio.ai';
-  try {
-    const userId = String(req.query.u || '').trim();
-    const token = String(req.query.t || '').trim();
+  const userId = String(req.query.u || '').trim();
+  const token = String(req.query.t || '').trim();
+  const valid = userId && token && verifyActivationToken(userId, token);
 
+  res.set('Cache-Control', 'no-store');
+  // Referrer-Policy so the token cannot ride out in a Referer header if the
+  // page ever links anywhere.
+  res.set('Referrer-Policy', 'no-referrer');
+
+  if (!valid) {
+    return res.status(400).type('html').send(activationPage({
+      site, ok: false, title: 'This link is not valid',
+      body: 'It may have been altered in transit, or it belongs to an account that no longer exists. Sign in and request a new one.',
+    }));
+  }
+  return res.type('html').send(activationPage({
+    site, ok: true, userId, token,
+    title: 'Activate your XENO account',
+    body: 'One click finishes setting up your account and unlocks the workspace.',
+  }));
+});
+
+/** POST /activate — the commit. A link scanner issues GET, never this. */
+router.post('/activate', async (req, res) => {
+  const site = process.env.PUBLIC_SITE_URL || 'https://xenostudio.ai';
+  try {
+    const userId = String(req.body?.u || req.query.u || '').trim();
+    const token = String(req.body?.t || req.query.t || '').trim();
     if (!userId || !token || !verifyActivationToken(userId, token)) {
       return res.redirect(302, `${site}/auth?activation=invalid`);
     }
-
-    // The account must still exist. A token for a deleted account is not an
-    // error worth explaining — it is simply not activatable.
     const { rows } = await req.db.query('SELECT id FROM users WHERE id = $1', [userId]);
     if (!rows.length) return res.redirect(302, `${site}/auth?activation=invalid`);
 
     await activateAccount(req.db, userId, { method: 'email_link', ip: clientIp(req) });
-    return res.redirect(302, `${site}/overview?activated=1`);
+    return res.redirect(302, `${site}/auth/activate?activated=1`);
   } catch (e) {
     console.error('[activate] error:', e?.message || e);
     return res.redirect(302, `${site}/auth?activation=error`);
+  }
+});
+
+/**
+ * POST /activate/code — the PRIMARY path.
+ *
+ * Authenticated: the code proves the person read the mail, the session proves
+ * which account is asking. Requiring both means a code leaked to a third party
+ * is useless without the account's session, and it removes any need to name an
+ * account in the request — so this endpoint cannot be used to probe which
+ * addresses exist.
+ */
+router.post('/activate/code', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) {
+      return res.status(401).json({ success: false, error: 'Session expired or revoked' });
+    }
+
+    const result = await verifyActivationCode(
+      req.db, decoded.userId, req.body?.code, bcrypt, { ip: clientIp(req) },
+    );
+    if (result.ok) return res.json({ success: true, activated: true });
+
+    // Three different problems, three different messages. "Invalid" for all of
+    // them is what sends people to support instead of to the fix.
+    const messages = {
+      malformed: 'That code should be six digits.',
+      no_code: 'That code has expired. Ask for a new one.',
+      expired: 'That code has expired. Ask for a new one.',
+      too_many_attempts: 'Too many attempts. Ask for a new code.',
+      wrong: 'That code is not right.',
+    };
+    return res.status(400).json({
+      success: false,
+      error: messages[result.reason] || 'That code is not right.',
+      code: result.reason,
+      ...(result.attemptsLeft !== undefined ? { attemptsLeft: result.attemptsLeft } : {}),
+    });
+  } catch (e) {
+    if (e?.name === 'JsonWebTokenError' || e?.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    console.error('[activate/code] error:', e?.message || e);
+    return res.status(500).json({ success: false, error: 'Could not verify that code' });
+  }
+});
+
+/**
+ * GET /activation-status — what the waiting page polls.
+ *
+ * Exists so someone who clicks the link on their phone sees the desktop tab
+ * move on by itself. Cheap: one indexed lookup, and the page stops polling the
+ * moment it flips.
+ */
+router.get('/activation-status', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    const activated = await isAccountActivated(req.db, decoded.userId);
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, activated });
+  } catch (e) {
+    if (e?.name === 'JsonWebTokenError' || e?.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    console.error('[activation-status] error:', e?.message || e);
+    return res.status(500).json({ success: false, error: 'Could not read status' });
   }
 });
 
@@ -2325,6 +2470,173 @@ router.post('/register-with-handle', requireRegistrationOpen, async (req, res) =
     }
     console.error('[register-with-handle] error:', e.message);
     res.status(500).json({ success: false, error: 'Registration failed' });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * ONBOARDING
+ *
+ * Two endpoints. Both resolve the bearer token inline, for the same reason
+ * documented on /resend-activation above: this router is mounted without auth,
+ * so `authMiddleware` is not a symbol in scope and reaching for it throws
+ * ReferenceError at import time — which `node --check` does not catch.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Resolve the caller, or null. Shared by both onboarding routes. */
+async function resolveUser(req) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return null;
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (await sessionRevoked(req.db, decoded)) return null;
+    const { rows } = await req.db.query(
+      'SELECT id, email FROM users WHERE id = $1', [decoded.userId],
+    );
+    return rows[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * GET /onboarding — has this account finished onboarding?
+ *
+ * The client asks before routing, so a returning user is never shown the flow
+ * twice. Deliberately NOT part of /me: /me is on the hot path of every page
+ * load in every product, and onboarding state is read once per session.
+ */
+router.get('/onboarding', async (req, res) => {
+  const user = await resolveUser(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+  try {
+    const { rows } = await req.db.query(
+      `SELECT display_name, heard_from, role, interests, starting_point, workspace,
+              completed_at, skipped_at
+         FROM user_onboarding WHERE user_id = $1`,
+      [user.id],
+    );
+    const row = rows[0] || null;
+    res.json({
+      success: true,
+      // One boolean for the client to branch on. Skipping counts as done —
+      // re-presenting a flow somebody explicitly dismissed is nagging.
+      done: Boolean(row && (row.completed_at || row.skipped_at)),
+      onboarding: row,
+    });
+  } catch (err) {
+    console.error('[onboarding] read failed:', err.message);
+    // Fail OPEN, unlike the activation gate. The worst case here is that a
+    // user sees a skippable survey twice; failing closed would wall them out
+    // of the product over a survey table, which is far worse.
+    res.json({ success: true, done: true, onboarding: null, degraded: true });
+  }
+});
+
+/**
+ * POST /onboarding — save answers.
+ *
+ * Accepts a partial body and upserts, so each step can save as it is completed
+ * rather than the whole flow depending on the user reaching the end. Somebody
+ * who answers two steps and closes the tab has still told us two things.
+ */
+router.post('/onboarding', async (req, res) => {
+  const user = await resolveUser(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+  try {
+    const b = req.body || {};
+
+    // Bound every free-text field. These are user-controlled strings that end
+    // up in analytics queries and, eventually, on a dashboard — length limits
+    // here are cheaper than discovering a 40 KB "how did you hear about us".
+    const str = (v, max) =>
+      typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
+
+    const displayName = str(b.displayName, 120);
+    const heardFrom = str(b.heardFrom, 200);
+    /* 60 was the cap when `role` held ONE answer. It is now a comma-joined
+     * set, and all eight roles serialise to 81 characters — so the old cap
+     * silently truncated the answer mid-word and stored a value that parses
+     * back to fewer roles than the user chose. Sized with headroom against the
+     * real maximum rather than to it, so adding a role does not reintroduce
+     * the same silent loss. */
+    const role = str(b.role, 200);
+    const startingPoint = str(b.startingPoint, 60);
+    const workspace = str(b.workspace, 40);
+
+    /* The workspace choice is the one field that can be UNSET.
+     *
+     * Every other answer only ever moves forward, so COALESCE(new, existing)
+     * is right for them — a later step posting its own field must not blank an
+     * earlier one. But the "full XENO workspace" bar is a TOGGLE: clicking it
+     * again clears the choice, and COALESCE would silently keep the old value,
+     * so an explicit un-choice would never reach the database.
+     *
+     * So absence and null are distinguished. A body with no `workspace` key
+     * leaves the stored value alone; a body that carries `workspace: null`
+     * clears it. `hasOwnProperty` rather than `!== undefined`, because JSON
+     * cannot express undefined and the key's PRESENCE is the signal. */
+    const workspaceProvided = Object.prototype.hasOwnProperty.call(b, 'workspace');
+
+    // Interests: array of short strings, deduped, capped. Anything else is
+    // discarded rather than rejected — a malformed optional survey field
+    // should not fail a request that also carries good answers.
+    const interests = Array.isArray(b.interests)
+      ? [...new Set(b.interests.filter((s) => typeof s === 'string' && s.length <= 40))].slice(0, 20)
+      : [];
+
+    const completed = b.completed === true;
+    const skipped = b.skipped === true;
+
+    await req.db.query(
+      `INSERT INTO user_onboarding
+         (user_id, display_name, heard_from, role, interests, starting_point,
+          completed_at, skipped_at, workspace)
+       VALUES ($1, $2, $3, $4, $5, $6,
+               CASE WHEN $7::boolean THEN NOW() END,
+               CASE WHEN $8::boolean THEN NOW() END,
+               $9)
+       ON CONFLICT (user_id) DO UPDATE SET
+         -- COALESCE(new, existing): a later step posting only its own field
+         -- must not blank the answers given in an earlier one.
+         display_name   = COALESCE(EXCLUDED.display_name,   user_onboarding.display_name),
+         heard_from     = COALESCE(EXCLUDED.heard_from,     user_onboarding.heard_from),
+         role           = COALESCE(EXCLUDED.role,           user_onboarding.role),
+         starting_point = COALESCE(EXCLUDED.starting_point, user_onboarding.starting_point),
+         -- $10 true = the client sent the key, so its value wins even when null.
+         workspace      = CASE WHEN $10::boolean THEN EXCLUDED.workspace
+                               ELSE COALESCE(EXCLUDED.workspace, user_onboarding.workspace) END,
+         -- Interests are REPLACED, not merged: it is a multi-select, so
+         -- unticking something has to be able to remove it.
+         interests      = CASE WHEN array_length(EXCLUDED.interests, 1) IS NULL
+                               THEN user_onboarding.interests ELSE EXCLUDED.interests END,
+         completed_at   = COALESCE(user_onboarding.completed_at, EXCLUDED.completed_at),
+         skipped_at     = COALESCE(user_onboarding.skipped_at,   EXCLUDED.skipped_at),
+         updated_at     = NOW()`,
+      [user.id, displayName, heardFrom, role, interests, startingPoint, completed, skipped, workspace, workspaceProvided],
+    );
+
+    /* Marketing preference.
+     *
+     * ONLY ever writes an opt-OUT. Declining is an action; accepting is the
+     * default state and needs no row.
+     *
+     * The asymmetry is deliberate and load-bearing: `optIn()` DELETEs the
+     * opt-out row outright, with no category filter. So calling it when the
+     * box is ticked would silently resurrect somebody who had previously
+     * unsubscribed from EVERYTHING — turning "yes, product updates are fine"
+     * into "re-subscribe me to all mail I ever rejected". Never call it here.
+     */
+    if (b.marketingOptIn === false) {
+      await optOut(req.db, user.email, { reason: 'onboarding', category: 'marketing' })
+        .catch((e) => console.error('[onboarding] opt-out failed:', e.message));
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[onboarding] write failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not save' });
   }
 });
 

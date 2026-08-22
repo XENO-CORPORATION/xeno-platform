@@ -1,207 +1,73 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-
-const heroContent: Record<string, { title: string; subtitle: string; description: string }> = {
-  '/auth': {
-    title: 'Create without',
-    subtitle: 'limits.',
-    description: 'The next-generation platform for creators. Design, generate, and build with the power of AI at your fingertips.'
-  },
-  '/help': {
-    title: 'How can we',
-    subtitle: 'help?',
-    description: 'Find answers to common questions or chat with our support team for personalized assistance.'
-  },
-  '/contact': {
-    title: 'Get in',
-    subtitle: 'touch.',
-    description: "Have a question or feedback? We'd love to hear from you. Our team typically responds within 24 hours."
-  },
-  '/forgot-password': {
-    title: 'Reset your',
-    subtitle: 'password.',
-    description: "Enter your email and we'll send you a secure link to get back into your account."
-  },
-  '/reset-password': {
-    title: 'Choose a new',
-    subtitle: 'password.',
-    description: 'Set a strong new password to secure your account and pick up right where you left off.'
-  },
-  '/verify-email': {
-    title: 'Verify your',
-    subtitle: 'email.',
-    description: 'Confirm your email address to unlock everything Xeno has to offer.'
-  }
-};
-
-const statsContent: Record<string, Array<{ value: string; label: string }>> = {
-  '/auth': [
-    { value: '50K+', label: 'Creators' },
-    { value: '1M+', label: 'Creations' },
-    { value: '4.9', label: 'Rating' }
-  ],
-  '/help': [
-    { value: '5+', label: 'FAQ Topics' },
-    { value: 'Live', label: 'Chat Support' }
-  ],
-  '/contact': [
-    { value: '<24h', label: 'Response' },
-    { value: '24/7', label: 'Support' }
-  ]
-};
 
 const AuthLayout = () => {
   const location = useLocation();
   const path = location.pathname;
-  const prevPathRef = useRef(path);
-
-  const [displayedHero, setDisplayedHero] = useState(heroContent[path] || heroContent['/auth']);
-  const [displayedStats, setDisplayedStats] = useState(statsContent[path] || statsContent['/auth']);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-
-  // Animate hero/stats when route changes
-  useEffect(() => {
-    // Skip if same path
-    if (prevPathRef.current === path) return;
-    prevPathRef.current = path;
-
-    const newHero = heroContent[path] || heroContent['/auth'];
-    const newStats = statsContent[path] || statsContent['/auth'];
-
-    setIsTransitioning(true);
-
-    // Fade out, then update content, then fade in
-    const fadeOutTimer = setTimeout(() => {
-      setDisplayedHero(newHero);
-      setDisplayedStats(newStats);
-
-      // Fade back in after content updates
-      requestAnimationFrame(() => {
-        setIsTransitioning(false);
-      });
-    }, 300);
-
-    return () => {
-      clearTimeout(fadeOutTimer);
-    };
-  }, [path]);
 
   return (
-    <div className="min-h-screen bg-[#000000] text-white font-['Inter',sans-serif] overflow-hidden antialiased flex">
+    /* ── VIEWPORT-LOCKED ──────────────────────────────────────────────────
+       h-[100dvh], NOT h-screen. `vh` on mobile is measured against the
+       viewport WITHOUT browser chrome, so the address bar overlaps the bottom
+       of the page — which on an auth screen is exactly where the submit button
+       and the legal line live. `dvh` tracks the chrome as it hides and shows.
+       h-screen is kept as the fallback for engines without dvh.
 
-      {/* Left Side - Hero Section with Video (STATIC - video never re-renders) */}
-      <div className="hidden lg:flex lg:w-[55%] xl:w-[60%] relative overflow-hidden">
-        <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover"
-        >
-          <source src="/hero-bg.mp4" type="video/mp4" />
-        </video>
+       overflow-hidden on the SHELL so the page itself never scrolls; the
+       content region below scrolls INSIDE itself when it has to. That
+       distinction matters because /help and /contact live in this layout and
+       are genuinely long — locking the whole thing would truncate them. */
+    <div className="h-screen h-[100dvh] overflow-hidden bg-[#000000] text-white font-['Inter',sans-serif] antialiased flex flex-col">
 
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/40 to-black/80" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
+      {/* ── CENTRED, NO HERO PANEL ────────────────────────────────────────────
+          Was a 55/60% split with an autoplaying /hero-bg.mp4 and a stats strip.
 
-        <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 h-full w-full">
-          {/* Logo - Always static */}
-          <Link
-            to="/"
-            className="flex items-center gap-3 group"
-          >
-            <img
-              src="/logo.svg"
-              alt="Xeno"
-              className="w-10 h-10 rounded-xl object-contain invert transition-transform duration-300 ease-out group-hover:scale-105"
-            />
-            <span className="text-2xl font-bold tracking-tight transition-opacity duration-300 group-hover:opacity-80">Xeno</span>
-          </Link>
+            1. 3.2 MB of video loaded before anyone typed a character, on the
+               screens whose entire job is one action.
+            2. The stats read "50K+ Creators · 1M+ Creations · 4.9 Rating"
+               against 7 real accounts. Removing the panel removes the claim;
+               keeping it meant inventing an honest version of a number that
+               had none.
+            3. DESIGN_SYSTEM.md is monochromatic, dense and undecorated. A
+               full-bleed marketing video with counters is another product's
+               language.
 
-          {/* Hero Text - Animated on route change */}
-          <div
-            className={`max-w-xl transition-all duration-500 ease-out ${
-              isTransitioning
-                ? 'opacity-0 translate-y-4'
-                : 'opacity-100 translate-y-0'
-            }`}
-          >
-            <h1 className="text-4xl lg:text-5xl xl:text-6xl font-bold leading-[1.05] tracking-tight mb-6 text-white">
-              {displayedHero.title}
-              <br />
-              <span className="text-white/40">
-                {displayedHero.subtitle}
-              </span>
-            </h1>
-            <p className="text-base lg:text-lg text-white/50 leading-relaxed max-w-md">
-              {displayedHero.description}
-            </p>
-          </div>
+          🔴 THIS LAYOUT DELIBERATELY IMPOSES NO COLUMN AND NO HEADING.
+          Every page inside it already centres its own content
+          (`max-w-[400px] mx-auto`) and already renders its own heading — the
+          hero copy was the SECOND heading on every screen, and a width here
+          would fight the padding each page brings for the old right-hand pane.
+          Give them the viewport; they were already built to centre in it.
 
-          {/* Stats - Animated on route change */}
-          <div
-            className={`flex items-center gap-10 lg:gap-12 transition-all duration-500 ease-out delay-100 ${
-              isTransitioning
-                ? 'opacity-0 translate-y-4'
-                : 'opacity-100 translate-y-0'
-            }`}
-          >
-            {displayedStats.map((stat, index) => (
-              <React.Fragment key={`${stat.label}-${index}`}>
-                {index > 0 && (
-                  <div className="w-px h-8 lg:h-10 bg-white/10 transition-opacity duration-300" />
-                )}
-                <div className="transition-all duration-300 ease-out hover:translate-y-[-2px]">
-                  <div className="text-2xl lg:text-3xl font-bold text-white">{stat.value}</div>
-                  <div className="text-sm text-white/40">{stat.label}</div>
-                </div>
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
+          The per-route hero COPY is gone rather than relocated: each page's own
+          heading is the more specific of the two ("Verifying your email" beats
+          "Verify your email."). heroContent, statsContent, the transition state
+          and the effect that drove them are DELETED, not left behind — dead
+          config outlives the person who knows it is dead. */}
 
-        {/* Animated gradient border */}
-        <div className="absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-      </div>
-
-      {/* Right Side - Dynamic Content (no key-based remount, content handles its own animation) */}
-      <div className="flex-1 flex flex-col min-h-screen bg-[#0a0a0c] relative overflow-hidden">
-        {/* Scrollable content area */}
-        <div className="flex-1 flex flex-col overflow-y-auto">
+      {/* min-h-0 is what actually lets this shrink below its content. Without
+          it a flex child refuses to, the inner scrollbar never appears, and the
+          shell's overflow-hidden silently clips instead. */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+        <div className="flex-1 flex flex-col justify-center">
           <Outlet />
         </div>
-
-        {/* Static Footer - doesn't re-animate on route change */}
-        <footer className="hidden lg:flex items-center justify-between px-12 xl:px-20 py-6 border-t border-white/[0.04] bg-[#0a0a0c]">
-          <p className="text-xs text-white/30">© 2026 Xeno. All rights reserved.</p>
-          <div className="flex items-center gap-6">
-            <Link
-              to="/help"
-              className={`text-xs transition-all duration-300 hover:translate-x-0.5 ${
-                path === '/help' ? 'text-white/60' : 'text-white/30 hover:text-white/60'
-              }`}
-            >
-              Help
-            </Link>
-            <Link
-              to="/contact"
-              className={`text-xs transition-all duration-300 hover:translate-x-0.5 ${
-                path === '/contact' ? 'text-white/60' : 'text-white/30 hover:text-white/60'
-              }`}
-            >
-              Contact
-            </Link>
-            <Link
-              to="/auth"
-              className={`text-xs transition-all duration-300 hover:translate-x-0.5 ${
-                path === '/auth' ? 'text-white/60' : 'text-white/30 hover:text-white/60'
-              }`}
-            >
-              Sign In
-            </Link>
-          </div>
-        </footer>
       </div>
+
+      <footer className="shrink-0 flex items-center justify-center gap-6 px-6 py-5 border-t border-white/[0.04]">
+        <p className="text-xs text-white/25">© 2026 Xeno</p>
+        {[['/help', 'Help'], ['/contact', 'Contact'], ['/auth', 'Sign In']].map(([to, label]) => (
+          <Link
+            key={to}
+            to={to}
+            className={`text-xs transition-colors duration-300 ${
+              path === to ? 'text-white/60' : 'text-white/30 hover:text-white/60'
+            }`}
+          >
+            {label}
+          </Link>
+        ))}
+      </footer>
 
       {/* Global animation styles */}
       <style>{`

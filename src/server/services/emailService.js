@@ -14,7 +14,8 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { isOptedOut, unsubscribeUrl } from './emailPreferences.js';
-import { activationUrl } from './accountActivation.js';
+import bcrypt from 'bcryptjs';
+import { activationUrl, mintCode } from './accountActivation.js';
 
 /**
  * Templates that are SECURITY / ACCOUNT-RECOVERY mail and are therefore never
@@ -213,6 +214,30 @@ function hairline(top = 0, bottom = 0) {
  * confirm the address, try it with nothing installed, then install. Numbering a
  * set that had no order would be the templated tic this avoids.
  */
+/**
+ * The activation CODE, rendered as the primary call to action.
+ *
+ * A code rather than only a link because mail-security appliances pre-fetch
+ * every URL in an inbound message — so a link that commits on GET gets
+ * "clicked" by a scanner, manufacturing the exact proof of intent this whole
+ * mechanism exists to require. A scanner cannot type six digits.
+ *
+ * Large, letter-spaced and selectable: people copy it or read it off a phone
+ * while typing on a laptop, and both need it legible at a glance. Monospace so
+ * 0/O and 1/l cannot be confused.
+ */
+function codeBlock(code, href) {
+  return `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 6px; background-color:#1a1a1a; border-radius:4px;">
+    <tr><td align="center" style="padding:18px 14px;">
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:10px; font-weight:600; letter-spacing:0.2em; text-transform:uppercase; color:#7f7f86;">Your confirmation code</div>
+      <div style="font-family:ui-monospace,'Cascadia Mono',Consolas,monospace; font-size:30px; font-weight:600; letter-spacing:0.28em; color:#ffffff; margin:10px 0 4px; padding-left:0.28em;">${escapeHtml(code)}</div>
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11px; color:#5d5d63;">Enter it on the page that is waiting for you. Expires in 15 minutes.</div>
+      ${href ? `<div style="margin-top:12px;"><a href="${escapeHtml(href)}" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:11px; color:#acacb4; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.15);">or confirm from this device instead &rarr;</a></div>` : ''}
+    </td></tr>
+  </table>`;
+}
+
 function stepRow(n, title, body, href, cta) {
   return `
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 4px; background-color:#1a1a1a; border-radius:4px;">
@@ -326,7 +351,7 @@ const templates = {
    * checklist row for a product that is not downloadable — an onboarding email that
    * sends people to a dead end is worse than no onboarding email.
    */
-  welcome: ({ displayName, loginUrl, activateUrl, unsubscribeUrl: unsubUrl }) => ({
+  welcome: ({ displayName, loginUrl, activateUrl, activationCode, unsubscribeUrl: unsubUrl }) => ({
     // The subject promises the shape of the mail, not a greeting. "Welcome to
     // XENO" alone tells the reader nothing they did not already know from
     // having just signed up.
@@ -357,8 +382,8 @@ const templates = {
         </td></tr>
       </table>
 
-      ${stepRow('01', 'Confirm your email',
-        'One click, and it is what unlocks the workspace. It also keeps account recovery working if you ever lose your password.',
+      ${activationCode ? codeBlock(activationCode, activateUrl) : stepRow('01', 'Confirm your email',
+        'One click, and it is what unlocks the workspace.',
         activateUrl || `${SITE}/verify-email`, 'Confirm')}
 
       ${stepRow('02', 'Open the workspace',
@@ -768,7 +793,18 @@ export function sendWelcomeEmail(db, user) {
   // Three attempts with backoff. A 4xx is NOT retried — Resend rejecting a
   // payload on content will reject it identically twice more, which only delays
   // the log line that explains why.
-  const attempt = (n) => sendEmail(db, 'welcome', user.email, {
+  // Mint the code ONCE, outside the retry. A retry must resend the SAME code —
+  // minting per attempt would invalidate the code carried by the message that
+  // did arrive, so a transient failure would silently break a working email.
+  const codePromise = mintCode(db, user.id, bcrypt).catch((e) => {
+    // A code we could not mint must not stop the mail: the link still works,
+    // and an email with one route in beats no email at all.
+    console.error(`[Email] could not mint an activation code for ${user.email}:`, e?.message || e);
+    return null;
+  });
+
+  const attempt = async (n) => sendEmail(db, 'welcome', user.email, {
+    activationCode: await codePromise,
     displayName,
     // /overview, not the marketing home. The template's primary CTA reads
     // "Open the workspace"; pointing it at the landing page makes it a lie.

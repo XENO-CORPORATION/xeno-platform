@@ -129,3 +129,123 @@ test('the welcome email is what delivers the activation link', () => {
   assert.match(svc, /activateUrl \|\|/,
     'the template does not consume activateUrl');
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v2 — the code path, and the GET/POST split that is the whole security fix
+// ═══════════════════════════════════════════════════════════════════════════
+
+const routes = readFileSync(new URL('../src/server/routes/authRoutes.js', import.meta.url), 'utf8');
+
+test('🔴 GET /activate does NOT commit — a mail scanner must not activate anyone', () => {
+  // The defect this replaces: v1 activated on GET, and Defender Safe Links,
+  // Proofpoint and Mimecast pre-fetch every URL in an inbound message. A
+  // scanner manufactured the exact proof of intent the gate exists to require.
+  const get = routes.slice(
+    routes.indexOf("router.get('/activate'"),
+    routes.indexOf("router.post('/activate'"),
+  );
+  assert.ok(get.length > 0, 'the GET /activate route is missing');
+  assert.doesNotMatch(get, /activateAccount\s*\(/,
+    'GET /activate calls activateAccount — a link scanner can now activate accounts silently');
+  // The form markup lives in the activationPage() helper, so assert the GET
+  // route RENDERS that page and that the page posts. Checking only the route
+  // body looked for the form where it is not, which is how this assertion
+  // failed while the behaviour was already correct.
+  assert.match(get, /activationPage\(/,
+    'GET /activate does not render the confirmation page, so there is no way to activate');
+  assert.match(routes, /function activationPage\([\s\S]*?method="POST"/,
+    'the confirmation page has no POST form — the link would be decorative');
+});
+
+test('POST /activate is what commits', () => {
+  const post = routes.slice(routes.indexOf("router.post('/activate'"));
+  assert.match(post.slice(0, 1600), /activateAccount\s*\(/,
+    'POST /activate does not activate — the link is now decorative');
+});
+
+test('the code endpoint requires a SESSION as well as the code', () => {
+  const seg = routes.slice(routes.indexOf("router.post('/activate/code'"));
+  const body = seg.slice(0, 1800);
+  assert.match(body, /jwt\.verify/,
+    'anyone could submit codes for any account, and the endpoint would leak which addresses exist');
+  assert.match(body, /sessionRevoked/,
+    'a revoked session could still activate');
+});
+
+test('the three code failures stay distinguishable', () => {
+  const seg = routes.slice(routes.indexOf("router.post('/activate/code'"));
+  for (const reason of ['expired', 'too_many_attempts', 'wrong']) {
+    assert.ok(seg.includes(reason), `no distinct message for "${reason}" — "invalid" sends all three to support`);
+  }
+});
+
+// ── the service's own rules ────────────────────────────────────────────────
+
+const svc = readFileSync(new URL('../src/server/services/accountActivation.js', import.meta.url), 'utf8');
+
+test('codes are HASHED, never stored in the clear', () => {
+  assert.match(svc, /bcrypt\.hash\(code/, 'the code is stored in the clear — a table dump becomes a set of working codes');
+  assert.doesNotMatch(svc, /INSERT INTO account_activation_codes[^;]*VALUES[^;]*\$2[^;]*\)\s*,\s*\[\s*userId,\s*code\b/,
+    'the plaintext code is being inserted');
+});
+
+test('attempts are counted in the DATABASE, before the comparison', () => {
+  // In-memory counting resets on restart and does not survive replicas, so it
+  // is not a limit. Counting after the compare hands back a free guess if the
+  // process dies mid-verify.
+  const verify = svc.slice(svc.indexOf('export async function verifyCode'));
+  const incAt = verify.indexOf('attempts = attempts + 1');
+  const cmpAt = verify.indexOf('bcrypt.compare');
+  assert.ok(incAt > -1, 'attempts are never incremented');
+  assert.ok(incAt < cmpAt, 'the attempt is counted AFTER the comparison — a crash mid-verify is a free guess');
+});
+
+test('a code is single-use and time-boxed', () => {
+  const verify = svc.slice(svc.indexOf('export async function verifyCode'));
+  assert.match(verify, /consumed_at = NOW\(\)/, 'codes are never consumed, so they are replayable');
+  assert.match(verify, /expires_at/, 'expiry is never checked');
+});
+
+test('minting invalidates the previous live code', () => {
+  const mint = svc.slice(svc.indexOf('export async function mintCode'), svc.indexOf('export async function verifyCode'));
+  assert.match(mint, /UPDATE account_activation_codes SET consumed_at = NOW\(\)/,
+    'a resend leaves the old code live — which doubles the guess surface and makes "resend" a lie');
+});
+
+test('the database enforces at most one live code', () => {
+  const mig = readFileSync(
+    new URL('../src/server/database/migrations/20260816200000-activation-codes.sql', import.meta.url), 'utf8');
+  assert.match(mig, /CREATE UNIQUE INDEX[\s\S]*?account_activation_codes\(user_id\)[\s\S]*?WHERE consumed_at IS NULL/,
+    'nothing stops two live codes existing — application-only checks lose the race between concurrent resends');
+  assert.match(mig, /REFERENCES users\(id\) ON DELETE CASCADE/,
+    'codes outlive deleted accounts — the same defect that left 24 live refresh tokens behind on 2026-08-16');
+});
+
+// ── the frontend must actually surface the gate ────────────────────────────
+
+test('🔴 something in the CLIENT handles account_not_activated', () => {
+  // Shipped without this once: the gate was enforced and invisible, so an
+  // unactivated user hit a bare 403 with the remedy unread in their inbox.
+  const it = readFileSync(new URL('../src/lib/activationInterceptor.ts', import.meta.url), 'utf8');
+  assert.match(it, /account_not_activated/, 'the interceptor does not look for the gate code');
+  assert.match(it, /res\.clone\(\)/,
+    'the interceptor reads the original body, draining it — every other 403 path in the app would break');
+  assert.match(it, /!==\s*ACTIVATION_PATH|ACTIVATION_PATH\s*!==/,
+    'no loop guard — a 403 on the activation page would bounce it against itself');
+
+  // 🔴 Comments must be stripped FIRST. The initial version of this assertion
+  // matched the raw file, so commenting the call out still passed — a gate that
+  // breaks open, which is precisely the defect it exists to catch. Found by
+  // mutation-checking it; it would never have been found by running it.
+  const main = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  assert.match(main, /installActivationInterceptor\(\)/,
+    'the interceptor is never installed — built, tested and unreachable');
+});
+
+test('the waiting page exists and is routed', () => {
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  assert.match(app, /path="\/auth\/activate"/, 'no route renders the waiting page');
+  assert.match(app, /import ActivateAccount/, 'the page is not imported');
+});

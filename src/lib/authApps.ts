@@ -12,14 +12,24 @@ export interface AuthApp {
   displayName: string;   // "XENO Post"
   accent: string;        // theme accent
   tagline: string;       // shown under "Authorize {displayName}"
+  /**
+   * Public product page, if one is actually published.
+   *
+   * 🔴 OPTIONAL ON PURPOSE. /product/cli returns 200 with the bare SPA shell —
+   * this app answers 200 for routes that do not exist, so a status code proves
+   * nothing and linking every slug blindly ships one dead link. Verified by
+   * BODY SIZE against the 4311-byte shell: post/hub/pixel/motion are real
+   * pages, cli is not. Omit the field rather than guess.
+   */
+  productPath?: string;
 }
 
 const APPS: Record<string, AuthApp> = {
-  post: { slug: 'post', displayName: 'XENO Post', accent: '#a760ff', tagline: 'Authorize XENO Post to use your XENO account.' },
+  post: { slug: 'post', productPath: '/product/post', displayName: 'XENO Post', accent: '#a760ff', tagline: 'Authorize XENO Post to use your XENO account.' },
   cli: { slug: 'cli', displayName: 'XENO CLI', accent: '#7ee0a0', tagline: 'A XENO command-line tool wants to sign in to your account.' },
-  hub: { slug: 'hub', displayName: 'XENO Hub', accent: '#8fb6ff', tagline: 'Authorize XENO Hub to use your XENO account.' },
-  pixel: { slug: 'pixel', displayName: 'XENO Pixel', accent: '#bf85ff', tagline: 'Authorize XENO Pixel to use your XENO account.' },
-  motion: { slug: 'motion', displayName: 'XENO Motion', accent: '#ff8fc8', tagline: 'Authorize XENO Motion to use your XENO account.' },
+  hub: { slug: 'hub', productPath: '/product/hub', displayName: 'XENO Hub', accent: '#8fb6ff', tagline: 'Authorize XENO Hub to use your XENO account.' },
+  pixel: { slug: 'pixel', productPath: '/product/pixel', displayName: 'XENO Pixel', accent: '#bf85ff', tagline: 'Authorize XENO Pixel to use your XENO account.' },
+  motion: { slug: 'motion', productPath: '/product/motion', displayName: 'XENO Motion', accent: '#ff8fc8', tagline: 'Authorize XENO Motion to use your XENO account.' },
 };
 
 /** Resolve an app slug to its branding. `xeno-post` and `post` both resolve. */

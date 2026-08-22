@@ -11,6 +11,7 @@
  */
 
 import express from 'express';
+import requireEntitlement from '../middleware/requireEntitlement.js';
 import { v4 as uuidv4 } from 'uuid';
 import fetch from 'node-fetch';
 import { tagResourceWorkspace } from '../utils/workspaceContext.js';
@@ -32,7 +33,11 @@ const router = express.Router();
  * GENERATE IMAGE WITH XENO FLOW (Nano Banana models)
  * POST /api/image/xeno-flow/generate
  */
-router.post('/xeno-flow/generate', async (req, res) => {
+/* Generation spends real compute — gated. The GET project/asset routes below
+   are NOT: they return the caller's own rows, which for an unpaid account are
+   empty by construction, and refusing to show somebody their own empty library
+   teaches them nothing. */
+router.post('/xeno-flow/generate', requireEntitlement('canUse'), async (req, res) => {
   try {
     const XENO_FLOW_URL = process.env.XENO_FLOW_URL || 'http://127.0.0.1:8090';
 
@@ -833,7 +838,7 @@ router.post('/generations/init', async (req, res) => {
  *
  * Saves a new image generation to history
  */
-router.post('/generations', async (req, res) => {
+router.post('/generations', requireEntitlement('canUse'), async (req, res) => {
   try {
     const userId = req.user.id;
     const {
