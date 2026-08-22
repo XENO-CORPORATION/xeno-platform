@@ -48,3 +48,7 @@ import { PlanCard } from '../../src/components/onboarding/OnboardingPieces';
 export function Tier(props: React.ComponentProps<typeof PlanCard>) {
   return <PlanCard {...props} />;
 }
+
+/* The advertised annual saving. Re-exported rather than reimplemented: the gate
+ * feeds it the REAL catalog, so it has to be the function the page calls. */
+export { annualSavingFrom } from '../../src/pages/Onboarding';

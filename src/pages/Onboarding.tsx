@@ -85,8 +85,19 @@ type CatalogItem = {
   id: string; kind: string; label: string; price: number;
   interval?: string; credits?: number; badge?: string;
   available?: boolean; perSeat?: boolean; plan?: string;
+  /** Annual items price the YEAR; this is the per-month figure to display. */
+  perMonth?: number;
+  /** The grandfathered early-adopter price. Exactly one of founding/list is offered. */
+  founding?: boolean;
+  /** What a founding price becomes for later customers. Quotable, never buyable —
+   *  the server sends the amount without a `priceId`. */
+  becomes?: { price: number; perMonth?: number | null };
   entitlements?: Entitlements;
 };
+
+/** What this deployment can actually serve, as opposed to what a plan is
+ *  entitled to. The two are different questions and a card needs both. */
+type Serves = { inHouse?: boolean };
 
 /** Turn a plan's REAL entitlement set into readable lines.
  *
@@ -98,11 +109,20 @@ type CatalogItem = {
  *  Order is deliberate — the things somebody is actually deciding between come
  *  first, and only entitlements that are GRANTED are listed. A pricing card is
  *  not the place to enumerate what you do not get. */
-function allFeatures(e?: Entitlements): string[] {
+function allFeatures(e?: Entitlements, serves?: Serves): string[] {
   if (!e) return [];
   const out: string[] = [];
-  if (e.inHouseDailyLimit === null) out.push('Unlimited in-house generation');
-  else if (e.inHouseDailyLimit) out.push(`${e.inHouseDailyLimit} in-house generations/day`);
+  /* 🔴 Entitled is not the same as SERVEABLE, and only one of them belongs on a
+   * card. `inHouseDailyLimit` is a real, enforced quota — and the route behind
+   * it answers 400 `inhouse_unavailable` when this deployment has no xeno-rt,
+   * so deriving the line straight from the entitlement advertises an allowance
+   * against an error. Omitted unless the server says it can serve it, which is
+   * the same fail-safe as `available` for a price: never offer what we cannot
+   * honour. Undefined counts as cannot — silence is not a yes. */
+  if (serves?.inHouse) {
+    if (e.inHouseDailyLimit === null) out.push('Unlimited in-house generation');
+    else if (e.inHouseDailyLimit) out.push(`${e.inHouseDailyLimit} in-house generations/day`);
+  }
   if (e.agents) out.push('AI agents across every app');
   if (e.crossApp) out.push('Cross-app workflows');
   if (e.cloudSync) out.push('Cloud sync and multi-device');
@@ -128,11 +148,15 @@ function allFeatures(e?: Entitlements): string[] {
  * a truer description of the decision being made — nobody compares Team to
  * nothing, they compare it to Pro.
  */
-function featuresFor(e?: Entitlements, baseline?: { label: string; entitlements?: Entitlements }): string[] {
-  const mine = allFeatures(e);
+function featuresFor(
+  e?: Entitlements,
+  baseline?: { label: string; entitlements?: Entitlements },
+  serves?: Serves,
+): string[] {
+  const mine = allFeatures(e, serves);
   if (!baseline?.entitlements) return mine.slice(0, 6);
 
-  const base = new Set(allFeatures(baseline.entitlements));
+  const base = new Set(allFeatures(baseline.entitlements, serves));
   const added = mine.filter((f) => !base.has(f));
   // Only roll up when this tier genuinely contains the cheaper one. If it does
   // not, "Everything in Pro" would be a lie and the full list is correct.
@@ -153,10 +177,87 @@ function featuresFor(e?: Entitlements, baseline?: { label: string; entitlements?
  * Capped, and capped at the TOP: these are ordered with the things people
  * actually decide on first, so a truncated list keeps the strongest argument.
  */
-function lockedFor(mine?: Entitlements, better?: Entitlements): string[] {
+function lockedFor(mine?: Entitlements, better?: Entitlements, serves?: Serves): string[] {
   if (!better) return [];
-  const have = new Set(allFeatures(mine));
-  return allFeatures(better).filter((f) => !have.has(f)).slice(0, 6);
+  const have = new Set(allFeatures(mine, serves));
+  return allFeatures(better, serves).filter((f) => !have.has(f)).slice(0, 6);
+}
+
+/**
+ * The line under the price. It has to carry whatever is true and awkward.
+ *
+ * Three facts compete for one line, and leaving any of them out is the kind of
+ * omission a customer discovers at checkout: that an annual plan charges a
+ * year up front, that Team multiplies by seats, and that a founding price is
+ * grandfathered rather than introductory. The last one matters most - "EUR 24"
+ * beside "EUR 39" reads as a discount that will expire unless we say plainly
+ * that it will not.
+ */
+function noteFor(item: CatalogItem, currency?: string): string {
+  const parts: string[] = [];
+  if (item.interval === 'year') parts.push(`Billed annually at ${formatPrice(item.price, currency)}`);
+  else parts.push('Billed monthly');
+  if (item.perSeat) parts.push('per seat');
+  parts.push('cancel any time');
+  return `${parts.join(' · ')}.`;
+}
+
+/**
+ * The founding-price promise: what it becomes, and that you keep this one.
+ *
+ * Both halves or neither. "EUR 24, locked forever" without the successor is a
+ * claim with nothing to compare against; "EUR 24, later EUR 39" without the lock
+ * reads as an introductory rate that expires — the bait-and-switch this
+ * ecosystem's own pricing standard exists to rule out. Together they are an
+ * honest deadline: the price rises for new customers and never for you.
+ *
+ * The successor comes from the server, matched on plan AND interval, so the
+ * yearly card quotes the yearly number. A literal here would be a promise about
+ * money maintained in the one place that cannot see what Stripe will charge.
+ */
+function foundingNote(item: CatalogItem, currency?: string): string | undefined {
+  if (!item.founding || !item.becomes) return undefined;
+  const then = item.becomes.perMonth ?? item.becomes.price;
+  const unit = item.becomes.perMonth != null || item.interval !== 'year' ? '/mo' : '';
+  return `${formatPrice(then, currency)}${unit} for everyone who joins later. You keep this price for as long as you stay.`;
+}
+
+/**
+ * What switching to annual actually saves — the SMALLEST saving on offer.
+ *
+ * One toggle switches every card, so any single percentage it states has to hold
+ * for all of them. A hand-typed "save 26%" sat here and was true only of the
+ * LIST prices; while founding pricing is open the plans actually on sale save
+ * 21% (Pro) and 20% (Team), so the control overstated the discount on both.
+ *
+ * Hence the minimum rather than the best case, and `floor` rather than `round`:
+ * rounding 20.8 up to 21 advertises a discount the customer does not receive.
+ * Understating is safe — every annual card also carries its own per-month
+ * figure, so the exact number is one glance away.
+ *
+ * ⚠️ It compares the two ANNUAL TOTALS, not the per-month figures. That is the
+ * quantity the customer actually parts with, and it avoids a real defect: Team
+ * saves exactly 20%, but `1 - 32/40` is 19.999999999999996 in binary, which
+ * floors to 19 — a full point given away to floating point. `(480 - 384)/480`
+ * is exact.
+ *
+ * Exported because it is a claim about money: it is gated against the real
+ * catalog in scripts/pricing.test.mjs, in both pricing regimes.
+ */
+export function annualSavingFrom(catalog?: CatalogItem[]): number | null {
+  const subs = (catalog || []).filter((i) => i.kind === 'subscription');
+  const savings = subs
+    .filter((y) => y.interval === 'year')
+    .map((y) => {
+      const monthly = subs.find((m) => m.plan === y.plan && (m.interval || 'month') === 'month');
+      if (!monthly?.price || !y.price) return null;
+      const yearOfMonths = monthly.price * 12;
+      return ((yearOfMonths - y.price) * 100) / yearOfMonths;
+    })
+    .filter((n): n is number => typeof n === 'number' && n > 0);
+  if (!savings.length) return null;
+  const pct = Math.floor(Math.min(...savings));
+  return pct > 0 ? pct : null;
 }
 
 /** Money in the server's currency. Intl rather than a '$' template: the anchor
@@ -195,6 +296,8 @@ const Onboarding: React.FC = () => {
      * The pricing step argues from the DIFFERENCE between free and paid, and a
      * difference needs both sides — see the note on getConfig(). */
     freePlan?: { plan: string; label: string; price: number; entitlements?: Entitlements };
+    /* Absent means "assume nothing is serveable" — see allFeatures. */
+    serves?: Serves;
   } | null>(null);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
   /* Raised by the workspace step's everything-bar. The nav drops away while it
@@ -236,7 +339,7 @@ const Onboarding: React.FC = () => {
         if (!cancelled && d?.success) {
           setBilling({
             enabled: Boolean(d.enabled), currency: d.currency || 'usd',
-            catalog: d.catalog || [], freePlan: d.freePlan,
+            catalog: d.catalog || [], freePlan: d.freePlan, serves: d.serves,
           });
         }
       })
@@ -434,10 +537,33 @@ const Onboarding: React.FC = () => {
   );
 
 
+  /* Monthly or annual. Defaults to MONTHLY.
+   *
+   * Annual is the better deal and defaulting to it would show a smaller
+   * number — which is exactly why it is not the default. Someone comparing
+   * prices should see the one they will be charged next month, not a figure
+   * that requires a year's commitment to be true. The saving is stated on the
+   * toggle instead, where it reads as an offer rather than a sleight. */
+  const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
+
   const subscriptions = useMemo(
-    () => (billing?.catalog || []).filter((i) => i.kind === 'subscription' && i.plan !== 'internal'),
+    () => (billing?.catalog || [])
+      .filter((i) => i.kind === 'subscription' && i.plan !== 'internal')
+      // Studio is an enterprise conversation, not a card on a signup flow.
+      // It stays in the catalog; it is not offered here.
+      .filter((i) => i.plan !== 'studio')
+      .filter((i) => (i.interval || 'month') === billingInterval),
+    [billing, billingInterval],
+  );
+
+  /* Is an annual price offered at all? The toggle must not exist otherwise -
+   * a control that switches to an empty list is worse than no control. */
+  const hasAnnual = useMemo(
+    () => (billing?.catalog || []).some((i) => i.kind === 'subscription' && i.interval === 'year'),
     [billing],
   );
+
+  const annualSaving = useMemo(() => annualSavingFrom(billing?.catalog), [billing]);
 
   /* The tier free is measured against: the CHEAPEST sellable one.
    *
@@ -705,6 +831,55 @@ const Onboarding: React.FC = () => {
                     : 'Browsing stays free. Generation, agents and cloud projects need a plan.'}
                 />
 
+                {/* ── Billing interval ─────────────────────────────────────
+                    Rendered only when an annual price actually exists. A
+                    toggle that switches to an empty grid is worse than no
+                    toggle, and the catalog is the only thing that knows. */}
+                {hasAnnual && (
+                  <div className="flex justify-center">
+                    <div
+                      role="group"
+                      aria-label="Billing interval"
+                      className="inline-flex gap-[2px] rounded-[9px] border border-white/[0.08] p-1"
+                      style={{ background: '#08080a' }}
+                    >
+                      {([
+                        { id: 'month' as const, label: 'Monthly' },
+                        {
+                          id: 'year' as const,
+                          label: 'Yearly',
+                          hint: annualSaving ? `save ${annualSaving}%` : undefined,
+                        },
+                      ]).map((opt) => {
+                        const on = billingInterval === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            data-roving="action"
+                            aria-pressed={on}
+                            onClick={() => setBillingInterval(opt.id)}
+                            className={cx(
+                              'rounded-[6px] px-4 py-2 text-[12.5px] font-medium transition-all duration-200',
+                              on ? 'text-white' : 'text-white/40 hover:text-white/70',
+                            )}
+                            // Selection is a lighter PLATE, not a colour - the
+                            // same monochrome rule the cards follow.
+                            style={on ? { background: '#242424' } : undefined}
+                          >
+                            {opt.label}
+                            {opt.hint && (
+                              <span className={cx('ml-2 text-[10.5px]', on ? 'text-white/45' : 'text-white/25')}>
+                                {opt.hint}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {subscriptions.length > 0 ? (
                   /* THREE tiers, side by side, free included.
                    *
@@ -727,17 +902,24 @@ const Onboarding: React.FC = () => {
                         price={formatPrice(billing.freePlan.price, billing.currency)}
                         interval=""
                         note="No card, no expiry."
-                        /* Free grants nothing in the entitlement table, so this
-                           is empty by design and the card is carried entirely by
-                           its locked list. Derived rather than assumed: give free
-                           an allowance tomorrow and the line appears by itself. */
-                        features={featuresFor(billing.freePlan.entitlements)}
-                        locked={lockedFor(billing.freePlan.entitlements, anchor?.entitlements)}
-                        /* The same number, twice, saying opposite things. That
-                           symmetry is the argument: free is not a smaller
-                           XENO, it is the whole of XENO with the engine off. */
+                        /* Free DOES grant something now — the local tier of the
+                           pricing standard — so this list fills itself from the
+                           same table, and the locked list still carries the
+                           argument by subtraction. Neither is typed. */
+                        features={featuresFor(billing.freePlan.entitlements, undefined, billing.serves)}
+                        locked={lockedFor(billing.freePlan.entitlements, anchor?.entitlements, billing.serves)}
+                        /* The same number, twice, differing only in what
+                           CONNECTS it. That is the paywall in the pricing
+                           standard: the apps are Layer 1 and free, and what
+                           costs money is our servers joining them up.
+                           ⚠️ This line used to read "None of them run", which
+                           was not true and — worse — not enforceable: the apps
+                           are local Electron installers and `canUse` gates our
+                           API, so a free user disproves it by opening one
+                           offline. A claim a customer can falsify in ten
+                           minutes discredits every other claim on the page. */
                         unlock={workspaceApps
-                          ? { count: workspaceApps, verdict: `All ${workspaceApps} open. None of them run.` }
+                          ? { count: workspaceApps, verdict: `All ${workspaceApps}, running on this machine.` }
                           : undefined}
                         current
                         style={wave(0, 0.10, 0.07)}
@@ -748,9 +930,14 @@ const Onboarding: React.FC = () => {
                       <PlanCard
                         key={item.id}
                         label={item.label}
-                        price={formatPrice(item.price, billing?.currency)}
-                        interval={item.interval || 'month'}
-                        note={item.perSeat ? 'Per seat, billed monthly.' : 'Billed monthly. Cancel any time.'}
+                        /* Annual prices the YEAR; the card shows the per-month
+                           figure because that is the number people compare,
+                           and the note states the real charge so the smaller
+                           number is never the whole claim. */
+                        price={formatPrice(item.perMonth ?? item.price, billing?.currency)}
+                        interval="month"
+                        note={noteFor(item, billing?.currency)}
+                        promise={foundingNote(item, billing?.currency)}
                         // Compare against the cheapest OTHER subscription, so
                         // the rollup names a real plan rather than a hardcoded
                         // one — reordering or renaming the catalog cannot make
@@ -758,13 +945,14 @@ const Onboarding: React.FC = () => {
                         features={featuresFor(
                           item.entitlements,
                           subscriptions.find((o) => o.id !== item.id && o.price < item.price),
+                          billing?.serves,
                         )}
                         // Pro is the anchor tier in the locked pricing strategy,
                         // so it carries the emphasis. Derived from the plan, not
                         // from position, so reordering the catalog cannot move
                         // the highlight onto the wrong card.
                         unlock={workspaceApps
-                          ? { count: workspaceApps, verdict: `All ${workspaceApps}, fully running.` }
+                          ? { count: workspaceApps, verdict: `All ${workspaceApps}, connected to each other.` }
                           : undefined}
                         highlighted={item.plan === 'pro'}
                         badge={item.plan === 'pro' ? 'Most popular' : item.badge}

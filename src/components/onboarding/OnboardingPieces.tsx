@@ -73,6 +73,11 @@ export const PlanCard: React.FC<{
   locked?: string[];
   /** Small line under the price — "per seat", "billed monthly". */
   note?: string;
+  /** The founding-price promise: what it becomes for later customers, and that
+   *  this one is kept. Rendered in the BODY, not the header — the header
+   *  reserves a fixed height so three plates stay aligned, and a second
+   *  variable line there drags one card's body out of line with the others. */
+  promise?: string;
   /** The measured app count in the workspace they chose, and what happens to it. */
   unlock?: { count: number; verdict: string };
   badge?: string;
@@ -84,7 +89,7 @@ export const PlanCard: React.FC<{
   onSelect?: () => void;
   style?: React.CSSProperties;
 }> = ({
-  label, price, interval, features, locked = [], note, unlock, badge,
+  label, price, interval, features, locked = [], note, promise, unlock, badge,
   highlighted, current, available, busy, onSelect, style,
 }) => (
   /* ═══════════════════════════════════════════════════════════════════════
@@ -220,6 +225,25 @@ export const PlanCard: React.FC<{
             {unlock.verdict}
           </p>
         </div>
+      )}
+
+      {promise && (
+        /* The founding price, and what it becomes.
+         *
+         * This is the only urgency device on the page, and it is honest: the
+         * price rises for LATER customers and never for this one. That is the
+         * whole difference between a deadline and a dark pattern — a countdown
+         * that resets, or a "was €39" that was never €39, is the thing this
+         * deliberately is not.
+         *
+         * The number it becomes is DERIVED from the list-priced catalog item,
+         * not typed here. A hand-written "€39 later" is a promise about a
+         * different SKU's price, and it goes stale silently the day that SKU
+         * changes — on the one line whose entire job is to be trusted. */
+        <p className={cx('mb-4 text-[11.5px] leading-snug',
+                         highlighted ? 'text-white/55' : 'text-white/35')}>
+          {promise}
+        </p>
       )}
 
       {features.length > 0 && (

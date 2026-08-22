@@ -56,7 +56,19 @@ import { resolveEntitlements } from '../utils/entitlementGate.js';
  * generic "upgrade required". `internal` is deliberately absent — it is a staff
  * plan, never something to sell a customer.
  */
-const UPGRADE_LADDER = ['free', 'pro', 'team'];
+/* SELLABLE plans only, cheapest first.
+ *
+ * 🔴 `free` was on this list and had to come off. It was harmless only while
+ * free granted nothing: the loop returns the first plan that GRANTS the
+ * capability, so a free tier that grants nothing is never returned. The moment
+ * free gained a real in-house allowance (`canUse: true`), every refusal began
+ * naming it - telling a user to "upgrade to free", which is both nonsense and
+ * an upgrade prompt that cannot be acted on.
+ *
+ * The rule is the one already written here for `internal`: a plan belongs on
+ * this ladder only if it is something we can sell a customer. Free is not, for
+ * exactly the same reason a staff plan is not. */
+const UPGRADE_LADDER = ['pro', 'team', 'studio'];
 
 /**
  * Capabilities this gate understands, mapped to the UpgradePrompt context token.

@@ -55,14 +55,39 @@ const CATALOG = [
   { id: 'credits_small',  kind: 'credits',      label: 'Starter',  credits: 1000,  price: 10,  priceEnv: 'STRIPE_PRICE_CREDITS_SMALL' },
   { id: 'credits_medium', kind: 'credits',      label: 'Plus',     credits: 5500,  price: 50,  priceEnv: 'STRIPE_PRICE_CREDITS_MEDIUM', badge: 'Best value' },
   { id: 'credits_large',  kind: 'credits',      label: 'Pro pack', credits: 12000, price: 100, priceEnv: 'STRIPE_PRICE_CREDITS_LARGE' },
-  { id: 'pro_monthly',    kind: 'subscription', label: 'Pro',      plan: 'pro',  credits: 0, price: 24, interval: 'month', priceEnv: 'STRIPE_PRICE_PRO_MONTHLY' },
-  // Team is PER-SEAT (LOCKED strategy: €40/seat/mo). Stripe quantity = active seats.
-  { id: 'team_seat',      kind: 'subscription', label: 'Team', plan: 'team', credits: 0, price: 40, interval: 'month', perSeat: true, priceEnv: 'STRIPE_PRICE_TEAM_SEAT_MONTHLY' },
-  // Legacy flat-rate Team — kept readable for any pre-existing subscription, NOT offered
-  // publicly (unconfigured priceEnv → available:false; the UI points Team → team_seat).
-  { id: 'team_monthly',   kind: 'subscription', label: 'Team (legacy flat)', plan: 'team', credits: 0, price: 60, interval: 'month', priceEnv: 'STRIPE_PRICE_TEAM_MONTHLY', legacy: true },
+
+  /* ── Everything — the anchor tier ────────────────────────────────────────
+   * Plan id stays `pro`. It is NOT cosmetic: production rows already carry
+   * plan='pro', and renaming the plan would silently downgrade every existing
+   * subscriber to the unknown-plan fallback. The LABEL is what changed.
+   *
+   * Two prices, one plan. Founding is grandfathered forever, so both must
+   * exist simultaneously — the offer filter shows one, the entitlement table
+   * resolves both to the same access. See `foundingOpen()`. */
+  { id: 'pro_monthly',        kind: 'subscription', label: 'Everything', plan: 'pro', credits: 0, price: 24,  interval: 'month', priceEnv: 'STRIPE_PRICE_PRO_MONTHLY',        founding: true },
+  { id: 'pro_annual',         kind: 'subscription', label: 'Everything', plan: 'pro', credits: 0, price: 228, interval: 'year',  priceEnv: 'STRIPE_PRICE_PRO_ANNUAL',         founding: true, perMonth: 19 },
+  { id: 'everything_monthly', kind: 'subscription', label: 'Everything', plan: 'pro', credits: 0, price: 39,  interval: 'month', priceEnv: 'STRIPE_PRICE_EVERYTHING_MONTHLY', listPrice: true },
+  { id: 'everything_annual',  kind: 'subscription', label: 'Everything', plan: 'pro', credits: 0, price: 348, interval: 'year',  priceEnv: 'STRIPE_PRICE_EVERYTHING_ANNUAL',  listPrice: true, perMonth: 29 },
+
+  // Team is PER-SEAT (LOCKED strategy: EUR 40/seat/mo). Stripe quantity = active seats.
+  { id: 'team_seat',   kind: 'subscription', label: 'Team', plan: 'team', credits: 0, price: 40,  interval: 'month', perSeat: true, priceEnv: 'STRIPE_PRICE_TEAM_SEAT_MONTHLY' },
+  { id: 'team_annual', kind: 'subscription', label: 'Team', plan: 'team', credits: 0, price: 384, interval: 'year',  perSeat: true, priceEnv: 'STRIPE_PRICE_TEAM_SEAT_ANNUAL', perMonth: 32 },
+
+  { id: 'studio_monthly', kind: 'subscription', label: 'Studio', plan: 'studio', credits: 0, price: 99, interval: 'month', priceEnv: 'STRIPE_PRICE_STUDIO_MONTHLY' },
+
+  // Legacy flat-rate Team - kept readable for any pre-existing subscription, NOT offered
+  // publicly (unconfigured priceEnv -> available:false; the UI points Team -> team_seat).
+  { id: 'team_monthly', kind: 'subscription', label: 'Team (legacy flat)', plan: 'team', credits: 0, price: 60, interval: 'month', priceEnv: 'STRIPE_PRICE_TEAM_MONTHLY', legacy: true },
 ];
 
+/* Founding pricing is OPEN until explicitly closed.
+ *
+ * The fail-safe direction matters and it is not the usual one. Defaulting to
+ * CLOSED on a missing/garbled env would quote EUR 39 to an early adopter who
+ * was promised EUR 24 grandfathered forever - breaking a public commitment.
+ * Defaulting to OPEN merely leaves money on the table for as long as nobody
+ * notices. One is a broken promise, the other is a delay. */
+const foundingOpen = () => process.env.XENO_FOUNDING_PRICING !== 'closed';
 function resolveItem(raw) {
   const priceId = process.env[raw.priceEnv] || null;
   return { ...raw, priceId, available: Boolean(priceId) };
@@ -103,24 +128,59 @@ async function livePriceFor(priceId) {
  * €60 legacy plan would have appeared in onboarding beside the real ones.
  *
  * A prose invariant is not an invariant. This is the filter that makes it one. */
-const isOfferable = (item) => !item.legacy;
+const isOfferable = (item) => {
+  if (item.legacy) return false;
+  /* Founding and list are two PRICES for one PLAN, and both must exist in the
+   * catalog at once - founding is grandfathered forever, so its price can
+   * never be deleted while a subscriber holds it. Exactly one is OFFERED.
+   *
+   * Resolving both to plan 'pro' is what makes that safe: whichever price a
+   * user bought, `entitlementsFor` gives them identical access. Only the
+   * amount differs, which is the entire point of a founding price. */
+  if (item.founding) return foundingOpen();
+  if (item.listPrice) return !foundingOpen();
+  return true;
+};
+
+/** One raw row, with the live Stripe amount overlaid onto the static fallback. */
+async function withLivePrice({ priceEnv, ...pub }) {
+  if (stripe && pub.priceId) {
+    const live = await livePriceFor(pub.priceId);
+    if (live && live.amount != null) return { ...pub, price: live.amount, currency: live.currency };
+  }
+  return { ...pub, currency: CURRENCY };
+}
 
 export async function getPublicCatalog() {
-  return Promise.all(CATALOG.filter(isOfferable).map(resolveItem).map(async ({ priceEnv, ...pub }) => {
-    if (stripe && pub.priceId) {
-      const live = await livePriceFor(pub.priceId);
-      if (live && live.amount != null) return { ...pub, price: live.amount, currency: live.currency };
-    }
-    return { ...pub, currency: CURRENCY };
-  })).then((items) => items.map((item) => (
+  /* EVERY row is priced, including the ones deliberately not offered.
+   *
+   * The unoffered list price is needed as a REFERENCE, not as a product. A
+   * founding price is only an argument if we say what it becomes — "EUR 24"
+   * standing alone reads as an ordinary price, and the whole commitment is
+   * that it is the lower of two. It goes through the same live overlay as
+   * anything sellable, so the number we promise it becomes is the number that
+   * would actually be charged, and only its `price` is carried across below,
+   * never its `priceId`. Quotable, unbuyable. */
+  const all = await Promise.all(CATALOG.map(resolveItem).map(withLivePrice));
+
+  return all.filter(isOfferable).map((item) => {
     /* Features come from the SAME table requireEntitlement reads, so a pricing
      * card can never advertise a capability the gate does not grant. Hand-typed
      * marketing bullets are how "Pro includes agents" outlives the code that
      * made it true. */
-    item.kind === 'subscription' && item.plan
+    const pub = item.kind === 'subscription' && item.plan
       ? { ...item, entitlements: entitlementsFor(item.plan) }
-      : item
-  )));
+      : item;
+    if (!item.founding) return pub;
+
+    /* Matched on plan AND interval. By plan alone, a yearly card would quote
+     * the MONTHLY successor — telling someone paying EUR 19/mo that their price
+     * becomes EUR 39, which is neither their price nor their term. */
+    const next = all.find((o) => o.listPrice && o.plan === item.plan && o.interval === item.interval);
+    return next
+      ? { ...pub, becomes: { price: next.price, perMonth: next.perMonth ?? null } }
+      : pub;
+  });
 }
 
 export async function getConfig() {
@@ -140,6 +200,23 @@ export async function getConfig() {
      * Same table `requireEntitlement` reads, so the card and the gate cannot
      * disagree in either direction. */
     freePlan: { plan: 'free', label: 'Free', price: 0, entitlements: entitlementsFor('free') },
+
+    /* What this deployment can actually SERVE — which is a different question
+     * from what a plan is entitled to, and the pricing card needs both.
+     *
+     * 🔴 An entitlement is an authorization fact; it says a request will not be
+     * refused for lack of a plan. It says nothing about whether the route
+     * behind it works. `POST /api/ai/chat` with `path='inhouse'` answers 400
+     * `inhouse_unavailable` when XENO_RT_BASE_URL is unset — so free's
+     * `inHouseDailyLimit: 50` is a real, enforced quota on a route that may
+     * have nothing behind it. Derived straight from the entitlement, the card
+     * would advertise "50 in-house generations/day" against a 400.
+     *
+     * This is the same fail-safe already used for money: `available` is false
+     * without a Stripe price id, so the UI never renders a button that cannot
+     * charge. The rule is the same one — do not advertise what this deployment
+     * cannot do — and the client omits the line rather than claiming it. */
+    serves: { inHouse: Boolean(process.env.XENO_RT_BASE_URL) },
   };
 }
 
@@ -173,16 +250,54 @@ export async function getConfig() {
  * it is one line to revert if it proves wrong.
  * ─────────────────────────────────────────────────────────────────────────── */
 const PLAN_ENTITLEMENTS = {
-  free: { plan: 'free', canUse: false, commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 0,    privateProjects: false, teamSeats: 0, cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
-  pro:  { plan: 'pro',  canUse: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0, cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
-  team: { plan: 'team', canUse: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+  /* ── FREE — the local Tool, and it genuinely runs ────────────────────────
+   * `canUse: true` with a real daily quota, NOT `canUse: false`.
+   *
+   * It was briefly false. Three reasons it is back, all from
+   * `XENO PRICING - STANDARD & LEDGER.md`:
+   *   1. In-house inference has near-zero marginal COGS, so withholding it
+   *      saves electricity and costs us the only cheap activation device we
+   *      have. Of 227 accounts, 4 ever generated an image and 0 ever uploaded
+   *      a file - the problem was never free users consuming too much.
+   *   2. It contradicted the public "BYOK everywhere, never locked to our
+   *      inference" commitment: a user with their own paid provider key could
+   *      not use XENO at all.
+   *   3. It was unenforceable in the direction it claimed. The apps are
+   *      downloadable installers; local editing never consults this table. A
+   *      gate that cannot reach the case it advertises is worse than none.
+   *
+   * The quota is enforced for real by middleware/inHouseDailyLimit.js. The
+   * paid boundary is the LAYER-2 flags below - cloudSync, crossApp, agents,
+   * privateProjects, collaboration - which a local binary genuinely cannot
+   * fake, plus `commercial`, which is a licence rather than a switch. */
+  free:   { plan: 'free',   canUse: true,  commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0,  cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
+
+  /* Everything. `crossApp` is the Layer-3 differentiator and the reason this
+   * tier exists - an agent that spans 26 applications is the one capability
+   * neither an app vendor nor a model vendor can assemble. */
+  pro:    { plan: 'pro',    canUse: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
+  team:   { plan: 'team',   canUse: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+  studio: { plan: 'studio', canUse: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 25, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+
   // Staff / internal-service accounts (prod has real users with plan='internal').
-  // NOT sellable — never in the CATALOG. All platform features enabled so internal
+  // NOT sellable - never in the CATALOG. All platform features enabled so internal
   // tooling and service accounts are never gated as free-tier. teamSeats 0: an
   // internal account is not itself a team container.
   internal: { plan: 'internal', canUse: true, commercial: true, maxResolution: '4k', priority: true, inHouseDailyLimit: null, privateProjects: true, teamSeats: 0, cloudSync: true, crossApp: true, agents: true, collaboration: true, watermark: false },
 };
 
+/* 🔴 NOT HERE YET: the EUR 9 single-app and EUR 19 single-suite rungs.
+ *
+ * They are locked in the pricing ladder and they are NOT implementable today,
+ * because nothing tells this API which application a request came from -
+ * `api_usage_logs.surface` carries one value for 99.95% of rows. Without app
+ * identity, `app` and `suite` would resolve to byte-identical entitlements and
+ * we would be charging EUR 19 for exactly what EUR 9 buys.
+ *
+ * Shipping them anyway is the failure this codebase keeps recording: a thing
+ * that is built, priced and advertised while nothing connects it. The exit
+ * condition is app identity on the request, then a scope on the plan row.
+ * Until then the ladder ships as Free / Everything / Team / Studio. */
 // Legacy/stray plan names seen in prod that must NOT silently fall back to free.
 // ultra → pro is a PROPOSED mapping (legacy 'ultra' subscribers get pro
 // entitlements) — pending user ratification; adjust here if a different target
