@@ -298,10 +298,18 @@ const PLAN_ENTITLEMENTS = {
  * that is built, priced and advertised while nothing connects it. The exit
  * condition is app identity on the request, then a scope on the plan row.
  * Until then the ladder ships as Free / Everything / Team / Studio. */
-// Legacy/stray plan names seen in prod that must NOT silently fall back to free.
-// ultra → pro is a PROPOSED mapping (legacy 'ultra' subscribers get pro
-// entitlements) — pending user ratification; adjust here if a different target
-// tier is decided.
+/* Legacy/stray plan names seen in prod that must NOT silently fall back to free.
+ *
+ * ultra → pro is RATIFIED (2026-08-22, by the account owner). It is exactly one
+ * live row and it is the operator's own account, so this grants nobody anything
+ * they were not already using — which is the only reason keeping it is cheap.
+ *
+ * ⚠️ An alias is a decision that outlives whoever made it, so the direction
+ * matters: the fallback below is `free`, meaning a plan name nobody recognises
+ * gets the FREE tier and a typo cannot mint a paid account. An alias is the
+ * deliberate exception to that, one name at a time. Do not turn this into a
+ * permissive prefix/regex match — the value of the map is that every entry was
+ * looked at. */
 const PLAN_ALIASES = { ultra: 'pro' };
 
 /** Feature entitlements for a plan (aliases resolved; defaults to free). */
