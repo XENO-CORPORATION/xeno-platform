@@ -74,6 +74,8 @@ import oauth2Routes from './routes/oauth2Routes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
+import inferenceCredentialRoutes from './routes/inferenceCredentialRoutes.js';
+import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
 import { oidcAuth } from './middleware/oidcAuth.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
@@ -552,6 +554,13 @@ if (process.env.LEDGER_V2_ENABLED === 'true') {
   app.use('/api/v2/ledger', databaseMiddleware, oidcAuth, v2LedgerRoutes);
   console.log('💳 Ledger v2 routes integrated: /api/v2/ledger/* + /service/* (LEDGER_V2_ENABLED)');
 }
+
+// Grant exchange is service-token, not OIDC — the gateway has no user session.
+// Mounted BEFORE the user vault so `/credential` is never stolen by oidcAuth.
+// Fail-closed when INFERENCE_GRANT_TOKEN is unset (see inferenceGrantAuth.js).
+// 🔴 POST /credential RETURNS a provider secret. Never add it to a body logger.
+app.use('/api/v2/inference/credential', databaseMiddleware, inferenceCredentialRoutes);
+app.use('/api/v2/inference/service', databaseMiddleware, inferenceServiceRoutes);
 
 // ── OIDC provider v2 (additive, flag-gated) ──────────────────────────────────
 // Mounted ONLY when OIDC_ENABLED=true → default (flag off) is a no-op. The

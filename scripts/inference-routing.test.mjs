@@ -330,6 +330,12 @@ test('the mount is authenticated and carries the do-not-log warning', () => {
     'the vault must sit behind oidcAuth — an unauthenticated vault is not a vault');
   assert.match(index, /CARRIES A USER'S PROVIDER KEY/,
     'the next person to add a body logger has to read this first');
+  assert.match(index, /app\.use\('\/api\/v2\/inference\/credential', databaseMiddleware, inferenceCredentialRoutes\)/,
+    'grant exchange is service-token, not oidcAuth — the gateway has no user session');
+  const credMount = index.indexOf("app.use('/api/v2/inference/credential'");
+  const vaultMount = index.indexOf("app.use('/api/v2/inference', databaseMiddleware, oidcAuth");
+  assert.ok(credMount !== -1 && credMount < vaultMount,
+    'credential must be mounted BEFORE the oidc vault or oidcAuth steals the path');
 });
 
 test('supported providers are declared, not improvised', () => {

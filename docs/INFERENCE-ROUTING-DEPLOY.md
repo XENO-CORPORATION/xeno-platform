@@ -8,14 +8,12 @@ surface at `/overview/ai-keys`. Backend **and** frontend **and** a DB migration.
 `release-guide/04-build-and-deploy.md` (read §3 and §4 — this runbook assumes
 them and only adds what is different).
 
-**Branch:** `feat/inference-routing` · **Commit:** `59e5349`
+**Branch:** `feat/byok-egress` (platform + gateway)
 
-**Hosts touched: `xeno-platform-001` ONLY.**
-`xeno-private-api-001` receives **nothing in this pass**, and that is a fact
-about scope, not an oversight — the gateway code for BYOK (**P3**) is not
-written, so there is no artifact to ship there. Deploying "nothing" to a second
-host to make a plan look complete is theatre. See §10 for what the API box
-genuinely needs, and when.
+**Hosts:** `xeno-platform-001` (vault, grants, `/api/ai/chat`) and, when
+flipping the flag, `xeno-private-api-001` (gateway grant exchange). Do not
+set `SECRET_BOX_KEY` on the API box. Do not flip `BYOK_ENABLED=true` until
+`INFERENCE_GRANT_TOKEN` is set on **both** hosts and the grant tests are green.
 
 ---
 
@@ -89,17 +87,21 @@ sudo docker exec xenostudio-postgres psql -U postgres -c 'CREATE DATABASE xeno_m
 gunzip -c ~/xenostudio-pre-inference-*.sql.gz \
   | sudo docker exec -i xenostudio-postgres psql -U postgres -d xeno_migration_check
 
-# Apply ONLY the new migration to the scratch copy and read the result.
+# Apply BOTH new migrations to the scratch copy and read the result.
+# scp the two files up first. Order is load-bearing — grants FK to credentials.
 sudo docker exec -i xenostudio-postgres psql -U postgres -d xeno_migration_check \
-  < /tmp/20260817120000-inference-routing.sql     # scp it up first
+  < /tmp/20260822110000-inference-routing.sql
+sudo docker exec -i xenostudio-postgres psql -U postgres -d xeno_migration_check \
+  < /tmp/20260822120000-inference-grants.sql
 
-# Both tables, both CHECK constraints, both FK behaviours.
+# Both tables, both CHECK constraints, both FK behaviours, and the grant table.
 sudo docker exec xenostudio-postgres psql -U postgres -d xeno_migration_check \
-  -c '\d user_provider_credentials' -c '\d inference_routes'
+  -c '\d user_provider_credentials' -c '\d inference_routes' -c '\d inference_grants'
 ```
 
 **Expected:** `upc_secret_is_sealed`, `ir_byok_needs_credential`, `ON DELETE
-CASCADE` to `users`, `ON DELETE RESTRICT` to `user_provider_credentials`.
+CASCADE` to `users`, `ON DELETE RESTRICT` to `user_provider_credentials`,
+`inference_grants` with `grant_hash` and **no secret column**.
 
 Only when that is clean:
 
@@ -118,14 +120,37 @@ silently do not ship (`release-guide/04` §3.2).
 git archive --format=tar HEAD \
   src/server/index.js \
   src/server/routes/v2InferenceRoutes.js \
+  src/server/routes/inferenceCredentialRoutes.js \
+  src/server/routes/inferenceServiceRoutes.js \
+  src/server/routes/inferenceGrantAuth.js \
+  src/server/routes/aiRoutes.js \
   src/server/services/providerCredentials.js \
+  src/server/services/inferenceGrants.js \
   src/server/utils/safeEndpoint.js \
-  src/server/database/migrations/20260817120000-inference-routing.sql \
-  docker-compose.yml \
+  src/server/utils/xenoChat.js \
+  src/server/utils/inferenceMeter.js \
+  src/server/utils/requestSurface.js \
+  src/server/utils/recordInferenceUsage.js \
+  src/server/middleware/requestLogger.js \
+  src/server/database/migrations/20260822110000-inference-routing.sql \
+  src/server/database/migrations/20260822120000-inference-grants.sql \
 | ssh xeno-platform-001 "cd /mnt/projects/xeno-platform && sudo tar xf - --overwrite \
-   && find src/server/routes/v2InferenceRoutes.js src/server/services/providerCredentials.js \
-           src/server/utils/safeEndpoint.js src/server/index.js \
-           src/server/database/migrations/20260817120000-inference-routing.sql docker-compose.yml \
+   && find src/server/routes/v2InferenceRoutes.js \
+           src/server/routes/inferenceCredentialRoutes.js \
+           src/server/routes/inferenceServiceRoutes.js \
+           src/server/routes/inferenceGrantAuth.js \
+           src/server/routes/aiRoutes.js \
+           src/server/services/providerCredentials.js \
+           src/server/services/inferenceGrants.js \
+           src/server/utils/safeEndpoint.js \
+           src/server/utils/xenoChat.js \
+           src/server/utils/inferenceMeter.js \
+           src/server/utils/requestSurface.js \
+           src/server/utils/recordInferenceUsage.js \
+           src/server/middleware/requestLogger.js \
+           src/server/index.js \
+           src/server/database/migrations/20260822110000-inference-routing.sql \
+           src/server/database/migrations/20260822120000-inference-grants.sql \
       -exec sudo sed -i 's/\r\$//' {} + \
    && sudo docker compose build backend"
 ```
@@ -133,6 +158,20 @@ git archive --format=tar HEAD \
 CRLF normalisation is required (this repo is developed on win32) and **must
 never touch binaries** — the file list above is all text, deliberately explicit
 rather than a glob.
+
+**Do not archive-overwrite `docker-compose.yml`.** The box file carries
+`REGISTRATION_OPEN_UNTIL` and other lockdown values that are not all in the
+repo. After the backend files land, surgically add the grant-token
+passthrough if it is missing:
+
+```bash
+ssh xeno-platform-001 'cd /mnt/projects/xeno-platform && sudo grep -n INFERENCE_GRANT_TOKEN docker-compose.yml || true'
+# If absent, insert next to BYOK_ENABLED — do not replace the file.
+```
+
+The repo compose already declares both `BYOK_ENABLED` and
+`INFERENCE_GRANT_TOKEN` so a future full deploy has them; that is not
+permission to clobber the live file today.
 
 **Build first, swap separately**, so a failed build never removes a running
 container:
@@ -179,6 +218,9 @@ notice rather than an empty screen.
 Deploying code and enabling a feature are two decisions. Keep them two commands.
 
 ```bash
+# INFERENCE_GRANT_TOKEN must already be on BOTH hosts (platform + gateway).
+# Do not flip the flag before that — exchange would 401 and every BYOK
+# chat would fail closed (correct) while looking like an outage.
 ssh xeno-platform-001
 cd /mnt/projects/xeno-platform
 sudo grep -q '^BYOK_ENABLED=' .env || echo 'BYOK_ENABLED=true' | sudo tee -a .env
@@ -199,7 +241,7 @@ reported a **stale HEAD** as a successful push.
 # The tables exist IN PRODUCTION, not just in a migration file.
 ssh xeno-platform-001 "sudo docker exec xenostudio-postgres psql -U postgres -d xenostudio \
   -c \"select tablename from pg_tables where tablename in
-       ('user_provider_credentials','inference_routes');\""
+       ('user_provider_credentials','inference_routes','inference_grants');\""
 
 # The route answers, and the flag reads as intended.
 curl -s https://xenostudio.ai/api/v2/inference/providers -H "Authorization: Bearer $TOK" | jq
@@ -232,7 +274,7 @@ SELECT count(*) FROM api_usage_logs
 
 | Symptom | Action |
 |---|---|
-| Backend will not boot after the migration | `sudo docker compose exec postgres psql -U postgres -d xenostudio` → `DROP TABLE inference_routes; DROP TABLE user_provider_credentials; DELETE FROM schema_migrations WHERE version LIKE '20260817120000%';` then redeploy the previous `index.js`. The `-- DOWN` section of the migration is exactly this. |
+| Backend will not boot after the migration | `sudo docker compose exec postgres psql -U postgres -d xenostudio` → `DROP TABLE inference_grants; DROP TABLE inference_routes; DROP TABLE user_provider_credentials; DELETE FROM schema_migrations WHERE version IN ('20260822110000','20260822120000');` then redeploy the previous `index.js`. The `-- DOWN` sections are exactly this. |
 | Feature misbehaving, backend healthy | Set `BYOK_ENABLED=` (empty) and `up -d backend`. Instant, reversible, keeps the tables. **Prefer this** — it is the reason the flag exists. |
 | Frontend in state `Created`, site 502 | `sudo docker compose up -d frontend` again once `backend` is healthy (§0.2). |
 | Data loss | Restore the §2 dump. It was proven restorable before anything changed. |
@@ -269,27 +311,47 @@ breaks sign-in for every shipped product.
 
 Stated so nobody reports it as a regression:
 
-- **BYOK does not serve inference yet.** `aiRoutes.js` still returns
-  `byok_unavailable`; wiring egress is **P2/P3** (the resolver is deployed and
-  read-only; the gateway grant exchange is not built).
-- **Per-product usage numbers are not yet real.** 99.95% of `api_usage_logs`
-  rows carry `surface='xeno_api'`, a transport label. That is **P4**, and it is
-  blocked behind products adopting the account SDK.
+- **BYOK does not serve until `BYOK_ENABLED=true` AND `INFERENCE_GRANT_TOKEN`
+  is set on platform and gateway.** Flag off is still today's `400
+  byok_unavailable`. That is fail-closed, not a missing feature.
+- **Do not set `SECRET_BOX_KEY` on `xeno-private-api-001`.** Grant exchange
+  is the hop. Spec §6.1.
+- **Products that never send `X-Xeno-Surface` still stamp `legacy:xeno_api`.**
+  Per-product numbers become real as each product adopts the account SDK.
 - **10 of 14 products have never signed in**, so most rows will read "never
   signed in". That is accurate, not a bug.
 
 ---
 
-## 10. `xeno-private-api-001` — what it needs, and when
+## 10. `xeno-private-api-001` — grant exchange (P3)
 
-Not this deploy. But the feature is not finished without it, so here is the
-scope, measured on the box 2026-08-17.
+Ship `byokEgress.js` + the `server.js` / `package.json` wiring. Do not set
+`SECRET_BOX_KEY` on this box. Do not set `PLATFORM_DATABASE_URL` as part of
+the same change.
+
+```bash
+# From the xeno-api-proxy checkout, after the commit is on the branch:
+scp byokEgress.js server.js package.json xeno-private-api-001:/tmp/byok-egress/
+# Then on the box, copy into the running tree (measure the path first —
+# historically /home/bunker/apps/xeno-api-proxy) and
+#   pm2 restart xeno-api-proxy --update-env
+# only AFTER INFERENCE_GRANT_TOKEN is in that tree's .env.
+```
+
+`INFERENCE_GRANT_TOKEN` must be the **same value** as on `xeno-platform-001`.
+Install it from a one-line file, never by interpolating the value into an
+ssh command that a log will capture.
+
+---
+
+## 11. What this still does not do
+
+P3 grant exchange is this deploy. These remain:
 
 | Work | Host | Phase |
 |---|---|---|
-| Grant exchange in `xeno-api-proxy` — BYOK for products that call `api.xenostudio.ai` **directly** (agent-cli, extension, browser, SDKs) | `xeno-private-api-001` | **P3** |
-| Tracking view in `xeno-api-platform/portal` (Next.js, own Postgres, auth federated to the platform) | `xeno-private-api-001` | **P5** |
-| `surface` carrying the real `client_id` instead of the `xeno_api` bucket | both | **P4** |
+| Tracking view in `xeno-api-platform/portal` | `xeno-private-api-001` | **P5** |
+| `surface` carrying the real `client_id` instead of the `legacy:xeno_api` bucket | both | **P4** (header exists; products still have to send it) |
 
 **🔴 The one rule to carry into P3.** `xeno-api-proxy` already contains code for
 a direct pooled connection to the platform Postgres (`PLATFORM_DATABASE_URL`),

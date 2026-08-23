@@ -70,8 +70,15 @@ export const logger = new StructuredLogger({ service: 'xenostudio-backend' });
 // Paths to skip logging (noisy health checks)
 const SKIP_LOG_PATHS = new Set(['/health', '/api/status']);
 
-// Paths with sensitive bodies (don't log request body)
-const SENSITIVE_PATHS = ['/api/auth/login', '/api/auth/register', '/api/auth/reset-password'];
+// Paths with sensitive bodies (don't log request body).
+// `/api/v2/inference` is a PREFIX: credentials POST carries a key, and
+// `/credential` RETURNS one. Hygiene §L2 — this family is never body-logged.
+export const SENSITIVE_PATHS = [
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/reset-password',
+  '/api/v2/inference',
+];
 
 export function requestLoggerMiddleware(req, res, next) {
   // Skip noisy paths
@@ -96,6 +103,7 @@ export function requestLoggerMiddleware(req, res, next) {
 
   // Log incoming request
   const isSensitive = SENSITIVE_PATHS.some(p => req.path.startsWith(p));
+  void isSensitive; // bodies are never logged; the prefix list is the seal
   req.log.info('request_start', {
     query: Object.keys(req.query).length > 0 ? req.query : undefined,
     contentLength: req.headers['content-length'],

@@ -27,11 +27,11 @@ export function xenoApiConfigured() {
  * Returns the raw OpenAI-shaped JSON ({ choices:[{message:{content}}], usage, model }).
  * Throws Error with .http=503 if the key is unset, or a provider Error on non-2xx.
  */
-export async function xenoChatCompletion({ model, messages, temperature, max_tokens, stream = false, extra = {} }) {
+export async function xenoChatCompletion({ model, messages, temperature, max_tokens, stream = false, extra = {}, headers = {} }) {
   if (!XENO_API_KEY) { const e = new Error('XENO_API_KEY not configured'); e.http = 503; throw e; }
   const response = await fetch(`${XENO_API_BASE}/chat/completions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${XENO_API_KEY}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${XENO_API_KEY}`, ...headers },
     body: JSON.stringify({ model: normalizeXenoModelId(model), messages, temperature, max_tokens, stream, ...extra }),
   });
   if (!response.ok) {

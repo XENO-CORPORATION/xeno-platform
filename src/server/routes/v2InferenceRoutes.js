@@ -26,6 +26,7 @@ import {
   createCredential, listCredentials, revokeCredential, deleteCredential,
   setRoute, clearRoute, listRoutes, listProducts, resolveInferenceRoute,
 } from '../services/providerCredentials.js';
+import { attachManagedGrant } from '../services/inferenceGrants.js';
 
 const router = express.Router();
 
@@ -146,9 +147,9 @@ router.delete('/routes/:surface', async (req, res) => {
 /**
  * POST /resolve  { surface, model?, requestedPath? }
  *
- * The authority both inference entry points ask. Read-only: it decides, it does
- * not spend. Forking this decision is exactly how the platform and the gateway
- * each ended up believing the other owned BYOK.
+ * The authority both inference entry points ask. A managed-BYOK decision
+ * also mints a ≤60s grant. Forking this decision is exactly how the
+ * platform and the gateway each ended up believing the other owned BYOK.
  *
  * 🔴 A byok decision that cannot be satisfied returns a typed 409. It never
  * degrades to premium — that would spend the user's credits on a request they
@@ -156,8 +157,9 @@ router.delete('/routes/:surface', async (req, res) => {
  */
 router.post('/resolve', async (req, res) => {
   try {
-    const { surface, requestedPath } = req.body || {};
-    res.json(await resolveInferenceRoute(req.db, req.user.id, { surface, requestedPath }));
+    const { surface, requestedPath, model } = req.body || {};
+    const decision = await resolveInferenceRoute(req.db, req.user.id, { surface, requestedPath });
+    res.json(await attachManagedGrant(req.db, req.user.id, decision, { surface, model }));
   } catch (e) { sendError(res, e); }
 });
 
