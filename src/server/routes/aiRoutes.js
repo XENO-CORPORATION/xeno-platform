@@ -11,6 +11,10 @@ import { getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { xenoChatCompletion, xenoChatCompletionStream, xenoApiConfigured } from '../utils/xenoChat.js';
 import { enforceInHouseDailyLimit, limitExceededBody } from '../middleware/inHouseDailyLimit.js';
 import requireEntitlement from '../middleware/requireEntitlement.js';
+import { byokEnabled, resolveInferenceRoute } from '../services/providerCredentials.js';
+import { mintGrant } from '../services/inferenceGrants.js';
+import { requestSurface } from '../utils/requestSurface.js';
+import { recordInferenceUsage } from '../utils/recordInferenceUsage.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -23,8 +27,8 @@ const LOCAL_MODEL_CATALOG_PATH = path.resolve(__dirname, '../data/localModelCata
 // OpenAI-compatible POST /v1/chat/completions (XENO_API_KEY, server-to-server).
 // Premium is metered LOCALLY as an interim measure until the XENO API's
 // platform-credit integration is live. BYOK is owned by the XENO API, not here.
-async function callXenoApi(model, messages, temperature, max_tokens, extra = {}) {
-  const data = await xenoChatCompletion({ model, messages, temperature, max_tokens, extra });
+async function callXenoApi(model, messages, temperature, max_tokens, extra = {}, headers = {}) {
+  const data = await xenoChatCompletion({ model, messages, temperature, max_tokens, extra, headers });
   const message = data.choices?.[0]?.message || {};
   return {
     success: true,
@@ -131,19 +135,78 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
-  const inferencePath = normalizePath(reqPath);
+  const requestedPath = reqPath != null && String(reqPath).trim() !== '' ? normalizePath(reqPath) : null;
+  const surface = requestSurface(req);
   const route = resolveRoute(model);
 
+  // Flag off + an explicit byok request keeps today's exact 400. Stored
+  // routes are ignored until BYOK_ENABLED=true — fail closed, not silent serve.
+  if (requestedPath === 'byok' && !byokEnabled()) {
+    return res.status(400).json({
+      error: 'byok_unavailable',
+      message: 'Bring-your-own-key is managed on your XENO account and is coming soon. Use a premium model for now.',
+    });
+  }
+
+  let decision;
+  if (!byokEnabled()) {
+    // Stored routes are ignored while the flag is off. Today's chat path.
+    decision = { path: requestedPath || 'premium', mode: 'managed', reason: 'flag-off', credential: null };
+  } else {
+    try {
+      decision = await resolveInferenceRoute(req.db, userId, { surface, requestedPath });
+    } catch (error) {
+      const code = error && error.code;
+      if (code === 'byok_disabled') {
+        return res.status(400).json({
+          error: 'byok_unavailable',
+          message: 'Bring-your-own-key is managed on your XENO account and is coming soon. Use a premium model for now.',
+        });
+      }
+      if (code && (String(code).startsWith('byok_') || code === 'inhouse_unavailable')) {
+        return res.status(error.http || 409).json({ error: code, message: error.message });
+      }
+      return res.status(500).json({ error: 'AI generation failed', model });
+    }
+  }
+
+  const inferencePath = decision.path;
+
   try {
-    // ── BYOK (owned by the XENO API, not the platform) ───────────────────────
-    // Users bring their own key on their XENO account; the XENO API then routes
-    // their requests on their key (unmetered). The platform stores no provider
-    // keys. Until the XENO API exposes this, byok is unavailable.
+    // ── BYOK — mint a grant, egress through the gateway, never meter (D4/D5).
     if (inferencePath === 'byok') {
-      return res.status(400).json({
-        error: 'byok_unavailable',
-        message: 'Bring-your-own-key is managed on your XENO account and is coming soon. Use a premium model for now.',
+      if (decision.mode === 'local') {
+        return res.status(409).json({
+          error: 'byok_local_egress',
+          message: 'This product is set to call the provider itself. The key never reaches XENO.',
+        });
+      }
+      if (!decision.credential || !decision.credential.id) {
+        return res.status(409).json({ error: 'byok_credential_missing', message: 'no key is configured for this product' });
+      }
+      if (!xenoApiConfigured()) {
+        return res.status(503).json({ error: 'Premium inference unavailable', message: 'The inference service is not configured.' });
+      }
+      const minted = await mintGrant(req.db, userId, {
+        surface,
+        model,
+        credentialId: decision.credential.id,
       });
+      const response = await callXenoApi(model, messages, temperature, max_tokens, toolExtra, {
+        'X-Xeno-Byok-Grant': minted.grant,
+        'X-Xeno-Surface': surface,
+      });
+      // cost_micro is 0 by construction — recordInferenceUsage refuses any other value.
+      await recordInferenceUsage(req.db, userId, {
+        surface,
+        model,
+        provider: decision.credential.provider || 'byok',
+        requestId: requestId || req.headers['x-request-id'] || randomUUID(),
+        inputTokens: response.usage?.prompt_tokens ?? 0,
+        outputTokens: response.usage?.completion_tokens ?? 0,
+        endpoint: '/api/ai/chat',
+      }).catch(() => {});
+      return res.json({ ...response, path: 'byok', metered: false, cost_micro: 0 });
     }
 
     // ── IN-HOUSE (xeno-rt) ──────────────────────────────────────────────────
@@ -175,8 +238,10 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
 
     const metered = await meterPremiumChat(req.db, userId, {
       model, provider: 'xeno', requestId: reqIdSeed,
-      estInputTokens, maxTokens: max_tokens,
-      run: () => callXenoApi(model, messages, temperature, max_tokens, toolExtra),
+      estInputTokens, maxTokens: max_tokens, surface,
+      run: () => callXenoApi(model, messages, temperature, max_tokens, toolExtra, {
+        'X-Xeno-Surface': surface,
+      }),
     });
 
     return res.json({
@@ -232,9 +297,45 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'unauthorized', message: 'Authentication required.' });
 
-  const inferencePath = normalizePath(reqPath);
-  if (inferencePath !== 'premium') {
-    // P0 is the premium path only; byok/inhouse streaming is not implemented yet.
+  const requestedPath = reqPath != null && String(reqPath).trim() !== '' ? normalizePath(reqPath) : null;
+  const surface = requestSurface(req);
+
+  if (requestedPath === 'byok' && !byokEnabled()) {
+    return res.status(400).json({
+      error: 'byok_unavailable',
+      message: 'Bring-your-own-key is managed on your XENO account and is coming soon. Use a premium model for now.',
+    });
+  }
+
+  let streamDecision;
+  if (!byokEnabled()) {
+    streamDecision = { path: requestedPath || 'premium' };
+  } else {
+    try {
+      streamDecision = await resolveInferenceRoute(req.db, userId, { surface, requestedPath });
+    } catch (error) {
+      const code = error && error.code;
+      if (code === 'byok_disabled') {
+        return res.status(400).json({
+          error: 'byok_unavailable',
+          message: 'Bring-your-own-key is managed on your XENO account and is coming soon. Use a premium model for now.',
+        });
+      }
+      if (code && (String(code).startsWith('byok_') || code === 'inhouse_unavailable')) {
+        return res.status(error.http || 409).json({ error: code, message: error.message });
+      }
+      return res.status(500).json({ error: 'inference_error', message: 'AI generation failed' });
+    }
+  }
+
+  if (streamDecision.path !== 'premium') {
+    if (streamDecision.path === 'byok' && streamDecision.mode === 'local') {
+      return res.status(409).json({
+        error: 'byok_local_egress',
+        message: 'This product is set to call the provider itself. The key never reaches XENO.',
+      });
+    }
+    // Streaming BYOK is not implemented — refuse, do not bill (spec D5).
     return res.status(501).json({
       error: 'invalid_request',
       message: 'Streaming currently supports the premium path only. Use POST /api/ai/chat for byok/inhouse.',
@@ -259,7 +360,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   try {
     meter = await meterPremiumChatStream(req.db, userId, {
       model, provider: 'xeno', requestId: reqIdSeed,
-      estInputTokens, maxTokens: max_tokens,
+      estInputTokens, maxTokens: max_tokens, surface: requestSurface(req),
     });
   } catch (error) {
     if (error.http === 402) {

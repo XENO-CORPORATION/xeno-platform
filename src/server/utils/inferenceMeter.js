@@ -80,6 +80,7 @@ export async function meterPremiumChat(db, userId, opts) {
   const {
     model, provider, requestId,
     estInputTokens = 0, maxTokens = 1024, run,
+    surface = 'ai_chat',
   } = opts;
 
   const holdId = deterministicTxnId(userId, requestId, model).slice(0, 64);
@@ -94,7 +95,7 @@ export async function meterPremiumChat(db, userId, opts) {
     await holdV2(db, userId, {
       holdId,
       amountMicro: estimateMicro,
-      surface: 'ai_chat',
+      surface,
       operation: 'chat.completion',
       expiresInSeconds: 900,
     });
@@ -108,7 +109,7 @@ export async function meterPremiumChat(db, userId, opts) {
     result = await run();
   } catch (e) {
     await voidHoldV2(db, userId, holdId).catch((ve) => reportMeterFailure('void', ve, {
-      userId, holdId, surface: 'ai_chat', operation: 'chat.completion', heldMicro: estimateMicro,
+      userId, holdId, surface, operation: 'chat.completion', heldMicro: estimateMicro,
     }));
     throw e;
   }
@@ -295,6 +296,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
   const {
     model, provider, requestId,
     estInputTokens = 0, maxTokens = 1024,
+    surface = 'ai_chat',
   } = opts;
 
   const holdId = deterministicTxnId(userId, requestId, model).slice(0, 64);
@@ -312,7 +314,7 @@ export async function meterPremiumChatStream(db, userId, opts) {
     await holdV2(db, userId, {
       holdId,
       amountMicro: estimateMicro,
-      surface: 'ai_chat',
+      surface,
       operation: 'chat.completion.stream',
       expiresInSeconds: 120,
     });
