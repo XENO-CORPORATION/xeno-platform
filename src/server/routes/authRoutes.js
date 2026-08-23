@@ -26,6 +26,7 @@ import {
 } from '../services/accountActivation.js';
 import { describeClient } from '../utils/userAgent.js';
 import { optOut } from '../services/emailPreferences.js';
+import { resolveOAuthLandingPath } from '../../lib/onboardingHandoff.js';
 import {
   requireRegistrationOpen,
   assertRegistrationAllowed,
@@ -97,13 +98,14 @@ const FRONTEND_URL = process.env.AUTH_FRONTEND_URL || siteOrigin();
 
 // Helper: build OAuth redirect URL
 function buildOAuthRedirectUrl(returnUrl, token, isNew) {
-  if (returnUrl && returnUrl.startsWith("xeno://")) {
-    const sep = returnUrl.includes("?") ? "&" : "?";
-    return `${returnUrl}${sep}token=${token}&isNew=${isNew}`;
+  const dest = resolveOAuthLandingPath(returnUrl, isNew);
+  if (dest.startsWith("xeno://")) {
+    const sep = dest.includes("?") ? "&" : "?";
+    return `${dest}${sep}token=${token}&isNew=${isNew}`;
   }
-  // Respect any existing query string on returnUrl (e.g. /cli-auth?session=XXX).
-  const sep = returnUrl && returnUrl.includes("?") ? "&" : "?";
-  return `${FRONTEND_URL}${returnUrl}${sep}token=${token}&isNew=${isNew}`;
+  // Respect any existing query string on dest (e.g. /cli-auth?session=XXX).
+  const sep = dest.includes("?") ? "&" : "?";
+  return `${FRONTEND_URL}${dest}${sep}token=${token}&isNew=${isNew}`;
 }
 
 // For desktop app: serve an HTML page that triggers the deep link

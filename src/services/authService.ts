@@ -1,6 +1,8 @@
 // XenoOS Authentication Service
 // Real authentication with database integration
 
+import { AUTH_TOKEN_KEY, ONBOARDING_DONE_KEY, ONBOARDING_NEXT_KEY } from '../lib/onboardingHandoff.js';
+
 const API_BASE = '/api';
 
 export interface User {
@@ -40,7 +42,7 @@ class AuthService {
 
   constructor() {
     // Load token from localStorage on initialization
-    this.token = localStorage.getItem('xenoos_auth_token');
+    this.token = localStorage.getItem(AUTH_TOKEN_KEY);
   }
 
   // Check if user is authenticated
@@ -81,7 +83,7 @@ class AuthService {
 
       if (response.ok && data.success) {
         this.token = data.token;
-        localStorage.setItem('xenoos_auth_token', data.token);
+        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
         localStorage.setItem('xenoos_user', JSON.stringify(data.user));
         return data;
       } else {
@@ -114,7 +116,7 @@ class AuthService {
 
       if (response.ok && data.success) {
         this.token = data.token;
-        localStorage.setItem('xenoos_auth_token', data.token);
+        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
         localStorage.setItem('xenoos_user', JSON.stringify(data.user));
         return data;
       } else {
@@ -135,8 +137,12 @@ class AuthService {
   // Logout user
   logout(): void {
     this.token = null;
-    localStorage.removeItem('xenoos_auth_token');
+    localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem('xenoos_user');
+    try {
+      sessionStorage.removeItem(ONBOARDING_DONE_KEY);
+      sessionStorage.removeItem(ONBOARDING_NEXT_KEY);
+    } catch { /* private-mode sessionStorage can throw */ }
   }
 
   // Get auth headers for API requests
@@ -153,7 +159,7 @@ class AuthService {
   // Validate current session and update user data
   async validateSession(): Promise<boolean> {
     // Check for token in localStorage (might have been set by OAuth)
-    const storedToken = localStorage.getItem('xenoos_auth_token');
+    const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
     if (storedToken && !this.token) {
       this.token = storedToken;
     }
