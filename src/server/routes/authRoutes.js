@@ -26,7 +26,7 @@ import {
 } from '../services/accountActivation.js';
 import { describeClient } from '../utils/userAgent.js';
 import { optOut } from '../services/emailPreferences.js';
-import { resolveOAuthLandingPath } from '../../lib/onboardingHandoff.js';
+import { resolveOAuthLandingPath } from '../lib/onboardingHandoff.js';
 import {
   requireRegistrationOpen,
   assertRegistrationAllowed,

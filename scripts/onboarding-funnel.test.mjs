@@ -12,6 +12,9 @@ import {
   resolveOAuthLandingPath,
   isAllowedOnboardingNext,
 } from '../src/lib/onboardingHandoff.js';
+import {
+  resolveOAuthLandingPath as resolveOAuthLandingPathServer,
+} from '../src/server/lib/onboardingHandoff.js';
 
 const page = readFileSync('src/pages/Onboarding.tsx', 'utf8');
 const authCtx = readFileSync('src/contexts/AuthContext.tsx', 'utf8');
@@ -42,7 +45,21 @@ test('Hub/CLI/OIDC handoffs are not intercepted even for a new account', () => {
 
 test('the OAuth builder actually calls the resolver — a copy that is never used is not a door', () => {
   assert.match(oauth, /resolveOAuthLandingPath\(returnUrl, isNew\)/);
-  assert.match(oauth, /from '\.\.\/\.\.\/lib\/onboardingHandoff\.js'/);
+  assert.match(oauth, /from '\.\.\/lib\/onboardingHandoff\.js'/);
+  assert.equal(oauth.includes('../../lib/'), false,
+    'authRoutes imported outside src/server — Dockerfile.backend cannot see that file');
+});
+
+test('the server resolver matches the website one — two copies, one rule', () => {
+  assert.equal(resolveOAuthLandingPath('/overview', true), ONBOARDING_PATH);
+  assert.equal(
+    resolveOAuthLandingPathServer('xeno://auth/callback', true),
+    resolveOAuthLandingPath('xeno://auth/callback', true),
+  );
+  assert.equal(
+    resolveOAuthLandingPathServer('/overview', true),
+    resolveOAuthLandingPath('/overview', true),
+  );
 });
 
 test('activation Continue still enters onboarding — the email door stays', () => {
