@@ -17,6 +17,10 @@ import {
 } from '../src/server/lib/onboardingHandoff.js';
 
 const page = readFileSync('src/pages/Onboarding.tsx', 'utf8');
+const onboardingSql = readFileSync(
+  'src/server/database/migrations/20260817120000-user-onboarding.sql',
+  'utf8',
+);
 const authCtx = readFileSync('src/contexts/AuthContext.tsx', 'utf8');
 const gate = readFileSync('src/components/auth/ProtectedRoute.tsx', 'utf8');
 const activate = readFileSync('src/pages/ActivateAccount.tsx', 'utf8');
@@ -97,4 +101,9 @@ test('an https next leaves the document — navigate() cannot open the portal', 
 
 test('a non-OK onboarding read fails OPEN — a 401 must not wall the product', () => {
   assert.match(gate, /if \(!res\.ok\)/);
+});
+
+test('user_onboarding.user_id is UUID — INTEGER cannot FK to users.id and the boot dies', () => {
+  assert.match(onboardingSql, /user_id\s+UUID\s+PRIMARY KEY REFERENCES users\(id\)/);
+  assert.equal(onboardingSql.includes('INTEGER PRIMARY KEY REFERENCES users'), false);
 });

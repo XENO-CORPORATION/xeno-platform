@@ -24,7 +24,9 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS user_onboarding (
-    user_id        INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    -- UUID, not INTEGER. users.id is UUID. 2026-08-23: an INTEGER column here
+    -- failed startup migrations (42804) and rolled the backend deploy back.
+    user_id        UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
 
     -- Step 1 — who they are. `display_name` is deliberately NOT copied into
     -- users.name: this is what they want to be called, which is not always the
