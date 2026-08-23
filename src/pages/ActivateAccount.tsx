@@ -166,11 +166,10 @@ const ActivateAccount = () => {
                 Your account is active. Thanks for confirming &mdash; it keeps the platform clear of
                 throwaway signups.
               </p>
-              {/* Into onboarding, not straight to the workspace. This is the
-                  only edge that makes onboarding reachable at all — the page
-                  itself sends anyone who has already finished on to /overview,
-                  so a returning user never sees it twice and this stays a
-                  one-way door for new accounts only. */}
+              {/* Into onboarding, not straight to the workspace. Password
+                  activation is one door; OAuth and the API portal are the
+                  others. The page itself sends anyone who has already finished
+                  on to /overview, so a returning user never sees it twice. */}
               <button
                 type="button"
                 onClick={() => navigate('/onboarding')}

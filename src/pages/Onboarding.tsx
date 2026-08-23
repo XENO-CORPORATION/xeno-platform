@@ -17,6 +17,10 @@ import {
   StepHeading, PlanCard, Field, Checkbox, PrimaryButton, TextButton, FlowControls,
   INPUT_CLS, cx,
 } from '../components/onboarding/OnboardingPieces';
+import {
+  AUTH_TOKEN_KEY, ONBOARDING_DONE_KEY, destinationAfterOnboarding,
+  consumeOnboardingNext, isExternalOnboardingNext,
+} from '../lib/onboardingHandoff.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * ONBOARDING — workspace → about you → role → plan → where to start
@@ -310,7 +314,7 @@ const Onboarding: React.FC = () => {
    * unmounted the old one — so every change was a hard cut. */
   const t = useStepTransition(step);
 
-  const token = () => localStorage.getItem('token');
+  const token = () => localStorage.getItem(AUTH_TOKEN_KEY);
 
   /* Never show this to somebody who already finished or dismissed it —
    * including on a plain reload, which is how you see a flow twice. */
@@ -320,7 +324,13 @@ const Onboarding: React.FC = () => {
       try {
         const res = await fetch(`${API}/onboarding`, { headers: { Authorization: `Bearer ${token()}` } });
         const data = await res.json();
-        if (!cancelled && data?.done) { navigate('/overview', { replace: true }); return; }
+        if (!cancelled && data?.done) {
+          sessionStorage.setItem(ONBOARDING_DONE_KEY, '1');
+          const to = destinationAfterOnboarding('/overview');
+          if (isExternalOnboardingNext(to)) { window.location.replace(to); return; }
+          navigate(to, { replace: true });
+          return;
+        }
       } catch {
         // An unreachable API is not a reason to trap someone on a survey.
       }
@@ -374,15 +384,30 @@ const Onboarding: React.FC = () => {
     } catch { setCheckingOut(null); }
   };
 
+  const leaveTo = (fallbackPath: string) => {
+    sessionStorage.setItem(ONBOARDING_DONE_KEY, '1');
+    const next = consumeOnboardingNext();
+    // A portal return wins over a product tile — they came here to finish
+    // the account, not to be stranded on a marketing page.
+    const to = (next && isExternalOnboardingNext(next)) ? next : fallbackPath;
+    if (isExternalOnboardingNext(to)) { window.location.replace(to); return; }
+    navigate(to, { replace: true });
+  };
+
   const finish = async (product?: { slug: string; launchPath?: string; delivery: string }) => {
     await save({ ...answers, startingPoint: product?.slug, completed: true }, { wait: true });
     // The destination is not derivable from the slug: a `web` product runs
     // inside the site and carries its own launchPath, while a desktop one must
     // go to its product page to be downloaded.
-    const to = product
+    const productPath = product
       ? (product.delivery === 'web' && product.launchPath) || `/product/${product.slug}`
       : '/overview';
-    navigate(to, { replace: true });
+    leaveTo(productPath);
+  };
+
+  const skip = async () => {
+    await save({ skipped: true }, { wait: true });
+    leaveTo('/overview');
   };
 
   /**
@@ -733,7 +758,7 @@ const Onboarding: React.FC = () => {
                   </label>
                 </div>
 
-                <Nav onNext={() => primaryAction()?.()} nextLabel="Continue" />
+                <Nav onNext={() => primaryAction()?.()} onSkip={skip} nextLabel="Continue" />
               </>
             )}
 
@@ -777,6 +802,7 @@ const Onboarding: React.FC = () => {
                 <Nav
                   onBack={() => back(0)}
                   onNext={() => primaryAction()?.()}
+                  onSkip={skip}
                   nextLabel="Continue"
                   nextDisabled={parseRoles(answers.role).length === 0}
                 />
@@ -809,6 +835,7 @@ const Onboarding: React.FC = () => {
                 <Nav
                   onBack={() => back(1)}
                   onNext={() => primaryAction()?.()}
+                  onSkip={skip}
                   nextLabel="Continue"
                   nextDisabled={!answers.workspace}
                   hidden={everythingHover}
@@ -984,7 +1011,7 @@ const Onboarding: React.FC = () => {
                     Trapping people on this screen would strand every single
                     one of them today, because no plan is purchasable until
                     Stripe is configured. */}
-                <Nav onBack={() => back(2)} onNext={() => finish()} nextLabel="Continue" />
+                <Nav onBack={() => back(2)} onNext={() => finish()} onSkip={skip} nextLabel="Continue" />
               </>
             )}
 
@@ -1013,11 +1040,11 @@ const Onboarding: React.FC = () => {
  * dark pattern in reverse.
  */
 const Nav: React.FC<{
-  onBack?: () => void; onNext?: () => void;
+  onBack?: () => void; onNext?: () => void; onSkip?: () => void;
   nextLabel?: string; nextDisabled?: boolean;
   /** Drops the whole row away — used while the everything-bar is hovered. */
   hidden?: boolean;
-}> = ({ onBack, onNext, nextLabel, nextDisabled, hidden }) => (
+}> = ({ onBack, onNext, onSkip, nextLabel, nextDisabled, hidden }) => (
   /* Falls DOWN and out rather than fading. A row that merely fades is still
      occupying its space and still reads as present-but-greyed; falling out of
      the frame reads as making way. `pointer-events-none` while gone, so a
@@ -1028,6 +1055,7 @@ const Nav: React.FC<{
                 ${hidden ? 'pointer-events-none translate-y-3 opacity-0' : 'translate-y-0 opacity-100'}`}
   >
     {onBack && <TextButton onClick={onBack}>Back</TextButton>}
+    {onSkip && <TextButton onClick={onSkip}>Skip for now</TextButton>}
     {/* Pushes the primary action to the far edge whether or not the left-hand
         links are present — `justify-between` would collapse it to the left on
         a step that has neither. */}

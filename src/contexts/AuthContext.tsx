@@ -5,6 +5,10 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService, User, AuthResponse } from '../services/authService';
+import {
+  AUTH_TOKEN_KEY, ONBOARDING_NEXT_KEY, ONBOARDING_PATH,
+  isAllowedOnboardingNext,
+} from '../lib/onboardingHandoff.js';
 
 interface AuthContextType {
   user: User | null;
@@ -60,6 +64,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (returnUrlParam && returnUrlParam.startsWith('/') && !returnUrlParam.startsWith('//')) {
           sessionStorage.setItem('xeno_return_url', returnUrlParam);
         }
+        const nextParam = urlParams.get('next');
+        if (isAllowedOnboardingNext(nextParam)) {
+          sessionStorage.setItem(ONBOARDING_NEXT_KEY, nextParam);
+        }
 
         // Handle OAuth error
         if (oauthError) {
@@ -73,7 +81,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Handle OAuth success - store token and validate
         if (oauthToken) {
           // Store the token
-          localStorage.setItem('xenoos_auth_token', oauthToken);
+          localStorage.setItem(AUTH_TOKEN_KEY, oauthToken);
 
           // Clean up URL (remove token from URL for security)
           window.history.replaceState({}, '', window.location.pathname);
@@ -84,9 +92,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             const storedUser = authService.getCurrentUser();
             setUser(storedUser);
 
-            // Show welcome message for new users
+            // A new website account goes to onboarding. A pending OIDC/CLI
+            // returnUrl wins — interrupting that grant is how Hub/CLI break.
             if (isNewUser) {
-              console.log('Welcome to XenoStudio! Your account has been created.');
+              const pendingReturn = sessionStorage.getItem('xeno_return_url');
+              if (!pendingReturn) {
+                window.location.replace(ONBOARDING_PATH);
+                return;
+              }
             }
           } else {
             authService.logout();
