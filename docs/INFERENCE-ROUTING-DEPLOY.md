@@ -89,10 +89,27 @@ gunzip -c ~/xenostudio-pre-inference-*.sql.gz \
 
 # Apply BOTH new migrations to the scratch copy and read the result.
 # scp the two files up first. Order is load-bearing — grants FK to credentials.
+#
+# ⚠ `psql < migration.sql` runs the `-- DOWN` half too and DROPS the tables
+# it just created. The boot runner (`runAllMigrations`) splits on `-- DOWN`
+# and applies UP only. Scratch must do the same: feed psql the UP half.
+python3 - <<'PY'
+from pathlib import Path
+for name in (
+    '20260822110000-inference-routing.sql',
+    '20260822120000-inference-grants.sql',
+):
+    src = Path('/tmp') / name
+    text = src.read_text()
+    up = text.split('-- DOWN', 1)[0]
+    dest = Path(str(src) + '.up')
+    dest.write_text(up)
+    print(name, 'up_bytes', len(up))
+PY
 sudo docker exec -i xenostudio-postgres psql -U postgres -d xeno_migration_check \
-  < /tmp/20260822110000-inference-routing.sql
+  < /tmp/20260822110000-inference-routing.sql.up
 sudo docker exec -i xenostudio-postgres psql -U postgres -d xeno_migration_check \
-  < /tmp/20260822120000-inference-grants.sql
+  < /tmp/20260822120000-inference-grants.sql.up
 
 # Both tables, both CHECK constraints, both FK behaviours, and the grant table.
 sudo docker exec xenostudio-postgres psql -U postgres -d xeno_migration_check \
