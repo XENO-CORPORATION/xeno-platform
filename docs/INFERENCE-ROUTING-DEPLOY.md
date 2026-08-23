@@ -1,7 +1,10 @@
 # Inference routing — VPS deployment runbook
 
-**What ships:** the provider-key vault, per-product routing, and the account
-surface at `/overview/ai-keys`. Backend **and** frontend **and** a DB migration.
+**What ships:** the provider-key vault and per-product routing on this origin.
+The write UI is the API portal at `https://api.xenostudio.ai/dashboard/inference`
+— not Overview. `/overview/ai-keys` redirects there. Backend **and** a DB
+migration live here; the portal BFF proxies the user's Bearer to
+`/api/v2/inference/*`.
 
 **Spec:** `XENO INFERENCE ROUTING - SPEC.md` · **Secret handling:**
 `XENO CREDENTIAL HYGIENE - PLAYBOOK.md` §8 · **Deploy mechanics:**
@@ -209,12 +212,11 @@ If the backend does not come up, go to §7 immediately — this is the outage ca
 git archive --format=tar HEAD \
   src/pages/Overview.tsx \
   src/components/overview/OverviewTaskbar.tsx \
-  src/components/account/InferenceRoutingPage.tsx \
-  src/services/inferenceRoutingService.ts \
 | ssh xeno-platform-001 "cd /mnt/projects/xeno-platform && sudo tar xf - --overwrite \
    && find src/pages/Overview.tsx src/components/overview/OverviewTaskbar.tsx \
-           src/components/account/InferenceRoutingPage.tsx src/services/inferenceRoutingService.ts \
       -exec sudo sed -i 's/\r\$//' {} + \
+   && sudo rm -f src/components/account/InferenceRoutingPage.tsx \
+                 src/services/inferenceRoutingService.ts \
    && sudo docker compose build frontend"
 
 ssh xeno-platform-001 'cd /mnt/projects/xeno-platform && sudo docker compose up -d frontend'
@@ -224,9 +226,9 @@ ssh xeno-platform-001 'sudo docker ps -a --filter name=xenostudio-frontend'
 `docker ps -a`, not `docker ps` — per §0.2, the failure mode is a container in
 state `Created` that the plain listing does not show at all.
 
-**Safe to ship with the flag still off.** The page reads `GET /providers`, sees
-`enabled: false`, and renders the honest "not enabled on this server yet"
-notice rather than an empty screen.
+**The Overview files only remove the old write UI and keep the redirect.**
+Do not re-add `InferenceRoutingPage.tsx` on the box. Key management is
+`https://api.xenostudio.ai/dashboard/inference`.
 
 ---
 
@@ -266,15 +268,15 @@ curl -s https://xenostudio.ai/api/v2/inference/providers -H "Authorization: Bear
 # Encryption still healthy AFTER the deploy.
 curl -s https://xenostudio.ai/api/health | jq '.checks.secretbox'
 
-# The page is served, by CONTENT not status code — an unrouted SPA path
-# returns 200 with an empty shell, which is how "the page exists" has been
-# wrongly concluded here before.
-curl -s https://xenostudio.ai/overview/ai-keys | wc -c
+# The old Overview path still 200s (SPA shell) and redirects in the browser.
+# The write UI is the API portal.
+curl -sI https://api.xenostudio.ai/dashboard/inference | head
 ```
 
-Then the end-to-end proof, in the browser, signed in: add a key → it is verified
-with the provider before saving → point one product at it → reload → the choice
-persisted → delete the key → **refused** with the product named (spec D10).
+Then the end-to-end proof, in the browser, signed in on **api.xenostudio.ai**:
+add a key → it is verified with the provider before saving → point one product
+at it → reload → the choice persisted → delete the key → **refused** with the
+product named (spec D10).
 
 **And the money assertion, which is the whole point:**
 
