@@ -60,7 +60,6 @@ import DownloadToolsInterface from '../components/playground/Download/DownloadTo
 import ProfilePage from '../components/account/ProfilePage';
 import SettingsPage from '../components/account/SettingsPage';
 import UsageAnalyticsPage from '../components/account/UsageAnalyticsPage';
-import InferenceRoutingPage from '../components/account/InferenceRoutingPage';
 import BillingPage from '../components/account/BillingPage';
 import TeamPage from '../components/account/TeamPage';
 // Import Content Creation pages
@@ -101,6 +100,18 @@ interface LayoutContextType {
 
 const LayoutContext = createContext<LayoutContextType>({ isSidebarCollapsed: false });
 export const useLayout = () => useContext(LayoutContext);
+
+/** Provider keys are managed on api.xenostudio.ai — products still call our API. */
+const ProviderKeysPortalRedirect: React.FC = () => {
+  useEffect(() => {
+    window.location.replace('https://api.xenostudio.ai/dashboard/inference');
+  }, []);
+  return (
+    <div className="h-full flex items-center justify-center">
+      <p className="text-white/40 text-sm">Provider keys are managed on the API platform…</p>
+    </div>
+  );
+};
 
 // Create a separate component for the main content to use WindowManager hook
 const OverviewContent: React.FC = () => {
@@ -299,8 +310,8 @@ const OverviewContent: React.FC = () => {
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="usage-analytics" element={<UsageAnalyticsPage />} />
-            {/* Per-product inference routing + the provider-key vault. */}
-            <Route path="ai-keys" element={<InferenceRoutingPage />} />
+            {/* Provider keys are managed on the API platform, not here. */}
+            <Route path="ai-keys" element={<ProviderKeysPortalRedirect />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="team" element={<TeamPage />} />
             <Route path="team/:tab" element={<TeamPage />} />
