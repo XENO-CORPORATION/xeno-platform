@@ -1,8 +1,9 @@
 /**
- * Account-funnel handoff — one module for the website, OAuth, and the API portal.
+ * Account-funnel handoff — website + portal client.
  *
- * A new account reaches /onboarding once. Returning users and privileged
- * handoffs (Hub/CLI OIDC, xeno://, /cli-auth) are not intercepted.
+ * ⚠️ resolveOAuthLandingPath is DUPLICATED in src/server/lib/onboardingHandoff.js.
+ * Dockerfile.backend only COPYs src/server/, so the backend cannot import this
+ * file. Change the function in both places; the funnel test compares them.
  */
 
 export const AUTH_TOKEN_KEY = 'xenoos_auth_token';
