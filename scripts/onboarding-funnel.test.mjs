@@ -11,6 +11,8 @@ import {
   ONBOARDING_PATH,
   resolveOAuthLandingPath,
   isAllowedOnboardingNext,
+  resolveActivationContinue,
+  isPrivilegedReturnUrl,
 } from '../src/lib/onboardingHandoff.js';
 import {
   resolveOAuthLandingPath as resolveOAuthLandingPathServer,
@@ -66,8 +68,38 @@ test('the server resolver matches the website one — two copies, one rule', () 
   );
 });
 
-test('activation Continue still enters onboarding — the email door stays', () => {
-  assert.match(activate, /navigate\('\/onboarding'\)/);
+test('activation Continue resumes a privileged grant and otherwise enters onboarding', () => {
+  assert.equal(isPrivilegedReturnUrl('/api/oauth2/authorize?client_id=xeno-api-portal'), true);
+  assert.equal(isPrivilegedReturnUrl('/cli-auth?session=abc'), true);
+  assert.equal(isPrivilegedReturnUrl('xeno://auth/callback'), true);
+  assert.equal(isPrivilegedReturnUrl('/overview'), false);
+  assert.equal(isPrivilegedReturnUrl('https://evil.example/'), false);
+  assert.equal(
+    resolveActivationContinue('/api/oauth2/authorize?client_id=xeno-api-portal'),
+    '/api/oauth2/authorize?client_id=xeno-api-portal',
+  );
+  assert.equal(resolveActivationContinue('/overview'), ONBOARDING_PATH);
+  assert.equal(resolveActivationContinue(null), ONBOARDING_PATH);
+  assert.match(activate, /destinationAfterActivation\(\)/);
+  assert.equal(activate.includes("navigate('/onboarding')"), false,
+    'Activate Continue is hardcoded to /onboarding — a portal signup cannot resume OIDC');
+});
+
+test('password signup does not jump to returnUrl before activate', () => {
+  const authPage = readFileSync('src/pages/AuthContent.tsx', 'utf8');
+  const start = authPage.indexOf("if (activeTab === 'signup')");
+  assert.ok(start >= 0, 'signup branch missing');
+  const signupBlock = authPage.slice(start, authPage.indexOf('return;', start) + 8);
+  assert.match(signupBlock, /stashReturnUrl\(returnUrl\)/);
+  assert.match(signupBlock, /navigate\('\/auth\/activate'/);
+  assert.equal(signupBlock.includes('window.location.href'), false,
+    'signup still jumps to returnUrl and will consume the OIDC grant before activate');
+});
+
+test('AuthContext does not consume xeno_return_url until the account is activated', () => {
+  assert.match(authCtx, /\/api\/auth\/activation-status/);
+  assert.match(authCtx, /if \(cancelled \|\| !d\?\.activated\) return/);
+  assert.match(authCtx, /consumeReturnUrl\(\)/);
 });
 
 test('OAuth isNew without a pending returnUrl goes to onboarding, not a console.log', () => {
