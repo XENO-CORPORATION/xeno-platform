@@ -4320,10 +4320,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         },
         messages: messages.map((m, idx) => ({
           index: idx + 1,
-          id: m.id,
-          role: m.role,
+          id: m.id || `msg-${idx + 1}`,
+          role: m.role || (m as any).sender || 'user',
           timestamp: m.timestamp ? new Date(m.timestamp).toISOString() : null,
-          content: m.content,
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content || ''),
           reasoning: (m as any).reasoning || (m as any).thought || null,
           images: m.images?.map(img => ({ name: img.name, size: img.size, type: img.type })) || [],
           files: m.files?.map(f => ({ name: f.name, size: f.size, type: f.type })) || [],
@@ -4347,11 +4347,15 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         readableLog += `_(No messages in active session)_\n\n`;
       } else {
         messages.forEach((m, i) => {
-          readableLog += `### [${i + 1}] ${m.role.toUpperCase()} — ${m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : 'now'}\n\n`;
+          const roleLabel = String(m.role || (m as any).sender || (m as any).type || 'message').toUpperCase();
+          const timeLabel = m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : 'now';
+          const contentText = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '');
+
+          readableLog += `### [${i + 1}] ${roleLabel} — ${timeLabel}\n\n`;
           if ((m as any).reasoning || (m as any).thought) {
-            readableLog += `> **Thinking / Reasoning Trace:**\n> ${((m as any).reasoning || (m as any).thought || '').replace(/\\n/g, '\n> ')}\n\n`;
+            readableLog += `> **Thinking / Reasoning Trace:**\n> ${String((m as any).reasoning || (m as any).thought || '').replace(/\\n/g, '\n> ')}\n\n`;
           }
-          readableLog += `${m.content}\n\n`;
+          readableLog += `${contentText}\n\n`;
           if (m.sources && m.sources.length > 0) {
             readableLog += `**Sources / Citations:**\n`;
             m.sources.forEach(s => {
