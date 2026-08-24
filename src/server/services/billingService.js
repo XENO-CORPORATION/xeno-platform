@@ -19,6 +19,7 @@
  *    prices/plans are managed in the Stripe dashboard, not in code.
  */
 import Stripe from 'stripe';
+import { consentReady, findUsableConsent, consumeConsent } from './checkoutConsent.js';
 import { siteOrigin } from '../config/hosts.js';
 import { addGrantTx, clawbackTx, getBalanceV2, MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 
@@ -522,13 +523,35 @@ function checkoutReturn(base, itemId, downloadIntent) {
   };
 }
 
-export async function createCheckout(pool, user, itemId, { origin, downloadIntent = null } = {}) {
+export async function createCheckout(pool, user, itemId, { origin, downloadIntent = null, consentId = null } = {}) {
   const item = CATALOG.map(resolveItem).find((i) => i.id === itemId);
   if (!item) { const e = new Error('unknown item'); e.status = 400; throw e; }
   if (!item.available) { const e = new Error(`item "${itemId}" has no configured price (set ${item.priceEnv})`); e.status = 400; throw e; }
 
   const base = process.env.BILLING_APP_URL || origin || siteOrigin();
   const { successUrl, cancelUrl } = checkoutReturn(base, item.id, downloadIntent);
+  /* 🔴 CONSENT IS REQUIRED, and this is the one check in this file that fails
+   * CLOSED without a flag to turn it off. For digital content delivered
+   * immediately, the 14-day withdrawal right is lost ONLY with express consent
+   * plus acknowledgement — miss it and a customer may use the software for
+   * thirteen days and demand a full refund, and be entitled to it.
+   *
+   * Refusing here rather than warning is deliberate: a sale made without it is
+   * not a slightly-weaker sale, it is a sale we cannot make final. */
+  if (await consentReady(pool)) {
+    const usable = consentId
+      ? consentId
+      : await findUsableConsent(pool, user.id, item.id);
+    if (!usable) {
+      const e = new Error('Consent to immediate performance is required before purchase');
+      e.status = 400;
+      e.code = 'consent_required';
+      throw e;
+    }
+    // eslint-disable-next-line no-param-reassign
+    consentId = usable;
+  }
+
   const customer = await getOrCreateCustomer(pool, user);
 
   const session = await stripe.checkout.sessions.create({
@@ -547,11 +570,22 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
      * no referrer — the metadata is the single channel by which "this
      * subscription was bought to get Pixel" can survive the trip through
      * Stripe. Without it the purchase is attributable to nothing. */
+    /* Stripe collects its own ToS acceptance too. Belt and braces on purpose:
+     * ours is the evidence we control and can produce years later; Stripe's is
+     * the one a card network sees during a chargeback. */
+    consent_collection: { terms_of_service: 'required' },
+    custom_text: {
+      terms_of_service_acceptance: {
+        message: 'You are asking for immediate access, which means you lose the 14-day right of withdrawal for this digital content.',
+      },
+    },
     metadata: {
       xenoUserId: String(user.id), itemId: item.id, credits: String(item.credits), kind: item.kind,
+      ...(consentId ? { xenoConsentId: String(consentId) } : {}),
       ...(downloadIntent ? { xenoDownloadIntent: String(downloadIntent) } : {}),
     },
   });
+  await consumeConsent(pool, consentId, session.id);
   return { url: session.url, id: session.id };
 }
 
