@@ -1,145 +1,33 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026-03-25-qwen35-lineup",
-  "updatedAt": "2026-03-25T17:58:36.550Z",
+  "catalogVersion": "2026-08-24-qwen38-lineup",
+  "updatedAt": "2026-08-24T00:00:00Z",
   "models": [
     {
-      "id": "qwen3.5-0.8b-q4-k-m",
-      "name": "Qwen 3.5 0.8B Q4_K_M",
-      "provider": "Qwen / unsloth",
+      "id": "qwen3.8-4b-q4-k-m",
+      "name": "Qwen 3.8 4B Q4_K_M",
+      "provider": "empero-ai (distill of Qwen)",
       "category": "llm",
-      "description": "Small local assistant model for ultra-fast everyday chat on xeno-rt.",
-      "size": "0.5 GB",
-      "sizeBytes": 532517120,
-      "parameters": "0.8B",
-      "tags": [
-        "general",
-        "fast",
-        "local"
-      ],
-      "license": "Apache 2.0",
-      "installable": true,
-      "runtime": "xeno-rt-chat",
-      "installSpec": {
-        "source": "r2",
-        "artifactKey": "models/local-chat/qwen3.5-0.8b-q4-k-m/Qwen3.5-0.8B-Q4_K_M.gguf",
-        "filename": "Qwen3.5-0.8B-Q4_K_M.gguf",
-        "sizeBytes": 532517120,
-        "sha256": "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
-        "expectedLocalIds": [
-          "Qwen3.5-0.8B-Q4_K_M"
-        ]
-      }
-    },
-    {
-      "id": "qwen3.5-2b-q4-k-m",
-      "name": "Qwen 3.5 2B Q4_K_M",
-      "provider": "Qwen / unsloth",
-      "category": "llm",
-      "description": "Light local assistant with better conversational quality than 0.8B while staying laptop-friendly for xeno-rt.",
-      "size": "1.2 GB",
-      "sizeBytes": 1280835840,
-      "parameters": "2B",
-      "tags": [
-        "balanced",
-        "chat",
-        "local"
-      ],
-      "license": "Apache 2.0",
-      "installable": true,
-      "runtime": "xeno-rt-chat",
-      "installSpec": {
-        "source": "r2",
-        "artifactKey": "models/local-chat/qwen3.5-2b-q4-k-m/Qwen3.5-2B-Q4_K_M.gguf",
-        "filename": "Qwen3.5-2B-Q4_K_M.gguf",
-        "sizeBytes": 1280835840,
-        "sha256": "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
-        "expectedLocalIds": [
-          "Qwen3.5-2B-Q4_K_M"
-        ]
-      }
-    },
-    {
-      "id": "qwen3.5-4b-q4-k-m",
-      "name": "Qwen 3.5 4B Q4_K_M",
-      "provider": "Qwen / unsloth",
-      "category": "llm",
-      "description": "Recommended default local assistant for xeno-rt with stronger chat quality and tool-following than the tiny models.",
+      "description": "The default local assistant for xeno-rt. Runs on an 8 GB card, and fast enough for everyday chat and tool use.",
       "size": "2.6 GB",
-      "sizeBytes": 2740937888,
+      "sizeBytes": 2783446304,
       "parameters": "4B",
       "tags": [
         "default",
         "quality",
         "local"
       ],
-      "license": "Apache 2.0",
+      "license": "Community distill",
       "installable": true,
       "runtime": "xeno-rt-chat",
       "installSpec": {
         "source": "r2",
-        "artifactKey": "models/local-chat/qwen3.5-4b-q4-k-m/Qwen3.5-4B-Q4_K_M.gguf",
-        "filename": "Qwen3.5-4B-Q4_K_M.gguf",
-        "sizeBytes": 2740937888,
-        "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+        "artifactKey": "models/local-chat/qwen3.8-4b-q4-k-m/Qwen3.8-4B-Q4_K_M.gguf",
+        "filename": "Qwen3.8-4B-Q4_K_M.gguf",
+        "sizeBytes": 2783446304,
+        "sha256": "dec96e8cf2e11b613bb46513dec485377f9ca5a351e71712ee0e244f287c6790",
         "expectedLocalIds": [
-          "Qwen3.5-4B-Q4_K_M"
-        ]
-      }
-    },
-    {
-      "id": "qwen3.5-9b-q4-k-m",
-      "name": "Qwen 3.5 9B Q4_K_M",
-      "provider": "Qwen / unsloth",
-      "category": "llm",
-      "description": "High-quality local assistant for capable machines when you want stronger reasoning and tool use in xeno-rt.",
-      "size": "5.3 GB",
-      "sizeBytes": 5680522464,
-      "parameters": "9B",
-      "tags": [
-        "quality",
-        "reasoning",
-        "local"
-      ],
-      "license": "Apache 2.0",
-      "installable": true,
-      "runtime": "xeno-rt-chat",
-      "installSpec": {
-        "source": "r2",
-        "artifactKey": "models/local-chat/qwen3.5-9b-q4-k-m/Qwen3.5-9B-Q4_K_M.gguf",
-        "filename": "Qwen3.5-9B-Q4_K_M.gguf",
-        "sizeBytes": 5680522464,
-        "sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
-        "expectedLocalIds": [
-          "Qwen3.5-9B-Q4_K_M"
-        ]
-      }
-    },
-    {
-      "id": "tinyllama-1.1b-chat-q4-0",
-      "name": "TinyLlama 1.1B Chat Q4_0",
-      "provider": "TheBloke",
-      "category": "llm",
-      "description": "Very small chat model for smoke tests and minimal-memory local runs.",
-      "size": "0.6 GB",
-      "sizeBytes": 637699456,
-      "parameters": "1.1B",
-      "tags": [
-        "smoke-test",
-        "tiny",
-        "chat"
-      ],
-      "license": "Llama 2",
-      "installable": true,
-      "runtime": "xeno-rt-chat",
-      "installSpec": {
-        "source": "r2",
-        "artifactKey": "models/local-chat/tinyllama-1.1b-chat-q4-0/tinyllama-1.1b-chat-v1.0.Q4_0.gguf",
-        "filename": "tinyllama-1.1b-chat-v1.0.Q4_0.gguf",
-        "sizeBytes": 637699456,
-        "sha256": "da3087fb14aede55fde6eb81a0e55e886810e43509ec82ecdc7aa5d62a03b556",
-        "expectedLocalIds": [
-          "tinyllama-1.1b-chat-v1.0.Q4_0"
+          "Qwen3.8-4B-Q4_K_M"
         ]
       }
     },
