@@ -523,6 +523,18 @@ function checkoutReturn(base, itemId, downloadIntent) {
   };
 }
 
+/**
+ * The card-statement descriptor.
+ *
+ * Stripe caps this at 22 characters and rejects < > \ ' " * — a value that
+ * violates either is refused at session creation, which would turn a cosmetic
+ * setting into a checkout outage. Clamped here rather than trusted.
+ */
+function statementDescriptor() {
+  const raw = process.env.STRIPE_STATEMENT_DESCRIPTOR || 'XENOSTUDIO';
+  return raw.replace(/[<>\\'"*]/g, '').trim().slice(0, 22) || 'XENOSTUDIO';
+}
+
 export async function createCheckout(pool, user, itemId, { origin, downloadIntent = null, consentId = null } = {}) {
   const item = CATALOG.map(resolveItem).find((i) => i.id === itemId);
   if (!item) { const e = new Error('unknown item'); e.status = 400; throw e; }
@@ -573,6 +585,35 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
     /* Stripe collects its own ToS acceptance too. Belt and braces on purpose:
      * ours is the evidence we control and can produce years later; Stripe's is
      * the one a card network sees during a chargeback. */
+    /* ── What the customer sees on their bank statement ────────────────
+     *
+     * 🔴 An unrecognisable descriptor is a leading cause of chargebacks, and a
+     * chargeback costs the fee whether or not it is won. Someone who cannot
+     * place a charge from three weeks ago calls their bank, not us — and by then
+     * the dispute exists.
+     *
+     * Overridable, but never absent: a missing descriptor falls back to whatever
+     * Stripe derives from the account name, which is exactly the unrecognisable
+     * case this exists to prevent. Stripe caps it at 22 characters and rejects
+     * < > \ ' " * — so it is truncated and stripped rather than trusted. */
+    ...(item.kind === 'subscription' ? {} : {
+      payment_intent_data: { statement_descriptor: statementDescriptor() },
+    }),
+
+    /* ── Invoices ──────────────────────────────────────────────────────────
+     *
+     * Subscriptions are invoiced by Stripe automatically. One-time payments are
+     * NOT — so a credit pack would leave the buyer with a receipt and no
+     * invoice, and a German business needs a proper Rechnung with sequential
+     * numbering (GoBD: retained 10 years).
+     *
+     * ⚠️ Numbering and retention are configured in the Stripe DASHBOARD, not
+     * here. Turning this on produces invoices; it does not by itself make them
+     * compliant, and the runbook says so rather than implying otherwise. */
+    ...(item.kind === 'subscription' ? {} : {
+      invoice_creation: { enabled: true },
+    }),
+
     consent_collection: { terms_of_service: 'required' },
     custom_text: {
       terms_of_service_acceptance: {
@@ -747,6 +788,48 @@ async function clawbackForCharge(pool, event, { paymentIntent, targetRefundMicro
 }
 
 /** Resolve a dispute's payment_intent (present directly in recent API; else via the charge). */
+/**
+ * Email the operator that a dispute has opened.
+ *
+ * NEVER throws into the webhook. A failed alert must not make Stripe retry the
+ * event — the freeze and the clawback are the parts that must not be re-run, and
+ * an unacknowledged webhook is redelivered.
+ *
+ * The address is DISPUTE_ALERT_EMAIL, falling back to billing@. If neither can be
+ * reached this logs at error level with the full detail, so the information
+ * exists somewhere a human could still find it.
+ */
+async function alertDisputeOpened(pool, dispute) {
+  const amount = dispute?.amount != null
+    ? `${(dispute.amount / 100).toFixed(2)} ${String(dispute.currency || 'eur').toUpperCase()}`
+    : null;
+  const dueBy = dispute?.evidence_details?.due_by
+    ? new Date(dispute.evidence_details.due_by * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+    : null;
+
+  /* Logged BEFORE the email, at error level, and unconditionally. If the mail
+   * path is broken this line is the only surviving trace, and it is the one
+   * thing that must not depend on anything else working. */
+  console.error(
+    `🔴 [billing] DISPUTE OPENED ${dispute?.id || ''} amount=${amount || '?'} `
+    + `reason=${dispute?.reason || '?'} respond_by=${dueBy || '?'}`,
+  );
+
+  const to = process.env.DISPUTE_ALERT_EMAIL || 'billing@xenostudio.ai';
+  try {
+    const { sendEmail } = await import('./emailService.js');
+    await sendEmail(pool, 'dispute_opened', to, {
+      amount, dueBy,
+      reason: dispute?.reason || null,
+      disputeId: dispute?.id || null,
+      customerEmail: dispute?.evidence?.customer_email_address || null,
+      url: dispute?.id ? `https://dashboard.stripe.com/disputes/${dispute.id}` : null,
+    });
+  } catch (e) {
+    console.error('[billing] could not email the dispute alert:', e.message);
+  }
+}
+
 async function resolveDisputePI(dispute) {
   if (dispute.payment_intent) return String(dispute.payment_intent);
   if (dispute.charge) {
@@ -938,6 +1021,11 @@ export async function handleEvent(pool, event) {
     // Dispute opened → freeze the account (stop further spend during the dispute).
     case 'charge.dispute.created': {
       await ensureSchema(pool);
+      /* 🔴 TELL SOMEBODY. Freezing the account and returning meant the 7–21 day
+       * response window opened in silence, and a window nobody knows about is a
+       * window that closes. This is the difference between a control and a
+       * record. */
+      await alertDisputeOpened(pool, obj).catch((e) => console.error('[billing] dispute alert failed:', e.message));
       const pi = await resolveDisputePI(obj);
       if (pi) {
         // Resolve the owner first, then freeze via a parameterized uuid predicate

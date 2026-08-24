@@ -26,7 +26,13 @@ import { activationUrl, mintCode } from './accountActivation.js';
  * account-recovery failure that presents to the user as a broken product, and to
  * support as an unreproducible ticket.
  */
-const ESSENTIAL_TEMPLATES = new Set(['password_reset', 'email_verification']);
+/* 🔴 'dispute_opened' is ESSENTIAL. It is operator mail with a legal deadline
+ * attached — Stripe gives 7–21 days to respond and a missed window is an
+ * automatic loss of both the money and the fee. Honouring an unsubscribe on it
+ * would mean one careless click permanently disables the only warning the
+ * business gets. Nobody can opt out of being told they are being sued for a
+ * chargeback. */
+const ESSENTIAL_TEMPLATES = new Set(['password_reset', 'email_verification', 'dispute_opened']);
 
 // --------------------------------------------------------------------------
 // XENO branded email wrapper
@@ -621,6 +627,34 @@ const templates = {
    * open it depends on who did the asking. "You were mentioned" tells the reader
    * nothing they can act on.
    */
+  /**
+   * A card dispute has been opened. OPERATOR mail, not customer mail.
+   *
+   * ⚠️ Deliberately plain and deliberately alarming. Stripe's response window is
+   * 7–21 days and it starts NOW; a message that reads like a notification gets
+   * triaged like one. Everything needed to act is in the body, because the
+   * person reading it on a phone must not have to go looking for the amount, the
+   * deadline or the link.
+   */
+  dispute_opened: (d) => ({
+    subject: `⚠️ Card dispute opened — ${d.amount || 'unknown amount'} — respond by ${d.dueBy || 'ASAP'}`,
+    html: wrapInLayout('Card dispute opened', `
+      <h1 style="margin:0 0 16px;font-size:20px;">A customer disputed a payment</h1>
+      <p style="margin:0 0 16px;">Stripe has opened a dispute. <strong>You must respond before the
+      deadline or the dispute is lost automatically</strong>, including the fee.</p>
+      <table style="width:100%;border-collapse:collapse;margin:0 0 16px;">
+        <tr><td style="padding:6px 0;">Amount</td><td style="padding:6px 0;"><strong>${d.amount || '—'}</strong></td></tr>
+        <tr><td style="padding:6px 0;">Reason</td><td style="padding:6px 0;">${d.reason || '—'}</td></tr>
+        <tr><td style="padding:6px 0;">Respond by</td><td style="padding:6px 0;"><strong>${d.dueBy || 'see Stripe'}</strong></td></tr>
+        <tr><td style="padding:6px 0;">Customer</td><td style="padding:6px 0;">${d.customerEmail || 'unknown'}</td></tr>
+        <tr><td style="padding:6px 0;">Dispute</td><td style="padding:6px 0;">${d.disputeId || '—'}</td></tr>
+      </table>
+      <p style="margin:0 0 16px;">The customer's credit account has been frozen automatically.</p>
+      <p style="margin:0;"><a href="${d.url || 'https://dashboard.stripe.com/disputes'}"
+        style="display:inline-block;background:#fff;color:#000;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Open in Stripe</a></p>
+    `),
+  }),
+
   forum_mention: ({ displayName, threadTitle, threadUrl, authorName, authorKind, authorOwner, excerpt, unsubscribeUrl: unsubUrl }) => ({
     subject: `${authorName} mentioned you: ${threadTitle}`,
     html: wrapInLayout('You were mentioned', `
