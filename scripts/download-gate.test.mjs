@@ -44,6 +44,10 @@ const UI = [
 
 const CDN_HOST = ['updates', 'xenostudio', 'ai'].join('.');
 
+/** The app.use(…) line for a mount, so a mount's middlewares can be asserted. */
+const mountLine = (prefix) =>
+  index.split(String.fromCharCode(10)).find((l) => l.includes('app.use(') && l.includes(prefix));
+
 /* ── 1 · The grant is a permission for ONE artifact ─────────────────────── */
 
 test('a valid grant opens exactly the artifact it names', () => {
@@ -113,7 +117,7 @@ test('the deep-link route is NOT mounted behind authMiddleware', () => {
    * a plain anchor navigation carries no credential. Mounting auth here would
    * refuse every paying customer — a gate that looks like it works because it
    * refuses everyone. The grant is what carries the permission instead. */
-  const line = index.split('\n').find((l) => l.includes('app.use(') && l.includes('/product'));
+  const line = mountLine('/product');
   assert.ok(line, 'the /product mount moved');
   assert.ok(!line.includes('authMiddleware'),
     'the deep-link is behind authMiddleware — that refuses real customers, see auth.js');
@@ -122,7 +126,7 @@ test('the deep-link route is NOT mounted behind authMiddleware', () => {
 /* ── 3 · Minting is the authenticated half ──────────────────────────────── */
 
 test('the mint endpoint sits behind auth AND the database', () => {
-  const line = index.split('\n').find((l) => l.includes('app.use(') && l.includes('/api/downloads'));
+  const line = mountLine('/api/downloads');
   assert.ok(line, 'the grant mint endpoint is not mounted');
   assert.ok(line.includes('authMiddleware'), 'grants can be minted without signing in');
   assert.ok(line.includes('databaseMiddleware'), 'the mint endpoint has no db to resolve entitlements with');
@@ -171,4 +175,53 @@ test('a refused download sends a free account to pricing, not in a loop', () => 
 
 test('assetUrl carries a warning so it is not re-used for downloads', () => {
   assert.ok(catalog.includes('NOT FOR DOWNLOAD LINKS'), 'assetUrl lost its do-not-use-for-downloads warning');
+});
+
+/* ── 5 · The updater's half (Phase 3) ───────────────────────────────────── */
+
+test('the update-grant endpoint sits behind auth AND the database', () => {
+  const line = mountLine('/api/updates');
+  assert.ok(line, 'the update grant endpoint is not mounted');
+  assert.ok(line.includes('authMiddleware'), 'an updater could mint a grant without an account');
+  assert.ok(line.includes('databaseMiddleware'), 'the update endpoint has no db to resolve entitlements with');
+});
+
+test('the update grant is refused before the release is looked up', () => {
+  /* Same ordering rule as the deep link. An updater that is refused must not
+   * learn from the error that a new version exists. */
+  const start = route.indexOf('updateGrantRouter.get(');
+  assert.ok(start > -1, 'the update grant route is gone');
+  const body = route.slice(start);
+  const gate = body.indexOf('assertEntitlement');
+  const lookup = body.indexOf('await loadReleases(slug)');
+  assert.ok(gate > -1, 'the update endpoint does not assert an entitlement');
+  assert.ok(lookup > -1, 'the update endpoint stopped resolving a release');
+  assert.ok(gate < lookup, 'the update paywall runs after the lookup, leaking that an update exists');
+});
+
+test('an update grant is bound to the RESOLVED version, never to "latest"', () => {
+  /* A "latest"-shaped grant held across a release silently starts pointing at
+   * different bytes than the updater decided to install — the grant would still
+   * verify, against the wrong file. Pin it to what was actually resolved. */
+  const body = route.slice(route.indexOf('updateGrantRouter.get('));
+  const mint = body.indexOf('mintDownloadGrant(');
+  assert.ok(mint > -1, 'the update endpoint stopped minting a grant');
+  /* Bound to the CALL, not the file: the JSON response also carries
+   * `version: release.version`, so a file-level check stayed green with the
+   * mint reverted to the unresolved value. Second time this exact shape has
+   * fooled a gate in this suite. */
+  const call = body.slice(mint, body.indexOf(')', mint));
+  assert.ok(call.includes('version: release.version'),
+    'the update grant is minted against an unresolved version, not the one it resolved');
+});
+
+test('update and download stay SEPARABLE, on one named seam', () => {
+  /* They check the same capability today because nobody has decided otherwise.
+   * What must not happen is the two collapsing into one call site, because then
+   * "an expired plan still gets security fixes" stops being a decision anyone
+   * can make. */
+  assert.ok(route.includes('const UPDATE_CAPABILITY ='),
+    'the update capability is no longer a named seam — splitting it is now a refactor, not a line');
+  assert.ok(route.includes('assertEntitlement(req.db, userId, UPDATE_CAPABILITY)'),
+    'the update endpoint no longer goes through its own capability constant');
 });
