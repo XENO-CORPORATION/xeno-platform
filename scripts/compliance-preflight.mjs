@@ -191,7 +191,10 @@ if (process.env.SUBJECT_HASH_SECRET) {
 /* Art. 13(2)(a): the storage period, or the criteria for it, must be given.
  * Derived from the policy file so a table added later and left undisclosed is
  * caught here rather than by a regulator. */
-const undisclosed = [...retentionSvc.matchAll(/days: (\d+),/g)]
+/* ⚠️ `documentedDays` too — the capital D meant this regex silently skipped
+ * the largest table, whose period the Privacy page then understated by a
+ * month. Who enforces a period is irrelevant to disclosing it. */
+const undisclosed = [...retentionSvc.matchAll(/(?:documented)?[Dd]ays: (\d+),/g)]
   .map((m) => m[1])
   .filter((d) => !has(privacy, new RegExp(`${d} days`)));
 if (undisclosed.length) {

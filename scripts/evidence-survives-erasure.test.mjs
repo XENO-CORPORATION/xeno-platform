@@ -257,11 +257,30 @@ test('🔴 a cascading table is not reported as "kept indefinitely"', () => {
 test('every policy declares WHO prunes it', () => {
   /* A policy with no prunedBy renders as UNKNOWN rather than guessing, but the
    * gap should be caught here rather than in front of an auditor. */
+  const KINDS = ['sweeper', 'cascade', 'elsewhere', 'never'];
   for (const p of POLICIES) {
-    assert.ok(['sweeper', 'cascade', 'never'].includes(p.prunedBy),
+    assert.ok(KINDS.includes(p.prunedBy),
       `${p.table} has prunedBy=${JSON.stringify(p.prunedBy)} — the summary cannot describe it`);
-    if (p.prunedBy === 'sweeper') assert.ok(p.days, `${p.table} claims a sweeper prunes it but has no period`);
-    if (p.prunedBy !== 'sweeper') assert.equal(p.days, null, `${p.table} is not swept here but declares a period — two clocks`);
+
+    /* 🔴 `days` means "what THIS sweeper deletes after", so it must be null
+     * unless we do the deleting — otherwise two clocks act on the same rows and
+     * the earlier one wins silently. `documentedDays` carries the period we owe
+     * the person when somebody else enforces it. Keeping them separate is what
+     * lets the disclosure be complete without the sweeper over-reaching. */
+    if (p.prunedBy === 'sweeper') {
+      assert.ok(p.days, `${p.table} claims a sweeper prunes it but has no period`);
+      assert.equal(p.documentedDays, undefined,
+        `${p.table} declares both days and documentedDays — one of them is wrong and nobody will know which`);
+    } else {
+      assert.equal(p.days, null, `${p.table} is not swept here but declares a period — two clocks`);
+    }
+
+    /* Anything deleted must say after how long. Only a genuinely retained table
+     * may answer "no period", and it must be the deliberate one. */
+    if (p.prunedBy === 'cascade' || p.prunedBy === 'elsewhere') {
+      assert.ok(p.documentedDays > 0,
+        `${p.table} is deleted by something else and does not say after how long — the auditor answer would be a shrug`);
+    }
   }
 });
 
@@ -286,8 +305,14 @@ test('🔴 every retention period in the code is DISCLOSED on the Privacy page',
    *
    * Derived from POLICIES rather than hardcoded, so ADDING a table with a
    * period and not disclosing it fails here. */
+  /* 🔴 Every row with a PERIOD, not only the ones this sweeper enforces. The
+   * first version skipped anything we do not delete ourselves — and the biggest
+   * table is deleted by the funnel sweeper, so its period was unchecked and the
+   * page understated it by a month (180 published, 210 real: a 30-day TTL and
+   * then 180 days AFTER expiry). Who does the deleting is irrelevant to the
+   * person being told how long we keep their data. */
   for (const p of describeRetention()) {
-    if (p.prunedBy !== 'sweeper') continue;
+    if (p.days == null) continue;
     assert.ok(privacy.includes(`${p.days} days`),
       `${p.table} is kept for ${p.days} days and the Privacy page never says so`);
   }
