@@ -1,0 +1,412 @@
+/* XENO State Playground — dark, monochrome, rounded-square grammar (no circles anywhere). */
+
+:root {
+  --bg: #08080a;
+  --panel: #0e0e12;
+  --panel-hi: #131318;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-hi: rgba(255, 255, 255, 0.14);
+  --ink: #d8d8de;
+  --ink-dim: #7f7f86;
+  --ink-bright: #f4f4f6;
+  --accent: #f4f4f6;
+  --radius: 9px;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.app {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 40px 28px 96px;
+}
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.title h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  color: var(--ink-bright);
+}
+.title .sub {
+  margin: 6px 0 0;
+  max-width: 52ch;
+  color: var(--ink-dim);
+}
+code { font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; font-size: 0.92em; color: var(--ink); }
+
+.controls {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+.controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 168px;
+}
+.controls span { color: var(--ink-dim); font-size: 12px; letter-spacing: 0.02em; }
+.controls b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 1px; /* 3px rail: 2px was 67% of its height, i.e. a capsule */
+  background: var(--line-hi);
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px; /* square handle, per the grammar */
+  background: var(--ink-bright);
+  cursor: pointer;
+  border: none;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 4px;
+  background: var(--ink-bright); cursor: pointer; border: none;
+}
+
+/* Gooey slider (liquid-gooey) — a working range whose thumb rubber-trails the drag.
+   Proportioned like liquid-gooey's own demo: the box is deliberately much larger than the rail, because
+   the liquid is larger than the element it wraps and needs somewhere to spill that is not over the rail.
+   Rail inset ≈ 0.56 x the thumb; box ≈ 2.2 x the thumb tall. */
+.gooey-slider {
+  position: relative;
+  width: 200px;
+  height: 40px;
+  display: flex;
+  align-items: stretch;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+.gooey-track {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: 1px; /* 3px rail: 2px was 67% of its height, i.e. a capsule */
+  background: var(--line-hi);
+}
+.gooey-fill {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: 1px; /* 3px rail: 2px was 67% of its height, i.e. a capsule */
+  background: var(--ink-bright);
+  pointer-events: none;
+}
+/* The goo layer. liquid-gooey forces `position: relative` as an INLINE style on its own wrapper, which
+   beats any stylesheet rule — so this can never be positioned absolutely. It is laid out as the slider's
+   only flex item instead, which gives it the full width and makes it the thumb's containing block. */
+.gooey-liquid {
+  flex: 1;
+  align-self: stretch; /* the thumb's containing block is the FULL box, not just the rail's height */
+  pointer-events: none;
+}
+/* Transparent on purpose: the LIQUID is the thumb.
+   TWO numbers decide how square it comes out, and both have to hold. The declared radius is the obvious
+   one. The other is the goo's blur: the threshold rounds off any corner TIGHTER than the blur, so the
+   blur is a FLOOR under the corner however square the element is declared. At 18px the ceiling for a
+   square read is about 30% of the width — so radius 5 (28%), with blur 3 sitting under it. Radius 6
+   with blur 5 put the effective corner at 33% and the thumb came out a pill. */
+.gooey-thumb {
+  position: absolute;
+  /* Parked on the START of the rail, exactly like the demo's `left: 14px`; the transform carries only
+     the travel, whose maximum is railWidth − thumb, so it lands flush on the far end. */
+  left: 10px;
+  top: 50%;
+  margin-top: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: transparent;
+  pointer-events: none;
+  /* No transition on the position: it is where your finger is. Easing it means the thumb lags behind the
+     fill during a fast drag and the two visibly come apart — the trailing is the LIQUID's job, and it
+     does it while the element itself stays exactly under the pointer. */
+  transition: scale 170ms cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+/* Grabbed: swells slightly, the way something soft does under a finger. */
+.gooey-slider:active .gooey-thumb {
+  scale: 1.1;
+}
+.gooey-slider:focus-visible {
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--line-hi);
+}
+@media (prefers-reduced-motion: reduce) {
+  .gooey-thumb {
+    scale: 1;
+    transition: none;
+  }
+}
+
+/* Liquid toggle (liquid-gooey experiment) — a knob big enough for the goo to read as liquid. */
+/* The track carries the inset as PADDING and lays the knob out with flex. It cannot be done by
+   absolutely positioning the goo layer: liquid-gooey sets `position: relative` as an INLINE style on
+   its own wrapper, which beats any stylesheet rule — so `position: absolute; inset: 6px` degraded into
+   a relative offset that shoved the knob 6px DOWN from the button's already-centred content box, and
+   the knob ended up sitting on the bottom edge. Padding + flex has no such fight. */
+.lqtoggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 68px;
+  height: 34px;
+  padding: 6px;
+  border: 1px solid var(--line-hi);
+  border-radius: 9px;
+  background: var(--panel-hi);
+  cursor: pointer;
+  transition: background 200ms ease;
+  outline: none;
+}
+.lqtoggle[data-on='true'] {
+  background: #26262b;
+}
+.lqtoggle:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--line-hi);
+}
+/* The goo layer fills the track's content box exactly — 54x20 (68 − 2px border − 12px padding) — so the
+   knob has 6px of clearance on every side and its halo never reaches the border. `align-items: center`
+   here too, so it does not matter what wrapper liquid-gooey puts around the knob. */
+.lqtoggle-liquid {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  pointer-events: none;
+}
+/* 20px knob, 4px radius — the same radius:size ratio as the real `<Switch>` knob. It only SURVIVES the
+   gooey pass because the blur is now smaller than the radius; a 6px blur on a 7px radius melted every
+   corner and the knob came out a circle, which the grammar does not allow anywhere. */
+.lqtoggle-knob {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: transparent;
+}
+
+.hint {
+  margin: 22px 0 20px;
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+.hint b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.hint em { color: var(--ink); font-style: normal; opacity: 0.85; }
+
+/* App header + section headers */
+.app-head {
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--line);
+}
+.app-head h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  color: var(--ink-bright);
+}
+.app-head .sub {
+  margin: 6px 0 0;
+  max-width: 62ch;
+  color: var(--ink-dim);
+}
+.title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-bright);
+}
+
+/* Controls panel — themed by .xeno (dark/light), so it shows the monochrome shell in either. */
+.panel {
+  background: var(--xeno-canvas);
+  border: 1px solid var(--xeno-border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 40px;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.panel-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--xeno-text);
+}
+.theme-toggle,
+.switch-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--xeno-muted);
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid var(--xeno-border);
+}
+.row .tag {
+  min-width: 128px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--xeno-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(102px, 1fr));
+  gap: 12px;
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: #c9c9d0;
+  cursor: default;
+  font: inherit;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+.cell.stateful { cursor: pointer; }
+.cell:hover {
+  background: var(--panel-hi);
+  border-color: var(--line-hi);
+  color: var(--ink-bright);
+}
+.cell.stateful:hover { transform: translateY(-1px); }
+.cell.on {
+  color: var(--accent);
+  border-color: rgba(244, 244, 246, 0.4);
+  background: var(--panel-hi);
+}
+
+.swatch {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 44px;
+  color: inherit; /* the glyph draws in currentColor */
+}
+
+.label {
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  color: var(--ink-dim);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cell:hover .label { color: var(--ink); }
+
+.badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 1px 6px;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  border-radius: 5px;
+  color: var(--ink-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+}
+.cell.on .badge { color: var(--bg); background: var(--accent); border-color: transparent; }
+
+/* Chrome switch — the construction toggle in the page header. Sits in the playground, not the
+   library: a product decides its own chrome, so this control is a demo affordance, not an element. */
+.chrome-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.chrome-note {
+  color: var(--xeno-muted);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Compare mode — the same tree twice, one column per construction. */
+.chrome-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.chrome-compare-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.chrome-compare-tag {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 6px 10px;
+  background: var(--xeno-panel-header);
+  border-radius: 4px;
+  color: var(--xeno-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+@media (max-width: 1100px) {
+  .chrome-compare { grid-template-columns: 1fr; }
+}

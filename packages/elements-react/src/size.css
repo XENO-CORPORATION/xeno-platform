@@ -1,0 +1,179 @@
+/*
+ * Control size metrics, as CSS.
+ *
+ * These four numbers used to be written onto every control as an INLINE style, computed in JS from
+ * `controlSize` at render time. That worked, but it put the box metrics in the one place nothing can
+ * override: an inline style beats every stylesheet rule there is. Which means a surface — a product
+ * rendering the same elements for touch instead of a mouse — had no seam to reach them through.
+ *
+ * Here they are ambient instead. A control emits `data-xeno-size="md"` and reads the four variables;
+ * a surface redefines the variables for the sizes it wants bigger, once, at the root:
+ *
+ *   .xeno[data-surface='mobile'] [data-xeno-size='md'] { --xeno-h: 44px; }
+ *
+ * Nothing at the call site changes, no context is threaded through the tree, and a product that sets
+ * no surface keeps exactly what it had.
+ *
+ * The attribute is namespaced (`data-xeno-size`, not `data-size`) for two reasons: it cannot collide
+ * with a host application's own `data-size`, and it therefore does not need to be scoped under
+ * `.xeno` — a control rendered outside the theme root still gets its metrics.
+ *
+ * DRIFT: the numbers below mirror `controlSize` in `@xenosystem/elements/tokens`, which stays the
+ * source of truth. `size.test.ts` fails if the two ever disagree.
+ *
+ * NOT here: glyph px. A `<XenoElement>` takes its size as a number prop, so an icon's scale is still
+ * resolved in JS (`iconPx`). Making icons follow a surface too is a separate change.
+ */
+
+[data-xeno-size='xs'] {
+  --xeno-h: 24px;
+  --xeno-padx: 8px;
+  --xeno-gap: 5px;
+  --xeno-font: 12px;
+  --xeno-icon: 15px;
+}
+[data-xeno-size='sm'] {
+  --xeno-h: 28px;
+  --xeno-padx: 10px;
+  --xeno-gap: 6px;
+  --xeno-font: 13px;
+  --xeno-icon: 16px;
+}
+[data-xeno-size='md'] {
+  --xeno-h: 32px;
+  --xeno-padx: 12px;
+  --xeno-gap: 6px;
+  --xeno-font: 14px;
+  --xeno-icon: 16px;
+}
+[data-xeno-size='lg'] {
+  --xeno-h: 36px;
+  --xeno-padx: 14px;
+  --xeno-gap: 7px;
+  --xeno-font: 14px;
+  --xeno-icon: 18px;
+}
+
+/* ── The touch surface ────────────────────────────────────────────────────────────────
+ * One block, declared by the product at its root:
+ *
+ *   <div className="xeno" data-surface="mobile">
+ *
+ * `font` at md is 16px and that is not a taste call — iOS Safari ZOOMS the page when a focused input
+ * has a font under 16px, so a 14px text field makes the whole layout jump the instant it is tapped. */
+.xeno[data-surface='mobile'] [data-xeno-size='xs'] {
+  --xeno-h: 28px;
+  --xeno-padx: 10px;
+  --xeno-gap: 6px;
+  --xeno-font: 13px;
+  --xeno-icon: 16px;
+}
+.xeno[data-surface='mobile'] [data-xeno-size='sm'] {
+  --xeno-h: 32px;
+  --xeno-padx: 12px;
+  --xeno-gap: 7px;
+  --xeno-font: 14px;
+  --xeno-icon: 17px;
+}
+.xeno[data-surface='mobile'] [data-xeno-size='md'] {
+  --xeno-h: 40px;
+  --xeno-padx: 16px;
+  --xeno-gap: 8px;
+  --xeno-font: 16px;
+  --xeno-icon: 20px;
+}
+.xeno[data-surface='mobile'] [data-xeno-size='lg'] {
+  --xeno-h: 48px;
+  --xeno-padx: 18px;
+  --xeno-gap: 9px;
+  --xeno-font: 16px;
+  --xeno-icon: 22px;
+}
+
+/* ── Glyphs follow the surface ────────────────────────────────────────────────────────
+ * A 16px glyph inside a 40px button is not the same design as a 16px glyph inside a 32px one — the
+ * ratio is what reads, and it has to hold. Desktop md is 32/16; touch md is 40/20. Same 50%.
+ *
+ * The renderer writes `width`/`height` as ATTRIBUTES on the svg, and a CSS rule outranks a
+ * presentation attribute — so this needs no renderer change, no new prop and no context, and the
+ * attributes stay put for the "renders correctly with no stylesheet" invariant.
+ *
+ * Only under a surface: with no surface declared the attribute already carries the right number, and
+ * a rule competing with it by default would be pure risk for no gain.
+ *
+ * Each owner is named rather than reaching every descendant, and that is the whole point — a blanket
+ * rule would also flatten the glyphs that are deliberately SMALLER than the control's own. The chip's
+ * remove × and the model picker's are `glyph - 2` by decision, and they keep their attribute. */
+.xeno[data-surface='mobile'] .xeno-btn > .xeno-element,
+.xeno[data-surface='mobile'] .xeno-input-icon > .xeno-element,
+.xeno[data-surface='mobile'] .xeno-tab > .xeno-element,
+.xeno[data-surface='mobile'] .xeno-chip-body > .xeno-element {
+  width: var(--xeno-icon);
+  height: var(--xeno-icon);
+}
+
+/* ── The hit target ───────────────────────────────────────────────────────────────────
+ * 44px square, Apple's HIG minimum and WCAG 2.1 AAA. It is the TAPPABLE area, not the visual one —
+ * keeping those separate is what lets the interface stay dense under a finger instead of becoming a
+ * column of slabs. Material does the same thing: 24dp of ink inside a 48dp target.
+ *
+ * It is gated on `pointer: coarse`, NOT on the surface, and the distinction matters. The surface is a
+ * decision the PRODUCT makes about density; the hit target answers a fact about the DEVICE. A phone
+ * opening the web platform has fingers whether or not anyone declared a surface, and it gets safe
+ * targets either way.
+ *
+ * The pseudo-element only exists inside the query, so on a precise pointer there is no extra layer
+ * over any control at all. `::after` on purpose: `::before` is already the goo fill on the toggle and
+ * the filter pill. Rows that can hold their own actions (list rows, table rows) are left out — an
+ * overlay across them would swallow clicks meant for a trailing button. */
+.xeno {
+  --xeno-hit: 44px;
+}
+
+@media (pointer: coarse) {
+  .xeno-btn,
+  .xeno-icon-btn,
+  .xeno-chip,
+  .xeno-pill,
+  .xeno-tab,
+  .xeno-segmented-option,
+  .xeno-switch,
+  .xeno-checkbox,
+  .xeno-radio,
+  .xeno-sidebar-item {
+    position: relative;
+  }
+  .xeno-btn::after,
+  .xeno-icon-btn::after,
+  .xeno-chip::after,
+  .xeno-pill::after,
+  .xeno-tab::after,
+  .xeno-segmented-option::after,
+  .xeno-switch::after,
+  .xeno-checkbox::after,
+  .xeno-radio::after,
+  .xeno-sidebar-item::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    width: 100%;
+    height: 100%;
+    min-width: var(--xeno-hit, 44px);
+    min-height: var(--xeno-hit, 44px);
+    /* Invisible, and it must never paint over the control it is extending. */
+    background: none;
+    border-radius: inherit;
+  }
+
+  /*
+   * Text fields are the exception, and they have to be: an overlay across a field would take the tap
+   * that was meant to focus it — a pseudo-element belongs to the wrapper, and clicking a div does not
+   * put a caret in the input inside it. A field cannot fake its target, so it earns one for real.
+   */
+  .xeno-input,
+  .xeno-textarea {
+    min-height: var(--xeno-hit, 44px);
+  }
+}

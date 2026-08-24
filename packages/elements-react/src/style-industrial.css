@@ -1,0 +1,175 @@
+/*
+ * ══════════════════════════════════════════════════════════════════════════════════════════════
+ *  OWNED FILE — INDUSTRIAL (`data-style="industrial"`)
+ * ══════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * One construction, one file, one owner, so the two can be worked on in parallel without either
+ * side touching the other's values. Everything a construction decides lives HERE — colours, box
+ * metrics, typography, radii. Nothing construction-specific belongs in a component stylesheet or
+ * in `xeno-theme.css`, because those are shared and a change there hits BOTH looks.
+ *
+ *  WHO IT IS FOR — read this before choosing any value.
+ *
+ *  Industrial is RAW and CLEAN. Its audience is engineers: hardware, systems, anyone reading an
+ *  instrument rather than enjoying a surface. `DESIGN_SYSTEM.md` §1 is the same idea in the locked
+ *  doc's words — "a professional instrument panel, not a consumer app. Carbon fiber cockpit, not
+ *  plastic toy. Restrained, geometric, functional."
+ *
+ *  What that decides, so you do not have to ask each time:
+ *    · No shadow, anywhere. Separation comes from BEING a distinct surface, not from casting onto
+ *      another one. This is why plates float on the page colour instead of stacking with depth.
+ *    · Tight radii. The shell rounds, the plate rounds less, and a face that meets a neighbour is
+ *      square (§4, per-corner).
+ *    · Emphasis by surface lightness and text brightness. Never hue, never a fill that shouts.
+ *    · Motion says what changed and then stops. Nothing decorative.
+ *
+ *  The question to ask of a new value: DOES THIS TELL THE USER SOMETHING? If it is there to be
+ *  pleasant, it belongs in Soft, not here.
+ *
+ * THE CONTRACT BETWEEN THE TWO FILES, enforced by `theme.test.ts`:
+ *   1. Every token declared in `style-soft.css` must also be declared here, and vice versa.
+ *      Adding one on your side and not telling the other side is the failure mode — the missing
+ *      one silently inherits the other construction's value and half-renders.
+ *   2. Every token must actually DIFFER between the two files. If a value is the same in both, it
+ *      is not a construction decision: move it to the shared base.
+ *
+ * So adding a token is a two-file change and the suite will say so. That is deliberate: it is the
+ * cheapest possible coordination between two people editing in parallel.
+ */
+
+/* ── CHROME: construction, not colour ──────────────────────────────────────────────────────────
+ * A THIRD axis, orthogonal to `data-theme` (colour ramp) and `data-surface` (density). It needs its
+ * own attribute: `data-theme` already carries `light`, and one attribute cannot hold two orthogonal
+ * values — you would lose "industrial + light".
+ *
+ * 🔴 DECLARED ON `:root`, NOT ON `.xeno`, and that is load-bearing rather than tidy.
+ *
+ * `.xeno` is a SCOPE MARKER — an app nests it (a section that wants the light ramp is a `.xeno` with
+ * `data-theme`), and the playground nests seven. A custom property resolves from the NEAREST
+ * declaring ancestor, so while these lived on `.xeno` every nested scope silently re-declared them at
+ * the default and the root's `data-style` never reached a single component. The axis appeared to do
+ * nothing, which is exactly what it did.
+ *
+ * On `:root` the defaults are declared once. `[data-style=…]` is attribute-only so it applies to
+ * whatever element carries it — html, an app wrapper, or one subtree — and wins for its descendants
+ * by proximity without needing to out-specify anything.
+ *
+ * DEFAULT = separated, because `DESIGN_SYSTEM.md` §"Panel Structure" requires it.
+ */
+:root {
+  /* ── CHROME: construction, not colour ──────────────────────────────────────────────────────
+   * A THIRD axis, orthogonal to `data-theme` (colour ramp) and `data-surface` (density). It has to
+   * be its own attribute: `data-theme` already carries `light`, and one attribute cannot hold two
+   * orthogonal values — you would lose "industrial + light". Same lesson as RFC 0003.
+   *
+   * Every chrome-bearing element reads these instead of hardcoding. That is what lets ONE DOM render
+   * as either construction: no component knows a theme exists, and nothing is built twice.
+   *
+   * DEFAULT = separated, because `DESIGN_SYSTEM.md` §"Panel Structure" requires it ("They are NOT
+   * merged into a single container"). `unified` is the opt-in.
+   */
+  /*
+   * 6 / 2 / 6 / 4, from `xeno-tools/packages/tool-kit/src/ui/Plate.tsx` — "the canonical panel chrome,
+   * ported from xeno-motion's dialogs, the pattern the design language actually resolves to across 10
+   * of Motion's 12 dialogs."
+   *
+   * ⚠️ FIXED, not responsive. Motion and Pixel DO use `clamp()` — but only in `index.css`, for the
+   * DOCKVIEW panel chrome, where a docked panel scales with the viewport. A floating dialog or a tool
+   * panel does not, and `Plate` pins 6/4/2. An earlier version of this file generalised the wrong one.
+   */
+  --xeno-style-gap: 2px;
+  --xeno-style-inset: 6px;
+  /* What the SHELL paints. Separated: the page shows between plates. */
+  --xeno-style-shell: var(--xeno-canvas);
+  /* What a header/footer PLATE paints. */
+  --xeno-style-plate: var(--xeno-panel-header);
+  /* What the BODY plate paints. */
+  --xeno-style-body: var(--xeno-viewport);
+  /* Separation is the gap, so no divider line is drawn. */
+  --xeno-style-divider: none;
+  /* §"Modals / Overlays": "the backdrop provides the separation." */
+  --xeno-style-shadow: none;
+  --xeno-style-radius: 6px;
+  /*
+   * DERIVED, not picked from the scale — `Plate` rounds its shell 6px and its children 4px. Two
+   * rounded rects offset by a constant stay parallel only if the inner radius drops by that offset,
+   * so this is geometry rather than taste. An earlier version chose `sm` off the radius scale because
+   * "4 is not in the scale"; the scale was never the right source for this number.
+   */
+  --xeno-style-radius-plate: calc(var(--xeno-style-radius) - 2px);
+  /* The glass on the header plate. Both reference apps, identical values. */
+  --xeno-style-plate-filter: blur(14px) saturate(120%);
+  /*
+   * Button emphasis. The playbook: "Emphasis comes from surface lightness and text brightness. Never
+   * from hue." Separated follows the reference — primary is the lightest SURFACE with bright text,
+   * not an inverted fill. On the chrome axis rather than the base so `unified` keeps the inverted
+   * treatment this set already shipped; a button is a button, but which reading of "emphasis" applies
+   * is part of the construction.
+   */
+  /*
+   * The readout / detail block — `PlateDetail` in the reference: "raised back to plate colour against
+   * the recessed body. This is Motion's readout group and is where label-value pairs belong."
+   *
+   * So in `separated` a card is NOT a soft surface with a big radius and a shadow. It is a plate-
+   * coloured block, 4px, borderless, flat. `xeno-tools/DESIGN_SYSTEM.md` bans the alternative
+   * outright: "❌ Gradients in chrome, drop shadows for depth".
+   */
+  --xeno-style-card-bg: var(--xeno-panel-header);
+  --xeno-style-card-border: none;
+  --xeno-style-card-radius: var(--xeno-style-radius-plate);
+  --xeno-style-card-pad: 12px;
+  --xeno-style-card-shadow: none;
+  /* Hover "lifts alpha, never bounces or scales dramatically" — tools DESIGN_SYSTEM, Motion. */
+  --xeno-style-card-lift: none;
+
+  /*
+   * Typography and box metrics DIFFER between the constructions, so they belong on the axis too. An
+   * earlier version of this pass changed them in the BASE, which silently altered `unified` — the one
+   * thing this axis exists to prevent. Everything a construction decides lives here or it leaks.
+   */
+  --xeno-style-border: var(--xeno-border-subtle);
+  --xeno-style-panel-header-pad: 7px 12px;
+  --xeno-style-panel-header-min-h: 34px;
+  --xeno-style-panel-body-pad: 12px;
+  --xeno-style-title-size: 11px;
+  --xeno-style-title-color: var(--xeno-muted);
+  --xeno-style-title-transform: uppercase;
+  --xeno-style-title-spacing: 0.08em;
+  --xeno-style-dialog-header-pad: 6px 12px;
+  --xeno-style-dialog-title-size: 11px;
+  --xeno-style-dialog-title-weight: 500;
+  --xeno-style-dialog-body-pad: 12px;
+  --xeno-style-dialog-body-size: 12px;
+  --xeno-style-dialog-footer-pad: 6px;
+  --xeno-style-dialog-footer-gap: 6px;
+  --xeno-style-card-elevated-bg: var(--xeno-style-card-bg);
+
+
+  /*
+   * FLOATING CHROME — menus, tooltips, dropdown panels.
+   *
+   * Separated puts them on §2's dropdown layer with no shadow, because the same reasoning as
+   * §"Modals / Overlays" applies: an overlay is separated from what is behind it by BEING a distinct
+   * surface, not by casting a shadow onto it. Unified keeps the elevated-plus-shadow treatment.
+   */
+  --xeno-style-overlay-bg: var(--xeno-dropdown);
+  --xeno-style-overlay-radius: var(--xeno-style-radius-plate);
+  --xeno-style-overlay-shadow: none;
+  --xeno-style-overlay-ring: inset 0 0 0 1px var(--xeno-border-subtle);
+  /* Controls inside chrome — segmented options, filter pills, inline code. */
+  --xeno-style-control-radius: var(--xeno-radius-xs);
+
+  /* Content blocks with their own header — code, source cards. Only the RADIUS differs between
+     constructions; their surfaces are already correct §2 layers in both, so they stay put. */
+  --xeno-style-content-radius: var(--xeno-style-radius-plate);
+
+  /* Per-component because their Soft values genuinely differ from each other and from the tooltip's.
+     Collapsing them into one token would have changed Soft, which is the leak this axis exists to
+     stop. Separated casts none of them. */
+  --xeno-style-menu-shadow: none;
+  --xeno-style-picker-shadow: none;
+
+  --xeno-style-btn-primary-bg: var(--xeno-control);
+  --xeno-style-btn-primary-fg: var(--xeno-text);
+  --xeno-style-btn-radius: var(--xeno-radius-xs);
+}

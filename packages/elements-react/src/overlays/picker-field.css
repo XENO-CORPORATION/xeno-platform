@@ -1,0 +1,81 @@
+/*
+ * PickerField — a form field that reveals a panel with the chat's "Scheduled" open/close animation:
+ * the panel slides DOWN from behind the field (clipped by the popover's overflow) while its content
+ * fades up a beat later, so nothing pops. Reverses on close. Monochrome, tokens only, motion is
+ * transform/opacity behind the reduce guard.
+ */
+
+.xeno-field {
+  position: relative;
+  display: inline-block;
+}
+
+/* ── Trigger (the field itself) ──────────────────────────────────────────────────── */
+.xeno-field-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 156px;
+  height: 34px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--xeno-text);
+  background: var(--xeno-canvas);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-style-control-radius);
+  cursor: pointer;
+  transition:
+    border-color var(--xeno-dur) ease,
+    background var(--xeno-dur) ease;
+}
+.xeno-field-trigger:hover {
+  border-color: var(--xeno-muted);
+}
+.xeno-field-trigger[data-open='true'] {
+  border-color: var(--xeno-muted);
+  background: var(--xeno-hover);
+}
+.xeno-field-trigger:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--xeno-canvas),
+    0 0 0 4px var(--xeno-border);
+}
+
+.xeno-field-icon {
+  display: inline-flex;
+  color: var(--xeno-muted);
+}
+.xeno-field-label {
+  color: var(--xeno-muted);
+  font-size: 12px;
+}
+.xeno-field-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.xeno-field-value[data-placeholder='true'] {
+  color: var(--xeno-muted);
+}
+.xeno-field-chevron {
+  display: inline-flex;
+  color: var(--xeno-muted);
+  transform: rotate(90deg); /* chevron-right → points down when closed */
+  transition: transform var(--xeno-dur) ease;
+}
+.xeno-field-trigger[data-open='true'] .xeno-field-chevron {
+  transform: rotate(-90deg); /* points up when open */
+}
+
+/* The reveal itself (the unfolding panel) lives in reveal.css — PickerField composes <Reveal>. */
+@media (prefers-reduced-motion: reduce) {
+  .xeno-field-chevron {
+    transition: none;
+  }
+}

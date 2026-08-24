@@ -1,0 +1,143 @@
+/*
+ * <Tabs> — a horizontal tablist over a hairline baseline, plus an optional panel. CSS-first: the
+ * selected tab carries `data-selection="on"`, a disabled tab carries `data-availability="disabled"`.
+ * Size metrics arrive as inline `--xeno-h/-padx/-gap/-font` vars from the size tokens. Monochrome only.
+ */
+
+.xeno-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.xeno-tablist {
+  position: relative; /* the containing block the indicator's measured offset is relative to */
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  border-bottom: 1px solid var(--xeno-border);
+}
+
+.xeno-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--xeno-gap, 6px);
+  height: var(--xeno-h, 32px);
+  padding: 0 var(--xeno-padx, 12px);
+  font-family: inherit;
+  font-size: var(--xeno-font, 14px);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--xeno-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--xeno-dur) var(--xeno-ease);
+}
+
+/* The underline — ONE hairline bar for the whole tablist, which SLIDES from the tab you left to the tab
+   you chose. It used to be a `::after` on each tab scaling from 0 to 1, so it appeared on the new tab
+   and vanished from the old one: two events, no journey, and no clue where it came from.
+   Its position and width arrive as `--xeno-tab-x` / `--xeno-tab-w`, measured by the component (a tab is
+   as wide as its label — layout is the only thing that can answer that). Everything after those two
+   numbers is CSS: the travel, the stretch, and the settle. */
+.xeno-tab-indicator {
+  /* Mid-flight the bar ELONGATES along its travel and thins — reaching for where it is going — then
+     rebounds a hair as it lands. Both scale with how far it has to go (`--xeno-tab-dist`). */
+  --xeno-tab-stretch: 0.22;
+  --xeno-tab-thin: 0.2;
+  --xeno-tab-goo-x: calc(1 + var(--xeno-tab-stretch) * var(--xeno-tab-dist, 1));
+  --xeno-tab-goo-y: calc(1 - var(--xeno-tab-thin) * var(--xeno-tab-dist, 1));
+  --xeno-tab-goo-x2: calc(1 - var(--xeno-tab-thin) * 0.25);
+  --xeno-tab-goo-y2: calc(1 + var(--xeno-tab-thin) * 0.25);
+  /* ONE duration for the travel and the deformation, or the stretch peaks off-centre and reads as a
+     glitch rather than as weight. */
+  --xeno-tab-dur: 300ms;
+  --xeno-tab-ease: cubic-bezier(0.34, 1.12, 0.5, 1);
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: var(--xeno-tab-w, 0px);
+  height: 2px;
+  translate: var(--xeno-tab-x, 0px) 0;
+  background: var(--xeno-text);
+  /* Square. At 2px tall even `--xeno-radius-hair` is 75% of the height — semicircular ends, i.e. a
+     capsule. Below about 4px there is no radius that reads as a corner, so a hairline stays a hairline. */
+  border-radius: 0;
+  pointer-events: none;
+}
+/* Not armed until the selection has actually changed once — otherwise the first measurement after mount
+   would slide the bar in from the left edge on page load. */
+.xeno-tablist[data-motion='ready'] .xeno-tab-indicator {
+  transition:
+    translate var(--xeno-tab-dur) var(--xeno-tab-ease),
+    width var(--xeno-tab-dur) var(--xeno-tab-ease);
+}
+
+.xeno-tab:hover:not([data-availability='disabled']) {
+  color: var(--xeno-text);
+}
+
+.xeno-tab[data-selection='on'] {
+  color: var(--xeno-text);
+}
+
+/* The stretch, keyed off the tablist's `data-index`. One keyframe track per position, all identical:
+   moving to another tab only changes which rule matches, and a browser will not restart an animation
+   whose name did not change. Eight positions; past that the bar still travels, it just stops
+   stretching. */
+.xeno-tablist[data-motion='ready'][data-index='0'] .xeno-tab-indicator { animation: xeno-tab-goo-0 var(--xeno-tab-dur) 1; }
+.xeno-tablist[data-motion='ready'][data-index='1'] .xeno-tab-indicator { animation: xeno-tab-goo-1 var(--xeno-tab-dur) 1; }
+.xeno-tablist[data-motion='ready'][data-index='2'] .xeno-tab-indicator { animation: xeno-tab-goo-2 var(--xeno-tab-dur) 1; }
+.xeno-tablist[data-motion='ready'][data-index='3'] .xeno-tab-indicator { animation: xeno-tab-goo-3 var(--xeno-tab-dur) 1; }
+.xeno-tablist[data-motion='ready'][data-index='4'] .xeno-tab-indicator { animation: xeno-tab-goo-4 var(--xeno-tab-dur) 1; }
+.xeno-tablist[data-motion='ready'][data-index='5'] .xeno-tab-indicator { animation: xeno-tab-goo-5 var(--xeno-tab-dur) 1; }
+.xeno-tablist[data-motion='ready'][data-index='6'] .xeno-tab-indicator { animation: xeno-tab-goo-6 var(--xeno-tab-dur) 1; }
+.xeno-tablist[data-motion='ready'][data-index='7'] .xeno-tab-indicator { animation: xeno-tab-goo-7 var(--xeno-tab-dur) 1; }
+@keyframes xeno-tab-goo-0 { 0% { scale: 1 1; } 34% { scale: var(--xeno-tab-goo-x) var(--xeno-tab-goo-y); } 72% { scale: var(--xeno-tab-goo-x2) var(--xeno-tab-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-tab-goo-1 { 0% { scale: 1 1; } 34% { scale: var(--xeno-tab-goo-x) var(--xeno-tab-goo-y); } 72% { scale: var(--xeno-tab-goo-x2) var(--xeno-tab-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-tab-goo-2 { 0% { scale: 1 1; } 34% { scale: var(--xeno-tab-goo-x) var(--xeno-tab-goo-y); } 72% { scale: var(--xeno-tab-goo-x2) var(--xeno-tab-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-tab-goo-3 { 0% { scale: 1 1; } 34% { scale: var(--xeno-tab-goo-x) var(--xeno-tab-goo-y); } 72% { scale: var(--xeno-tab-goo-x2) var(--xeno-tab-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-tab-goo-4 { 0% { scale: 1 1; } 34% { scale: var(--xeno-tab-goo-x) var(--xeno-tab-goo-y); } 72% { scale: var(--xeno-tab-goo-x2) var(--xeno-tab-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-tab-goo-5 { 0% { scale: 1 1; } 34% { scale: var(--xeno-tab-goo-x) var(--xeno-tab-goo-y); } 72% { scale: var(--xeno-tab-goo-x2) var(--xeno-tab-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-tab-goo-6 { 0% { scale: 1 1; } 34% { scale: var(--xeno-tab-goo-x) var(--xeno-tab-goo-y); } 72% { scale: var(--xeno-tab-goo-x2) var(--xeno-tab-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-tab-goo-7 { 0% { scale: 1 1; } 34% { scale: var(--xeno-tab-goo-x) var(--xeno-tab-goo-y); } 72% { scale: var(--xeno-tab-goo-x2) var(--xeno-tab-goo-y2); } 100% { scale: 1 1; } }
+
+.xeno-tab:focus-visible {
+  outline: none;
+  border-radius: var(--xeno-radius-xs);
+  box-shadow:
+    0 0 0 2px var(--xeno-canvas),
+    0 0 0 4px var(--xeno-border);
+}
+
+.xeno-tab[data-availability='disabled'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.xeno-tab-panel {
+  color: var(--xeno-text);
+  outline: none;
+}
+.xeno-tab-panel:focus-visible {
+  border-radius: var(--xeno-radius-sm);
+  box-shadow:
+    0 0 0 2px var(--xeno-canvas),
+    0 0 0 4px var(--xeno-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-tab,
+  .xeno-tablist[data-motion='ready'] .xeno-tab-indicator {
+    transition: none;
+  }
+  /* The bar still marks the tab — it just gets there without travelling or stretching. */
+  .xeno-tab-indicator {
+    animation: none !important;
+  }
+}

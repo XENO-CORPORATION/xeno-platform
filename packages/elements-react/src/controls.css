@@ -1,0 +1,453 @@
+/*
+ * Tier-1 control styles. CSS-first: appearance is driven by `data-*` state attributes + the theme
+ * custom properties from `xeno-theme.css`; size metrics arrive as inline `--xeno-h/-padx/-gap/-font`
+ * vars set by the renderer from the size tokens (so sizes cannot drift from the data). Behaviour is
+ * hand-rolled in the components (Base UI comes later, SPEC §13). No literal colours here.
+ */
+
+/* ── Button / IconButton ─────────────────────────────────────────────────────────── */
+.xeno-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--xeno-gap, 6px);
+  height: var(--xeno-h, 32px);
+  padding: 0 var(--xeno-padx, 12px);
+  font-family: inherit;
+  font-size: var(--xeno-font, 14px);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--xeno-text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--xeno-radius-control);
+  cursor: pointer;
+  user-select: none;
+  /* The press. It is asymmetric on purpose: going DOWN has to be immediate, because that is the
+     acknowledgement that the click landed, while coming back UP is allowed to take four times as long
+     and to spring past its rest size on the way. A press that eases down feels laggy; a release that
+     snaps feels dead. The two clocks below are what make it read as a physical button rather than a
+     rectangle that changed size — `:active` swaps them, and the shorthand is written once.
+     `scale` and not `transform`, so the entrance animation (which owns `transform`) and the press can
+     never overwrite one another. */
+  --xeno-btn-press: 0.96;
+  --xeno-btn-press-dur: 260ms;
+  --xeno-btn-press-ease: cubic-bezier(0.2, 1.7, 0.4, 1); /* release — overshoots, then settles */
+  scale: 1;
+  transition:
+    background var(--xeno-dur) ease,
+    border-color var(--xeno-dur) ease,
+    color var(--xeno-dur) ease,
+    opacity var(--xeno-dur) ease,
+    scale var(--xeno-btn-press-dur) var(--xeno-btn-press-ease);
+}
+.xeno-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--xeno-canvas), 0 0 0 4px var(--xeno-border);
+}
+.xeno-btn:active:not(:disabled):not([data-availability='disabled']) {
+  --xeno-btn-press-dur: 65ms;
+  --xeno-btn-press-ease: cubic-bezier(0.3, 0, 0.1, 1); /* press — straight down, no hesitation */
+  scale: var(--xeno-btn-press);
+}
+.xeno-btn:disabled,
+.xeno-btn[data-availability='disabled'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.xeno-btn[data-availability='busy'] {
+  cursor: progress;
+}
+
+/* Emphasis is surface lightness + text brightness, never hue. Both readings live on the chrome axis:
+   `separated` uses the lightest SURFACE with bright text (the reference); `unified` keeps the inverted
+   fill this set shipped. The component does not know which. */
+.xeno-btn[data-variant='primary'] {
+  background: var(--xeno-style-btn-primary-bg);
+  color: var(--xeno-style-btn-primary-fg);
+}
+.xeno-btn[data-variant='primary']:hover:not(:disabled) {
+  background:
+    linear-gradient(var(--xeno-hover), var(--xeno-hover)),
+    var(--xeno-style-btn-primary-bg);
+}
+.xeno-btn[data-variant='secondary'] {
+  background: var(--xeno-control);
+  border-color: var(--xeno-border);
+}
+/* `--xeno-hover` is a TINT, not a surface — it is translucent, so assigning it here replaced the
+   opaque `--xeno-control` fill and the button came out DARKER on hover (#2b2b2b → ≈#222224), reading
+   as though it had lost its fill. Layering it over the fill is what the token actually means, and it
+   resolves correctly in both themes without inventing a `control-hover` colour. `secondary` is the
+   only variant this could hit: it is the only one with a fill at rest. */
+.xeno-btn[data-variant='secondary']:hover:not(:disabled) {
+  background:
+    linear-gradient(var(--xeno-hover), var(--xeno-hover)),
+    var(--xeno-control);
+}
+.xeno-btn[data-variant='ghost'] {
+  color: var(--xeno-muted);
+}
+.xeno-btn[data-variant='ghost']:hover:not(:disabled) {
+  color: var(--xeno-text);
+  background: var(--xeno-hover);
+}
+.xeno-btn[data-variant='outline'] {
+  border-color: var(--xeno-border);
+}
+.xeno-btn[data-variant='outline']:hover:not(:disabled) {
+  background: var(--xeno-hover);
+  border-color: var(--xeno-muted);
+}
+
+/* QUIET — the chrome button. A hairline at rest and muted ink, coming forward only when reached for:
+   the ink brightens and a hover tint arrives, and the BORDER holds still, because the border is this
+   variant's identity rather than its signal. That is the whole difference from `outline`, which reads
+   at full strength and lights its border instead. */
+.xeno-btn[data-variant='quiet'] {
+  border-color: var(--xeno-border);
+  color: var(--xeno-muted);
+}
+.xeno-btn[data-variant='quiet']:hover:not(:disabled) {
+  color: var(--xeno-text);
+  background: var(--xeno-hover);
+}
+/* ON, the border gets out of the way. A quiet button is `on` while the thing it opened is on screen,
+   and for that moment it is not chrome beside a panel but the top edge of one — so it takes a fill and
+   drops the outline that was holding it apart. `--xeno-control` and not `--xeno-hover`: hover is a
+   translucent tint that says "the pointer is here", and this state outlives the pointer. */
+.xeno-btn[data-variant='quiet'][data-selection='on'] {
+  background: var(--xeno-control);
+  border-color: transparent;
+}
+.xeno-btn[data-variant='danger'] {
+  border-color: var(--xeno-border);
+  color: var(--xeno-muted);
+}
+.xeno-btn[data-variant='danger']:hover:not(:disabled) {
+  color: var(--xeno-danger);
+  border-color: var(--xeno-danger);
+}
+
+/* SELECTION reads as the text colour, whatever the variant's rest is.
+ *
+ * `ghost` sits at `--xeno-muted` so a row of icon buttons stays quiet; a button that is ON has to come
+ * forward, and in a monochrome grammar the only way forward is brightness. Every other axis is spoken
+ * for — a fill would make it a different variant, a border a different shape.
+ *
+ * It lives HERE rather than at the consumer, and that is the point: a product saying this from outside
+ * is patching a variant it does not own. It must sit after EVERY variant block: it wins on source order
+ * at equal weight, and it used to sit between `ghost` and `outline`, where the three variants below it
+ * — `outline`, `quiet`, `danger` — quietly took the ink back. `quiet` is where that showed: a top-bar
+ * button with its menu open stayed muted, looking exactly like the ones whose menus were shut.
+ *
+ * A note on how this was nearly abandoned. Measured through a headless driver it appeared to do
+ * nothing — and so did an inline `color: #ff0000 !important`, which is not possible. The button
+ * transitions `color` over 0.14s, and the probe was reading `getComputedStyle` on the same tick as the
+ * write, which returns the value the transition STARTED from. Any assertion about a colour on a
+ * control in this library has to wait for its own transition first. */
+.xeno-btn[data-selection='on'] {
+  color: var(--xeno-text);
+}
+
+/* Entrance — the locked "send button" appear: fade + slide in + scale up. Opt-in via data-enter. */
+@keyframes xeno-btn-enter {
+  from {
+    opacity: 0;
+    transform: translateX(6px) scale(0.76);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.xeno-btn[data-enter] {
+  animation: xeno-btn-enter var(--xeno-dur-entrance) var(--xeno-ease) both;
+}
+
+/* Confirmed — the copy→check acknowledgement: the swapped glyph brightens and pops in. */
+@keyframes xeno-confirm-pop {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+.xeno-btn[data-confirmed] {
+  color: var(--xeno-text);
+}
+.xeno-btn[data-confirmed] .xeno-element {
+  animation: xeno-confirm-pop var(--xeno-dur) var(--xeno-ease-overshoot) both;
+}
+
+/* Icon-only: square, no horizontal padding. */
+.xeno-icon-btn {
+  width: var(--xeno-h, 32px);
+  padding: 0;
+  aspect-ratio: 1 / 1;
+}
+
+/* Toggle button (button-style on/off).
+ *
+ * The "on" fill is not a background any more — it is a LAYER that floods in. It spreads out of the glyph
+ * as a growing circle until it has filled the button, and drains back into the glyph when you switch it
+ * off: the state does not blink on, it pours in.
+ *
+ * The flood is CLIPPED, never scaled. A scaled layer changes size, and next to a row of buttons that
+ * reads as the button itself swelling — so the geometry here is frozen: `clip-path` only ever reveals
+ * more or less of a layer that stays exactly the button's size and never leaves its bounds.
+ *
+ * It has to be a pseudo-element: only a separate layer can be clipped without taking the label and the
+ * glyph with it. `isolation: isolate` makes the button its own stacking context, which pins the
+ * `z-index: -1` layer between the button's own background and its content — no z-index on the text (raw
+ * text nodes cannot take one) and no dependence on what the button happens to sit inside. */
+.xeno-toggle {
+  --xeno-toggle-goo-dur: 320ms;
+  /* Decisive ease-out, NOT an overshoot: a bezier that goes past 1 would drive the clip radius negative
+     on the way out and the fill would snap away early. */
+  --xeno-toggle-goo-ease: var(--xeno-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  position: relative;
+  isolation: isolate;
+  border-color: var(--xeno-border);
+  color: var(--xeno-muted);
+}
+.xeno-toggle::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  /* -1px so the layer reaches under the border, exactly where a background would have painted. */
+  inset: -1px;
+  border-radius: inherit;
+  background: var(--xeno-control);
+  /* The source of the flood: the leading edge, where the glyph sits. Radius 0 = nothing showing. */
+  clip-path: circle(0% at var(--xeno-padx, 12px) 50%);
+}
+.xeno-toggle[data-selection='on'] {
+  color: var(--xeno-text);
+}
+/* 150% of the box's own diagonal reference — enough to reach the far corner from an off-centre origin. */
+.xeno-toggle[data-selection='on']::before {
+  clip-path: circle(150% at var(--xeno-padx, 12px) 50%);
+}
+/* Hover reads through both states: the fill covers any background tint once the toggle is on, so the
+   affordance lives on the border, which is visible either way. */
+.xeno-toggle:hover:not(:disabled) {
+  color: var(--xeno-text);
+  background: var(--xeno-hover);
+  border-color: var(--xeno-muted);
+}
+/* A fixed button, all the way: the toggle also opts out of the press every other button gets. Nothing
+   about it changes size — the fill is the only thing that moves. (Opting out means holding `scale` at 1,
+   since the press rides on `scale`, not `transform`.) */
+.xeno-toggle:active:not(:disabled) {
+  scale: 1;
+}
+/* Both labels stacked in ONE grid cell, so the button is sized to the longer of the two in either state.
+   This — not the animation — is what makes a Pin/Pinned toggle look like it resizes itself. */
+.xeno-toggle-labels {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+}
+.xeno-toggle-label {
+  grid-area: 1 / 1;
+  transition: opacity var(--xeno-dur) ease;
+}
+.xeno-toggle[data-selection='off'] .xeno-toggle-label[data-when='on'],
+.xeno-toggle[data-selection='on'] .xeno-toggle-label[data-when='off'] {
+  opacity: 0;
+  visibility: hidden;
+}
+/* Gated on `data-motion="ready"`, set only once `pressed` has actually changed — otherwise every toggle
+   that mounts in the on state would pour itself in on page load. No fill-mode: each track ends on the
+   resting value above, so the static rules take over with nothing to jump. */
+.xeno-toggle[data-motion='ready'][data-selection='on']::before {
+  animation: xeno-toggle-goo-in var(--xeno-toggle-goo-dur) var(--xeno-toggle-goo-ease);
+}
+.xeno-toggle[data-motion='ready'][data-selection='off']::before {
+  animation: xeno-toggle-goo-out var(--xeno-toggle-goo-dur) var(--xeno-toggle-goo-ease);
+}
+@keyframes xeno-toggle-goo-in {
+  from { clip-path: circle(0% at var(--xeno-padx, 12px) 50%); }
+  to { clip-path: circle(150% at var(--xeno-padx, 12px) 50%); }
+}
+@keyframes xeno-toggle-goo-out {
+  from { clip-path: circle(150% at var(--xeno-padx, 12px) 50%); }
+  to { clip-path: circle(0% at var(--xeno-padx, 12px) 50%); }
+}
+
+/* ── Switch (track + knob, both rounded SQUARES) ─────────────────────────────────── */
+/* The knob does not glide, it THROWS: it overshoots the far end, swings back past it and settles —
+   two bounces, the way a sprung switch actually behaves. The track keeps its own clock (0ms — the
+   colour snaps the instant the state flips) so the flip reads as decided while the knob is still
+   catching up; that separation is the whole effect. Position rides on `translate`, not `transform`,
+   so the keyframes and the press affordance never fight over one property.
+   Travel = 30px content box (36 − 2px border − 4px padding) − 14px knob = 16px. */
+.xeno-switch {
+  --xeno-switch-travel: 16px;
+  --xeno-switch-dur: 350ms;
+  --xeno-switch-track-dur: 0ms;
+  /* Overshoot past the end, then the smaller swing back. */
+  --xeno-switch-ov1: 1.1px;
+  --xeno-switch-ov2: 0px;
+  --xeno-switch-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+  display: inline-flex;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  padding: 2px;
+  background: var(--xeno-control);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-md);
+  cursor: pointer;
+  transition: background var(--xeno-switch-track-dur) var(--xeno-switch-ease);
+}
+.xeno-switch-knob {
+  width: 14px;
+  height: 14px;
+  translate: 0 0;
+  will-change: translate;
+  background: var(--xeno-muted);
+  border-radius: var(--xeno-radius-xs);
+  transition:
+    translate var(--xeno-dur) var(--xeno-ease-expo),
+    width var(--xeno-dur) var(--xeno-ease-expo),
+    background var(--xeno-dur) ease;
+}
+/* Press affordance — the knob stretches while held (iOS-style), reduce-safe. */
+.xeno-switch:active:not(:disabled):not([data-availability='disabled']) .xeno-switch-knob {
+  width: 18px;
+}
+.xeno-switch[data-selection='on']:active:not(:disabled):not([data-availability='disabled']) .xeno-switch-knob {
+  translate: 12px 0;
+}
+.xeno-switch[data-selection='on'] {
+  background: var(--xeno-text);
+}
+.xeno-switch[data-selection='on'] .xeno-switch-knob {
+  translate: var(--xeno-switch-travel) 0;
+  background: var(--xeno-on-accent);
+}
+/* The throw itself. Gated on `data-motion="ready"`, which the component only sets once the user has
+   actually toggled it — otherwise every switch that mounts in the "off" state would bounce on load.
+   No fill-mode on purpose: each keyframe track ends exactly on the resting value above, so once it
+   finishes the static rules take over with no jump, and `:active` can stretch the knob again. */
+.xeno-switch[data-motion='ready'][data-selection='on'] .xeno-switch-knob {
+  animation: xeno-switch-throw-on var(--xeno-switch-dur) var(--xeno-switch-ease);
+}
+.xeno-switch[data-motion='ready'][data-selection='off'] .xeno-switch-knob {
+  animation: xeno-switch-throw-off var(--xeno-switch-dur) var(--xeno-switch-ease);
+}
+@keyframes xeno-switch-throw-on {
+  0% { translate: 0 0; }
+  55% { translate: calc(var(--xeno-switch-travel) + var(--xeno-switch-ov1)) 0; }
+  80% { translate: calc(var(--xeno-switch-travel) - var(--xeno-switch-ov2)) 0; }
+  100% { translate: var(--xeno-switch-travel) 0; }
+}
+@keyframes xeno-switch-throw-off {
+  0% { translate: var(--xeno-switch-travel) 0; }
+  55% { translate: calc(0px - var(--xeno-switch-ov1)) 0; }
+  80% { translate: var(--xeno-switch-ov2) 0; }
+  100% { translate: 0 0; }
+}
+.xeno-switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--xeno-canvas), 0 0 0 4px var(--xeno-border);
+}
+.xeno-switch:disabled,
+.xeno-switch[data-availability='disabled'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── TextInput / SearchInput ─────────────────────────────────────────────────────── */
+.xeno-input {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--xeno-gap, 6px);
+  height: var(--xeno-h, 32px);
+  padding: 0 var(--xeno-padx, 12px);
+  background: var(--xeno-canvas);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-md);
+  color: var(--xeno-text);
+  transition: border-color var(--xeno-dur) ease;
+}
+.xeno-input:focus-within {
+  border-color: var(--xeno-muted);
+}
+.xeno-input[data-availability='disabled'] {
+  opacity: 0.4;
+}
+.xeno-input-icon {
+  display: inline-flex;
+  color: var(--xeno-muted);
+}
+.xeno-input-field {
+  flex: 1;
+  /* Fill the wrapper's height. Centred at its own natural height instead, the field left a dead band
+     along the top and bottom of a box that LOOKS like a text field and does not focus when tapped —
+     4px of it at 32px, and 10px once a touch surface takes the wrapper to 44. A field's target should
+     be the box you can see. */
+  align-self: stretch;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--xeno-font, 14px);
+  outline: none;
+}
+.xeno-input-field::placeholder {
+  color: var(--xeno-muted);
+}
+
+/* ── Textarea ────────────────────────────────────────────────────────────────────── */
+.xeno-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--xeno-canvas);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-card);
+  color: var(--xeno-text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--xeno-dur) ease;
+}
+.xeno-textarea::placeholder {
+  color: var(--xeno-muted);
+}
+.xeno-textarea:focus {
+  border-color: var(--xeno-muted);
+}
+.xeno-textarea[data-availability='disabled'] {
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-btn,
+  .xeno-switch,
+  .xeno-switch-knob {
+    transition: none;
+  }
+  .xeno-btn[data-enter],
+  .xeno-btn[data-confirmed] .xeno-element,
+  .xeno-toggle::before {
+    animation: none;
+  }
+  .xeno-switch:active:not(:disabled) .xeno-switch-knob {
+    width: 14px;
+  }
+  /* No press travel either — with the transition off, a scale change would be a jump, not a press. */
+  .xeno-btn:active:not(:disabled) {
+    scale: 1;
+  }
+  .xeno-switch[data-motion='ready'] .xeno-switch-knob {
+    animation: none;
+  }
+}

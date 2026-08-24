@@ -245,12 +245,8 @@ function App() {
               </ProtectedRoute>
             } />
 
-            {/* /chat -> standalone full-viewport ChatApp with artifacts and streaming */}
-            <Route path="/chat" element={
-              <ProtectedRoute>
-                <ChatApp />
-              </ProtectedRoute>
-            } />
+            {/* /chat -> the overview chat */}
+            <Route path="/chat" element={<Navigate to="/overview/chat/llm" replace />} />
 
             {/* Protected Routes - Only accessible after authentication */}
             <Route path="/overview/*" element={

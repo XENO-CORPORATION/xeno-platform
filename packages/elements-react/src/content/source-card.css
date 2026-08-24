@@ -1,0 +1,99 @@
+/*
+ * <SourceCard> — a link-embed row. Monochrome shell: card radius, hairline border, hover lifts the
+ * border to --xeno-muted. Only theme tokens; motion is transform/opacity behind reduced-motion.
+ */
+.xeno-source-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: var(--xeno-surface);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-style-content-radius);
+  color: var(--xeno-text);
+  text-decoration: none;
+  transition:
+    border-color var(--xeno-dur) var(--xeno-ease),
+    background var(--xeno-dur) var(--xeno-ease);
+}
+
+a.xeno-source-card {
+  cursor: pointer;
+}
+a.xeno-source-card:hover {
+  border-color: var(--xeno-muted);
+  background: var(--xeno-hover);
+}
+a.xeno-source-card:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--xeno-canvas),
+    0 0 0 4px var(--xeno-border);
+}
+
+/* Leading tile — square rounded (radius-md), favicon or domain-initial placeholder. */
+.xeno-source-card-tile {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  background: var(--xeno-control);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-md);
+  color: var(--xeno-muted);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+.xeno-source-card-favicon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.xeno-source-card-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.xeno-source-card-title {
+  overflow: hidden;
+  color: var(--xeno-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.xeno-source-card-domain {
+  overflow: hidden;
+  color: var(--xeno-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.xeno-source-card-snippet {
+  display: -webkit-box;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--xeno-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-source-card {
+    transition: none;
+  }
+}

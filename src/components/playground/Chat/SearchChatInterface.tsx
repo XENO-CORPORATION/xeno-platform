@@ -1,35 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Button, IconButton, MenuItem, SegmentedControl, Spinner, useGooPill, useMenu } from '@xenosystem/elements-react';
 import ReactMarkdown from 'react-markdown';
-import {
-  Send,
-  Globe,
-  Loader2,
-  X,
-  ChevronDown,
-  Eye,
-  Brain,
-  Check,
-  SquarePen,
-  StopCircle,
-  Paperclip,
-  Zap,
-  Link2,
-  Sparkles,
-  ExternalLink,
-  Bot,
-  Navigation,
-  ScanEye,
-  Layers,
-  FileOutput,
-  ArrowLeft,
-  Lightbulb,
-  Trash2,
-  Search as SearchIcon,
-  Clock
-} from 'lucide-react';
+import { Send, Globe, ChevronDown, Eye, Check, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl, EditDecl, LightbulbDecl, GlobeDecl, BotDecl, BrainDecl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
+import { useChatTheme } from './chatTheme';
 
 // Helper to format large token counts
 const formatTokens = (tokens: number): string => {
@@ -178,6 +154,11 @@ const DEFAULT_MODEL: Model = {
 };
 
 const SearchChatInterface: React.FC = () => {
+  // Whatever the user set on the chat's brightness slider. Read-only here — this surface has no
+  // switcher of its own, it just wears the answer. Both halves are needed: the class is the base
+  // palette, the style is the exact stop when that stop has no name.
+  const { themeClass, themeStyle } = useChatTheme();
+
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -230,6 +211,15 @@ const SearchChatInterface: React.FC = () => {
   const companyDropdownButtonRef = useRef<HTMLButtonElement>(null);
   const xenoBrowserRef = useRef<XenoBrowserRef>(null);
   const companyListContainerRef = useRef<HTMLDivElement>(null);
+  /* The model dropdown was a plain div with a click-outside ref: every row its own Tab stop,
+     arrows dead, Escape ignored. useMenu gives it the behaviour and useGooPill the travelling
+     highlight, both measuring the ref the click-outside handler already holds. */
+  const companyMenuGoo = useGooPill<HTMLDivElement>({ hostRef: companyListContainerRef });
+  const companyMenuKbd = useMenu<HTMLDivElement>({
+    open: isCompanyDropdownOpen,
+    onClose: () => { setIsCompanyDropdownOpen(false); },
+    menuRef: companyListContainerRef,
+  });
 
   // Load models on mount
   useEffect(() => {
@@ -309,6 +299,18 @@ const SearchChatInterface: React.FC = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  /* Escape closes it, which is the one thing `useMenu` deliberately does not do: the hook owns the
+     arrows, Home/End and Tab, and leaves dismissal to whoever owns the open state. Every other menu in
+     this chat pairs its click-outside effect with exactly this listener. */
+  useEffect(() => {
+    if (!isCompanyDropdownOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsCompanyDropdownOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isCompanyDropdownOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1185,34 +1187,55 @@ Based on these search results, provide a helpful, accurate, and concise answer t
   };
 
   return (
-    <div className="relative flex h-full text-white overflow-hidden bg-[#121212]">
+    // `chat-themed` brings the --chat-* palette and hands it on to the library as --xeno-*. The
+    // class picks the base palette and the style carries the exact brightness stop when the slider
+    // is not parked on one of the three named ones. This route never mounts ChatWithLLM, so until
+    // the palettes moved to a stylesheet of their own there was nothing here to inherit — which is
+    // why every colour in this file used to be a literal.
+    //
+    // `xeno-icon-hosts` says every button and link in here hosts a glyph, so the icons animate on
+    // hover without each control having to opt in. They were all already XENO glyphs; none of them
+    // moved.
+    <div
+      className={`chat-themed xeno-icon-hosts ${themeClass} relative flex h-full text-[var(--chat-text)] overflow-hidden bg-[var(--chat-canvas)]`}
+      style={themeStyle}
+    >
       {/* History Sidebar */}
       <div
-        className={`absolute left-0 top-0 bottom-0 z-30 bg-[#121212] border-r border-[#3a3a3d] transition-all duration-300 ease-in-out ${
+        className={`absolute left-0 top-0 bottom-0 z-30 bg-[var(--chat-canvas)] border-r border-[var(--chat-border)] transition-all duration-300 ease-in-out ${
           isHistoryOpen ? 'w-80 translate-x-0' : 'w-80 -translate-x-full'
         }`}
       >
         {/* History Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#3a3a3d]">
-          <h3 className="text-sm font-medium text-white">Search History</h3>
-          <button
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--chat-border)]">
+          <h3 className="text-sm font-medium text-[var(--chat-text)]">Search History</h3>
+          <IconButton
+            icon={XDecl}
+            variant="ghost"
+            size="sm"
+            iconSize={16}
             onClick={() => setIsHistoryOpen(false)}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-[#2a2a2d] transition-colors"
-          >
-            <X size={16} />
-          </button>
+            aria-label="Close search history"
+          />
         </div>
 
         {/* Search Bar */}
-        <div className="p-3 border-b border-[#3a3a3d]">
+        <div className="p-3 border-b border-[var(--chat-border)]">
           <div className="relative">
-            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            {/* Stays hand-written, and this is the cleanest instance of the fill problem in the
+                chat: EVERYTHING else about it converts. `h-9` is exactly lg, `text-sm` is exactly
+                lg's 14px, the magnifier's 14 is what `iconSize` is for, the border is
+                `--chat-border` and the focus ring is already `--chat-muted` — the component's own
+                pair. One declaration blocks it: the field is `--chat-surface` and `.xeno-input`
+                hard-codes `background: var(--xeno-canvas)`, which would sink a raised bar to
+                #0a0a0a. Third field to fail on this and nothing else. */}
+            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--chat-muted)]" />
             <input
               type="text"
               placeholder="Search history..."
               value={historySearchQuery}
               onChange={(e) => setHistorySearchQuery(e.target.value)}
-              className="w-full bg-[#19191a] border border-[#3a3a3d] rounded-lg py-1.5 pl-9 pr-3 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500 transition-colors h-9"
+              className="w-full bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg py-1.5 pl-9 pr-3 text-sm text-[var(--chat-text)] placeholder-[var(--chat-muted)] focus:outline-none focus:border-[var(--chat-muted)] transition-colors h-9"
             />
           </div>
         </div>
@@ -1221,14 +1244,14 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         <div className="flex-1 overflow-y-auto p-2" style={{ height: 'calc(100% - 110px)' }}>
           {isLoadingHistory ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Loader2 size={32} className="text-gray-600 mb-3 animate-spin" />
-              <p className="text-sm text-gray-500">Loading history...</p>
+              <Spinner size={32} className="mb-3" />
+              <p className="text-sm text-[var(--chat-muted)]">Loading history...</p>
             </div>
           ) : conversationHistory.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Clock size={32} className="text-gray-600 mb-3" />
-              <p className="text-sm text-gray-500">No search history</p>
-              <p className="text-xs text-gray-600 mt-1">Your searches will appear here</p>
+              <Clock size={32} className="text-[var(--chat-muted)] mb-3" />
+              <p className="text-sm text-[var(--chat-muted)]">No search history</p>
+              <p className="text-xs text-[var(--chat-muted)] mt-1">Your searches will appear here</p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -1243,25 +1266,28 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   onClick={() => loadConversation(conv)}
                   className={`group flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                     activeConversationId === conv.id
-                      ? 'bg-[#2a2a2d]'
-                      : 'hover:bg-[#1a1a1d]'
+                      ? 'bg-[var(--chat-control)]'
+                      : 'hover:bg-[var(--chat-surface)]'
                   }`}
                 >
-                  <div className="flex-shrink-0 mt-0.5 text-gray-500">
+                  <div className="flex-shrink-0 mt-0.5 text-[var(--chat-muted)]">
                     {getEngineIcon(conv.searchEngine)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white truncate">{conv.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-sm text-[var(--chat-text)] truncate">{conv.title}</p>
+                    <p className="text-xs text-[var(--chat-muted)] mt-0.5">
                       {formatTimestamp(conv.timestamp)}
                     </p>
                   </div>
-                  <button
+                  <IconButton
+                    icon={Trash2Decl}
+                    variant="ghost"
+                    size="xs"
+                    iconSize={14}
+                    className="opacity-0"
                     onClick={(e) => deleteConversation(conv.id, e)}
-                    className="flex-shrink-0 p-1 rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                    aria-label="Delete conversation"
+                  />
                 </div>
               ))}
             </div>
@@ -1278,59 +1304,83 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         }}
       >
         {/* Top Bar */}
-        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-[#121212]">
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-[var(--chat-canvas)]">
           {/* Left side - History & New Chat */}
           <div className="flex items-center gap-2">
-            <button
+            {/* Border plus a fill is `secondary`, `h-9` is `lg`. The voice view's top bar is the
+                same pair and converted the same way; the fill moves a step lighter with it, from
+                `--chat-surface` to the one control fill the variants carry.
+                Open used to brighten the BORDER. It is `data-selection` now, which the library
+                answers in ink — the same sentence in the grammar the rest of this chat speaks.
+                Both gain an `aria-label`: `IconButton` requires one, and a `title` is a tooltip, not
+                a name. Neither of these had a name before. */}
+            <IconButton
+              icon={LightbulbDecl}
+              variant="secondary"
+              size="lg"
+              iconSize={16}
+              data-selection={isHistoryOpen ? 'on' : 'off'}
               onClick={() => setIsHistoryOpen(!isHistoryOpen)}
-              className={`flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9 ${
-                isHistoryOpen ? 'border-gray-500' : ''
-              }`}
+              aria-label="Search history"
               title="Search History"
-            >
-              <Lightbulb size={16} />
-            </button>
-            <button
+            />
+            <IconButton
+              icon={EditDecl}
+              variant="secondary"
+              size="lg"
+              iconSize={16}
               onClick={handleNewChat}
-              className="flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-white/80 hover:border-gray-500 transition-colors h-9"
+              aria-label="New search"
               title="New Search"
-            >
-              <SquarePen size={16} />
-            </button>
+            />
           </div>
 
           {/* Center - Engine Selector */}
-          <div className="flex items-center bg-[#19191a] border border-[#3a3a3d] rounded-lg p-1">
+          {/* Stays hand-written, and the component that wants these EXISTS. `<SegmentedControl>` is
+              a single-select of connected options inside one bordered track, the chosen one floating
+              on an inset `--xeno-control` fill and the rest transparent muted labels — which is this
+              engine selector described exactly, container and all.
+              ONE door is missing now. The glyph slot went in — `SegmentedOption` takes an `icon`,
+              which is what let the composer's Web/Agent pair below convert — so what is left is the
+              label, and it is the harder half. Here it is CONDITIONAL: it disappears when the
+              results panel or the browser opens, leaving an icon-only segment. `label: string` is
+              both the visible text and the accessible name, so hiding one hides the other, and
+              passing `''` would leave three segments named only by their glyphs. That is a layout
+              policy the component has no opinion about, and inventing one at a call site is how a
+              component starts drifting. */}
+          <div className="flex items-center bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg p-1">
             <button
               onClick={() => setSearchEngine('xeno')}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-all ${
                 searchEngine === 'xeno'
-                  ? 'bg-[#2a2a2d] text-white'
-                  : 'text-gray-500 hover:text-gray-300'
+                  ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                  : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
               }`}
               title="Xeno Search"
             >
               <Sparkles size={14} />
               {!(showResultsPanel || isBrowserOpen) && <span>Xeno</span>}
             </button>
+            {/* Stays hand-written — the Xeno segment's twin, same two missing doors. */}
             <button
               onClick={() => setSearchEngine('google')}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-all ${
                 searchEngine === 'google'
-                  ? 'bg-[#2a2a2d] text-white'
-                  : 'text-gray-500 hover:text-gray-300'
+                  ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                  : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
               }`}
               title="Google Search"
             >
               <Globe size={14} />
               {!(showResultsPanel || isBrowserOpen) && <span>Google</span>}
             </button>
+            {/* Stays hand-written — the Xeno segment's twin, same two missing doors. */}
             <button
               onClick={() => setSearchEngine('brave')}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-all ${
                 searchEngine === 'brave'
-                  ? 'bg-[#2a2a2d] text-white'
-                  : 'text-gray-500 hover:text-gray-300'
+                  ? 'bg-[var(--chat-control)] text-[var(--chat-text)]'
+                  : 'text-[var(--chat-muted)] hover:text-[var(--chat-text)]'
               }`}
               title="Brave Search"
             >
@@ -1341,88 +1391,91 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
           {/* Right side - Model Selector */}
           <div className="relative flex-shrink-0">
-            <button
+            {/* Border plus a fill is `secondary`, `h-9` is `lg`, and the two widths are layout that
+                stays. `busy` is not the door here: it sets `cursor: progress` and nothing visible, so
+                the spinner has to remain a child — `leadingIcon` takes a declaration and a spinner is
+                a component that animates itself. Loading therefore drops the leading glyph and puts
+                the spinner in its place, which is what the hand-written ternary did.
+                The brain also stops being muted against the label and takes the button's ink, which
+                is the component's rule: one control, one colour. */}
+            <Button
               ref={companyDropdownButtonRef}
+              variant="secondary"
+              size="lg"
+              iconSize={16}
+              leadingIcon={isModelsLoading ? undefined : BrainDecl}
+              className={(showResultsPanel || isBrowserOpen) ? 'w-[8rem]' : 'w-[10rem]'}
               onClick={() => setIsCompanyDropdownOpen(!isCompanyDropdownOpen)}
               onMouseEnter={() => setIsModelSelectorButtonHovered(true)}
               onMouseLeave={() => setIsModelSelectorButtonHovered(false)}
-              className={`flex items-center justify-center gap-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9 ${
-                (showResultsPanel || isBrowserOpen) ? 'w-[8rem]' : 'w-[10rem]'
-              }`}
+              aria-expanded={isCompanyDropdownOpen}
+              aria-haspopup="dialog"
+              aria-label={`Select model. Current model: ${selectedModel.name}`}
             >
-              {isModelsLoading ? (
-                <Loader2 size={16} className="text-gray-500 flex-shrink-0 animate-spin" />
-              ) : (
-                <Brain size={16} className="text-gray-500 flex-shrink-0" />
-              )}
+              {isModelsLoading && <Spinner size={16} className="flex-shrink-0" />}
               <span className="truncate">{selectedModel.name}</span>
-            </button>
+            </Button>
 
             {(isModelSelectorButtonHovered && !isCompanyDropdownOpen) && (
               <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 pointer-events-none">
-                <ChevronDown size={16} className="text-gray-500" />
+                <ChevronDown size={16} className="text-[var(--chat-muted)]" />
               </div>
             )}
 
             {/* Model Dropdown */}
             <div
-              ref={companyListContainerRef}
+              {...(() => { const { ref: _g, className: _c, ...handlers } = companyMenuGoo.hostProps; return handlers; })()}
+              {...companyMenuKbd.menuProps}
               className={`
+                ${companyMenuGoo.hostProps.className} chat-goo
                 absolute top-full mt-[10px] right-0 z-20
-                transition-all duration-200 ease-out origin-top-right
+                transition-[opacity,transform] duration-200 ease-out origin-top-right
                 ${isCompanyDropdownOpen ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}
-                w-72 bg-[#19191a] border border-[#3a3a3d] rounded-lg shadow-xl
+                w-72 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg shadow-xl
                 max-h-[70vh] overflow-hidden flex flex-col
               `}
             >
+              {/* First child, so the pill paints behind the rows rather than over them. */}
+              {companyMenuGoo.pill}
               <div className="flex-1 overflow-y-auto">
                 {groupedModels.map((group) => {
                   const isExpanded = expandedCompanies.has(group.companyName);
                   const isActiveCompany = getCompanyNameFromModelId(selectedModel.id) === group.companyName;
                   return (
                     <div key={group.companyName}>
-                      <button
-                        onClick={() => {
-                          setExpandedCompanies(prev => {
-                            if (prev.has(group.companyName)) {
-                              return new Set();
-                            } else {
-                              return new Set([group.companyName]);
-                            }
-                          });
+                      {/* A DISCLOSURE, not a submenu: the models grow underneath this row rather
+                          than opening a panel beside it, and `expanded` is the component's word for
+                          that — the same chevron, quarter-turned, reporting `aria-expanded` instead
+                          of promising a popup. It is also what keeps the dropdown alive, because
+                          `useMenu` dismisses on any chosen row except one that reports it.
+                          `selected` marks the company the current model belongs to, which is what
+                          the brighter label said by hand. */}
+                      <MenuItem
+                        expanded={isExpanded}
+                        selected={isActiveCompany}
+                        onSelect={() => {
+                          setExpandedCompanies((prev) =>
+                            prev.has(group.companyName) ? new Set() : new Set([group.companyName]),
+                          );
                         }}
-                        className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
-                          isExpanded ? 'bg-white/5' : 'hover:bg-white/5'
-                        }`}
                       >
-                        <span className={`text-sm ${isActiveCompany ? 'text-white' : 'text-gray-400'}`}>
-                          {group.companyName}
-                        </span>
-                        <ChevronDown size={14} className={`text-gray-600 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-                      </button>
+                        {group.companyName}
+                      </MenuItem>
 
                       <div className={`overflow-hidden transition-all duration-200 ${isExpanded ? 'max-h-[400px]' : 'max-h-0'}`}>
                         <div className="pb-1">
+                          {/* `value` is the right-aligned token count in the UI face — deliberately
+                              not `shortcut`, which sets mono and would make a number read as a key
+                              to press. `selected` draws the check the hand-written row drew. */}
                           {group.models.map((model) => (
-                            <button
+                            <MenuItem
                               key={model.id}
-                              onClick={() => handleModelSelect(model)}
-                              className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
-                                selectedModel.id === model.id ? 'bg-white/10' : 'hover:bg-white/5'
-                              }`}
+                              selected={selectedModel.id === model.id}
+                              value={formatTokens(model.maxTokens)}
+                              onSelect={() => handleModelSelect(model)}
                             >
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <span className={`text-sm truncate ${selectedModel.id === model.id ? 'text-white' : 'text-gray-400'}`}>
-                                  {model.name}
-                                </span>
-                                <span className="text-[10px] text-gray-600 flex-shrink-0">
-                                  {formatTokens(model.maxTokens)}
-                                </span>
-                              </div>
-                              {selectedModel.id === model.id && (
-                                <Check size={14} className="text-gray-400 flex-shrink-0" />
-                              )}
-                            </button>
+                              {model.name}
+                            </MenuItem>
                           ))}
                         </div>
                       </div>
@@ -1441,46 +1494,52 @@ Based on these search results, provide a helpful, accurate, and concise answer t
               <div className="flex flex-col items-center justify-center h-full pt-16">
                 {/* Mode Toggle Tabs */}
                 <div className="flex items-center gap-2 mb-8">
-                  <button
+                  {/* The composer's pair one screen down is the same choice, and it is a
+                      `SegmentedControl` now — but these two are not connected, they sit apart with a
+                      gap, so the track that makes a segmented control one thing does not apply.
+                      `quiet` + `data-selection` instead. They lose `rounded-full` for the scale's
+                      8px doing it; a stadium is not on the radius scale, which runs hair/xs/sm/md/
+                      control/card and draws rounded squares throughout.
+                      Legible because these sit on `--chat-canvas` (#0a0a0a), where a #262626 fill
+                      reads — the elevated-surface collision in §9 does not reach here. */}
+                  <Button
+                    variant="quiet"
+                    size="md"
+                    leadingIcon={GlobeDecl}
+                    data-selection={searchMode === 'web' ? 'on' : 'off'}
+                    aria-pressed={searchMode === 'web'}
                     onClick={() => setSearchMode('web')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                      searchMode === 'web'
-                        ? 'bg-[#19191a] border border-[#3a3a3d] text-white'
-                        : 'text-gray-500 hover:text-gray-300'
-                    }`}
                   >
-                    <Globe size={16} />
                     Web Search
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="quiet"
+                    size="md"
+                    leadingIcon={BotDecl}
+                    data-selection={searchMode === 'agent' ? 'on' : 'off'}
+                    aria-pressed={searchMode === 'agent'}
                     onClick={() => setSearchMode('agent')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                      searchMode === 'agent'
-                        ? 'bg-[#19191a] border border-[#3a3a3d] text-white'
-                        : 'text-gray-500 hover:text-gray-300'
-                    }`}
                   >
-                    <Bot size={16} />
                     Agent Search
-                  </button>
+                  </Button>
                 </div>
 
                 {/* Feature Card */}
-                <div className="w-full max-w-xl bg-[#19191a] border border-[#3a3a3d] rounded-2xl p-6">
+                <div className="w-full max-w-xl bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-2xl p-6">
                   {/* Header */}
                   <div className="flex items-center gap-4 mb-6">
-                    <div className="w-12 h-12 rounded-xl bg-[#111113] border border-[#3a3a3d] flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-[var(--chat-canvas)] border border-[var(--chat-border)] flex items-center justify-center">
                       {searchMode === 'web' ? (
-                        <Globe size={24} className="text-gray-400" />
+                        <Globe size={24} className="text-[var(--chat-muted)]" />
                       ) : (
-                        <Bot size={24} className="text-gray-400" />
+                        <Bot size={24} className="text-[var(--chat-muted)]" />
                       )}
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-white">
+                      <h2 className="text-lg font-semibold text-[var(--chat-text)]">
                         {searchMode === 'web' ? 'Web Search' : 'Agent Search'}
                       </h2>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-[var(--chat-muted)]">
                         {searchMode === 'web'
                           ? 'Search the web and open results in the built-in browser.'
                           : 'AI agent that browses and extracts information autonomously.'}
@@ -1493,14 +1552,14 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     {currentFeatures.map((feature, idx) => (
                       <div
                         key={idx}
-                        className="flex items-center gap-3 p-3 bg-[#111113] border border-[#3a3a3d] rounded-xl"
+                        className="flex items-center gap-3 p-3 bg-[var(--chat-canvas)] border border-[var(--chat-border)] rounded-xl"
                       >
-                        <div className="w-9 h-9 rounded-lg bg-[#19191a] border border-[#3a3a3d] flex items-center justify-center flex-shrink-0">
-                          <feature.icon size={16} className="text-gray-500" />
+                        <div className="w-9 h-9 rounded-lg bg-[var(--chat-surface)] border border-[var(--chat-border)] flex items-center justify-center flex-shrink-0">
+                          <feature.icon size={16} className="text-[var(--chat-muted)]" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-white">{feature.title}</p>
-                          <p className="text-xs text-gray-500">{feature.subtitle}</p>
+                          <p className="text-sm font-medium text-[var(--chat-text)]">{feature.title}</p>
+                          <p className="text-xs text-[var(--chat-muted)]">{feature.subtitle}</p>
                         </div>
                       </div>
                     ))}
@@ -1513,34 +1572,34 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   <div key={message.id}>
                     {message.role === 'user' ? (
                       <div className="flex justify-end">
-                        <div className="max-w-[75%] bg-[#2a2a2d] border border-[#3a3a3d] text-white rounded-2xl rounded-br-none p-3">
+                        <div className="max-w-[75%] bg-[var(--chat-control)] border border-[var(--chat-border)] text-[var(--chat-text)] rounded-2xl rounded-br-none p-3">
                           <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                         </div>
                       </div>
                     ) : (
                       <div className="flex justify-start">
                         <div className="max-w-[75%]">
-                          <div className="bg-[#19191a] text-gray-200 rounded-2xl rounded-bl-none p-3 prose prose-sm prose-invert max-w-none prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-gray-200 prose-headings:font-medium prose-strong:text-white prose-strong:font-semibold leading-relaxed">
+                          <div className="bg-[var(--chat-surface)] text-[var(--chat-text)] rounded-2xl rounded-bl-none p-3 prose prose-sm prose-invert max-w-none prose-p:my-2 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5 prose-headings:text-[var(--chat-text)] prose-headings:font-medium prose-strong:text-[var(--chat-text)] prose-strong:font-semibold leading-relaxed">
                             <ReactMarkdown
                               components={{
                                 p: ({ children }) => <p className="text-sm my-2">{children}</p>,
-                                strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                                strong: ({ children }) => <strong className="font-semibold text-[var(--chat-text)]">{children}</strong>,
                                 ul: ({ children }) => <ul className="list-disc pl-4 my-2 space-y-1">{children}</ul>,
                                 ol: ({ children }) => <ol className="list-decimal pl-4 my-2 space-y-1">{children}</ol>,
-                                li: ({ children }) => <li className="text-sm text-gray-300">{children}</li>,
-                                h1: ({ children }) => <h1 className="text-lg font-semibold text-white mt-4 mb-2">{children}</h1>,
-                                h2: ({ children }) => <h2 className="text-base font-semibold text-white mt-3 mb-2">{children}</h2>,
-                                h3: ({ children }) => <h3 className="text-sm font-semibold text-white mt-2 mb-1">{children}</h3>,
-                                code: ({ children }) => <code className="bg-[#2a2a2d] px-1.5 py-0.5 rounded text-xs text-gray-300">{children}</code>,
-                                pre: ({ children }) => <pre className="bg-[#2a2a2d] p-3 rounded-lg overflow-x-auto my-2">{children}</pre>,
-                                a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{children}</a>,
-                                blockquote: ({ children }) => <blockquote className="border-l-2 border-[#3a3a3d] pl-3 my-2 text-gray-400 italic">{children}</blockquote>,
+                                li: ({ children }) => <li className="text-sm text-[var(--chat-text)]">{children}</li>,
+                                h1: ({ children }) => <h1 className="text-lg font-semibold text-[var(--chat-text)] mt-4 mb-2">{children}</h1>,
+                                h2: ({ children }) => <h2 className="text-base font-semibold text-[var(--chat-text)] mt-3 mb-2">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-sm font-semibold text-[var(--chat-text)] mt-2 mb-1">{children}</h3>,
+                                code: ({ children }) => <code className="bg-[var(--chat-control)] px-1.5 py-0.5 rounded text-xs text-[var(--chat-text)]">{children}</code>,
+                                pre: ({ children }) => <pre className="bg-[var(--chat-control)] p-3 rounded-lg overflow-x-auto my-2">{children}</pre>,
+                                a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-[var(--chat-accent)] underline decoration-[var(--chat-border)] underline-offset-2 transition-colors hover:decoration-[var(--chat-accent)]">{children}</a>,
+                                blockquote: ({ children }) => <blockquote className="border-l-2 border-[var(--chat-border)] pl-3 my-2 text-[var(--chat-muted)] italic">{children}</blockquote>,
                               }}
                             >
                               {message.content}
                             </ReactMarkdown>
                             {message.pageContext && (
-                              <p className="text-xs mt-2 text-gray-500 flex items-center gap-1">
+                              <p className="text-xs mt-2 text-[var(--chat-muted)] flex items-center gap-1">
                                 <Eye size={12} /> Viewing: {getDomain(message.pageContext)}
                               </p>
                             )}
@@ -1553,9 +1612,9 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
                 {(isLoading || isSearching || isAgentWorking) && (
                   <div className="flex justify-start">
-                    <div className="bg-[#19191a] rounded-2xl rounded-bl-none p-3">
-                      <div className="flex items-center gap-2 text-gray-400">
-                        <Loader2 size={16} className="animate-spin" />
+                    <div className="bg-[var(--chat-surface)] rounded-2xl rounded-bl-none p-3">
+                      <div className="flex items-center gap-2 text-[var(--chat-muted)]">
+                        <Spinner size={16} />
                         <span className="text-sm">
                           {isSearching ? 'Searching the web...' :
                            isAgentWorking ? `Agent working... (Step ${agentSteps.length + 1})` :
@@ -1563,8 +1622,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                         </span>
                       </div>
                       {isAgentWorking && agentSteps.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-[#3a3a3d]">
-                          <p className="text-xs text-gray-500">
+                        <div className="mt-2 pt-2 border-t border-[var(--chat-border)]">
+                          <p className="text-xs text-[var(--chat-muted)]">
                             Last action: {agentSteps[agentSteps.length - 1]?.action?.type || 'processing'}
                           </p>
                         </div>
@@ -1582,11 +1641,11 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         {/* Page Content Indicator */}
         {isBrowserOpen && currentPageContent && (
           <div className="px-4 mb-2">
-            <div className="max-w-full mx-auto px-3 py-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg">
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+            <div className="max-w-full mx-auto px-3 py-2 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-lg">
+              <div className="flex items-center gap-2 text-xs text-[var(--chat-muted)]">
                 <Eye size={12} className="text-green-500" />
-                <span>AI can see: <span className="text-gray-300">{currentPageContent.title}</span></span>
-                {isLoadingPageContent && <Loader2 size={12} className="animate-spin ml-auto" />}
+                <span>AI can see: <span className="text-[var(--chat-text)]">{currentPageContent.title}</span></span>
+                {isLoadingPageContent && <Spinner size={12} className="ml-auto" />}
               </div>
             </div>
           </div>
@@ -1596,13 +1655,13 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         {showResultsPanel && !isBrowserOpen && (
           <div className="flex-shrink-0 px-4 mb-2">
             <div className="max-w-full mx-auto text-center">
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-[var(--chat-muted)]">
                 {isSearching ? (
                   'Searching...'
                 ) : searchResults.length > 0 ? (
                   <>
-                    <span className="text-white font-medium">Search Results</span>
-                    <span className="text-gray-500"> / </span>
+                    <span className="text-[var(--chat-text)] font-medium">Search Results</span>
+                    <span className="text-[var(--chat-muted)]"> / </span>
                     <span>{searchResults.length} results for "{currentQuery}"</span>
                   </>
                 ) : (
@@ -1615,18 +1674,22 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
         {/* Input Container */}
         <div className="flex-shrink-0 px-4 pb-4">
-          <div className={`mx-auto bg-[#19191a] border border-[#3a3a3d] rounded-2xl overflow-hidden shadow-lg ${
+          <div className={`mx-auto bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-2xl overflow-hidden shadow-lg ${
             (showResultsPanel || isBrowserOpen) ? 'max-w-full' : 'max-w-3xl'
           }`}>
             {/* Textarea Row */}
             <div className="flex items-end relative">
+              {/* Stays hand-written — the second of the two composer fields §7 excludes by name, and
+                  the marker it was missing. Same shape as the one in ChatWithLLM: a ref-driven
+                  auto-grow capped at 150px, `resize-none`, `border-none`, and it is the top half of a
+                  rounded card whose bottom half is the controls row. The card owns the box. */}
               <textarea
                 ref={textareaRef}
                 placeholder={searchMode === 'web' ? "Search the web with AI..." : "Ask the agent to research..."}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="w-full bg-transparent text-white placeholder-gray-500 pl-4 pr-4 py-3 outline-none resize-none flex-grow focus:ring-0 border-none focus:outline-none focus:shadow-none text-base"
+                className="w-full bg-transparent text-[var(--chat-text)] placeholder-[var(--chat-muted)] pl-4 pr-4 py-3 outline-none resize-none flex-grow focus:ring-0 border-none focus:outline-none focus:shadow-none text-base"
                 style={{ maxHeight: '150px' }}
                 rows={1}
               />
@@ -1636,61 +1699,61 @@ Based on these search results, provide a helpful, accurate, and concise answer t
             <div className="flex items-center justify-between px-3 pb-3">
               <div className="flex items-center gap-2">
                 {/* Attach Button */}
-                <button
-                  className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2d] transition-colors"
+                <IconButton
+                  icon={PaperclipDecl}
+                  variant="ghost"
+                  size="lg"
+                  iconSize={18}
                   title="Attach file"
-                >
-                  <Paperclip size={18} />
-                </button>
+                  aria-label="Attach file"
+                />
 
                 {/* Mode Toggle Buttons */}
-                <div className="flex items-center bg-[#111113] border border-[#3a3a3d] rounded-lg p-1">
-                  <button
-                    onClick={() => setSearchMode('web')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                      searchMode === 'web'
-                        ? 'bg-[#2a2a2d] text-white'
-                        : 'text-gray-500 hover:text-gray-300'
-                    }`}
-                  >
-                    <Globe size={14} />
-                    Web
-                  </button>
-                  <button
-                    onClick={() => setSearchMode('agent')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                      searchMode === 'agent'
-                        ? 'bg-[#2a2a2d] text-white'
-                        : 'text-gray-500 hover:text-gray-300'
-                    }`}
-                  >
-                    <Bot size={14} />
-                    Agent
-                  </button>
-                </div>
+                {/* Container and both buttons become ONE `<SegmentedControl>`, which is what this
+                    always was: a single-select of connected options inside a bordered track, the
+                    chosen one on an inset `--xeno-control` fill and the other a muted label. The
+                    hand-written version had the track, the padding and the two states; what it did
+                    not have is the thumb that travels between them.
+                    It needed a door first — `SegmentedOption` had no glyph slot, and dropping the
+                    globe and the bot would have been redrawing the control rather than taking it. */}
+                <SegmentedControl
+                  value={searchMode}
+                  onValueChange={(next) => setSearchMode(next as typeof searchMode)}
+                  size="md"
+                  iconSize={14}
+                  options={[
+                    { value: 'web', label: 'Web', icon: GlobeDecl },
+                    { value: 'agent', label: 'Agent', icon: BotDecl },
+                  ]}
+                  aria-label="Search mode"
+                />
               </div>
 
               {/* Send Button */}
               <div className="flex items-center">
                 {isLoading || isSearching ? (
-                  <button
+                  <IconButton
+                    icon={StopCircleDecl}
+                    variant="ghost"
+                    size="lg"
+                    iconSize={18}
                     onClick={() => {
                       setIsLoading(false);
                       setIsSearching(false);
                     }}
-                    className="flex items-center justify-center w-10 h-10 rounded-lg bg-[#2a2a2d] text-gray-400 hover:text-white transition-colors"
+                    aria-label="Stop searching"
                     title="Stop"
-                  >
-                    <StopCircle size={18} />
-                  </button>
+                  />
                 ) : (
-                  <button
+                  <IconButton
+                    icon={SendDecl}
+                    variant="ghost"
+                    size="lg"
+                    iconSize={18}
                     onClick={handleSubmit}
-                    className="flex items-center justify-center w-10 h-10 rounded-lg bg-[#2a2a2d] text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     disabled={!inputValue.trim()}
-                  >
-                    <Send size={18} />
-                  </button>
+                    aria-label="Send"
+                  />
                 )}
               </div>
             </div>
@@ -1700,7 +1763,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
       {/* Right Panel - Unified Browser & Results */}
       <div
-        className="absolute top-0 bottom-0 right-0 w-[55%] flex bg-[#121212] transition-all duration-300 ease-out"
+        className="absolute top-0 bottom-0 right-0 w-[55%] flex bg-[var(--chat-canvas)] transition-all duration-300 ease-out"
         style={{
           transform: (showResultsPanel || isBrowserOpen) ? 'translateX(0)' : 'translateX(100%)',
           opacity: (showResultsPanel || isBrowserOpen) ? 1 : 0
@@ -1709,7 +1772,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         {/* Spacer Line */}
         {(showResultsPanel || isBrowserOpen) && (
           <div className="flex-shrink-0 flex items-center py-8">
-            <div className="w-px h-full bg-[#3a3a3d]"></div>
+            <div className="w-px h-full bg-[var(--chat-control-strong)]"></div>
           </div>
         )}
 
@@ -1757,6 +1820,11 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                       : 'left 150ms ease-out, top 150ms ease-out'
                   }}
                 >
+                  {/* The blue on this overlay is deliberate and it is the only hue in the file.
+                      Everything here belongs to one live activity — an agent driving a browser: the
+                      pointer, its trail, the ping ring, the step list, the "controlling browser"
+                      banner. That is CONTENT, in the grammar's sense, and content is where colour is
+                      allowed to live; the shell around it stays monochrome. One feature, one hue. */}
                   {/* Cursor icon with trail effect during movement */}
                   <div className={`relative ${agentCursor.action === 'moving' ? 'scale-110' : 'scale-100'} transition-transform duration-200`}>
                     <svg
@@ -1768,6 +1836,9 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     >
                       <path
                         d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.48 0 .72-.58.38-.92L6.35 2.85a.5.5 0 0 0-.85.36Z"
+                        // The one colour in this file, and it stays: this is a drawing of a mouse
+                        // pointer moving across a page the agent is browsing — content, not chrome,
+                        // and the white outline is the one every OS cursor has.
                         fill="#3b82f6"
                         stroke="#fff"
                         strokeWidth="1.5"
@@ -1791,13 +1862,13 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   {agentCursor.action === 'scroll' && (
                     <div className="absolute -right-8 top-0 flex flex-col items-center text-blue-400">
                       <ChevronDown size={20} className="animate-bounce" />
-                      <span className="text-[10px] bg-blue-500/80 px-1.5 py-0.5 rounded text-white">scroll</span>
+                      <span className="text-[10px] bg-blue-500/80 px-1.5 py-0.5 rounded text-[var(--chat-text)]">scroll</span>
                     </div>
                   )}
                   {/* Type indicator */}
                   {agentCursor.action === 'type' && (
-                    <div className="absolute left-8 top-0 bg-blue-500 px-2 py-1 rounded text-xs text-white shadow-lg flex items-center gap-1">
-                      <span className="inline-block w-1.5 h-3 bg-white animate-pulse" />
+                    <div className="absolute left-8 top-0 bg-blue-500 px-2 py-1 rounded text-xs text-[var(--chat-text)] shadow-lg flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-3 bg-[var(--chat-text)] animate-pulse" />
                       typing...
                     </div>
                   )}
@@ -1815,27 +1886,30 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                   <div className="flex items-center justify-center gap-2 py-2">
                     <Bot size={14} className="text-blue-400 animate-pulse" />
                     <span className="text-xs text-blue-400 font-medium">Agent controlling browser</span>
-                    <Loader2 size={12} className="text-blue-400 animate-spin" />
+                    <Spinner size={12} style={{ ["--xeno-spinner-track"]: "rgb(96 165 250 / 0.35)", ["--xeno-spinner-edge"]: "rgb(96 165 250)" } as React.CSSProperties} />
                   </div>
                 </div>
               )}
 
               {/* Agent Steps Overlay - Shows on top of browser when in agent mode */}
               {searchMode === 'agent' && agentSteps.length > 0 && (
-                <div className="absolute bottom-0 left-0 right-0 max-h-[35%] overflow-y-auto bg-[#121212]/95 border-t border-[#3a3a3d] backdrop-blur-sm z-30">
+                <div className="absolute bottom-0 left-0 right-0 max-h-[35%] overflow-y-auto bg-[var(--chat-canvas)]/95 border-t border-[var(--chat-border)] backdrop-blur-sm z-30">
                   <div className="p-3">
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                    <div className="flex items-center gap-2 text-xs text-[var(--chat-muted)] mb-2">
                       <Layers size={12} />
                       <span>Agent Steps ({agentSteps.length})</span>
-                      {isAgentWorking && <Loader2 size={12} className="animate-spin text-blue-400" />}
+                      {isAgentWorking && <Spinner size={12} style={{ ["--xeno-spinner-track"]: "rgb(96 165 250 / 0.35)", ["--xeno-spinner-edge"]: "rgb(96 165 250)" } as React.CSSProperties} />}
                       {!isAgentWorking && (
-                        <button
+                        <IconButton
+                          icon={XDecl}
+                          variant="ghost"
+                          size="xs"
+                          iconSize={12}
+                          className="ml-auto"
                           onClick={() => setAgentSteps([])}
-                          className="ml-auto p-1 rounded hover:bg-[#2a2a2d] text-gray-500 hover:text-white transition-colors"
                           title="Clear steps"
-                        >
-                          <X size={12} />
-                        </button>
+                          aria-label="Clear steps"
+                        />
                       )}
                     </div>
                     <div className="space-y-2">
@@ -1845,17 +1919,17 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                           className={`p-2 border rounded-lg text-xs transition-all ${
                             idx === agentSteps.length - 1 && isAgentWorking
                               ? 'bg-blue-500/10 border-blue-500/30'
-                              : 'bg-[#19191a] border-[#3a3a3d]'
+                              : 'bg-[var(--chat-surface)] border-[var(--chat-border)]'
                           }`}
                         >
                           <div className="flex items-start gap-2">
                             <span className={`flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
                               idx === agentSteps.length - 1 && isAgentWorking
                                 ? 'bg-blue-500/20 text-blue-400'
-                                : 'bg-[#2a2a2d] text-gray-400'
+                                : 'bg-[var(--chat-control)] text-[var(--chat-muted)]'
                             }`}>
                               {idx === agentSteps.length - 1 && isAgentWorking ? (
-                                <Loader2 size={8} className="animate-spin" />
+                                <Spinner size={8} />
                               ) : (
                                 idx + 1
                               )}
@@ -1863,17 +1937,17 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                             <div className="flex-1 min-w-0">
                               {/* Show URL context if available */}
                               {step.url && (
-                                <div className="text-[10px] text-gray-600 truncate mb-0.5" title={step.url}>
+                                <div className="text-[10px] text-[var(--chat-muted)] truncate mb-0.5" title={step.url}>
                                   📍 {getDomain(step.url)}
                                 </div>
                               )}
-                              <p className="text-gray-300 text-xs">{step.thought}</p>
+                              <p className="text-[var(--chat-text)] text-xs">{step.thought}</p>
                               {step.action && (
-                                <div className="flex items-center gap-1 mt-1 text-gray-500">
+                                <div className="flex items-center gap-1 mt-1 text-[var(--chat-muted)]">
                                   <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                                     idx === agentSteps.length - 1 && isAgentWorking
                                       ? 'bg-blue-500/20 text-blue-400'
-                                      : 'bg-[#111113]'
+                                      : 'bg-[var(--chat-canvas)]'
                                   }`}>
                                     {step.action.type}
                                   </span>
@@ -1893,16 +1967,16 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 
               {/* Mode Indicator Badge - Only show when not agent working */}
               {!isAgentWorking && (
-                <div className="absolute top-14 right-4 z-10 flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#19191a] border border-[#3a3a3d]">
+                <div className="absolute top-14 right-4 z-10 flex items-center gap-1.5 px-2 py-1 rounded-md bg-[var(--chat-surface)] border border-[var(--chat-border)]">
                   {searchMode === 'agent' ? (
                     <>
-                      <Bot size={12} className="text-gray-400" />
-                      <span className="text-[10px] text-gray-400 font-medium">Agent</span>
+                      <Bot size={12} className="text-[var(--chat-muted)]" />
+                      <span className="text-[10px] text-[var(--chat-muted)] font-medium">Agent</span>
                     </>
                   ) : (
                     <>
-                      <Globe size={12} className="text-gray-400" />
-                      <span className="text-[10px] text-gray-400 font-medium">Web</span>
+                      <Globe size={12} className="text-[var(--chat-muted)]" />
+                      <span className="text-[10px] text-[var(--chat-muted)] font-medium">Web</span>
                     </>
                   )}
                 </div>
@@ -1915,14 +1989,14 @@ Based on these search results, provide a helpful, accurate, and concise answer t
             <div className="flex-1 overflow-y-auto p-6 pt-4">
               {isSearching ? (
                 <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 size={32} className="animate-spin text-gray-500 mb-3" />
-                  <p className="text-sm text-gray-500">Searching the web...</p>
+                  <Spinner size={32} className="mb-3" />
+                  <p className="text-sm text-[var(--chat-muted)]">Searching the web...</p>
                 </div>
               ) : searchResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Globe size={32} className="text-gray-600 mb-3" />
-                  <p className="text-sm text-gray-500">No results found</p>
-                  <p className="text-xs text-gray-600 mt-1">Try a different search term</p>
+                  <Globe size={32} className="text-[var(--chat-muted)] mb-3" />
+                  <p className="text-sm text-[var(--chat-muted)]">No results found</p>
+                  <p className="text-xs text-[var(--chat-muted)] mt-1">Try a different search term</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1930,7 +2004,7 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     <div
                       key={idx}
                       onClick={() => openInBrowser(result.url)}
-                      className={`group p-4 bg-[#19191a] border border-[#3a3a3d] rounded-xl hover:border-gray-500 cursor-pointer transition-all duration-300 ${
+                      className={`group p-4 bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-xl hover:border-[var(--chat-muted)] cursor-pointer transition-all duration-300 ${
                         idx < visibleResults
                           ? 'opacity-100 translate-y-0'
                           : 'opacity-0 translate-y-4'
@@ -1946,20 +2020,20 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                           className="w-4 h-4 rounded"
                           onError={(e) => (e.currentTarget.style.display = 'none')}
                         />
-                        <span className="text-xs text-gray-500">{result.domain}</span>
+                        <span className="text-xs text-[var(--chat-muted)]">{result.domain}</span>
                         {result.relevance_score && (
-                          <span className="ml-auto text-[10px] text-gray-600 bg-[#111113] px-2 py-0.5 rounded">
+                          <span className="ml-auto text-[10px] text-[var(--chat-muted)] bg-[var(--chat-canvas)] px-2 py-0.5 rounded">
                             {Math.round(result.relevance_score * 100)}% match
                           </span>
                         )}
                       </div>
-                      <h4 className="text-sm font-medium text-blue-400 group-hover:underline mb-2 line-clamp-2">
+                      <h4 className="text-sm font-medium text-[var(--chat-accent)] underline-offset-2 group-hover:underline mb-2 line-clamp-2">
                         {result.title}
                       </h4>
-                      <p className="text-xs text-gray-400 line-clamp-3">
+                      <p className="text-xs text-[var(--chat-muted)] line-clamp-3">
                         {result.snippet}
                       </p>
-                      <div className="flex items-center gap-2 mt-3 text-xs text-gray-500">
+                      <div className="flex items-center gap-2 mt-3 text-xs text-[var(--chat-muted)]">
                         <ExternalLink size={12} />
                         <span>Click to open in browser</span>
                       </div>

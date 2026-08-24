@@ -22,9 +22,15 @@ import VideoUpscaleInterface from '../components/playground/Enhance/VideoEnhance
 import MultiChatContainer from '../components/playground/Chat/MultiChatContainer';
 import ChatWithVoice from '../components/playground/Chat/ChatWithVoice';
 import SearchChatInterface from '../components/playground/Chat/SearchChatInterface';
+import ChatArtifactsPage from '../components/playground/Chat/ChatArtifactsPage';
+import ChatCustomizePage from '../components/playground/Chat/ChatCustomizePage';
+import ChatScheduledPage from '../components/playground/Chat/ChatScheduledPage';
+import ChatGlobalSettingsPage from '../components/playground/Chat/ChatGlobalSettingsPage';
+import ChatSkillsWorkspace from '../components/playground/Chat/ChatSkillsWorkspace';
 const ThreeDGenerationInterface = React.lazy(() => import('../components/playground/Generation/ThreeDGenerationInterface'));
 import AudioGenerationInterface from '../components/playground/Generation/AudioGenerationInterface';
 import VideoGenerationInterface from '../components/playground/Generation/VideoGenerationInterface';
+import VideoGenerationInterface2 from '../components/playground/Generation/VideoGenerationInterface2';
 // Add imports for the new training components
 import LoRaImageTrainComponent from '../components/playground/Train/LoRaImageTrainInterface';
 import LoRaVideoTrainComponent from '../components/playground/Train/LoRaVideoTrainInterface';
@@ -199,15 +205,28 @@ const OverviewContent: React.FC = () => {
   const [isTaskbarHidden, setIsTaskbarHidden] = useState(false);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const toggleTaskbar = () => setIsTaskbarHidden((prev) => !prev);
+    const onKeyDown = (e: KeyboardEvent) => {
       if (e.shiftKey && e.key === 'H') {
         e.preventDefault();
-        setIsTaskbarHidden(prev => !prev);
+        toggleTaskbar();
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('toggle_overview_taskbar', toggleTaskbar as EventListener);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('toggle_overview_taskbar', toggleTaskbar as EventListener);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('overview_taskbar_visibility', {
+        detail: { hidden: isTaskbarHidden },
+      }),
+    );
+  }, [isTaskbarHidden]);
 
   return (
     <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'row', overflow: 'hidden', margin: 0, padding: 0 }}>
@@ -260,6 +279,7 @@ const OverviewContent: React.FC = () => {
             <Route path="/overview/generation/image2-copy" element={<ImageGenerationInterface2Copy />} />
             <Route path="generation/3d" element={<React.Suspense fallback={<div>Loading 3D Studio...</div>}><ThreeDGenerationInterface /></React.Suspense>} />
             <Route path="generation/video" element={<VideoGenerationInterface />} />
+            <Route path="generation/video2" element={<VideoGenerationInterface2 />} />
             <Route path="generation/audio" element={<AudioGenerationInterface />} />
             <Route path="enhance/image" element={<ImageUpscaleInterface />} />
             <Route path="enhance/video" element={<VideoUpscaleInterface />} />
@@ -267,7 +287,13 @@ const OverviewContent: React.FC = () => {
             <Route path="train/lora" element={<LoRaImageTrainComponent />} />
             <Route path="train/lora-video" element={<LoRaVideoTrainComponent />} />
             <Route path="train/llm" element={<TextLLMTrainComponent />} />
-            <Route path="chat/llm" element={<ChatApp />} />
+            <Route path="chat/llm" element={<MultiChatContainer />} />
+            <Route path="chat/artifacts" element={<ChatArtifactsPage />} />
+            <Route path="chat/artifacts/:artifactId" element={<ChatArtifactsPage />} />
+            <Route path="chat/customize" element={<ChatCustomizePage />} />
+            <Route path="chat/scheduled" element={<ChatScheduledPage />} />
+            <Route path="chat/settings" element={<ChatGlobalSettingsPage />} />
+            <Route path="chat/skills" element={<ChatSkillsWorkspace />} />
             <Route path="chat/multi" element={<MultiChatContainer />} />
             {/* XENO: voice mode route disabled — voice de-scoped (no direct provider calls) */}
             {/* <Route path="chat/voice" element={<ChatWithVoice />} /> */}

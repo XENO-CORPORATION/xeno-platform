@@ -1,0 +1,296 @@
+/*
+ * Sidebar — the slide-in left navigation panel. Locked geometry: SQUARE corners, flush to the viewport
+ * edge; a fixed ~260px column on `var(--xeno-surface)`. CSS-first: the only state that drives appearance
+ * is `data-state="open|closed"` on the panel + backdrop. The only animated property is `transform`
+ * (translateX), guarded by reduced-motion. Monochrome — the scrim is a neutral, hueless black.
+ */
+
+.xeno-sidebar {
+  /* One row's stride, in one place: the pill's travel is computed from these, so a row that changes
+     height can never leave the pill landing between two rows. */
+  --xeno-sidebar-row: 36px;
+  --xeno-sidebar-row-gap: 2px;
+  /* How much the goo pill misbehaves. The squash is deliberately restrained — enough deformation to
+     read as mass, not enough to look like jelly on a nav you use all day — and the travel easing
+     overshoots only slightly (1.12, against the 1.4 of the library's overshoot token). Turn these
+     three up together to get the full CodePen bounce back. */
+  --xeno-goo-squash-x: 0.95;
+  --xeno-goo-squash-y: 1.1;
+  --xeno-goo-ease: cubic-bezier(0.34, 1.12, 0.5, 1);
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  max-width: 85vw;
+  height: 100%;
+  background: var(--xeno-surface);
+  border-inline-end: 1px solid var(--xeno-border);
+  border-radius: 0; /* locked: square, flush */
+  color: var(--xeno-text);
+  transform: translateX(0);
+  transition: transform var(--xeno-dur) var(--xeno-ease);
+  will-change: transform;
+}
+.xeno-sidebar[data-state='closed'] {
+  transform: translateX(-100%);
+}
+
+/* ── Header (brand + search) ─────────────────────────────────────────────────────── */
+.xeno-sidebar-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: none;
+  padding: 16px;
+  border-bottom: 1px solid var(--xeno-border);
+}
+.xeno-sidebar-brand {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--xeno-text);
+}
+/* Make the shared TextInput fill the header width. */
+.xeno-sidebar-search {
+  display: flex;
+  width: 100%;
+}
+
+/* ── Nav (scrollable list of rows) ───────────────────────────────────────────────── */
+.xeno-sidebar-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+.xeno-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--xeno-sidebar-row-gap);
+}
+/* The rows of one group + the pill that backs them. `position: relative` makes this the pill's
+   containing block, so its travel is measured from the first row of THIS group — which is why the
+   heading can sit outside and the trick survives sections of different shapes. */
+.xeno-sidebar-items {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--xeno-sidebar-row-gap);
+}
+.xeno-sidebar-section + .xeno-sidebar-section {
+  margin-top: 8px;
+}
+.xeno-sidebar-heading {
+  padding: 10px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--xeno-muted);
+}
+
+/* ── Row (self-contained; NOT ListRow) ───────────────────────────────────────────── */
+.xeno-sidebar-item {
+  position: relative;
+  z-index: 1; /* over the pill, which is painted behind the whole group */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: var(--xeno-sidebar-row);
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: left;
+  color: var(--xeno-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--xeno-style-control-radius);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--xeno-dur) ease,
+    color var(--xeno-dur) ease;
+}
+/* Neither hover nor selection paints its OWN background any more — the travelling pill below is the
+   single filled surface for the whole group. Two of them would read as two selections. */
+.xeno-sidebar-item:hover,
+.xeno-sidebar-item[data-selection='on'] {
+  color: var(--xeno-text);
+}
+.xeno-sidebar-item:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--xeno-surface),
+    0 0 0 4px var(--xeno-border);
+}
+.xeno-sidebar-item[data-availability='disabled'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── The goo pill (the travelling hover surface) ──────────────────────────────────────
+ * ONE filled pill per group, painted behind the rows, that FLIES to whichever row you point at and
+ * squashes on the way — narrower and taller as it launches, back to true as it lands. That squash is
+ * the whole illusion: a rectangle that only slid would read as a scrollbar; one that deforms reads as
+ * something with mass. Adapted from One_div's gooey nav, in XENO ink: the pill is `--xeno-control`,
+ * the monochrome step above the panel, not an accent colour.
+ *
+ * Pure CSS, no measuring: the pill is the LAST child of the group, so every row keeps its natural
+ * `:nth-child` number and a hovered row reaches the pill with `~`. Travel is `row index x stride`, and
+ * the stride comes from the row tokens above, so it cannot drift out of step with the layout. */
+.xeno-sidebar-goo {
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  top: calc(var(--xeno-goo-row, 0) * (var(--xeno-sidebar-row) + var(--xeno-sidebar-row-gap)));
+  width: 100%;
+  height: var(--xeno-sidebar-row);
+  background: var(--xeno-control);
+  border-radius: var(--xeno-style-control-radius);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    top var(--xeno-dur-entrance, 240ms) var(--xeno-goo-ease),
+    opacity var(--xeno-dur, 0.14s) ease;
+}
+/* The pill RESTS on the selected row of its group (so the selection indicator is the same object
+   that flies), and is invisible in a group with no selection. */
+.xeno-sidebar-item[data-selection='on'] ~ .xeno-sidebar-goo { opacity: 1; }
+.xeno-sidebar-item[data-selection='on']:nth-child(1) ~ .xeno-sidebar-goo { --xeno-goo-row: 0; }
+.xeno-sidebar-item[data-selection='on']:nth-child(2) ~ .xeno-sidebar-goo { --xeno-goo-row: 1; }
+.xeno-sidebar-item[data-selection='on']:nth-child(3) ~ .xeno-sidebar-goo { --xeno-goo-row: 2; }
+.xeno-sidebar-item[data-selection='on']:nth-child(4) ~ .xeno-sidebar-goo { --xeno-goo-row: 3; }
+.xeno-sidebar-item[data-selection='on']:nth-child(5) ~ .xeno-sidebar-goo { --xeno-goo-row: 4; }
+.xeno-sidebar-item[data-selection='on']:nth-child(6) ~ .xeno-sidebar-goo { --xeno-goo-row: 5; }
+.xeno-sidebar-item[data-selection='on']:nth-child(7) ~ .xeno-sidebar-goo { --xeno-goo-row: 6; }
+.xeno-sidebar-item[data-selection='on']:nth-child(8) ~ .xeno-sidebar-goo { --xeno-goo-row: 7; }
+.xeno-sidebar-item[data-selection='on']:nth-child(9) ~ .xeno-sidebar-goo { --xeno-goo-row: 8; }
+.xeno-sidebar-item[data-selection='on']:nth-child(10) ~ .xeno-sidebar-goo { --xeno-goo-row: 9; }
+.xeno-sidebar-item[data-selection='on']:nth-child(11) ~ .xeno-sidebar-goo { --xeno-goo-row: 10; }
+.xeno-sidebar-item[data-selection='on']:nth-child(12) ~ .xeno-sidebar-goo { --xeno-goo-row: 11; }
+
+/* Hover takes it over. Same specificity as the rules above ON PURPOSE — these come later, so pointing
+   at a row always wins over the resting position, and letting go hands it back. */
+.xeno-sidebar-item:hover ~ .xeno-sidebar-goo { opacity: 1; }
+.xeno-sidebar-item:nth-child(1):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 0; animation: xeno-goo-1 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(2):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 1; animation: xeno-goo-2 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(3):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 2; animation: xeno-goo-3 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(4):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 3; animation: xeno-goo-4 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(5):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 4; animation: xeno-goo-5 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(6):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 5; animation: xeno-goo-6 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(7):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 6; animation: xeno-goo-7 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(8):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 7; animation: xeno-goo-8 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(9):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 8; animation: xeno-goo-9 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(10):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 9; animation: xeno-goo-10 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(11):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 10; animation: xeno-goo-11 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(12):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 11; animation: xeno-goo-12 var(--xeno-dur-entrance, 240ms) 1; }
+
+/* One keyframe track PER ROW, all identical. They have to be separate NAMES: re-pointing at another row
+   only swaps which rule matches, and a browser does not restart an animation whose name did not change —
+   so a single shared `xeno-goo` would squash once and then never again as you slide down the list. */
+@keyframes xeno-goo-1 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-2 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-3 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-4 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-5 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-6 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-7 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-8 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-9 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-10 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-11 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-12 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
+
+/* ── The XENO nav hover animation ─────────────────────────────────────────────────────
+ * The icon + label NUDGE right — the icon leads, the label follows a beat later (a small cascade), on
+ * the interaction easing (E2). There is no left rail: the goo pill above already marks both the hovered
+ * row and the active one, and a second marker on the same edge only competed with it. */
+.xeno-sidebar-item-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--xeno-muted);
+  transition:
+    color var(--xeno-dur) ease,
+    transform var(--xeno-dur-entrance, 240ms) var(--xeno-ease-stagger, cubic-bezier(0.22, 0.7, 0.2, 1));
+}
+.xeno-sidebar-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: transform var(--xeno-dur-entrance, 240ms) var(--xeno-ease-stagger, cubic-bezier(0.22, 0.7, 0.2, 1));
+}
+.xeno-sidebar-item:hover .xeno-sidebar-item-icon,
+.xeno-sidebar-item[data-selection='on'] .xeno-sidebar-item-icon {
+  color: var(--xeno-text);
+}
+.xeno-sidebar-item:hover .xeno-sidebar-item-icon {
+  transform: translateX(6px);
+}
+.xeno-sidebar-item:hover .xeno-sidebar-item-label {
+  transform: translateX(6px);
+  transition-delay: 45ms; /* label follows the icon — the cascade */
+}
+
+/* Per-glyph icon animations are global now — see `icon-motion.css`, triggered by
+ * `.xeno-sidebar-item:hover .xeno-element[data-glyph]`. The nudge above stays sidebar-specific. */
+
+/* ── Footer ──────────────────────────────────────────────────────────────────────── */
+.xeno-sidebar-footer {
+  flex: none;
+  padding: 12px 16px;
+  border-top: 1px solid var(--xeno-border);
+}
+
+/* ── Backdrop (small screens only) ───────────────────────────────────────────────── */
+.xeno-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgba(0, 0, 0, 0.5); /* neutral scrim — hueless, like a shadow */
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--xeno-dur) ease,
+    visibility var(--xeno-dur) ease;
+}
+.xeno-sidebar-backdrop[data-state='open'] {
+  opacity: 1;
+  visibility: visible;
+}
+@media (min-width: 900px) {
+  .xeno-sidebar-backdrop {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-sidebar,
+  .xeno-sidebar-backdrop,
+  .xeno-sidebar-item,
+  .xeno-sidebar-item-icon,
+  .xeno-sidebar-item-label,
+  .xeno-sidebar-goo {
+    transition: none;
+  }
+  /* The pill still MARKS the row it belongs to — it just gets there without flying or squashing. */
+  .xeno-sidebar-goo {
+    animation: none !important;
+  }
+  /* States still apply (the pill marks the row, colours change); motion does not — no nudge, no per-glyph play. */
+  .xeno-sidebar-item:hover .xeno-sidebar-item-icon,
+  .xeno-sidebar-item:hover .xeno-sidebar-item-label {
+    transform: none;
+  }
+  .xeno-sidebar-item-icon .xeno-element {
+    animation: none !important;
+  }
+}

@@ -1,0 +1,132 @@
+/*
+ * ListRow — a selectable / actionable list row. CSS-first: the `selection` and `availability` axes
+ * arrive as `data-*` attributes on the root; interaction (hover / press / focus) is pure CSS. Depth is
+ * hairline borders only — monochrome shell, no coloured glow. Only the theme tokens from
+ * `xeno-theme.css` are used; no literal colours.
+ */
+
+.xeno-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--xeno-text);
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--xeno-radius-md);
+  cursor: default;
+  transition:
+    background var(--xeno-dur) ease,
+    border-color var(--xeno-dur) ease;
+}
+
+/* Reset the native <button> chrome so a button row reads exactly like a div row. */
+button.xeno-list-row {
+  font: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Interactive rows (a real button, or a div carrying role=button / role=option) invite the pointer. */
+button.xeno-list-row:not(:disabled),
+.xeno-list-row[role='button'],
+.xeno-list-row[role='option'] {
+  cursor: pointer;
+}
+
+/* Hover — only interactive, enabled, unselected rows lift onto --xeno-hover. */
+button.xeno-list-row:not(:disabled):hover,
+.xeno-list-row[role='button']:not([aria-disabled='true']):hover,
+.xeno-list-row[role='option']:not([aria-disabled='true']):hover {
+  background: var(--xeno-hover);
+}
+
+/* Selection wins over hover — a selected row stays on the solid control fill. */
+.xeno-list-row[data-selection='on'],
+button.xeno-list-row[data-selection='on']:not(:disabled):hover,
+.xeno-list-row[role='button'][data-selection='on']:hover,
+.xeno-list-row[role='option'][data-selection='on']:hover {
+  background: var(--xeno-control);
+}
+
+.xeno-list-row:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--xeno-canvas),
+    0 0 0 4px var(--xeno-border);
+}
+
+button.xeno-list-row:active:not(:disabled) {
+  transform: scale(0.995);
+}
+
+.xeno-list-row:disabled,
+.xeno-list-row[data-availability='disabled'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Slots ───────────────────────────────────────────────────────────────────────── */
+
+/* Leading — glyph / avatar. Fixed, never shrinks. Its own children keep their intrinsic colour. */
+.xeno-list-row-leading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--xeno-muted);
+}
+
+/* Middle — the truncation column. min-width:0 lets the title/subtitle ellipsize inside the flex row. */
+.xeno-list-row-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.xeno-list-row-title {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--xeno-text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.xeno-list-row-subtitle {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--xeno-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Trailing — meta / actions pinned to the end. Fixed, never shrinks. */
+.xeno-list-row-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--xeno-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-list-row {
+    transition: none;
+  }
+  button.xeno-list-row:active:not(:disabled) {
+    transform: none;
+  }
+}

@@ -53,6 +53,7 @@ COPY public/ ./public/
 
 # Copy source code (this layer invalidates when source changes)
 COPY src/ ./src/
+COPY packages/ ./packages/
 
 # Copy build scripts (the build runs scripts/prerender-products.mjs — SEO §8)
 COPY scripts/ ./scripts/

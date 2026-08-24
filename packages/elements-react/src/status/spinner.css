@@ -1,0 +1,33 @@
+/*
+ * Spinner — an indeterminate loader. A small rounded SQUARE outline (never a circle): all four edges
+ * sit in `--xeno-muted` as the track and the top edge burns to `--xeno-text` as the bright leading
+ * edge, the whole square rotating. Size + stroke arrive as inline vars (`--xeno-spinner-size`/
+ * `--xeno-spinner-stroke`) set by the component from `size`, so the metrics never drift from the data.
+ * Motion is gated behind `prefers-reduced-motion: no-preference`. Monochrome shell, theme tokens only.
+ */
+.xeno-spinner {
+  display: inline-block;
+  box-sizing: border-box;
+  width: var(--xeno-spinner-size, 16px);
+  height: var(--xeno-spinner-size, 16px);
+  /* Track and leading edge are named, and default to the two inks. A consumer that needs the loader
+     to belong to something coloured — a status row for one live activity, say — can say so here
+     instead of reassigning `--xeno-text` on the element, which is the whole app's ink and means
+     something else. Omit them and nothing changes. */
+  border: var(--xeno-spinner-stroke, 2px) solid var(--xeno-spinner-track, var(--xeno-muted));
+  border-top-color: var(--xeno-spinner-edge, var(--xeno-text));
+  border-radius: var(--xeno-radius-xs);
+  vertical-align: middle;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .xeno-spinner {
+    animation: xeno-spinner-rot 0.7s linear infinite;
+  }
+}
+
+@keyframes xeno-spinner-rot {
+  to {
+    transform: rotate(360deg);
+  }
+}

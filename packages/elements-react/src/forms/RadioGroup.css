@@ -1,0 +1,115 @@
+/*
+ * `<RadioGroup>` / `<RadioRow>` — SQUARE markers (radius-xs) with a smaller inner square, never circles.
+ * CSS-first: paint is keyed off `data-selection` (off|on) and `data-availability`; layout off
+ * `data-orientation`. Monochrome shell — only theme tokens, no literal colours.
+ */
+.xeno-radiogroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.xeno-radiogroup[data-orientation='horizontal'] {
+  flex-direction: row;
+  gap: 12px;
+}
+
+.xeno-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--xeno-radius-md);
+  color: var(--xeno-text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--xeno-dur) var(--xeno-ease);
+}
+.xeno-radio:hover:not(:disabled) {
+  background: var(--xeno-hover);
+}
+
+.xeno-radio-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  background: var(--xeno-canvas);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-xs);
+  transition: border-color var(--xeno-dur) var(--xeno-ease);
+}
+.xeno-radio:hover:not(:disabled) .xeno-radio-marker {
+  border-color: var(--xeno-muted);
+}
+.xeno-radio[data-selection='on'] .xeno-radio-marker {
+  border-color: var(--xeno-text);
+}
+
+/* The mark is a SQUARE, and at 8px it has to be drawn like one. It carried `--xeno-radius-xs` (3px),
+   which is 37% of its own width — enough rounding that at this size it reads as a dot rather than as a
+   square. `--xeno-radius-hair` puts it at 19%, in the same family as the switch knob's 21%. */
+.xeno-radio-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--xeno-text);
+  border-radius: var(--xeno-radius-hair, 1.5px);
+  scale: 0;
+  opacity: 0;
+  transition:
+    scale var(--xeno-dur) var(--xeno-ease),
+    opacity var(--xeno-dur) var(--xeno-ease);
+}
+.xeno-radio[data-selection='on'] .xeno-radio-dot {
+  scale: 1;
+  opacity: 1;
+}
+/* Choosing STAMPS: the square overshoots and settles, so the choice lands rather than fades in. Only on
+   the way in — letting go is quiet, and the transition above still handles it.
+   Armed at the group, which is safe HERE and would not be on a multi-select: exactly one radio can be
+   on, so the only one whose rule starts matching when the group arms is the one that just changed. */
+.xeno-radiogroup[data-motion='ready'] .xeno-radio[data-selection='on'] .xeno-radio-dot {
+  animation: xeno-radio-stamp 260ms var(--xeno-ease-overshoot, cubic-bezier(0.34, 1.4, 0.5, 1));
+}
+@keyframes xeno-radio-stamp {
+  0% { scale: 0; opacity: 0; }
+  45% { scale: 1.22; opacity: 1; }
+  100% { scale: 1; opacity: 1; }
+}
+
+.xeno-radio-label {
+  color: var(--xeno-text);
+}
+
+.xeno-radio:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--xeno-canvas),
+    0 0 0 4px var(--xeno-border);
+}
+
+.xeno-radio:disabled,
+.xeno-radio[data-availability='disabled'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-radio,
+  .xeno-radio-marker,
+  .xeno-radio-dot {
+    transition: none;
+  }
+  /* The mark still appears — it just does not stamp. */
+  .xeno-radio-dot {
+    animation: none !important;
+  }
+}

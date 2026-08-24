@@ -1,0 +1,102 @@
+/*
+ * Dense table styles — the locked grammar for Table / DataTable. CSS-first: appearance is driven by
+ * the `xeno-*` classes plus the `data-align` / `data-selection` seams, reading only the theme custom
+ * properties from `xeno-theme.css`. Border-collapse with hairline BOTTOM row rules only — no vertical
+ * rules, no zebra striping. Monochrome throughout; no literal colours.
+ */
+
+.xeno-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  color: var(--xeno-text);
+}
+
+.xeno-th,
+.xeno-td {
+  padding: 6px 11px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.xeno-th {
+  color: var(--xeno-muted);
+  font-weight: 600;
+  font-size: 0.85em;
+}
+
+/* Bottom border only on rows — the sole rule; header row divider comes for free. */
+.xeno-tr {
+  border-bottom: 1px solid var(--xeno-border);
+}
+
+/* ── Tracking a row ───────────────────────────────────────────────────────────────────
+ * A dense table is READ by running your eye along a line, and until now nothing under the pointer
+ * answered — which is what makes a table feel like a picture of data instead of data.
+ *
+ * The restraint here is deliberate and is the opposite of the choice made for the toggles: no flood,
+ * no travel. You cross a dozen rows in a second while scanning, and anything with a 300ms gesture
+ * would still be arriving when you have already left. A wash that is simply THERE is the correct
+ * answer; the only thing that moves is a hairline on the leading edge, and it moves in 140ms.
+ *
+ * Body rows only. The header is not a row you track, and neither is the empty-state row — there is
+ * nothing under the pointer there to answer for. */
+.xeno-tbody .xeno-tr:hover:not(:has(.xeno-table-empty)) {
+  background: var(--xeno-hover);
+}
+
+/* Selection axis — a step ABOVE the hover wash, not the same token. They used to share
+   `--xeno-hover`, so once rows answered the pointer a hovered row and a selected row were the same
+   colour, and the selection stopped meaning anything. */
+.xeno-tr[data-selection='on'] {
+  background: var(--xeno-control);
+}
+
+/* The leading-edge mark: a hairline that grows from the middle of the row, on hover and on selection.
+   It lives on the first cell rather than the row, because a `<tr>` is not a reliable containing block
+   under `border-collapse` — cells are. */
+.xeno-tbody .xeno-tr > :first-child {
+  position: relative;
+}
+.xeno-tbody .xeno-tr > :first-child::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--xeno-text);
+  border-radius: var(--xeno-radius-hair, 1.5px);
+  transform: scaleY(0);
+  transform-origin: center;
+}
+.xeno-tbody .xeno-tr:hover:not(:has(.xeno-table-empty)) > :first-child::before,
+.xeno-tbody .xeno-tr[data-selection='on'] > :first-child::before {
+  transform: scaleY(1);
+}
+
+/* Alignment overrides (data-* seam). */
+.xeno-th[data-align='center'],
+.xeno-td[data-align='center'] {
+  text-align: center;
+}
+.xeno-th[data-align='right'],
+.xeno-td[data-align='right'] {
+  text-align: right;
+}
+
+/* Empty state — muted, roomy, column-spanning. */
+.xeno-table-empty {
+  padding: 18px 11px;
+  color: var(--xeno-muted);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .xeno-tr {
+    transition: background var(--xeno-dur) var(--xeno-ease);
+  }
+  .xeno-tbody .xeno-tr > :first-child::before {
+    transition: transform var(--xeno-dur) var(--xeno-ease);
+  }
+}

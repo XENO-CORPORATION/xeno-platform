@@ -1,0 +1,10 @@
+{
+  "//": "Tests use Node built-ins (fs/url) to load declarations from source; the shipped code stays platform-free via tsconfig.json (types:[]).",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "exclude": []
+}

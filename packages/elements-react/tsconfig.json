@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      // Resolve siblings against their built declarations (a .d.ts is exempt from rootDir/emit).
+      // The pre-hooks build @xenosystem/elements and @xenosystem/generate first. vitest resolves the
+      // same ids to source via alias, so tests need no build.
+      "@xenosystem/elements/schema": ["../elements/dist/schema.d.ts"],
+      "@xenosystem/elements/tokens": ["../elements/dist/tokens/index.d.ts"],
+      // Per-element declarations resolve to their built .d.ts (exempt from rootDir), so non-test
+      // source files can name a single glyph without pulling the elements SOURCE into this program.
+      "@xenosystem/elements/elements/*": ["../elements/dist/elements/*.d.ts"],
+      "@xenosystem/elements": ["../elements/dist/index.d.ts"],
+      "@xenosystem/generate": ["../generate/dist/index.d.ts"]
+    }
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ]
+}

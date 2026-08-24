@@ -1,0 +1,97 @@
+/*
+ * `goo.css` — the travelling hover pill, as a primitive rather than a menu feature.
+ *
+ * ONE filled row that travels to whatever you are pointing at, instead of each row painting its own
+ * background. A fill that appears on the new row and vanishes from the old one is two events with no
+ * journey between them, and it never says where it came from.
+ *
+ * This lives outside `menu.css` because the behaviour is not about menus. Any vertical list of rows can
+ * host it — a menu, a command palette, a product's own hand-rolled dropdown — and the alternative was
+ * every one of those copying the same twenty lines. Pair it with `useGooPill()`, which supplies the two
+ * numbers a stylesheet cannot work out on its own: where the row starts and how tall it is.
+ *
+ * The sidebar keeps its own version, and that is not duplication: a sidebar OWNS its rows (it maps an
+ * `items` array, so the offset is `index x stride` and pure CSS can do it). A host with arbitrary
+ * children cannot assume a stride, so it measures. Same effect, two honest implementations.
+ */
+.xeno-goo-host {
+  /* How far the pill misbehaves on the way. Restrained on purpose — enough deformation to read as
+     weight, not enough to look like jelly on something you use constantly. */
+  --xeno-goo-stretch: 0.14;
+  --xeno-goo-squeeze: 0.06;
+  --xeno-goo-dur: 220ms;
+  --xeno-goo-pill-ease: cubic-bezier(0.34, 1.12, 0.5, 1);
+  isolation: isolate;
+}
+
+/* The pill is positioned against the host, so the host has to be a containing block — but claiming
+   `position: relative` outright would be this stylesheet overruling the host's own layout. A menu panel
+   is `absolute` (it is anchored to a trigger) and a product's panel is Tailwind's `.absolute`; both are
+   one class, so whoever loads last would win, and a panel silently dropped back into flow is a much
+   worse bug than a pill in the wrong place.
+   `:where()` is specificity ZERO: it supplies `relative` only where nothing else has an opinion, and
+   loses to every real position the host declares. `absolute`, `fixed` and `sticky` are all containing
+   blocks too, so losing is the correct outcome, not a fallback. */
+:where(.xeno-goo-host) {
+  position: relative;
+}
+
+/* `--xeno-goo-inset` defaults to the 4px a padded list gives itself, so the pill lines up with the rows
+   rather than with the panel edge. Fill and radius are tokens so a product can hand it its own ink. */
+.xeno-goo-pill {
+  position: absolute;
+  z-index: -1;
+  left: var(--xeno-goo-inset, 4px);
+  right: var(--xeno-goo-inset, 4px);
+  top: var(--xeno-goo-y, 0px);
+  height: var(--xeno-goo-h, 0px);
+  background: var(--xeno-goo-fill, var(--xeno-control));
+  border-radius: var(--xeno-goo-radius, var(--xeno-radius-sm));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    top var(--xeno-goo-dur) var(--xeno-goo-pill-ease),
+    height var(--xeno-goo-dur) var(--xeno-goo-pill-ease),
+    opacity var(--xeno-dur, 0.14s) ease;
+}
+.xeno-goo-host[data-goo='on'] > .xeno-goo-pill {
+  opacity: 1;
+}
+
+/* The stretch, keyed off the row index so re-pointing restarts it — a browser will not replay an
+   animation whose name did not change. Ten rows; past that the pill still travels, it just stops
+   stretching, which is a fair trade for a list nobody scans by deformation anyway. */
+.xeno-goo-host[data-goo='on'][data-goo-index='0'] > .xeno-goo-pill { animation: xeno-goo-pill-0 var(--xeno-goo-dur) 1; }
+.xeno-goo-host[data-goo='on'][data-goo-index='1'] > .xeno-goo-pill { animation: xeno-goo-pill-1 var(--xeno-goo-dur) 1; }
+.xeno-goo-host[data-goo='on'][data-goo-index='2'] > .xeno-goo-pill { animation: xeno-goo-pill-2 var(--xeno-goo-dur) 1; }
+.xeno-goo-host[data-goo='on'][data-goo-index='3'] > .xeno-goo-pill { animation: xeno-goo-pill-3 var(--xeno-goo-dur) 1; }
+.xeno-goo-host[data-goo='on'][data-goo-index='4'] > .xeno-goo-pill { animation: xeno-goo-pill-4 var(--xeno-goo-dur) 1; }
+.xeno-goo-host[data-goo='on'][data-goo-index='5'] > .xeno-goo-pill { animation: xeno-goo-pill-5 var(--xeno-goo-dur) 1; }
+.xeno-goo-host[data-goo='on'][data-goo-index='6'] > .xeno-goo-pill { animation: xeno-goo-pill-6 var(--xeno-goo-dur) 1; }
+.xeno-goo-host[data-goo='on'][data-goo-index='7'] > .xeno-goo-pill { animation: xeno-goo-pill-7 var(--xeno-goo-dur) 1; }
+.xeno-goo-host[data-goo='on'][data-goo-index='8'] > .xeno-goo-pill { animation: xeno-goo-pill-8 var(--xeno-goo-dur) 1; }
+.xeno-goo-host[data-goo='on'][data-goo-index='9'] > .xeno-goo-pill { animation: xeno-goo-pill-9 var(--xeno-goo-dur) 1; }
+@keyframes xeno-goo-pill-0 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-pill-1 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-pill-2 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-pill-3 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-pill-4 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-pill-5 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-pill-6 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-pill-7 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-pill-8 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
+@keyframes xeno-goo-pill-9 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
+
+/* Nothing here raises the rows, on purpose. A negative `z-index` child paints below its parent's in-flow
+   content, so the rows are already over the pill without a single declaration — and a blanket
+   `position: relative` on the host's children would quietly re-anchor any absolutely-positioned
+   descendant (a submenu, a tooltip) to the wrong box. The one thing a host DOES have to give up is rows
+   that paint their own hover background: two filled surfaces read as two highlights. */
+
+/* Motion off: the pill still marks the row, it just stops travelling and deforming to get there. */
+@media (prefers-reduced-motion: reduce) {
+  .xeno-goo-pill {
+    transition: opacity var(--xeno-dur, 0.14s) ease;
+    animation: none !important;
+  }
+}

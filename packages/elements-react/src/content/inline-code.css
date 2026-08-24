@@ -1,0 +1,14 @@
+/*
+ * <InlineCode> — an inline monospace chip for prose. Monochrome shell: a `--xeno-surface` fill and
+ * `--xeno-text` ink (never the legacy peach), `radius-sm` corners, tight padding. Tokens only, no hue.
+ */
+.xeno-inline-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875em;
+  padding: 2px 6px;
+  background: var(--xeno-surface);
+  border-radius: var(--xeno-style-control-radius);
+  color: var(--xeno-text);
+  white-space: break-spaces;
+  overflow-wrap: anywhere;
+}

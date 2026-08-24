@@ -1,0 +1,219 @@
+/*
+ * <ModelPicker> — a trigger + an absolute panel (tray rows / rail chips). Monochrome shell: hairline
+ * borders + one soft (uncoloured) shadow for the panel depth. Only the theme custom properties from
+ * xeno-theme.css are used; no literal colours, no hues. Motion is transform/opacity only, gated behind
+ * prefers-reduced-motion.
+ */
+
+.xeno-model-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+/* ── Trigger ─────────────────────────────────────────────────────────────────────── */
+/* Extends .xeno-btn (controls.css) — here we just lay out glyph · label · chevron. */
+.xeno-mp-trigger {
+  justify-content: flex-start;
+  min-width: 180px;
+  max-width: 320px;
+}
+.xeno-mp-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xeno-mp-placeholder {
+  color: var(--xeno-muted);
+  font-weight: 400;
+}
+.xeno-mp-chevron {
+  display: inline-flex;
+  color: var(--xeno-muted);
+  transition: transform var(--xeno-dur) var(--xeno-ease);
+}
+.xeno-model-picker[data-open='true'] .xeno-mp-chevron {
+  transform: rotate(180deg);
+}
+
+/* ── Panel (shared) ──────────────────────────────────────────────────────────────── */
+.xeno-mp-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  background: var(--xeno-style-overlay-bg);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-md);
+  box-shadow: var(--xeno-style-picker-shadow);
+  outline: none;
+  animation: xeno-mp-in var(--xeno-dur) var(--xeno-ease);
+}
+.xeno-mp-panel:focus-visible {
+  border-color: var(--xeno-muted);
+}
+
+@keyframes xeno-mp-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Tray layout ─────────────────────────────────────────────────────────────────── */
+.xeno-mp-panel--tray {
+  min-width: max(100%, 220px);
+  max-height: 320px;
+  padding: 4px;
+  overflow-y: auto;
+}
+.xeno-mp-group + .xeno-mp-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--xeno-border);
+}
+.xeno-mp-group-label {
+  padding: 6px 8px 4px;
+  color: var(--xeno-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.xeno-mp-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--xeno-radius-sm);
+  color: var(--xeno-text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background var(--xeno-dur) ease;
+}
+.xeno-mp-option[data-active='true'] {
+  background: var(--xeno-hover);
+}
+.xeno-mp-option[data-selection='on'] {
+  background: var(--xeno-control);
+}
+.xeno-mp-check {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  color: var(--xeno-text);
+}
+.xeno-mp-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Rail layout ─────────────────────────────────────────────────────────────────── */
+.xeno-mp-panel--rail {
+  min-width: max(100%, 240px);
+  max-width: 420px;
+  padding: 8px;
+}
+/* Viewport clips the scroller and carries the left/right fade edges. */
+.xeno-mp-rail-viewport {
+  position: relative;
+}
+.xeno-mp-rail-viewport::before,
+.xeno-mp-rail-viewport::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  pointer-events: none;
+  z-index: 1;
+}
+.xeno-mp-rail-viewport::before {
+  left: 0;
+  background: linear-gradient(to right, var(--xeno-elevated), transparent);
+}
+.xeno-mp-rail-viewport::after {
+  right: 0;
+  background: linear-gradient(to left, var(--xeno-elevated), transparent);
+}
+.xeno-mp-rail {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 4px;
+  scrollbar-width: none;
+}
+.xeno-mp-rail::-webkit-scrollbar {
+  display: none;
+}
+.xeno-mp-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  flex: none;
+  position: relative;
+  padding: 6px 12px;
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-control);
+  color: var(--xeno-text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--xeno-dur) ease,
+    border-color var(--xeno-dur) ease;
+}
+.xeno-mp-chip[data-active='true'] {
+  background: var(--xeno-hover);
+  border-color: var(--xeno-muted);
+}
+.xeno-mp-chip[data-selection='on'] {
+  background: var(--xeno-control);
+  border-color: var(--xeno-muted);
+  padding-right: 26px;
+}
+.xeno-mp-chip-provider {
+  color: var(--xeno-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.xeno-mp-chip-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.xeno-mp-chip-check {
+  display: inline-flex;
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  color: var(--xeno-text);
+}
+
+/* ── Disabled ────────────────────────────────────────────────────────────────────── */
+.xeno-model-picker[data-availability='disabled'] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-mp-chevron,
+  .xeno-mp-option,
+  .xeno-mp-chip {
+    transition: none;
+  }
+  .xeno-mp-panel {
+    animation: none;
+  }
+}

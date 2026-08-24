@@ -1,5 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- `xeno` brings the XENO Elements theme tokens into scope for the whole document and lets any XENO
+     component render correctly wherever it is adopted. It restyles nothing on its own: every rule in
+     that stylesheet is scoped to a `.xeno-*` class, and no component here carries one yet.
+     `xeno-scroll-wake` opts the PAGE scrollbar into the system one — absent until the page moves, then
+     a rail with the thumb on it. It is gated on the `data-scrolling` attribute that main.tsx sets,
+     because the document element counts as hovered whenever the pointer is anywhere in the window. -->
+<html lang="en" class="xeno xeno-scroll-wake">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon-v2.svg" />
@@ -36,32 +42,17 @@
         flex-direction: column;
       }
 
-      /* Custom Scrollbar Styles */
-      /* For Webkit browsers (Chrome, Safari) */
-      ::-webkit-scrollbar {
-        width: 8px; /* Width of the scrollbar */
-        height: 8px; /* Height of the scrollbar for horizontal scroll */
-      }
+      /* Scrollbars are XENO Elements' now — see `scrollbar.css`. A third copy of them used to live
+         here: an 8px webkit bar in #3a3a3d, and under it a universal `* { scrollbar-width: thin }`
+         "for Firefox".
 
-      ::-webkit-scrollbar-track {
-        background: #1e1e1e; /* Color of the track (the area the scrollbar moves in) */
-        border-radius: 4px;
-      }
+         That last rule is why none of it ever drew. Since Chrome 121, an element with `scrollbar-width`
+         set has its `::-webkit-scrollbar` pseudo-elements IGNORED — and on `*` that is the whole
+         document, so the eight rules above it were dead the moment they were written, with nothing
+         anywhere to say so. The same pair existed twice more, in `src/index.css`, hiding the same way.
 
-      ::-webkit-scrollbar-thumb {
-        background: #3a3a3d; /* Color of the scrollbar thumb (the draggable part) */
-        border-radius: 4px; /* Rounded corners for the thumb */
-      }
-
-      ::-webkit-scrollbar-thumb:hover {
-        background: #555; /* Color of the thumb on hover */
-      }
-
-      /* For Firefox */
-      * {
-        scrollbar-width: thin; /* "auto" or "thin" */
-        scrollbar-color: #3a3a3d #1e1e1e; /* thumb and track color */
-      }
+         The lesson is in the pairing, not the values: the two styling models are mutually exclusive,
+         and writing both is not belt-and-braces, it is switching the good one off. */
 
       /* Animated Ellipsis for "Okay, let me figure out..." */
       .thinking-ellipsis .dot {

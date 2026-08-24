@@ -1,0 +1,70 @@
+/*
+ * Avatar + AvatarStack — a person/agent tile and its overlapping cluster. CSS-first: the square edge is
+ * an inline `--xeno-avatar-size` var (set by the component from `size`), so metrics never drift from the
+ * data. Rounded SQUARES only (`radius-xs`), never circles. Monochrome shell; depth is a hairline border
+ * plus, in the stack, a flat canvas ring. No literal colours — theme tokens only.
+ */
+
+.xeno-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--xeno-avatar-size, 24px);
+  height: var(--xeno-avatar-size, 24px);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-xs);
+  background: var(--xeno-control);
+  color: var(--xeno-muted);
+  overflow: hidden;
+  user-select: none;
+  vertical-align: middle;
+}
+
+/* Image fill — cover the square, clipped to its rounded corners. */
+.xeno-avatar-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+/* Initials + '+N' overflow text — centred, uppercase, muted, scaled off the edge length. */
+.xeno-avatar-initials {
+  font-family: inherit;
+  font-size: calc(var(--xeno-avatar-size, 24px) * 0.4);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--xeno-muted);
+  text-transform: uppercase;
+}
+
+/* Glyph fallback inherits the tile's muted ink via currentColor. */
+.xeno-avatar[data-variant='icon'] {
+  color: var(--xeno-muted);
+}
+
+/* ── AvatarStack ─────────────────────────────────────────────────────────────────── */
+.xeno-avatar-stack {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+/* Overlap: pull each tile left and ring it in the canvas so the stack reads as separated squares. */
+.xeno-avatar-stack > .xeno-avatar {
+  position: relative;
+  margin-left: -8px;
+  box-shadow: 0 0 0 2px var(--xeno-canvas);
+}
+.xeno-avatar-stack > .xeno-avatar:first-child {
+  margin-left: 0;
+}
+
+/* The '+N' tile sits on the elevated surface to distinguish it from the people tiles. */
+.xeno-avatar-more {
+  background: var(--xeno-elevated);
+}

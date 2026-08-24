@@ -1,0 +1,65 @@
+/*
+ * StatusIndicator — an inline square mark + label.
+ *
+ * CSS-first: the mark's paint is driven by `data-tone`. The mark is a rounded SQUARE (radius-xs),
+ * never a circle. `neutral`/`active` stay monochrome (theme greys); `success` colours from the injected
+ * `--xeno-status-tone` var (set from the status token by the renderer); `danger` uses `--xeno-danger`.
+ * The only motion is the `active` mark's breathing, gated behind `prefers-reduced-motion: no-preference`.
+ * No literal colours here.
+ */
+
+.xeno-statusindicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--xeno-text);
+}
+
+.xeno-statusindicator-mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--xeno-radius-xs);
+  background: var(--xeno-muted);
+}
+
+.xeno-statusindicator[data-tone='active'] .xeno-statusindicator-mark {
+  background: var(--xeno-active);
+}
+
+.xeno-statusindicator[data-tone='success'] .xeno-statusindicator-mark {
+  background: var(--xeno-status-tone);
+}
+
+.xeno-statusindicator[data-tone='danger'] .xeno-statusindicator-mark {
+  background: var(--xeno-danger);
+}
+
+/* neutral label reads a touch dimmer; the tonal ones keep the mark as the accent */
+.xeno-statusindicator[data-tone='neutral'] .xeno-statusindicator-label {
+  color: var(--xeno-muted);
+}
+
+.xeno-statusindicator[data-tone='danger'] .xeno-statusindicator-label {
+  color: var(--xeno-danger);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes xeno-statusindicator-breathe {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(0.72);
+      opacity: 0.6;
+    }
+  }
+  .xeno-statusindicator[data-tone='active'] .xeno-statusindicator-mark {
+    animation: xeno-statusindicator-breathe 1.6s var(--xeno-ease) infinite;
+  }
+}

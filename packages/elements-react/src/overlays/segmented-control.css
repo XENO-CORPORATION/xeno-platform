@@ -1,0 +1,185 @@
+/*
+ * <SegmentedControl> — connected options in one bordered track (rounded square). CSS-first: the chosen
+ * option carries `data-selection="on"`; a disabled option carries `data-availability="disabled"`. Size
+ * metrics arrive as inline vars. Monochrome only.
+ *
+ * The fill is ONE thumb that slides between options, not a background each option paints for itself —
+ * the same shared-indicator idea as the sidebar's goo pill, laid on its side. A fill that simply
+ * appears on the new option and vanishes from the old one tells you nothing about where it came from;
+ * one that travels does.
+ *
+ * How it can slide with no measuring. The track is a GRID of `1fr` columns, so every segment is exactly
+ * as wide as the widest label — which makes a segment's width pure arithmetic (track minus padding
+ * minus gaps, over the count) instead of something only layout knows. React supplies the two numbers it
+ * already has, `--xeno-seg-count` and `--xeno-seg-index`, as plain data; CSS does the rest. No
+ * measuring, no animation runtime, and the thumb lands on the segment to the pixel.
+ *
+ * It must be grid, not `flex: 1 1 0`. A flex item's `min-width` defaults to `auto`, i.e. its own
+ * min-content, so each option gets clamped to the width of its own label and the segments come out
+ * UNEQUAL — the thumb then computes an average width and sits beside the option instead of on it.
+ * Grid's `1fr` has no such floor: every track resolves to the largest contribution, so they are equal
+ * by construction and the arithmetic below is exact.
+ */
+
+/* Registering the index as a real `<number>` is what makes the slide smooth. An unregistered custom
+   property is a string as far as the engine is concerned: it flips from "0" to "2" in one frame, and
+   anything computed from it flips with it. Typed, it interpolates — so the transition below runs on the
+   NUMBER, and the thumb's offset is simply recomputed every frame from a value that is genuinely
+   travelling. That is also why the thumb itself does not transition `translate`: two easings stacked on
+   the same movement smear it. */
+@property --xeno-seg-index {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+.xeno-segmented {
+  /* The goo. Mid-flight the thumb ELONGATES along the direction it is travelling and thins across it —
+     a body of liquid reaching for where it is going — then rebounds a hair the other way as it lands.
+     Both amounts are multiplied by how far it is going (`--xeno-seg-dist`, from React), so a jump
+     across the whole control stretches visibly more than a step to the neighbour. That is the part
+     that sells it as matter rather than as a rectangle with an easing curve. */
+  --xeno-seg-stretch: 0.16;
+  --xeno-seg-squeeze: 0.07;
+  --xeno-seg-goo-x: calc(1 + var(--xeno-seg-stretch) * var(--xeno-seg-dist, 1));
+  --xeno-seg-goo-y: calc(1 - var(--xeno-seg-squeeze) * var(--xeno-seg-dist, 1));
+  /* The rebound: a small counter-squash on the way out of the stretch. */
+  --xeno-seg-goo-x2: calc(1 - var(--xeno-seg-squeeze) * 0.45);
+  --xeno-seg-goo-y2: calc(1 + var(--xeno-seg-squeeze) * 0.45);
+  /* ONE duration for the travel and the deformation. If they drift apart the stretch peaks somewhere
+     other than mid-flight and the whole thing reads as a glitch. */
+  --xeno-seg-dur: 300ms;
+  --xeno-seg-gap: 2px;
+  /* The track's own inset, named once: the thumb's width subtracts exactly this, twice. Hard-coding it
+     in two places is how a thumb drifts a couple of pixels off its segment. */
+  --xeno-seg-pad: 2px;
+  --xeno-seg-ease: cubic-bezier(0.34, 1.12, 0.5, 1);
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr; /* equal segments, by construction */
+  /* Explicit content-width so a column parent (align-items:stretch) cannot stretch the track to full
+     width — a segmented control always hugs its options. */
+  width: fit-content;
+  align-items: stretch;
+  gap: var(--xeno-seg-gap);
+  padding: var(--xeno-seg-pad);
+  background: var(--xeno-surface);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-md);
+  /* The travel itself: the index slides, and everything computed from it slides with it. */
+  transition: --xeno-seg-index var(--xeno-seg-dur) var(--xeno-seg-ease);
+}
+
+/* The travelling fill. `100%` in `translate` is the thumb's OWN width, so one segment plus one gap is
+   exactly `100% + var(--xeno-seg-gap)` — the stride, without ever naming a pixel width. */
+.xeno-segmented-thumb {
+  position: absolute;
+  z-index: -1;
+  top: var(--xeno-seg-pad);
+  bottom: var(--xeno-seg-pad);
+  left: var(--xeno-seg-pad);
+  /* `100%` here is the track's PADDING box, so the options' row is that minus the padding on both
+     sides; take out the gaps and divide by the count and you have one segment, exactly. */
+  width: calc(
+    (100% - var(--xeno-seg-pad) * 2 - var(--xeno-seg-gap) * (var(--xeno-seg-count, 1) - 1)) /
+      var(--xeno-seg-count, 1)
+  );
+  translate: calc(var(--xeno-seg-index, 0) * (100% + var(--xeno-seg-gap))) 0;
+  background: var(--xeno-control);
+  border-radius: var(--xeno-style-control-radius);
+  pointer-events: none;
+}
+/* Nothing selected (a `value` matching no option) — no thumb rather than a thumb parked on the first. */
+.xeno-segmented[data-selection='off'] .xeno-segmented-thumb {
+  opacity: 0;
+}
+
+.xeno-segmented-option {
+  position: relative;
+  z-index: 1; /* over the thumb */
+  display: inline-flex;
+  min-width: 0; /* the grid track owns the width; do not let the label put a floor under it */
+  align-items: center;
+  justify-content: center;
+  gap: var(--xeno-gap, 6px);
+  height: calc(var(--xeno-h, 32px) - 4px);
+  padding: 0 var(--xeno-padx, 12px);
+  font-family: inherit;
+  font-size: var(--xeno-font, 14px);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--xeno-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--xeno-radius-xs);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    color var(--xeno-dur) var(--xeno-ease),
+    background var(--xeno-dur) var(--xeno-ease);
+}
+
+/* Hover brightens the LABEL and nothing else. A tint behind an unselected option is a second filled
+   surface sliding under the thumb — which is exactly what reads as the background being wrong mid-swap.
+   One control, one fill: the thumb. */
+.xeno-segmented-option:hover:not([data-availability='disabled']):not([data-selection='on']) {
+  color: var(--xeno-text);
+}
+
+/* The selected option no longer paints a fill of its own — the thumb under it is the fill. */
+.xeno-segmented-option[data-selection='on'] {
+  color: var(--xeno-text);
+}
+
+.xeno-segmented-option:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--xeno-canvas),
+    0 0 0 4px var(--xeno-border);
+}
+
+.xeno-segmented-option[data-availability='disabled'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* The squash, keyed off the track's `data-index`. One keyframe track per position, all identical, for
+   the same reason as the sidebar's: moving to another segment only changes which rule matches, and a
+   browser will not restart an animation whose name did not change. Eight positions — a segmented
+   control with more options than that wants to be a Select. Past eight the thumb still travels; it
+   just stops squashing. */
+.xeno-segmented[data-index='0'] .xeno-segmented-thumb { animation: xeno-seg-goo-0 var(--xeno-seg-dur) 1; }
+.xeno-segmented[data-index='1'] .xeno-segmented-thumb { animation: xeno-seg-goo-1 var(--xeno-seg-dur) 1; }
+.xeno-segmented[data-index='2'] .xeno-segmented-thumb { animation: xeno-seg-goo-2 var(--xeno-seg-dur) 1; }
+.xeno-segmented[data-index='3'] .xeno-segmented-thumb { animation: xeno-seg-goo-3 var(--xeno-seg-dur) 1; }
+.xeno-segmented[data-index='4'] .xeno-segmented-thumb { animation: xeno-seg-goo-4 var(--xeno-seg-dur) 1; }
+.xeno-segmented[data-index='5'] .xeno-segmented-thumb { animation: xeno-seg-goo-5 var(--xeno-seg-dur) 1; }
+.xeno-segmented[data-index='6'] .xeno-segmented-thumb { animation: xeno-seg-goo-6 var(--xeno-seg-dur) 1; }
+.xeno-segmented[data-index='7'] .xeno-segmented-thumb { animation: xeno-seg-goo-7 var(--xeno-seg-dur) 1; }
+/* Armed only once the value has actually changed — otherwise every segmented control on the page
+   squashes itself on load. */
+.xeno-segmented:not([data-motion='ready']) .xeno-segmented-thumb { animation: none; }
+
+@keyframes xeno-seg-goo-0 { 0% { scale: 1 1; } 34% { scale: var(--xeno-seg-goo-x) var(--xeno-seg-goo-y); } 72% { scale: var(--xeno-seg-goo-x2) var(--xeno-seg-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-seg-goo-1 { 0% { scale: 1 1; } 34% { scale: var(--xeno-seg-goo-x) var(--xeno-seg-goo-y); } 72% { scale: var(--xeno-seg-goo-x2) var(--xeno-seg-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-seg-goo-2 { 0% { scale: 1 1; } 34% { scale: var(--xeno-seg-goo-x) var(--xeno-seg-goo-y); } 72% { scale: var(--xeno-seg-goo-x2) var(--xeno-seg-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-seg-goo-3 { 0% { scale: 1 1; } 34% { scale: var(--xeno-seg-goo-x) var(--xeno-seg-goo-y); } 72% { scale: var(--xeno-seg-goo-x2) var(--xeno-seg-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-seg-goo-4 { 0% { scale: 1 1; } 34% { scale: var(--xeno-seg-goo-x) var(--xeno-seg-goo-y); } 72% { scale: var(--xeno-seg-goo-x2) var(--xeno-seg-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-seg-goo-5 { 0% { scale: 1 1; } 34% { scale: var(--xeno-seg-goo-x) var(--xeno-seg-goo-y); } 72% { scale: var(--xeno-seg-goo-x2) var(--xeno-seg-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-seg-goo-6 { 0% { scale: 1 1; } 34% { scale: var(--xeno-seg-goo-x) var(--xeno-seg-goo-y); } 72% { scale: var(--xeno-seg-goo-x2) var(--xeno-seg-goo-y2); } 100% { scale: 1 1; } }
+@keyframes xeno-seg-goo-7 { 0% { scale: 1 1; } 34% { scale: var(--xeno-seg-goo-x) var(--xeno-seg-goo-y); } 72% { scale: var(--xeno-seg-goo-x2) var(--xeno-seg-goo-y2); } 100% { scale: 1 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* The travel lives on the track (the index), so that is where it has to be switched off. */
+  .xeno-segmented,
+  .xeno-segmented-option {
+    transition: none;
+  }
+  /* The thumb still marks the segment — it just gets there without travelling or squashing. */
+  .xeno-segmented-thumb {
+    animation: none !important;
+  }
+}

@@ -1,0 +1,71 @@
+/*
+ * `@xenosystem/elements-react/xeno-elements.css` — the one-import stylesheet.
+ *
+ * Pulls in the theme tokens, the element renderer styles, the Tier-1 control styles, and every
+ * Tier-2 element stylesheet. Import this once and scope your tree with a `.xeno` element:
+ *
+ *   import '@xenosystem/elements-react/xeno-elements.css'
+ *
+ * Tokens must come first so every rule below can read the CSS custom properties.
+ */
+
+/* Foundation: tokens, then the renderer + controls. */
+@import './xeno-theme.css';
+/* The chrome axis — one file per construction, one owner each. See either file's header. */
+@import './style-industrial.css';
+@import './style-soft.css';
+@import './size.css';
+@import './xeno-element.css';
+@import './scrollbar.css';
+@import './icon-motion.css';
+@import './goo.css';
+@import './controls.css';
+
+/* Containers */
+@import './containers/card.css';
+@import './containers/panel.css';
+@import './containers/chip.css';
+@import './containers/tile.css';
+@import './containers/message-bubble.css';
+@import './containers/Badges.css';
+@import './containers/avatar.css';
+@import './containers/list-row.css';
+@import './containers/table.css';
+
+/* Overlays (Popover shares menu.css) */
+@import './overlays/menu.css';
+@import './overlays/modal.css';
+@import './overlays/tabs.css';
+@import './overlays/segmented-control.css';
+@import './overlays/pill-filter.css';
+@import './overlays/tooltip.css';
+@import './overlays/date-time-picker.css';
+@import './overlays/reveal.css';
+@import './overlays/picker-field.css';
+
+/* Forms */
+@import './forms/Checkbox.css';
+@import './forms/RadioGroup.css';
+
+/* Content */
+@import './content/code-block.css';
+@import './content/source-card.css';
+@import './content/sources-disclosure.css';
+@import './content/model-picker.css';
+@import './content/inline-code.css';
+@import './content/callout.css';
+@import './content/collapsible.css';
+@import './content/caret.css';
+
+/* Nav */
+@import './nav/sidebar.css';
+
+/* Layout */
+@import './layout/ResizablePanel.css';
+
+/* Status */
+@import './status/thinkingcube.css';
+@import './status/spinner.css';
+@import './status/progress-bar.css';
+@import './status/steptimeline.css';
+@import './status/statusindicator.css';

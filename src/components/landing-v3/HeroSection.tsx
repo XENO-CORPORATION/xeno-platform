@@ -106,7 +106,7 @@ function ChatDemo() {
       </div>
       <div className="mt-auto flex items-center gap-2 rounded-[6px] border border-white/[0.07] bg-white/[0.02] py-2 pl-2.5 pr-1.5">
         <Paperclip className="h-4 w-4 shrink-0 text-[#69635b]" />
-        <span className="flex-1 truncate text-[12px] text-[#69635b]">Ask anything…<span className="xeno-caret ml-px inline-block h-3 w-px -translate-y-px bg-[#69635b] align-middle" /></span>
+        <span className="flex-1 truncate text-[12px] text-[#69635b]">Ask anything…<span className="chat-caret ml-px inline-block h-3 w-px -translate-y-px bg-[#69635b] align-middle" /></span>
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[5px] bg-white/10 text-[#cdc7be]"><SendHorizontal className="h-4 w-4" /></span>
       </div>
     </div>
@@ -299,7 +299,7 @@ const MOCKS: Record<string, () => React.ReactNode> = {
       <div className="shrink-0 truncate text-[#d8d2ca] motion-safe:group-hover/panel:[animation:xenoMsgIn_0.4s_ease-out_both]" style={{ animationDelay: '0.56s' }}><span className="text-[#69635b]">✓</span> 6 steps · 4 assets · ready</div>
       <div className="mt-auto flex shrink-0 items-center gap-1.5 pt-1.5">
         <span className="truncate text-[#69635b]">xeno@workspace ~ %</span>
-        <span className="xeno-caret inline-block h-3 w-1.5 shrink-0 bg-white/65" />
+        <span className="chat-caret inline-block h-3 w-1.5 shrink-0 bg-white/65" />
       </div>
     </div>
   ),

@@ -1,0 +1,56 @@
+/*
+ * Reveal — an in-flow animated disclosure. The region's height (inline, animated) pushes following
+ * content DOWN so the panel never floats over the page; the clip is panel-WIDTH so a wide child shows
+ * full width and only unfolds VERTICALLY; the content fades up a beat after. Tokens only, motion is
+ * transform/opacity/height behind the reduce guard.
+ */
+
+.xeno-reveal {
+  position: relative;
+  height: 0;
+  margin-top: 7px;
+  transition: height 240ms var(--xeno-ease);
+}
+
+/* Absolute + panel-width (max-content), so a wide calendar shows FULL width (never cut on the side);
+   as tall as the region (height:100%), so the reveal only clips VERTICALLY. `data-clip=false` lifts it
+   once open so edge focus rings are not cut. */
+.xeno-reveal-clip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  height: 100%;
+  overflow: hidden;
+  z-index: 50;
+}
+.xeno-reveal-clip[data-align='end'] {
+  left: auto;
+  right: 0;
+}
+.xeno-reveal-clip[data-clip='false'] {
+  overflow: visible;
+}
+
+.xeno-reveal-content {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 200ms ease-out 40ms,
+    transform 200ms ease-out 40ms;
+}
+.xeno-reveal[data-open='true'] .xeno-reveal-content {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-reveal,
+  .xeno-reveal-content {
+    transition: none;
+  }
+  .xeno-reveal-content {
+    opacity: 1;
+    transform: none;
+  }
+}

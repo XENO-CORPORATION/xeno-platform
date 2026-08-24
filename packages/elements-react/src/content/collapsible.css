@@ -1,0 +1,80 @@
+/*
+ * <Collapsible> — a "Thoughts"-style disclosure. Borderless summary (lightbulb glyph + label + chevron)
+ * over a Callout-like body (2px `--xeno-border` left rule, 12px inset). CSS-first: `data-open` on the root
+ * rotates the chevron and lifts the label ink. Tokens only; motion is transform/opacity behind the guard.
+ */
+.xeno-collapsible {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Summary — a borderless text button, left-aligned to its content. */
+.xeno-collapsible-summary {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  padding: 2px 4px 2px 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--xeno-radius-sm);
+  color: var(--xeno-muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--xeno-dur) var(--xeno-ease);
+}
+.xeno-collapsible-summary:hover {
+  color: var(--xeno-text);
+}
+.xeno-collapsible-summary:focus-visible {
+  outline: none;
+  color: var(--xeno-text);
+  box-shadow:
+    0 0 0 2px var(--xeno-canvas),
+    0 0 0 4px var(--xeno-border);
+}
+.xeno-collapsible[data-open] .xeno-collapsible-summary {
+  color: var(--xeno-text);
+}
+
+.xeno-collapsible-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--xeno-muted);
+}
+
+.xeno-collapsible-label {
+  flex: none;
+}
+
+/* Chevron — points right when closed, down when open (root carries the seam). */
+.xeno-collapsible-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--xeno-muted);
+  transform: rotate(-90deg);
+  transition: transform var(--xeno-dur) var(--xeno-ease);
+}
+.xeno-collapsible[data-open] .xeno-collapsible-chevron {
+  transform: rotate(0deg);
+}
+
+/* Body — set apart like a Callout; hidden until open. */
+.xeno-collapsible-body {
+  margin-top: 6px;
+  padding-left: 12px;
+  border-left: 2px solid var(--xeno-border);
+  color: var(--xeno-muted);
+}
+.xeno-collapsible-body[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-collapsible-summary,
+  .xeno-collapsible-chevron {
+    transition: none;
+  }
+}

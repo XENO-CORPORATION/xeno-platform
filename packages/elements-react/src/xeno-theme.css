@@ -1,0 +1,102 @@
+/*
+ * XENO theme — the design tokens as CSS custom properties. Scope with a `.xeno` element (or copy the
+ * vars onto :root). Monochrome SHELL: every role below is greyscale; only `--xeno-danger` carries hue.
+ * Values mirror @xenosystem/elements/tokens (guarded by theme.test.ts). Dark is the default; light is a
+ * PROPOSED companion (the design-system locks dark; the chat lab supplies the light ground). Dim: TODO.
+ */
+
+.xeno {
+  /* radius scale — rounded squares, never circles */
+  --xeno-radius-hair: 1.5px;
+  --xeno-radius-xs: 3px;
+  --xeno-radius-sm: 5px;
+  --xeno-radius-md: 6px;
+  --xeno-radius-control: 8px;
+  --xeno-radius-card: 12px;
+
+  /* colour roles — dark (DESIGN_SYSTEM §2) */
+  --xeno-canvas: #08080a;
+  /* §2 Layer 1 "Canvas/viewport" — the body plate of any chrome stack.
+     ⚠️ NAMING TRAP: `--xeno-canvas` above is `surface.page`, NOT `surface.canvas`. The token named
+     `canvas` is THIS one. Renaming would touch every component, so it is recorded, not deepened. */
+  --xeno-viewport: #111111;
+  --xeno-surface: #161618;
+  /* §2 Layer 3 "Panel header". The token (`surface.panelHeader`) already existed; this block simply
+     had not exposed it, which is why the panel had no second surface to separate its heading onto. */
+  --xeno-panel-header: #1a1a1a;
+  /* §2 "Dropdown/menu" — context menus, dropdowns. The last §2 layer the theme had not exposed. */
+  --xeno-dropdown: #101011;
+  --xeno-elevated: #111115;
+  --xeno-control: #2b2b2b;
+  --xeno-border: rgba(255, 255, 255, 0.1);
+  /* Half-weight hairline. `Plate` frames its shell at white/[0.05]; `--xeno-border` (0.1) is twice
+     that and reads as a drawn line rather than an edge. The playbook calls it `border-subtle`. */
+  --xeno-border-subtle: rgba(255, 255, 255, 0.05);
+  --xeno-hover: rgba(169, 169, 177, 0.08);
+  --xeno-text: #d8d8de;
+  --xeno-muted: #7f7f86;
+  --xeno-active: #acacb4;
+  --xeno-danger: #ef4444;
+  --xeno-danger-hover: #dc2626;
+  --xeno-on-accent: #08080a;
+
+  /* scrollbar — its own alphas on purpose. A thumb sitting on any surface in the set has to be legible
+     without being furniture, and neither `--xeno-border` (too faint to grab) nor `--xeno-muted` (too
+     loud) is that value. Nothing is painted at rest; `-hover` is the bar in the region, `-active` is
+     the bar under the pointer. The pads set the widths: 5px of border on a 12px gutter leaves a 2px
+     rail, 3px leaves a 6px thumb, 2px leaves the 8px it grows to. */
+  --xeno-scroll-size: 12px;
+  --xeno-scroll-pad: 3px;
+  --xeno-scroll-pad-hover: 2px;
+  --xeno-scroll-rail-pad: 5px;
+  --xeno-scroll-rail: rgba(255, 255, 255, 0.07);
+  --xeno-scroll-thumb: rgba(255, 255, 255, 0.16);
+  --xeno-scroll-thumb-hover: rgba(255, 255, 255, 0.28);
+  --xeno-scroll-thumb-active: rgba(255, 255, 255, 0.42);
+
+  /* motion — easing families (E1 base + E2–E5 from the chat lab) */
+  --xeno-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --xeno-ease-stagger: cubic-bezier(0.22, 0.7, 0.2, 1);
+  --xeno-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --xeno-ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --xeno-ease-overshoot: cubic-bezier(0.34, 1.4, 0.5, 1);
+  /* duration ladder + per-item stagger */
+  --xeno-dur: 140ms;
+  --xeno-dur-fast: 120ms;
+  --xeno-dur-entrance: 240ms;
+  --xeno-dur-modal: 420ms;
+  --xeno-stagger: 40ms;
+
+  color: var(--xeno-text);
+}
+
+
+/* Light — PROPOSED (chat lab ground). Same monochrome roles, inverted values. */
+.xeno[data-theme='light'] {
+  --xeno-canvas: #faf9f7;
+  --xeno-surface: #ffffff;
+  --xeno-dropdown: #ffffff;
+  --xeno-elevated: #ffffff;
+  --xeno-control: #f0efec;
+  /* PROPOSED, like the rest of this block. Dark puts the heading one step LIGHTER than the body
+     (#1a1a1a over #161618); light mirrors that by going one step darker than a white body. It reuses
+     the existing control value rather than inventing a hue — but it must not equal `--xeno-canvas`,
+     or the 4px gap stops reading against the page and the separated architecture disappears. A real
+     light ramp is the design system's call, not this file's. */
+  --xeno-panel-header: #f0efec;
+  /* PROPOSED. Reuses this block's white rather than minting a fourth light value; the only
+     requirement is that shell / plate / body stay mutually distinguishable, or the gaps stop reading
+     and the separated construction collapses. */
+  --xeno-viewport: #ffffff;
+  --xeno-border: rgba(0, 0, 0, 0.12);
+  --xeno-border-subtle: rgba(0, 0, 0, 0.06);
+  --xeno-hover: rgba(0, 0, 0, 0.05);
+  --xeno-text: #1a1815;
+  --xeno-muted: #6f6b64;
+  --xeno-active: #3a3833;
+  --xeno-on-accent: #faf9f7;
+  --xeno-scroll-rail: rgba(0, 0, 0, 0.08);
+  --xeno-scroll-thumb: rgba(0, 0, 0, 0.18);
+  --xeno-scroll-thumb-hover: rgba(0, 0, 0, 0.32);
+  --xeno-scroll-thumb-active: rgba(0, 0, 0, 0.46);
+}

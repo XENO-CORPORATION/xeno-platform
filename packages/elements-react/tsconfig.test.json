@@ -1,0 +1,13 @@
+{
+  "//": "Tests render via react-dom/server and import a few declarations from source; noEmit lifts the rootDir constraint.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    // Tests import a few declarations from the elements SOURCE (outside the package). noEmit means
+    // rootDir has no layout effect, but tsc still enforces containment — widen it to the repo root.
+    "rootDir": "../.."
+  },
+  "include": ["src"],
+  "exclude": []
+}

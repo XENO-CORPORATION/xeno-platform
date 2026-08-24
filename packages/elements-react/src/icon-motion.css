@@ -1,0 +1,1909 @@
+/* =============================================================================
+   XENO icon motion — bespoke per-glyph hover animations
+   -----------------------------------------------------------------------------
+   The renderer stamps a `data-glyph` attribute on every icon it draws
+   (`<svg class="xeno-element" data-glyph="search"> … </svg>`), gives every shape
+   inside it `class="xeno-part"`, and numbers each shape with a `data-part` index
+   (its position in the geometry).
+
+   Each glyph animates the moving parts that carry its MEANING: some drive their
+   individual PARTS (a bell's clapper, an eye's pupil, a list's rows), others move
+   as a WHOLE icon (a gear spins, an arrow travels). A glyph is one or the other —
+   never both — so nothing double-animates.
+
+   A single pair of triggers plays the right keyframe when the icon itself is
+   hovered, or when any interactive host that wraps it is hovered (buttons, chips,
+   toggles, list rows, menu items, tabs, …). Animations use transform and opacity
+   ONLY (compositor-friendly, no layout thrash); every keyframe starts and ends at
+   the identity transform so icons always rest cleanly. Motion is switched off
+   entirely under prefers-reduced-motion.
+   ============================================================================= */
+
+/* ---- Base: defaults every glyph + every part inherits ---------------------- */
+.xeno-element[data-glyph] {
+  transform-box: fill-box;
+  transform-origin: center;
+  --xeno-icon-anim: none;
+  --xeno-icon-dur: 520ms;
+  --xeno-icon-ease: var(--xeno-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.xeno-element[data-glyph] .xeno-part {
+  transform-box: fill-box;
+  transform-origin: center;
+  --part-anim: none;
+  --part-dur: 520ms;
+}
+
+/* ---- Per-glyph mapping + keyframes ----------------------------------------- */
+
+/* menu (parts) — three bars ripple left-to-right, one after another */
+.xeno-element[data-glyph='menu'] .xeno-part { transform-origin: left center; }
+.xeno-element[data-glyph='menu'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-menu-0; }
+.xeno-element[data-glyph='menu'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-menu-1; }
+.xeno-element[data-glyph='menu'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-menu-2; }
+@keyframes xeno-pt-menu-0 { 0% { transform: translateX(0); } 22% { transform: translateX(3px); } 48% { transform: translateX(0); } 100% { transform: translateX(0); } }
+@keyframes xeno-pt-menu-1 { 0% { transform: translateX(0); } 16% { transform: translateX(0); } 38% { transform: translateX(3px); } 62% { transform: translateX(0); } 100% { transform: translateX(0); } }
+@keyframes xeno-pt-menu-2 { 0% { transform: translateX(0); } 30% { transform: translateX(0); } 54% { transform: translateX(3px); } 78% { transform: translateX(0); } 100% { transform: translateX(0); } }
+
+/* search (whole) — a scanning sweep with a lens-zoom */
+.xeno-element[data-glyph='search'] { --xeno-icon-anim: xeno-ic-search; --xeno-icon-dur: 600ms; }
+@keyframes xeno-ic-search {
+  0%   { transform: translate(0, 0) scale(1); }
+  20%  { transform: translate(2px, -2px) scale(1.08); }
+  40%  { transform: translate(3px, 1px) scale(1.12); }
+  60%  { transform: translate(-1px, 2px) scale(1.08); }
+  80%  { transform: translate(-2px, -1px) scale(1.04); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+/* plus (parts) — the plus draws itself: the vertical bar grows in, then the horizontal, each with a small overshoot */
+.xeno-element[data-glyph='plus'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-plus-v; --part-dur: 540ms; transform-origin: center; }
+.xeno-element[data-glyph='plus'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-plus-h; --part-dur: 540ms; transform-origin: center; }
+@keyframes xeno-pt-plus-v {
+  0%   { transform: scaleY(0); }
+  45%  { transform: scaleY(1.15); }
+  70%  { transform: scaleY(0.95); }
+  100% { transform: scaleY(1); }
+}
+@keyframes xeno-pt-plus-h {
+  0%, 20% { transform: scaleX(0); }
+  60%     { transform: scaleX(1.15); }
+  80%     { transform: scaleX(0.95); }
+  100%    { transform: scaleX(1); }
+}
+
+/* minus (whole) — the bar collapses hard to a stub, holds, then springs back (decisive remove) */
+.xeno-element[data-glyph='minus'] { --xeno-icon-anim: xeno-ic-minus; --xeno-icon-dur: 460ms; }
+@keyframes xeno-ic-minus {
+  0%   { transform: scaleX(1); }
+  34%  { transform: scaleX(0.5); }
+  54%  { transform: scaleX(0.5); }
+  80%  { transform: scaleX(1.14); }
+  100% { transform: scaleX(1); }
+}
+
+/* x (parts) — the two strokes draw themselves like an X being struck, then a small pop */
+.xeno-element[data-glyph='x'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-x-draw; --part-dur: 520ms; stroke-dasharray: 32; }
+@keyframes xeno-pt-x-draw {
+  0%   { stroke-dashoffset: 32; transform: scale(1); }
+  58%  { stroke-dashoffset: 0; transform: scale(1); }
+  74%  { transform: scale(1.14); }
+  100% { stroke-dashoffset: 0; transform: scale(1); }
+}
+
+/* check (parts) — the tick draws itself heel-to-tip at an EVEN pace, then gives a confirming pop.
+   A draw-in needs a steady ease: the library's default ease-out front-loads it and the stroke
+   appears half-finished in the first few frames. */
+.xeno-element[data-glyph='check'] { --xeno-icon-ease: cubic-bezier(0.65, 0, 0.35, 1); }
+.xeno-element[data-glyph='check'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-check-draw; --part-dur: 900ms; stroke-dasharray: 23; }
+@keyframes xeno-pt-check-draw {
+  0%   { stroke-dashoffset: 23; transform: scale(1); }
+  72%  { stroke-dashoffset: 0; transform: scale(1); }
+  86%  { stroke-dashoffset: 0; transform: scale(1.13); }
+  100% { stroke-dashoffset: 0; transform: scale(1); }
+}
+
+/* chevron-down (whole) — dips down as if to expand */
+.xeno-element[data-glyph='chevron-down'] { --xeno-icon-anim: xeno-ic-chevron-down; --xeno-icon-dur: 440ms; }
+@keyframes xeno-ic-chevron-down {
+  0%   { transform: translateY(0) scaleY(1); }
+  35%  { transform: translateY(4px) scaleY(0.9); }
+  65%  { transform: translateY(-2px) scaleY(1.05); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+
+/* chevron-right (whole) — nudges onward */
+.xeno-element[data-glyph='chevron-right'] { --xeno-icon-anim: xeno-ic-chevron-right; --xeno-icon-dur: 480ms; }
+@keyframes xeno-ic-chevron-right {
+  0%   { transform: translateX(0); }
+  25%  { transform: translateX(-2px); }
+  55%  { transform: translateX(4px); }
+  75%  { transform: translateX(2px); }
+  100% { transform: translateX(0); }
+}
+
+/* arrow-right (whole) — shoots forward from its tail */
+.xeno-element[data-glyph='arrow-right'] { --xeno-icon-anim: xeno-ic-arrow-right; --xeno-icon-dur: 500ms; transform-origin: left center; }
+@keyframes xeno-ic-arrow-right {
+  0%   { transform: translateX(0) scaleX(1); }
+  30%  { transform: translateX(-2px) scaleX(0.9); }
+  60%  { transform: translateX(5px) scaleX(1.15); }
+  100% { transform: translateX(0) scaleX(1); }
+}
+
+/* arrow-up (whole) — an immediate leap with a floating double-bob */
+.xeno-element[data-glyph='arrow-up'] { --xeno-icon-anim: xeno-ic-arrow-up; --xeno-icon-dur: 540ms; transform-origin: bottom center; }
+@keyframes xeno-ic-arrow-up {
+  0%   { transform: translateY(0) scaleY(1); }
+  30%  { transform: translateY(-6px) scaleY(1.14); }
+  56%  { transform: translateY(-2px) scaleY(0.96); }
+  78%  { transform: translateY(-4px) scaleY(1.05); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+
+/* gear (whole) — cranks forward in two ratchet steps */
+.xeno-element[data-glyph='gear'] { --xeno-icon-anim: xeno-ic-gear; --xeno-icon-dur: 620ms; }
+@keyframes xeno-ic-gear {
+  0%   { transform: rotate(0deg); }
+  20%  { transform: rotate(20deg); }
+  38%  { transform: rotate(15deg); }
+  58%  { transform: rotate(38deg); }
+  76%  { transform: rotate(33deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* bell (parts) — the bell rocks gently from its hang while the clapper at the BOTTOM swings hard and lags, like a real bell */
+.xeno-element[data-glyph='bell'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-bell-body; --part-dur: 760ms; transform-origin: 50% 0%; }
+.xeno-element[data-glyph='bell'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-bell-clap; --part-dur: 760ms; transform-origin: 50% 0%; }
+@keyframes xeno-pt-bell-body {
+  0%, 100% { transform: rotate(0deg); }
+  22%      { transform: rotate(14deg); }
+  48%      { transform: rotate(-11deg); }
+  72%      { transform: rotate(5deg); }
+}
+@keyframes xeno-pt-bell-clap {
+  0%, 100% { transform: rotate(0deg); }
+  16%      { transform: rotate(34deg); }
+  40%      { transform: rotate(-30deg); }
+  62%      { transform: rotate(18deg); }
+  82%      { transform: rotate(-7deg); }
+}
+
+/* mic (parts) — the capsule throbs twice, as if actively catching sound */
+.xeno-element[data-glyph='mic'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-mic-cap; }
+@keyframes xeno-pt-mic-cap {
+  0%   { transform: scale(1); }
+  18%  { transform: scale(1.42); }
+  36%  { transform: scale(0.92); }
+  54%  { transform: scale(1.24); }
+  74%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
+/* link (parts) — the two rings tug apart along the chain, then snap back */
+.xeno-element[data-glyph='link'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-link-l; }
+.xeno-element[data-glyph='link'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-link-r; }
+@keyframes xeno-pt-link-l {
+  0%   { transform: translate(0, 0); }
+  30%  { transform: translate(-2px, 2px); }
+  55%  { transform: translate(1px, -1px); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes xeno-pt-link-r {
+  0%   { transform: translate(0, 0); }
+  30%  { transform: translate(2px, -2px); }
+  55%  { transform: translate(-1px, 1px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* lock (parts) — the shackle springs open, hovers, then snaps shut with a latch-click overshoot */
+.xeno-element[data-glyph='lock'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-lock-shackle; transform-origin: bottom center; }
+@keyframes xeno-pt-lock-shackle {
+  0%   { transform: translateY(0) scaleY(1); }
+  18%  { transform: translateY(-3px) scaleY(1.09); }
+  46%  { transform: translateY(-3px) scaleY(1.09); }
+  64%  { transform: translateY(0.6px) scaleY(0.93); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+
+/* heart (parts) — the solid fill rises from the point upward (the heart "fills up"), then the outline beats */
+.xeno-element[data-glyph='heart'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-heart-beat; --part-dur: 820ms; transform-origin: center; }
+.xeno-element[data-glyph='heart'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-heart-fill; --part-dur: 820ms; transform-origin: 50% 100%; opacity: 0; }
+@keyframes xeno-pt-heart-fill {
+  0%   { transform: scaleY(0); opacity: 1; }
+  55%  { transform: scaleY(1); opacity: 1; }
+  100% { transform: scaleY(1); opacity: 1; }
+}
+@keyframes xeno-pt-heart-beat {
+  0%, 50% { transform: scale(1); }
+  64%     { transform: scale(1.14); }
+  78%     { transform: scale(0.97); }
+  90%     { transform: scale(1.03); }
+  100%    { transform: scale(1); }
+}
+
+/* user (parts) — the head gives a small nod above the shoulders */
+.xeno-element[data-glyph='user'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-user-head; transform-origin: bottom center; }
+@keyframes xeno-pt-user-head {
+  0%   { transform: translateY(0) rotate(0deg); }
+  28%  { transform: translateY(-3.2px) rotate(-13deg); }
+  55%  { transform: translateY(0) rotate(8deg); }
+  78%  { transform: translateY(0) rotate(-3deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+
+/* globe (parts) — the world TURNS. Four meridian halves ride the sphere: each one enters at the left limb,
+   bulges out, flattens to a straight line as it crosses the poles, bulges the other way and merges into the
+   right limb, where it fades and passes behind. Two are on the face at any moment (one, at the quarter turns).
+
+   The projection is exact, not a fudge. A half-meridian at longitude L projects to the same half-ellipse
+   scaled horizontally by sin(L), so scaleX IS the reprojection — sin() drives every stop below, sampled every
+   15deg of turn. The limbs are where it pays off: |scaleX| tops out at sqrt(2), which lands the meridian
+   exactly on x = 3 / x = 21, ON the frame, so opacity can switch there and the hand-over is invisible. The
+   previous version stopped at 7.0 of a 9 radius and vanished in mid-air, which is why only the middle of the
+   globe seemed to move.
+
+   All four share the polar axis as their transform origin, so they turn as one rigid sphere; the equator and
+   parallels do not move, because on a real globe they do not. Linear timing, or the spin would visibly slow
+   at the ends. NOTE: 3D transforms (rotateY/perspective) do NOT apply to shapes inside an svg — only to the
+   svg itself — so the rotation is carried honestly in 2D. `non-scaling-stroke` holds the line weight steady
+   while a meridian is stretched 1.41x, for the duration of the hover only. */
+.xeno-element[data-glyph='globe'] { --xeno-icon-ease: linear; }
+.xeno-element[data-glyph='globe'] .xeno-part[data-part='3'],
+.xeno-element[data-glyph='globe'] .xeno-part[data-part='4'],
+.xeno-element[data-glyph='globe'] .xeno-part[data-part='5'],
+.xeno-element[data-glyph='globe'] .xeno-part[data-part='6'] {
+  --part-dur: 2800ms; --part-vfx: non-scaling-stroke;
+  transform-box: view-box; transform-origin: 12px 12px;
+}
+.xeno-element[data-glyph='globe'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-globe-m1; }
+.xeno-element[data-glyph='globe'] .xeno-part[data-part='4'] { --part-anim: xeno-pt-globe-m2; }
+.xeno-element[data-glyph='globe'] .xeno-part[data-part='5'] { --part-anim: xeno-pt-globe-m3; }
+.xeno-element[data-glyph='globe'] .xeno-part[data-part='6'] { --part-anim: xeno-pt-globe-m4; }
+/* [3] L=45deg at rest, on the face and heading for the right limb */
+@keyframes xeno-pt-globe-m1 {
+  0%     { transform: scaleX(1); opacity: 1; }
+  4.17%  { transform: scaleX(1.22); opacity: 1; }
+  8.33%  { transform: scaleX(1.37); opacity: 1; }
+  12.5%  { transform: scaleX(1.41); opacity: 0; }
+  16.67% { transform: scaleX(1.37); opacity: 0; }
+  20.83% { transform: scaleX(1.22); opacity: 0; }
+  25%    { transform: scaleX(1); opacity: 0; }
+  29.17% { transform: scaleX(0.71); opacity: 0; }
+  33.33% { transform: scaleX(0.37); opacity: 0; }
+  37.5%  { transform: scaleX(0); opacity: 0; }
+  41.67% { transform: scaleX(-0.37); opacity: 0; }
+  45.83% { transform: scaleX(-0.71); opacity: 0; }
+  50%    { transform: scaleX(-1); opacity: 0; }
+  54.17% { transform: scaleX(-1.22); opacity: 0; }
+  58.33% { transform: scaleX(-1.37); opacity: 0; }
+  62.5%  { transform: scaleX(-1.41); opacity: 0; }
+  66.67% { transform: scaleX(-1.37); opacity: 1; }
+  70.83% { transform: scaleX(-1.22); opacity: 1; }
+  75%    { transform: scaleX(-1); opacity: 1; }
+  79.17% { transform: scaleX(-0.71); opacity: 1; }
+  83.33% { transform: scaleX(-0.37); opacity: 1; }
+  87.5%  { transform: scaleX(0); opacity: 1; }
+  91.67% { transform: scaleX(0.37); opacity: 1; }
+  95.83% { transform: scaleX(0.71); opacity: 1; }
+  100%   { transform: scaleX(1); opacity: 1; }
+}
+/* [4] L=135deg — behind, comes round the left limb at 41.67% */
+@keyframes xeno-pt-globe-m2 {
+  0%     { transform: scaleX(1); opacity: 0; }
+  4.17%  { transform: scaleX(0.71); opacity: 0; }
+  8.33%  { transform: scaleX(0.37); opacity: 0; }
+  12.5%  { transform: scaleX(0); opacity: 0; }
+  16.67% { transform: scaleX(-0.37); opacity: 0; }
+  20.83% { transform: scaleX(-0.71); opacity: 0; }
+  25%    { transform: scaleX(-1); opacity: 0; }
+  29.17% { transform: scaleX(-1.22); opacity: 0; }
+  33.33% { transform: scaleX(-1.37); opacity: 0; }
+  37.5%  { transform: scaleX(-1.41); opacity: 0; }
+  41.67% { transform: scaleX(-1.37); opacity: 1; }
+  45.83% { transform: scaleX(-1.22); opacity: 1; }
+  50%    { transform: scaleX(-1); opacity: 1; }
+  54.17% { transform: scaleX(-0.71); opacity: 1; }
+  58.33% { transform: scaleX(-0.37); opacity: 1; }
+  62.5%  { transform: scaleX(0); opacity: 1; }
+  66.67% { transform: scaleX(0.37); opacity: 1; }
+  70.83% { transform: scaleX(0.71); opacity: 1; }
+  75%    { transform: scaleX(1); opacity: 1; }
+  79.17% { transform: scaleX(1.22); opacity: 1; }
+  83.33% { transform: scaleX(1.37); opacity: 1; }
+  87.5%  { transform: scaleX(1.41); opacity: 0; }
+  91.67% { transform: scaleX(1.37); opacity: 0; }
+  95.83% { transform: scaleX(1.22); opacity: 0; }
+  100%   { transform: scaleX(1); opacity: 0; }
+}
+/* [5] L=225deg — the twin of [3], half a turn behind it */
+@keyframes xeno-pt-globe-m3 {
+  0%     { transform: scaleX(1); opacity: 0; }
+  4.17%  { transform: scaleX(1.22); opacity: 0; }
+  8.33%  { transform: scaleX(1.37); opacity: 0; }
+  12.5%  { transform: scaleX(1.41); opacity: 0; }
+  16.67% { transform: scaleX(1.37); opacity: 1; }
+  20.83% { transform: scaleX(1.22); opacity: 1; }
+  25%    { transform: scaleX(1); opacity: 1; }
+  29.17% { transform: scaleX(0.71); opacity: 1; }
+  33.33% { transform: scaleX(0.37); opacity: 1; }
+  37.5%  { transform: scaleX(0); opacity: 1; }
+  41.67% { transform: scaleX(-0.37); opacity: 1; }
+  45.83% { transform: scaleX(-0.71); opacity: 1; }
+  50%    { transform: scaleX(-1); opacity: 1; }
+  54.17% { transform: scaleX(-1.22); opacity: 1; }
+  58.33% { transform: scaleX(-1.37); opacity: 1; }
+  62.5%  { transform: scaleX(-1.41); opacity: 0; }
+  66.67% { transform: scaleX(-1.37); opacity: 0; }
+  70.83% { transform: scaleX(-1.22); opacity: 0; }
+  75%    { transform: scaleX(-1); opacity: 0; }
+  79.17% { transform: scaleX(-0.71); opacity: 0; }
+  83.33% { transform: scaleX(-0.37); opacity: 0; }
+  87.5%  { transform: scaleX(0); opacity: 0; }
+  91.67% { transform: scaleX(0.37); opacity: 0; }
+  95.83% { transform: scaleX(0.71); opacity: 0; }
+  100%   { transform: scaleX(1); opacity: 0; }
+}
+/* [6] L=315deg — the twin of [4]; at rest it is the left arc of the ellipse */
+@keyframes xeno-pt-globe-m4 {
+  0%     { transform: scaleX(1); opacity: 1; }
+  4.17%  { transform: scaleX(0.71); opacity: 1; }
+  8.33%  { transform: scaleX(0.37); opacity: 1; }
+  12.5%  { transform: scaleX(0); opacity: 1; }
+  16.67% { transform: scaleX(-0.37); opacity: 1; }
+  20.83% { transform: scaleX(-0.71); opacity: 1; }
+  25%    { transform: scaleX(-1); opacity: 1; }
+  29.17% { transform: scaleX(-1.22); opacity: 1; }
+  33.33% { transform: scaleX(-1.37); opacity: 1; }
+  37.5%  { transform: scaleX(-1.41); opacity: 0; }
+  41.67% { transform: scaleX(-1.37); opacity: 0; }
+  45.83% { transform: scaleX(-1.22); opacity: 0; }
+  50%    { transform: scaleX(-1); opacity: 0; }
+  54.17% { transform: scaleX(-0.71); opacity: 0; }
+  58.33% { transform: scaleX(-0.37); opacity: 0; }
+  62.5%  { transform: scaleX(0); opacity: 0; }
+  66.67% { transform: scaleX(0.37); opacity: 0; }
+  70.83% { transform: scaleX(0.71); opacity: 0; }
+  75%    { transform: scaleX(1); opacity: 0; }
+  79.17% { transform: scaleX(1.22); opacity: 0; }
+  83.33% { transform: scaleX(1.37); opacity: 0; }
+  87.5%  { transform: scaleX(1.41); opacity: 0; }
+  91.67% { transform: scaleX(1.37); opacity: 1; }
+  95.83% { transform: scaleX(1.22); opacity: 1; }
+  100%   { transform: scaleX(1); opacity: 1; }
+}
+
+/* eye (parts) — a blink of the lid and a glance of the pupil */
+.xeno-element[data-glyph='eye'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-eye-lid; --part-vfx: non-scaling-stroke; }
+.xeno-element[data-glyph='eye'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-eye-pupil; }
+@keyframes xeno-pt-eye-lid {
+  0%   { transform: scaleY(1); }
+  40%  { transform: scaleY(1); }
+  50%  { transform: scaleY(0.15); }
+  60%  { transform: scaleY(1); }
+  100% { transform: scaleY(1); }
+}
+@keyframes xeno-pt-eye-pupil {
+  0%   { transform: translateX(0); }
+  22%  { transform: translateX(-2.5px); }
+  52%  { transform: translateX(2.5px); }
+  78%  { transform: translateX(-1px); }
+  100% { transform: translateX(0); }
+}
+
+/* alert (parts) — the exclamation shakes inside a steady frame */
+.xeno-element[data-glyph='alert'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-alert-mark; }
+.xeno-element[data-glyph='alert'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-alert-mark; }
+@keyframes xeno-pt-alert-mark {
+  0%   { transform: translateX(0); }
+  15%  { transform: translateX(-3.2px); }
+  30%  { transform: translateX(3.2px); }
+  45%  { transform: translateX(-2.5px); }
+  60%  { transform: translateX(2.1px); }
+  78%  { transform: translateX(-1px); }
+  100% { transform: translateX(0); }
+}
+
+/* bookmark (whole) — the ribbon swings on its top pin */
+.xeno-element[data-glyph='bookmark'] { --xeno-icon-anim: xeno-ic-bookmark; --xeno-icon-dur: 640ms; transform-origin: top center; }
+@keyframes xeno-ic-bookmark {
+  0%   { transform: translateY(0) rotate(0deg); }
+  22%  { transform: translateY(-1px) rotate(-13deg); }
+  50%  { transform: translateY(0) rotate(9deg); }
+  74%  { transform: translateY(0) rotate(-4deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+
+/* star (whole) — a full spin that twinkles at the turns */
+.xeno-element[data-glyph='star'] { --xeno-icon-anim: xeno-ic-star; --xeno-icon-dur: 620ms; }
+@keyframes xeno-ic-star {
+  0%   { transform: rotate(0deg) scale(1); opacity: 1; }
+  30%  { transform: rotate(120deg) scale(1.18); opacity: 0.86; }
+  55%  { transform: rotate(205deg) scale(0.92); opacity: 1; }
+  78%  { transform: rotate(300deg) scale(1.06); }
+  100% { transform: rotate(360deg) scale(1); opacity: 1; }
+}
+
+/* image (parts) — a day timelapse: the sun arcs up and across the sky (bigger at its peak) then back down */
+.xeno-element[data-glyph='image'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-image-sun; --part-dur: 1300ms; transform-origin: center; }
+@keyframes xeno-pt-image-sun {
+  0%   { transform: translate(0, 0) scale(1); }
+  22%  { transform: translate(2.5px, -3px) scale(1.14); }
+  48%  { transform: translate(5px, -3.5px) scale(1.2); }
+  74%  { transform: translate(6.5px, -1px) scale(1.06); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+/* file (parts) — the document's lines of text write themselves in, top to bottom */
+.xeno-element[data-glyph='file'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-file-l0; --part-dur: 860ms; stroke-dasharray: 8; }
+.xeno-element[data-glyph='file'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-file-l1; --part-dur: 860ms; stroke-dasharray: 8; }
+.xeno-element[data-glyph='file'] .xeno-part[data-part='4'] { --part-anim: xeno-pt-file-l2; --part-dur: 860ms; stroke-dasharray: 5; }
+@keyframes xeno-pt-file-l0 { 0%, 12% { stroke-dashoffset: 8; } 42%, 100% { stroke-dashoffset: 0; } }
+@keyframes xeno-pt-file-l1 { 0%, 32% { stroke-dashoffset: 8; } 62%, 100% { stroke-dashoffset: 0; } }
+@keyframes xeno-pt-file-l2 { 0%, 52% { stroke-dashoffset: 5; } 82%, 100% { stroke-dashoffset: 0; } }
+
+/* folder (parts) — a document rises OUT of the folder's mouth and drops back in. The sheet and its lines
+   share one origin pinned to the folder's mouth (`view-box` lets all three parts use the same absolute
+   point) and grow upward from it, so NOTHING is ever drawn inside the folder — no show-through, which a
+   plain translate would give away since the folder's outline has no fill to hide behind. */
+.xeno-element[data-glyph='folder'] { --xeno-icon-ease: cubic-bezier(0.34, 1.2, 0.5, 1); }
+.xeno-element[data-glyph='folder'] .xeno-part[data-part='0'],
+.xeno-element[data-glyph='folder'] .xeno-part[data-part='1'],
+.xeno-element[data-glyph='folder'] .xeno-part[data-part='2'] {
+  --part-anim: xeno-pt-folder-doc; --part-dur: 900ms;
+  transform-box: view-box; transform-origin: 13.4px 7.4px; opacity: 0;
+}
+.xeno-element[data-glyph='folder'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-folder-body; --part-dur: 900ms; transform-origin: 50% 100%; }
+@keyframes xeno-pt-folder-doc {
+  0%   { transform: scaleY(0); opacity: 1; }
+  42%  { transform: scaleY(1); opacity: 1; }
+  74%  { transform: scaleY(1); opacity: 1; }
+  100% { transform: scaleY(0); opacity: 1; }
+}
+@keyframes xeno-pt-folder-body {
+  0%, 100% { transform: scaleY(1); }
+  42%      { transform: scaleY(1.03); }
+  76%      { transform: scaleY(1.03); }
+}
+
+/* copy (parts) — the front sheet lifts up-and-away to reveal the duplicate beneath it, then settles back */
+.xeno-element[data-glyph='copy'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-copy-front; --part-dur: 640ms; }
+@keyframes xeno-pt-copy-front {
+  0%   { transform: translate(0, 0) scale(1); }
+  38%  { transform: translate(-2.6px, -2.6px) scale(1.05); }
+  70%  { transform: translate(0.8px, 0.8px) scale(0.99); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+/* edit (parts) — the pencil actually WRITES: it travels to the right, leaving a drawn stroke behind
+   its tip, nodding on each press; the stroke then fades and the pencil returns. */
+.xeno-element[data-glyph='edit'] { --xeno-icon-ease: cubic-bezier(0.65, 0, 0.35, 1); }
+.xeno-element[data-glyph='edit'] .xeno-part[data-part='0'],
+.xeno-element[data-glyph='edit'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-edit-hand; --part-dur: 1000ms; transform-origin: 18% 88%; }
+.xeno-element[data-glyph='edit'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-edit-stroke; --part-dur: 1000ms; stroke-dasharray: 7.5; opacity: 0; }
+@keyframes xeno-pt-edit-hand {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  12%  { transform: translate(0.3px, 0.5px) rotate(-2deg); }
+  30%  { transform: translate(2px, 0.2px) rotate(1.5deg); }
+  48%  { transform: translate(3.6px, 0.5px) rotate(-1.5deg); }
+  66%  { transform: translate(5.2px, 0.2px) rotate(1.5deg); }
+  78%  { transform: translate(5.2px, 0) rotate(0deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+@keyframes xeno-pt-edit-stroke {
+  0%   { stroke-dashoffset: 7.5; opacity: 0; }
+  12%  { stroke-dashoffset: 7.5; opacity: 1; }
+  70%  { stroke-dashoffset: 0; opacity: 1; }
+  86%  { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+/* trash (parts) — the lid lifts open, the bin gulps (something drops in), the lid drops shut */
+.xeno-element[data-glyph='trash'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-trash-lid; --part-dur: 760ms; transform-origin: 0% 60%; }
+.xeno-element[data-glyph='trash'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-trash-bin; --part-dur: 760ms; transform-origin: center top; }
+@keyframes xeno-pt-trash-lid {
+  0%        { transform: rotate(0deg) translateY(0); }
+  22%       { transform: rotate(-26deg) translateY(-1.2px); }
+  55%       { transform: rotate(-26deg) translateY(-1.2px); }
+  82%, 100% { transform: rotate(0deg) translateY(0); }
+}
+@keyframes xeno-pt-trash-bin {
+  0%, 30%, 100% { transform: scaleY(1); }
+  44%           { transform: scaleY(0.9); }
+  62%           { transform: scaleY(1.02); }
+}
+
+/* download (parts) — only the arrow plunges down into the tray, which gives a little bounce (split geometry) */
+.xeno-element[data-glyph='download'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-download-arrow; --part-dur: 680ms; transform-origin: center; }
+.xeno-element[data-glyph='download'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-download-tray; --part-dur: 680ms; transform-origin: center; }
+@keyframes xeno-pt-download-arrow {
+  0%   { transform: translateY(0) scaleY(1); }
+  18%  { transform: translateY(-2.5px) scaleY(1.05); }
+  50%  { transform: translateY(4.5px) scaleY(1.08); }
+  66%  { transform: translateY(3px) scaleY(0.82); }
+  84%  { transform: translateY(0) scaleY(1); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+@keyframes xeno-pt-download-tray {
+  0%, 46%, 100% { transform: translateY(0) scaleX(1); }
+  56%           { transform: translateY(0.8px) scaleX(1.06); }
+  72%           { transform: translateY(0) scaleX(1); }
+}
+
+/* upload (parts) — the arrow launches up out of its tray, fading at the apex as if sent, then settles */
+.xeno-element[data-glyph='upload'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-upload-arrow; transform-origin: bottom center; }
+@keyframes xeno-pt-upload-arrow {
+  0%   { transform: translateY(0); opacity: 1; }
+  30%  { transform: translateY(-4.5px); opacity: 0.68; }
+  52%  { transform: translateY(-0.5px); opacity: 1; }
+  76%  { transform: translateY(-2px); }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+/* send (whole) — the plane darts off and fades, then returns */
+.xeno-element[data-glyph='send'] { --xeno-icon-anim: xeno-ic-send; --xeno-icon-dur: 640ms; }
+@keyframes xeno-ic-send {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  18%  { transform: translate(-1.5px, 1.5px) scale(0.92); opacity: 1; }
+  52%  { transform: translate(4.5px, -4.5px) scale(1.08); opacity: 0.55; }
+  60%  { transform: translate(5px, -5px) scale(1.02); opacity: 0.5; }
+  61%  { transform: translate(-3.5px, 3.5px) scale(0.9); opacity: 0.5; }
+  100% { transform: translate(0, 0) scale(1); opacity: 1; }
+}
+
+/* code (parts) — the two brackets fly apart to open a gap, then settle (the split geometry, animated) */
+.xeno-element[data-glyph='code'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-code-l; --part-dur: 560ms; }
+.xeno-element[data-glyph='code'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-code-r; --part-dur: 560ms; }
+@keyframes xeno-pt-code-l {
+  0%   { transform: translateX(0); }
+  30%  { transform: translateX(-2.5px); }
+  55%  { transform: translateX(0.8px); }
+  100% { transform: translateX(0); }
+}
+@keyframes xeno-pt-code-r {
+  0%   { transform: translateX(0); }
+  30%  { transform: translateX(2.5px); }
+  55%  { transform: translateX(-0.8px); }
+  100% { transform: translateX(0); }
+}
+
+/* terminal (parts) — like a real console, ONLY the cursor blinks; the ">" prompt + window stay still */
+.xeno-element[data-glyph='terminal'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-terminal-cursor; --part-dur: 900ms; }
+@keyframes xeno-pt-terminal-cursor {
+  0%, 100% { opacity: 1; }
+  25%      { opacity: 1; }
+  26%, 55% { opacity: 0; }
+  56%      { opacity: 1; }
+}
+
+/* more (parts) — the three dots bounce in sequence */
+.xeno-element[data-glyph='more'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-more-0; }
+.xeno-element[data-glyph='more'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-more-1; }
+.xeno-element[data-glyph='more'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-more-2; }
+@keyframes xeno-pt-more-0 { 0% { transform: translateY(0); } 22% { transform: translateY(-3px); } 46% { transform: translateY(0); } 100% { transform: translateY(0); } }
+@keyframes xeno-pt-more-1 { 0% { transform: translateY(0); } 14% { transform: translateY(0); } 36% { transform: translateY(-3px); } 60% { transform: translateY(0); } 100% { transform: translateY(0); } }
+@keyframes xeno-pt-more-2 { 0% { transform: translateY(0); } 28% { transform: translateY(0); } 50% { transform: translateY(-3px); } 74% { transform: translateY(0); } 100% { transform: translateY(0); } }
+
+/* grid (parts) — the four tiles pop on in a diagonal cascade */
+.xeno-element[data-glyph='grid'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-grid-0; }
+.xeno-element[data-glyph='grid'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-grid-1; }
+.xeno-element[data-glyph='grid'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-grid-2; }
+.xeno-element[data-glyph='grid'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-grid-3; }
+@keyframes xeno-pt-grid-0 { 0% { transform: scale(1); } 20% { transform: scale(1.5); } 44% { transform: scale(1); } 100% { transform: scale(1); } }
+@keyframes xeno-pt-grid-1 { 0% { transform: scale(1); } 12% { transform: scale(1); } 32% { transform: scale(1.5); } 56% { transform: scale(1); } 100% { transform: scale(1); } }
+@keyframes xeno-pt-grid-2 { 0% { transform: scale(1); } 24% { transform: scale(1); } 44% { transform: scale(1.5); } 68% { transform: scale(1); } 100% { transform: scale(1); } }
+@keyframes xeno-pt-grid-3 { 0% { transform: scale(1); } 36% { transform: scale(1); } 56% { transform: scale(1.5); } 80% { transform: scale(1); } 100% { transform: scale(1); } }
+
+/* list (parts) — each row's bullet pops and its line slides in, top to bottom */
+.xeno-element[data-glyph='list'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-list-l0; transform-origin: left center; }
+.xeno-element[data-glyph='list'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-list-l1; transform-origin: left center; }
+.xeno-element[data-glyph='list'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-list-l2; transform-origin: left center; }
+.xeno-element[data-glyph='list'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-list-b0; }
+.xeno-element[data-glyph='list'] .xeno-part[data-part='4'] { --part-anim: xeno-pt-list-b1; }
+.xeno-element[data-glyph='list'] .xeno-part[data-part='5'] { --part-anim: xeno-pt-list-b2; }
+@keyframes xeno-pt-list-l0 { 0% { transform: translateX(0); } 20% { transform: translateX(2.5px); } 46% { transform: translateX(0); } 100% { transform: translateX(0); } }
+@keyframes xeno-pt-list-l1 { 0% { transform: translateX(0); } 14% { transform: translateX(0); } 34% { transform: translateX(2.5px); } 60% { transform: translateX(0); } 100% { transform: translateX(0); } }
+@keyframes xeno-pt-list-l2 { 0% { transform: translateX(0); } 28% { transform: translateX(0); } 48% { transform: translateX(2.5px); } 74% { transform: translateX(0); } 100% { transform: translateX(0); } }
+@keyframes xeno-pt-list-b0 { 0% { transform: scale(1); } 20% { transform: scale(1.3); } 46% { transform: scale(1); } 100% { transform: scale(1); } }
+@keyframes xeno-pt-list-b1 { 0% { transform: scale(1); } 14% { transform: scale(1); } 34% { transform: scale(1.3); } 60% { transform: scale(1); } 100% { transform: scale(1); } }
+@keyframes xeno-pt-list-b2 { 0% { transform: scale(1); } 28% { transform: scale(1); } 48% { transform: scale(1.3); } 74% { transform: scale(1); } 100% { transform: scale(1); } }
+
+/* filter (whole) — the funnel pinches narrow then relaxes */
+.xeno-element[data-glyph='filter'] { --xeno-icon-anim: xeno-ic-filter; --xeno-icon-dur: 500ms; transform-origin: top center; }
+@keyframes xeno-ic-filter {
+  0%   { transform: scaleX(1) scaleY(1); }
+  30%  { transform: scaleX(0.68) scaleY(1.06); }
+  50%  { transform: scaleX(0.76) scaleY(1.03); }
+  70%  { transform: scaleX(1.07) scaleY(0.95); }
+  100% { transform: scaleX(1) scaleY(1); }
+}
+
+/* sliders (parts) — the two knobs travel their tracks in opposite directions */
+.xeno-element[data-glyph='sliders'] .xeno-part[data-part='4'] { --part-anim: xeno-pt-sliders-k1; }
+.xeno-element[data-glyph='sliders'] .xeno-part[data-part='5'] { --part-anim: xeno-pt-sliders-k2; }
+@keyframes xeno-pt-sliders-k1 {
+  0%   { transform: translateX(0); }
+  30%  { transform: translateX(-4px); }
+  60%  { transform: translateX(1.5px); }
+  100% { transform: translateX(0); }
+}
+@keyframes xeno-pt-sliders-k2 {
+  0%   { transform: translateX(0); }
+  30%  { transform: translateX(4px); }
+  60%  { transform: translateX(-1.5px); }
+  100% { transform: translateX(0); }
+}
+
+/* refresh (whole) — a wind-up then a full clockwise revolution */
+.xeno-element[data-glyph='refresh'] { --xeno-icon-anim: xeno-ic-refresh; --xeno-icon-dur: 680ms; }
+@keyframes xeno-ic-refresh {
+  0%   { transform: rotate(0deg) scale(1); }
+  12%  { transform: rotate(-28deg) scale(0.95); }
+  60%  { transform: rotate(230deg) scale(1.02); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* share (parts) — the three nodes pulse along the branch */
+.xeno-element[data-glyph='share'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-share-0; }
+.xeno-element[data-glyph='share'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-share-1; }
+.xeno-element[data-glyph='share'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-share-2; }
+@keyframes xeno-pt-share-0 { 0% { transform: scale(1); } 22% { transform: scale(1.75); } 48% { transform: scale(1); } 100% { transform: scale(1); } }
+@keyframes xeno-pt-share-1 { 0% { transform: scale(1); } 16% { transform: scale(1); } 38% { transform: scale(1.75); } 62% { transform: scale(1); } 100% { transform: scale(1); } }
+@keyframes xeno-pt-share-2 { 0% { transform: scale(1); } 30% { transform: scale(1); } 52% { transform: scale(1.75); } 76% { transform: scale(1); } 100% { transform: scale(1); } }
+
+/* clock (parts) — the hands sweep a full clockwise revolution about the centre, like a real clock; the face holds still */
+.xeno-element[data-glyph='clock'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-clock-hands; --part-dur: 900ms; transform-origin: 0% 69%; }
+@keyframes xeno-pt-clock-hands {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* home (parts) — the house BUILDS itself: the walls rise off the ground, the roof drops on top and lands
+   with a small settle, then the door appears last. All three share the ground line as their origin. */
+.xeno-element[data-glyph='home'] { --xeno-icon-ease: cubic-bezier(0.34, 1.3, 0.5, 1); }
+.xeno-element[data-glyph='home'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-home-roof; --part-dur: 1000ms; transform-box: view-box; transform-origin: 12px 20px; }
+.xeno-element[data-glyph='home'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-home-walls; --part-dur: 1000ms; transform-box: view-box; transform-origin: 12px 20px; }
+.xeno-element[data-glyph='home'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-home-door; --part-dur: 1000ms; transform-box: view-box; transform-origin: 12px 20px; }
+@keyframes xeno-pt-home-walls {
+  0%   { transform: scaleY(0); }
+  34%  { transform: scaleY(1); }
+  100% { transform: scaleY(1); }
+}
+@keyframes xeno-pt-home-roof {
+  0%, 22% { transform: translateY(-9px); opacity: 0; }
+  30%     { transform: translateY(-9px); opacity: 1; }
+  56%     { transform: translateY(0); opacity: 1; }
+  66%     { transform: translateY(-1.2px); opacity: 1; }
+  78%     { transform: translateY(0); opacity: 1; }
+  100%    { transform: translateY(0); opacity: 1; }
+}
+@keyframes xeno-pt-home-door {
+  0%, 70% { transform: scaleY(0); }
+  88%     { transform: scaleY(1); }
+  100%    { transform: scaleY(1); }
+}
+
+/* info (parts) — only the i-dot lifts and taps back down with a little squash ("gets dotted") */
+.xeno-element[data-glyph='info'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-info-dot; --part-dur: 620ms; }
+@keyframes xeno-pt-info-dot {
+  0%   { transform: translateY(0) scale(1, 1); }
+  35%  { transform: translateY(-3px) scale(1, 1); }
+  68%  { transform: translateY(0.5px) scale(1.18, 0.82); }
+  84%  { transform: translateY(0) scale(0.94, 1.06); }
+  100% { transform: translateY(0) scale(1, 1); }
+}
+
+/* help (parts) — the question mark writes itself: the hook draws in, then the dot drops onto the page */
+.xeno-element[data-glyph='help'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-help-draw; --part-dur: 720ms; stroke-dasharray: 16; }
+.xeno-element[data-glyph='help'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-help-dot; --part-dur: 720ms; transform-origin: center; }
+@keyframes xeno-pt-help-draw {
+  0%   { stroke-dashoffset: 16; }
+  55%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes xeno-pt-help-dot {
+  0%, 48% { transform: translateY(-3px) scale(0); opacity: 0; }
+  66%     { transform: translateY(0) scale(1.3); opacity: 1; }
+  82%     { transform: translateY(0) scale(0.9); opacity: 1; }
+  100%    { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* message (parts) — the bubble nudges from its tail while the text lines write themselves in */
+.xeno-element[data-glyph='message'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-message-pop; --part-dur: 620ms; transform-origin: 0% 100%; }
+.xeno-element[data-glyph='message'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-message-lines; --part-dur: 620ms; stroke-dasharray: 12; }
+@keyframes xeno-pt-message-pop {
+  0%   { transform: scale(1) rotate(0deg); }
+  40%  { transform: scale(1.06) rotate(-2deg); }
+  72%  { transform: scale(0.99) rotate(0.5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+@keyframes xeno-pt-message-lines {
+  0%   { stroke-dashoffset: 12; opacity: 0; }
+  35%  { stroke-dashoffset: 9; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+
+/* attach (whole) — the clip swings from its top hinge */
+.xeno-element[data-glyph='attach'] { --xeno-icon-anim: xeno-ic-attach; --xeno-icon-dur: 700ms; transform-origin: top center; }
+@keyframes xeno-ic-attach {
+  0%   { transform: translateY(0) rotate(0deg); }
+  15%  { transform: translateY(1px) rotate(14deg); }
+  38%  { transform: translateY(0) rotate(-10deg); }
+  58%  { transform: translateY(0) rotate(6deg); }
+  78%  { transform: translateY(0) rotate(-3deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+
+/* layers (parts) — the top and bottom sheets fan apart, then re-stack */
+.xeno-element[data-glyph='layers'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-layers-top; }
+.xeno-element[data-glyph='layers'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-layers-bot; }
+@keyframes xeno-pt-layers-top {
+  0%   { transform: translateY(0); }
+  30%  { transform: translateY(-2.5px); }
+  60%  { transform: translateY(0.5px); }
+  100% { transform: translateY(0); }
+}
+@keyframes xeno-pt-layers-bot {
+  0%   { transform: translateY(0); }
+  30%  { transform: translateY(2px); }
+  60%  { transform: translateY(-0.5px); }
+  100% { transform: translateY(0); }
+}
+
+/* sun (parts) — the rays wheel a full turn while the core pulses warm */
+.xeno-element[data-glyph='sun'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-sun-core; }
+.xeno-element[data-glyph='sun'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-sun-rays; --part-dur: 700ms; }
+@keyframes xeno-pt-sun-core {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.14); }
+  60%  { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+@keyframes xeno-pt-sun-rays {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* archive (parts) — the lid LIFTS STRAIGHT UP and presses back down, and the box takes the press.
+   Deliberately not the trash lid, which hinges open and flaps: archiving is putting something away and
+   sealing it, discarding is throwing it out, and the two gestures should not look alike on icons this
+   close in meaning. The slot holds still — it is the mark that says things come back out. */
+.xeno-element[data-glyph='archive'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-archive-lid; --part-dur: 620ms; }
+.xeno-element[data-glyph='archive'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-archive-body; --part-dur: 620ms; transform-origin: center bottom; }
+@keyframes xeno-pt-archive-lid {
+  0%   { transform: translateY(0); }
+  30%  { transform: translateY(-3px); }
+  62%  { transform: translateY(0.6px); }
+  100% { transform: translateY(0); }
+}
+@keyframes xeno-pt-archive-body {
+  0%   { transform: scaleY(1); }
+  62%  { transform: scaleY(0.96); }
+  100% { transform: scaleY(1); }
+}
+
+/* user-x (parts) — the cross DRAWS ITSELF, one stroke then the other, while the figure leans away.
+   The X is the whole message (this person is not being kept), so it is the thing that performs; the
+   figure only acknowledges it. Steady easing, as with `check`: the library's default ease-out
+   front-loads a dash and the stroke looks half-finished in the first frames. */
+.xeno-element[data-glyph='user-x'] { --xeno-icon-ease: cubic-bezier(0.65, 0, 0.35, 1); }
+.xeno-element[data-glyph='user-x'] .xeno-part[data-part='0'],
+.xeno-element[data-glyph='user-x'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-userx-figure; --part-dur: 640ms; }
+.xeno-element[data-glyph='user-x'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-userx-a; --part-dur: 640ms; stroke-dasharray: 6.4; }
+.xeno-element[data-glyph='user-x'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-userx-b; --part-dur: 640ms; stroke-dasharray: 6.4; }
+@keyframes xeno-pt-userx-figure {
+  0%   { transform: translateX(0); }
+  45%  { transform: translateX(-0.8px); }
+  100% { transform: translateX(0); }
+}
+@keyframes xeno-pt-userx-a {
+  0%   { stroke-dashoffset: 6.4; }
+  45%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes xeno-pt-userx-b {
+  0%,
+  45%  { stroke-dashoffset: 6.4; }
+  90%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* contrast (whole) — the icon turns half a revolution, so the solid half changes sides. That IS the
+   control: a theme toggle swaps which half is dark, and rotating the same shape says it without
+   redrawing anything. It stops at 180deg rather than returning, then the animation ends and the icon
+   snaps back to rest — so a second hover reads as another flip rather than a rewind. */
+/* contrast (parts) — a TIMELAPSE. Daylight crosses the square: the shadow already covering the left
+   half sweeps on across the right until the whole face is dark, and it HOLDS there while you point at
+   it. Leave, and it is morning again.
+   The hold is the point. `forwards` keeps the last frame instead of letting the icon snap back mid-
+   gesture, and removing the animation on mouse-out is what performs the reset — so the two states are
+   "pointing at it" and "not", which is what the control actually has.
+
+   It is the FRAME that fills, not a second shape, and that is what keeps the declaration honest. The
+   frame carries `fill: none` from the svg root, so with no stylesheet at all the icon still draws as
+   the half-solid square it is meant to be — the sweep exists only in CSS. The alternative, a full-square
+   fill sitting in the geometry, would render every no-CSS copy of this glyph as a solid block.
+
+   `clip-path` starts at the centre line rather than the left edge: the left half is already dark, so
+   sweeping from x=3 would spend the first half of the animation re-filling pixels that are not
+   changing. And clipping the rect leaves its own rounded corners intact all the way across, which
+   scaling a straight-edged half could never do — the corner would have arrived square. */
+.xeno-element[data-glyph='contrast'] .xeno-part[data-part='2'] {
+  --part-anim: xeno-pt-contrast-sweep;
+  --part-dur: 2400ms;
+  /* Symmetric easing and a linear-ish middle: a timelapse that accelerates halfway is a timelapse of
+     nothing in particular. */
+  --xeno-icon-ease: cubic-bezier(0.45, 0, 0.55, 1);
+  animation-iteration-count: infinite;
+}
+/* The resting half is hidden for the whole run: the sweeping layer reproduces it exactly at 0%, so
+   leaving both would double-paint the same pixels and, worse, pin a solid left half under an animation
+   whose whole point is that the left half empties. */
+.xeno-element[data-glyph='contrast'] .xeno-part[data-part='1'] {
+  --part-anim: xeno-pt-contrast-rest;
+  --part-dur: 1ms;
+  animation-fill-mode: forwards;
+}
+
+/*
+ * A whole day, on a loop, and it has to JOIN UP at both ends.
+ *
+ * It begins on the resting drawing — the left half dark — so starting the loop is invisible: the frame
+ * the animation opens with is the frame that was already there.
+ *
+ * The seam at the end is the interesting part. The cycle finishes with the square empty, and it has to
+ * resume with the left half dark, which is not the same picture. The trick is that "empty" can be
+ * spelled two ways: clipped away from the LEFT (where the light left it) or from the RIGHT (where the
+ * dark will grow back from). Both show nothing, so switching between them costs nothing to look at —
+ * and after the switch, closing the right-hand clip grows darkness inward from the left edge, which is
+ * exactly how the day started. No jump, and no rewind: the light always travels one way.
+ */
+@keyframes xeno-pt-contrast-sweep {
+  /* the resting drawing */
+  0%      { fill: currentColor; clip-path: inset(0 50% 0 0); }
+  /* dusk — the shadow crosses the right half */
+  32%     { fill: currentColor; clip-path: inset(0 0 0 0); }
+  /* midnight — a beat of full dark, so the turn reads as a turn and not a bounce */
+  44%     { fill: currentColor; clip-path: inset(0 0 0 0); }
+  /* dawn — the light sweeps the dark away, from the left */
+  74%     { fill: currentColor; clip-path: inset(0 0 0 100%); }
+  /* the same nothing, re-anchored to the other edge — invisible, because nothing is showing */
+  74.01%  { fill: currentColor; clip-path: inset(0 100% 0 0); }
+  /* a beat of bare border, which is the state worth pausing on */
+  82%     { fill: currentColor; clip-path: inset(0 100% 0 0); }
+  /* dawn's shadow grows back from the left, and lands exactly on the frame it started from */
+  100%    { fill: currentColor; clip-path: inset(0 50% 0 0); }
+}
+@keyframes xeno-pt-contrast-rest {
+  from,
+  to { opacity: 0; }
+}
+
+/* briefcase (parts) — the case OPENS. The lid hinges up off the clasp line and the handle rides with
+   it, because a handle is fixed to a lid and does not stay behind; the base holds still and takes the
+   weight.
+
+   It replaces a version where the whole icon bobbed up and down, which said nothing: a case that is
+   lifted is a case doing what any box does. A case that OPENS is the one thing only a case does — and
+   the glyph stands for "customize", where the point is getting at what is inside.
+
+   The hinge is at the LEFT end of the seam, so the right side lifts further than the left and the gap
+   is a wedge rather than a slab sliding off. Two degrees of rotation with a small lift under it: at
+   24px a wedge is all the eye needs, and any more turns the lid into a flap. */
+.xeno-element[data-glyph='briefcase'] .xeno-part[data-part='0'],
+.xeno-element[data-glyph='briefcase'] .xeno-part[data-part='1'] {
+  --part-anim: xeno-pt-briefcase-lid;
+  --part-dur: 720ms;
+  transform-box: view-box;
+  transform-origin: 3px 13px;
+}
+.xeno-element[data-glyph='briefcase'] .xeno-part[data-part='2'] {
+  --part-anim: xeno-pt-briefcase-base;
+  --part-dur: 720ms;
+  transform-box: view-box;
+  transform-origin: 12px 19.5px;
+}
+@keyframes xeno-pt-briefcase-lid {
+  0%   { transform: translateY(0) rotate(0deg); }
+  38%  { transform: translateY(-3.4px) rotate(-6deg); }
+  62%  { transform: translateY(-3.4px) rotate(-6deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+/* The base only acknowledges it — a hair of squash as the lid comes back down. */
+@keyframes xeno-pt-briefcase-base {
+  0%   { transform: scaleY(1); }
+  62%  { transform: scaleY(1); }
+  78%  { transform: scaleY(0.9); }
+  100% { transform: scaleY(1); }
+}
+
+/* building — the windows come on, floor by floor, left to right. The walls hold: a building that rocked
+   would be an earthquake, and what this glyph means is that somebody is home.
+
+   Six parts rather than one, because the whole point is the stagger. `--part-dur` is the same on all six
+   and the delay lives in the keyframe percentages instead of in `animation-delay`, so the six finish
+   together and the sequence reads as one event with an order rather than six separate ones. */
+.xeno-element[data-glyph='building'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-win-1; --part-dur: 620ms; }
+.xeno-element[data-glyph='building'] .xeno-part[data-part='4'] { --part-anim: xeno-pt-win-2; --part-dur: 620ms; }
+.xeno-element[data-glyph='building'] .xeno-part[data-part='5'] { --part-anim: xeno-pt-win-3; --part-dur: 620ms; }
+.xeno-element[data-glyph='building'] .xeno-part[data-part='6'] { --part-anim: xeno-pt-win-4; --part-dur: 620ms; }
+.xeno-element[data-glyph='building'] .xeno-part[data-part='7'] { --part-anim: xeno-pt-win-5; --part-dur: 620ms; }
+.xeno-element[data-glyph='building'] .xeno-part[data-part='8'] { --part-anim: xeno-pt-win-6; --part-dur: 620ms; }
+@keyframes xeno-pt-win-1 { 0%,4%   { opacity: 0.22; } 22%, 100% { opacity: 1; } }
+@keyframes xeno-pt-win-2 { 0%,12%  { opacity: 0.22; } 30%, 100% { opacity: 1; } }
+@keyframes xeno-pt-win-3 { 0%,20%  { opacity: 0.22; } 38%, 100% { opacity: 1; } }
+@keyframes xeno-pt-win-4 { 0%,28%  { opacity: 0.22; } 46%, 100% { opacity: 1; } }
+@keyframes xeno-pt-win-5 { 0%,36%  { opacity: 0.22; } 54%, 100% { opacity: 1; } }
+@keyframes xeno-pt-win-6 { 0%,44%  { opacity: 0.22; } 62%, 100% { opacity: 1; } }
+
+/* next-dismiss — hover motion PER STATE, because the glyph means two different things and a control
+   should answer for the one it is showing.
+
+   Pointing at it while it is an arrow gets `arrow-right`'s own gesture; while it is a cross it gets
+   `x`'s pop. Borrowed rather than invented, so hovering this button feels the same as hovering the two
+   glyphs it stands in for.
+
+   It is a whole-icon animation on `transform`, and the morph between the states runs on `d`. Different
+   properties, so the two never fight: you can hover mid-morph and both keep going. */
+.xeno-element[data-glyph='next-dismiss'][data-selection='off'] {
+  --xeno-icon-anim: xeno-ic-arrow-right;
+  --xeno-icon-dur: 500ms;
+  transform-origin: left center;
+}
+.xeno-element[data-glyph='next-dismiss'][data-selection='on'] {
+  --xeno-icon-anim: xeno-ic-nextdismiss-x;
+  --xeno-icon-dur: 420ms;
+}
+@keyframes xeno-ic-nextdismiss-x {
+  0%   { transform: scale(1); }
+  46%  { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+/* ---- Triggers: play on icon-hover or any interactive host ------------------- */
+
+/* There are TWO triggers, not one.
+ *
+ * Hover is the obvious one: point at a control and its glyph stirs. The second is SELECTION — a host
+ * carrying `data-selection="on"` plays the same animation once, at the moment it becomes selected.
+ *
+ * That second trigger exists because a real product kept hand-rolling it. A row of options where picking
+ * one makes its icon respond is a common, meaningful pattern: the motion is not decoration there, it is
+ * the confirmation that the choice landed. Without a selection trigger the only way to get it was to
+ * abandon the declaration and hand-write an animated SVG per option — which is exactly what the chat's
+ * share dialog had done, three times over, in a stroke weight that did not match the rest of the set.
+ *
+ * CSS gives this for free and it is worth saying why: a rule that only applies while the attribute is on
+ * starts its animation when the attribute flips, and stops existing when it flips back. No listener, no
+ * state, no replay logic. Flipping to `off` and back to `on` plays it again.
+ *
+ * Both trigger lists stay at specificity ZERO (`:where`), so any consumer rule still overrides them.
+ *
+ * There is also a SCOPE, `.xeno-icon-hosts`, and it is the third trigger. Inside an element carrying it,
+ * every button, link, menu item, tab and option is a host without saying so.
+ *
+ * That looks like it contradicts the closed list, and it is the closed list's escape hatch rather than a
+ * hole in it. The list exists so an icon does not stir on a stray hover — a table full of glyphs that all
+ * twitch as the pointer crosses them is noise. But a product whose every icon button IS a XENO glyph pays
+ * that tax as a per-button opt-in it has to remember, forever, on every button anyone adds. Measured on
+ * one: thirty-four controls carried a glyph and none of them was a host, and the way that surfaced was a
+ * user noticing two buttons out of six that sat still.
+ *
+ * The scope answers to SELECTION as well as hover, and it did not at first — which turned out to matter
+ * more than it sounds. A copy button that swaps its glyph for a check on click had the check draw
+ * itself perfectly, so long as the pointer stayed put; move the mouse as you click, as people do, and
+ * the check simply appeared, already finished. The draw only existed while a hover trigger matched.
+ * Selection is the trigger that does not need a pointer, and a product that has declared its scope
+ * should not then have to add `xeno-icon-hover` to one button to reach it.
+ *
+ * A scope is a decision made once, in the open, by the consumer — which is the difference between an
+ * opt-in and a default.
+ */
+
+/* whole-icon animations */
+:where(
+  .xeno-element[data-glyph]:hover,
+  .xeno-btn:hover .xeno-element[data-glyph],
+  .xeno-chip:hover .xeno-element[data-glyph],
+  .xeno-toggle:hover .xeno-element[data-glyph],
+  .xeno-list-row:hover .xeno-element[data-glyph],
+  .xeno-menu-item:hover .xeno-element[data-glyph],
+  .xeno-sidebar-item:hover .xeno-element[data-glyph],
+  .xeno-tab:hover .xeno-element[data-glyph],
+  .xeno-segmented-option:hover .xeno-element[data-glyph],
+  .xeno-field-trigger:hover .xeno-element[data-glyph],
+  .xeno-icon-hover:hover .xeno-element[data-glyph],
+  .xeno-icon-hosts :is(button, a, [role='menuitem'], [role='tab'], [role='option'], [role='radio'], label):hover .xeno-element[data-glyph],
+  .xeno-icon-hover[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-icon-hosts :is(button, a, [role='menuitem'], [role='tab'], [role='option'], [role='radio'], label)[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-list-row[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-menu-item[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-sidebar-item[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-tab[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-segmented-option[data-selection='on'] .xeno-element[data-glyph]
+) { animation: var(--xeno-icon-anim) var(--xeno-icon-dur) var(--xeno-icon-ease); }
+
+/* per-part animations */
+:where(
+  .xeno-element[data-glyph]:hover,
+  .xeno-btn:hover .xeno-element[data-glyph],
+  .xeno-chip:hover .xeno-element[data-glyph],
+  .xeno-toggle:hover .xeno-element[data-glyph],
+  .xeno-list-row:hover .xeno-element[data-glyph],
+  .xeno-menu-item:hover .xeno-element[data-glyph],
+  .xeno-sidebar-item:hover .xeno-element[data-glyph],
+  .xeno-tab:hover .xeno-element[data-glyph],
+  .xeno-segmented-option:hover .xeno-element[data-glyph],
+  .xeno-field-trigger:hover .xeno-element[data-glyph],
+  .xeno-icon-hover:hover .xeno-element[data-glyph],
+  .xeno-icon-hosts :is(button, a, [role='menuitem'], [role='tab'], [role='option'], [role='radio'], label):hover .xeno-element[data-glyph],
+  .xeno-icon-hover[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-icon-hosts :is(button, a, [role='menuitem'], [role='tab'], [role='option'], [role='radio'], label)[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-list-row[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-menu-item[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-sidebar-item[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-tab[data-selection='on'] .xeno-element[data-glyph],
+  .xeno-segmented-option[data-selection='on'] .xeno-element[data-glyph]
+) .xeno-part {
+  animation: var(--part-anim) var(--part-dur) var(--xeno-icon-ease);
+  /* A part that is scaled hard (globe's meridians) opts into a constant line weight for the DURATION of the
+     hover only: `non-scaling-stroke` pins the stroke to screen pixels, which would otherwise leave the icon
+     under-weighted whenever it is drawn larger than 24. At rest the stroke scales with `size`, as it must. */
+  vector-effect: var(--part-vfx, none);
+}
+
+/* ── The transport set: play / pause / stop ──────────────────────────────────────────
+   One control in three states, so the three animations are one idea told three ways: play LEANS the way
+   it is going, pause takes the weight on both feet, stop lands. Same 460ms for all three, because they
+   replace each other in place and a state that took longer would read as a slower machine. */
+
+/* play — the wedge presses forward and settles. It is the only one of the three with a direction, so it
+   is the only one that travels. */
+.xeno-element[data-glyph='play'] { --xeno-icon-anim: xeno-play-go; --xeno-icon-dur: 460ms; }
+@keyframes xeno-play-go {
+  0%   { transform: translateX(0); }
+  34%  { transform: translateX(1.4px); }
+  100% { transform: translateX(0); }
+}
+
+/* pause — the bars part a hair and come back. Offset by a beat so it reads as two objects rather than one
+   shape scaling: a pause is two things standing still, and things that move in perfect lockstep look
+   welded. */
+.xeno-element[data-glyph='pause'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-pause-a; --part-dur: 460ms; }
+.xeno-element[data-glyph='pause'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-pause-b; --part-dur: 460ms; }
+@keyframes xeno-pt-pause-a {
+  0%   { transform: translateX(0); }
+  38%  { transform: translateX(-2.4px); }
+  100% { transform: translateX(0); }
+}
+@keyframes xeno-pt-pause-b {
+  0%   { transform: translateX(0); }
+  48%  { transform: translateX(2.4px); }
+  100% { transform: translateX(0); }
+}
+
+/* stop — one contraction, nothing else. A stop is the absence of travel, so anything that moved sideways
+   here would argue with the glyph. */
+.xeno-element[data-glyph='stop'] { --xeno-icon-anim: xeno-stop-land; --xeno-icon-dur: 460ms; }
+@keyframes xeno-stop-land {
+  0%   { transform: scale(1); }
+  38%  { transform: scale(0.72); }
+  70%  { transform: scale(1.07); }
+  100% { transform: scale(1); }
+}
+
+/* ── The panel set: the chevron goes where the panel is about to go ──────────────────
+   Four glyphs, one gesture, four directions. Only the chevron moves — the frame is the window and the
+   rail is the panel's edge, and a window that shifted every time you pointed at it would be a bug. The
+   travel is 1.6px: enough to read as intent at 24px, small enough that the chevron never leaves the
+   frame it belongs to. */
+.xeno-element[data-glyph='panel-left'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-panel-e; --part-dur: 500ms; }
+.xeno-element[data-glyph='panel-right-close'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-panel-e; --part-dur: 500ms; }
+.xeno-element[data-glyph='panel-left-close'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-panel-w; --part-dur: 500ms; }
+.xeno-element[data-glyph='panel-right'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-panel-w; --part-dur: 500ms; }
+@keyframes xeno-pt-panel-e {
+  0%   { transform: translateX(0); }
+  36%  { transform: translateX(3.4px); }
+  100% { transform: translateX(0); }
+}
+@keyframes xeno-pt-panel-w {
+  0%   { transform: translateX(0); }
+  36%  { transform: translateX(-3.4px); }
+  100% { transform: translateX(0); }
+}
+
+/* ── maximize / minimize — the same gesture with the sign flipped ────────────────────
+   Each corner moves along its OWN diagonal, away from the centre for maximize and toward it for
+   minimize. Four separate keyframes per glyph rather than a scale on the whole icon: scaling would take
+   the stroke weight with it, and a corner bracket that thickens as it travels stops looking like the
+   same bracket. */
+.xeno-element[data-glyph='maximize'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-max-tl; --part-dur: 520ms; }
+.xeno-element[data-glyph='maximize'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-max-tr; --part-dur: 520ms; }
+.xeno-element[data-glyph='maximize'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-max-br; --part-dur: 520ms; }
+.xeno-element[data-glyph='maximize'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-max-bl; --part-dur: 520ms; }
+@keyframes xeno-pt-max-tl { 0% { transform: translate(0, 0); } 38% { transform: translate(-2.9px, -2.9px); } 100% { transform: translate(0, 0); } }
+@keyframes xeno-pt-max-tr { 0% { transform: translate(0, 0); } 38% { transform: translate(2.9px, -2.9px); } 100% { transform: translate(0, 0); } }
+@keyframes xeno-pt-max-br { 0% { transform: translate(0, 0); } 38% { transform: translate(2.9px, 2.9px); } 100% { transform: translate(0, 0); } }
+@keyframes xeno-pt-max-bl { 0% { transform: translate(0, 0); } 38% { transform: translate(-2.9px, 2.9px); } 100% { transform: translate(0, 0); } }
+
+.xeno-element[data-glyph='minimize'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-min-tl; --part-dur: 520ms; }
+.xeno-element[data-glyph='minimize'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-min-tr; --part-dur: 520ms; }
+.xeno-element[data-glyph='minimize'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-min-br; --part-dur: 520ms; }
+.xeno-element[data-glyph='minimize'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-min-bl; --part-dur: 520ms; }
+@keyframes xeno-pt-min-tl { 0% { transform: translate(0, 0); } 38% { transform: translate(1.3px, 1.3px); } 100% { transform: translate(0, 0); } }
+@keyframes xeno-pt-min-tr { 0% { transform: translate(0, 0); } 38% { transform: translate(-1.3px, 1.3px); } 100% { transform: translate(0, 0); } }
+@keyframes xeno-pt-min-br { 0% { transform: translate(0, 0); } 38% { transform: translate(-1.3px, -1.3px); } 100% { transform: translate(0, 0); } }
+@keyframes xeno-pt-min-bl { 0% { transform: translate(0, 0); } 38% { transform: translate(1.3px, -1.3px); } 100% { transform: translate(0, 0); } }
+
+/* ── calendar — the posts tap down, the page takes it ────────────────────────────────
+   The binder posts are what hold a calendar to the wall, so they are what moves; the header rule and the
+   page stay put. It is a small motion on purpose — a calendar is usually a label for a date field, not a
+   button, and a page that swung would pull the eye off the value beside it. */
+.xeno-element[data-glyph='calendar'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-cal-post-a; --part-dur: 540ms; }
+.xeno-element[data-glyph='calendar'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-cal-post-b; --part-dur: 540ms; }
+.xeno-element[data-glyph='calendar'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-cal-page; --part-dur: 540ms; transform-box: view-box; transform-origin: 12px 20.5px; }
+@keyframes xeno-pt-cal-post-a {
+  0%   { transform: translateY(0); }
+  30%  { transform: translateY(-3.1px); }
+  100% { transform: translateY(0); }
+}
+@keyframes xeno-pt-cal-post-b {
+  0%   { transform: translateY(0); }
+  42%  { transform: translateY(-3.1px); }
+  100% { transform: translateY(0); }
+}
+@keyframes xeno-pt-cal-page {
+  0%   { transform: scaleY(1); }
+  46%  { transform: scaleY(0.9); }
+  100% { transform: scaleY(1); }
+}
+
+/* ── The negation set: eye-off / mic-off / timer-off ─────────────────────────────────
+   The slash DRAWS ITSELF, corner to corner, and the thing being denied gives way underneath. One mark,
+   one gesture, across every glyph that negates something — and it is the drawing that carries it: a
+   slash that simply appeared would be a state, while a slash that is drawn is an act.
+
+   `stroke-dasharray: 22.1` is the stroke's own length (4.2,4.2 → 19.8,19.8 = sqrt(2) x 15.6), so the
+   dash offset runs it exactly once. Steady easing, as with `check`: the default ease-out front-loads
+   the dash and the line looks half-finished for most of the animation. */
+.xeno-element[data-glyph='eye-off'],
+.xeno-element[data-glyph='mic-off'],
+.xeno-element[data-glyph='timer-off'] { --xeno-icon-ease: cubic-bezier(0.65, 0, 0.35, 1); }
+
+.xeno-element[data-glyph='eye-off'] .xeno-part[data-part='2'],
+.xeno-element[data-glyph='mic-off'] .xeno-part[data-part='3'],
+.xeno-element[data-glyph='timer-off'] .xeno-part[data-part='2'] {
+  --part-anim: xeno-pt-slash;
+  --part-dur: 560ms;
+  stroke-dasharray: 22.1;
+}
+@keyframes xeno-pt-slash {
+  0%   { stroke-dashoffset: 22.1; }
+  70%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* What each one gives up as the slash arrives. Not the same part in each: the eye loses its pupil (it
+   stops seeing), the mic's capsule shrinks back into its cradle (it stops listening), the clock's hands
+   fall still (it stops counting). Same mark, three different things being denied — a shared animation on
+   "whatever is part 1" would have said nothing about any of them. */
+.xeno-element[data-glyph='eye-off'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-eyeoff-pupil; --part-dur: 560ms; transform-box: view-box; transform-origin: 12px 12px; }
+@keyframes xeno-pt-eyeoff-pupil {
+  0%   { transform: scale(1); opacity: 1; }
+  62%  { transform: scale(0.45); opacity: 0.25; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.xeno-element[data-glyph='mic-off'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-micoff-capsule; --part-dur: 560ms; }
+@keyframes xeno-pt-micoff-capsule {
+  0%   { transform: translateY(0); }
+  62%  { transform: translateY(2.2px); }
+  100% { transform: translateY(0); }
+}
+.xeno-element[data-glyph='timer-off'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-timeroff-hands; --part-dur: 560ms; transform-box: view-box; transform-origin: 12px 12px; }
+@keyframes xeno-pt-timeroff-hands {
+  0%   { transform: rotate(0deg); }
+  26%  { transform: rotate(26deg); }
+  62%  { transform: rotate(26deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* ── The marked set: the mark performs, the object holds ─────────────────────────────
+   file-x, message-x — the cross draws itself one stroke then the other, the way `user-x` does. Reusing
+   that timing on purpose: a cross means the same thing on all three, so it should arrive the same way.
+   Stroke length is 7.35 (5.2 x sqrt(2)) for the file, 6.5 for the smaller one in the bubble. */
+.xeno-element[data-glyph='file-x'],
+.xeno-element[data-glyph='message-x'],
+.xeno-element[data-glyph='message-plus'],
+.xeno-element[data-glyph='file-out'],
+.xeno-element[data-glyph='folder-up'] { --xeno-icon-ease: cubic-bezier(0.65, 0, 0.35, 1); }
+
+.xeno-element[data-glyph='file-x'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-mark-a; --part-dur: 600ms; stroke-dasharray: 7.35; }
+.xeno-element[data-glyph='file-x'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-mark-b; --part-dur: 600ms; stroke-dasharray: 7.35; }
+.xeno-element[data-glyph='message-x'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-mark-a; --part-dur: 600ms; stroke-dasharray: 6.5; }
+.xeno-element[data-glyph='message-x'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-mark-b; --part-dur: 600ms; stroke-dasharray: 6.5; }
+@keyframes xeno-pt-mark-a {
+  0%   { stroke-dashoffset: 8; }
+  46%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes xeno-pt-mark-b {
+  0%   { stroke-dashoffset: 8; }
+  30%  { stroke-dashoffset: 8; }
+  76%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* message-plus — the two strokes meet in the middle rather than being drawn end to end. A plus has no
+   reading order; a cross does, which is why the two glyphs animate differently despite sharing a bubble. */
+.xeno-element[data-glyph='message-plus'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-plus-h; --part-dur: 600ms; transform-box: view-box; transform-origin: 12.4px 10.5px; }
+.xeno-element[data-glyph='message-plus'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-plus-v; --part-dur: 600ms; transform-box: view-box; transform-origin: 12.4px 10.5px; }
+@keyframes xeno-pt-plus-h {
+  0%   { transform: scaleX(0.2); }
+  56%  { transform: scaleX(1); }
+  100% { transform: scaleX(1); }
+}
+@keyframes xeno-pt-plus-v {
+  0%   { transform: scaleY(0.2); }
+  70%  { transform: scaleY(1); }
+  100% { transform: scaleY(1); }
+}
+
+/* file-out — the arrow LEAVES. Head and shaft travel together and come back: an export is one thing
+   going one way, and a head that outran its own shaft would be two things. */
+.xeno-element[data-glyph='file-out'] .xeno-part[data-part='2'],
+.xeno-element[data-glyph='file-out'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-fileout; --part-dur: 620ms; }
+@keyframes xeno-pt-fileout {
+  0%   { transform: translateX(0); }
+  40%  { transform: translateX(2.2px); }
+  100% { transform: translateX(0); }
+}
+
+/* folder-up — the arrow rises and the folder takes it, the same beat `archive` uses for its lid. The
+   two glyphs are neighbours in meaning (things going into a container), so they move alike. */
+.xeno-element[data-glyph='folder-up'] .xeno-part[data-part='1'],
+.xeno-element[data-glyph='folder-up'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-folderup-arrow; --part-dur: 620ms; }
+.xeno-element[data-glyph='folder-up'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-folderup-body; --part-dur: 620ms; transform-box: view-box; transform-origin: 10.4px 18.4px; }
+@keyframes xeno-pt-folderup-arrow {
+  0%   { transform: translateY(0); }
+  34%  { transform: translateY(-2.4px); }
+  100% { transform: translateY(0); }
+}
+@keyframes xeno-pt-folderup-body {
+  0%   { transform: scaleY(1); }
+  50%  { transform: scaleY(0.97); }
+  100% { transform: scaleY(1); }
+}
+
+/* ── The arrow family — one head, so one gesture ─────────────────────────────────────
+   Every arrow in the set travels along its own shaft and comes back. Distance is 1.6px, the same as the
+   panel chevrons: an arrow is usually a label on a button, and one that lunged would pull the eye off
+   the word beside it. */
+.xeno-element[data-glyph='arrow-up-right'] { --xeno-icon-anim: xeno-arrow-ne; --xeno-icon-dur: 480ms; }
+@keyframes xeno-arrow-ne {
+  0%   { transform: translate(0, 0); }
+  36%  { transform: translate(1.2px, -1.2px); }
+  100% { transform: translate(0, 0); }
+}
+/* The swap arrows pass EACH OTHER: same distance, opposite directions, and the lower one starts a beat
+   late. Two arrows moving as one block would be a single object sliding, which is not what a swap is. */
+.xeno-element[data-glyph='arrow-left-right'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-swap-e; --part-dur: 520ms; }
+.xeno-element[data-glyph='arrow-left-right'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-swap-w; --part-dur: 520ms; }
+@keyframes xeno-pt-swap-e {
+  0%   { transform: translateX(0); }
+  38%  { transform: translateX(3.4px); }
+  100% { transform: translateX(0); }
+}
+@keyframes xeno-pt-swap-w {
+  0%   { transform: translateX(0); }
+  16%  { transform: translateX(0); }
+  50%  { transform: translateX(-3.4px); }
+  100% { transform: translateX(0); }
+}
+
+/* trending-up — the line DRAWS itself and the head arrives at the end of it, which is the only order
+   that tells the truth: a trend is a thing that happened over time, so the glyph should take time.
+   Dash length 24 covers the polyline (7.8 + 4.8 + 10.7 ≈ 23.3) with a margin. */
+.xeno-element[data-glyph='trending-up'] { --xeno-icon-ease: cubic-bezier(0.65, 0, 0.35, 1); }
+.xeno-element[data-glyph='trending-up'] .xeno-part[data-part='0'] {
+  --part-anim: xeno-pt-trend-line;
+  --part-dur: 720ms;
+  stroke-dasharray: 24;
+}
+.xeno-element[data-glyph='trending-up'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-trend-head; --part-dur: 720ms; }
+@keyframes xeno-pt-trend-line {
+  0%   { stroke-dashoffset: 24; }
+  62%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes xeno-pt-trend-head {
+  0%   { opacity: 0; transform: translate(-1.6px, 1.6px); }
+  56%  { opacity: 0; transform: translate(-1.6px, 1.6px); }
+  78%  { opacity: 1; transform: translate(0, 0); }
+  100% { opacity: 1; transform: translate(0, 0); }
+}
+
+/* check-square — the tick draws itself inside a frame that holds still, the same way `check` does alone.
+   The frame is the constant in this family (`stop`, `contrast`, `check-square`); if it moved, the three
+   would stop reading as the same enclosure. Dash 12.6 is the tick's own length. */
+.xeno-element[data-glyph='check-square'] { --xeno-icon-ease: cubic-bezier(0.65, 0, 0.35, 1); }
+.xeno-element[data-glyph='check-square'] .xeno-part[data-part='1'] {
+  --part-anim: xeno-pt-checksq;
+  --part-dur: 540ms;
+  stroke-dasharray: 12.6;
+}
+@keyframes xeno-pt-checksq {
+  0%   { stroke-dashoffset: 12.6; }
+  72%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* save — the shutter presses into the shell and the shell takes it. A disk is a thing you push in, and
+   that is the only motion the object has ever had. */
+.xeno-element[data-glyph='save'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-save-shutter; --part-dur: 520ms; }
+.xeno-element[data-glyph='save'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-save-shell; --part-dur: 520ms; transform-box: view-box; transform-origin: 12px 19.6px; }
+@keyframes xeno-pt-save-shutter {
+  0%   { transform: translateY(0); }
+  36%  { transform: translateY(3.1px); }
+  100% { transform: translateY(0); }
+}
+@keyframes xeno-pt-save-shell {
+  0%   { transform: scaleY(1); }
+  46%  { transform: scaleY(0.9); }
+  100% { transform: scaleY(1); }
+}
+
+/* quote — the second mark follows the first, the way a quotation is read. Nothing else moves, because
+   the marks ARE the glyph. */
+.xeno-element[data-glyph='quote'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-quote-a; --part-dur: 620ms; }
+.xeno-element[data-glyph='quote'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-quote-b; --part-dur: 620ms; }
+@keyframes xeno-pt-quote-a {
+  0%   { transform: translateY(0); }
+  32%  { transform: translateY(-3.1px); }
+  100% { transform: translateY(0); }
+}
+@keyframes xeno-pt-quote-b {
+  0%   { transform: translateY(0); }
+  14%  { transform: translateY(0); }
+  46%  { transform: translateY(-3.1px); }
+  100% { transform: translateY(0); }
+}
+
+/* monitor / app-window — the screen wakes. A screen is the one part of either glyph that has a state,
+   so it is the part that changes; the stand and the title bar are furniture and hold still. */
+.xeno-element[data-glyph='monitor'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-screen-wake; --part-dur: 560ms; transform-box: view-box; transform-origin: 12px 10.2px; }
+.xeno-element[data-glyph='app-window'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-screen-wake; --part-dur: 560ms; transform-box: view-box; transform-origin: 12px 12px; }
+/* The screen blinks rather than only shrinking. Scale alone is what this was, and a screen cannot be
+   scaled far without ceasing to be the same monitor — 14% is about the limit, and 14% of a ten-pixel
+   screen is a pixel and a half of edge. Dimming has no such ceiling: it is the one thing a display can
+   do to its whole surface at once, and it is also what waking actually looks like. */
+@keyframes xeno-pt-screen-wake {
+  0%   { transform: scale(1); opacity: 1; }
+  30%  { transform: scale(0.88); opacity: 0.25; }
+  62%  { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+/* The window's two marks blink in sequence behind it — the smallest thing in the glyph, doing the least. */
+.xeno-element[data-glyph='app-window'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-win-dot-a; --part-dur: 560ms; }
+.xeno-element[data-glyph='app-window'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-win-dot-b; --part-dur: 560ms; }
+@keyframes xeno-pt-win-dot-a { 0% { opacity: 1; } 30% { opacity: 0.3; } 60% { opacity: 1; } 100% { opacity: 1; } }
+@keyframes xeno-pt-win-dot-b { 0% { opacity: 1; } 16% { opacity: 1; } 46% { opacity: 0.3; } 76% { opacity: 1; } 100% { opacity: 1; } }
+
+/* zap — one hard flash and a snap back, no travel. The glyph means "instant", and anything that eased
+   in would be arguing with the word. Steps easing on the way in for the same reason. */
+.xeno-element[data-glyph='zap'] { --xeno-icon-anim: xeno-zap-strike; --xeno-icon-dur: 440ms; --xeno-icon-ease: cubic-bezier(0.2, 0, 0, 1); }
+@keyframes xeno-zap-strike {
+  0%   { transform: scale(1); opacity: 1; }
+  18%  { transform: scale(1.32); opacity: 0.3; }
+  34%  { transform: scale(0.9); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* wrap-text — the hook is drawn, then its head arrives, so the line is seen running out of room before
+   it is seen turning back. Dash 12 covers the hook's run and its arc. */
+.xeno-element[data-glyph='wrap-text'] { --xeno-icon-ease: cubic-bezier(0.65, 0, 0.35, 1); }
+.xeno-element[data-glyph='wrap-text'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-wrap-hook; --part-dur: 660ms; stroke-dasharray: 16; }
+.xeno-element[data-glyph='wrap-text'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-wrap-head; --part-dur: 660ms; }
+@keyframes xeno-pt-wrap-hook {
+  0%   { stroke-dashoffset: 16; }
+  60%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes xeno-pt-wrap-head {
+  0%   { opacity: 0; transform: translateX(1.6px); }
+  54%  { opacity: 0; transform: translateX(1.6px); }
+  76%  { opacity: 1; transform: translateX(0); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* thumbs-up / thumbs-down — the WHOLE hand goes the way it points and comes back. Up for a like, down
+   for a dislike: the gesture and the glyph say the same thing, which a rotation from the wrist did not
+   — that read as a hand waving, and a wave means neither approval nor its opposite.
+
+   The whole icon rather than the palm alone, because a hand that leaves its own cuff behind is a hand
+   coming off at the wrist. Mirrored exactly, as the geometry is: the pair sits under every answer, and a
+   like that travelled further than a dislike would read as the product having an opinion about which one
+   you should press. */
+.xeno-element[data-glyph='thumbs-up'] { --xeno-icon-anim: xeno-ic-thumb-up; --xeno-icon-dur: 520ms; }
+.xeno-element[data-glyph='thumbs-down'] { --xeno-icon-anim: xeno-ic-thumb-down; --xeno-icon-dur: 520ms; }
+@keyframes xeno-ic-thumb-up {
+  0%   { transform: translateY(0); }
+  34%  { transform: translateY(-2.4px); }
+  100% { transform: translateY(0); }
+}
+@keyframes xeno-ic-thumb-down {
+  0%   { transform: translateY(0); }
+  34%  { transform: translateY(2.4px); }
+  100% { transform: translateY(0); }
+}
+
+/* library — the leaning book straightens and falls back. It is the only part that can move without the
+   shelf becoming a different shelf, and it is also the part that carries the meaning: three upright bars
+   are a chart, and the one out of line is what says these are objects standing up. */
+.xeno-element[data-glyph='library'] .xeno-part[data-part='2'] {
+  --part-anim: xeno-pt-library-lean;
+  --part-dur: 620ms;
+  transform-box: view-box;
+  transform-origin: 15px 19.2px;
+}
+/* Seven degrees on a book five units tall is a third of a pixel at the 13px this is drawn at in the
+   agent rail. It straightens the whole way now, and past vertical, so the lean visibly resolves and
+   comes back — a book being pushed upright rather than nudged. */
+@keyframes xeno-pt-library-lean {
+  0%   { transform: rotate(0deg); }
+  36%  { transform: rotate(-18deg); }
+  68%  { transform: rotate(4deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* store — the awning takes a breath and the front holds. An awning is cloth on a frame; it is the only
+   soft thing in the glyph, so it is the only thing that gives. */
+.xeno-element[data-glyph='store'] .xeno-part[data-part='0'] {
+  --part-anim: xeno-pt-store-awning;
+  --part-dur: 560ms;
+  transform-box: view-box;
+  transform-origin: 12px 9.4px;
+}
+/* The weakest motion in the whole set as measured: 0.36px, because 12% of a four-unit awning at 13px is
+   a quarter of a pixel. It billows properly now — half again its depth, and drawn back under itself on
+   the way out, which is what cloth on a frame does when the wind drops. */
+@keyframes xeno-pt-store-awning {
+  0%   { transform: scaleY(1); }
+  36%  { transform: scaleY(1.55); }
+  70%  { transform: scaleY(0.88); }
+  100% { transform: scaleY(1); }
+}
+
+/* navigation — the pointer travels along the way it points, which is the only direction it is allowed to
+   move: a location marker that drifted sideways would be pointing at one thing and going to another. */
+.xeno-element[data-glyph='navigation'] { --xeno-icon-anim: xeno-nav-go; --xeno-icon-dur: 520ms; }
+@keyframes xeno-nav-go {
+  0%   { transform: translateY(0); }
+  34%  { transform: translateY(-1.8px); }
+  100% { transform: translateY(0); }
+}
+
+/* lightbulb — it comes ON. The glass brightens and swells a fraction while the collar and contact hold
+   still, because the socket does not light up. This is the one glyph in the set whose animation IS its
+   meaning rather than a comment on it: an idea is the moment something starts. */
+.xeno-element[data-glyph='lightbulb'] .xeno-part[data-part='0'] {
+  --part-anim: xeno-pt-bulb-on;
+  --part-dur: 680ms;
+  transform-box: view-box;
+  transform-origin: 12px 15px;
+}
+@keyframes xeno-pt-bulb-on {
+  0%   { transform: scale(1); opacity: 0.45; }
+  30%  { transform: scale(1.28); opacity: 1; }
+  62%  { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.45; }
+}
+
+/* scan-eye — the frame closes in and the eye looks. Corners inward, not outward: this is `maximize`'s
+   geometry with the opposite intent, and the direction is the entire difference between framing
+   something to enlarge it and framing something to examine it. The pupil tracks a beat behind the
+   corners, because the frame arrives first and the looking follows. */
+.xeno-element[data-glyph='scan-eye'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-scan-tl; --part-dur: 720ms; }
+.xeno-element[data-glyph='scan-eye'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-scan-tr; --part-dur: 720ms; }
+.xeno-element[data-glyph='scan-eye'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-scan-br; --part-dur: 720ms; }
+.xeno-element[data-glyph='scan-eye'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-scan-bl; --part-dur: 720ms; }
+.xeno-element[data-glyph='scan-eye'] .xeno-part[data-part='5'] { --part-anim: xeno-pt-scan-pupil; --part-dur: 720ms; }
+@keyframes xeno-pt-scan-tl { 0% { transform: translate(0,0); } 34% { transform: translate(2.4px, 2.4px); } 100% { transform: translate(0,0); } }
+@keyframes xeno-pt-scan-tr { 0% { transform: translate(0,0); } 34% { transform: translate(-2.4px, 2.4px); } 100% { transform: translate(0,0); } }
+@keyframes xeno-pt-scan-br { 0% { transform: translate(0,0); } 34% { transform: translate(-2.4px, -2.4px); } 100% { transform: translate(0,0); } }
+@keyframes xeno-pt-scan-bl { 0% { transform: translate(0,0); } 34% { transform: translate(2.4px, -2.4px); } 100% { transform: translate(0,0); } }
+@keyframes xeno-pt-scan-pupil {
+  0%   { transform: translateX(0); }
+  30%  { transform: translateX(0); }
+  54%  { transform: translateX(2.1px); }
+  78%  { transform: translateX(-2.1px); }
+  100% { transform: translateX(0); }
+}
+
+/* shapes — the square that sits in front slides clear and comes back, so the overlap is briefly opened.
+   Only the one in front moves: what the glyph is about is that there are two objects, and the way to say
+   that is to let one of them pass over the other. */
+.xeno-element[data-glyph='shapes'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-shapes-square; --part-dur: 600ms; }
+@keyframes xeno-pt-shapes-square {
+  0%   { transform: translate(0, 0); }
+  38%  { transform: translate(3.1px, 3.1px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* waves — the three roll, each a beat behind the one above it. The glyph is drawn with them in phase so
+   the motion has somewhere to go: staggered at rest, it would already look like it was moving and the
+   hover would have nothing left to add. Half a wavelength each way, so the crest lands where the trough
+   was and nothing appears to slide off the edge. */
+.xeno-element[data-glyph='waves'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-wave-a; --part-dur: 900ms; }
+.xeno-element[data-glyph='waves'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-wave-b; --part-dur: 900ms; }
+.xeno-element[data-glyph='waves'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-wave-c; --part-dur: 900ms; }
+@keyframes xeno-pt-wave-a { 0% { transform: translateX(0); } 50% { transform: translateX(2.4px); } 100% { transform: translateX(0); } }
+@keyframes xeno-pt-wave-b { 0% { transform: translateX(0); } 14% { transform: translateX(0); } 60% { transform: translateX(2.4px); } 100% { transform: translateX(0); } }
+@keyframes xeno-pt-wave-c { 0% { transform: translateX(0); } 28% { transform: translateX(0); } 70% { transform: translateX(2.4px); } 100% { transform: translateX(0); } }
+
+/* feather — the quill dips from its point, the way a pen is put to paper. The pivot is the tip, because
+   that is the part that stays put when you write. */
+/* Percentages, for the reason spelled out on `brain`: this is a whole-icon rule, so px would be CSS
+   pixels off the root element's own box and the tip would only be the tip at size 24. 4.2/24, 19.8/24. */
+.xeno-element[data-glyph='feather'] {
+  --xeno-icon-anim: xeno-feather-dip;
+  --xeno-icon-dur: 620ms;
+  transform-origin: 17.5% 82.5%;
+}
+@keyframes xeno-feather-dip {
+  0%   { transform: rotate(0deg); }
+  36%  { transform: rotate(-7deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* hand — the fingers ripple, thumb to little finger. Four bars rather than one outline is what buys
+   this: a scalloped silhouette can only wave as a whole, and a hand that waves as a whole is a paddle. */
+.xeno-element[data-glyph='hand'] .xeno-part[data-part='0'] { --part-anim: xeno-pt-finger-a; --part-dur: 720ms; }
+.xeno-element[data-glyph='hand'] .xeno-part[data-part='1'] { --part-anim: xeno-pt-finger-b; --part-dur: 720ms; }
+.xeno-element[data-glyph='hand'] .xeno-part[data-part='2'] { --part-anim: xeno-pt-finger-c; --part-dur: 720ms; }
+.xeno-element[data-glyph='hand'] .xeno-part[data-part='3'] { --part-anim: xeno-pt-finger-d; --part-dur: 720ms; }
+@keyframes xeno-pt-finger-a { 0% { transform: translateY(0); } 26% { transform: translateY(-3.1px); } 60% { transform: translateY(0); } 100% { transform: translateY(0); } }
+@keyframes xeno-pt-finger-b { 0% { transform: translateY(0); } 12% { transform: translateY(0); } 38% { transform: translateY(-3.1px); } 72% { transform: translateY(0); } 100% { transform: translateY(0); } }
+@keyframes xeno-pt-finger-c { 0% { transform: translateY(0); } 24% { transform: translateY(0); } 50% { transform: translateY(-3.1px); } 84% { transform: translateY(0); } 100% { transform: translateY(0); } }
+@keyframes xeno-pt-finger-d { 0% { transform: translateY(0); } 36% { transform: translateY(0); } 62% { transform: translateY(-3.1px); } 96% { transform: translateY(0); } 100% { transform: translateY(0); } }
+
+/* file-clock — the hands sweep a full turn and the sheet holds. One turn, not a nudge: this glyph means
+   history, and the only honest way to say "time passed" is to let some. */
+.xeno-element[data-glyph='file-clock'] .xeno-part[data-part='3'] {
+  --part-anim: xeno-pt-fileclock;
+  --part-dur: 900ms;
+  --xeno-icon-ease: cubic-bezier(0.65, 0, 0.35, 1);
+  transform-box: view-box;
+  transform-origin: 11.7px 15.3px;
+}
+@keyframes xeno-pt-fileclock {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ---------------------------------------------------------------------------
+   A NOTE ON AMPLITUDE, which the seven glyphs below were all calibrated wrong for
+   the first time round.
+
+   Every keyframe here is written in the 24-unit viewBox, and it is natural to judge
+   it in the preview, where icons are drawn at 96 or 48. The chat draws them at 13
+   to 16. At 14px a unit is 0.58 CSS pixels, so a motion that looks like a confident
+   three units on the design grid arrives as 1.7 pixels — and a rotation of a
+   near-symmetric shape arrives as nothing at all, because there is no edge whose
+   travel the eye can follow.
+
+   Measured on the running chat with the host's :hover forced and the part rects
+   sampled through the animation: brain-circuit moved 0.30px, smile 0.43, bot 0.49,
+   target 0.58. All seven read as broken, and none of them was — the triggers fired
+   every time. The rule the set already followed without writing it down is that the
+   motions which work at small sizes are the LARGE ones: refresh spins a full turn
+   (8.1px), chevron travels (4.7px), plus scales from zero (3.7px).
+
+   So: at these sizes, scale from zero and travel. Rotate only what has a long arm.
+   --------------------------------------------------------------------------- */
+
+/* brain — it tilts, the way a head does when someone is working something out. There is nothing else in
+   this glyph that CAN move: two strokes, one of them the outline and the other the line that divides it,
+   and a sulcus that slid would be a crack rather than a fold. So the motion is the whole object, and the
+   gesture it borrows is the one people actually make when they think.
+
+   The pivot is the base of the brain rather than its centre — a head tilts on a neck, and rotating about
+   the middle reads as a wobble.
+
+   It tips fourteen degrees and comes back through five, rather than the six it started life with. A blob
+   is the hardest thing in this set to rotate legibly — it has no corner to watch — so it needs both the
+   larger angle and the overshoot on the way back, which is the part the eye actually catches. */
+/* The pivot is a PERCENTAGE, and that is the whole of a bug this shipped with.
+ *
+ * A WHOLE-icon rule targets the root `<svg>`, which is a replaced element with a CSS box — so a
+ * `transform-origin` written in px is CSS pixels measured from that box's corner, not viewBox units.
+ * `12px 19.4px` is only the base of the brain when the icon happens to be drawn at 24. The chat draws
+ * it at 14, where that pivot sits five pixels BELOW the glyph and two from its right edge, and a
+ * fourteen-degree rotation about a point outside the icon is not a tilt — it is the drawing being
+ * thrown sideways. Reported as "it doesn't look like a brain any more", which is what it looked like.
+ *
+ * `transform-box: view-box` looks like the fix and is a no-op here: on the root element the view box
+ * and the fill box are the same rectangle, so the lengths stay CSS pixels either way. It only converts
+ * to user units on a CHILD, which is why the per-part rules in this file (file-clock, library, the
+ * nodes below) can and must use it. A whole-icon rule has to speak in percentages: 12/24 and 19.4/24.
+ *
+ * `feather` had the same defect and got away with it — seven degrees moves the drawing about a pixel,
+ * which reads as slightly odd easing rather than as a bug. */
+.xeno-element[data-glyph='brain'] {
+  --xeno-icon-anim: xeno-ic-brain-tilt;
+  --xeno-icon-dur: 720ms;
+  transform-origin: 50% 81%;
+}
+@keyframes xeno-ic-brain-tilt {
+  0%   { transform: rotate(0deg); }
+  36%  { transform: rotate(-14deg); }
+  68%  { transform: rotate(5deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* brain-circuit — the signal leaves the tissue and arrives at a node, twice, upper then lower. The order
+   is the point; both at once would be a pulse, and a pulse is a heartbeat.
+
+   The trace DRAWS, from the sulcus outward, and the node then arrives from nothing. That is the second
+   version: the first swelled the nodes 32% in place, which on a 2.8-unit square at 16px is four tenths
+   of a pixel — the animation ran, and no one could have seen it. Growing from zero moves the same square
+   by its whole width, and the trace's far end travels its whole length. Same idea, an order of magnitude
+   more of it.
+
+   `scaleX` from the sulcus end for the trace, so it extends rather than growing from its middle — a
+   signal has a direction. */
+.xeno-element[data-glyph='brain-circuit'] .xeno-part[data-part='2'] {
+  --part-anim: xeno-pt-trace-a;
+  --part-dur: 780ms;
+  transform-box: view-box;
+  transform-origin: 12px 9.3px;
+}
+.xeno-element[data-glyph='brain-circuit'] .xeno-part[data-part='3'] {
+  --part-anim: xeno-pt-trace-b;
+  --part-dur: 780ms;
+  transform-box: view-box;
+  transform-origin: 12px 15.3px;
+}
+.xeno-element[data-glyph='brain-circuit'] .xeno-part[data-part='4'] {
+  --part-anim: xeno-pt-node-fire-a;
+  --part-dur: 780ms;
+  transform-box: view-box;
+  transform-origin: 17px 9.3px;
+}
+.xeno-element[data-glyph='brain-circuit'] .xeno-part[data-part='5'] {
+  --part-anim: xeno-pt-node-fire-b;
+  --part-dur: 780ms;
+  transform-box: view-box;
+  transform-origin: 17px 15.3px;
+}
+@keyframes xeno-pt-trace-a {
+  0%   { transform: scaleX(0); }
+  30%  { transform: scaleX(1); }
+  100% { transform: scaleX(1); }
+}
+@keyframes xeno-pt-trace-b {
+  0%   { transform: scaleX(0); }
+  26%  { transform: scaleX(0); }
+  56%  { transform: scaleX(1); }
+  100% { transform: scaleX(1); }
+}
+@keyframes xeno-pt-node-fire-a {
+  0%   { transform: scale(0); }
+  30%  { transform: scale(0); }
+  48%  { transform: scale(1.25); }
+  62%  { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+@keyframes xeno-pt-node-fire-b {
+  0%   { transform: scale(0); }
+  56%  { transform: scale(0); }
+  74%  { transform: scale(1.25); }
+  88%  { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+
+/* bot — the antenna bobs and it blinks. The eyes are two-unit vertical STROKES, which is what makes the
+   blink possible at all: a segment can close to nothing along one axis and open again. A dot can only
+   shrink towards its own centre, which is a fade, and a robot whose eyes fade is powering down.
+
+   Both eyes on the same frame. Staggered, it would be a wink, and a wink from a piece of software is a
+   different personality than this product has.
+
+   The antenna was added because the blink alone is not enough here. A blink is a real event — the eye is
+   there and then it is not — but at 13px, which is what the empty state's tabs draw, the eye is barely a
+   pixel tall to begin with, so its disappearing is a flicker rather than a gesture. The antenna EXTENDS,
+   which gives the eye something to follow while the blink happens underneath it.
+
+   The stem stretches by exactly what the node travels, anchored at the head. Moving the node alone was
+   the obvious version and it is wrong: a node that leaves its stem behind is a part coming off. */
+.xeno-element[data-glyph='bot'] .xeno-part[data-part='0'] {
+  --part-anim: xeno-pt-bot-antenna;
+  --part-dur: 700ms;
+  transform-box: view-box;
+  transform-origin: 12px 4px;
+}
+.xeno-element[data-glyph='bot'] .xeno-part[data-part='1'] {
+  --part-anim: xeno-pt-bot-stem;
+  --part-dur: 700ms;
+  transform-box: view-box;
+  transform-origin: 12px 8px;
+}
+.xeno-element[data-glyph='bot'] .xeno-part[data-part='3'] {
+  --part-anim: xeno-pt-bot-blink;
+  --part-dur: 700ms;
+  transform-box: view-box;
+  transform-origin: 8.8px 13.6px;
+}
+.xeno-element[data-glyph='bot'] .xeno-part[data-part='4'] {
+  --part-anim: xeno-pt-bot-blink;
+  --part-dur: 700ms;
+  transform-box: view-box;
+  transform-origin: 15.2px 13.6px;
+}
+@keyframes xeno-pt-bot-antenna {
+  0%   { transform: translateY(0); }
+  30%  { transform: translateY(-2.6px); }
+  62%  { transform: translateY(0.4px); }
+  100% { transform: translateY(0); }
+}
+/* 2.6 units of travel on a 2.6-unit stem is exactly double its length, and 0.4 back is 1.15. */
+@keyframes xeno-pt-bot-stem {
+  0%   { transform: scaleY(1); }
+  30%  { transform: scaleY(2); }
+  62%  { transform: scaleY(0.85); }
+  100% { transform: scaleY(1); }
+}
+@keyframes xeno-pt-bot-blink {
+  0%   { transform: scaleY(1); }
+  40%  { transform: scaleY(1); }
+  54%  { transform: scaleY(0.04); }
+  70%  { transform: scaleY(1); }
+  100% { transform: scaleY(1); }
+}
+
+/* sparkles — the two twinkle out of phase, the small one following the large. That order is the reason
+   there are two: a single star can only pulse, and a pulse has no direction, while a second one arriving
+   late reads as light catching on something.
+
+   A quarter turn goes with the scale. A four-pointed star rotated 90° is the same star, so the turn
+   costs nothing at the ends of the animation and is visible for every frame in between — which is
+   exactly the property a twinkle wants. */
+.xeno-element[data-glyph='sparkles'] .xeno-part[data-part='0'] {
+  --part-anim: xeno-pt-twinkle-a;
+  --part-dur: 820ms;
+  transform-box: view-box;
+  transform-origin: 9.6px 9.6px;
+}
+.xeno-element[data-glyph='sparkles'] .xeno-part[data-part='1'] {
+  --part-anim: xeno-pt-twinkle-b;
+  --part-dur: 820ms;
+  transform-box: view-box;
+  transform-origin: 17.8px 17.4px;
+}
+@keyframes xeno-pt-twinkle-a {
+  0%   { transform: rotate(0deg) scale(1); }
+  46%  { transform: rotate(45deg) scale(0.78); }
+  100% { transform: rotate(90deg) scale(1); }
+}
+@keyframes xeno-pt-twinkle-b {
+  0%   { transform: rotate(0deg) scale(1); }
+  24%  { transform: rotate(0deg) scale(1); }
+  62%  { transform: rotate(45deg) scale(0.72); }
+  100% { transform: rotate(90deg) scale(1); }
+}
+
+/* wand-sparkles — the wand flicks and the star answers. Cause and effect, in that order and with a gap
+   between them: the shaft and its joint swing together about the handle, and only after they have turned
+   does the star swell. Simultaneous, the two would look like one object stretching.
+
+   The pivot is the butt of the handle, because that is where a hand would be, and the whole point of the
+   joint being drawn at the lower third is to say so. */
+.xeno-element[data-glyph='wand-sparkles'] .xeno-part[data-part='0'],
+.xeno-element[data-glyph='wand-sparkles'] .xeno-part[data-part='1'] {
+  --part-anim: xeno-pt-wand-flick;
+  --part-dur: 720ms;
+  transform-box: view-box;
+  transform-origin: 3.8px 20.2px;
+}
+.xeno-element[data-glyph='wand-sparkles'] .xeno-part[data-part='2'] {
+  --part-anim: xeno-pt-wand-star;
+  --part-dur: 720ms;
+  transform-box: view-box;
+  transform-origin: 18.2px 6.4px;
+}
+/* Eighteen degrees, not nine. The shaft has a long arm — its tip is fifteen units from the handle — so
+   this is the one glyph in the group where rotation was already the right instrument and simply needed
+   twice as much of it. The star arrives from nothing rather than swelling a quarter, for the same reason
+   the circuit's nodes do. */
+@keyframes xeno-pt-wand-flick {
+  0%   { transform: rotate(0deg); }
+  30%  { transform: rotate(-18deg); }
+  64%  { transform: rotate(4deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes xeno-pt-wand-star {
+  0%   { transform: rotate(0deg) scale(0.2); }
+  32%  { transform: rotate(0deg) scale(0.2); }
+  58%  { transform: rotate(45deg) scale(1.35); }
+  78%  { transform: rotate(70deg) scale(0.94); }
+  100% { transform: rotate(90deg) scale(1); }
+}
+
+/* target — the rings close on the centre and open again. Inner first, then outer, so the tightening
+   reads as one movement travelling INWARD rather than the whole glyph shrinking. The centre mark holds
+   still, because it is the thing being converged on; a bullseye that moved would be the wrong idea
+   entirely. */
+.xeno-element[data-glyph='target'] .xeno-part[data-part='0'] {
+  --part-anim: xeno-pt-target-outer;
+  --part-dur: 680ms;
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+}
+.xeno-element[data-glyph='target'] .xeno-part[data-part='1'] {
+  --part-anim: xeno-pt-target-inner;
+  --part-dur: 680ms;
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+}
+/* The rings close much harder than they first did — 0.9 and 0.76 were a tenth and a quarter of rings
+   that are ten and five pixels wide on screen, so the whole convergence happened inside a pixel. The
+   inner ring now collapses most of the way to the centre mark, which is the reading anyway: it is not
+   that the rings shrink a little, it is that they close ON something. */
+@keyframes xeno-pt-target-outer {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(0.8); }
+  72%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes xeno-pt-target-inner {
+  0%   { transform: scale(1); }
+  32%  { transform: scale(0.42); }
+  70%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+/* smile — the eyes narrow and the mouth widens, together. A smile is not a mouth shape; it is what the
+   eyes do at the same time, which is why the eyes are strokes here and not dots. A face where only the
+   mouth moves is a face being polite about something.
+
+   The mouth widens rather than curving deeper, because the curve is geometry and widening is a
+   transform — and a smile that got WIDER is the same reading as one that got deeper, for free. */
+.xeno-element[data-glyph='smile'] .xeno-part[data-part='1'] {
+  --part-anim: xeno-pt-smile-eye;
+  --part-dur: 620ms;
+  transform-box: view-box;
+  transform-origin: 9.2px 10.9px;
+}
+.xeno-element[data-glyph='smile'] .xeno-part[data-part='2'] {
+  --part-anim: xeno-pt-smile-eye;
+  --part-dur: 620ms;
+  transform-box: view-box;
+  transform-origin: 14.8px 10.9px;
+}
+.xeno-element[data-glyph='smile'] .xeno-part[data-part='3'] {
+  --part-anim: xeno-pt-smile-mouth;
+  --part-dur: 620ms;
+  transform-box: view-box;
+  transform-origin: 12px 15.4px;
+}
+/* The eyes close ALL the way rather than halfway, and the mouth takes a third more width instead of a
+   seventh. Halfway on a 1.8-unit stroke is nine tenths of a unit — half a pixel where this glyph is
+   actually drawn — so the first version was a smile no one could see happen. Squeezed shut, the eye is
+   simply gone for a moment, which is an event at any size. */
+@keyframes xeno-pt-smile-eye {
+  0%   { transform: scaleY(1); }
+  38%  { transform: scaleY(0.05) translateY(0.5px); }
+  72%  { transform: scaleY(1.1); }
+  100% { transform: scaleY(1); }
+}
+@keyframes xeno-pt-smile-mouth {
+  0%   { transform: scale(1, 1); }
+  38%  { transform: scale(1.34, 1.45); }
+  72%  { transform: scale(0.96, 0.94); }
+  100% { transform: scale(1, 1); }
+}
+
+/* ---- Accessibility: honor reduced-motion ----------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .xeno-element[data-glyph],
+  .xeno-element[data-glyph] .xeno-part { animation: none !important; }
+}

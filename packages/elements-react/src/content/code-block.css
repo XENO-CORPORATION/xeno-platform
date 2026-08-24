@@ -1,0 +1,159 @@
+/*
+ * CodeBlock — a monochrome code surface. Shell is greyscale (canvas card + hairline border); the code is
+ * the ink. State is CSS-first: `data-collapsed` on the root swaps body↔summary and rotates the chevron;
+ * `data-selection` on the copy button reflects the transient copied state. Tokens only — the sole hue is
+ * `--xeno-danger`, and only on an error output. Motion is transform/opacity, behind the reduce guard.
+ */
+.xeno-code {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--xeno-canvas);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-style-content-radius);
+  color: var(--xeno-text);
+  overflow: hidden;
+}
+
+/* ── Header: language label + action row ─────────────────────────────────────────── */
+.xeno-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 6px 5px 12px;
+  background: var(--xeno-surface);
+  border-bottom: 1px solid var(--xeno-border);
+}
+
+.xeno-code-lang {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--xeno-muted);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.xeno-code-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Copy button reflects the ~1.5s copied confirmation (icon swaps to Check; ink lifts to full text). */
+.xeno-code-copy.is-copied {
+  color: var(--xeno-text);
+}
+
+/* Collapse chevron: points down when open, rotates to point right when collapsed. */
+.xeno-code-collapse .xeno-element {
+  transition: transform var(--xeno-dur) var(--xeno-ease);
+}
+.xeno-code[data-collapsed='true'] .xeno-code-collapse .xeno-element {
+  transform: rotate(-90deg);
+}
+
+/* ── Body: <pre><code>, monospace, horizontally scrollable ───────────────────────── */
+.xeno-code-body {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--xeno-text);
+  tab-size: 2;
+}
+.xeno-code-body:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--xeno-border);
+}
+.xeno-code-code {
+  display: block;
+  font: inherit;
+  color: inherit;
+  white-space: pre;
+}
+
+/* Collapsed ↔ expanded: swap body for the summary line. */
+.xeno-code[data-collapsed='true'] .xeno-code-body {
+  display: none;
+}
+.xeno-code[data-collapsed='false'] .xeno-code-summary {
+  display: none;
+}
+
+.xeno-code-summary {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 10px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--xeno-muted);
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition:
+    color var(--xeno-dur) ease,
+    background var(--xeno-dur) ease;
+}
+.xeno-code-summary:hover {
+  color: var(--xeno-text);
+  background: var(--xeno-hover);
+}
+.xeno-code-summary:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--xeno-border);
+}
+
+/* ── Output panel: Running… / result / error ─────────────────────────────────────── */
+.xeno-code-output {
+  padding: 10px 14px;
+  background: var(--xeno-elevated);
+  border-top: 1px solid var(--xeno-border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.xeno-code-output-running {
+  color: var(--xeno-muted);
+}
+.xeno-code-output-text {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  color: var(--xeno-text);
+}
+.xeno-code-output[data-status='error'] {
+  border-top-color: var(--xeno-danger);
+}
+.xeno-code-output[data-status='error'] .xeno-code-output-text {
+  color: var(--xeno-danger);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .xeno-code-output[data-status='running'] .xeno-code-output-running {
+    animation: xeno-code-pulse 1.2s var(--xeno-ease) infinite;
+  }
+}
+@keyframes xeno-code-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-code-collapse .xeno-element,
+  .xeno-code-summary {
+    transition: none;
+  }
+}

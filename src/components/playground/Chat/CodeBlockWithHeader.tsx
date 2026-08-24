@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect, memo } from 'react';
-import { Copy, Check, Rows, Minimize2, Maximize2, Play, Loader2, X, Pencil } from 'lucide-react';
+import React, { useState, useMemo, memo } from 'react';
+import { Button, IconButton, Spinner, Textarea } from '@xenosystem/elements-react';
+import { Copy, Check, Rows, XDecl, Maximize2Decl, Minimize2Decl, EditDecl, CheckDecl, CopyDecl, PlayDecl } from '@/lib/icons';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 // Interface for Piston API Runtime (can remain here or be moved to a types file)
 interface PistonRuntime {
@@ -32,6 +33,7 @@ interface CodeBlockWithHeaderProps {
   onEditCodeChange?: (newCode: string) => void; // Callback when editing code changes
   onSaveCodeEdit?: () => void; // Callback to save code edit
   onCancelCodeEdit?: () => void; // Callback to cancel code edit
+  theme?: 'dark' | 'light'; // Chat theme — drives the syntax palette + surfaces
 }
 
 // List of languages considered runnable (adjust as needed based on Piston support)
@@ -52,7 +54,8 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
   editingCode = '',
   onEditCodeChange,
   onSaveCodeEdit,
-  onCancelCodeEdit
+  onCancelCodeEdit,
+  theme = 'dark'
 }) => {
   const [copied, setCopied] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -103,20 +106,20 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
   };
 
   // --- Style Definitions ---
-  const baseButtonClass = "p-1.5 rounded-md transition-all duration-150 ease-in-out flex items-center gap-1.5 text-gray-400 text-xs font-medium hover:text-white hover:bg-zinc-700/60";
-  const copiedButtonClass = "text-green-400 bg-green-900/40";
+  const baseButtonClass = "p-1.5 rounded-md transition-all duration-150 ease-in-out flex items-center gap-1.5 text-[var(--chat-muted)] text-xs font-medium hover:text-[var(--chat-text)] hover:bg-[var(--chat-hover)]";
+  const copiedButtonClass = "text-[var(--chat-text)] bg-[var(--chat-hover)]";
 
   // Customizations for the syntax highlighter style
   // We modify the theme directly here for padding and line height inside the <pre>
   const customSyntaxHighlighterStyle = useMemo(() => {
-    const style = { ...vscDarkPlus }; // Copy the theme
-    
+    const style = { ...(theme === 'light' ? oneLight : vscDarkPlus) }; // Palette follows chat theme
+
     // Style the main <pre> tag
     style['pre[class*="language-"]'] = {
         ...(style['pre[class*="language-"]'] || {}), // Keep existing pre styles
         margin: '0',                     // Remove outer margin
         padding: '1rem',                 // Add internal padding (adjust as needed)
-        backgroundColor: '#18171b',      // Match desired background if theme differs
+        backgroundColor: 'transparent',  // Show the token-themed container behind it
         lineHeight: '1.5',               // Standard line height for readability
         borderRadius: '0 0 0.5rem 0.5rem', // RE-ADD bottom rounding
     };
@@ -131,7 +134,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
      };
 
     return style;
-  }, []);
+  }, [theme]);
   
   // Style for line numbers
   const lineNumberStyle = useMemo(() => ({
@@ -139,7 +142,7 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
       paddingRight: '1em',
       marginRight: '0.5em', // Consistent margin for all lines
       textAlign: 'right' as const, // Right-align line numbers for consistent spacing
-      color: '#6a737d', // Dim color for line numbers
+      color: 'var(--chat-muted)', // Dim color for line numbers
       userSelect: 'none' as const,
       fontSize: '0.9em', // Slightly smaller line numbers
       display: 'inline-block', // Needed for proper alignment
@@ -150,44 +153,27 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
   return (
     // Use a Fragment to return multiple top-level elements
     <>
-      {/* Inline Styles for Scrollbar - Scoped via unique class */}
-      <style>
-        {`
-          .code-block-syntax-highlighter pre::-webkit-scrollbar {
-            width: 8px; 
-            height: 8px;
-          }
+      {/* The scrollbar is XENO Elements' now, applied document-wide from `scrollbar.css`: nothing at
+          rest, a hairline rail with the thumb on it once the pointer is in the region.
 
-          .code-block-syntax-highlighter pre::-webkit-scrollbar-track {
-            background: #18171b; 
-            border-radius: 4px;
-          }
+          A local one used to be declared here — an 8px webkit bar plus a `scrollbar-width: thin`
+          labelled "Optional: Firefox scrollbar styling". That label had it backwards. Since Chrome 121
+          an element with `scrollbar-width` set has its `::-webkit-scrollbar` rules IGNORED, so the line
+          meant for Firefox was switching the good version off everywhere else, and this panel had been
+          showing the browser's default bar rather than the four rules above it. No error, and the rules
+          still listed as applied in DevTools. */}
 
-          .code-block-syntax-highlighter pre::-webkit-scrollbar-thumb {
-            background: #3a3a3d; // Or another suitable dark grey
-            border-radius: 4px;
-            border: 1px solid #18171b; // Creates slight separation from track
-          }
+      {/* Code Block Container - Add the unique class.
+          `overflow: clip` rather than `hidden`: both round off the corners, but `hidden`
+          makes this a scroll container, and a sticky child can then only stick inside a
+          box that never scrolls — i.e. not at all. `clip` does not, so the header below
+          sticks against the conversation's scrollport, which is the one actually moving. */}
+      <div className="code-block-container code-block-syntax-highlighter rounded-lg border border-[var(--chat-border)] bg-[var(--chat-canvas)] [overflow:clip] shadow-none my-4">
 
-          .code-block-syntax-highlighter pre::-webkit-scrollbar-thumb:hover {
-            background: #555; 
-          }
-          
-          /* Optional: Firefox scrollbar styling */
-          .code-block-syntax-highlighter pre {
-            scrollbar-width: thin;
-            scrollbar-color: #3a3a3d #18171b;
-          }
-        `}
-      </style>
-
-      {/* Code Block Container - Add the unique class */}
-      <div className="code-block-container code-block-syntax-highlighter rounded-lg border border-[#3a3a3d] bg-[#18171b] overflow-hidden shadow-md my-4">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 bg-[#1f1f20] border-b border-[#3a3a3d]">
+        {/* Header — pinned, so Copy / Edit stay reachable anywhere inside a long block. */}
+        <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-lg border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-4 py-2">
           {/* Language Name */}
-          <span className="text-xs font-medium text-gray-400 select-none uppercase tracking-wider">
+          <span className="text-xs font-medium text-[var(--chat-muted)] select-none uppercase tracking-wider">
             {cleanLanguage}
         </span>
           
@@ -195,69 +181,80 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
           <div className="flex items-center gap-3">
              {/* Collapse Button */}
              {canCollapse && !isEditing && (
-                 <button
-                    className={`${baseButtonClass} hover:bg-zinc-700/60`}
+                 <Button
+                    variant="ghost"
+                    size="sm"
+                    leadingIcon={isCollapsed ? Maximize2Decl : Minimize2Decl}
                     title={isCollapsed ? "Expand code" : "Collapse code"}
                     onClick={toggleCollapse}
                     disabled={currentIsRunning} // Disable while running
                  >
-                    {isCollapsed ? <Maximize2 size={15} /> : <Minimize2 size={15} />}
                     <span className="hidden sm:inline">{isCollapsed ? 'Expand' : 'Collapse'}</span>
-                 </button>
+                 </Button>
              )}
              {/* Run Button (Conditional) */}
              {isRunnable && !isEditing && (
-                <button
-                   className={`${baseButtonClass} ${currentIsRunning || runtimesLoading ? 'text-gray-500 cursor-not-allowed' : 'hover:bg-zinc-700/60'}`}
+                <Button
+                   variant="ghost"
+                   size="sm"
+                   {...(currentIsRunning || runtimesLoading ? {} : { leadingIcon: PlayDecl })}
                    title={runtimesLoading ? "Loading runtimes..." : currentIsRunning ? "Running..." : "Run code"}
                    onClick={handleRun}
-                   disabled={currentIsRunning || runtimesLoading} // Disable if running OR if runtimes are loading
+                   disabled={currentIsRunning || runtimesLoading}
                 >
-                   {currentIsRunning || runtimesLoading ? <Loader2 size={15} className="animate-spin"/> : <Play size={15} className="fill-current"/>}
+                   {/* The leading slot takes a DECLARATION and the busy face is a Spinner component,
+                       so the two cannot share it. The spinner rides in children instead, where the
+                       label already is. */}
+                   {(currentIsRunning || runtimesLoading) && <Spinner size={15} />}
                    <span className="hidden sm:inline">{runtimesLoading ? "Loading..." : currentIsRunning ? 'Running' : 'Run'}</span>
-                </button>
+                </Button>
              )}
              {/* Edit Button */}
              {onEditCode && !isEditing && (
-                <button
-                   className={`${baseButtonClass} hover:bg-zinc-700/60`}
+                <Button
+                   variant="ghost"
+                   size="sm"
+                   leadingIcon={EditDecl}
                    title="Edit code"
                    onClick={() => onEditCode(codeBlockId, code, cleanLanguage)}
                    disabled={currentIsRunning}
                 >
-                   <Pencil size={15} />
                    <span className="hidden sm:inline">Edit</span>
-                </button>
+                </Button>
              )}
              {/* Save/Cancel Buttons when editing */}
              {isEditing && (
                 <>
-                  <button
-                     className="text-xs text-gray-400 hover:text-gray-200 px-2 py-1 transition-colors"
+                  <Button
+                     variant="ghost"
+                     size="xs"
                      title="Cancel editing"
                      onClick={onCancelCodeEdit}
                   >
                      Cancel
-                  </button>
-                  <button
-                     className="text-xs bg-gray-400 text-zinc-900 px-3 py-1 rounded-md font-semibold hover:bg-gray-300 transition-colors"
+                  </Button>
+                  <Button
+                     variant="primary"
+                     size="xs"
                      title="Save changes"
                      onClick={onSaveCodeEdit}
                   >
                      Save
-                  </button>
+                  </Button>
                 </>
              )}
              {/* Copy Button */}
-          <button
-                className={`${baseButtonClass} ${copied ? copiedButtonClass : 'hover:bg-zinc-700/60'}`}
+          <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={copied ? CheckDecl : CopyDecl}
                 title={copied ? "Copied!" : "Copy code"}
-            onClick={handleCopy}
-                disabled={copied || currentIsRunning || isEditing} // Disable while running, copied, or editing
+                data-selection={copied ? 'on' : 'off'}
+                onClick={handleCopy}
+                disabled={copied || currentIsRunning || isEditing}
           >
-                {copied ? <Check size={15} /> : <Copy size={15} />}
                 <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
-          </button>
+          </Button>
           </div>
         </div>
 
@@ -265,10 +262,24 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
         <div className="code-content-area">
             {isEditing ? (
               <div className="p-2">
-                <textarea
+                {/* The field that was blocked by TYPE rather than by fill, and the argument against
+                    fixing it with a third override door held: the answer was a MODE. `--xeno-font-mono`
+                    had been declared in the library beside `--xeno-font-sans` and read by nothing, so
+                    `mono` asks for the family the system already names instead of smuggling one in
+                    through `className` and letting stylesheet order settle the face.
+                    Everything else was already the component: `--chat-canvas` is what it paints, the
+                    border and the focus colour are its own `--chat-border` / `--chat-muted` pair.
+                    `fontSize={14}` holds `text-sm` where the component's default is 15.
+                    `leading-relaxed` goes — the component owns line-height at 1.5, and leaving the
+                    class would be two rules fighting on cascade order, the same coin-flip the family
+                    posed. The focus RING goes too: `.xeno-textarea:focus` is the border alone, which
+                    is what every other converted field in this chat now does. */}
+                <Textarea
+                  mono
+                  fontSize={14}
                   value={editingCode}
                   onChange={(e) => onEditCodeChange?.(e.target.value)}
-                  className="w-full min-h-[200px] max-h-[500px] p-3 bg-[#0d0d0e] border border-[#3a3a3a] rounded-lg text-white font-mono text-sm resize-y focus:outline-none focus:border-[#5a5a5a] focus:ring-1 focus:ring-[#5a5a5a] leading-relaxed"
+                  className="w-full min-h-[200px] max-h-[500px] resize-y"
                   placeholder="Edit code..."
                   autoFocus
                   spellCheck={false}
@@ -276,11 +287,11 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
               </div>
             ) : isCollapsed ? (
               <div
-                className="px-4 py-3 flex items-center justify-center gap-2 text-sm text-gray-500 cursor-pointer hover:text-gray-400 transition-colors duration-150"
+                className="px-4 py-3 flex items-center justify-center gap-2 text-sm text-[var(--chat-muted)] cursor-pointer hover:text-[var(--chat-muted)] transition-colors duration-150"
                 onClick={toggleCollapse}
               >
                   <Rows size={16} />
-                  <span className="text-white">{numberOfLines}</span> <span className="sr-only">hidden lines</span> <span className="hidden md:inline text-gray-400">hidden lines</span>
+                  <span className="text-[var(--chat-text)]">{numberOfLines}</span> <span className="sr-only">hidden lines</span> <span className="hidden md:inline text-[var(--chat-muted)]">hidden lines</span>
               </div>
             ) : (
               <SyntaxHighlighter
@@ -297,64 +308,37 @@ const CodeBlockWithHeader: React.FC<CodeBlockWithHeaderProps> = memo(({
           )}
         </div>
 
-        {/* MOVED & RESTYLED Execution Status & Output -- becomes part of the main container (REVERTING THIS) */}
-        {/* 
-      {(isRunning || runOutput || runError) && (
-          <div className="relative px-4 py-2 text-xs border-t border-[#3a3a3d]"> 
-              {!isRunning && (runOutput || runError) && (
-                <button 
-                  onClick={handleCloseOutput}
-                  className="absolute top-1 right-1 p-1 text-gray-500 hover:text-gray-300 hover:bg-zinc-700/50 rounded-full transition-colors"
-                  aria-label="Close output"
-                >
-                  <X size={14} />
-                </button>
-              )}
-              {isRunning && (
-                  <div className="flex items-center gap-2 text-gray-400 text-xs">
-                      <Loader2 size={14} className="animate-spin"/> 
-                      <span>Running...</span>
-      </div>
-              )}
-              {runOutput && !isRunning && (
-                  <pre className="whitespace-pre-wrap font-mono text-gray-300 text-xs leading-relaxed">{runOutput}</pre> 
-              )}
-              {runError && !isRunning && (
-                  <pre className="whitespace-pre-wrap font-mono text-red-400 text-xs leading-relaxed">{runError}</pre>
-              )}
-            </div>
-        )}
-        */}
-        {/* End Moved Output Section (REVERTED) */}
         
       </div> {/* End Code Block Container */} 
 
       {/* --- Separate Execution Output Container (RESTORED) --- */}
       {(currentIsRunning || currentRunOutput || currentRunError) && (
           // Restore original styling for a separate panel, remove top margin/bottom margin
-          <div className="execution-output-container relative rounded-lg bg-[#1f1f20] border border-[#3a3a3d] px-4 py-2 text-xs shadow-md">
+          <div className="execution-output-container relative rounded-lg bg-[var(--chat-surface)] border border-[var(--chat-border)] px-4 py-2 text-xs shadow-none">
               {/* Close Button for Output - Conditionally Rendered */}
               {!currentIsRunning && (currentRunOutput || currentRunError) && (
-                <button 
+                <IconButton
+                  icon={XDecl}
+                  variant="ghost"
+                  size="xs"
+                  iconSize={14}
+                  className="absolute top-1 right-1"
                   onClick={handleCloseOutput}
-                  className="absolute top-1 right-1 p-1 text-gray-500 hover:text-gray-300 hover:bg-zinc-700/50 rounded-md transition-colors"
                   aria-label="Close output"
-                >
-                  <X size={14} />
-                </button>
+                />
               )}
 
               {currentIsRunning && (
-                  <div className="flex items-center gap-2 text-gray-400 text-xs">
-                      <Loader2 size={14} className="animate-spin"/> 
+                  <div className="flex items-center gap-2 text-[var(--chat-muted)] text-xs">
+                      <Spinner size={14} /> 
                       <span>Running...</span>
                   </div>
               )}
               {currentRunOutput && !currentIsRunning && (
-                  <div className="whitespace-pre-wrap font-mono text-gray-300 text-xs leading-relaxed">{currentRunOutput}</div> 
+                  <div className="whitespace-pre-wrap font-mono text-[var(--chat-text)] text-xs leading-relaxed">{currentRunOutput}</div> 
               )}
               {currentRunError && !currentIsRunning && (
-                  <div className="whitespace-pre-wrap font-mono text-red-400 text-xs leading-relaxed">{currentRunError}</div>
+                  <div className="whitespace-pre-wrap font-mono text-[var(--chat-danger)] text-xs leading-relaxed">{currentRunError}</div>
               )}
             </div>
       )}

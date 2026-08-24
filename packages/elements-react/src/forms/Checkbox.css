@@ -1,0 +1,114 @@
+/*
+ * `<Checkbox>` — rounded-SQUARE box + optional label. CSS-first: paint is keyed off `data-selection`
+ * (off|on|mixed) and `data-availability`. Monochrome shell — only theme tokens, no literal colours.
+ */
+.xeno-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--xeno-text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.xeno-checkbox-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 17px;
+  height: 17px;
+  /* The stamped glyph inherits this via currentColor; only visible once the box is filled. */
+  color: var(--xeno-on-accent);
+  background: var(--xeno-canvas);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-sm);
+  transition:
+    background var(--xeno-dur) var(--xeno-ease),
+    border-color var(--xeno-dur) var(--xeno-ease);
+}
+
+.xeno-checkbox:hover:not(:disabled) .xeno-checkbox-box {
+  border-color: var(--xeno-muted);
+}
+
+.xeno-checkbox[data-selection='on'] .xeno-checkbox-box,
+.xeno-checkbox[data-selection='mixed'] .xeno-checkbox-box {
+  background: var(--xeno-text);
+  border-color: var(--xeno-text);
+}
+
+/* ── Ticking ──────────────────────────────────────────────────────────────────────────
+ * The tick DRAWS itself, heel to tip. Nothing new is authored here: `xeno.check` already carries that
+ * animation in `icon-motion.css`, where it plays on hover — the glyph's own rule sets `--part-anim`,
+ * `--part-dur` and the `stroke-dasharray` it needs. All this does is play the SAME animation on the
+ * event that actually matters for a checkbox, which is the tick appearing.
+ *
+ * Reading it through `var(--part-anim)` rather than naming the keyframe keeps the two loosely coupled:
+ * redraw the check glyph's animation and the checkbox follows it, with no edit here.
+ *
+ * The 900ms the gallery uses is a showcase pace; a control that answers a click wants ~a third of that.
+ *
+ * Everything is gated on `data-motion="ready"`, which the component sets only after `checked` has
+ * genuinely changed — otherwise a form rendered with ticked boxes draws all of them on load. */
+.xeno-checkbox[data-motion='ready'][data-selection='on'] .xeno-part[data-part='0'] {
+  --part-dur: 340ms;
+  animation: var(--part-anim) var(--part-dur) var(--xeno-icon-ease);
+}
+/* The box answers with it: a quick compress and overshoot, so the fill lands with the tick instead of
+   snapping into place a beat ahead of it. */
+.xeno-checkbox[data-motion='ready'][data-selection='on'] .xeno-checkbox-box,
+.xeno-checkbox[data-motion='ready'][data-selection='mixed'] .xeno-checkbox-box {
+  animation: xeno-checkbox-stamp 280ms var(--xeno-ease-overshoot, cubic-bezier(0.34, 1.4, 0.5, 1));
+}
+@keyframes xeno-checkbox-stamp {
+  0% { scale: 0.86; }
+  60% { scale: 1.06; }
+  100% { scale: 1; }
+}
+/* Indeterminate has no stroke to draw — the bar just arrives, widening from the middle. */
+.xeno-checkbox[data-motion='ready'][data-selection='mixed'] .xeno-part[data-part='0'] {
+  animation: xeno-checkbox-dash 240ms var(--xeno-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+@keyframes xeno-checkbox-dash {
+  0% { scale: 0 1; opacity: 0; }
+  100% { scale: 1 1; opacity: 1; }
+}
+
+.xeno-checkbox-label {
+  color: var(--xeno-text);
+}
+
+.xeno-checkbox:focus-visible {
+  outline: none;
+}
+.xeno-checkbox:focus-visible .xeno-checkbox-box {
+  box-shadow:
+    0 0 0 2px var(--xeno-canvas),
+    0 0 0 4px var(--xeno-border);
+}
+
+.xeno-checkbox:disabled,
+.xeno-checkbox[data-availability='disabled'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-checkbox-box {
+    transition: none;
+  }
+  /* The tick is still there — it just does not draw itself in. */
+  .xeno-checkbox-box,
+  .xeno-checkbox .xeno-part {
+    animation: none !important;
+  }
+}

@@ -1,0 +1,112 @@
+/*
+ * MessageBubble — the chat message container. Monochrome SHELL: the container carries no colour of its
+ * own; only `children` may bring content colour. A `user` turn is a right-aligned bubble; an `assistant`
+ * turn is a bare left-aligned prose block (the locked design). State rides the root as `data-role` and,
+ * while a turn is still being written, `data-streaming`. Only the theme custom properties are used here.
+ */
+
+.xeno-message {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+  /* How wide a user bubble may run before it wraps. A knob rather than a prop, because the answer is
+     usually a MEDIA QUERY — a bubble that reads well at 80% on a desktop column is cramped at 80% of
+     a phone — and a breakpoint belongs in the product's stylesheet, not threaded through React state.
+     Override it on the turn, on the transcript, or in an `@media` block; the default stands alone. */
+  --xeno-message-max: 80%;
+}
+
+/* Sides: user hugs the right rail, assistant the left. */
+.xeno-message[data-role='user'] {
+  align-items: flex-end;
+}
+.xeno-message[data-role='assistant'] {
+  align-items: flex-start;
+}
+
+.xeno-message-body {
+  min-width: 0;
+  color: var(--xeno-text);
+  font-size: 15px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* Attachments — what was sent WITH the message, above the body and outside the bubble. They share the
+   turn's alignment and take no fill of their own: an image already has edges, and wrapping it in a
+   border plus 12px of surface only draws a second frame around the first. */
+.xeno-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: var(--xeno-message-max);
+  min-width: 0;
+}
+.xeno-message[data-role='user'] .xeno-message-attachments {
+  justify-content: flex-end;
+}
+
+/* User: a bubble — surface fill, hairline border, card radius with the bottom-right corner squared. */
+.xeno-message[data-role='user'] .xeno-message-body {
+  max-width: var(--xeno-message-max);
+  /* A person's own words keep the shape they were typed in — the blank line they left between two
+     thoughts is part of the message. Only on this side: an assistant turn is rendered prose, where
+     the source newlines are markup and honouring them would double every paragraph break. */
+  white-space: pre-wrap;
+  padding: 12px;
+  background: var(--xeno-surface);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-card);
+  border-bottom-right-radius: var(--xeno-radius-xs);
+}
+
+/* Assistant: no bubble, just prose (locked design). */
+.xeno-message[data-role='assistant'] .xeno-message-body {
+  max-width: 100%;
+}
+
+/* Meta row: timestamp + hover action bar, aligned under the turn. */
+.xeno-message-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.xeno-message-time {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--xeno-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hover action bar — fades in on hover/focus of the whole turn. */
+.xeno-message-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  /* Transparent is not gone. At `opacity: 0` these buttons still take the pointer, so the strip of
+     nothing under a message swallowed clicks and — worse — sometimes ran Copy or Regenerate on a turn
+     whose bar the reader could not see. Faded out means out of reach; hover puts it back. */
+  pointer-events: none;
+  transition: opacity 0.18s var(--xeno-ease);
+}
+.xeno-message:hover .xeno-message-actions,
+.xeno-message:focus-within .xeno-message-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* While streaming the bar stays hidden and inert, even on hover/focus (this rule wins by source order). */
+.xeno-message[data-streaming] .xeno-message-actions {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-message-actions {
+    transition: none;
+  }
+}

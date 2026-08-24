@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      // Dev app: resolve the packages to SOURCE, the same as the vite aliases, so typecheck needs no
+      // sibling build. (vite.config.ts is intentionally out of scope — its own duplicate-vite type
+      // identity is a non-issue at runtime and only noise here.)
+      "@xenosystem/elements/schema": ["../elements/src/schema.ts"],
+      "@xenosystem/elements/tokens": ["../elements/src/tokens/index.ts"],
+      "@xenosystem/elements/elements/*": ["../elements/src/elements/*.ts"],
+      "@xenosystem/elements": ["../elements/src/index.ts"],
+      "@xenosystem/generate": ["../generate/src/index.ts"],
+      "@xenosystem/elements-react": ["../elements-react/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

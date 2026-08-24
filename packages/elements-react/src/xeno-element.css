@@ -1,0 +1,60 @@
+/*
+ * Base presentation for a XENO element. CSS-FIRST, 0 kb JS: an element's discrete state lives in
+ * `data-<axis>` attributes on the root, and this stylesheet is where any transition attaches — never a
+ * JavaScript animation runtime (SPEC §6, so elements survive sandboxed iframes and web export).
+ *
+ * Geometry variant swaps (bookmark off↔on) are re-rendered from `state` by the renderer. Channel
+ * transitions declared as BINDINGS (opacity/scale/fill over ms) land here as they are added; the axis
+ * attributes below are the selectors they will hang off. `currentColor` keeps every glyph monochrome
+ * and inheriting the surrounding text colour.
+ */
+
+.xeno-element {
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 0;
+  color: inherit;
+}
+
+/* An element the product marks unavailable reads as dimmed everywhere, from one rule. */
+.xeno-element[data-availability='disabled'] {
+  opacity: 0.4;
+}
+.xeno-element[data-availability='busy'] {
+  cursor: progress;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .xeno-element,
+  .xeno-element * {
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease,
+      fill 160ms ease,
+      stroke 160ms ease;
+  }
+}
+
+
+/* ── Morphing between geometry variants ───────────────────────────────────────────────
+ * When a declaration's active variant is interpolable with `base` — same primitive count, same kind at
+ * every index — the renderer marks the icon `data-morph="on"` and hands each path its own `d` a second
+ * time, as `--part-d`. That is all the seam needs: `d` is an animatable CSS property, a custom property
+ * changing is a computed-value change, so the swap becomes a transition and the icon draws itself from
+ * one shape into the other.
+ *
+ * Still no animation runtime. The renderer never animates; it states that an animation is possible and
+ * the stylesheet decides whether to take it — the same division the rest of this system runs on.
+ *
+ * Behind `@supports` because `d` as a CSS property is not universal. Where it is missing, the `d`
+ * ATTRIBUTE is still correct and still swapped on re-render, so the icon changes instantly instead of
+ * morphing: the worse animation, never the wrong picture. */
+@supports (d: path('M0 0')) {
+  .xeno-element[data-morph='on'] .xeno-part {
+    d: var(--part-d);
+    transition: d var(--xeno-dur-morph, 320ms) var(--xeno-ease-morph, cubic-bezier(0.22, 0.7, 0.2, 1));
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .xeno-element[data-morph='on'] .xeno-part { transition: none; }
+  }
+}

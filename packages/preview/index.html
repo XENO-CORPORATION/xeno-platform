@@ -1,0 +1,18 @@
+<!doctype html>
+<!-- `xeno` brings the theme tokens into scope on the document element; `xeno-scroll-wake` opts the PAGE
+     scrollbar into the system one. The library never does this to a host page on its own — the
+     playground does it deliberately, so the page's own bar is drawn like everything else on it.
+     `-wake` and not `-scroll`: the document element counts as hovered whenever the pointer is anywhere
+     in the window, so the hover-gated variant would leave the page bar permanently on. This one gates
+     on the `data-scrolling` attribute, which main.tsx sets while the page is moving. -->
+<html lang="en" class="xeno xeno-scroll-wake">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XENO Elements — State Playground</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,193 @@
+/*
+ * Popover / Menu / MenuItem — a hand-rolled anchored overlay (no portal lib). CSS-first: the panel is an
+ * absolutely-positioned card anchored to a `position:relative` wrapper; the anchored edge flips on the
+ * `data-align` attribute. Depth is a hairline border + one soft (uncoloured) shadow. Monochrome shell,
+ * rounded squares only, tokens from `xeno-theme.css`. Motion is transform/opacity, behind reduced-motion.
+ */
+
+/* ── Popover (anchor + panel) ─────────────────────────────────────────────────────── */
+.xeno-popover {
+  position: relative;
+  display: inline-flex;
+}
+
+.xeno-popover-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--xeno-style-overlay-bg);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-style-overlay-radius);
+  box-shadow: var(--xeno-style-menu-shadow);
+  color: var(--xeno-text);
+  outline: none;
+}
+.xeno-popover-panel[data-align='end'] {
+  left: auto;
+  right: 0;
+}
+
+/* ── Menu (a Popover panel that is a role=menu list) ──────────────────────────────── */
+/* `position: relative` + `isolation` come from `xeno-goo-host`, which the component also puts on this
+   element; the 4px padding is what `--xeno-goo-inset` defaults to, so the pill lines up with the rows. */
+.xeno-menu {
+  min-width: 200px;
+  padding: 4px;
+}
+
+/* The travelling hover pill is a PRIMITIVE, not a menu feature — see `goo.css` and `useGooPill()`. A
+ * menu was simply the first list that needed it; a command palette or a product's own hand-rolled
+ * dropdown wants the same behaviour, so it does not live here. `<Menu>` carries `xeno-goo-host` and
+ * renders the pill as its first child, and the rows below give up painting their own hover background
+ * because the pill IS the filled surface. */
+
+/* ── MenuItem (row: lead · label · shortcut · chevron) ────────────────────────────── */
+.xeno-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  /* 32, not the 34 this was written with. The system's own control scale is xs 24 / sm 28 / md 32 /
+     lg 36 and there is no 34 in it — the number was picked by eye and never checked against the table
+     it belongs to. Found by measuring a product's menu rows against this component: the product was on
+     the scale and the library was not. */
+  height: 32px;
+  margin: 0;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  /* `md`, not `sm`. The locked radius scale is explicit that overlay chrome is "6px throughout", and a
+     menu row is overlay chrome; 5px is the badge/checkbox step. */
+  border-radius: var(--xeno-radius-md);
+  color: var(--xeno-text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--xeno-dur) ease,
+    color var(--xeno-dur) ease;
+}
+/* The row paints no background of its own: the travelling pill is the filled surface, and two of them
+   would read as two highlights. */
+.xeno-menu-item:hover:not(:disabled),
+.xeno-menu-item:focus-visible {
+  outline: none;
+}
+.xeno-menu-item:focus-visible {
+  box-shadow: var(--xeno-style-overlay-ring);
+}
+.xeno-menu-item[data-availability='disabled'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.xeno-menu-item[data-variant='danger'] {
+  color: var(--xeno-danger);
+}
+.xeno-menu-item[data-variant='danger']:hover:not(:disabled),
+.xeno-menu-item[data-variant='danger']:focus-visible {
+  color: var(--xeno-danger-hover);
+  background: var(--xeno-hover);
+}
+
+/* Leading slot — reserved icon/check column (a rounded box, never a circle). */
+.xeno-menu-item-lead {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--xeno-muted);
+}
+.xeno-menu-item[data-selection='on'] .xeno-menu-item-lead {
+  color: var(--xeno-text);
+}
+.xeno-menu-item[data-variant='danger'] .xeno-menu-item-lead {
+  color: inherit;
+}
+
+/* Label — grows and truncates. */
+.xeno-menu-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Shortcut — trailing, muted mono. */
+.xeno-menu-item-shortcut {
+  flex: none;
+  margin-left: 12px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--xeno-muted);
+}
+
+/* Value — trailing, muted, but in the UI font, and that is the whole point of it being a separate
+   slot. A shortcut is a KEY: mono, tracked out, because it stands for something the reader will
+   press. A value is a WORD the reader chose ("All", "Last activity") and setting a word in mono
+   makes it read as a key too. Same slot, same muted colour, different typeface — the distinction
+   the shortcut rule alone could not draw. Sits before the chevron, so a submenu row reads
+   label → current value → "there is more this way". */
+.xeno-menu-item-value {
+  flex: none;
+  /* 2, not the shortcut's 12 — the row's own 10px `gap` is already between them, and a value is a
+     word rather than a key glyph, so it needs the label's width more than it needs the air. At 12 a
+     "Last activity / All ›" row ran out of room and ellipsed its own label. */
+  margin-left: 2px;
+  color: var(--xeno-muted);
+}
+
+/* Submenu chevron — trailing, muted. */
+.xeno-menu-item-chevron {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+  color: var(--xeno-muted);
+}
+
+/* A DISCLOSURE row turns the same chevron a quarter — the region it opens is below, not beside, and
+   the arrow should point at it. It turns rather than swapping to a chevron-down so the reader can
+   see WHICH row moved; the rotation is the state change, not a redraw. */
+.xeno-menu-item-chevron[data-state] {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.xeno-menu-item-chevron[data-state='open'] {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .xeno-menu-item-chevron[data-state] {
+    transition: none;
+  }
+}
+
+/* ── Motion (transform/opacity only; opt-in) ─────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .xeno-popover-panel {
+    animation: xeno-popover-in var(--xeno-dur) var(--xeno-ease);
+    transform-origin: top left;
+  }
+  .xeno-popover-panel[data-align='end'] {
+    transform-origin: top right;
+  }
+}
+
+@keyframes xeno-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

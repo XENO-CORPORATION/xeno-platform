@@ -1,0 +1,167 @@
+/*
+ * Modal / Sheet — the locked floating-window overlay. CSS-first: the placement is driven by the
+ * `data-variant` attribute on the scrim and the card, everything else is tokens from `xeno-theme.css`.
+ * Depth is a hairline border + one soft (uncoloured) shadow; the scrim tints from `--xeno-canvas` so it
+ * stays monochrome in both themes. No literal colours, no coloured glow.
+ */
+
+/* ── Scrim / overlay ─────────────────────────────────────────────────────────────── */
+.xeno-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--xeno-canvas) 72%, transparent);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.xeno-modal-overlay[data-variant='sheet'] {
+  align-items: flex-end;
+  padding: 0;
+}
+
+/* ── Card ────────────────────────────────────────────────────────────────────────── */
+/*
+ * The card is a chrome stack, like a panel — §"Panel Structure"'s construction, floated. Every value
+ * comes from `--xeno-style-*`, so the same DOM renders as a shell carrying three plates with 2px
+ * gaps (`separated`) or as one clipped card with hairline dividers and a soft shadow (`unified`).
+ */
+.xeno-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--xeno-style-gap);
+  padding: var(--xeno-style-inset);
+  width: min(92vw, 480px);
+  max-height: min(85vh, 640px);
+  background: var(--xeno-style-shell);
+  border: 1px solid var(--xeno-style-border);
+  border-radius: var(--xeno-style-radius);
+  box-shadow: var(--xeno-style-shadow);
+  outline: none;
+  overflow: hidden;
+}
+.xeno-modal[data-variant='sheet'] {
+  width: 100%;
+  max-width: 640px;
+  max-height: 85vh;
+  border-bottom: none;
+  /* radius only on the top corners — it meets the bottom edge */
+  border-radius: var(--xeno-style-radius) var(--xeno-style-radius) 0 0;
+}
+
+/* ── Header (title + close) ──────────────────────────────────────────────────────── */
+.xeno-modal-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--xeno-style-dialog-header-pad);
+  background: var(--xeno-style-plate);
+  -webkit-backdrop-filter: var(--xeno-style-plate-filter);
+  backdrop-filter: var(--xeno-style-plate-filter);
+  border-bottom: var(--xeno-style-divider);
+}
+.xeno-modal-title {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--xeno-style-dialog-title-size);
+  font-weight: var(--xeno-style-dialog-title-weight);
+  letter-spacing: 0.03em;
+  line-height: 1.3;
+  color: var(--xeno-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Pushes the close button to the trailing edge, with or without a title. */
+.xeno-modal-close {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+
+/* ── Body (the one scroll region) ────────────────────────────────────────────────── */
+.xeno-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--xeno-style-dialog-body-pad);
+  background: var(--xeno-style-body);
+  color: var(--xeno-text);
+  font-size: var(--xeno-style-dialog-body-size);
+  line-height: 1.55;
+}
+
+/* ── Footer (right-aligned actions) ──────────────────────────────────────────────── */
+.xeno-modal-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--xeno-style-dialog-footer-gap);
+  padding: var(--xeno-style-dialog-footer-pad);
+  background: var(--xeno-style-plate);
+  border-top: var(--xeno-style-divider);
+}
+
+/* ── Motion (transform/opacity only; opt-in) ─────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .xeno-modal-overlay {
+    animation: xeno-modal-scrim-in var(--xeno-dur) var(--xeno-ease);
+  }
+  .xeno-modal {
+    animation: xeno-modal-pop-in calc(var(--xeno-dur) * 1.4) var(--xeno-ease);
+  }
+  .xeno-modal[data-variant='sheet'] {
+    animation: xeno-modal-sheet-in calc(var(--xeno-dur) * 1.7) var(--xeno-ease);
+  }
+}
+
+@keyframes xeno-modal-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes xeno-modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes xeno-modal-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/*
+ * §4 "Radius Is Per-Corner, Not Per-Element": a corner is rounded only where the surface meets
+ * NOTHING. Each plate faces its neighbour across the 2px gap, so the facing corners are SQUARE — a
+ * uniform radius on every plate is the tell that this section was skipped, and it was.
+ *
+ * Declared on first/last child rather than per plate so a stack with no header, or no footer, still
+ * presents a rounded outer edge instead of a square one against the rounded shell.
+ */
+.xeno-modal > * {
+  border-radius: 0;
+}
+.xeno-modal > :first-child {
+  border-top-left-radius: var(--xeno-style-radius-plate);
+  border-top-right-radius: var(--xeno-style-radius-plate);
+}
+.xeno-modal > :last-child {
+  border-bottom-left-radius: var(--xeno-style-radius-plate);
+  border-bottom-right-radius: var(--xeno-style-radius-plate);
+}

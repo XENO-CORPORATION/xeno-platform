@@ -1,0 +1,88 @@
+/*
+ * ProgressBar — a determinate progress meter. A flat track (`--xeno-control`, `radius-sm`, ~4px tall)
+ * holds a fill (`--xeno-text`) whose width is the clamped value (0..1) as a percentage. An optional
+ * header row carries the label + a tabular percent readout; it is `aria-hidden` because the track
+ * (`role="progressbar"`) already announces name + value. Rounded squares, monochrome shell, theme
+ * tokens only — no literal colours.
+ */
+.xeno-progressbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+/* label + percent readout above the track */
+.xeno-progressbar-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--xeno-muted);
+}
+.xeno-progressbar-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--xeno-text);
+}
+
+/* The track IS the progressbar element.
+ *
+ * A radius only reads as a CORNER while it stays well under half the smaller dimension; at half it is
+ * a semicircle and the bar is a capsule, whatever the token was called. `--xeno-radius-sm` (5px) on a
+ * 4px bar was 125% of its own height — as round as a rounded shape can get.
+ *
+ * The fix is height, not a smaller number: 6px with `--xeno-radius-hair` puts it at 25%, the same
+ * ratio as the scrollbar thumb, and the corner is actually visible at that size. Squeezing the radius
+ * instead would have meant a sub-token literal for a bar too thin to show it anyway. */
+.xeno-progressbar-track {
+  display: block;
+  width: 100%;
+  height: 6px;
+  background: var(--xeno-control);
+  border-radius: var(--xeno-radius-hair);
+  overflow: hidden;
+}
+
+.xeno-progressbar-fill {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  background: var(--xeno-text);
+  border-radius: inherit;
+  transition: width var(--xeno-dur) var(--xeno-ease);
+}
+
+/* ── Indeterminate ────────────────────────────────────────────────────────────────────
+ * Work is happening; how much is left is not known. A short segment sweeps the track end to end,
+ * because that is the one motion that says "running" without also claiming a position — a bar that
+ * grows says something about progress whether or not it means to.
+ *
+ * The sweep is deliberately not symmetric: it enters at speed, slows across the middle where the eye
+ * can read it, then leaves. `translate` on a fixed-width segment, so nothing is laid out per frame.
+ * The track already clips (`overflow: hidden`), so the segment simply runs off both ends. */
+.xeno-progressbar-track[data-state='indeterminate'] .xeno-progressbar-fill {
+  width: 34%;
+  transition: none;
+  animation: xeno-progress-sweep 1400ms var(--xeno-ease-stagger, cubic-bezier(0.22, 0.7, 0.2, 1))
+    infinite;
+}
+@keyframes xeno-progress-sweep {
+  from { translate: -110% 0; }
+  to { translate: 330% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-progressbar-fill {
+    transition: none;
+  }
+  /* A perpetual sweep is exactly what reduced-motion is asking not to see. The bar still says "busy"
+     — it just says it by sitting there at a partial width instead of running. */
+  .xeno-progressbar-track[data-state='indeterminate'] .xeno-progressbar-fill {
+    animation: none;
+    width: 100%;
+    opacity: 0.45;
+  }
+}

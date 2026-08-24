@@ -1,0 +1,44 @@
+{
+  "name": "@xenosystem/elements",
+  "version": "0.0.1",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "The XENO element contract \u2014 declarations, schema, state model. Framework-free, platform-free.",
+  "author": "XENO Corporation <emilian@bnkrsys.com>",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
+    },
+    "./tokens": {
+      "types": "./dist/tokens/index.d.ts",
+      "default": "./dist/tokens/index.js"
+    },
+    "./elements/*": {
+      "types": "./dist/elements/*.d.ts",
+      "default": "./dist/elements/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
+    "import-glyphs": "node --no-warnings scripts/import-glyphs.mjs"
+  },
+  "devDependencies": {
+    "svgpath": "^2.6.0",
+    "typescript": "^5.4.0"
+  }
+}

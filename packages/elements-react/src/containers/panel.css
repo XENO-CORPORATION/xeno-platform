@@ -1,0 +1,120 @@
+/*
+ * Panel — a chrome stack: heading, body, footer.
+ *
+ * Every construction value comes from the `--xeno-style-*` tokens, so the SAME DOM renders as either
+ * chrome. Under `separated` (the default, required by DESIGN_SYSTEM.md §"Panel Structure") the wrapper
+ * paints the page colour and the three plates float on it with a 2px gap. Under `unified` the gap
+ * collapses to 0, the plates go transparent, the wrapper paints the surface and clips them, and the
+ * dividers come back — one card, exactly as this set rendered before the chrome axis existed.
+ *
+ * Nothing here knows a theme exists. That is the point: no component is built twice.
+ *
+ * Scrolling is chrome-independent — give the panel a bounded height and the body scrolls on its own
+ * (`min-height: 0` lets a flex child shrink below its content).
+ */
+.xeno-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--xeno-style-gap);
+  padding: var(--xeno-style-inset);
+  min-height: 0;
+  background: var(--xeno-style-shell);
+  /* `separated` draws no border on the wrapper — the plates carry their own. `unified` needs one,
+     and gets it because the shell is painted and clipped. Both read the same token. */
+  border: 1px solid var(--xeno-style-border);
+  border-radius: var(--xeno-style-radius);
+  overflow: hidden;
+  color: var(--xeno-text);
+}
+
+/*
+ * Heading plate. §"Panel Structure" fixes it at 34px so headings line up with sidebar navigation
+ * across a product; the padding sets the text inside that rather than defining the height.
+ */
+.xeno-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+  min-height: var(--xeno-style-panel-header-min-h);
+  padding: var(--xeno-style-panel-header-pad);
+  background: var(--xeno-style-plate);
+  -webkit-backdrop-filter: var(--xeno-style-plate-filter);
+  backdrop-filter: var(--xeno-style-plate-filter);
+  border-bottom: var(--xeno-style-divider);
+}
+
+/*
+ * §"Headers and Footers": the header text is "small, uppercase, with letter-spacing. It functions as
+ * a label, not a headline." Matches the convention the code-block language chip already uses.
+ */
+.xeno-panel-title {
+  min-width: 0;
+  color: var(--xeno-style-title-color);
+  font-size: var(--xeno-style-title-size);
+  font-weight: 600;
+  letter-spacing: var(--xeno-style-title-spacing);
+  text-transform: var(--xeno-style-title-transform);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xeno-panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* Body plate — the scroll region. */
+.xeno-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--xeno-style-panel-body-pad);
+  overflow: auto;
+  background: var(--xeno-style-body);
+  color: var(--xeno-text);
+}
+
+/*
+ * Footer plate — §"Headers and Footers": "Footer padding matches header padding exactly. Headers and
+ * footers are visually symmetric." Every box metric below is the header's, duplicated deliberately
+ * rather than shared through a common class: the symmetry is a design rule a future change must break
+ * on purpose, and a shared class would let one drift silently while the other did not.
+ *
+ * `space-between` gives the dismiss-left / confirm-right arrangement the products already use.
+ */
+.xeno-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+  min-height: var(--xeno-style-panel-header-min-h);
+  padding: var(--xeno-style-panel-header-pad);
+  background: var(--xeno-style-plate);
+  border-top: var(--xeno-style-divider);
+}
+
+/*
+ * §4 "Radius Is Per-Corner, Not Per-Element": a corner is rounded only where the surface meets
+ * NOTHING. Each plate faces its neighbour across the 2px gap, so the facing corners are SQUARE — a
+ * uniform radius on every plate is the tell that this section was skipped, and it was.
+ *
+ * Declared on first/last child rather than per plate so a stack with no header, or no footer, still
+ * presents a rounded outer edge instead of a square one against the rounded shell.
+ */
+.xeno-panel > * {
+  border-radius: 0;
+}
+.xeno-panel > :first-child {
+  border-top-left-radius: var(--xeno-style-radius-plate);
+  border-top-right-radius: var(--xeno-style-radius-plate);
+}
+.xeno-panel > :last-child {
+  border-bottom-left-radius: var(--xeno-style-radius-plate);
+  border-bottom-right-radius: var(--xeno-style-radius-plate);
+}

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { X } from 'lucide-react';
+import {  } from '@/lib/icons';
 import ChatWithLLM from './ChatWithLLM';
 
 interface ChatInterface {
@@ -66,7 +66,7 @@ const MultiChatContainer: React.FC<MultiChatContainerProps> = ({ isStandalone = 
       {/* Use auto-rows-fr to ensure equal row heights, and grid-cols with 1fr for equal column widths */}
       <div className={`h-full grid auto-rows-fr ${interfaces.length === 1 ? 'gap-0' : 'gap-2'} ${getLayoutClasses()}`}>
         {interfaces.map((iface, index) => (
-          <div key={iface.id} className={`relative h-full min-h-0 overflow-hidden ${interfaces.length === 1 ? '' : 'border border-[#1e1e21] rounded-lg bg-[#0a0a0b]'}`}>
+          <div key={iface.id} className={`relative h-full min-h-0 overflow-hidden ${interfaces.length === 1 ? '' : 'border border-[var(--chat-border)] rounded-lg bg-[var(--chat-canvas)]'}`}>
             {/* Chat Interface - header/conversation selector is now inside ChatWithLLM */}
             <ChatWithLLM
               key={iface.id}

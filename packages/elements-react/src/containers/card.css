@@ -1,0 +1,75 @@
+/*
+ * Card — the base surface box. Monochrome shell: background + hairline border + card radius; depth on the
+ * `elevated` variant is the darker `--xeno-elevated` token plus one soft (hue-free) shadow. The hover-lift
+ * is opt-in via `data-interactive` and its transform lives behind `prefers-reduced-motion` — the border
+ * brighten still applies when motion is reduced. Only theme tokens; no literal colours (shadow excepted).
+ */
+.xeno-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--xeno-style-card-pad);
+  background: var(--xeno-style-card-bg);
+  border: var(--xeno-style-card-border);
+  border-radius: var(--xeno-style-card-radius);
+  color: var(--xeno-text);
+}
+
+.xeno-card[data-variant='elevated'] {
+  background: var(--xeno-style-card-elevated-bg);
+  box-shadow: var(--xeno-style-card-shadow);
+}
+
+/* Body — the default slot. min-width:0 keeps flex-row children from overflowing the card. */
+.xeno-card-body {
+  min-width: 0;
+}
+
+/* Header — a titled slot split from the body by an inset hairline. */
+.xeno-card-header {
+  margin-bottom: 11px;
+  padding-bottom: 11px;
+  border-bottom: var(--xeno-style-divider);
+  color: var(--xeno-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Footer — a trailing slot, mirror of the header, quieter text. */
+.xeno-card-footer {
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: var(--xeno-style-divider);
+  color: var(--xeno-muted);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+/* Interactive — the sole hover-lift XENO allows. Border brighten is safe without motion. */
+.xeno-card[data-interactive='true'] {
+  cursor: pointer;
+}
+.xeno-card[data-interactive='true']:hover {
+  border-color: var(--xeno-muted);
+}
+
+/* Strong lift — the artifact-card affordance: a bigger rise + one soft, hue-free shadow. The shadow is
+   safe without motion, so it sits outside the reduced-motion guard; only the transform is gated. */
+.xeno-card[data-interactive='true'][data-lift='strong']:hover {
+  box-shadow: var(--xeno-style-card-lift);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .xeno-card[data-interactive='true'] {
+    transition:
+      transform var(--xeno-dur) var(--xeno-ease),
+      border-color var(--xeno-dur) ease,
+      box-shadow var(--xeno-dur) ease;
+  }
+  .xeno-card[data-interactive='true']:hover {
+    transform: translateY(-1px);
+  }
+  .xeno-card[data-interactive='true'][data-lift='strong']:hover {
+    transform: translateY(-3px);
+  }
+}

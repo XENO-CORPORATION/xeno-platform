@@ -1,0 +1,10 @@
+{
+  "//": "Tests may use Node built-ins; the shipped source (tsconfig.json) stays platform-free with types:[].",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "exclude": []
+}

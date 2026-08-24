@@ -1,0 +1,126 @@
+/*
+ * Tooltip — a hover/focus hint. CSS-first reveal driven by `data-state` (JS-controlled), positioned on
+ * a `data-side` of the trigger. Monochrome shell: an elevated panel with a hairline border and muted
+ * 12px mono text; rounded squares only. Motion is transform/opacity, behind reduced-motion.
+ */
+
+.xeno-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.xeno-tooltip-panel {
+  position: absolute;
+  z-index: 50;
+  width: max-content;
+  max-width: 240px;
+  padding: 6px 8px;
+  background: var(--xeno-style-overlay-bg);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-style-overlay-radius);
+  color: var(--xeno-muted);
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  box-shadow: var(--xeno-style-overlay-shadow);
+  transition:
+    opacity var(--xeno-dur) var(--xeno-ease),
+    transform var(--xeno-dur) var(--xeno-ease),
+    visibility 0s linear var(--xeno-dur);
+}
+
+/* Sides — centre with inset + auto margins (works even when the panel is wider than the trigger) so
+ * the entrance transform stays free to animate. A small gap separates the panel from the trigger. */
+.xeno-tooltip-panel[data-side='top'] {
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  margin-bottom: 8px;
+  transform: translateY(4px);
+}
+.xeno-tooltip-panel[data-side='bottom'] {
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  margin-top: 8px;
+  transform: translateY(-4px);
+}
+.xeno-tooltip-panel[data-side='left'] {
+  right: 100%;
+  top: 0;
+  bottom: 0;
+  margin-block: auto;
+  margin-right: 8px;
+  transform: translateX(4px);
+}
+.xeno-tooltip-panel[data-side='right'] {
+  left: 100%;
+  top: 0;
+  bottom: 0;
+  margin-block: auto;
+  margin-left: 8px;
+  transform: translateX(-4px);
+}
+
+/* Revealed — settle to the resting position; keep visibility on until the fade completes on close. */
+.xeno-tooltip-panel[data-state='open'] {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(0, 0);
+  transition:
+    opacity var(--xeno-dur) var(--xeno-ease),
+    transform var(--xeno-dur) var(--xeno-ease),
+    visibility 0s linear 0s;
+}
+
+/* Arrow — a small rounded square rotated 45°, overlapping the panel edge so it reads as a pointer. */
+.xeno-tooltip-arrow {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: var(--xeno-style-overlay-bg);
+  border-radius: var(--xeno-radius-hair);
+}
+.xeno-tooltip-panel[data-side='top'] .xeno-tooltip-arrow {
+  left: 50%;
+  bottom: -3px;
+  transform: translateX(-50%) rotate(45deg);
+}
+.xeno-tooltip-panel[data-side='bottom'] .xeno-tooltip-arrow {
+  left: 50%;
+  top: -3px;
+  transform: translateX(-50%) rotate(45deg);
+}
+.xeno-tooltip-panel[data-side='left'] .xeno-tooltip-arrow {
+  top: 50%;
+  right: -3px;
+  transform: translateY(-50%) rotate(45deg);
+}
+.xeno-tooltip-panel[data-side='right'] .xeno-tooltip-arrow {
+  top: 50%;
+  left: -3px;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-tooltip-panel {
+    transform: none;
+    transition:
+      opacity var(--xeno-dur) linear,
+      visibility 0s linear var(--xeno-dur);
+  }
+  .xeno-tooltip-panel[data-state='open'] {
+    transform: none;
+    transition:
+      opacity var(--xeno-dur) linear,
+      visibility 0s linear 0s;
+  }
+}

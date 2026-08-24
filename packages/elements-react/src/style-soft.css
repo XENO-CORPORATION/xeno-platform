@@ -1,0 +1,101 @@
+/*
+ * ══════════════════════════════════════════════════════════════════════════════════════════════
+ *  OWNED FILE — SOFT (`data-style="soft"`)
+ * ══════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * One construction, one file, one owner, so the two can be worked on in parallel without either
+ * side touching the other's values. Everything a construction decides lives HERE — colours, box
+ * metrics, typography, radii. Nothing construction-specific belongs in a component stylesheet or
+ * in `xeno-theme.css`, because those are shared and a change there hits BOTH looks.
+ *
+ *  WHO IT IS FOR — read this before choosing any value.
+ *
+ *  Soft is the one with animation, depth and visible interaction. Its audience is creative and
+ *  finance work — people for whom the interface being pleasant to use is part of the value, not
+ *  noise on top of it.
+ *
+ *  What that decides:
+ *    · Depth is allowed. Shadows lift a floating surface off what is behind it.
+ *    · Generous radii — the card step, not the plate step.
+ *    · One container, not a stack of plates: the header is the shell's own background showing
+ *      through, divided by a hairline rather than by a gap.
+ *    · Motion may be enjoyable as well as informative.
+ *
+ *  ⚠️ It is also a PRESERVED look. It must keep rendering as the set did before the style axis
+ *  existed — `theme.test.ts` pins the pre-axis values. Design forward deliberately, not by drift.
+ *
+ * THE CONTRACT BETWEEN THE TWO FILES, enforced by `theme.test.ts`:
+ *   1. Every token declared in `style-industrial.css` must also be declared here, and vice versa.
+ *      Adding one on your side and not telling the other side is the failure mode — the missing
+ *      one silently inherits the other construction's value and half-renders.
+ *   2. Every token must actually DIFFER between the two files. If a value is the same in both, it
+ *      is not a construction decision: move it to the shared base.
+ *
+ * So adding a token is a two-file change and the suite will say so. That is deliberate: it is the
+ * cheapest possible coordination between two people editing in parallel.
+ */
+
+/* ── UNIFIED chrome ────────────────────────────────────────────────────────────────────────────
+ * One clipped surface with hairline dividers — the construction this set shipped before the chrome
+ * axis existed, preserved deliberately rather than corrected away.
+ *
+ * It is expressed ENTIRELY as values. Collapsing the gap to 0, painting the shell with the surface
+ * colour and making the plates transparent reproduces a single card exactly — same DOM, same
+ * components, no second implementation. That is the whole test for whether something may be a theme.
+ */
+[data-style='soft'] {
+  --xeno-style-gap: 0px;
+  --xeno-style-inset: 0px;
+  --xeno-style-shell: var(--xeno-surface);
+  --xeno-style-plate: transparent;
+  --xeno-style-body: transparent;
+  --xeno-style-divider: 1px solid var(--xeno-border);
+  --xeno-style-shadow: 0 12px 48px -16px rgba(0, 0, 0, 0.55);
+  --xeno-style-radius: var(--xeno-radius-card);
+  --xeno-style-radius-plate: 0px;
+  /* No glass: a single clipped surface has nothing behind a plate to blur. */
+  --xeno-style-plate-filter: none;
+  /* The inverted primary this set already shipped — preserved, not corrected. */
+  /* The soft card this set shipped — surface, big radius, hairline, and a real shadow. */
+  --xeno-style-card-bg: var(--xeno-surface);
+  --xeno-style-card-border: 1px solid var(--xeno-border);
+  --xeno-style-card-radius: var(--xeno-radius-card);
+  --xeno-style-card-pad: 13px 15px;
+  --xeno-style-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --xeno-style-card-lift: 0 8px 24px -10px rgba(0, 0, 0, 0.45);
+
+  /* Restores every pre-axis value exactly. Verified against the baseline, not eyeballed. */
+  --xeno-style-border: var(--xeno-border);
+  --xeno-style-panel-header-pad: 11px 15px;
+  --xeno-style-panel-header-min-h: auto;
+  --xeno-style-panel-body-pad: 15px;
+  --xeno-style-title-size: 14px;
+  --xeno-style-title-color: var(--xeno-text);
+  --xeno-style-title-transform: none;
+  --xeno-style-title-spacing: normal;
+  --xeno-style-dialog-header-pad: 16px 16px 12px 20px;
+  --xeno-style-dialog-title-size: 16px;
+  --xeno-style-dialog-title-weight: 600;
+  --xeno-style-dialog-body-pad: 4px 20px 20px;
+  --xeno-style-dialog-body-size: 14px;
+  --xeno-style-dialog-footer-pad: 12px 20px;
+  --xeno-style-dialog-footer-gap: 8px;
+  --xeno-style-card-elevated-bg: var(--xeno-elevated);
+
+
+  /* The floating treatment this set shipped: elevated surface, md radius, a real drop shadow. */
+  --xeno-style-overlay-bg: var(--xeno-elevated);
+  --xeno-style-overlay-radius: var(--xeno-radius-md);
+  --xeno-style-overlay-shadow: 0 4px 12px rgba(0, 0, 0, 0.24);
+  --xeno-style-overlay-ring: inset 0 0 0 1px var(--xeno-border);
+  --xeno-style-control-radius: var(--xeno-radius-md);
+
+  --xeno-style-content-radius: var(--xeno-radius-card);
+
+  --xeno-style-menu-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.24);
+  --xeno-style-picker-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.35);
+
+  --xeno-style-btn-primary-bg: var(--xeno-text);
+  --xeno-style-btn-primary-fg: var(--xeno-on-accent);
+  --xeno-style-btn-radius: var(--xeno-radius-control);
+}

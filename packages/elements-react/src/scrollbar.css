@@ -1,0 +1,184 @@
+/*
+ * The XENO scrollbar.
+ *
+ * A scrollbar is the one control the user does not summon: it appears because there is more, and it
+ * has to say so without becoming furniture. XENO's answer is to not draw it at all until you are in
+ * the region — and then to draw it properly, as an instrument with a rail, rather than as a lone mark
+ * floating in space. Three states:
+ *
+ *   idle              NOTHING. The gutter is reserved but nothing is painted.
+ *   container hovered the rail appears — a hairline track with a thumb riding it
+ *   thumb hovered     brightest, and thicker, and it stays that way while you drag
+ *
+ * The rail is the half people get wrong. A thumb alone, arriving out of nowhere, reads as a stray
+ * mark; the same thumb sitting on a track reads as a control that was always there and simply became
+ * visible. It also gives the thumb something to be measured against — you can see how much document a
+ * drag covers, which a floating bar never tells you.
+ *
+ * The gutter is reserved even while nothing is drawn, so appearing costs no reflow: the content does
+ * not shift sideways the moment your pointer enters.
+ *
+ * ## What it cannot do
+ *
+ * It appears rather than FADES in. The pseudo-elements below take no transitions in any engine that
+ * implements them, so hiding and showing is a snap either way. A true fade — and a bar that also wakes
+ * on a keyboard scroll, where there is no pointer to hover — needs the overlay model: a real element
+ * over the content, positioned from `scrollTop`. That costs a listener per scroll container and a
+ * component wrapping every one of them, which is not a trade this library makes for its default.
+ * The playground's Scrollbar gallery has that version standing next to this one.
+ *
+ * ## The two engines are mutually exclusive — this is the part that bites
+ *
+ * There are two ways to style a scrollbar and they cannot be combined. `scrollbar-width` /
+ * `scrollbar-color` are the standard properties, and since Chrome 121 setting EITHER of them makes the
+ * `::-webkit-scrollbar` pseudo-elements be ignored on that element. Declare both and Blink silently
+ * drops the detailed version, which is exactly how a stylesheet ends up with a thumb that has no
+ * corner radius and no hover state despite ten lines asking for them.
+ *
+ * So they are branched on `@supports selector(::-webkit-scrollbar)`: the pseudo-elements where they
+ * exist (Blink, WebKit), the standard properties where they do not (Gecko). Firefox gets the colours
+ * and the thin width; it does not get the radius or the growth, because the standard properties cannot
+ * express them.
+ *
+ * ## Scope
+ *
+ * Only inside `.xeno`. A component library has no business restyling the host page's scrollbars, and a
+ * consumer who does want them can opt in by putting `.xeno-scroll` on `<html>` (with the tokens in
+ * scope). Everything is wrapped in `:where()`, so the specificity is zero and any component can
+ * override it by naming its own class — see the time picker, which only re-declares the SIZE token.
+ */
+
+/* ---- Gecko: the standard properties, on their own ----------------------------
+   `scrollbar-color` cannot express a rail, so Firefox gets the hover gating and the colours and
+   nothing else: absent at rest, thumb-on-a-faint-track when you are in the region. */
+@supports not selector(::-webkit-scrollbar) {
+  :where(.xeno, .xeno *, .xeno-scroll) {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  :where(.xeno, .xeno *, .xeno-scroll):hover {
+    scrollbar-color: var(--xeno-scroll-thumb-hover) var(--xeno-scroll-rail);
+  }
+}
+
+/* ---- Blink / WebKit: the pseudo-elements ------------------------------------- */
+@supports selector(::-webkit-scrollbar) {
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar {
+    width: var(--xeno-scroll-size);
+    height: var(--xeno-scroll-size);
+  }
+  /* The stepper arrows are a relic; nothing in the system has them. */
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  /* ---- Idle: the gutter is there, nothing is painted in it ---- */
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar-track,
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar-corner,
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar-thumb {
+    background-color: transparent;
+  }
+
+  /*
+   * Both pieces are drawn the same way: a transparent border plus `background-clip: padding-box`
+   * insets the paint without anything having to be positioned. The border is what sets the WIDTH —
+   * 5px of border on a 12px gutter leaves a 2px rail, 3px leaves a 6px thumb, and 2px leaves the 8px
+   * the thumb grows to under the pointer. Because only the border changes, the gutter never does, so
+   * nothing reflows at any point.
+   *
+   * Radius is `--xeno-radius-hair` (1.5px of 6px, 25%), plus the border so the outer edge stays true.
+   * `--xeno-radius-xs` would be half the thumb's own width — a capsule with semicircular ends, and
+   * the grammar has no circles in it.
+   */
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar-track,
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar-thumb {
+    background-clip: padding-box;
+    border: solid transparent;
+  }
+  /* The rail is square. Its painted strip is only 2px wide, where `--xeno-radius-hair` would be 75%
+     of the width — semicircular ends. The radius here is exactly the border, so the PAINTED corner
+     comes out at zero. */
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar-track {
+    border-width: var(--xeno-scroll-rail-pad);
+    border-radius: var(--xeno-scroll-rail-pad);
+  }
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar-thumb {
+    border-width: var(--xeno-scroll-pad);
+    border-radius: calc(var(--xeno-radius-hair, 1.5px) + var(--xeno-scroll-pad));
+    min-height: 28px; /* never let a long document shrink the grab target to nothing */
+  }
+
+  /* ---- In the region: the rail arrives, with the thumb on it ---- */
+  :where(.xeno, .xeno *, .xeno-scroll):hover::-webkit-scrollbar-track {
+    background-color: var(--xeno-scroll-rail);
+  }
+  :where(.xeno, .xeno *, .xeno-scroll):hover::-webkit-scrollbar-thumb {
+    background-color: var(--xeno-scroll-thumb-hover);
+  }
+
+  /* ---- On the thumb: brightest, and thicker, and it holds while you drag ---- */
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar-thumb:hover,
+  :where(.xeno, .xeno *, .xeno-scroll)::-webkit-scrollbar-thumb:active {
+    background-color: var(--xeno-scroll-thumb-active);
+    border-width: var(--xeno-scroll-pad-hover);
+  }
+}
+
+/*
+ * ## `.xeno-scroll-wake` — for a scroller where `:hover` means nothing
+ *
+ * The document element is hovered whenever the pointer is anywhere in the window, so gating the page's
+ * own bar on hover leaves it permanently on — the opposite of the intent. This variant gates on
+ * ACTIVITY instead: it shows while `data-scrolling` is present and hides when it is gone.
+ *
+ * That one attribute is the app's job, because it is the only part a stylesheet cannot observe. Set it
+ * on scroll, drop it a beat after the last event:
+ *
+ *   let idle
+ *   addEventListener('scroll', () => {
+ *     root.setAttribute('data-scrolling', '')
+ *     clearTimeout(idle)
+ *     idle = setTimeout(() => root.removeAttribute('data-scrolling'), 600)
+ *   }, { passive: true })
+ *
+ * Pointing at the gutter still reveals the thumb even while idle — an invisible thumb still occupies
+ * its track, so going for it deliberately works.
+ */
+@supports selector(::-webkit-scrollbar) {
+  .xeno-scroll-wake:not([data-scrolling])::-webkit-scrollbar-track,
+  .xeno-scroll-wake:not([data-scrolling])::-webkit-scrollbar-thumb {
+    background-color: transparent;
+  }
+  .xeno-scroll-wake[data-scrolling]::-webkit-scrollbar-track {
+    background-color: var(--xeno-scroll-rail);
+  }
+  .xeno-scroll-wake[data-scrolling]::-webkit-scrollbar-thumb {
+    background-color: var(--xeno-scroll-thumb-hover);
+  }
+  /* Under the pointer still wins, exactly as everywhere else. */
+  .xeno-scroll-wake::-webkit-scrollbar-thumb:hover,
+  .xeno-scroll-wake::-webkit-scrollbar-thumb:active {
+    background-color: var(--xeno-scroll-thumb-active);
+    border-width: var(--xeno-scroll-pad-hover);
+  }
+}
+@supports not selector(::-webkit-scrollbar) {
+  .xeno-scroll-wake:not([data-scrolling]) {
+    scrollbar-color: transparent transparent;
+  }
+  .xeno-scroll-wake[data-scrolling] {
+    scrollbar-color: var(--xeno-scroll-thumb-hover) var(--xeno-scroll-rail);
+  }
+}
+
+/*
+ * Opt-in: reserve the gutter so content does not jump sideways the moment it becomes scrollable. Not
+ * on by default — it costs the width permanently, which is wrong in a narrow panel and right in a long
+ * document. `stable both-edges` keeps the centring honest when the content is centred.
+ */
+.xeno-scroll-gutter {
+  scrollbar-gutter: stable;
+}
+.xeno-scroll-gutter-both {
+  scrollbar-gutter: stable both-edges;
+}

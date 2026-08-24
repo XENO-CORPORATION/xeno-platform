@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      // Resolve the contract against the built DECLARATIONS, not the source. A .d.ts is exempt from
+      // rootDir/emit, so generate's dist stays flat. The `pretypecheck`/`prebuild` hooks build
+      // @xenosystem/elements first so these exist. (vitest resolves the same ids to source via alias.)
+      "@xenosystem/elements/schema": ["../elements/dist/schema.d.ts"],
+      "@xenosystem/elements": ["../elements/dist/index.d.ts"]
+    }
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/**/*.test.ts"
+  ]
+}

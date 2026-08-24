@@ -1,0 +1,36 @@
+{
+  "name": "@xenosystem/generate",
+  "version": "0.0.1",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "XENO declarations → per-platform artifacts. The only writer of generated output.",
+  "author": "XENO Corporation <emilian@bnkrsys.com>",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prebuild": "npm run build -w @xenosystem/elements",
+    "build": "tsc -p tsconfig.json",
+    "pretypecheck": "npm run build -w @xenosystem/elements",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
+    "artifacts": "npm run build && node scripts/build-artifacts.mjs"
+  },
+  "dependencies": {
+    "@xenosystem/elements": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

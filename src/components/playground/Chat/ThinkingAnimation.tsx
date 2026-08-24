@@ -87,8 +87,8 @@ export const ThinkingAnimationInline: React.FC<ThinkingAnimationProps> = ({
   }, [isLive]);
 
   return (
-    <span className="text-sm text-gray-400">
-      Thinking{currentDuration > 0 && <span className="text-gray-500 ml-1">({currentDuration}s)</span>}
+    <span className="text-sm text-[var(--chat-muted)]">
+      Thinking{currentDuration > 0 && <span className="text-[var(--chat-muted)] ml-1">({currentDuration}s)</span>}
     </span>
   );
 };

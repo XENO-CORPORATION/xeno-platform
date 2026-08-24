@@ -1,0 +1,75 @@
+/*
+ * ThinkingCube — the LOCKED branded model avatar. A single rounded SQUARE that either BREATHES
+ * (thinking: one continuous rotate + scale loop) or LANDS (settled: a one-shot grow while the fill
+ * grows opaque canvas → muted). Monochrome shell: muted hairline outline, canvas/muted fill only.
+ * No circles, no coloured glow. Motion is transform/opacity + background-color; a reduced-motion
+ * override stills the spin and leaves `settled` as a static filled square.
+ */
+
+.xeno-cube {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--xeno-cube-size, 24px);
+  height: var(--xeno-cube-size, 24px);
+  line-height: 0;
+  flex: none;
+}
+
+.xeno-cube-body {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border: 1.5px solid var(--xeno-muted);
+  border-radius: var(--xeno-radius-xs);
+  background-color: var(--xeno-canvas);
+  transform-origin: center;
+  will-change: transform, background-color;
+}
+
+/* thinking — ONE continuous loop: rotate 0→360° while the scale breathes 1 → .52 → 1. */
+.xeno-cube[data-state='thinking'] .xeno-cube-body {
+  background-color: var(--xeno-canvas);
+  animation: xeno-cube-life 1.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* settled — runs ONCE: grow .8 → 1.14 → 1 while the SAME square fills canvas → muted, then holds. */
+.xeno-cube[data-state='settled'] .xeno-cube-body {
+  background-color: var(--xeno-muted);
+  animation: xeno-cube-settle 0.52s var(--xeno-ease) both;
+}
+
+@keyframes xeno-cube-life {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(0.52);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes xeno-cube-settle {
+  0% {
+    transform: scale(0.8);
+    background-color: var(--xeno-canvas);
+  }
+  60% {
+    transform: scale(1.14);
+  }
+  100% {
+    transform: scale(1);
+    background-color: var(--xeno-muted);
+  }
+}
+
+/* Reduced motion: no spin, no grow. `settled` still rests as its filled muted square (base rule above);
+   `thinking` rests as a still, muted-outlined canvas square. */
+@media (prefers-reduced-motion: reduce) {
+  .xeno-cube[data-state='thinking'] .xeno-cube-body,
+  .xeno-cube[data-state='settled'] .xeno-cube-body {
+    animation: none;
+  }
+}

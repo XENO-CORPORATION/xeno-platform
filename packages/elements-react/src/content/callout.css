@@ -1,0 +1,77 @@
+/*
+ * <Callout> — a left-ruled blockquote. Monochrome by default (muted italic ink, hairline rule); the
+ * `danger` tone is the sole exception, swapping the rule and the glyph to `--xeno-danger`. Tokens only.
+ *
+ * The rule is a pseudo-element rather than a `border-left` for one reason: a border cannot be scaled
+ * from its top edge, and the entrance below is the rule DRAWING DOWN. Everything else about it is
+ * identical — 2px wide, flush left, the same total 14px inset to the text.
+ */
+.xeno-callout {
+  position: relative;
+  margin: 0;
+  padding-left: 14px;
+  color: var(--xeno-muted);
+  font-style: italic;
+}
+.xeno-callout::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--xeno-border);
+  /* Square: at 2px wide a 1.5px radius is 75% of the width, which is a capsule, not a corner. */
+  border-radius: 0;
+  transform-origin: top center;
+}
+.xeno-callout[data-tone='danger']::before {
+  background: var(--xeno-danger);
+}
+
+/* The flex row exists ONLY when there is a glyph. Without one the children stay direct descendants of
+   the blockquote, so a run of `<p>`s lays out as prose rather than as a row of flex items. */
+.xeno-callout[data-icon] {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+.xeno-callout-icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 1px; /* optical: the glyph's box sits a hair above the italic x-height */
+  color: var(--xeno-muted);
+}
+.xeno-callout[data-tone='danger'] .xeno-callout-icon {
+  color: var(--xeno-danger);
+}
+.xeno-callout-body {
+  min-width: 0;
+}
+
+/* ── Entrance ─────────────────────────────────────────────────────────────────────────
+ * The rule leads and the text follows it in. Two tracks rather than one fade, because the rule IS the
+ * callout's form — a block that simply fades up could be any block, while a rule drawing down from the
+ * top is unmistakably this one. The rule takes longer than the text on purpose: it is still arriving
+ * as the words settle, so the two read as one gesture instead of two. */
+.xeno-callout[data-enter] {
+  animation: xeno-callout-in var(--xeno-dur-entrance, 240ms) var(--xeno-ease) both;
+}
+.xeno-callout[data-enter]::before {
+  animation: xeno-callout-rule 320ms var(--xeno-ease-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+@keyframes xeno-callout-in {
+  from { opacity: 0; translate: 5px 0; }
+  to { opacity: 1; translate: 0 0; }
+}
+@keyframes xeno-callout-rule {
+  from { scale: 1 0; }
+  to { scale: 1 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-callout[data-enter],
+  .xeno-callout[data-enter]::before {
+    animation: none;
+  }
+}

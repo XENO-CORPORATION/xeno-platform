@@ -1,0 +1,137 @@
+/*
+ * StepTimeline — a vertical run of steps threaded by a hairline spine.
+ *
+ * CSS-first: paint is driven by `data-status` on each step; the size mark is a rounded SQUARE
+ * (radius-xs), never a circle. Monochrome throughout — spine + marks are greys from `xeno-theme.css`.
+ * The only motion is the `active` mark's breathing, gated behind `prefers-reduced-motion: no-preference`.
+ * No literal colours here.
+ */
+
+.xeno-steptimeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Two columns: the rail (fixed mark width) + the body. Rows stack with no gap so the spine of one
+   step reaches the mark of the next. */
+.xeno-steptimeline-step {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  column-gap: 12px;
+}
+
+/* ── Rail (mark + spine) — decorative, aria-hidden ───────────────────────────────────── */
+.xeno-steptimeline-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* stretch to the row height so the spine's flex fill spans down to the next mark */
+}
+
+.xeno-steptimeline-mark {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: var(--xeno-radius-xs);
+}
+
+/* pending — an outline square, not yet reached */
+.xeno-steptimeline-step[data-status='pending'] .xeno-steptimeline-mark {
+  background: transparent;
+  border: 1.5px solid var(--xeno-muted);
+}
+
+/* active — a filled square, breathing (see reduced-motion gate below) */
+.xeno-steptimeline-step[data-status='active'] .xeno-steptimeline-mark {
+  background: var(--xeno-active);
+}
+
+/* done — filled to text colour; the check glyph inherits `--xeno-on-accent` via currentColor */
+.xeno-steptimeline-step[data-status='done'] .xeno-steptimeline-mark {
+  background: var(--xeno-text);
+  color: var(--xeno-on-accent);
+}
+
+/* the connecting spine — a 1.5px rounded border-coloured bar filling to the next mark */
+.xeno-steptimeline-spine {
+  flex: 1 1 auto;
+  width: 1.5px;
+  min-height: 12px;
+  margin: 2px 0;
+  background: var(--xeno-border);
+  border-radius: var(--xeno-radius-hair);
+}
+
+/* ── Body (label + optional time) ────────────────────────────────────────────────────── */
+.xeno-steptimeline-body {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 18px;
+}
+
+/* space between steps — every step but the last pads its body so the spine has length */
+.xeno-steptimeline-step:not(:last-child) .xeno-steptimeline-body {
+  padding-bottom: 20px;
+}
+
+.xeno-steptimeline-label {
+  flex: 1 1 auto;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--xeno-text);
+}
+
+.xeno-steptimeline-step[data-status='pending'] .xeno-steptimeline-label {
+  color: var(--xeno-muted);
+}
+
+.xeno-steptimeline-step[data-status='active'] .xeno-steptimeline-label {
+  font-weight: 500;
+}
+
+.xeno-steptimeline-time {
+  flex: none;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  color: var(--xeno-muted);
+}
+
+/* screen-reader-only status word — the visible mark is decorative */
+.xeno-steptimeline-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes xeno-steptimeline-breathe {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(0.78);
+      opacity: 0.6;
+    }
+  }
+  .xeno-steptimeline-step[data-status='active'] .xeno-steptimeline-mark {
+    animation: xeno-steptimeline-breathe 1.8s var(--xeno-ease) infinite;
+  }
+}

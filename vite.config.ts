@@ -3,11 +3,51 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { fileURLToPath, URL } from 'node:url';
 
+import fs from 'node:fs';
+
+/** Path to XENO elements packages (in-repo vendor or sibling repo). */
+const localPackages = fileURLToPath(new URL('./packages/', import.meta.url));
+const siblingPackages = fileURLToPath(new URL('../xeno-elements/packages/', import.meta.url));
+const foundationPackages = fileURLToPath(new URL('../xeno-elements-foundations/packages/', import.meta.url));
+
+const XENO_PACKAGES = fs.existsSync(localPackages)
+  ? localPackages
+  : fs.existsSync(siblingPackages)
+  ? siblingPackages
+  : foundationPackages;
+
+const xeno = (p: string) => path.join(XENO_PACKAGES, p);
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) }
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+
+      // ── XENO Elements ──────────────────────────────────────────────────────────────
+      // Resolved to SOURCE in the sibling repo, not to a built package. The library and this app are
+      // developed together right now, so a build step between them would mean every change to a
+      // control needs a rebuild before it can be seen here. This is a DEVELOPMENT arrangement: the
+      // real dependency becomes a versioned package from a registry once the library settles.
+      //
+      // Order matters — the deeper specifiers must come before the bare one, or `@xenosystem/elements`
+      // would swallow `@xenosystem/elements/tokens`. The same trap catches the stylesheet: without the
+      // entry below, `@xenosystem/elements-react/xeno-elements.css` resolves to the bare alias and then
+      // has `/xeno-elements.css` appended to it, giving `.../src/index.ts/xeno-elements.css`.
+      '@xenosystem/elements-react/xeno-elements.css': xeno('elements-react/src/xeno-elements.css'),
+      '@xenosystem/elements/schema': xeno('elements/src/schema.ts'),
+      '@xenosystem/elements/tokens': xeno('elements/src/tokens/index.ts'),
+      '@xenosystem/elements/elements': xeno('elements/src/elements'),
+      '@xenosystem/elements': xeno('elements/src/index.ts'),
+      '@xenosystem/generate': xeno('generate/src/index.ts'),
+      '@xenosystem/elements-react': xeno('elements-react/src/index.ts'),
+    },
+    // Two copies of React is the classic failure of linking a package from outside the tree: the
+    // library would resolve its own, hooks would break, and the error ("Invalid hook call") points at
+    // the library rather than at the wiring. The library keeps React as a peer dependency only; this
+    // is the other half of that contract.
+    dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'axios', 'lucide-react'],
@@ -17,6 +57,9 @@ export default defineConfig({
   },
   server: {
     host: true, // Accept connections from any host
+    // The elements library is a sibling repo, outside this project root — Vite will not serve files
+    // from there unless the directory is explicitly allowed.
+    fs: { allow: [fileURLToPath(new URL('.', import.meta.url)), XENO_PACKAGES] },
     allowedHosts: ['.trycloudflare.com', 'localhost', '127.0.0.1'],
     port: 5183,
     strictPort: false,

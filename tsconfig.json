@@ -19,7 +19,15 @@
     "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@xenosystem/elements/schema": ["packages/elements/src/schema.ts", "../xeno-elements/packages/elements/src/schema.ts"],
+      "@xenosystem/elements/tokens": ["packages/elements/src/tokens/index.ts", "../xeno-elements/packages/elements/src/tokens/index.ts"],
+      "@xenosystem/elements/elements/*": ["packages/elements/src/elements/*", "../xeno-elements/packages/elements/src/elements/*"],
+      "@xenosystem/elements": ["packages/elements/src/index.ts", "../xeno-elements/packages/elements/src/index.ts"],
+      "@xenosystem/generate": ["packages/generate/src/index.ts", "../xeno-elements/packages/generate/src/index.ts"],
+      "@xenosystem/elements-react": ["packages/elements-react/src/index.ts", "../xeno-elements/packages/elements-react/src/index.ts"],
+      "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx"],

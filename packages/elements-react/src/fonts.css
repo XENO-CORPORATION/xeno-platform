@@ -1,0 +1,34 @@
+/*
+ * The XENO typeface — vendored, not merely declared.
+ *
+ * `font-family: 'Inter'` alone SILENTLY falls back when Inter is not installed, and on Windows that
+ * means Segoe UI: a fine reading face and the wrong one for dense dark chrome. The app then looks
+ * identical to having declared nothing, which is most of why an interface reads as cheap. It is a
+ * live bug in xeno-hub today. Vendoring the woff2 means it works offline and needs no CSP exception.
+ *
+ * OPT-IN, deliberately. This is a library, not an app: forcing ~100 kB of font into every consumer's
+ * bundle is not ours to decide, and a product with its own licensed face must be able to say no. Same
+ * shape as the `motion` entry point — the platform SHIPS it so nobody re-derives it, and the consumer
+ * chooses.
+ *
+ *   import '@xenosystem/elements-react/fonts.css'
+ *
+ * A product that skips this gets the fallback stack below and should know that it has.
+ */
+@import '@fontsource-variable/inter/index.css';
+
+.xeno {
+  /*
+   * `--xeno-font-*` and NOT `--xeno-text-*`. That prefix is already the colour ramp, and reusing it
+   * would silently overwrite `--xeno-text` app-wide — a documented failure, not a hypothetical.
+   */
+  --xeno-font-sans: 'Inter Variable', 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --xeno-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  font-family: var(--xeno-font-sans);
+  /* cv11 disambiguates 1/l/I — the one that matters most in dense UI and in code-adjacent labels. */
+  font-feature-settings: 'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv11' 1, 'ss01' 1;
+  font-optical-sizing: auto;
+  /* Inter runs a touch wide at UI sizes. */
+  letter-spacing: -0.006em;
+}

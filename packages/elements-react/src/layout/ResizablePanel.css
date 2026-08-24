@@ -1,0 +1,79 @@
+/*
+ * ResizablePanel — a fixed-width panel + a 4px draggable divider. CSS-first: `data-side` places the
+ * handle, `data-dragging` locks the grab cursor + text selection during a drag, `data-availability`
+ * carries the disabled axis. Monochrome shell: the handle rests on the hairline `--xeno-border` and
+ * lifts to `--xeno-muted` on hover/focus. No literal colours, no hue.
+ */
+
+.xeno-resizable {
+  display: flex;
+  align-items: stretch;
+  min-height: 0;
+}
+
+/* While dragging, the grab cursor should persist even as the pointer leaves the 4px handle. */
+.xeno-resizable[data-dragging='true'] {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* The sized child — width is the only driven property; contents scroll within. */
+.xeno-resizable-panel {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* The divider: a hairline strip that lifts on hover/focus. Rounded-square grammar (no circles). */
+.xeno-resizable-handle {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 4px;
+  padding: 0;
+  border: none;
+  border-radius: var(--xeno-radius-hair);
+  background: var(--xeno-border);
+  cursor: col-resize;
+  touch-action: none;
+  transition: background var(--xeno-dur) var(--xeno-ease);
+}
+
+/* Widen the pointer/press target beyond the 4px visual without shifting layout. */
+.xeno-resizable-handle::before {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;
+}
+
+.xeno-resizable-handle:hover {
+  background: var(--xeno-muted);
+}
+
+.xeno-resizable-handle:focus-visible {
+  outline: none;
+  background: var(--xeno-muted);
+  box-shadow:
+    0 0 0 2px var(--xeno-canvas),
+    0 0 0 4px var(--xeno-border);
+}
+
+/* Active drag reads a touch brighter than hover. */
+.xeno-resizable[data-dragging='true'] .xeno-resizable-handle {
+  background: var(--xeno-active);
+}
+
+/* Disabled: inert hairline, not-allowed cursor, dimmed. */
+.xeno-resizable[data-availability='disabled'] .xeno-resizable-handle,
+.xeno-resizable-handle[data-availability='disabled'] {
+  background: var(--xeno-border);
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-resizable-handle {
+    transition: none;
+  }
+}

@@ -1,0 +1,238 @@
+/*
+ * DateTimePicker — a faithful port of the chat's "Scheduled" date/time popover. Monochrome, tokens
+ * only, `rounded-md` (6px) everywhere. The SELECTION is a soft `--xeno-control` fill (never bright
+ * inverted ink); adjacent-month days are greyed; the time columns are quiet bordered lists with a thin
+ * scrollbar, and AM/PM is two flat buttons. State is CSS-first via `data-selection` on the cells.
+ */
+
+/* ── DatePicker ──────────────────────────────────────────────────────────────────── */
+.xeno-datepicker {
+  --xeno-cell: 26px;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  width: fit-content;
+  padding: 6px;
+  background: var(--xeno-surface);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-style-overlay-radius);
+  color: var(--xeno-text);
+  user-select: none;
+}
+
+.xeno-datepicker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 0;
+}
+
+.xeno-datepicker-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--xeno-text);
+}
+
+/* The prev/next chevrons are one glyph (chevron-right); the prev button mirrors it to point left. */
+.xeno-datepicker-prev .xeno-element {
+  transform: rotate(180deg);
+}
+
+.xeno-datepicker-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, var(--xeno-cell));
+  gap: 2px;
+}
+
+.xeno-datepicker-weekday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--xeno-muted);
+}
+
+.xeno-datepicker-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.xeno-datepicker-week {
+  display: grid;
+  grid-template-columns: repeat(7, var(--xeno-cell));
+  gap: 2px;
+}
+
+.xeno-datepicker-cell {
+  width: var(--xeno-cell);
+  height: var(--xeno-cell);
+}
+
+.xeno-datepicker-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--xeno-text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--xeno-radius-md);
+  cursor: pointer;
+  transition:
+    background var(--xeno-dur) ease,
+    color var(--xeno-dur) ease;
+}
+.xeno-datepicker-day:hover {
+  background: var(--xeno-hover);
+}
+.xeno-datepicker-day:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--xeno-surface),
+    0 0 0 4px var(--xeno-border);
+}
+/* Adjacent-month days: present (real, clickable) but greyed back. */
+.xeno-datepicker-day[data-outside] {
+  color: var(--xeno-muted);
+  opacity: 0.45;
+}
+/* Selection — the soft control fill the product uses, not bright inverted ink. */
+.xeno-datepicker-day[data-selection='on'] {
+  color: var(--xeno-text);
+  opacity: 1;
+  background: var(--xeno-control);
+}
+
+.xeno-datepicker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--xeno-border);
+}
+/* If Clear is hidden, Today still sits at the right edge. */
+.xeno-datepicker-footer > .xeno-datepicker-today:only-child {
+  margin-left: auto;
+}
+
+/* ── TimePicker ──────────────────────────────────────────────────────────────────── */
+.xeno-timepicker {
+  display: flex;
+  gap: 4px;
+  width: fit-content;
+  /* Match the calendar's natural height (26px cells → ~258px) so the two fields' panels are consistent
+     in size; the Hour/Min lists fill and scroll within it. */
+  min-height: 258px;
+  padding: 6px;
+  background: var(--xeno-surface);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-md);
+  color: var(--xeno-text);
+  user-select: none;
+}
+
+/* Equal-width columns that stretch to the panel height, so all three boxes match — and the panel can
+   grow to match a taller sibling (e.g. the calendar) with the lists filling it, not leaving a gap. */
+.xeno-timepicker-col {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 58px;
+  min-height: 0;
+}
+
+.xeno-timepicker-col-head {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--xeno-muted);
+}
+
+.xeno-timepicker-list {
+  display: flex;
+  /* basis 0: the list FILLS the column height without its content inflating the panel — so the
+     calendar drives the shared height and the time panel matches it exactly (scrolling within). */
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  padding: 2px;
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-md);
+}
+/* Hour + Min scroll within the shared height; AM/PM (no data-scroll) sits flush at the top.
+   The scrollbar itself comes from `scrollbar.css`; a column this narrow only wants a slimmer one, so
+   it re-declares the SIZE TOKEN and nothing else. It used to re-implement the whole thing — and set
+   `scrollbar-width` alongside its own `::-webkit-scrollbar` rules, which since Chrome 121 means Blink
+   ignored every one of them and drew the default bar. */
+.xeno-timepicker-list[data-scroll] {
+  --xeno-scroll-size: 9px;
+  --xeno-scroll-pad: 2px;
+  --xeno-scroll-pad-hover: 1px;
+  --xeno-scroll-rail-pad: 4px; /* 9 − 2×4 = a 1px rail; the default 5 would leave none at all */
+  overflow-y: auto;
+}
+
+.xeno-timepicker-option {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  width: 100%;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--xeno-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--xeno-radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--xeno-dur) ease,
+    color var(--xeno-dur) ease;
+}
+.xeno-timepicker-option:hover {
+  color: var(--xeno-text);
+  background: var(--xeno-hover);
+}
+.xeno-timepicker-option:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--xeno-surface),
+    0 0 0 4px var(--xeno-border);
+}
+.xeno-timepicker-option[data-selection='on'] {
+  color: var(--xeno-text);
+  background: var(--xeno-control);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xeno-datepicker-day,
+  .xeno-timepicker-option {
+    transition: none;
+  }
+}

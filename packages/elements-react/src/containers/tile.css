@@ -1,0 +1,17 @@
+/*
+ * Tile — a square icon tile. Rounded square (radius-md), a surface ground, a hairline border, and a
+ * centred glyph in muted ink. The box edge arrives as an inline `--xeno-tile-size` var. No literal
+ * colours; monochrome shell.
+ */
+.xeno-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--xeno-tile-size, 32px);
+  height: var(--xeno-tile-size, 32px);
+  color: var(--xeno-muted);
+  background: var(--xeno-surface);
+  border: 1px solid var(--xeno-border);
+  border-radius: var(--xeno-radius-md);
+}

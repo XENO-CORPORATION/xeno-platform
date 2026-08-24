@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, MessageSquareText, Loader, Settings, StopCircle, Play, Pause, X, AlertTriangle, ChevronLeft, ChevronRight, KeyRound, SquarePen, Copy, Check, MessageSquare, ArrowLeft, Edit2, Paperclip, Clock, Trash } from 'lucide-react';
-// XENO: @google/genai (Gemini-Live) import removed — voice mode de-scoped; no direct provider calls.
+import { Button, IconButton } from '@xenosystem/elements-react';
+import { useChatTheme } from './chatTheme';
+import { Mic, MicOff, Loader, StopCircle, Play, AlertTriangle, Check, MessageSquare, MessageSquareDecl, ArrowRightDecl, CheckDecl, CopyDecl, PauseDecl, PlayDecl, Trash2Decl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -120,6 +121,9 @@ const useMicrophoneSetup = (setAvailableMicrophones: React.Dispatch<React.SetSta
 };
 
 const ChatWithVoice: React.FC = () => {
+  // Read-only: this surface has no switcher, it wears whatever the chat's slider was left on.
+  const { themeClass, themeStyle } = useChatTheme();
+
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>('idle');
   const [assistantStatus, setAssistantStatus] = useState<AssistantStatus>('idle');
   const [showDetailedChat, setShowDetailedChat] = useState(false);
@@ -1101,19 +1105,19 @@ const ChatWithVoice: React.FC = () => {
     const iconSize = 32;
     const baseClass = "transition-colors duration-300";
 
-    if (microphoneStatus === 'no_device') return <AlertTriangle size={iconSize} className={`${baseClass} text-[var(--text-secondary)] opacity-70`} />;
-    if (microphoneStatus === 'listening' || microphoneStatus === 'recording') return <MicOff size={iconSize} className={`${baseClass} text-[var(--text-primary)]`} />;
-    if (microphoneStatus === 'initializing' || microphoneStatus === 'requesting_permission') return <Loader size={iconSize} className={`${baseClass} text-neutral-400 animate-spin`} />;
+    if (microphoneStatus === 'no_device') return <AlertTriangle size={iconSize} className={`${baseClass} text-[var(--chat-muted)] opacity-70`} />;
+    if (microphoneStatus === 'listening' || microphoneStatus === 'recording') return <MicOff size={iconSize} className={`${baseClass} text-[var(--chat-text)]`} />;
+    if (microphoneStatus === 'initializing' || microphoneStatus === 'requesting_permission') return <Loader size={iconSize} className={`${baseClass} text-[var(--chat-muted)] animate-spin`} />;
     if (microphoneStatus === 'processing_audio' || assistantStatus === 'thinking') return <Loader size={iconSize} className={`${baseClass} text-[var(--accent-color)] animate-spin`} />;
     if (assistantStatus === 'speaking') return <StopCircle size={iconSize} className={`${baseClass} text-[var(--accent-color)]`} />;
-    if (microphoneStatus === 'permission_denied' || assistantStatus === 'error') return <AlertTriangle size={iconSize} className={`${baseClass} text-[var(--text-secondary)] opacity-70`} />;
-    return <Mic size={iconSize} className={`${baseClass} text-[var(--text-primary)] opacity-90`} />;
+    if (microphoneStatus === 'permission_denied' || assistantStatus === 'error') return <AlertTriangle size={iconSize} className={`${baseClass} text-[var(--chat-muted)] opacity-70`} />;
+    return <Mic size={iconSize} className={`${baseClass} text-[var(--chat-text)] opacity-90`} />;
   };
 
   const getStatusText = () => {
     const selectedProvider = availableProviders[currentProviderIndex]?.name || 'Unknown';
     
-    if (lastError) return <span className="text-neutral-300 font-medium flex items-center text-xs sm:text-sm"><AlertTriangle size={14} className="mr-1.5 text-neutral-400 flex-shrink-0" />{lastError}</span>;
+    if (lastError) return <span className="text-[var(--chat-text)] font-medium flex items-center text-xs sm:text-sm"><AlertTriangle size={14} className="mr-1.5 text-[var(--chat-muted)] flex-shrink-0" />{lastError}</span>;
     
     let text = `Click the microphone to talk with ${selectedProvider}`;
     if (microphoneStatus === 'no_device') text = "No microphone detected.";
@@ -1126,7 +1130,7 @@ const ChatWithVoice: React.FC = () => {
     else if (microphoneStatus === 'requesting_permission') text = "Requesting microphone permission...";
     else if (microphoneStatus === 'initializing') text = `Connecting to ${selectedProvider}...`;
     
-    return <span className="text-neutral-400 text-xs sm:text-sm">{text}</span>;
+    return <span className="text-[var(--chat-muted)] text-xs sm:text-sm">{text}</span>;
   };
 
   const getMicButtonTitle = (): string => {
@@ -1158,39 +1162,39 @@ const ChatWithVoice: React.FC = () => {
 
   const micButtonClasses = () => {
     const selectedProvider = availableProviders[currentProviderIndex]?.id || 'unknown';
-    let baseClasses = "rounded-full p-5 sm:p-6 transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--primary-bg)] shadow-glass hover:shadow-glass-hover backdrop-blur-xs";
-    let stateClasses = "bg-[var(--glassmorphism-bg)] border border-[var(--glassmorphism-border)] hover:border-white/30 focus:ring-white/40";
+    let baseClasses = "rounded-full p-5 sm:p-6 transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--chat-canvas)] shadow-glass hover:shadow-glass-hover backdrop-blur-xs";
+    let stateClasses = "bg-[var(--chat-hover)] border border-[var(--chat-border)] hover:border-[var(--chat-muted)] focus:ring-[var(--chat-muted)]";
     
     if (micButtonDisabled) {
-      stateClasses = `bg-neutral-700/40 border-neutral-600/50 text-neutral-500 cursor-not-allowed backdrop-blur-none shadow-inner`;
+      stateClasses = `bg-[var(--chat-control)]/40 border-[var(--chat-border)]/50 text-[var(--chat-muted)] cursor-not-allowed backdrop-blur-none shadow-inner`;
     } else if (microphoneStatus === 'listening' || microphoneStatus === 'recording') {
       // Provider-specific active states
       if (selectedProvider === 'openai') {
         const isOpenAiSession = openAiRtcDataChannelRef.current || openAiRtcPeerConnectionRef.current;
         if (isOpenAiSession) {
-          stateClasses = `bg-neutral-600/30 border-neutral-500/40 hover:border-neutral-400/50 focus:ring-neutral-300/50 openai-listening-pulse`;
+          stateClasses = `bg-[var(--chat-control-strong)]/30 border-[var(--chat-border)]/40 hover:border-[var(--chat-muted)]/50 focus:ring-[var(--chat-muted)]/50 openai-listening-pulse`;
         } else {
-          stateClasses = `bg-neutral-600/30 border-neutral-500/40 hover:border-neutral-400/50 focus:ring-neutral-300/50`;
+          stateClasses = `bg-[var(--chat-control-strong)]/30 border-[var(--chat-border)]/40 hover:border-[var(--chat-muted)]/50 focus:ring-[var(--chat-muted)]/50`;
         }
       } else if (selectedProvider === 'google') {
-        stateClasses = `bg-blue-600/30 border-blue-500/40 hover:border-blue-400/50 focus:ring-blue-300/50 google-listening-pulse`;
+        stateClasses = `bg-[var(--accent-color)]/30 border-[var(--accent-color)]/40 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50 google-listening-pulse`;
       } else {
         // Default/other providers
-        stateClasses = `bg-purple-600/30 border-purple-500/40 hover:border-purple-400/50 focus:ring-purple-300/50`;
+        stateClasses = `bg-[var(--accent-color)]/30 border-[var(--accent-color)]/40 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50`;
       }
     } else if (microphoneStatus === 'processing_audio' || assistantStatus === 'thinking') {
       stateClasses = `bg-[var(--accent-color)]/20 border-[var(--accent-color)]/30 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50 cursor-wait`;
     } else if (assistantStatus === 'speaking') {
       // Provider-specific speaking states
       if (selectedProvider === 'google') {
-        stateClasses = `bg-blue-500/20 border-blue-400/30 hover:border-blue-300/50 focus:ring-blue-200/50`;
+        stateClasses = `bg-[var(--accent-color)]/20 border-[var(--accent-color)]/30 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50`;
       } else if (selectedProvider === 'openai') {
         stateClasses = `bg-[var(--accent-color)]/20 border-[var(--accent-color)]/30 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50`;
       } else {
-        stateClasses = `bg-purple-500/20 border-purple-400/30 hover:border-purple-300/50 focus:ring-purple-200/50`;
+        stateClasses = `bg-[var(--accent-color)]/20 border-[var(--accent-color)]/30 hover:border-[var(--accent-color)]/50 focus:ring-[var(--accent-color)]/50`;
       }
     } else if (microphoneStatus === 'permission_denied' || assistantStatus === 'error' || lastError || microphoneStatus === 'no_device') {
-      stateClasses = `bg-neutral-700/30 border-neutral-600/40 hover:border-neutral-500/50 focus:ring-neutral-400/50`;
+      stateClasses = `bg-[var(--chat-control)]/30 border-[var(--chat-border)]/40 hover:border-[var(--chat-muted)]/50 focus:ring-[var(--chat-muted)]/50`;
     }
     
     return `${baseClasses} ${stateClasses}`;
@@ -1268,13 +1272,27 @@ const ChatWithVoice: React.FC = () => {
   // --- End: Message Action Handlers ---
 
   return (
-    <div className="flex flex-col h-full text-[var(--text-secondary)] relative overflow-hidden antialiased">
+    // Same story as the search interface: this is a sibling route, it never mounts ChatWithLLM, and
+    // until the palettes moved to a stylesheet of their own there was nothing here to inherit. The
+    // class is the base palette and the style is the exact brightness stop when the slider is not
+    // parked on one of the three named ones — apply both, or an eighteen-stop line rounds to three.
+    <div
+      className={`chat-voice chat-themed xeno-icon-hosts ${themeClass} flex flex-col h-full text-[var(--chat-text)] relative overflow-hidden antialiased`}
+      style={themeStyle}
+    >
       {!showDetailedChat ? (
         // Main Voice Interface - Show when NOT in chat mode
         <div className="flex flex-col items-center justify-center flex-grow w-full max-w-md mx-auto p-4">
           <div className="w-44 sm:w-48 h-[70px] mb-6 sm:mb-8 flex items-center justify-center relative">
             {renderWaveformVisualizer()}
           </div>
+          {/* Stays hand-written, and not marginally. It is `rounded-full` at p-5/p-6 — an 80-to-96px
+              CIRCLE, where this design system draws rounded squares and never circles, and where the
+              control scale stops at 36. `micButtonClasses()` branches five ways: disabled, an OpenAI
+              session with its own pulse, OpenAI without one, Google with another pulse, and every
+              other provider — several of them tinted with `--accent-color`, which belongs to no
+              token set here. There is no variant, no size and no axis in the library that any of
+              that maps onto. This is the voice view's subject, not one of its controls. */}
           <button
             onClick={handleMicButtonClick}
             title={getMicButtonTitle()}
@@ -1283,49 +1301,61 @@ const ChatWithVoice: React.FC = () => {
             {getMicButtonIcon()}
           </button>
           <div className="text-center mt-4 mb-6 max-w-sm">
-            <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+            <p className="text-sm text-[var(--chat-muted)] leading-relaxed">
               {getStatusText()}
             </p>
           </div>
 
           {/* Voice Interface Controls */}
           <div className="flex items-center justify-center gap-4 mb-6">
-            <button
+            <IconButton
+              icon={MessageSquareDecl}
+              variant="ghost"
+              size="lg"
+              iconSize={22}
               onClick={() => setShowDetailedChat(true)}
-              className="p-2 text-neutral-400 hover:text-white hover:bg-white/10 rounded-md transition-colors"
               title="View Chat History"
-            >
-              <MessageSquare size={22} />
-            </button>
+              aria-label="View chat history"
+            />
           </div>
         </div>
       ) : (
         // Chat Interface - Show when in chat mode with exact ChatWithLLM structure
-        <div className="relative flex flex-col h-full text-white overflow-hidden">
+        <div className="relative flex flex-col h-full text-[var(--chat-text)] overflow-hidden">
           {/* Top Bar */}
           <div className="absolute top-0 left-0 z-10 flex flex-shrink-0 items-center justify-between px-4 pt-4 pb-0 w-full bg-transparent">
             {/* Left side button */}
             <div className="flex items-center gap-2">
-              <button 
+              {/* Border plus a `--chat-surface` fill is `secondary` by the conversion table, and
+                  `h-9` is `lg`. The fill moves a step lighter doing it — the variants carry one
+                  control fill, `--xeno-control`, where this said `--chat-surface`.
+                  The arrow is `arrow-right` mirrored: the library draws one geometry and flips it
+                  where it is used, and `.chat-icon-flip-x` is how a component's glyph gets flipped
+                  when the call site cannot reach inside it. */}
+              <IconButton
+                icon={ArrowRightDecl}
+                variant="secondary"
+                size="lg"
+                iconSize={16}
+                className="chat-icon-flip-x"
                 onClick={() => setShowDetailedChat(false)}
-                className="flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9"
                 aria-label="Go back to voice interface"
                 title="Back to Voice"
-              >
-                <ArrowLeft size={16} />
-              </button>
+              />
             </div>
 
             {/* Right side button */}
             <div className="flex items-center gap-2">
-              <button 
+              {/* The back arrow's twin at the other end of the bar. */}
+              <IconButton
+                icon={Trash2Decl}
+                variant="secondary"
+                size="lg"
+                iconSize={16}
                 onClick={() => setMessages([])}
-                className="flex items-center justify-center bg-[#19191a] border border-[#3a3a3d] rounded-lg px-3 py-1.5 text-sm text-white/80 hover:border-gray-500 transition-colors h-9"
                 aria-label="Clear chat history"
                 title="Clear Chat"
-              >
-                <Trash size={16} />
-              </button>
+              />
             </div>
           </div>
 
@@ -1333,7 +1363,7 @@ const ChatWithVoice: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-4 pb-0 pt-16">
             <div className="max-w-[45rem] mx-auto space-y-4">
               {messages.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">
+                <div className="text-center text-[var(--chat-text)]0 py-8">
                   <MessageSquare size={48} className="mx-auto mb-4 opacity-50" />
                   <p>No conversation history yet</p>
                   <p className="text-sm mt-2">Start talking to see your messages here</p>
@@ -1350,9 +1380,9 @@ const ChatWithVoice: React.FC = () => {
                   if (msg.isGenerating && !msg.textContent) {
                     return (
                       <div key={msg.id} className="flex justify-start w-full pl-[1.125rem] py-2">
-                        <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-gray-400">
+                        <div className="flex items-center gap-2 bg-[var(--chat-control)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--chat-muted)]">
                           <span className="flex h-2 w-2 relative mr-1">
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-500 animate-pulse"></span> 
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--chat-muted)] animate-pulse"></span> 
                           </span>
                           <span>
                             {assistantStatus === 'thinking' ? "Assistant is thinking..." : "Processing..."}
@@ -1369,37 +1399,66 @@ const ChatWithVoice: React.FC = () => {
                     >
                       {isUser ? (
                         editingMessageId === msg.id ? (
-                          <div className="flex flex-col bg-[#19191a] border border-[#3a3a3d] rounded-2xl rounded-br-none p-3 max-w-[75%] w-full text-white">
+                          <div className="flex flex-col bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-2xl rounded-br-none p-3 max-w-[75%] w-full text-[var(--chat-text)]">
+                            {/* Stays hand-written — bare inside a box it does not own, not the
+                                composer field the count assumed. This is the voice route's
+                                edit-in-place: the `--chat-surface` bubble around it carries the
+                                border, the 2xl radius and the squared-off bottom-right corner that
+                                marks it as the user's, so the field is `bg-transparent`,
+                                `border-none`, `resize-none` and grows by having its overflow hidden.
+                                Same shape as the message editor in ChatWithLLM. */}
                             <textarea
                               ref={editInputRef}
                               value={editText}
                               onChange={(e) => setEditText(e.target.value)}
-                              className="w-full bg-transparent text-sm leading-snug text-white outline-none resize-none focus:ring-0 border-none focus:outline-none focus:shadow-none whitespace-pre-wrap scrollbar-thin scrollbar-thumb-zinc-600 scrollbar-track-transparent focus:outline-none"
+                              className="w-full bg-transparent text-sm leading-snug text-[var(--chat-text)] outline-none resize-none focus:ring-0 border-none focus:outline-none focus:shadow-none whitespace-pre-wrap"
                               rows={1}
                               style={{ overflowY: 'hidden' }}
                             />
                             <div className="flex items-center justify-end gap-2 mt-1.5 self-end">
-                              <button onClick={handleCancelEdit} className="text-sm text-gray-400 hover:text-gray-200 px-3 py-1" aria-label="Cancel edit">
+                              {/* Cancel is `ghost` — muted ink brightening on hover, and its 12px
+                                  padding and 14px type are `md` to the pixel. */}
+                              <Button variant="ghost" size="md" onClick={handleCancelEdit} aria-label="Cancel edit">
                                 Cancel
-                              </button>
-                              <button onClick={handleSaveEdit} className="text-sm bg-gray-400 text-zinc-900 px-3 py-1 rounded-md font-semibold hover:bg-gray-300 transition-colors" aria-label="Save changes">
+                              </Button>
+                              {/* `primary md`, matching its `ghost md` Cancel. The bridge carries
+                                  the chrome tokens now, so the reason recorded here is answered.
+                                  This one is NOT an exact swap and the difference is the point: it
+                                  filled `--chat-muted`, a grey, where the other three Save buttons in
+                                  this chat fill `--chat-accent`. Three sites agreeing and one not is
+                                  the one being corrected — the same call made for the search field
+                                  whose focus ring was accent where every other field's was muted. */}
+                              <Button
+                                variant="primary"
+                                size="md"
+                                onClick={handleSaveEdit}
+                                aria-label="Save changes"
+                              >
                                 Save
-                              </button>
+                              </Button>
                             </div>
                           </div>
                         ) : (
                           <div data-message-id={msg.id} className="group flex flex-col items-end max-w-[75%]">
-                            <div className="bg-[#19191a] border border-[#3a3a3d] rounded-2xl rounded-br-none p-3 text-white">
+                            <div className="bg-[var(--chat-surface)] border border-[var(--chat-border)] rounded-2xl rounded-br-none p-3 text-[var(--chat-text)]">
                               <p className="text-sm leading-snug whitespace-pre-wrap">{msg.textContent}</p>
                             </div>
                             <div className="flex items-center justify-end gap-2 mt-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-150">
-                              <button onClick={() => handleCopyUserMessage(msg.textContent, msg.id)} className="p-1 text-gray-400 hover:text-gray-200 rounded-md" aria-label="Copy message">
-                                {copiedMessageId === msg.id ? (
-                                  <Check size={14} className="text-green-400" />
-                                ) : (
-                                  <Copy size={14} />
-                                )}
-                              </button>
+                              {/* One button, two faces — the ternary belongs in `icon` so the check
+                                  DRAWS over the copy mark instead of replacing it. `xeno-icon-hover`
+                                  stays: it is what makes `data-selection` a trigger for that draw
+                                  even when the pointer moves off as you click, which is what people
+                                  actually do. */}
+                              <IconButton
+                                icon={copiedMessageId === msg.id ? CheckDecl : CopyDecl}
+                                variant="ghost"
+                                size="xs"
+                                iconSize={14}
+                                className="xeno-icon-hover"
+                                data-selection={copiedMessageId === msg.id ? 'on' : 'off'}
+                                onClick={() => handleCopyUserMessage(msg.textContent, msg.id)}
+                                aria-label="Copy message"
+                              />
                             </div>
                           </div>
                         )
@@ -1410,18 +1469,18 @@ const ChatWithVoice: React.FC = () => {
                           {!msg.textContent && !msg.isGenerating && msg.role === 'assistant' && (
                             <div className="flex items-center gap-2 py-2 pl-[1.125rem]">
                               <div className="flex items-center space-x-1 ai-response-dots">
-                                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                <div className="w-2 h-2 rounded-full bg-[var(--chat-muted)] animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                <div className="w-2 h-2 rounded-full bg-[var(--chat-muted)] animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                <div className="w-2 h-2 rounded-full bg-[var(--chat-muted)] animate-bounce" style={{ animationDelay: '300ms' }}></div>
                               </div>
-                              <span className="text-gray-400 text-sm">Generating response...</span>
+                              <span className="text-[var(--chat-muted)] text-sm">Generating response...</span>
                             </div>
                           )}
 
                           {/* AI Answer Text */}
                           <div className="w-full pl-[1.125rem]">
                             {msg.textContent && (
-                              <div className="prose prose-sm prose-invert max-w-none text-gray-100 prose-strong:text-gray-50 prose-p:my-1.5 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5"> 
+                              <div className="prose prose-sm prose-invert max-w-none text-[var(--chat-text)] prose-strong:text-[var(--chat-text)] prose-p:my-1.5 prose-li:my-0.5 prose-ol:pl-5 prose-ul:pl-5"> 
                                 <ReactMarkdown
                                   remarkPlugins={[remarkGfm]}
                                   rehypePlugins={[rehypeRaw]}
@@ -1435,22 +1494,37 @@ const ChatWithVoice: React.FC = () => {
                           {/* Action Buttons */}
                           {msg.textContent && (
                             <div className={`flex items-center gap-2 mt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-150`}>
-                              <button onClick={() => handleCopyAiMessage(msg.textContent, msg.id)} className="p-1 ml-4 text-gray-400 hover:text-gray-200 rounded-md" aria-label="Copy AI response">
-                                {copiedAiMessageId === msg.id ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                              </button>
+                              {/* The user turn's copy button, one turn over. `ml-4` is layout. */}
+                              <IconButton
+                                icon={copiedAiMessageId === msg.id ? CheckDecl : CopyDecl}
+                                variant="ghost"
+                                size="xs"
+                                iconSize={14}
+                                className="xeno-icon-hover ml-4"
+                                data-selection={copiedAiMessageId === msg.id ? 'on' : 'off'}
+                                onClick={() => handleCopyAiMessage(msg.textContent, msg.id)}
+                                aria-label="Copy AI response"
+                              />
+                              {/* Play/pause is one button with two faces, same as the copy above it,
+                                  so the ternary goes in `icon`.
+                                  Playing used to be `--accent-color`, a #5D5FEF violet declared at
+                                  the bottom of this file and belonging to no token set — the chat's
+                                  palettes are greyscale and only `--chat-danger` carries hue. It is
+                                  the `selection` axis now, which says the same thing the way this
+                                  design says everything else: brightness, not colour. */}
                               {msg.audioUrl && !msg.isGenerating && (
-                                <button
-                                  onClick={() => playAssistantAudio(msg.id, msg.audioUrl)} 
-                                  disabled={assistantStatus === 'speaking' && !msg.isPlaying} 
-                                  title={msg.isPlaying ? "Pause" : "Play assistant response"}
-                                  className={`p-1 rounded-md transition-colors 
-                                    ${msg.isPlaying 
-                                        ? 'text-[var(--accent-color)] hover:text-[var(--accent-color-secondary)]' 
-                                        : 'text-gray-400 hover:text-gray-200'
-                                    }`}
-                                >
-                                  {msg.isPlaying ? <Pause size={14} className="block" /> : <Play size={14} className="block" />}
-                                </button>
+                                <IconButton
+                                  icon={msg.isPlaying ? PauseDecl : PlayDecl}
+                                  variant="ghost"
+                                  size="xs"
+                                  iconSize={14}
+                                  className="xeno-icon-hover"
+                                  data-selection={msg.isPlaying ? 'on' : 'off'}
+                                  onClick={() => playAssistantAudio(msg.id, msg.audioUrl)}
+                                  disabled={assistantStatus === 'speaking' && !msg.isPlaying}
+                                  title={msg.isPlaying ? 'Pause' : 'Play assistant response'}
+                                  aria-label={msg.isPlaying ? 'Pause' : 'Play assistant response'}
+                                />
                               )}
                             </div>
                           )}
@@ -1462,8 +1536,8 @@ const ChatWithVoice: React.FC = () => {
               )}
               {assistantStatus === 'thinking' && (!messages.length || messages[messages.length-1].role === 'user') && (
                 <div className="flex justify-start w-full pl-[1.125rem] py-2">
-                  <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-gray-400">
-                    <Loader size={16} className="animate-spin mr-1 text-gray-500" /> 
+                  <div className="flex items-center gap-2 bg-[var(--chat-control)] border border-[var(--chat-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--chat-muted)]">
+                    <Loader size={16} className="animate-spin mr-1 text-[var(--chat-text)]0" /> 
                     <span>Assistant is thinking...</span>
                   </div>
                 </div>
@@ -1474,9 +1548,16 @@ const ChatWithVoice: React.FC = () => {
           {/* Back to Voice Mode Button */}
           <div className="p-4">
             <div className="flex justify-center">
+              {/* Stays hand-written, on three counts. It is 48px tall where the control scale stops
+                  at 36, so no size token describes it. It rests on `--chat-hover`, which is a
+                  POINTER signal in this token set rather than a surface — a variant filling with it
+                  would read as permanently hovered, which is a mistake this project has already come
+                  close to making once. And `shadow-glass` + `backdrop-blur-xs` is a glass treatment
+                  the variants have no member for; it belongs to this view's voice chrome, not to the
+                  control grammar. */}
               <button
                 onClick={() => setShowDetailedChat(false)}
-                className="flex items-center gap-2 px-6 py-3 bg-[var(--glassmorphism-bg)] border border-[var(--glassmorphism-border)] rounded-xl text-[var(--text-primary)] hover:border-white/30 transition-all duration-300 shadow-glass hover:shadow-glass-hover backdrop-blur-xs"
+                className="flex items-center gap-2 px-6 py-3 bg-[var(--chat-hover)] border border-[var(--chat-border)] rounded-xl text-[var(--chat-text)] hover:border-[var(--chat-muted)] transition-all duration-300 shadow-glass hover:shadow-glass-hover backdrop-blur-xs"
                 aria-label="Return to voice interface"
                 title="Return to voice interface"
               >
@@ -1500,58 +1581,56 @@ export default ChatWithVoice;
 const styleTag = document.getElementById('chat-with-voice-styles') || document.createElement('style');
 styleTag.id = 'chat-with-voice-styles';
 styleTag.textContent = `
-  :root {
-    --primary-bg: #0a0a0b;
-    --secondary-bg: #111113;
-    --text-primary: #FFFFFF;
-    --text-secondary: #E0E0E0;
-    --glassmorphism-bg: rgba(255, 255, 255, 0.05);
-    --glassmorphism-border: rgba(255, 255, 255, 0.1);
+  /* Scoped to this route, and that is the fix rather than tidiness.
+   *
+   * This block was on :root, injected into <head> at module load, and five of its seven colours were
+   * byte-identical duplicates of what index.css already defines there. The other two were not: they
+   * replaced the app's accent — a purple — with a violet, everywhere, from the moment anyone opened
+   * the voice route. index.css hands that accent to the scrollbars and "interactive elements".
+   *
+   * So only what is genuinely this route's own survives, and it survives under a class. */
+  .chat-voice {
     --accent-color: #5D5FEF; /* Updated accent color to a more vibrant violet/blue */
     --accent-color-secondary: #4B4DDB; /* Slightly darker shade for hover/active states */
     --z-elevated: 10;
   }
 
-  .animate-fadeIn { animation: fadeIn 0.2s ease-out forwards; }
-  @keyframes fadeIn {
+  .chat-voice .animate-fadeIn { animation: chat-voice-fade-in 0.2s ease-out forwards; }
+  @keyframes chat-voice-fade-in {
     from { opacity: 0; transform: translateY(8px) scale(0.99); }
     to { opacity: 1; transform: translateY(0px) scale(1); }
   }
-  .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-  .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); border-radius: 10px; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 10px; }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.12); }
 
-  .bar {
-    background: var(--text-secondary); 
+  .chat-voice .bar {
+    background: var(--chat-text); 
     width: 10px; margin: 0px 4px; border-radius: 5px;
     height: 3px; opacity: 0.35;
     transition: height 0.2s ease-out, opacity 0.2s ease-out, background-color 0.2s ease-out;
   }
   @keyframes sound { 0% { opacity: .35; height: 3px; } 100% { opacity: 1; height: 70px; } }
-  .waveform-active .bar {
+  .chat-voice .waveform-active .bar {
     animation-name: sound; animation-timing-function: linear;
     animation-iteration-count: infinite; animation-direction: alternate;
-    animation-play-state: running; background: var(--text-secondary);
+    animation-play-state: running; background: var(--chat-text);
   }
-  .waveform-active .bar:nth-child(1)  { animation-duration: 474ms; animation-delay: -500ms; }
-  .waveform-active .bar:nth-child(2)  { animation-duration: 433ms; animation-delay: -550ms; }
-  .waveform-active .bar:nth-child(3)  { animation-duration: 407ms; animation-delay: -600ms; }
-  .waveform-active .bar:nth-child(4)  { animation-duration: 458ms; animation-delay: -450ms; }
-  .waveform-active .bar:nth-child(5)  { animation-duration: 400ms; animation-delay: -500ms; }
-  .waveform-active .bar:nth-child(6)  { animation-duration: 427ms; animation-delay: -580ms; }
-  .waveform-active .bar:nth-child(7)  { animation-duration: 441ms; animation-delay: -520ms; }
-  .waveform-active .bar:nth-child(8)  { animation-duration: 419ms; animation-delay: -480ms; }
-  .waveform-active .bar:nth-child(9)  { animation-duration: 487ms; animation-delay: -550ms; }
-  .waveform-active .bar:nth-child(10) { animation-duration: 442ms; animation-delay: -600ms; }
+  .chat-voice .waveform-active .bar:nth-child(1) { animation-duration: 474ms; animation-delay: -500ms; }
+  .chat-voice .waveform-active .bar:nth-child(2) { animation-duration: 433ms; animation-delay: -550ms; }
+  .chat-voice .waveform-active .bar:nth-child(3) { animation-duration: 407ms; animation-delay: -600ms; }
+  .chat-voice .waveform-active .bar:nth-child(4) { animation-duration: 458ms; animation-delay: -450ms; }
+  .chat-voice .waveform-active .bar:nth-child(5) { animation-duration: 400ms; animation-delay: -500ms; }
+  .chat-voice .waveform-active .bar:nth-child(6) { animation-duration: 427ms; animation-delay: -580ms; }
+  .chat-voice .waveform-active .bar:nth-child(7) { animation-duration: 441ms; animation-delay: -520ms; }
+  .chat-voice .waveform-active .bar:nth-child(8) { animation-duration: 419ms; animation-delay: -480ms; }
+  .chat-voice .waveform-active .bar:nth-child(9) { animation-duration: 487ms; animation-delay: -550ms; }
+  .chat-voice .waveform-active .bar:nth-child(10) { animation-duration: 442ms; animation-delay: -600ms; }
 
   @keyframes sound-processing {
-    0%, 100% { height: 5px; opacity: 0.3; background-color: var(--text-secondary); } 
-    50% { height: 25px; opacity: 0.6; background-color: var(--text-secondary); } 
+    0%, 100% { height: 5px; opacity: 0.3; background-color: var(--chat-text); } 
+    50% { height: 25px; opacity: 0.6; background-color: var(--chat-text); } 
   }
-  .waveform-processing-active .bar { animation: sound-processing 1000ms ease-in-out infinite alternate; }
-  .waveform-idle .bar { height: 3px; opacity: 0.35; animation: none; }
-  .waveform-error-active .bar { height: 5px; opacity: 0.6; background-color: var(--text-secondary); animation: none; }
+  .chat-voice .waveform-processing-active .bar { animation: sound-processing 1000ms ease-in-out infinite alternate; }
+  .chat-voice .waveform-idle .bar { height: 3px; opacity: 0.35; animation: none; }
+  .chat-voice .waveform-error-active .bar { height: 5px; opacity: 0.6; background-color: var(--chat-text); animation: none; }
 
   @keyframes openai-pulse {
     0%, 100% { 
@@ -1563,7 +1642,7 @@ styleTag.textContent = `
       border-color: rgba(255, 255, 255, 0.6);
     }
   }
-  .openai-listening-pulse {
+  .chat-voice .openai-listening-pulse {
     animation: openai-pulse 2s ease-in-out infinite;
   }
 
@@ -1577,7 +1656,7 @@ styleTag.textContent = `
       border-color: rgba(59, 130, 246, 0.6);
     }
   }
-  .google-listening-pulse {
+  .chat-voice .google-listening-pulse {
     animation: google-pulse 2s ease-in-out infinite;
   }
 `;
