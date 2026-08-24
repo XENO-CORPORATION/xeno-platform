@@ -25,7 +25,7 @@
  *                           → REBUILD. Never hand-edit a checksum to make a gate pass.
  */
 import { createHash } from 'node:crypto';
-import { statSync, readFileSync } from 'node:fs';
+import { statSync, readFileSync, openSync, readSync, closeSync } from 'node:fs';
 import { basename } from 'node:path';
 
 /**
@@ -118,13 +118,51 @@ export function rewriteLatestYml(text, version) {
   return rewriteFeedRefs(text, version, 'slug-root');
 }
 
+/**
+ * Hash a file of ANY size, without loading it into memory.
+ *
+ * 🔴 These used `readFileSync`, which is capped at Node's ~2 GiB Buffer limit:
+ *
+ *   RangeError [ERR_FS_FILE_TOO_LARGE]: File size (2783446304) is greater than 2 GiB
+ *
+ * So the gated publisher physically could not take a model weight — 2.78 GB for Qwen 3.8 4B,
+ * 21.7 GB for Ornith. That is not a cosmetic limit: it is why `publish-local-model-catalog.mjs`
+ * shells `rclone copyto` directly and references `r2-upload.mjs` ZERO times. Every model ever
+ * published to R2 therefore went up UNGATED — no secret scan, no immutability check — past the
+ * single choke point that ABSOLUTE RULE §2b exists to enforce.
+ *
+ * A gate that cannot accept the payload does not get bypassed occasionally; it gets bypassed
+ * permanently, and the bypass becomes the normal path. Fixing the gate is what removes the reason
+ * to route around it.
+ *
+ * Deliberately SYNCHRONOUS. `describeArtifact` and its callers are sync, and making these async
+ * would ripple through the publisher for no benefit — chunked `readSync` streams just as well and
+ * produces a byte-identical digest.
+ */
+function hashFileSync(file, algorithm) {
+  const hash = createHash(algorithm);
+  const fd = openSync(file, 'r');
+  try {
+    // 1 MiB: large enough that syscall overhead is irrelevant next to disk throughput, small
+    // enough that hashing a 21.7 GB model costs a megabyte of RSS rather than a gigabyte.
+    const buffer = Buffer.allocUnsafe(1024 * 1024);
+    let bytesRead;
+    while ((bytesRead = readSync(fd, buffer, 0, buffer.length, null)) > 0) {
+      hash.update(buffer.subarray(0, bytesRead));
+    }
+  } finally {
+    closeSync(fd);
+  }
+  return hash;
+}
+
 /** electron-builder writes sha512 as BASE64 of the raw digest, not hex. */
 export function sha512Base64(file) {
-  return createHash('sha512').update(readFileSync(file)).digest('base64');
+  return hashFileSync(file, 'sha512').digest('base64');
 }
 
 export function sha256Hex(file) {
-  return createHash('sha256').update(readFileSync(file)).digest('hex');
+  return hashFileSync(file, 'sha256').digest('hex');
 }
 
 /**
