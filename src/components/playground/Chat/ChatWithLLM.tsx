@@ -5972,7 +5972,7 @@ interface QueueState {
             // console.log(`[fetchAiResponse] Received image data directly from backend.`);
             return { 
                 imageData: data.imageData,
-                modelIdUsed: data.modelIdUsed || 'gpt-image-1' // Default to gpt-image-1 if not specified
+                modelIdUsed: data.modelIdUsed || 'gpt-image-2' // Default to gpt-image-2 if not specified
             };
         }
         // --- END NEW: Handle Image Generation Response Directly ---
@@ -6469,8 +6469,8 @@ interface QueueState {
       };
 
       const imageModel = findModelById(groupedModels, imageModelId) || {
-        id: 'gpt-image-1',
-        name: 'GPT Image 1',
+        id: 'gpt-image-2',
+        name: 'GPT Image 2',
         provider: 'OpenAI',
         maxTokens: 4096,
       } as any;

@@ -1078,12 +1078,12 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             // Entitlement gate + metering: charge before generating, refund on any failure below.
             imgUserId = req.user?.id;
             imgEnt = await resolveEntitlements(req.db, imgUserId);
-            imgCost = getCreditCost('image', 'gpt-high');
+            imgCost = getCreditCost('image', 'gpt-image-2') || getCreditCost('image', 'gpt-high');
             const imgDebit = await deductCredits(req.db, imgUserId, imgCost, {
                 transactionId: `imggen:${imgRequestId}`,
                 surface: 'chat',
                 operation: 'image-generation',
-                model: 'gpt-image-1',
+                model: 'gpt-image-2',
             });
             if (!imgDebit.success) {
                 return res.status(402).json({ error: 'Insufficient credits', required: imgCost, current: imgDebit.currentCredits ?? 0 });
@@ -1152,7 +1152,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                         return res.status(500).json({ error: 'Image generation failed. Please try again.' });
                     }
                 }
-                await logCreditUsage(req.db, imgUserId, 'image:gpt-image-1', imgCost, { route: '/api/chat/generate:image' }).catch(() => {});
+                await logCreditUsage(req.db, imgUserId, 'image:gpt-image-2', imgCost, { route: '/api/chat/generate:image' }).catch(() => {});
                 return res.json({
                     imageData: outImageData,
                     modelIdUsed: modelLabel,
@@ -1186,7 +1186,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 }
 
                 const editResponse = await xenoImageClient.image.edit({
-                    model: 'nano_banana', // gateway conversational image-edit model
+                    model: 'gpt-image-2', // gateway conversational image-edit model
                     image: primaryImageData, // base64 — xeno-ai sends `image` as a JSON field, not multipart
                     prompt: combinationPrompt,
                     n: 1,
@@ -1197,7 +1197,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     if (imgCharged) await refundImgCharge();
                     return res.status(500).json({ error: 'Image combination failed to return data.' });
                 }
-                return await finishImage(comboB64, 'gpt-image-1-edit', `combination_${Date.now()}`, `combination_${Date.now()}`);
+                return await finishImage(comboB64, 'gpt-image-2-edit', `combination_${Date.now()}`, `combination_${Date.now()}`);
             }
 
             // An edited-image context must carry its bytes via the edit_image task (the frontend
@@ -1215,9 +1215,10 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             // Plain generation — fresh, or a conversational follow-up degraded to an independent
             // generation (the gateway has no /v1/responses chaining; the frontend does not resend
             // image bytes on a plain follow-up, so continuity there is not recoverable server-side).
-            console.log('Calling XENO gateway /v1/images/generations for conversational image generation...');
+            console.log('Calling XENO gateway /v1/images/generations for conversational image generation with gpt-image-2...');
+            const genModel = req.body.imageModel || req.body.model || 'gpt-image-2';
             const genResponse = await xenoImageClient.image.generate({
-                model: 'imagen4', // gateway default image-gen model
+                model: genModel === 'gpt-image-1' ? 'gpt-image-2' : genModel, // XENO API image-gen model
                 prompt: imagePrompt,
                 width: 1024,
                 height: 1024,
@@ -1230,7 +1231,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 if (imgCharged) await refundImgCharge();
                 return res.status(500).json({ error: 'Image generation failed: No image data returned.' });
             }
-            return await finishImage(genB64, 'gpt-image-1', `xeno_resp_${randomUUID()}`, `xeno_imgcall_${randomUUID()}`);
+            return await finishImage(genB64, 'gpt-image-2', `xeno_resp_${randomUUID()}`, `xeno_imgcall_${randomUUID()}`);
 
         } catch (error) {
             if (imgCharged) await refundImgCharge();
