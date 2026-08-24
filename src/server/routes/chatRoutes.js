@@ -1068,13 +1068,16 @@ router.post('/sync', async (req, res) => {
 // ARTIFACTS ROUTES
 // ============================================
 
-// GET /api/chat/artifacts - List artifacts with filter and sort
+// GET /api/chat/artifacts - List artifacts with filter, sort, and pagination
 router.get('/artifacts', async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
     const { kind, sort = 'updated', query } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
     let sql = `SELECT a.*, c.title AS conversation_title 
                FROM chat_artifacts a 
                LEFT JOIN chat_conversations c ON a.conversation_id = c.id
@@ -1095,8 +1098,11 @@ router.get('/artifacts', async (req, res) => {
     else if (sort === 'created') sql += ` ORDER BY a.created_at DESC`;
     else sql += ` ORDER BY a.updated_at DESC`;
 
+    params.push(limit, offset);
+    sql += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
     const { rows } = await req.db.query(sql, params);
-    res.json({ success: true, artifacts: rows });
+    res.json({ success: true, artifacts: rows, limit, offset });
   } catch (error) {
     console.error('Failed to list artifacts:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -1173,13 +1179,16 @@ router.delete('/artifacts/:id', async (req, res) => {
 // SCHEDULED AUTOMATION TASKS ROUTES
 // ============================================
 
-// GET /api/chat/scheduled - List scheduled tasks
+// GET /api/chat/scheduled - List scheduled tasks with pagination
 router.get('/scheduled', async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
     const { status, sort = 'next', query } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
     let sql = `SELECT * FROM chat_scheduled_tasks WHERE user_id = $1`;
     const params = [userId];
 
@@ -1197,8 +1206,11 @@ router.get('/scheduled', async (req, res) => {
     else if (sort === 'updated') sql += ` ORDER BY updated_at DESC`;
     else sql += ` ORDER BY next_run_at ASC`;
 
+    params.push(limit, offset);
+    sql += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
     const { rows } = await req.db.query(sql, params);
-    res.json({ success: true, tasks: rows });
+    res.json({ success: true, tasks: rows, limit, offset });
   } catch (error) {
     console.error('Failed to list scheduled tasks:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -1409,11 +1421,14 @@ router.delete('/skills/:id', async (req, res) => {
 // PROJECTS & KNOWLEDGE FILES ROUTES
 // ============================================
 
-// GET /api/chat/projects - List projects
+// GET /api/chat/projects - List projects with pagination
 router.get('/projects', async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
     const { rows } = await req.db.query(
       `SELECT p.*, 
@@ -1421,11 +1436,12 @@ router.get('/projects', async (req, res) => {
               (SELECT COUNT(*) FROM chat_conversations WHERE project_id = p.id) AS chat_count
        FROM chat_projects p
        WHERE p.user_id = $1 AND p.is_archived = FALSE
-       ORDER BY p.updated_at DESC`,
-      [userId]
+       ORDER BY p.updated_at DESC
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
     );
 
-    res.json({ success: true, projects: rows });
+    res.json({ success: true, projects: rows, limit, offset });
   } catch (error) {
     console.error('Failed to list projects:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
