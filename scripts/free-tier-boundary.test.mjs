@@ -13,6 +13,16 @@
  * real quota; paid connects it to our servers. That is a line a local binary
  * genuinely cannot cross, which is why it can be gated honestly.
  *
+ * ⚠️ AMENDED 2026-08-24 — a second, DIFFERENT gate sits above that one. The
+ * account owner overrode the Layer-1 rule: obtaining an installer now needs an
+ * active paid plan (`canDownload`). The paragraph above is still right about
+ * what it describes — we cannot police a binary already on a laptop — but
+ * "unenforceable" was only ever true of RUNNING one. HANDING IT OVER is
+ * enforceable, because every installer comes from our CDN.
+ *
+ * So the two coexist: canUse asks whether we serve this account, canDownload
+ * asks whether we give it the bytes. Do not collapse them back into one.
+ *
  * ── WHY THESE ARE WORTH HAVING ─────────────────────────────────────────────
  *
  * This ecosystem has shipped the same defect four times: xeno-workflow's 76
@@ -61,6 +71,79 @@ test('free gets NO Layer-2 capability — that is where the paywall is', () => {
   }
   // A licence, not a switch: the enforceable half of the free tier.
   assert.equal(free.commercial, false, 'free grants a commercial licence');
+});
+
+test('free CANNOT download — the installer is a paid entitlement', () => {
+  /* OWNER OVERRIDE, 2026-08-24. `XENO PRICING - STANDARD & LEDGER.md` puts the
+   * apps in Layer 1 at EUR 0; the account owner moved the installer above the
+   * paywall. This gate is the record of that decision.
+   *
+   * It does NOT contradict `free CAN use` above. canUse is "may this account
+   * call our servers" — unenforceable against a binary already installed.
+   * canDownload is "may we hand over the bytes", which we do control because
+   * every installer comes from our CDN. Different questions, different answers. */
+  assert.equal(entitlementsFor('free').canDownload, false,
+    'free grants canDownload — the installer paywall is gone');
+});
+
+test('every sellable plan CAN download, and so can staff', () => {
+  for (const plan of ['pro', 'team', 'studio', 'internal']) {
+    assert.equal(entitlementsFor(plan).canDownload, true, `${plan} cannot download`);
+  }
+  // The legacy alias resolves to a real plan, so it must not lose the installer.
+  assert.equal(entitlementsFor('ultra').canDownload, true, 'the ultra alias lost downloads');
+});
+
+test('an unknown plan cannot download — the gate fails CLOSED', () => {
+  /* A typo must never mint a download. Same direction as the plan fallback:
+   * unrecognised resolves to free, and free cannot download. */
+  assert.equal(entitlementsFor('bogus-typo-plan').canDownload, false);
+  assert.equal(entitlementsFor(undefined).canDownload, false);
+  assert.equal(entitlementsFor(null).canDownload, false);
+});
+
+test('a refused download names a plan that can actually be bought', () => {
+  /* The failure this repeats: `free` was on the upgrade ladder and refusals
+   * said "upgrade to free". A download refusal has to name something with a
+   * checkout behind it. */
+  const plan = cheapestPlanWith('canDownload');
+  assert.ok(plan, 'nothing sellable grants canDownload — every refusal would be a dead end');
+  assert.notEqual(plan, 'free');
+  assert.notEqual(plan, 'internal', 'a refusal must not point a customer at a staff plan');
+  const body = upgradeRequiredBody('canDownload', entitlementsFor('free'));
+  assert.equal(body.requiredPlan, plan);
+});
+
+test('the download refusal carries a context the UpgradePrompt can render', () => {
+  /* An unknown context token renders nothing, so the user sees a blank refusal.
+   * The union lives in components/common/UpgradePrompt.tsx. */
+  const body = upgradeRequiredBody('canDownload', entitlementsFor('free'));
+  const prompt = readFileSync(join('src/components/common', 'UpgradePrompt.tsx'), 'utf8');
+  assert.ok(body.context, 'the download refusal carries no context token');
+  assert.ok(prompt.includes(`'${body.context}'`),
+    `UpgradePrompt does not accept context '${body.context}'`);
+});
+
+test('the fail-closed fallback refuses downloads during an outage', () => {
+  /* resolveEntitlements returns FREE_ENT on any database error, so this row is
+   * what every paying customer looks like during a fault. It must not hand out
+   * installers, and it must say so explicitly rather than by omission. */
+  const gate = readFileSync(join('src/server/utils', 'entitlementGate.js'), 'utf8');
+  const start = gate.indexOf('const FREE_ENT');
+  assert.ok(start > -1, 'FREE_ENT is gone — re-verify the fallback refuses downloads');
+  const body = gate.slice(start, gate.indexOf('};', start));
+  assert.match(body, /canDownload:\s*false/, 'the outage fallback does not refuse downloads');
+});
+
+test('the Free pricing card does not offer a download', () => {
+  /* The copy half. The card used to read "Download free" over href /download,
+   * which is now a promise the server refuses — the worst kind of claim,
+   * because the user only finds out after clicking. */
+  const pricing = readFileSync(join('src/config', 'pricing.ts'), 'utf8');
+  const free = pricing.slice(pricing.indexOf("id: 'free'"), pricing.indexOf("id: 'pro'"));
+  assert.ok(free.length > 0, 'the free tier moved — re-verify it offers no download');
+  assert.doesNotMatch(free, /cta:\s*'[^']*Download/i, 'the Free card offers a download again');
+  assert.doesNotMatch(free, /href:\s*'\/download'/, 'the Free card links straight at the download page');
 });
 
 test('every sellable plan can use', () => {

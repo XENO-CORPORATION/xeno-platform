@@ -582,7 +582,7 @@ curl -s  https://updates.xenostudio.ai/apps/<slug>/releases.json | head
 curl -sI https://updates.xenostudio.ai/apps/<slug>/version.json
 
 # the stable download deep-link 302s to the new installer:
-curl -sI "https://xenostudio.ai/product/<slug>/download/win"     # expect 302
+curl -si "https://xenostudio.ai/product/<slug>/download/win" | head -1   # expect 401 — PAYWALLED, see docs/DOWNLOAD-GATE.md
 ```
 
 The download route normalizes the OS segment (`win|windows`, `mac|macos|osx`, `linux|appimage`), 30 s-caches `releases.json` per slug, and 302s to the primary asset. On bad input it returns a 404 JSON error (`BAD_SLUG`, `BAD_OS`, `NO_RELEASES`, `NO_RELEASE`, `NO_ASSET`) rather than redirecting to the wrong file.

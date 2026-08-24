@@ -20,7 +20,7 @@ curl -s https://updates.xenostudio.ai/apps/<slug>/releases.json | head
 curl -sI https://updates.xenostudio.ai/apps/<slug>/version.json
 
 # 3. Does the stable download deep-link 302 to a real installer?
-curl -sI "https://xenostudio.ai/product/<slug>/download/win"     # expect: HTTP/… 302
+curl -si "https://xenostudio.ai/product/<slug>/download/win" | head -1  # expect: 401 (PAYWALLED — a 302 here means the gate is OPEN)
 
 # 4. Does the landing page itself load?
 curl -sI https://xenostudio.ai/product/<slug>                    # expect: HTTP/… 200
@@ -115,7 +115,7 @@ ssh xeno-platform-001 "cd /mnt/projects/xeno-platform \
 
 ```bash
 curl -sI https://xenostudio.ai/product/<slug>            # 200
-curl -sI https://xenostudio.ai/product/<slug>/download/win   # 302 (desktop)
+curl -si https://xenostudio.ai/product/<slug>/download/win | head -1  # 401 (desktop, paywalled)
 ```
 
 Caveat (accuracy): `sudo docker compose build --no-cache frontend` is an **operator override**, not a quoted line from `PRODUCT-LANDING-SPEC.md` §8.2 — the spec's deploy step is plain `sudo docker compose build frontend`. The literal string `--no-cache` in the spec docs refers to the R2 `Cache-Control: no-cache` **header** on JSON uploads, an unrelated concept. Use `--no-cache` on the Docker build only when you suspect a stale cached layer; otherwise the plain build is correct and faster. Confirm the current spec wording in `PRODUCT-LANDING-SPEC.md` §8.2 before treating it as canonical.

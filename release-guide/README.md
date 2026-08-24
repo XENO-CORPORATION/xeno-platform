@@ -149,7 +149,7 @@ node scripts/xeno-release.mjs publish \
   --app <slug> --version <version> --date <YYYY-MM-DD> \
   --type patch --notes-file CHANGELOG.md \
   --win "release/<App> Setup <version>.exe"          # add --mac / --linux if built
-curl -sI "https://xenostudio.ai/product/<slug>/download/win"    # expect 302
+curl -si "https://xenostudio.ai/product/<slug>/download/win" | head -1  # expect 401 — PAYWALLED
 
 # ── CONTENT + DEPLOY — landing/docs edit (needs a rebuild; see 04-build-and-deploy.md) ──
 npm run build                                         # vite + prerender — MUST be clean first

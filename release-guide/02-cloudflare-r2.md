@@ -155,7 +155,7 @@ curl -sI https://updates.xenostudio.ai/apps/<slug>/version.json
 curl -sI "https://updates.xenostudio.ai/apps/<slug>/v<version>/<InstallerFilename>"
 
 # 4. Website stable deep-link must 302-redirect to the R2 installer
-curl -sI "https://xenostudio.ai/product/<slug>/download/win"      # expect HTTP/… 302
+curl -si "https://xenostudio.ai/product/<slug>/download/win" | head -1   # expect 401 — PAYWALLED, see docs/DOWNLOAD-GATE.md
 ```
 
 What to look for:

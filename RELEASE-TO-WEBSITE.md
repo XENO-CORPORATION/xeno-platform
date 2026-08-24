@@ -167,7 +167,7 @@ rclone copyto version.json  r2:xeno-hub-releases/apps/pixel/version.json  --head
 curl -s  https://updates.xenostudio.ai/apps/<slug>/releases.json | head      # your new entry is first
 curl -sI https://updates.xenostudio.ai/apps/<slug>/version.json              # 200
 # desktop only — the stable download link must 302 to your installer:
-curl -sI "https://xenostudio.ai/product/<slug>/download/win"
+curl -si "https://xenostudio.ai/product/<slug>/download/win" | head -1   # 401 — paywalled
 ```
 Then open `https://xenostudio.ai/product/<slug>` — it should show the new version,
 date, and (desktop) working download buttons. **No platform deploy is needed** —

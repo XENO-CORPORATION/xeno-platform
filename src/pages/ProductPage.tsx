@@ -12,6 +12,7 @@ import ExperimentalNotice from '../components/product/ExperimentalNotice';
 import {
   getProduct, fetchReleases, latestRelease, downloadLink, type Release, type Product,
 } from '../lib/productCatalog';
+import { downloadClickHandler } from '../lib/startDownload';
 import { getProductContent } from '../content/products';
 import ProductLanding from './ProductLanding';
 
@@ -114,7 +115,7 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
               {!product.externalUrl && product.delivery === 'desktop' && (
                 <div className="flex flex-wrap items-center gap-3">
                   {downloadUrl(os) ? (
-                    <a href={downloadUrl(os)!} className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
+                    <a href={downloadUrl(os)!} onClick={downloadClickHandler(product.slug, os)} className="inline-flex items-center gap-2 rounded-[9px] bg-white px-5 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
                       <Download className="h-4 w-4" />Download for {OS_NAME[os]}
                     </a>
                   ) : (

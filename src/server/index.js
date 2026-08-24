@@ -62,7 +62,7 @@ import collaborationRoutes from './routes/collaborationRoutes.js';
 import emailRoutes from './routes/emailRoutes.js';
 import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
-import productDownloadRoutes from './routes/productDownloadRoutes.js';
+import productDownloadRoutes, { grantRouter as downloadGrantRouter } from './routes/productDownloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
@@ -646,10 +646,19 @@ console.log('🖼️ Office Canvas routes integrated: /api/office-canvas/*');
 // Rate-limit download starts (spawns yt-dlp — expensive).
 app.use('/api/download/start', llmLimiter);
 app.use('/api/download', databaseMiddleware, authMiddleware, downloadRoutes);
-// Public, stable product download deep-links (PRODUCT-PAGES-SPEC.md §4).
-// No auth / no DB — resolves the current installer from R2 and 302s to it.
+// Minting a download grant is the AUTHENTICATED half of the paywall
+// (owner override 2026-08-24). 401 belongs to authMiddleware and 403 to the
+// canDownload entitlement, so this must sit behind both.
+app.use('/api/downloads', databaseMiddleware, authMiddleware, downloadGrantRouter);
+
+// The deep-link stays public and un-DB'd, because its URL is printed in release
+// notes and emails and must not 404. It no longer serves bytes on its own: a
+// request without a valid grant is redirected to sign in (HTML) or refused
+// (JSON). It cannot be mounted behind authMiddleware — a plain <a href>
+// navigation carries no Authorization header, so that would refuse every real
+// customer. See the header of productDownloadRoutes.js.
 app.use('/product', productDownloadRoutes);
-console.log('⬇️ Product download deep-links: /product/:slug/download/:os');
+console.log('⬇️ Product download deep-links: /product/:slug/download/:os (grant required)');
 app.use('/api/blog', databaseMiddleware, blogRoutes);
 app.use('/api/learn', databaseMiddleware, learnRoutes);
 // XENO Forum — the community Record. Public, cacheable reads only in v0.1

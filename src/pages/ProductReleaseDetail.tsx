@@ -5,7 +5,8 @@ import Header from '../components/landing-v3/Header';
 import Footer from '../components/landing-v3/Footer';
 import { Reveal } from '../components/landing-v3/primitives';
 import ExperimentalNotice from '../components/product/ExperimentalNotice';
-import { getProduct, fetchReleases, assetUrl, type Release } from '../lib/productCatalog';
+import { getProduct, fetchReleases, downloadLink, type Release } from '../lib/productCatalog';
+import { downloadClickHandler } from '../lib/startDownload';
 
 const PLATFORMS: { key: 'windows' | 'mac' | 'linux'; name: string }[] = [
   { key: 'windows', name: 'Windows' }, { key: 'mac', name: 'macOS' }, { key: 'linux', name: 'Linux' },
@@ -76,7 +77,7 @@ const ProductReleaseDetail: React.FC = () => {
                           <div key={p.key} className="rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] p-4">
                             <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#69635b]">{p.name}</div>
                             {assets.length === 0 ? <p className="text-[12.5px] italic text-[#5d5850]">Not available</p> : assets.map((a) => (
-                              <a key={a.file} href={assetUrl(product, a.file)} className="group flex items-center justify-between py-1.5 text-[13px] text-[#9b948a] transition-colors hover:text-white">
+                              <a key={a.file} href={downloadLink(product, p.key, release.version)} onClick={downloadClickHandler(product.slug, p.key, release.version)} className="group flex items-center justify-between py-1.5 text-[13px] text-[#9b948a] transition-colors hover:text-white">
                                 {a.label}<Download className="h-3.5 w-3.5 text-[#5d5850] transition-colors group-hover:text-white" />
                               </a>
                             ))}

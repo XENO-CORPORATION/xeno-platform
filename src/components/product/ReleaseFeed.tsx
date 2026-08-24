@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Download, AlertTriangle } from 'lucide-react';
-import { assetUrl, getProduct, experimentalNotice, type Release } from '../../lib/productCatalog';
+import { downloadLink, getProduct, experimentalNotice, type Release } from '../../lib/productCatalog';
+import { downloadClickHandler } from '../../lib/startDownload';
 import ExperimentalNotice from './ExperimentalNotice';
 
 /* Shared renderer for a product's release / patch / hotfix history.
@@ -68,7 +69,7 @@ function ReleaseRow({ release, slug, defaultOpen, linkToDetail }: { release: Rel
                     {assets.length === 0 ? (
                       <p className="text-[12px] italic text-[#5d5850]">—</p>
                     ) : assets.map((a) => (
-                      <a key={a.file} href={assetUrl(slug, a.file)} className="group flex items-center justify-between py-1.5 text-[12.5px] text-[#9b948a] transition-colors hover:text-white">
+                      <a key={a.file} href={downloadLink(slug, p.key, release.version)} onClick={downloadClickHandler(slug, p.key, release.version)} className="group flex items-center justify-between py-1.5 text-[12.5px] text-[#9b948a] transition-colors hover:text-white">
                         {a.label}<Download className="h-3.5 w-3.5 text-[#5d5850] transition-colors group-hover:text-white" />
                       </a>
                     ))}

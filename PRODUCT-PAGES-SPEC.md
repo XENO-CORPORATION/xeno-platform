@@ -42,7 +42,7 @@ and the legacy plural pages are redirected and retired.
 | **D2** | **The product catalog (`src/lib/productCatalog.ts`) is the single source of truth** for product identity, metadata, delivery type, and routing. Adding a product = one catalog entry + its R2 data. No per-product page code. |
 | **D3** | **Canonical release data is `releases.json`** (full history array) at `https://updates.xenostudio.ai/apps/:slug/releases.json`. `version.json` is **retained** as a derived "latest stable" pointer (Hub auto-update + fast latest lookups) and MUST equal the latest stable entry in `releases.json`. **Both are published together, every release.** |
 | **D4** | **Product pages are SEO-correct via build-time prerendering** of the canonical routes (static HTML emitted per product/release from the catalog). The legacy `public/products/` generator (`add-seo-to-products.js`) is retired once prerender ships. |
-| **D5** | **Stable download links are backend 302 redirects** (`/product/:slug/download/:os`) that resolve the current asset from R2 at request time — the link never changes as versions bump. |
+| **D5** | **Stable download links are backend 302 redirects** (`/product/:slug/download/:os`) that resolve the current asset from R2 at request time — the link never changes as versions bump. 🔴 **AMENDED 2026-08-24 (owner override): the redirect is PAYWALLED.** The URL shape is unchanged — it is printed in release notes and emails — but it now 302s only when the request carries a valid short-lived grant, which is minted for a signed-in account whose plan has `canDownload`. Anonymous: **401 JSON**, or a redirect to `/auth?returnUrl=…` for a browser navigation. See §4.1 and `docs/DOWNLOAD-GATE.md`. |
 | **D6** | `releases.json` carries the **full version history** (newest-first). The product page shows the latest + a few recent; `/releases` shows all. |
 | **D7** | **One slug, everywhere.** The catalog `slug` is the URL segment, the R2 folder id, and the product key across Hub, website, and the release pipeline. No aliases except an explicit `r2` override for legacy R2 folders. |
 
@@ -59,8 +59,9 @@ and the legacy plural pages are redirected and retired.
 | `/product/:slug/releases/:version` | **Single release** — one version's notes, type/channel/severity, and downloads. Canonical permalink for "what changed in X.Y.Z". | Prerendered SPA |
 | `/product/:slug/docs` | **Docs** — optional. Renders product docs or 302s to the product's docs home if external. | Prerendered SPA / redirect |
 | `/product/:slug/privacy` | **Product privacy policy** — optional, present when the content module authors `privacy`. Covers what THAT product does with your data, which for products that read user content (the browser extension) is materially more than the platform policy at `/privacy`. Required by app/web-store submissions, which link this URL. No authored policy → redirect to `/privacy`. | Prerendered SPA / redirect |
-| `/product/:slug/download/:os` | **Stable installer redirect** — 302 to the current latest-stable asset on R2. (See §4.) | Backend 302 |
-| `/product/:slug/download/:os/:version` | **Pinned installer redirect** — 302 to that version's asset on R2. | Backend 302 |
+| `/product/:slug/download/:os` | **Stable installer redirect** — 302 to the current latest-stable asset on R2, **only with a valid grant** (§4.1). | Backend 302 / 401 |
+| `/product/:slug/download/:os/:version` | **Pinned installer redirect** — 302 to that version's asset on R2, **only with a valid grant** (§4.1). | Backend 302 / 401 |
+| `POST /api/downloads/grant` | **Mints the grant.** Authenticated; asserts `canDownload`; 403 to a plan without it. | JSON |
 
 `:slug` ∈ catalog slugs. `:os` ∈ `win` \| `mac` \| `linux` (aliases `windows`,
 `macos`, `osx`, `appimage` normalized). `:version` is a semver string (no `v`
@@ -118,10 +119,39 @@ These give every product **permanent, shareable** download URLs that always poin
 at the right current file — independent of the version number.
 
 ```
-GET /product/:slug/download/:os            → 302  latest STABLE asset for :os
-GET /product/:slug/download/:os/:version   → 302  that version's asset for :os
-GET /product/:slug/download/:os?channel=beta → 302 latest BETA asset for :os
+GET /product/:slug/download/:os?grant=…            → 302  latest STABLE asset for :os
+GET /product/:slug/download/:os/:version?grant=…   → 302  that version's asset for :os
+GET /product/:slug/download/:os?channel=beta&grant=… → 302 latest BETA asset for :os
 ```
+
+### 4.1 The grant (amended 2026-08-24 — owner override)
+
+**No request reaches the resolution algorithm below without a valid `grant`.**
+The refusal is deliberately evaluated FIRST, before `releases.json` is loaded, so
+a refusal cannot leak the version or filename it refused.
+
+| Caller | Result |
+|---|---|
+| Browser navigation (`Accept: text/html`), no grant | **302 → `/auth?returnUrl=…`** |
+| Anything else, no grant | **401** `download_grant_required` |
+| Valid grant | the 302 described below |
+
+The route **cannot** simply be mounted behind `authMiddleware`, and the reason is
+structural rather than a preference: this app authenticates with an
+`Authorization: Bearer` header and **sets no auth cookie**, while a download is a
+plain `<a href>` navigation, which sends cookies and never a header. Auth
+middleware here would refuse every paying customer — a gate that looks like it
+works because it refuses everyone. So the SPA, which does hold the token, calls
+`POST /api/downloads/grant` and navigates with the result.
+
+A grant is an HMAC over `(userId, slug, os, version, exp)`, valid for 5 minutes,
+and is **bound to one artifact** — replaying a Hub grant against Pixel is
+`wrong_artifact`, not a pass for the catalogue.
+
+⚠️ **This closes OUR door, not every door.** The bytes are still on a public CDN
+and Hub's updater still polls it unauthenticated. Both are Phase 3, and the order
+is load-bearing: locking R2 before Hub can present a grant would break
+auto-update for every installed app. `docs/DOWNLOAD-GATE.md` names all three.
 
 **Resolution algorithm (backend):**
 1. Normalize `:os` (`windows|win→win`, `macos|osx|mac→mac`, `linux|appimage→linux`).
@@ -414,7 +444,7 @@ Each step is independently shippable and leaves the site working.
 
 - [ ] `/product/:slug`, `/download`, `/releases`, `/releases/:version` render real
       data for every `shipping` product, driven only by the catalog + `releases.json`.
-- [ ] `/product/:slug/download/win|mac|linux` 302s to a working installer; pinned
+- [ ] `/product/:slug/download/win|mac|linux` **refuses an anonymous caller** (401 / redirect to auth) and 302s to a working installer *with a valid grant*; pinned
       `/…/:version` works; misses return 404 JSON, never a wrong file.
 - [ ] `releases.json` **and** `version.json` are published together on every release;
       Hub auto-update still works unchanged.
@@ -438,8 +468,9 @@ Each step is independently shippable and leaves the site working.
 
 **Stable links for Hub (never change across versions):**
 ```
-https://xenostudio.ai/product/hub/download/win     → 302 …/apps/hub/v0.5.1/XENO-HUB Setup 0.5.1.exe
-https://xenostudio.ai/product/hub/download/mac      → 302 …/apps/hub/v0.5.1/XENO-Hub-0.5.1-arm64.dmg
+https://xenostudio.ai/product/hub/download/win     → 401  (anonymous — paywalled, §4.1)
+https://xenostudio.ai/product/hub/download/win?grant=… → 302 …/apps/hub/v0.5.1/XENO-HUB Setup 0.5.1.exe
+https://xenostudio.ai/product/hub/download/mac?grant=… → 302 …/apps/hub/v0.5.1/XENO-Hub-0.5.1-arm64.dmg
 https://xenostudio.ai/product/hub/releases/0.5.1    → release detail page (permalink)
 ```
 

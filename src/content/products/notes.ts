@@ -168,7 +168,7 @@ const notes: ProductContent = {
     { q: 'What does “experimental” actually mean here?', a: 'It means this is an early build we are publishing openly rather than sitting on. The engine works and 681 automated tests cover it, but it has not been through a wide user shake-down: expect rough edges and keep a backup of your vault. Your notes are plain files in ~/.xeno/notes, so nothing is trapped in a proprietary store if you walk away.' },
     { q: 'Why does Windows warn me about the installer?', a: 'Because it is not code-signed yet. Windows SmartScreen shows “Windows protected your PC” for any installer without a signing certificate, regardless of what it contains. Choose “More info”, then “Run anyway”. Code signing is planned; until then we would rather tell you the warning is coming than pretend it is not.' },
     { q: 'Will it update itself?', a: 'No. This build has no in-app updater — it will never prompt you and never upgrade on its own. When a newer version is published you will need to come back here and install it over the top. XENO Hub, which polls for new versions, can tell you when one is out.' },
-    { q: 'What does it cost?', a: 'The experimental build is free to download. AI features require a XENO account and draw on credits. Pricing for the finished product will be announced closer to a stable release.' },
+    { q: 'What does it cost?', a: 'Downloading the experimental build requires a XENO account with an active plan. AI features draw on credits. Pricing for the finished product will be announced closer to a stable release.' },
   ],
   seo: {
     title: 'XENO Notes — the local-first, AI-native knowledge base',

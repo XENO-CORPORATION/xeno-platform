@@ -85,11 +85,20 @@ export const PRICING_TIERS: PricingTier[] = [
     name: 'Free',
     price: 0,
     currency: 'eur',
-    line: 'The standalone tool. Every XENO app, running on your machine.',
+    line: 'An account, and the in-house API. The apps themselves need a plan.',
     features: [
-      'Every app: Pixel, Motion, Sound, Canvas & more',
-      'Local editing & local files — works offline',
-      'Clean, full-resolution exports',
+      /* ⚠️ This list said "Every app: Pixel, Motion, Sound, Canvas & more" and
+       * "Local editing & local files — works offline", above a CTA reading
+       * "Download free" that pointed at /download.
+       *
+       * That is no longer true and it is NOT a claim being quietly retired:
+       * the account owner MOVED the boundary on 2026-08-24 (see
+       * PLAN_ENTITLEMENTS.free `canDownload` in billingService.js). An
+       * installer now needs an active paid plan. A free account keeps the API
+       * allowance below, and an app it already installed keeps working —
+       * but it cannot obtain a new one, so this card must not offer one. */
+      'Browse every product and every release note',
+      'Clean, full-resolution exports from apps you already have',
       // BYOK was listed here and is NOT available: the `byok` inference path in
       // src/server/routes/aiRoutes.js returns `byok_unavailable`, because BYOK is
       // owned by the XENO API gateway and is not implemented there yet. This list
@@ -101,9 +110,9 @@ export const PRICING_TIERS: PricingTier[] = [
       'In-house xeno-rt open models — fair-use daily cap',
       'Community support',
     ],
-    note: 'No card. A real tool, not a trial — but standalone: no cloud, agents or collaboration.',
-    cta: 'Download free',
-    href: '/download',
+    note: 'No card. Includes the in-house API on a fair-use daily cap. Installing an app requires a plan.',
+    cta: 'Create account',
+    href: '/auth',
   },
   {
     id: 'pro',

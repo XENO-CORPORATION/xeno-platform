@@ -6,6 +6,7 @@ import Footer from '../components/landing-v3/Footer';
 import { Reveal } from '../components/landing-v3/primitives';
 import ExperimentalNotice from '../components/product/ExperimentalNotice';
 import { getProduct, fetchReleases, downloadLink, type Release } from '../lib/productCatalog';
+import { downloadClickHandler } from '../lib/startDownload';
 import { getProductContent } from '../content/products';
 
 /* /product/:slug/download — the dedicated download page (PRODUCT-PAGES-SPEC.md §3.3).
@@ -63,6 +64,7 @@ const ProductDownload: React.FC = () => {
               <>
                 <a
                   href={`${downloadLink(product, p.key)}${channel === 'beta' ? '?channel=beta' : ''}`}
+                  onClick={downloadClickHandler(product.slug, p.key)}
                   className="mt-3 inline-flex items-center justify-center gap-2 rounded-[8px] bg-white px-3.5 py-2.5 text-[13px] font-semibold text-black transition-colors hover:bg-white/90"
                 >
                   <Download className="h-3.5 w-3.5" />Download

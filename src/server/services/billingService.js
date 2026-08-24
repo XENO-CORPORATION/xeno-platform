@@ -269,21 +269,45 @@ const PLAN_ENTITLEMENTS = {
    * The quota is enforced for real by middleware/inHouseDailyLimit.js. The
    * paid boundary is the LAYER-2 flags below - cloudSync, crossApp, agents,
    * privateProjects, collaboration - which a local binary genuinely cannot
-   * fake, plus `commercial`, which is a licence rather than a switch. */
-  free:   { plan: 'free',   canUse: true,  commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0,  cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
+   * fake, plus `commercial`, which is a licence rather than a switch.
+   *
+   * ── canDownload: false — AN OWNER OVERRIDE OF THE LOCKED LAYER-1 RULE ─────
+   *
+   * `XENO PRICING - STANDARD & LEDGER.md` puts the apps in Layer 1 at EUR 0.
+   * The account owner overrode that on 2026-08-24: an installer now requires a
+   * signed-in account AND an active paid plan. The standard's Layer 2/3 lines
+   * are untouched; this adds a distribution gate above them.
+   *
+   * It does NOT contradict `canUse: true` above, and the difference is the
+   * whole design:
+   *
+   *   canUse       - can this account call OUR SERVERS. Says nothing about a
+   *                  binary already on a laptop, and cannot: local editing
+   *                  never reaches this table.
+   *   canDownload  - may we HAND OVER the bytes. That one we do control,
+   *                  because every installer comes from our CDN.
+   *
+   * So a free account keeps the fair-use API it always had, and an app it
+   * already installed keeps working. What it cannot do is obtain a new one.
+   *
+   * ⚠️ This flag is only as true as its weakest door. A public R2 object is
+   * still a download, so gating the website alone would be theatre - see
+   * routes/productDownloadRoutes.js and the grant work behind it. Do not
+   * describe downloads as "closed" on the strength of this line alone. */
+  free:   { plan: 'free',   canUse: true,  canDownload: false, commercial: false, maxResolution: 'standard', priority: false, inHouseDailyLimit: 50,   privateProjects: false, teamSeats: 0,  cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false },
 
   /* Everything. `crossApp` is the Layer-3 differentiator and the reason this
    * tier exists - an agent that spans 26 applications is the one capability
    * neither an app vendor nor a model vendor can assemble. */
-  pro:    { plan: 'pro',    canUse: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
-  team:   { plan: 'team',   canUse: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
-  studio: { plan: 'studio', canUse: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 25, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+  pro:    { plan: 'pro',    canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 0,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: false, watermark: false },
+  team:   { plan: 'team',   canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 5,  cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
+  studio: { plan: 'studio', canUse: true,  canDownload: true,  commercial: true,  maxResolution: '4k',       priority: true,  inHouseDailyLimit: null, privateProjects: true,  teamSeats: 25, cloudSync: true,  crossApp: true,  agents: true,  collaboration: true,  watermark: false },
 
   // Staff / internal-service accounts (prod has real users with plan='internal').
   // NOT sellable - never in the CATALOG. All platform features enabled so internal
   // tooling and service accounts are never gated as free-tier. teamSeats 0: an
   // internal account is not itself a team container.
-  internal: { plan: 'internal', canUse: true, commercial: true, maxResolution: '4k', priority: true, inHouseDailyLimit: null, privateProjects: true, teamSeats: 0, cloudSync: true, crossApp: true, agents: true, collaboration: true, watermark: false },
+  internal: { plan: 'internal', canUse: true, canDownload: true,  commercial: true, maxResolution: '4k', priority: true, inHouseDailyLimit: null, privateProjects: true, teamSeats: 0, cloudSync: true, crossApp: true, agents: true, collaboration: true, watermark: false },
 };
 
 /* 🔴 NOT HERE YET: the EUR 9 single-app and EUR 19 single-suite rungs.

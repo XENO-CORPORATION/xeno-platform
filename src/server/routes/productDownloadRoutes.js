@@ -1,21 +1,46 @@
 /*
- * productDownloadRoutes — PRODUCT-PAGES-SPEC.md §4.
+ * productDownloadRoutes — PRODUCT-PAGES-SPEC.md §4, as amended by the
+ * 2026-08-24 owner override: an installer now requires an active paid plan.
  *
- * Stable, public download deep-links. The URL never changes as versions bump;
- * the backend resolves the current asset from R2 at request time and 302s to it.
+ *   GET  /product/:slug/download/:os[/:version]?grant=…   → 302 to the asset
+ *   POST /api/downloads/grant                             → mint that grant
  *
- *   GET /product/:slug/download/:os              → latest STABLE asset for :os
- *   GET /product/:slug/download/:os/:version     → that version's asset
- *   GET /product/:slug/download/:os?channel=beta → latest BETA asset
+ * ── THE DEEP LINK IS STILL PUBLIC, AND STILL SERVES NOTHING ────────────────
  *
- * Mounted PUBLIC (no auth) at `/product`. nginx proxies only the OS-specific
- * subpath here; `/product/:slug` and `/product/:slug/download` (the pages) fall
- * through to the SPA.
+ * The URL shape is unchanged, because it is printed in release notes and
+ * emails. What changed is that it no longer hands over bytes on its own.
+ *
+ * It cannot simply be mounted behind authMiddleware, and the reason is
+ * structural rather than a preference:
+ *
+ *   "the app authenticates via `Authorization: Bearer` and sets NO auth cookie"
+ *                                              — src/server/middleware/auth.js
+ *
+ * A download is a plain <a href> navigation, and a browser sends cookies on
+ * those, never an Authorization header. Auth middleware here would refuse
+ * every real customer — a gate that looks like it works because it refuses
+ * everyone. So the SPA, which does hold the token, mints a short-lived signed
+ * grant and navigates to the link with it.
+ *
+ * Without a valid grant:
+ *   - a browser navigation is redirected to sign in / to pricing
+ *   - anything else gets 401/403 JSON
+ *   - and in NO case does this route 302 to an installer
+ *
+ * ⚠️ The bytes themselves are still on a public CDN, so this closes OUR door
+ * and not every door. See docs/DOWNLOAD-GATE.md before claiming otherwise.
  */
 import express from 'express';
 import { updatesOrigin } from '../config/hosts.js';
+import { assertEntitlement } from '../middleware/requireEntitlement.js';
+import { mintDownloadGrant, verifyDownloadGrant, GRANT_TTL_SECONDS } from '../utils/downloadGrant.js';
 
 const router = express.Router();
+
+/** A browser NAVIGATION wants a page; an API client wants JSON. */
+function wantsHtml(req) {
+  return String(req.headers.accept || '').includes('text/html');
+}
 
 const R2_PUBLIC = process.env.XENO_UPDATES_BASE || updatesOrigin();
 const OS_ALIASES = {
@@ -100,6 +125,27 @@ router.get('/:slug/download/:os/:version?', async (req, res) => {
   }
   const channel = req.query.channel === 'beta' ? 'beta' : 'stable';
 
+  /* ── The paywall. Before any asset lookup, so an unentitled request cannot
+   * learn a filename or a version from the shape of the error. */
+  const wanted = { slug, os, version: req.params.version || '' };
+  const verdict = verifyDownloadGrant(req.query.grant, wanted);
+  if (!verdict.ok) {
+    if (wantsHtml(req)) {
+      // Send the browser somewhere it can act. The SPA reads returnUrl and
+      // comes back here with a grant once the account can actually download.
+      const back = encodeURIComponent(req.originalUrl.split('?')[0]);
+      return res.redirect(302, `/auth?returnUrl=${back}`);
+    }
+    return res.status(401).json({
+      error: {
+        code: 'download_grant_required',
+        message: 'Downloading requires a signed-in account with an active plan.',
+        reason: verdict.reason,
+        mint: '/api/downloads/grant',
+      },
+    });
+  }
+
   const releases = await loadReleases(slug);
   if (!releases.length) {
     return res.status(404).json({ error: { code: 'NO_RELEASES', message: `No releases published for "${slug}"` } });
@@ -119,6 +165,45 @@ router.get('/:slug/download/:os/:version?', async (req, res) => {
   // etc. but keep path separators.
   const url = `${R2_PUBLIC}/apps/${slug}/${encodeURI(asset.file)}`;
   return res.redirect(302, url);
+});
+
+/**
+ * The authenticated half. Mount at /api/downloads behind databaseMiddleware +
+ * authMiddleware, so 401 is owned by auth and 403 by the entitlement.
+ *
+ * Returns a URL rather than the bytes: the browser then navigates to it, which
+ * keeps the large transfer on the CDN instead of through Node.
+ */
+export const grantRouter = express.Router();
+
+grantRouter.post('/grant', async (req, res) => {
+  const slug = String(req.body?.slug || '').toLowerCase();
+  const osParam = String(req.body?.os || '').toLowerCase();
+  const os = OS_ALIASES[osParam];
+  const version = req.body?.version ? String(req.body.version).replace(/^v/i, '') : '';
+  res.set('Cache-Control', 'no-store');
+
+  if (!/^[a-z0-9-]+$/.test(slug) || !os) {
+    return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'slug and os are required' } });
+  }
+  // authMiddleware owns 401; reaching here without a user is a wiring bug.
+  const userId = req.user?.id;
+  if (!userId || !req.db) {
+    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Sign in to download.' } });
+  }
+
+  // Fails CLOSED to free, so a database fault refuses rather than hands over.
+  const check = await assertEntitlement(req.db, userId, 'canDownload');
+  if (!check.allowed) return res.status(403).json(check.body);
+
+  const grant = mintDownloadGrant({ userId, slug, os, version });
+  const path = version
+    ? `/product/${slug}/download/${osParam}/${version}`
+    : `/product/${slug}/download/${osParam}`;
+  return res.json({
+    url: `${path}?grant=${encodeURIComponent(grant)}`,
+    expiresInSeconds: GRANT_TTL_SECONDS,
+  });
 });
 
 export default router;

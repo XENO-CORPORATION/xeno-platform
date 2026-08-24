@@ -83,6 +83,12 @@ const CAPABILITY_CONTEXT = {
    * product; this one refuses the product. It maps to the 'general' prompt
    * because there is no single feature to name: the answer is "get a plan". */
   canUse: 'general',
+
+  /* Handing over an installer (owner override, 2026-08-24). Mapped to
+   * 'general' rather than a new token because the honest answer to a refused
+   * download IS "get a plan" — there is no single feature to name, and a
+   * context the UpgradePrompt union does not carry would render nothing. */
+  canDownload: 'general',
   cloudSync: 'cloudSync',
   crossApp: 'crossApp',
   agents: 'agents',
