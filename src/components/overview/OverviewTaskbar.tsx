@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -378,38 +379,34 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
   return (
     <>
       {/* ── Mobile Top-Right Menu Trigger (on non-chat pages without their own top bar) ── */}
-      {!isChatRoute && (
+      {!isChatRoute && typeof document !== 'undefined' && createPortal(
         <button
           type="button"
           onClick={() => setIsMobileMenuOpen(true)}
-          className="fixed top-3.5 right-3.5 z-[240] md:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-black/85 text-white shadow-xl backdrop-blur-md active:scale-95 transition-all duration-150"
+          className="fixed top-3.5 right-3.5 z-[240] md:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-black/85 text-white shadow-2xl backdrop-blur-md active:scale-95 transition-all duration-150"
           aria-label="Open taskbar menu"
         >
           <Menu size={20} />
-        </button>
+        </button>,
+        document.body
       )}
 
-      {/* ── Full Mobile Taskbar Drawer ───────────────────────────────────────────── */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-[250] md:hidden flex flex-col justify-end">
+      {/* ── Full Mobile Taskbar Drawer (Full Mobile Viewport) ─────────────────────────── */}
+      {isMobileMenuOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[260] md:hidden flex flex-col justify-end">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
             onClick={() => setIsMobileMenuOpen(false)}
           />
 
-          {/* Drawer Panel */}
-          <div className="relative z-10 flex flex-col h-[90dvh] w-full rounded-t-3xl border-t border-x border-white/15 bg-[#0a0a0c]/95 backdrop-blur-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
-            {/* Top Drag Indicator */}
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-white/20" />
-            </div>
-
+          {/* Drawer Panel - Full Viewport */}
+          <div className="relative z-10 flex flex-col h-[100dvh] max-h-[100dvh] w-full bg-[#0a0a0c] backdrop-blur-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 pt-[max(0.875rem,env(safe-area-inset-top))]">
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
-                  <svg width="18" height="18" viewBox="0 0 1082 1082" fill="currentColor">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white border border-white/10">
+                  <svg width="20" height="20" viewBox="0 0 1082 1082" fill="currentColor">
                     <path d="M489.1 219.763L323.457 39.7072L101.649 30.4597C51.6926 28.3769 39.5494 67.5718 39.7224 87.4296L30.4124 310.735L347.816 655.757L475.833 537.987L241.73 283.514C207.644 246.462 222.019 240.156 233.467 241.634L455.275 250.881L489.1 219.763Z" />
                     <path d="M861.765 489.52L1041.69 323.704L1050.94 101.684C1053.03 51.6793 1013.87 39.5273 994.024 39.7019L770.9 30.3995L426.135 348.133L543.8 476.263L798.083 241.917C835.108 207.796 841.408 222.184 839.931 233.644L830.674 455.664L861.765 489.52Z" />
                     <path d="M592.871 862.143L758.514 1042.2L980.322 1051.45C1030.28 1053.53 1042.42 1014.33 1042.25 994.477L1051.56 771.171L734.155 426.15L606.138 543.919L840.241 798.392C874.327 835.444 859.952 841.751 848.504 840.272L626.696 831.025L592.871 862.143Z" />
@@ -433,7 +430,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/80 hover:text-white active:scale-95"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white/80 hover:text-white active:scale-95 transition-all"
                 >
                   <X size={18} />
                 </button>
@@ -482,7 +479,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
             </div>
 
             {/* Scrollable Categories List */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-3 pb-8">
               <div className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
                 Products & Workspaces
               </div>
@@ -567,7 +564,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
             </div>
 
             {/* Footer Account Actions */}
-            <div className="border-t border-white/10 bg-black/50 p-4 pb-6 flex items-center justify-between">
+            <div className="border-t border-white/10 bg-black/50 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] flex items-center justify-between">
               <button
                 onClick={() => { setShowAccountModal(true); setIsMobileMenuOpen(false); }}
                 className="flex items-center gap-2 text-xs text-white/70 hover:text-white font-medium"
@@ -584,7 +581,8 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Desktop Sidebar */}
