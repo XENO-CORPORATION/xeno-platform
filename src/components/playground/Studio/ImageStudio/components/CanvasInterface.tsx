@@ -87,7 +87,7 @@ const CanvasInterface: React.FC<CanvasInterfaceProps> = ({
           task: 'edit_image',
           imageData: imageDataUrl,
           prompt: editPrompt,
-          model: 'gpt-image-1',
+          model: 'gpt-image-2',
           outputFormat: 'png',
           quality: 'auto',
           size: 'auto',

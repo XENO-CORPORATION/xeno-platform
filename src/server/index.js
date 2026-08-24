@@ -1460,8 +1460,8 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 requestParams.response_format = 'b64_json';
             }
 
-            // Add optional parameters for gpt-image-1
-            if (model === 'gpt-image-1') {
+            // Add optional parameters for gpt-image-2 / gpt-image-1
+            if (model === 'gpt-image-2' || model === 'gpt-image-1') {
                 if (background) requestParams.background = background;
                 if (outputFormat) requestParams.output_format = outputFormat;
                 if (quality) requestParams.quality = quality;

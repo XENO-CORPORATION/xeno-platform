@@ -246,7 +246,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
   const [debugMode, setDebugMode] = useState<boolean>(false);
 
   // NEW: Model Selection State
-  const [selectedModel, setSelectedModel] = useState<'seededit-v3' | 'gpt-image-1' | 'flux-kontext' | 'step1x-edit' | 'ideogram-v2-edit'>('seededit-v3');
+  const [selectedModel, setSelectedModel] = useState<'seededit-v3' | 'gpt-image-2' | 'gpt-image-1' | 'flux-kontext' | 'step1x-edit' | 'ideogram-v2-edit'>('seededit-v3');
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
 
   // NEW: Style Modal State
@@ -560,9 +560,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
       category: 'SeedEdit'
     },
     { 
-      id: 'gpt-image-1', 
-      name: 'Image Gen 1', 
-      description: 'OpenAI GPT-4 Vision with image editing capabilities',
+      id: 'gpt-image-2', 
+      name: 'Image Gen 2', 
+      description: 'OpenAI GPT Image 2 with multimodal generation and editing capabilities',
       category: 'OpenAI'
     },
     { 
@@ -1663,7 +1663,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     setIsModelDropdownOpen(!isModelDropdownOpen);
   };
 
-  const handleModelSelect = (modelId: 'seededit-v3' | 'gpt-image-1' | 'flux-kontext' | 'step1x-edit' | 'ideogram-v2-edit') => {
+  const handleModelSelect = (modelId: 'seededit-v3' | 'gpt-image-2' | 'gpt-image-1' | 'flux-kontext' | 'step1x-edit' | 'ideogram-v2-edit') => {
     setSelectedModel(modelId);
     setIsModelDropdownOpen(false);
   };

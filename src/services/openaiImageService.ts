@@ -119,7 +119,7 @@ export class OpenAIImageService {
       console.log('Generating image with model:', settings.model, settings);
 
       // GPT Image models keep the dedicated path for parity with prior behavior.
-      if (settings.model === 'gpt-image-1' || settings.model?.startsWith('gpt-4')) {
+      if (settings.model === 'gpt-image-2' || settings.model === 'gpt-image-1' || settings.model?.startsWith('gpt-4')) {
         return await this.generateWithResponsesAPI(settings);
       }
 
@@ -226,7 +226,7 @@ export class OpenAIImageService {
       
       const result = await this.generateImage({
         prompt,
-        model: 'gpt-image-1',
+        model: 'gpt-image-2',
         n: 1,
         size: '1024x1024'
       });
@@ -284,7 +284,7 @@ export class OpenAIImageService {
   // 7. Get Supported Models
   async getSupportedModels(): Promise<string[]> {
     // Model discovery lives behind the backend proxy; expose the supported set directly.
-    return ['gpt-image-1'];
+    return ['gpt-image-2'];
   }
 
   // 8. Validate Image Input

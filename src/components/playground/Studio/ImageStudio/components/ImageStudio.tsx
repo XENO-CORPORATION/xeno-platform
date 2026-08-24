@@ -204,7 +204,7 @@ const ImageStudio: React.FC = () => {
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Model selection state
-  const [selectedModel, setSelectedModel] = useState<'gpt-image-1' | 'flux-kontext'>('flux-kontext');
+  const [selectedModel, setSelectedModel] = useState<'gpt-image-2' | 'gpt-image-1' | 'flux-kontext'>('gpt-image-2');
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
 
   // AI Image Generation Settings
@@ -1112,8 +1112,8 @@ const ImageStudio: React.FC = () => {
           ));
         }
 
-            } else if (selectedModel === 'gpt-image-1') {
-        console.log('Using GPT Image 1 for conversational image generation');
+            } else if (selectedModel === 'gpt-image-2' || selectedModel === 'gpt-image-1') {
+        console.log('Using GPT Image 2 for conversational image generation');
         
         // Comprehensive intent detection system
         const analyzePromptIntent = (prompt: string) => {
@@ -1284,7 +1284,7 @@ const ImageStudio: React.FC = () => {
                 task: 'edit_image',
                 imageData: messageWithEditedImage.imageData,
                 prompt: basePrompt,
-                model: 'gpt-image-1',
+                model: selectedModel || 'gpt-image-2',
                 outputFormat: 'png',
                 quality: 'auto',
                 size: 'auto',
@@ -1330,9 +1330,9 @@ const ImageStudio: React.FC = () => {
             ? {
                 ...msg,
                 isGeneratingImage: false,
-                      text: `Image edited successfully using GPT Image 1 (Context: ${editedContext.id} - ${editedContext.description})`,
+                      text: `Image edited successfully using GPT Image 2 (Context: ${editedContext.id} - ${editedContext.description})`,
                       imageData: newImageUrl,
-                      modelIdUsed: 'gpt-image-1',
+                      modelIdUsed: 'gpt-image-2',
                       responseId: editedContext.responseId,
                       imageGenerationCallId: editedContext.imageGenerationCallId,
                       imageContextId: editedContextId,
@@ -1347,9 +1347,9 @@ const ImageStudio: React.FC = () => {
               const finalAiMessage: ChatMessage = {
                 ...aiMessage,
                 isGeneratingImage: false,
-                text: `Image edited successfully using GPT Image 1 (Context: ${editedContext.id} - ${editedContext.description})`,
+                text: `Image edited successfully using GPT Image 2 (Context: ${editedContext.id} - ${editedContext.description})`,
                 imageData: newImageUrl,
-                modelIdUsed: 'gpt-image-1',
+                modelIdUsed: 'gpt-image-2',
                 responseId: editedContext.responseId,
                 imageGenerationCallId: editedContext.imageGenerationCallId,
                 imageContextId: editedContextId,
@@ -1360,7 +1360,7 @@ const ImageStudio: React.FC = () => {
 
               const updatedMessages = [...messages.filter(msg => msg.id !== aiMessage.id), userMessage, finalAiMessage];
               const sessionSettings = {
-                model: 'gpt-image-1',
+                model: 'gpt-image-2' as const,
                 seed: '',
                 guidanceScale: guidanceScale,
                 aspectRatio: aspectRatio,
@@ -1515,7 +1515,7 @@ const ImageStudio: React.FC = () => {
                 isGeneratingImage: false,
                   text: getSuccessMessage(),
                   imageData: imageUrl,
-                  modelIdUsed: 'gpt-image-1',
+                  modelIdUsed: 'gpt-image-2',
                   responseId: result.responseId, // Store for future follow-ups
                   imageGenerationCallId: result.imageGenerationCallId, // Store for context
                   imageContextId: contextId, // Store context ID
@@ -1532,7 +1532,7 @@ const ImageStudio: React.FC = () => {
             isGeneratingImage: false,
             text: getSuccessMessage(),
             imageData: imageUrl,
-            modelIdUsed: 'gpt-image-1',
+            modelIdUsed: 'gpt-image-2',
             responseId: result.responseId,
             imageGenerationCallId: result.imageGenerationCallId,
             imageContextId: contextId,
@@ -1544,8 +1544,8 @@ const ImageStudio: React.FC = () => {
           // Update session using the history hook
           const updatedMessages = [...messages.filter(msg => msg.id !== aiMessage.id), userMessage, finalAiMessage];
           const sessionSettings = {
-            model: 'gpt-image-1',
-            seed: '', // GPT Image 1 doesn't use seeds
+            model: 'gpt-image-2' as const,
+            seed: '', // GPT Image 2 doesn't use seeds
             guidanceScale: guidanceScale,
             aspectRatio: aspectRatio,
             numImages: 1
@@ -1645,7 +1645,7 @@ const ImageStudio: React.FC = () => {
     setIsModelDropdownOpen(!isModelDropdownOpen);
   };
 
-  const handleModelSelect = (model: 'gpt-image-1' | 'flux-kontext') => {
+  const handleModelSelect = (model: 'gpt-image-2' | 'gpt-image-1' | 'flux-kontext') => {
     setSelectedModel(model);
     setIsModelDropdownOpen(false);
   };
@@ -1779,7 +1779,7 @@ const ImageStudio: React.FC = () => {
             title: project.title,
             timestamp: new Date(project.created_at).getTime(),
             messages: [],
-            model: project.model as 'gpt-image-1' | 'flux-kontext',
+            model: (project.model as any) || 'gpt-image-2',
             seed: project.seed,
             aspectRatio: project.aspect_ratio,
             numImages: project.num_images,
@@ -2056,7 +2056,7 @@ const ImageStudio: React.FC = () => {
             title: project.title,
             timestamp: new Date(project.created_at).getTime(),
             messages: [],
-            model: project.model as 'gpt-image-1' | 'flux-kontext',
+            model: (project.model as any) || 'gpt-image-2',
             seed: project.seed,
             aspectRatio: project.aspect_ratio,
             numImages: project.num_images,
@@ -2850,7 +2850,7 @@ const ImageStudio: React.FC = () => {
                           onClick={toggleModelDropdown}
                           className="flex items-center gap-2 px-3 py-2 bg-[#19191a] border border-[#3a3a3d] rounded-lg text-gray-300 hover:border-gray-500 hover:text-white transition-colors text-sm"
                         >
-                          <span>{selectedModel === 'gpt-image-1' ? 'GPT Image 1' : 'Flux Kontext'}</span>
+                          <span>{selectedModel === 'flux-kontext' ? 'Flux Kontext' : 'GPT Image 2'}</span>
                           <ChevronDown size={14} className={`transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
 
@@ -2869,14 +2869,14 @@ const ImageStudio: React.FC = () => {
                         >
                           <div className="p-1">
                             <button 
-                              onClick={() => handleModelSelect('gpt-image-1')}
+                              onClick={() => handleModelSelect('gpt-image-2')}
                               className={`w-full flex items-center px-3 py-2 text-sm rounded-md text-left transition-colors ${
-                                selectedModel === 'gpt-image-1' 
+                                selectedModel === 'gpt-image-2' 
                                   ? 'bg-white text-black' 
                                   : 'text-gray-300 hover:bg-zinc-700/50'
                               }`}
                             >
-                              GPT Image 1
+                              GPT Image 2
                             </button>
                             <button 
                               onClick={() => handleModelSelect('flux-kontext')}

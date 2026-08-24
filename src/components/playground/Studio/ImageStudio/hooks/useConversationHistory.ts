@@ -50,7 +50,7 @@ export const useConversationHistory = (
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   setInputValue: React.Dispatch<React.SetStateAction<string>>,
   setAttachedFiles: React.Dispatch<React.SetStateAction<any[]>>,
-  setSelectedModel: React.Dispatch<React.SetStateAction<'gpt-image-1' | 'flux-kontext'>>,
+  setSelectedModel: React.Dispatch<React.SetStateAction<'gpt-image-2' | 'gpt-image-1' | 'flux-kontext'>>,
   setSeed: React.Dispatch<React.SetStateAction<string>>,
   setAspectRatio: React.Dispatch<React.SetStateAction<string>>,
   setNumImages: React.Dispatch<React.SetStateAction<number>>
@@ -117,7 +117,7 @@ export const useConversationHistory = (
               title: project.title,
               timestamp: new Date(project.created_at).getTime(),
               messages: [], // We'll load messages when user clicks on the project
-              model: project.model as 'gpt-image-1' | 'flux-kontext',
+              model: project.model as 'gpt-image-2' | 'gpt-image-1' | 'flux-kontext',
               seed: project.seed,
               aspectRatio: project.aspect_ratio,
               numImages: project.num_images,
@@ -322,7 +322,7 @@ export const useConversationHistory = (
       
       // Load session settings if available
       if (sessionToLoad.settings) {
-        setSelectedModel(sessionToLoad.settings.model as 'gpt-image-1' | 'flux-kontext');
+        setSelectedModel((sessionToLoad.settings.model as any) || 'gpt-image-2');
         if (sessionToLoad.settings.seed) {
           setSeed(sessionToLoad.settings.seed);
         }

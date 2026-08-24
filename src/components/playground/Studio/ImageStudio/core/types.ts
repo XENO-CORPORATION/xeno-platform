@@ -82,7 +82,7 @@ export interface ImageGenerationSession {
   };
   // Database integration fields
   isFromDatabase?: boolean; // Flag to identify database projects
-  model?: 'gpt-image-1' | 'flux-kontext';
+  model?: 'gpt-image-2' | 'gpt-image-1' | 'flux-kontext';
   seed?: string;
   aspectRatio?: string;
   numImages?: number;
