@@ -106,7 +106,9 @@ CREATE TABLE IF NOT EXISTS email_logs (
   template        VARCHAR(100) NOT NULL,
   subject         VARCHAR(500),
   status          VARCHAR(20) NOT NULL DEFAULT 'pending'
-                  CHECK (status IN ('pending', 'sent', 'failed', 'bounced')),
+                  -- 'skipped' = no provider configured; a no-op must not report as
+                  -- 'sent' OR as 'failed'. Added by 20260824120000 for existing DBs.
+                  CHECK (status IN ('pending', 'sent', 'failed', 'bounced', 'skipped')),
   provider_id     VARCHAR(255),
   error           TEXT,
   sent_at         TIMESTAMPTZ,
