@@ -65,6 +65,8 @@ import downloadRoutes from './routes/downloadRoutes.js';
 import productDownloadRoutes, { grantRouter as downloadGrantRouter, updateGrantRouter } from './routes/productDownloadRoutes.js';
 import { router as downloadFunnelRouter } from './routes/downloadFunnelRoutes.js';
 import { sweepExpiredIntents } from './services/downloadFunnel.js';
+import { requireSupportedClient } from './middleware/requireSupportedClient.js';
+import clientPolicyRoutes from './routes/clientPolicyRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
@@ -253,6 +255,27 @@ const globalLimiter = rateLimit({
   },
 });
 app.use('/api/', globalLimiter);
+
+// ── Minimum supported client build ──────────────────────────────────────────
+//
+// 🔴 This is what makes a licence requirement retroactive. A build shipped
+// before enforcement existed has no check compiled into it and nothing we deploy
+// can make that binary refuse itself — but it is only worth running because of
+// what it can REACH, and that is all on this side of the wire. So we stop
+// answering it.
+//
+// It works on builds that predate the idea because clients already identify
+// themselves without having been asked to: production logs carry XenoCode/0.2.0
+// and XenoHarbor/0.2.0 straight out of Electron's and Node's default
+// User-Agent. See services/clientVersion.js.
+//
+// Mounted on /api only, and AFTER the rate limiter so a refused client cannot
+// spend more of the estate than any other caller. Every product defaults to NO
+// floor — a policy row is created deliberately, per product, because a table
+// that defaulted to enforcing would have locked out every user at once the
+// moment it was added.
+app.use('/api/', databaseMiddleware, requireSupportedClient);
+app.use('/api/client-policy', databaseMiddleware, clientPolicyRoutes);
 
 // Strict rate limiter for auth endpoints: 10 requests per 15 minutes per IP
 const authLimiter = rateLimit({
