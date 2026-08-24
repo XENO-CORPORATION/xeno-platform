@@ -4,6 +4,12 @@
 active paid plan.** Owner override, 2026-08-24, against the Layer-1 rule in
 `XENO PRICING - STANDARD & LEDGER.md` §3. Layers 2 and 3 are unchanged.
 
+> 📕 **The JOURNEY — how a person actually gets from a Download button to a file,
+> and everything that is tracked along the way — is `DOWNLOAD-FUNNEL.md`.** This
+> file is the *enforcement*; that one is the *flow*, and it also carries the
+> honest anti-abuse layering (including the in-app licence check that no product
+> implements yet).
+
 ## The one thing to understand
 
 There are **three** doors to the same bytes, and they are not equally closed:
