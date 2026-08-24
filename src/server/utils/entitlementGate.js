@@ -8,6 +8,11 @@
  * back-compat, never gate on it). Enforced SERVER-SIDE (the client cannot bypass it).
  */
 import { getEntitlements } from '../services/billingService.js';
+/* The GATE resolves effectively — personal plan OR any workspace that licenses
+ * this person. Per-seat Team is a workspace subscription, so resolving gates
+ * from the personal plan alone refused every Team member the software their
+ * employer had just paid for. See services/effectivePlan.js. */
+import { getEffectiveEntitlements } from '../services/effectivePlan.js';
 
 const RES_CAP_PX = { standard: 1024, '4k': 4096 };
 
@@ -32,7 +37,7 @@ const FREE_ENT = {
 /** Resolve a user's entitlements (falls back to Free on any error — fail closed). */
 export async function resolveEntitlements(db, userId) {
   try {
-    const e = await getEntitlements(db, userId);
+    const e = await getEffectiveEntitlements(db, userId);
     return e?.entitlements || FREE_ENT;
   } catch {
     return FREE_ENT;

@@ -524,7 +524,13 @@ router.post('/:id/billing/subscribe', wrap(async (req, res) => {
   const memberCount = (await memberRoles(req.db, wsId)).size;
   const seats = Math.max(memberCount, Math.floor(Number(req.body?.seats) || memberCount || 1));
   try {
-    const out = await createWorkspaceSeatCheckout(req.db, req.user, { workspaceId: wsId, seats, origin: req.headers.origin });
+    /* Carry a download intent if the owner reached this from a Download
+     * button, so a Team purchase returns to the download and is attributable
+     * to it. Opaque token only — the return URL is built server-side. */
+    const downloadIntent = typeof req.body?.downloadIntent === 'string' ? req.body.downloadIntent : null;
+    const out = await createWorkspaceSeatCheckout(req.db, req.user, {
+      workspaceId: wsId, seats, origin: req.headers.origin, downloadIntent,
+    });
     await audit(req.db, wsId, req.user.id, 'billing.subscribe', wsId, { seats });
     res.json({ success: true, url: out.url });
   } catch (e) {

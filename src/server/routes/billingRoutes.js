@@ -15,6 +15,7 @@
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
 import * as billing from '../services/billingService.js';
+import { getEffectiveEntitlements } from '../services/effectivePlan.js';
 import { creditsView, subscriptionView } from '../utils/accountViews.js';
 
 const router = express.Router();
@@ -48,7 +49,7 @@ router.get('/summary', authMiddleware, async (req, res) => {
 /** The user's plan + feature entitlements — the gate every product reads. */
 router.get('/entitlements', authMiddleware, async (req, res) => {
   try {
-    res.json({ success: true, ...(await billing.getEntitlements(req.db, req.user.id)) });
+    res.json({ success: true, ...(await getEffectiveEntitlements(req.db, req.user.id)) });
   } catch (err) {
     console.error('[billing] entitlements error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to load entitlements' });

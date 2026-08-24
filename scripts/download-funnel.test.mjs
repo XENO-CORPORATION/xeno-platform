@@ -145,7 +145,12 @@ test('resolve() trusts nothing stored on the intent row', () => {
   for (const cheat of ['intent.plan', 'intent.entitled', 'intent.user.plan', 'intent.status ===']) {
     assert.ok(!body.includes(cheat), `resolve() reads ${cheat} from the intent instead of the database`);
   }
-  assert.ok(body.includes('await getPlan(pool, user.id)'), 'resolve() no longer derives the plan live');
+  /* The PROPERTY, not the function name. This pinned `getPlan` specifically and
+   * went red when the resolver correctly became getEffectivePlan — a mechanism
+   * check failing against strictly better code. What matters is that the plan is
+   * fetched from the database per call, not read off the intent row. */
+  assert.ok(/await get(Effective)?Plan\(pool, user\.id\)/.test(body),
+    'resolve() no longer derives the plan live from the database');
 });
 
 test('an intent token is unguessable and is not a database id', () => {

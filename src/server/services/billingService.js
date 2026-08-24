@@ -560,23 +560,33 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
  * rides on BOTH the session metadata (for checkout.session.completed) and the
  * subscription metadata (for renewal/quantity-change events).
  */
-export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, seats, origin }) {
+export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, seats, origin, downloadIntent = null }) {
   const item = CATALOG.map(resolveItem).find((i) => i.id === 'team_seat');
   if (!item?.available) { const e = new Error('team seat price not configured (set STRIPE_PRICE_TEAM_SEAT_MONTHLY)'); e.status = 400; throw e; }
   const qty = Math.max(1, Math.floor(Number(seats) || 1));
   const base = process.env.BILLING_APP_URL || origin || siteOrigin();
+  const seatReturn = checkoutReturn(base, 'team_seat', downloadIntent);
   const customer = await getOrCreateCustomer(pool, user);
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     customer,
     client_reference_id: String(user.id),
     line_items: [{ price: item.priceId, quantity: qty }],
-    success_url: `${base}/overview/billing?billing=success&item=team_seat`,
-    cancel_url: `${base}/overview/billing?billing=cancel`,
+    /* Same return rule as the personal path, and for the same reason: someone
+     * who reached checkout from a Download button must land back on their
+     * download, not on a billing page with no explanation of why they are
+     * there. Built server-side — a client-supplied success_url is an open
+     * redirect with a payment attached. */
+    success_url: seatReturn.successUrl,
+    cancel_url: seatReturn.cancelUrl,
     allow_promotion_codes: true,
     ...taxCheckoutFields(),
     subscription_data: { metadata: { xenoWorkspaceId: String(workspaceId), seats: String(qty) } },
-    metadata: { xenoUserId: String(user.id), itemId: 'team_seat', kind: 'subscription', xenoWorkspaceId: String(workspaceId), seats: String(qty) },
+    metadata: {
+      xenoUserId: String(user.id), itemId: 'team_seat', kind: 'subscription',
+      xenoWorkspaceId: String(workspaceId), seats: String(qty),
+      ...(downloadIntent ? { xenoDownloadIntent: String(downloadIntent) } : {}),
+    },
   });
   return { url: session.url, id: session.id };
 }
@@ -782,6 +792,10 @@ export async function handleEvent(pool, event) {
           const seats = Number(session.metadata?.seats || 1);
           await setWorkspacePlan(pool, wsId, { plan: 'team', status: 'active', subId: session.subscription || null, seats });
           console.log(`💳 [billing] workspace ${wsId} → team plan, ${seats} seats (checkout ${event.id})`);
+          /* AFTER the plan lands, same ordering as the personal branch: the
+           * resume page is polling, and attributing first would let it observe
+           * the attribution while still being refused. */
+          await attributeDownloadIntent(pool, session, 'team');
         } else {
           // Personal subscription → set the user PLAN (from the item metadata; no credit grant).
           const plan = planForItemId(session.metadata?.itemId) || 'pro';
