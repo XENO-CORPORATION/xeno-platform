@@ -247,6 +247,38 @@ if (/§ ?19( Abs\. ?1)? (UStG|Umsatzsteuergesetz)/.test(impressum)) {
     'if you are a Kleinunternehmer, charging no VAT needs the statutory explanation. If you are NOT, ignore this — and make sure Stripe Tax carries a registration.');
 }
 
+/* The posture must be WRITTEN DOWN and must agree with the page. Every fact in
+ * docs/TAX-POSTURE.md was rediscovered the hard way during the Stripe build, and
+ * two of them were wrong in code at the time. A number that appears in one place
+ * and not the other is the drift this catches. */
+const posture = read('docs/TAX-POSTURE.md');
+if (!posture) {
+  fail('docs/TAX-POSTURE.md is missing',
+    'the VAT regime, the two thresholds and what changes at crossover are then only in someone memory');
+} else {
+  const inDoc = posture.match(VAT_ID);
+  const onPage = impressum.match(VAT_ID);
+  if (inDoc && onPage && inDoc[0] === onPage[0]) {
+    ok('the tax posture doc and the Impressum agree on the VAT number');
+  } else if (inDoc && onPage) {
+    fail(`VAT number mismatch: doc says ${inDoc[0]}, Impressum says ${onPage[0]}`,
+      'one of them is being quoted somewhere it should not be');
+  } else {
+    warn('cannot compare the VAT number between the doc and the Impressum');
+  }
+
+  /* 🔴 The crossover contradiction, stated so it is checkable later: charging VAT
+   * while still displaying the § 19 notice is a false statement on a legally
+   * required page. The preflight cannot see Stripe registrations from here, so it
+   * records the pairing rather than pretending to verify it. */
+  if (/Stripe Tax is ENABLED with ZERO registrations/.test(posture)) {
+    ok('the zero-registration posture is documented as deliberate');
+  } else {
+    warn('the doc no longer explains the zero-registration posture',
+      'someone will read enabled-with-no-registrations as a misconfiguration and add one');
+  }
+}
+
 const privacy = 'src/pages/Privacy.tsx';
 if (has(privacy, /Stripe/i)) ok('Privacy names Stripe as a processor');
 else fail('Privacy does not name Stripe', 'a payment processor receives personal data; GDPR Art. 13 requires naming recipients');
