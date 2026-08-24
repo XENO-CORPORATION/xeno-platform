@@ -14634,7 +14634,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   nothing in this codebase reads. The active fill has never painted. Saying
                   `data-selection` — which the component's axis is named for — makes a dormant rule
                   live, and the token it reaches for exists in all three palettes. */}
-              {!isMultiInterface && (messages.length === 0 || isTemporaryChat) && (
+              {!isMultiInterface && messages.length === 0 && (
                 <Button
                   variant="quiet"
                   size="lg"
@@ -14643,7 +14643,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   className="chat-top-bar-btn"
                   data-selection={isTemporaryChat ? 'on' : 'off'}
                   aria-pressed={isTemporaryChat}
-                  aria-label="Temporary chat toggle"
+                  aria-label="Temporary chat preview"
                   title="Temporary chat"
                   onClick={() => {
                     setIsTemporaryChat((current) => !current);
@@ -14653,9 +14653,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   }}
                 >
                   <span className="font-medium leading-none">Temporary</span>
-                  <span className={`leading-none text-[12px] ${isTemporaryChat ? 'text-emerald-400 font-semibold' : 'text-[var(--chat-muted)]'}`}>
-                    {isTemporaryChat ? 'On' : 'Preview'}
-                  </span>
+                  <span className="leading-none text-[12px] text-[var(--chat-muted)]">Preview</span>
                 </Button>
               )}
 
@@ -15238,50 +15236,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               aria-hidden="true"
             />
           )}
-          </div>
-        </div>
-
-        {/* Temporary Chat Privacy Banner (ChatGPT-style slide-down from behind top bar) */}
-        <div
-          aria-live="polite"
-          data-temporary-chat-banner
-          className={`absolute left-0 right-0 z-20 overflow-hidden transition-all duration-300 ease-out border-b border-[var(--chat-border)] bg-[var(--chat-surface)]/95 backdrop-blur-md shadow-md ${
-            isTemporaryChat
-              ? 'max-h-24 opacity-100 translate-y-0 pointer-events-auto'
-              : 'max-h-0 opacity-0 -translate-y-full pointer-events-none border-b-0'
-          }`}
-          style={{
-            top: CHAT_CHROME_BAR_HEIGHT_PX,
-            left: !isMultiInterface && isHistoryOpen && !isMobile ? '260px' : '0px',
-            right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px',
-          }}
-        >
-          <div className={`${isMultiInterface ? 'max-w-full px-3' : (isWideChatEnabled ? 'max-w-[67.5rem] px-4' : 'max-w-[45rem] px-4')} mx-auto py-2 flex items-center justify-between gap-3`}>
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--chat-hover)] text-[var(--chat-text)] border border-[var(--chat-border)]">
-                <UserRoundX size={14} />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-[var(--chat-text)]">Temporary Chat</span>
-                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
-                    Incognito
-                  </span>
-                </div>
-                <p className="text-[11px] text-[var(--chat-muted)] truncate sm:whitespace-normal">
-                  This chat won't appear in your history, use or create memories, or be stored in the cloud.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsTemporaryChat(false)}
-                className="text-xs font-medium text-[var(--chat-muted)] hover:text-[var(--chat-text)] px-2.5 py-1 rounded-md border border-[var(--chat-border)] bg-[var(--chat-overlay)] hover:bg-[var(--chat-hover)] transition-colors active:scale-[0.98]"
-              >
-                Turn off
-              </button>
-            </div>
           </div>
         </div>
 
