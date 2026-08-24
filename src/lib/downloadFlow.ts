@@ -119,8 +119,17 @@ export async function readIntent(token: string): Promise<IntentEnvelope | null> 
   }
 }
 
-/** Bind an intent to the account that just authenticated. */
+/**
+ * Bind an intent to the account that just authenticated.
+ *
+ * ⚠️ Returns null WITHOUT calling when there is no token. Claiming is an
+ * authenticated action, so an anonymous caller gets a guaranteed 401 — a failed
+ * request and a console error on every single anonymous visit to the resume
+ * page. Nobody would ever see it (the page works), which is exactly why it would
+ * be permanent: a console full of expected errors is a console nobody reads.
+ */
 export async function claimIntent(token: string, wasSignup: boolean): Promise<IntentEnvelope | null> {
+  if (!authHeaders().Authorization) return null;
   try {
     const res = await fetch(`${API}/downloads/intent/${encodeURIComponent(token)}/claim`, {
       method: 'POST',
