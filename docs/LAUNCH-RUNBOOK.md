@@ -236,6 +236,16 @@ skip it and then it cannot report the one finding that matters.
 
 ---
 
+> 🔴 **Most of this is now automated: `node scripts/paid-loop-proof.mjs --confirm`**
+> (run it inside the backend container, where the env lives). It walks consent →
+> createCheckout → subscription → webhook → plan → entitlement → cancel →
+> refusal against REAL Stripe test mode and the REAL database, then deletes
+> everything it created and verifies it is gone. 11 assertions.
+>
+> It uses `pm_card_visa`, Stripe's named test token — no card data anywhere — so
+> what remains for a human below is the hosted Checkout page itself, which is
+> Stripe's UI rather than our code.
+
 ## Step 7 — Test mode, and walk the WHOLE loop
 
 `sk_test_` + card `4242 4242 4242 4242`.
