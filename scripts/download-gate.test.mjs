@@ -45,8 +45,15 @@ const UI = [
 const CDN_HOST = ['updates', 'xenostudio', 'ai'].join('.');
 
 /** The app.use(…) line for a mount, so a mount's middlewares can be asserted. */
-const mountLine = (prefix) =>
-  index.split(String.fromCharCode(10)).find((l) => l.includes('app.use(') && l.includes(prefix));
+/** The app.use(…) line for a mount, so a mount's middlewares can be asserted.
+ *
+ * ⚠️ Takes the ROUTER name too. /api/downloads now carries two mounts — the
+ * anonymous funnel and the authenticated grant mint — so matching the prefix
+ * alone returned whichever came first and asserted the wrong one's middleware.
+ * A prefix stopped being a unique identifier the moment a second router shared it. */
+const mountLine = (prefix, router) =>
+  index.split(String.fromCharCode(10)).find((l) => l.includes('app.use(') && l.includes(prefix)
+    && (!router || l.includes(router)));
 
 /* ── 1 · The grant is a permission for ONE artifact ─────────────────────── */
 
@@ -126,7 +133,7 @@ test('the deep-link route is NOT mounted behind authMiddleware', () => {
 /* ── 3 · Minting is the authenticated half ──────────────────────────────── */
 
 test('the mint endpoint sits behind auth AND the database', () => {
-  const line = mountLine('/api/downloads');
+  const line = mountLine('/api/downloads', 'downloadGrantRouter');
   assert.ok(line, 'the grant mint endpoint is not mounted');
   assert.ok(line.includes('authMiddleware'), 'grants can be minted without signing in');
   assert.ok(line.includes('databaseMiddleware'), 'the mint endpoint has no db to resolve entitlements with');
@@ -166,11 +173,30 @@ test('every Download control mints a grant on click', () => {
   }
 });
 
-test('a refused download sends a free account to pricing, not in a loop', () => {
-  const helper = read('src/lib', 'startDownload.ts');
-  assert.ok(helper.includes('res.status === 403'), 'the client does not handle a plan refusal');
-  assert.ok(helper.includes('/pricing'), 'a refused download does not offer a way to fix it');
-  assert.ok(helper.includes('res.status === 401'), 'the client does not handle a signed-out download');
+test('a refused download leads somewhere actionable, never to a dead end', async () => {
+  /* ⚠️ REWRITTEN 2026-08-24. This gate used to assert that startDownload.ts
+   * contained `res.status === 403` and '/pricing' — it pinned the MECHANISM
+   * (status-code branching in one named file) rather than the OUTCOME (a refused
+   * person is given a way forward). The mechanism then moved: refusal is now
+   * decided server-side by the funnel state machine, and startDownload.ts is a
+   * shim. The old gate went red against strictly better code.
+   *
+   * That is the same failure this repo already recorded once, when a gate pinned
+   * `externalUrl === undefined` and the mechanism was the bug. So this asserts
+   * the outcome, wherever it is implemented. */
+  const { STATES, nextPathFor } = await import('../src/server/services/downloadFunnel.js');
+  const flow = read('src/lib', 'startDownload.ts') + read('src/lib', 'downloadFlow.ts');
+
+  assert.equal(nextPathFor(STATES.PLAN, 'tok').split('?')[0], '/pricing',
+    'a refused download no longer offers a way to fix it');
+  assert.ok(nextPathFor(STATES.SIGNIN, 'tok').startsWith('/auth'),
+    'a signed-out download no longer offers sign-in');
+
+  /* And the client must actually FOLLOW that instruction rather than inventing
+   * its own destination — two places deciding where a refusal goes is how they
+   * drift apart. */
+  assert.ok(flow.includes('window.location.assign(env.next)'),
+    'the client ignores the destination the server computed and guesses its own');
 });
 
 test('assetUrl carries a warning so it is not re-used for downloads', () => {
@@ -180,7 +206,7 @@ test('assetUrl carries a warning so it is not re-used for downloads', () => {
 /* ── 5 · The updater's half (Phase 3) ───────────────────────────────────── */
 
 test('the update-grant endpoint sits behind auth AND the database', () => {
-  const line = mountLine('/api/updates');
+  const line = mountLine('/api/updates', 'updateGrantRouter');
   assert.ok(line, 'the update grant endpoint is not mounted');
   assert.ok(line.includes('authMiddleware'), 'an updater could mint a grant without an account');
   assert.ok(line.includes('databaseMiddleware'), 'the update endpoint has no db to resolve entitlements with');

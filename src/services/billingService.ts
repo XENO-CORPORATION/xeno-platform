@@ -78,12 +78,12 @@ export async function getLivePriceMap(): Promise<Record<string, { price: number;
 }
 
 /** Start Stripe Checkout for a catalog item; on success redirects to Stripe. */
-export async function startCheckout(itemId: string): Promise<{ ok: boolean; error?: string }> {
+export async function startCheckout(itemId: string, downloadIntent?: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch(`${API_BASE}/billing/checkout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ itemId }),
+      body: JSON.stringify({ itemId, downloadIntent }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data?.url) {

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import MarketingPage, { Section, Prose, CheckList } from '../components/marketing/MarketingPage';
 import { startCheckout, isAuthed, getLivePriceMap, getBillingAvailability, type BillingAvailability } from '../services/billingService';
+import { useSearchParams } from 'react-router-dom';
 import {
   PRICING_TIERS,
   CREDIT_PACKS,
@@ -18,6 +19,11 @@ type LivePrice = { price: number; currency: string };
  *  are redirected to Stripe. Reuses the existing billing flow — no new billing surface. */
 function useCheckout() {
   const navigate = useNavigate();
+  /* A download intent, if the visitor arrived here from a Download button. It
+   * rides through Stripe on the session metadata so the WEBHOOK can attribute
+   * the purchase — that is the only channel that survives the round trip. */
+  const [params] = useSearchParams();
+  const downloadIntent = params.get('i');
   const [busyId, setBusyId] = React.useState<string | null>(null);
   /* 'unknown' until the config answers, and 'unknown' behaves exactly like
    * today — the button stays live and the server remains the authority. Only a
@@ -31,20 +37,27 @@ function useCheckout() {
   const start = React.useCallback(
     async (itemId: string) => {
       if (!isAuthed()) {
-        navigate(`/auth?return=${encodeURIComponent('/pricing')}`);
+        /* 🔴 `returnUrl`, NOT `return`. AuthContent.tsx reads `returnUrl`; the
+         * old `return` was silently ignored, so every signed-out visitor who
+         * clicked a plan CTA authenticated and then never came back to pricing.
+         * A dropped parameter on the one page that takes money. */
+        const back = downloadIntent
+          ? `/pricing?i=${encodeURIComponent(downloadIntent)}`
+          : '/pricing';
+        navigate(`/auth?returnUrl=${encodeURIComponent(back)}`);
         return;
       }
       setBusyId(itemId);
-      const r = await startCheckout(itemId);
+      const r = await startCheckout(itemId, downloadIntent || undefined);
       if (!r.ok) {
         setBusyId(null);
         toast.error(r.error || 'Could not start checkout');
       }
       // On success the browser is redirected to Stripe Checkout.
     },
-    [navigate],
+    [navigate, downloadIntent],
   );
-  return { start, busyId, availability };
+  return { start, busyId, availability, downloadIntent };
 }
 
 const ctaClass = (featured?: boolean) =>

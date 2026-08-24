@@ -497,14 +497,38 @@ function taxCheckoutFields() {
   };
 }
 
-export async function createCheckout(pool, user, itemId, { origin }) {
+/**
+ * Where Stripe sends someone back to.
+ *
+ * 🔴 Same-origin path only, and built HERE rather than accepted from the client.
+ * This string becomes `success_url`, so a client-supplied value would be an open
+ * redirect with a payment attached — the most credible phishing hop a site can
+ * offer, because the victim has just been on a real Stripe page.
+ *
+ * A download intent returns to the resume page; everything else keeps the
+ * existing billing destination, unchanged.
+ */
+function checkoutReturn(base, itemId, downloadIntent) {
+  if (downloadIntent && /^[A-Za-z0-9_-]{16,64}$/.test(downloadIntent)) {
+    const i = encodeURIComponent(downloadIntent);
+    return {
+      successUrl: `${base}/download/resume?i=${i}&checkout=success`,
+      cancelUrl: `${base}/download/resume?i=${i}&checkout=cancel`,
+    };
+  }
+  return {
+    successUrl: `${base}/overview/billing?billing=success&item=${itemId}`,
+    cancelUrl: `${base}/overview/billing?billing=cancel`,
+  };
+}
+
+export async function createCheckout(pool, user, itemId, { origin, downloadIntent = null } = {}) {
   const item = CATALOG.map(resolveItem).find((i) => i.id === itemId);
   if (!item) { const e = new Error('unknown item'); e.status = 400; throw e; }
   if (!item.available) { const e = new Error(`item "${itemId}" has no configured price (set ${item.priceEnv})`); e.status = 400; throw e; }
 
   const base = process.env.BILLING_APP_URL || origin || siteOrigin();
-  const successUrl = `${base}/overview/billing?billing=success&item=${item.id}`;
-  const cancelUrl = `${base}/overview/billing?billing=cancel`;
+  const { successUrl, cancelUrl } = checkoutReturn(base, item.id, downloadIntent);
   const customer = await getOrCreateCustomer(pool, user);
 
   const session = await stripe.checkout.sessions.create({
@@ -518,7 +542,15 @@ export async function createCheckout(pool, user, itemId, { origin }) {
     ...taxCheckoutFields(),
     // Metadata rides on the session (and, for one-time, is what the webhook reads
     // to know how many credits to grant).
-    metadata: { xenoUserId: String(user.id), itemId: item.id, credits: String(item.credits), kind: item.kind },
+    /* xenoDownloadIntent rides here because the webhook is the ONLY place that
+     * learns a payment actually succeeded, and it has no browser, no session and
+     * no referrer — the metadata is the single channel by which "this
+     * subscription was bought to get Pixel" can survive the trip through
+     * Stripe. Without it the purchase is attributable to nothing. */
+    metadata: {
+      xenoUserId: String(user.id), itemId: item.id, credits: String(item.credits), kind: item.kind,
+      ...(downloadIntent ? { xenoDownloadIntent: String(downloadIntent) } : {}),
+    },
   });
   return { url: session.url, id: session.id };
 }
@@ -684,6 +716,45 @@ async function resolveDisputePI(dispute) {
  * Process a verified Stripe event. Idempotent + defensive: unknown/irrelevant
  * events are acked (return handled:false) so Stripe stops retrying.
  */
+/**
+ * Attribute a completed checkout to the download that caused it.
+ *
+ * 🔴 This is the ONLY moment the attribution can be made. The webhook is a
+ * different process from the browser, arriving seconds to minutes later, with no
+ * session, no referrer and no cookie — the session metadata is the single
+ * channel by which "this subscription was bought in order to get Pixel" survives
+ * the round trip through Stripe. Miss it here and the purchase is attributable
+ * to nothing, forever.
+ *
+ * Never throws: a payment must not fail because a funnel row would not update.
+ */
+async function attributeDownloadIntent(pool, session, plan) {
+  const token = session?.metadata?.xenoDownloadIntent;
+  if (!token) return;
+  try {
+    const r = await pool.query(
+      `UPDATE download_intents
+          SET required_purchase = TRUE,
+              purchased_plan = $1,
+              checkout_session_id = $2,
+              updated_at = NOW()
+        WHERE token = $3
+        RETURNING id`,
+      [plan || null, session.id || null, String(token)],
+    );
+    const id = r.rows[0]?.id;
+    if (!id) return;
+    await pool.query(
+      `INSERT INTO download_intent_events (intent_id, step, detail)
+       VALUES ($1, 'checkout_completed', $2::jsonb)`,
+      [id, JSON.stringify({ plan: plan || null, sessionId: session.id || null })],
+    );
+    console.log(`💳 [billing] checkout attributed to download intent (plan '${plan}')`);
+  } catch (e) {
+    console.error('[billing] failed to attribute download intent:', e.message);
+  }
+}
+
 export async function handleEvent(pool, event) {
   const obj = event.data.object;
   switch (event.type) {
@@ -716,6 +787,11 @@ export async function handleEvent(pool, event) {
           const plan = planForItemId(session.metadata?.itemId) || 'pro';
           await setPlan(pool, uid, { plan, status: 'active', subId: session.subscription || null });
           console.log(`💳 [billing] user ${uid} → plan '${plan}' (checkout ${event.id})`);
+          /* AFTER setPlan, deliberately. The resume page is polling for the plan,
+           * and attributing before granting would let it observe the attribution
+           * while still being refused — a visible flicker of "we took your money
+           * and you still cannot download". */
+          await attributeDownloadIntent(pool, session, plan);
         }
       } else if (session.mode === 'payment') {
         // One-time top-up pack → GRANT credits (atomic claim+grant, idempotent).
