@@ -204,6 +204,28 @@ Read-only. It catches the **quiet** failure: a price env pointing at the wrong
 Stripe Price does not error — because the site overlays the live amount, the page
 and the charge agree perfectly and both disagree with the number you chose.
 
+And the compliance preflight, which runs the other way round — **from the repo**,
+because it reads source files. It refuses (exit 2) if run anywhere else, rather
+than reporting every unreadable file as a blocker:
+
+```bash
+ssh xeno-platform-001 "sudo docker exec xenostudio-backend sh -c '
+  echo STRIPE_AUTOMATIC_TAX=\$STRIPE_AUTOMATIC_TAX;
+  [ -n \"\$SUBJECT_HASH_SECRET\" ] && echo SUBJECT_HASH_SECRET=set'" > /tmp/prod.env
+node scripts/compliance-preflight.mjs --env-from /tmp/prod.env
+```
+
+⚠️ The snapshot carries **presence, never a secret's value** — the script only
+needs to know whether a key is set, so gathering it leaks nothing.
+
+🔴 **The two halves cannot run in the same place.** File checks need the repo; the
+environment facts need production. Running the compliance preflight inside the
+container once produced **ten fabricated blockers** (*"no consent service"*, *"no
+Impressum"*, *"Terms does not mention how to cancel"*) purely because `/app` has a
+different layout — `/app/services`, not `/app/src/server/services`. None were
+real. A checker that cries wolf is worse than no checker, because people learn to
+skip it and then it cannot report the one finding that matters.
+
 ✅ **Done when:** both preflights exit 0.
 
 ---

@@ -41,15 +41,63 @@ console.log('⚠️  Mechanisms only. A green run is NOT a statement that you ar
  * laptop they describe the laptop, which is never the question being asked. An
  * unlabelled env finding sends someone to fix a problem that does not exist, or
  * worse, to believe one is fixed because their shell happens to have the value. */
-const IN_DEPLOYMENT = existsSync('/.dockerenv') || process.env.XENO_PREFLIGHT_ENV === 'production';
-if (!IN_DEPLOYMENT) {
-  console.log('ℹ️  Running OUTSIDE the deployment. Findings marked [env] describe THIS');
-  console.log('   machine, not production. For the real answer:\n');
-  console.log('     sudo docker cp scripts/compliance-preflight.mjs xenostudio-backend:/app/');
-  console.log('     sudo docker exec xenostudio-backend node /app/compliance-preflight.mjs\n');
+/* 🔴 AND THE FIRST FIX FOR THAT WAS WORSE. It labelled env findings and told the
+ * reader to run this inside the backend container "for the real answer". The
+ * container has no repo source — its layout is /app/services, not
+ * /app/src/server/services — so every file check missed and the run reported TEN
+ * fabricated blockers: "no consent service", "no Impressum", "Terms does not
+ * mention how to cancel". All false, all alarming, and a checker that cries wolf
+ * is worse than no checker.
+ *
+ * The two halves cannot run in the same place, so they no longer try. File
+ * checks run HERE, against the repo, and refuse if the repo is not here. The
+ * environment is supplied as a SNAPSHOT of non-secret facts, gathered by a
+ * command that leaks nothing:
+ *
+ *   ssh xeno-platform-001 "sudo docker exec xenostudio-backend sh -c '
+ *     echo STRIPE_AUTOMATIC_TAX=\\$STRIPE_AUTOMATIC_TAX;
+ *     [ -n \\"\\$SUBJECT_HASH_SECRET\\" ] && echo SUBJECT_HASH_SECRET=set'" > /tmp/prod.env
+ *   node scripts/compliance-preflight.mjs --env-from /tmp/prod.env
+ *
+ * ⚠️ The snapshot carries PRESENCE, never a secret's value — the script only
+ * ever needs to know whether a key is set. */
+
+/* Precondition. Reporting findings about files that are not there is how the
+ * previous version produced ten blockers that did not exist. */
+if (!existsSync('src/server/services/billingService.js')) {
+  console.error('  REFUSED: this must run from the xeno-platform repo root.');
+  console.error('  It reads source files; from anywhere else every check would');
+  console.error('  MISS and be reported as a blocker. See the note above for how');
+  console.error('  to supply production environment facts with --env-from.\n');
+  process.exit(2);
 }
-/** Marks a finding whose truth depends on where this script is running. */
-const envTag = IN_DEPLOYMENT ? '' : ' [env: this machine, not production]';
+
+const envArgIdx = process.argv.indexOf('--env-from');
+const SNAPSHOT = new Map();
+if (envArgIdx > -1) {
+  const f = process.argv[envArgIdx + 1];
+  if (!f || !existsSync(f)) {
+    console.error(`  REFUSED: --env-from ${f || '<missing>'} does not exist.`);
+    process.exit(2);
+  }
+  for (const line of readFileSync(f, 'utf8').split('\n')) {
+    const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+    if (m) SNAPSHOT.set(m[1], m[2]);
+  }
+}
+const USING_SNAPSHOT = envArgIdx > -1;
+
+/** An environment fact — from the supplied snapshot, else this machine. */
+const envOf = (name) => (USING_SNAPSHOT ? SNAPSHOT.get(name) : process.env[name]);
+
+if (USING_SNAPSHOT) {
+  console.log(`ℹ️  Environment facts from a snapshot (${SNAPSHOT.size} value(s)); file checks from this repo.\n`);
+} else {
+  console.log('ℹ️  No --env-from given, so findings marked [env] describe THIS machine,');
+  console.log('   not production. File checks are unaffected and always valid here.\n');
+}
+/** Marks a finding whose truth depends on which environment was measured. */
+const envTag = USING_SNAPSHOT ? '' : ' [env: this machine, not production]';
 
 /* ── 1 · Right of withdrawal — the one that voids sales ─────────────────── */
 console.log('Right of withdrawal (EU CRD 2011/83; §§ 312g, 356 BGB)');
@@ -121,7 +169,7 @@ if (!consentSvc) {
 
 /* ── 2 · Tax ─────────────────────────────────────────────────────────────── */
 console.log('\nTax');
-if (process.env.STRIPE_AUTOMATIC_TAX === 'true') {
+if (envOf('STRIPE_AUTOMATIC_TAX') === 'true') {
   ok('Stripe Tax enabled');
 } else {
   fail(`Stripe Tax is OFF (STRIPE_AUTOMATIC_TAX)${envTag}`,
@@ -200,7 +248,7 @@ else fail('surviving evidence is anonymous',
 /* Advisory, not a blocker: it works, it is just coupled to a secret that gets
  * rotated for unrelated reasons. Worth fixing BEFORE the first sale, because
  * afterwards a rotation orphans real evidence rather than an empty table. */
-if (process.env.SUBJECT_HASH_SECRET) {
+if (envOf('SUBJECT_HASH_SECRET')) {
   ok(`SUBJECT_HASH_SECRET is set explicitly${envTag}`);
 } else {
   warn(`SUBJECT_HASH_SECRET is unset — evidence handles are keyed by JWT_SECRET${envTag}`,

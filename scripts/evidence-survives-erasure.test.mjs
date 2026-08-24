@@ -490,3 +490,53 @@ test('🔴 every silently-degrading setting has a compose slot', () => {
       `${name} has no compose slot — ${consequence}`);
   }
 });
+
+/* ── 11 · A checker must refuse rather than fabricate ────────────────────── */
+
+test('🔴 the compliance preflight REFUSES outside the repo instead of inventing blockers', async () => {
+  /* It reads repo source. Run anywhere else, every `read()` returns '' and every
+   * check reports its absence — which is exactly what happened: told to run
+   * inside the backend container "for the real answer", it emitted TEN
+   * fabricated blockers ("no consent service", "no Impressum", "Terms does not
+   * mention how to cancel"). None were real. The container simply has a
+   * different layout: /app/services, not /app/src/server/services.
+   *
+   * A checker that cries wolf is worse than no checker — people learn to skip
+   * it, and then it cannot report the one finding that matters. So: assert its
+   * own precondition, and exit 2 (refused) rather than 1 (failed), because
+   * "I could not look" and "I looked and it is bad" are different answers. */
+  const { spawnSync } = await import('node:child_process');
+  const { tmpdir } = await import('node:os');
+  const { resolve } = await import('node:path');
+
+  const script = resolve('scripts/compliance-preflight.mjs');
+  const r = spawnSync(process.execPath, [script], { cwd: tmpdir(), encoding: 'utf8' });
+
+  assert.equal(r.status, 2,
+    `run outside the repo it exited ${r.status} — 2 means refused; 1 would be indistinguishable from real blockers`);
+  assert.ok(/REFUSED/.test(r.stderr || ''), 'it does not say it refused');
+  assert.ok(!/✗/.test(r.stdout || ''),
+    'it emitted findings from a directory with no source — every one of them is fabricated');
+});
+
+test('environment facts come from a snapshot, never from whoever runs it', () => {
+  /* The two halves cannot run in the same place: file checks need the repo, env
+   * checks need production. Reading process.env directly means the answer
+   * describes the operator's laptop. */
+  const pre = read('scripts/compliance-preflight.mjs');
+  /* ⚠️ The PARSE, not the string. `--env-from` also appears in the usage comment
+   * at the top, so a substring check passed with the argument handling removed.
+   * Twelfth time in this codebase that a gate was satisfied by prose describing
+   * the thing rather than the thing. */
+  assert.ok(/process\.argv\.indexOf\('--env-from'\)/.test(pre),
+    'there is no way to supply production environment facts');
+  assert.ok(/envOf\('STRIPE_AUTOMATIC_TAX'\)/.test(pre),
+    'the tax check reads process.env directly — it would describe the machine running it');
+  assert.ok(/envOf\('SUBJECT_HASH_SECRET'\)/.test(pre),
+    'the evidence-key check reads process.env directly');
+
+  /* ⚠️ And the snapshot must never need a secret's VALUE. It records presence,
+   * so gathering it cannot leak anything. */
+  assert.ok(!/SNAPSHOT\.get\('SUBJECT_HASH_SECRET'\)\s*===/.test(pre),
+    'the snapshot is being compared to a secret value — presence is all this needs');
+});
