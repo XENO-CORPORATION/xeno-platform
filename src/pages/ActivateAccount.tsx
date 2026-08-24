@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, RefreshCw } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
+import {
+  destinationAfterActivation, isFullPageActivationDest,
+} from '../lib/onboardingHandoff.js';
 
 /**
  * The waiting room between "signed up" and "can use the platform".
@@ -166,13 +169,19 @@ const ActivateAccount = () => {
                 Your account is active. Thanks for confirming &mdash; it keeps the platform clear of
                 throwaway signups.
               </p>
-              {/* Into onboarding, not straight to the workspace. Password
-                  activation is one door; OAuth and the API portal are the
-                  others. The page itself sends anyone who has already finished
-                  on to /overview, so a returning user never sees it twice. */}
+              {/* A pending OIDC/CLI grant resumes first. Website signups
+                  with no grant go to onboarding. Hardcoding /onboarding here
+                  is how a portal signup lost its authorize URL. */}
               <button
                 type="button"
-                onClick={() => navigate('/onboarding')}
+                onClick={() => {
+                  const dest = destinationAfterActivation();
+                  if (isFullPageActivationDest(dest)) {
+                    window.location.href = dest;
+                    return;
+                  }
+                  navigate(dest);
+                }}
                 className="mt-8 w-full h-12 rounded-[6px] bg-white text-black font-semibold transition-all duration-300 hover:bg-white/90"
               >
                 Continue

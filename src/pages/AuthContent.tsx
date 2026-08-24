@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import AuthMark from '../components/auth/AuthMark';
 import { useAuth } from '../contexts/AuthContext';
 import { getAuthApp } from '../lib/authApps';
+import { stashReturnUrl, consumeReturnUrl } from '../lib/onboardingHandoff.js';
 
 /** Same-origin path guard for returnUrl (open-redirect protection). */
 function safeReturnUrl(raw: string | null): string | null {
@@ -159,17 +160,17 @@ const AuthContent = () => {
         // straight back there instead of the dashboard — a full-page load so
         // the backend authorize route continues the grant.
         const returnUrl = safeReturnUrl(new URLSearchParams(location.search).get('returnUrl'));
-        if (returnUrl) {
-          window.location.href = returnUrl;
+        // A NEW account always activates first. Jumping to returnUrl here
+        // used to consume the OIDC grant, then the activation interceptor
+        // dumped them on /auth/activate with nothing to resume.
+        if (activeTab === 'signup') {
+          if (returnUrl) stashReturnUrl(returnUrl);
+          navigate('/auth/activate', { replace: true });
           return;
         }
-        // A NEW account goes to activation, not into the workspace. It would
-        // get there anyway — the first gated call 403s and the interceptor
-        // redirects — but arriving at a half-working workspace and being
-        // bounced out of it reads as a fault. Send them to the step that is
-        // actually next.
-        if (activeTab === 'signup') {
-          navigate('/auth/activate', { replace: true });
+        if (returnUrl) {
+          consumeReturnUrl();
+          window.location.href = returnUrl;
           return;
         }
         const from = (location.state as any)?.from?.pathname || '/overview';

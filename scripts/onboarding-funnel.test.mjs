@@ -11,6 +11,8 @@ import {
   ONBOARDING_PATH,
   resolveOAuthLandingPath,
   isAllowedOnboardingNext,
+  resolveActivationContinue,
+  isPrivilegedReturnUrl,
 } from '../src/lib/onboardingHandoff.js';
 import {
   resolveOAuthLandingPath as resolveOAuthLandingPathServer,
@@ -66,8 +68,38 @@ test('the server resolver matches the website one — two copies, one rule', () 
   );
 });
 
-test('activation Continue still enters onboarding — the email door stays', () => {
-  assert.match(activate, /navigate\('\/onboarding'\)/);
+test('activation Continue resumes a privileged grant and otherwise enters onboarding', () => {
+  assert.equal(isPrivilegedReturnUrl('/api/oauth2/authorize?client_id=xeno-api-portal'), true);
+  assert.equal(isPrivilegedReturnUrl('/cli-auth?session=abc'), true);
+  assert.equal(isPrivilegedReturnUrl('xeno://auth/callback'), true);
+  assert.equal(isPrivilegedReturnUrl('/overview'), false);
+  assert.equal(isPrivilegedReturnUrl('https://evil.example/'), false);
+  assert.equal(
+    resolveActivationContinue('/api/oauth2/authorize?client_id=xeno-api-portal'),
+    '/api/oauth2/authorize?client_id=xeno-api-portal',
+  );
+  assert.equal(resolveActivationContinue('/overview'), ONBOARDING_PATH);
+  assert.equal(resolveActivationContinue(null), ONBOARDING_PATH);
+  assert.match(activate, /destinationAfterActivation\(\)/);
+  assert.equal(activate.includes("navigate('/onboarding')"), false,
+    'Activate Continue is hardcoded to /onboarding — a portal signup cannot resume OIDC');
+});
+
+test('password signup does not jump to returnUrl before activate', () => {
+  const authPage = readFileSync('src/pages/AuthContent.tsx', 'utf8');
+  const start = authPage.indexOf("if (activeTab === 'signup')");
+  assert.ok(start >= 0, 'signup branch missing');
+  const signupBlock = authPage.slice(start, authPage.indexOf('return;', start) + 8);
+  assert.match(signupBlock, /stashReturnUrl\(returnUrl\)/);
+  assert.match(signupBlock, /navigate\('\/auth\/activate'/);
+  assert.equal(signupBlock.includes('window.location.href'), false,
+    'signup still jumps to returnUrl and will consume the OIDC grant before activate');
+});
+
+test('AuthContext does not consume xeno_return_url until the account is activated', () => {
+  assert.match(authCtx, /\/api\/auth\/activation-status/);
+  assert.match(authCtx, /if \(cancelled \|\| !d\?\.activated\) return/);
+  assert.match(authCtx, /consumeReturnUrl\(\)/);
 });
 
 test('OAuth isNew without a pending returnUrl goes to onboarding, not a console.log', () => {
@@ -90,9 +122,27 @@ test('next= is allowlisted — an open redirect is refused', () => {
   assert.equal(isAllowedOnboardingNext('javascript:alert(1)'), false);
 });
 
-test('Skip for now writes skipped — otherwise the gate is a trap', () => {
-  assert.match(page, /skipped:\s*true/);
-  assert.match(page, /Skip for now/);
+test('the plan step FINISHES without a purchase — otherwise the gate is a trap', () => {
+  // Skip was removed by request (scripts/keyboard-flow.test.mjs holds that
+  // line). Continue is the only way forward, so the anti-trap property moved:
+  // the LAST step's Continue must call finish() — which writes completed and
+  // leaves — and must never be disabled. No plan is purchasable while Stripe
+  // is unconfigured, so a plan step that demanded one would strand everybody.
+  // Scoped to finish(). `completed: true` also appears in startCheckout(), so
+  // a file-wide match would stay green with finish() gutted. Bounded by the
+  // next declaration rather than a multi-line regex — that pattern is one
+  // escape away from silently matching nothing.
+  const fStart = page.indexOf('const finish = async');
+  assert.ok(fStart > -1, 'finish() is gone — re-verify the flow still completes');
+  const fEnd = page.indexOf('const back', fStart);
+  assert.ok(fEnd > fStart, 'cannot bound finish() — re-verify it records completion');
+  const finishBody = page.slice(fStart, fEnd);
+  assert.match(finishBody, /completed:\s*true/, 'finish() no longer records completion');
+
+  const planNav = page.match(/<Nav onBack=\{\(\) => back\(2\)\}[^/]*\/>/);
+  assert.ok(planNav, 'the plan step Nav changed shape — re-verify it still finishes');
+  assert.match(planNav[0], /onNext=\{\(\) => finish\(\)\}/, 'the last step no longer finishes');
+  assert.doesNotMatch(planNav[0], /nextDisabled/, 'the plan step Continue can be disabled — that is the trap');
 });
 
 test('an https next leaves the document — navigate() cannot open the portal', () => {

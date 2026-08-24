@@ -7,7 +7,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService, User, AuthResponse } from '../services/authService';
 import {
   AUTH_TOKEN_KEY, ONBOARDING_NEXT_KEY, ONBOARDING_PATH,
-  isAllowedOnboardingNext,
+  isAllowedOnboardingNext, stashReturnUrl, peekReturnUrl, consumeReturnUrl,
 } from '../lib/onboardingHandoff.js';
 
 interface AuthContextType {
@@ -60,10 +60,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // can send the user back there after they authenticate by ANY method
         // (password / social / MFA). Same-tab sessionStorage survives the OAuth
         // round-trip. Same-origin only (open-redirect guard).
-        const returnUrlParam = urlParams.get('returnUrl');
-        if (returnUrlParam && returnUrlParam.startsWith('/') && !returnUrlParam.startsWith('//')) {
-          sessionStorage.setItem('xeno_return_url', returnUrlParam);
-        }
+        stashReturnUrl(urlParams.get('returnUrl'));
         const nextParam = urlParams.get('next');
         if (isAllowedOnboardingNext(nextParam)) {
           sessionStorage.setItem(ONBOARDING_NEXT_KEY, nextParam);
@@ -95,7 +92,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             // A new website account goes to onboarding. A pending OIDC/CLI
             // returnUrl wins — interrupting that grant is how Hub/CLI break.
             if (isNewUser) {
-              const pendingReturn = sessionStorage.getItem('xeno_return_url');
+              const pendingReturn = peekReturnUrl();
               if (!pendingReturn) {
                 window.location.replace(ONBOARDING_PATH);
                 return;
@@ -147,15 +144,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => window.removeEventListener('xeno:credits-updated', onCreditsUpdated);
   }, []);
 
-  // Once authenticated by ANY path (password, register, social/MFA, or restored
-  // session), return the user to a pending OIDC authorize page if one is queued.
+  // Resume a pending OIDC/CLI grant only AFTER the account is activated.
+  // Register used to jump here immediately, consume the key, then get
+  // bounced to /auth/activate by the interceptor — Continue had nothing
+  // left to resume and sent a portal signup to /onboarding instead.
   useEffect(() => {
     if (!user) return;
-    const rt = sessionStorage.getItem('xeno_return_url');
-    if (rt && rt.startsWith('/') && !rt.startsWith('//')) {
-      sessionStorage.removeItem('xeno_return_url');
-      window.location.href = rt; // full-page load (backend authorize route)
-    }
+    const rt = peekReturnUrl();
+    if (!rt) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem(AUTH_TOKEN_KEY);
+        const r = await fetch('/api/auth/activation-status', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const d = await r.json().catch(() => null);
+        if (cancelled || !d?.activated) return;
+        const dest = consumeReturnUrl();
+        if (dest) window.location.href = dest;
+      } catch {
+        // Leave the key. Activate Continue is the other reader.
+      }
+    })();
+    return () => { cancelled = true; };
   }, [user]);
 
   const login = async (email: string, password: string): Promise<AuthResponse> => {
