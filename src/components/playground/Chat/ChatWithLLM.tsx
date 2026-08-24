@@ -3158,7 +3158,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         session: {
           conversationId: activeConversationId || 'new-session',
           conversationTitle: activeTitle,
-          chatMode,
+          chatMode: emptyStateMode,
           selectedModel: {
             id: selectedModel?.id,
             name: selectedModel?.name,
@@ -3196,7 +3196,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       readableLog += `- **Exported At:** ${telemetry.exportTimestamp}\n`;
       readableLog += `- **Conversation:** ${activeTitle} (\`${telemetry.session.conversationId}\`)\n`;
       readableLog += `- **Model:** ${selectedModel?.name || selectedModel?.id || 'Default'} (\`${selectedModel?.id || 'n/a'}\`)\n`;
-      readableLog += `- **Mode:** \`${chatMode}\` | **Theme:** \`${chatTheme}\` | **Viewport:** ${telemetry.client.viewport.width}x${telemetry.client.viewport.height} (DPR: ${telemetry.client.viewport.devicePixelRatio})\n`;
+      readableLog += `- **Mode:** \`${emptyStateMode}\` | **Theme:** \`${chatTheme}\` | **Viewport:** ${telemetry.client.viewport.width}x${telemetry.client.viewport.height} (DPR: ${telemetry.client.viewport.devicePixelRatio})\n`;
       readableLog += `- **Chat Container:** ${telemetry.client.measurements.chatContainer?.width || 'auto'}px × ${telemetry.client.measurements.chatContainer?.height || 'auto'}px\n`;
       readableLog += `- **Composer Textarea:** ${telemetry.client.measurements.textarea?.width || 'auto'}px × ${telemetry.client.measurements.textarea?.height || 'auto'}px\n\n`;
       readableLog += `## Message History (${messages.length} messages)\n\n`;
@@ -3241,7 +3241,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     isMobile,
     isStandalone,
     isMultiInterface,
-    chatMode,
+    emptyStateMode,
     selectedModel,
     systemPrompt,
     selectedPersona,
