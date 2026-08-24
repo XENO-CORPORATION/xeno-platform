@@ -64,6 +64,7 @@ import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
 import productDownloadRoutes, { grantRouter as downloadGrantRouter, updateGrantRouter } from './routes/productDownloadRoutes.js';
 import { router as downloadFunnelRouter } from './routes/downloadFunnelRoutes.js';
+import { sweepExpiredIntents } from './services/downloadFunnel.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
@@ -3854,6 +3855,20 @@ runStartupMigrations()
       .catch((e) => console.error('[HoldSweeper] error:', e.message));
     setInterval(sweepHolds, 15 * 60 * 1000).unref();
     sweepHolds();
+
+    // Download-intent sweeper. `expires_at` was in the schema with nothing
+    // reading it; expiry is now enforced on read (so the deadline is real at
+    // every instant) and this only decides how long rows are KEPT. Expired
+    // intents are MARKED rather than deleted — "tried and never came back" is a
+    // real funnel outcome, and deleting it would silently improve every
+    // conversion rate by erasing the failures.
+    const sweepIntents = () => sweepExpiredIntents(pool)
+      .then(({ marked, deleted }) => {
+        if (marked || deleted) console.log(`[FunnelSweeper] expired ${marked}, pruned ${deleted}`);
+      })
+      .catch((e) => console.error('[FunnelSweeper] error:', e.message));
+    setInterval(sweepIntents, 30 * 60 * 1000).unref();
+    sweepIntents();
   })
   .catch(err => {
     // FAIL CLOSED: a broken/half-applied schema must not serve traffic. Exit non-zero
