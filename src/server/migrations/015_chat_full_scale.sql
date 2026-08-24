@@ -54,6 +54,9 @@ CREATE TABLE IF NOT EXISTS chat_project_files (
 CREATE INDEX IF NOT EXISTS idx_chat_projects_user ON chat_projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_project_files_proj ON chat_project_files(project_id);
 
+ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES chat_projects(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_chat_conversations_project ON chat_conversations(project_id);
+
 -- ============================================================================
 -- 3. CHAT SCHEDULED AUTOMATION TASKS
 -- ============================================================================
