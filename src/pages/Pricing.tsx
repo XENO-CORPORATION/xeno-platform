@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import MarketingPage, { Section, Prose, CheckList } from '../components/marketing/MarketingPage';
 import { startCheckout, isAuthed, getLivePriceMap, getBillingAvailability, type BillingAvailability } from '../services/billingService';
 import { useSearchParams } from 'react-router-dom';
+import CheckoutConsent from '../components/billing/CheckoutConsent';
 import {
   PRICING_TIERS,
   CREDIT_PACKS,
@@ -25,6 +26,10 @@ function useCheckout() {
   const [params] = useSearchParams();
   const downloadIntent = params.get('i');
   const [busyId, setBusyId] = React.useState<string | null>(null);
+  /* 🔴 Checkout REFUSES without a recorded consent (fail-closed, server side), so
+   * the purchase is staged here until the buyer has actually given it. Jumping
+   * straight to Stripe would 400 for every customer. */
+  const [pending, setPending] = React.useState<{ itemId: string } | null>(null);
   /* 'unknown' until the config answers, and 'unknown' behaves exactly like
    * today — the button stays live and the server remains the authority. Only a
    * definite 'disabled' changes what the page says. */
@@ -47,17 +52,24 @@ function useCheckout() {
         navigate(`/auth?returnUrl=${encodeURIComponent(back)}`);
         return;
       }
-      setBusyId(itemId);
-      const r = await startCheckout(itemId, downloadIntent || undefined);
-      if (!r.ok) {
-        setBusyId(null);
-        toast.error(r.error || 'Could not start checkout');
-      }
+      /* Stage it. The consent dialog calls back with a consent id. */
+      setPending({ itemId });
       // On success the browser is redirected to Stripe Checkout.
     },
     [navigate, downloadIntent],
   );
-  return { start, busyId, availability, downloadIntent };
+  /* Called by the consent dialog once the buyer has agreed and it is recorded. */
+  const proceed = React.useCallback(async (itemId: string, consentId: string) => {
+    setPending(null);
+    setBusyId(itemId);
+    const r = await startCheckout(itemId, downloadIntent || undefined, consentId);
+    if (!r.ok) {
+      setBusyId(null);
+      toast.error(r.error || 'Could not start checkout');
+    }
+  }, [downloadIntent]);
+
+  return { start, busyId, availability, downloadIntent, pending, setPending, proceed };
 }
 
 const ctaClass = (featured?: boolean) =>
@@ -165,6 +177,16 @@ const Pricing: React.FC = () => {
   };
 
   return (
+  <>
+  {checkout.pending && (
+    <CheckoutConsent
+      itemId={checkout.pending.itemId}
+      planLabel={PRICING_TIERS.find((t) => t.itemId === checkout.pending!.itemId)?.name || 'XENO'}
+      priceLabel={priceLabel(PRICING_TIERS.find((t) => t.itemId === checkout.pending!.itemId) || PRICING_TIERS[0])}
+      onCancel={() => checkout.setPending(null)}
+      onConsented={(consentId) => void checkout.proceed(checkout.pending!.itemId, consentId)}
+    />
+  )}
   <MarketingPage
     eyebrow="PRICING"
     title="One plan. Every app, and the platform they run on."
@@ -297,6 +319,7 @@ const Pricing: React.FC = () => {
       />
     </Section>
   </MarketingPage>
+  </>
   );
 };
 

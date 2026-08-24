@@ -77,13 +77,52 @@ export async function getLivePriceMap(): Promise<Record<string, { price: number;
   return map;
 }
 
+export interface ConsentText { text: string; hash: string; }
+
+/**
+ * The exact wording the buyer must agree to.
+ *
+ * 🔴 Fetched from the server, never written here. If this file carried its own
+ * copy, the page could show one thing while the stored consent recorded
+ * another — and a record attesting to text the person never read is worse than
+ * no record, because it looks like evidence.
+ */
+export async function getConsentText(): Promise<ConsentText | null> {
+  try {
+    const res = await fetch(`${API_BASE}/billing/consent-text`);
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d?.text ? { text: d.text, hash: d.hash } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Record consent. Must succeed before checkout, which refuses without it. */
+export async function recordConsent(itemId: string, opts: {
+  immediatePerformance: boolean; withdrawalAcknowledged: boolean; termsAccepted: boolean;
+}): Promise<{ ok: boolean; consentId?: string; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/billing/consent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ itemId, ...opts, locale: navigator.language }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok && d?.consentId) return { ok: true, consentId: d.consentId };
+    return { ok: false, error: d?.error || `Could not record consent (${res.status})` };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 /** Start Stripe Checkout for a catalog item; on success redirects to Stripe. */
-export async function startCheckout(itemId: string, downloadIntent?: string): Promise<{ ok: boolean; error?: string }> {
+export async function startCheckout(itemId: string, downloadIntent?: string, consentId?: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch(`${API_BASE}/billing/checkout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ itemId, downloadIntent }),
+      body: JSON.stringify({ itemId, downloadIntent, consentId }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data?.url) {

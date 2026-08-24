@@ -132,3 +132,37 @@ test('the spec names it MANDATORY and marks the interim', () => {
     'the copy-per-product interim is no longer named — it will become permanent by default');
   assert.ok(/EXIT:/.test(src), 'the interim has no exit condition');
 });
+
+/* ── 4 · The consent UI must exist, because the server refuses without it ─── */
+
+test('🔴 the checkout UI COLLECTS consent, not just the server demanding it', () => {
+  /* I shipped the server-side refusal before the UI that satisfies it. Checkout
+   * would have 400'd for EVERY customer on day one of Stripe, and it was
+   * invisible because requireEnabled throws 503 first while Stripe is off — a
+   * latent break hidden behind an unrelated guard.
+   *
+   * Assert the CHAIN, not the presence of a file: dialog exists, Pricing stages
+   * a pending purchase instead of jumping to Stripe, and the consent id reaches
+   * startCheckout. */
+  const dialog = readFileSync('src/components/billing/CheckoutConsent.tsx', 'utf8');
+  const pricing = readFileSync('src/pages/Pricing.tsx', 'utf8');
+  const client = readFileSync('src/services/billingService.ts', 'utf8');
+
+  assert.ok(dialog.includes('recordConsent('), 'the consent dialog never records anything');
+  assert.ok(pricing.includes('<CheckoutConsent'), 'the consent dialog is never rendered');
+  assert.ok(pricing.includes('setPending({ itemId })'),
+    'Pricing jumps straight to Stripe — checkout will 400 with consent_required for every customer');
+  assert.ok(/startCheckout\(itemId, downloadIntent \|\| undefined, consentId\)/.test(pricing),
+    'the consent id never reaches checkout');
+  assert.ok(/startCheckout\(itemId: string, downloadIntent\?: string, consentId\?: string\)/.test(client),
+    'startCheckout cannot carry a consent id');
+});
+
+test('the dialog does not invent the wording', () => {
+  /* A record attesting to text the person never read is worse than no record:
+   * it looks like evidence. */
+  const dialog = readFileSync('src/components/billing/CheckoutConsent.tsx', 'utf8');
+  assert.ok(dialog.includes('getConsentText()'), 'the dialog no longer fetches the server wording');
+  assert.ok(!/I ask XENO to make the software/.test(dialog),
+    'the dialog hardcodes the consent text — it can now drift from what is stored');
+});
