@@ -97,6 +97,12 @@ security logging.
 
 ---
 
+> ⚙️ **The settled facts are in [TAX-POSTURE.md](./TAX-POSTURE.md)** — USt-IdNr,
+> Kleinunternehmer § 19 status, the TWO thresholds (€25k total vs €10k cross-border
+> B2C digital — they are unrelated and conflating them is the expensive mistake),
+> why Stripe Tax is enabled with zero registrations, and the five things that must
+> change together at crossover. Read it before this step.
+
 ## Step 3 — Steuerberater: settle the VAT position
 
 **This is the one you cannot do alone, and it gates step 4.**
