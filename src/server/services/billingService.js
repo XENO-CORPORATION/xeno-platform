@@ -93,6 +93,18 @@ function resolveItem(raw) {
   return { ...raw, priceId, available: Boolean(priceId) };
 }
 
+/**
+ * INTERNAL catalog — includes `priceEnv`, the environment-variable NAME behind
+ * each price. Never serve this: getCatalog() strips those names on purpose.
+ *
+ * It exists so `scripts/billing-preflight.mjs` can tell an operator WHICH
+ * variable is missing, without keeping a second copy of the catalogue. A
+ * duplicated price list is the drift this file is built to prevent — the whole
+ * point of CATALOG being the single source of truth is that nothing restates it.
+ */
+export function getInternalCatalog() {
+  return CATALOG.map(resolveItem).map((i) => ({ ...i, currency: CURRENCY }));
+}
 /** Public catalog (never leaks price env NAMES, only ids/labels/availability). The `price`
  *  here is the STATIC fallback; the live path (getPublicCatalog) overlays the real Stripe
  *  amount so advertised == charged. */
