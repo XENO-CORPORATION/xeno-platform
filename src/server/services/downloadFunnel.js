@@ -33,7 +33,9 @@
  * token yields the name of a product, which was public anyway.
  */
 import crypto from 'crypto';
-import { getPlan, entitlementsFor } from './billingService.js';
+import { entitlementsFor } from './billingService.js';
+/* Effective, not personal: a Team member is licensed by their workspace. */
+import { getEffectivePlan } from './effectivePlan.js';
 
 /** The vocabulary. Asserted here rather than in a CHECK constraint — a funnel
  *  gains steps, and a migration-per-step is how recording stops happening. */
@@ -297,7 +299,7 @@ export async function resolve(pool, intent, user, { releases = null } = {}) {
   /* Fails CLOSED to free — a database fault must refuse, not hand over bytes. */
   let plan = { plan: 'free', status: 'none' };
   try {
-    plan = await getPlan(pool, user.id);
+    plan = await getEffectivePlan(pool, user.id);
   } catch (e) {
     console.error('[Funnel] plan lookup failed, refusing', e.message);
   }
