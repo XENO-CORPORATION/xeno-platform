@@ -61,6 +61,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // (password / social / MFA). Same-tab sessionStorage survives the OAuth
         // round-trip. Same-origin only (open-redirect guard).
         stashReturnUrl(urlParams.get('returnUrl'));
+
+        /* Mark a brand-new account so the download funnel can tell a SIGNUP
+         * from a sign-in. Only the OAuth callback knows this — by the time the
+         * resume page loads, a new account and an existing one are
+         * indistinguishable, and "did this account get created because someone
+         * wanted Pixel?" is the single most valuable number the funnel
+         * produces. sessionStorage because it must not outlive the tab. */
+        if (isNewUser) {
+          try { sessionStorage.setItem('xeno_signup_pending', '1'); } catch { /* storage off */ }
+        }
         const nextParam = urlParams.get('next');
         if (isAllowedOnboardingNext(nextParam)) {
           sessionStorage.setItem(ONBOARDING_NEXT_KEY, nextParam);

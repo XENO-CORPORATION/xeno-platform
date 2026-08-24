@@ -54,6 +54,7 @@ import AuthLayout from './components/layouts/AuthLayout';
 import AuthContent from './pages/AuthContent';
 import ActivateAccount from './pages/ActivateAccount';
 import Onboarding from './pages/Onboarding';
+import DownloadResume from './pages/DownloadResume';
 import DeviceAuthContent from './pages/DeviceAuthContent';
 import HelpContent from './pages/HelpContent';
 import ContactContent from './pages/ContactContent';
@@ -186,6 +187,12 @@ function App() {
                 chrome. It sits on the authenticated side of the funnel — the
                 page itself redirects anyone who has already finished. */}
             <Route path="/onboarding" element={<Onboarding />} />
+
+            {/* Where every interrupted download comes back to. Deliberately
+                OUTSIDE any auth layout: a signed-out visitor lands here after
+                Stripe or an OAuth bounce, and wrapping it in a guard would
+                redirect away the one page that knows how to finish the job. */}
+            <Route path="/download/resume" element={<DownloadResume />} />
 
             <Route element={<AuthLayout />}>
               <Route path="/auth" element={<AuthContent />} />

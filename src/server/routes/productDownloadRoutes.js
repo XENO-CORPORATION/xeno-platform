@@ -34,6 +34,10 @@ import express from 'express';
 import { updatesOrigin } from '../config/hosts.js';
 import { assertEntitlement } from '../middleware/requireEntitlement.js';
 import { mintDownloadGrant, verifyDownloadGrant, GRANT_TTL_SECONDS } from '../utils/downloadGrant.js';
+import { rateLimitKey } from '../utils/clientIp.js';
+import {
+  findIntent, claimIntent, record, flag, STEPS, funnelReady,
+} from '../services/downloadFunnel.js';
 
 const router = express.Router();
 
@@ -200,6 +204,56 @@ grantRouter.post('/grant', async (req, res) => {
   const path = version
     ? `/product/${slug}/download/${osParam}/${version}`
     : `/product/${slug}/download/${osParam}`;
+
+  /* ── The audit, and it is not optional ──────────────────────────────────
+   * A grant is an exercise of authority. Minting one without a record means
+   * the only question that matters after an incident — "what did this account
+   * actually take, and when?" — has no answer at all. Recorded AFTER the
+   * entitlement passed, so the table holds grants, not attempts.
+   *
+   * Wrapped, because the audit must not be able to refuse a download that was
+   * legitimately authorised: this is a log, not a second gate. A write failure
+   * is loud in the server log and invisible to the customer. */
+  const clientIp = (() => { try { return rateLimitKey(req); } catch { return null; } })();
+  let intent = null;
+  try {
+    if (req.body?.intent && await funnelReady(req.db)) {
+      intent = await findIntent(req.db, String(req.body.intent));
+      if (intent && (!intent.user_id || intent.user_id === userId)) {
+        intent = await claimIntent(req.db, intent, userId, { clientIp });
+      } else {
+        intent = null;
+      }
+    }
+  } catch (e) {
+    console.error('[Downloads] intent lookup failed', e.message);
+  }
+
+  try {
+    await req.db.query(
+      `INSERT INTO download_grants (user_id, intent_id, slug, os, version, plan, client_ip, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [userId, intent?.id || null, slug, os, version,
+        check.ent?.plan || null, clientIp, String(req.headers['user-agent'] || '').slice(0, 512)],
+    );
+  } catch (e) {
+    console.error('[Downloads] failed to audit grant', e.message);
+  }
+
+  if (intent) {
+    /* Fulfilment is the funnel's terminal event and the only one that means the
+     * person got what they came for. */
+    try {
+      await req.db.query(
+        "UPDATE download_intents SET status = 'fulfilled', fulfilled_at = NOW(), updated_at = NOW() WHERE id = $1 AND status <> 'fulfilled'",
+        [intent.id],
+      );
+    } catch (e) {
+      console.error('[Downloads] failed to mark intent fulfilled', e.message);
+    }
+    await record(req.db, intent.id, STEPS.GRANT_MINTED, { slug, os, version }, { userId, clientIp });
+  }
+
   return res.json({
     url: `${path}?grant=${encodeURIComponent(grant)}`,
     expiresInSeconds: GRANT_TTL_SECONDS,

@@ -143,7 +143,16 @@ router.post('/checkout', requireEnabled, authMiddleware, async (req, res) => {
     if (!itemId || typeof itemId !== 'string') {
       return res.status(400).json({ success: false, error: 'itemId is required' });
     }
-    const { url } = await billing.createCheckout(req.db, req.user, itemId, { origin: originOf(req) });
+    /* The download intent, if this checkout was reached from a Download button.
+     * Passed as an OPAQUE token, never as a URL: createCheckout builds the
+     * return destination itself, because a client-supplied success_url is an
+     * open redirect with a payment attached. */
+    const downloadIntent = typeof req.body?.downloadIntent === 'string'
+      ? req.body.downloadIntent
+      : null;
+    const { url } = await billing.createCheckout(req.db, req.user, itemId, {
+      origin: originOf(req), downloadIntent,
+    });
     res.json({ success: true, url });
   } catch (err) {
     console.error('[billing] checkout error:', err.message);

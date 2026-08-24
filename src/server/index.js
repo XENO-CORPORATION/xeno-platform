@@ -63,6 +63,7 @@ import emailRoutes from './routes/emailRoutes.js';
 import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
 import productDownloadRoutes, { grantRouter as downloadGrantRouter, updateGrantRouter } from './routes/productDownloadRoutes.js';
+import { router as downloadFunnelRouter } from './routes/downloadFunnelRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
@@ -85,7 +86,7 @@ import learnRoutes from './routes/learnRoutes.js';
 import forumRoutes from './routes/forumRoutes.js';
 import { requireActivated } from './services/accountActivation.js';
 import agentRoutes from './routes/agentRoutes.js';
-import { authMiddleware } from './middleware/auth.js';
+import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { runMigrations } from './services/migrationService.js';
 
@@ -649,6 +650,17 @@ app.use('/api/download', databaseMiddleware, authMiddleware, downloadRoutes);
 // Minting a download grant is the AUTHENTICATED half of the paywall
 // (owner override 2026-08-24). 401 belongs to authMiddleware and 403 to the
 // canDownload entitlement, so this must sit behind both.
+// The funnel is user-AWARE but not user-REQUIRED, and that is the whole point:
+// an intent exists precisely because the person does not have an account yet.
+// Requiring auth here would mean the funnel only ever sees people who already
+// converted — the one population it does not need to measure.
+//
+// Mounted BEFORE the authenticated grant router on the same prefix. Express runs
+// mounts in order and this router only declares /intent paths, so /grant falls
+// through to the authenticated mount below. Reversing these two lines would put
+// authMiddleware in front of the anonymous endpoints and silently 401 every
+// first-time visitor.
+app.use('/api/downloads', databaseMiddleware, optionalAuthMiddleware, downloadFunnelRouter);
 app.use('/api/downloads', databaseMiddleware, authMiddleware, downloadGrantRouter);
 // The UPDATER's half (Phase 3). Same two middlewares for the same reasons; a
 // separate mount because "may install" and "may receive a security fix for what
