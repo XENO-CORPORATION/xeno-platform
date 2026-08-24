@@ -6672,49 +6672,39 @@ interface QueueState {
     let extractedDirectPrompt: string | null = null;
     let isPotentialImageRefinement: boolean = false;
 
-    // Direct mode check: if user is in image mode, prompt is directly an image prompt
+    // 1. Direct mode check: if user is in image mode, prompt is directly an image prompt
     if (emptyStateMode === 'image') {
         extractedDirectPrompt = userTextToSend;
     }
 
-    // Direct visual style check (e.g. "Create a cozy rainy-night café in a watercolor style")
+    // 2. Direct visual / image generation intent check (e.g. "Create a cozy rainy-night café in a watercolor style", "draw a cat", "generate an image of a sunset")
     if (!extractedDirectPrompt && !isLikelyCodeOrLongText) {
-        const visualStyleIndicators = [
-            'in a watercolor style', 'watercolor style', 'watercolor', 'oil painting',
-            'digital art', 'photorealistic', 'realistic photo', 'cinematic lighting',
-            '3d render', 'anime style', 'cyberpunk style', 'concept art', 'pixel art',
-            'vector art', 'flat art', 'in the style of', 'style of', 'hyperrealistic',
-            'studio lighting', 'octane render', 'unreal engine 5', 'unreal engine',
-            'generate an image', 'generate a photo', 'generate a picture', 'create an image',
-            'create a photo', 'create a picture', 'draw a', 'paint a', 'sketch a'
-        ];
-        const hasVisualIndicator = visualStyleIndicators.some(ind => userTextForProcessing.includes(ind));
-        const startsWithVerb = baseImageVerbs.some(v => userTextForProcessing.startsWith(v + ' '));
+        const isImageAction = /^(create|generate|draw|paint|sketch|render|make|illustrate|design)\b/i.test(userTextForProcessing);
+        const hasVisualTerm = /\b(image|photo|picture|drawing|illustration|art|portrait|painting|sketch|graphic|wallpaper|watercolor|cafe|cyberpunk|anime|scenery|landscape|scene|avatar|logo|render|3d)\b/i.test(userTextForProcessing);
+        const hasStylePhrase = /\b(style|in\s+(a\s+)?(watercolor|oil|digital|pixel|anime|cyberpunk|3d|photorealistic|cinematic|vintage|retro|realistic))\b/i.test(userTextForProcessing);
+        const isDirectImageOf = /^(image|picture|photo|drawing|illustration|painting|sketch)\s+(of|with|for)\b/i.test(userTextForProcessing);
 
-        if (hasVisualIndicator && startsWithVerb) {
+        if ((isImageAction && (hasVisualTerm || hasStylePhrase)) || isDirectImageOf) {
             extractedDirectPrompt = userTextToSend;
         }
     }
 
     // Stage 1: Try to find a direct command with a clear subject.
-    verbLoop: for (const verb of baseImageVerbs) {
-        for (const noun of imageNounVariations) {
-            for (const prep of prepositionsForSubject) {
-                const commandPatternStart = `${verb} ${noun} ${prep} `;
-                if (userTextForProcessing.startsWith(commandPatternStart)) {
-                    // console.log('[INTENT DEBUG] STAGE 1 Candidate commandPatternStart:', commandPatternStart, 'for input:', userTextForProcessing);
-                    const potentialSubject = userTextToSend.substring(commandPatternStart.length).trim();
-                    if (potentialSubject) {
-                        if (contextualSubjectKeywords.includes(potentialSubject.toLowerCase())) {
-                            // console.log('[INTENT DEBUG] STAGE 1 MATCH on commandPatternStart with contextual subject:', commandPatternStart);
-                            isPotentialImageRefinement = true;
-                            // console.log(`[Intent] Path 2 trigger (Stage 1): Direct command with contextual subject: "${userTextForProcessing}"`); // Original log
-                            break verbLoop;
-                        } else {
-                            // console.log('[INTENT DEBUG] STAGE 1 MATCH on commandPatternStart with explicit subject:', commandPatternStart);
-                            extractedDirectPrompt = potentialSubject;
-                            // console.log(`[Intent] Path 1 trigger (Stage 1): Direct command with explicit subject: "${extractedDirectPrompt}" from input "${userTextForProcessing}"`); // Original log
-                            break verbLoop;
+    if (!extractedDirectPrompt) {
+        verbLoop: for (const verb of baseImageVerbs) {
+            for (const noun of imageNounVariations) {
+                for (const prep of prepositionsForSubject) {
+                    const commandPatternStart = `${verb} ${noun} ${prep} `;
+                    if (userTextForProcessing.startsWith(commandPatternStart)) {
+                        const potentialSubject = userTextToSend.substring(commandPatternStart.length).trim();
+                        if (potentialSubject) {
+                            if (contextualSubjectKeywords.includes(potentialSubject.toLowerCase())) {
+                                isPotentialImageRefinement = true;
+                                break verbLoop;
+                            } else {
+                                extractedDirectPrompt = potentialSubject;
+                                break verbLoop;
+                            }
                         }
                     }
                 }
@@ -6728,20 +6718,14 @@ interface QueueState {
             for (const noun of imageNounVariations) {
                 const commandPatternNoPrep = `${verb} ${noun} `;
                 if (userTextForProcessing.startsWith(commandPatternNoPrep)) {
-                    // console.log('[INTENT DEBUG] STAGE 2 Candidate commandPatternNoPrep:', commandPatternNoPrep, 'for input:', userTextForProcessing);
                     const potentialSubjectNoPrep = userTextToSend.substring(commandPatternNoPrep.length).trim();
                     if (potentialSubjectNoPrep) {
-                        // console.log('[INTENT DEBUG] STAGE 2 MATCH on commandPatternNoPrep:', commandPatternNoPrep);
                         isPotentialImageRefinement = true;
-                        // console.log(`[Intent] Path 2 trigger (Stage 2): Command followed by likely subject/context (no prep): "${userTextForProcessing}"`); // Original log
                         break verbLoop2;
                     }
                 }
                 if (userTextForProcessing === `${verb} ${noun}`) {
-                    // console.log('[INTENT DEBUG] STAGE 2 Candidate exact verb+noun:', `${verb} ${noun}`, 'for input:', userTextForProcessing);
-                    // console.log('[INTENT DEBUG] STAGE 2 MATCH on exact verb+noun:', `${verb} ${noun}`);
                     isPotentialImageRefinement = true;
-                    // console.log(`[Intent] Path 2 trigger (Stage 2): Exact verb+noun command: "${userTextForProcessing}"`); // Original log
                     break verbLoop2;
                 }
             }
@@ -6749,27 +6733,18 @@ interface QueueState {
     }
 
     // Stage 3: Broader check for inclusion of image-related verbs/nouns if nothing specific caught yet.
-    // --- MODIFICATION: Only run Stage 3 if input is NOT likely code/long text AND Stages 1 & 2 didn't find anything ---
     if (!isLikelyCodeOrLongText && !extractedDirectPrompt && !isPotentialImageRefinement) {
         const baseNounsForRegex = ["image", "picture", "photo", "drawing", "illustration", "art", "pic", "painting", "sketch"];
         const containsVerbCheck = baseImageVerbs.some(verb => new RegExp(`\\b${verb}\\b`, 'i').test(userTextForProcessing));
         const containsNounCheck = baseNounsForRegex.some(noun => new RegExp(`\\b${noun}\\b`, 'i').test(userTextForProcessing));
         const containsContextualWordCheck = contextualSubjectKeywords.some(csWord => new RegExp(`\\b${csWord.replace(/\s+/g, '\\s+')}\\b`, 'i').test(userTextForProcessing));
 
-        // console.log(`[INTENT DEBUG] STAGE 3 Checks: userText='${userTextForProcessing}', containsVerb=${containsVerbCheck}, containsNoun=${containsNounCheck}, containsContextualWord=${containsContextualWordCheck}`);
-
         if (containsVerbCheck && containsNounCheck) {
-            // console.log('[INTENT DEBUG] STAGE 3 MATCH on containsVerb && containsNoun');
             isPotentialImageRefinement = true;
-            // console.log(`[Intent] Path 2 trigger (Stage 3): General inclusion of image verb & noun (whole words): "${userTextForProcessing}"`); // Original log
         } else if ((userTextForProcessing === "draw" || userTextForProcessing === "paint" || userTextForProcessing === "sketch") && !filesToSend.length) {
-            // console.log('[INTENT DEBUG] STAGE 3 MATCH on single image verb command (draw/paint/sketch)');
             isPotentialImageRefinement = true;
-            // console.log(`[Intent] Path 2 trigger (Stage 3): Single image verb command: "${userTextForProcessing}"`); // Original log
         } else if (containsVerbCheck && containsContextualWordCheck && !containsNounCheck) {
-            // console.log('[INTENT DEBUG] STAGE 3 MATCH on containsVerb && containsContextualWord && !containsNoun');
             isPotentialImageRefinement = true;
-            // console.log(`[Intent] Path 2 trigger (Stage 3): Verb + Contextual word (whole words, no explicit noun): "${userTextForProcessing}"`); // Original log
         }
     }
     // --- End Image Generation Intent Detection ---

@@ -1983,6 +1983,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
         // Extract text - structure follows OpenAI standard
         let outputText = data.choices?.[0]?.message?.content;
+        let returnedImageData = null;
 
         if (Array.isArray(outputText)) {
             outputText = outputText
@@ -2002,12 +2003,45 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     outputText = rawMsg.refusal;
                 } else if (Array.isArray(rawMsg.tool_calls) && rawMsg.tool_calls.length > 0) {
                     outputText = rawMsg.tool_calls.map(tc => tc.function?.arguments || tc.function?.name || 'tool_call').join('\n');
-                } else {
-                    outputText = 'Response generated successfully.';
                 }
-            } else {
-                outputText = 'Response generated.';
             }
+        }
+
+        // If the model did not return text content (or tried tool calling), check if the prompt is an image request and auto-generate via gpt-image-2
+        if ((!outputText || outputText.trim() === '') && xenoImageClient) {
+            const userMsgs = Array.isArray(req.body.messages) ? req.body.messages : [];
+            const lastUserMsg = [...userMsgs].reverse().find(m => m.role === 'user');
+            const lastPrompt = typeof lastUserMsg?.content === 'string' 
+                ? lastUserMsg.content 
+                : (Array.isArray(lastUserMsg?.parts) ? lastUserMsg.parts.find(p => p.type === 'text')?.text : '');
+
+            if (lastPrompt && /(create|generate|draw|paint|sketch|render|make|illustrate|image|photo|picture|drawing|illustration|art|portrait|painting|wallpaper|watercolor|cafe|cyberpunk|anime)/i.test(lastPrompt)) {
+                try {
+                    console.log(`[AutoImageFallback] LLM returned empty text for image prompt "${lastPrompt.substring(0, 50)}...", generating image via gpt-image-2...`);
+                    const genResponse = await xenoImageClient.image.generate({
+                        model: 'gpt-image-2',
+                        prompt: lastPrompt,
+                        width: 1024,
+                        height: 1024,
+                        n: 1,
+                        response_format: 'b64_json',
+                    });
+                    const imgItem = genResponse?.data?.[0];
+                    if (imgItem) {
+                        const rawB64 = imgItem.b64_json || imgItem.base64 || (typeof imgItem.url === 'string' && imgItem.url.startsWith('data:') ? imgItem.url.split(',')[1] : null);
+                        if (rawB64) {
+                            returnedImageData = rawB64;
+                            outputText = `Generated image with GPT Image 2: "${lastPrompt}"`;
+                        }
+                    }
+                } catch (imgErr) {
+                    console.error('[AutoImageFallback] Failed to generate image via gpt-image-2:', imgErr.message);
+                }
+            }
+        }
+
+        if (!outputText) {
+            outputText = 'Response generated.';
         }
 
         // Convert literal '\n' to actual newline characters for the main output text
@@ -2262,6 +2296,11 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             console.log("   -> Added usage data:", finalResponse.usage);
         }
         // <<< END: ADD usage data to response >>>
+
+        if (returnedImageData) {
+            finalResponse.imageData = returnedImageData;
+            finalResponse.modelIdUsed = 'gpt-image-2';
+        }
 
         // Return the final response object
         console.log("Final response object being sent to frontend:", finalResponse);
