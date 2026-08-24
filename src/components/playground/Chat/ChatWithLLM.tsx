@@ -14735,12 +14735,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             >
               {isTranscriptCopied ? (
                 <>
-                  <CheckDecl size={13} className="text-emerald-400 flex-shrink-0 animate-in fade-in zoom-in-75 duration-150" />
+                  <Check size={13} className="text-emerald-400 flex-shrink-0 animate-in fade-in zoom-in-75 duration-150" />
                   <span className="text-emerald-400 font-semibold">Transcript Copied!</span>
                 </>
               ) : (
                 <>
-                  <CopyDecl size={13} className="opacity-70 group-hover:opacity-100 flex-shrink-0 transition-opacity" />
+                  <Copy size={13} className="opacity-70 group-hover:opacity-100 flex-shrink-0 transition-opacity" />
                   <span className="hidden sm:inline">Copy Session Transcript</span>
                   <span className="inline sm:hidden">Transcript</span>
                 </>
