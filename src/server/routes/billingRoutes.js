@@ -16,6 +16,8 @@ import express from 'express';
 import authMiddleware from '../middleware/auth.js';
 import * as billing from '../services/billingService.js';
 import { getEffectiveEntitlements } from '../services/effectivePlan.js';
+import { recordConsent, CONSENT_TEXT, CONSENT_HASH } from '../services/checkoutConsent.js';
+import { rateLimitKey } from '../utils/clientIp.js';
 import { creditsView, subscriptionView } from '../utils/accountViews.js';
 
 const router = express.Router();
@@ -137,6 +139,46 @@ router.get('/pricing-tiers', async (req, res) => {
   }
 });
 
+/**
+ * The exact wording a buyer must agree to, so the UI renders what the server
+ * will store rather than its own paraphrase.
+ *
+ * 🔴 Served from the SAME constant the consent record hashes. If the page could
+ * show different words from the ones recorded, the record would attest to
+ * something the person never read — which is worse than no record at all,
+ * because it looks like evidence.
+ */
+router.get('/consent-text', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, text: CONSENT_TEXT, hash: CONSENT_HASH });
+});
+
+/**
+ * Record consent to immediate performance. Must precede checkout.
+ *
+ * Separate from /checkout on purpose: the consent is an act with its own
+ * timestamp and its own evidence, and burying it inside the purchase call would
+ * make "when did they agree?" answerable only as "at some point during a
+ * payment".
+ */
+router.post('/consent', requireEnabled, authMiddleware, async (req, res) => {
+  try {
+    const id = await recordConsent(req.db, {
+      userId: req.user.id,
+      itemId: String(req.body?.itemId || ''),
+      immediatePerformance: req.body?.immediatePerformance === true,
+      withdrawalAcknowledged: req.body?.withdrawalAcknowledged === true,
+      termsAccepted: req.body?.termsAccepted === true,
+      locale: typeof req.body?.locale === 'string' ? req.body.locale.slice(0, 16) : null,
+      clientIp: (() => { try { return rateLimitKey(req); } catch { return null; } })(),
+      userAgent: req.headers['user-agent'],
+    });
+    res.json({ success: true, consentId: id });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message, code: err.code || 'consent_failed' });
+  }
+});
+
 /** Create a Stripe Checkout session for a catalog item; returns the redirect URL. */
 router.post('/checkout', requireEnabled, authMiddleware, async (req, res) => {
   try {
@@ -151,8 +193,9 @@ router.post('/checkout', requireEnabled, authMiddleware, async (req, res) => {
     const downloadIntent = typeof req.body?.downloadIntent === 'string'
       ? req.body.downloadIntent
       : null;
+    const consentId = typeof req.body?.consentId === 'string' ? req.body.consentId : null;
     const { url } = await billing.createCheckout(req.db, req.user, itemId, {
-      origin: originOf(req), downloadIntent,
+      origin: originOf(req), downloadIntent, consentId,
     });
     res.json({ success: true, url });
   } catch (err) {

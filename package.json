@@ -94,7 +94,9 @@
     "test:keyboard-flow": "node --test scripts/keyboard-flow.test.mjs",
     "test:keyboard-grid": "node --test scripts/keyboard-grid.test.mjs",
     "test:focus-visible": "node --test scripts/focus-visible.test.mjs",
-    "test:cors": "node --test scripts/cors-extension-origin.test.mjs"
+    "test:cors": "node --test scripts/cors-extension-origin.test.mjs",
+    "billing:preflight": "node scripts/billing-preflight.mjs",
+    "compliance:preflight": "node scripts/compliance-preflight.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.7",
