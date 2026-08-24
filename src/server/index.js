@@ -65,6 +65,7 @@ import downloadRoutes from './routes/downloadRoutes.js';
 import productDownloadRoutes, { grantRouter as downloadGrantRouter, updateGrantRouter } from './routes/productDownloadRoutes.js';
 import { router as downloadFunnelRouter } from './routes/downloadFunnelRoutes.js';
 import { sweepExpiredIntents } from './services/downloadFunnel.js';
+import { sweepRetention, RETENTION_SWEEP_INTERVAL_MS } from './services/dataRetention.js';
 import { requireSupportedClient } from './middleware/requireSupportedClient.js';
 import clientPolicyRoutes from './routes/clientPolicyRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
@@ -3892,6 +3893,21 @@ runStartupMigrations()
       .catch((e) => console.error('[FunnelSweeper] error:', e.message));
     setInterval(sweepIntents, 30 * 60 * 1000).unref();
     sweepIntents();
+
+    // Data retention. Four tables added for the download funnel and the version
+    // floor grow one row per user action; none of them had an end, which is a
+    // scheduled outage rather than a slow leak. Policy per table lives in ONE
+    // place (services/dataRetention.js) because "how long do we keep X?" is a
+    // question auditors and GDPR requests ask, and "read four files" is the
+    // wrong answer. checkout_consents is deliberately NOT pruned — see there.
+    const sweepRet = () => sweepRetention(pool)
+      .then((counts) => {
+        const parts = Object.entries(counts).map(([t, n]) => `${t}:${n}`);
+        if (parts.length) console.log(`[Retention] pruned ${parts.join(' ')}`);
+      })
+      .catch((e) => console.error('[Retention] error:', e.message));
+    setInterval(sweepRet, RETENTION_SWEEP_INTERVAL_MS).unref();
+    sweepRet();
   })
   .catch(err => {
     // FAIL CLOSED: a broken/half-applied schema must not serve traffic. Exit non-zero

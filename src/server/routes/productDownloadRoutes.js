@@ -200,6 +200,42 @@ grantRouter.post('/grant', async (req, res) => {
   const check = await assertEntitlement(req.db, userId, 'canDownload');
   if (!check.allowed) return res.status(403).json(check.body);
 
+  /* ── Per-ACCOUNT bound ──────────────────────────────────────────────────
+   *
+   * 🔴 The global limiter is per-IP, and this endpoint is the authority path:
+   * one call produces the permission to take a 140 MB binary. Per-IP alone means
+   * a single compromised paid account can mint grants from anywhere, and the
+   * account is the thing being abused, not the address.
+   *
+   * The cap is deliberately generous — a person on three machines re-downloading
+   * a suite after a reinstall is NORMAL, and a limit that catches them is a
+   * support ticket wearing a security costume. It exists to stop a script, and
+   * it is measured against the audit table we already write, so it needs no new
+   * state and cannot drift from what actually happened.
+   *
+   * Fails OPEN: if the audit table cannot be read we allow the download. The
+   * entitlement has already passed, so the caller has PAID — refusing them over
+   * a failed count would punish a customer for our database. */
+  const CAP = Number(process.env.GRANT_HOURLY_CAP || 60);
+  try {
+    const recent = await req.db.query(
+      "SELECT count(*)::int AS n FROM download_grants WHERE user_id = $1 AND at > NOW() - INTERVAL '1 hour'",
+      [userId],
+    );
+    if ((recent.rows[0]?.n || 0) >= CAP) {
+      console.warn(`[Downloads] grant cap reached for user ${userId} (${CAP}/hour)`);
+      return res.status(429).json({
+        error: {
+          code: 'grant_rate_limited',
+          message: 'Too many downloads started recently. Try again in a little while.',
+          retryAfterSeconds: 900,
+        },
+      });
+    }
+  } catch (e) {
+    console.error('[Downloads] grant cap check failed, allowing:', e.message);
+  }
+
   const grant = mintDownloadGrant({ userId, slug, os, version });
   const path = version
     ? `/product/${slug}/download/${osParam}/${version}`
