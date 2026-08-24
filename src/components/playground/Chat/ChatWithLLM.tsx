@@ -3122,135 +3122,6 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   /** If set, the next created project receives this conversation. */
   const [pendingProjectAssignConversationId, setPendingProjectAssignConversationId] = useState<string | null>(null);
 
-  const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
-
-  const handleCopySessionTranscript = useCallback(async () => {
-    try {
-      const activeTitle = activeConversationId
-        ? (conversationHistory.find(c => c.id === activeConversationId)?.title || 'Untitled Conversation')
-        : 'New Conversation';
-
-      const containerBounds = chatContainerRef.current?.getBoundingClientRect();
-      const chatAreaBounds = chatAreaRef.current?.getBoundingClientRect();
-      const textareaBounds = textareaRef.current?.getBoundingClientRect();
-
-      const telemetry = {
-        exportTimestamp: new Date().toISOString(),
-        client: {
-          url: window.location.href,
-          userAgent: navigator.userAgent,
-          viewport: {
-            width: window.innerWidth,
-            height: window.innerHeight,
-            devicePixelRatio: window.devicePixelRatio,
-            orientation: window.screen?.orientation?.type || (window.innerWidth > window.innerHeight ? 'landscape' : 'portrait'),
-          },
-          measurements: {
-            chatContainer: containerBounds ? { width: Math.round(containerBounds.width), height: Math.round(containerBounds.height), top: Math.round(containerBounds.top), left: Math.round(containerBounds.left) } : null,
-            chatArea: chatAreaBounds ? { width: Math.round(chatAreaBounds.width), height: Math.round(chatAreaBounds.height), top: Math.round(chatAreaBounds.top), left: Math.round(chatAreaBounds.left) } : null,
-            textarea: textareaBounds ? { width: Math.round(textareaBounds.width), height: Math.round(textareaBounds.height) } : null,
-          },
-          theme: chatTheme,
-          isMobile,
-          isStandalone,
-          isMultiInterface,
-        },
-        session: {
-          conversationId: activeConversationId || 'new-session',
-          conversationTitle: activeTitle,
-          chatMode: emptyStateMode,
-          selectedModel: {
-            id: selectedModel?.id,
-            name: selectedModel?.name,
-            provider: selectedModel?.provider || (selectedModel?.id ? getCompanyNameFromModelId(selectedModel.id) : 'unknown'),
-            contextWindow: selectedModel?.contextWindow,
-            maxTokens: selectedModel?.maxTokens,
-            temperature: selectedModel?.temperature,
-          },
-          systemPrompt: systemPrompt || null,
-          persona: selectedPersona || null,
-          pistonRuntimesCount: pistonRuntimes?.length || 0,
-          totalMessages: messages.length,
-          stats: {
-            totalTokens: totalUsedTokens,
-            isStreaming: isLoading,
-          },
-        },
-        messages: messages.map((m, idx) => ({
-          index: idx + 1,
-          id: m.id,
-          role: m.role,
-          timestamp: m.timestamp ? new Date(m.timestamp).toISOString() : null,
-          content: m.content,
-          reasoning: (m as any).reasoning || (m as any).thought || null,
-          images: m.images?.map(img => ({ name: img.name, size: img.size, type: img.type })) || [],
-          files: m.files?.map(f => ({ name: f.name, size: f.size, type: f.type })) || [],
-          sources: m.sources?.map(s => ({ title: s.title, url: s.url, snippet: s.snippet })) || [],
-          toolCalls: (m as any).toolCalls || null,
-          searchQuery: (m as any).searchQuery || null,
-          isError: Boolean(m.isError),
-        })),
-      };
-
-      let readableLog = `# XENO Chat Session Transcript\n\n`;
-      readableLog += `- **Exported At:** ${telemetry.exportTimestamp}\n`;
-      readableLog += `- **Conversation:** ${activeTitle} (\`${telemetry.session.conversationId}\`)\n`;
-      readableLog += `- **Model:** ${selectedModel?.name || selectedModel?.id || 'Default'} (\`${selectedModel?.id || 'n/a'}\`)\n`;
-      readableLog += `- **Mode:** \`${emptyStateMode}\` | **Theme:** \`${chatTheme}\` | **Viewport:** ${telemetry.client.viewport.width}x${telemetry.client.viewport.height} (DPR: ${telemetry.client.viewport.devicePixelRatio})\n`;
-      readableLog += `- **Chat Container:** ${telemetry.client.measurements.chatContainer?.width || 'auto'}px × ${telemetry.client.measurements.chatContainer?.height || 'auto'}px\n`;
-      readableLog += `- **Composer Textarea:** ${telemetry.client.measurements.textarea?.width || 'auto'}px × ${telemetry.client.measurements.textarea?.height || 'auto'}px\n\n`;
-      readableLog += `## Message History (${messages.length} messages)\n\n`;
-
-      if (messages.length === 0) {
-        readableLog += `_(No messages in active session)_\n\n`;
-      } else {
-        messages.forEach((m, i) => {
-          readableLog += `### [${i + 1}] ${m.role.toUpperCase()} — ${m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : 'now'}\n\n`;
-          if ((m as any).reasoning || (m as any).thought) {
-            readableLog += `> **Thinking / Reasoning Trace:**\n> ${((m as any).reasoning || (m as any).thought || '').replace(/\\n/g, '\n> ')}\n\n`;
-          }
-          readableLog += `${m.content}\n\n`;
-          if (m.sources && m.sources.length > 0) {
-            readableLog += `**Sources / Citations:**\n`;
-            m.sources.forEach(s => {
-              readableLog += `- [${s.title || s.url}](${s.url}): ${s.snippet || ''}\n`;
-            });
-            readableLog += `\n`;
-          }
-          if ((m as any).toolCalls && (m as any).toolCalls.length > 0) {
-            readableLog += `**Tool Invocations:**\n\`\`\`json\n${JSON.stringify((m as any).toolCalls, null, 2)}\n\`\`\`\n\n`;
-          }
-        });
-      }
-
-      readableLog += `---\n## Diagnostic JSON Snapshot\n\`\`\`json\n${JSON.stringify(telemetry, null, 2)}\n\`\`\`\n`;
-
-      await navigator.clipboard.writeText(readableLog);
-      setIsTranscriptCopied(true);
-      setTimeout(() => setIsTranscriptCopied(false), 2200);
-    } catch (err) {
-      console.error('[ChatWithLLM] Failed to copy transcript to clipboard:', err);
-    }
-  }, [
-    activeConversationId,
-    conversationHistory,
-    chatContainerRef,
-    chatAreaRef,
-    textareaRef,
-    chatTheme,
-    isMobile,
-    isStandalone,
-    isMultiInterface,
-    emptyStateMode,
-    selectedModel,
-    systemPrompt,
-    selectedPersona,
-    pistonRuntimes,
-    messages,
-    totalUsedTokens,
-    isLoading,
-  ]);
-
   useEffect(() => {
     localStorage.setItem(chatProjectsStorageKey, JSON.stringify(chatProjects));
   }, [chatProjects, chatProjectsStorageKey]);
@@ -4393,6 +4264,135 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // --- End State for Xeno Search Results Display ---
 
   // --- START: MOVED HELPER FUNCTIONS ---
+  const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
+
+  const handleCopySessionTranscript = useCallback(async () => {
+    try {
+      const activeTitle = activeConversationId
+        ? (conversationHistory.find(c => c.id === activeConversationId)?.title || 'Untitled Conversation')
+        : 'New Conversation';
+
+      const containerBounds = chatContainerRef.current?.getBoundingClientRect();
+      const chatAreaBounds = chatAreaRef.current?.getBoundingClientRect();
+      const textareaBounds = textareaRef.current?.getBoundingClientRect();
+
+      const telemetry = {
+        exportTimestamp: new Date().toISOString(),
+        client: {
+          url: window.location.href,
+          userAgent: navigator.userAgent,
+          viewport: {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            devicePixelRatio: window.devicePixelRatio,
+            orientation: window.screen?.orientation?.type || (window.innerWidth > window.innerHeight ? 'landscape' : 'portrait'),
+          },
+          measurements: {
+            chatContainer: containerBounds ? { width: Math.round(containerBounds.width), height: Math.round(containerBounds.height), top: Math.round(containerBounds.top), left: Math.round(containerBounds.left) } : null,
+            chatArea: chatAreaBounds ? { width: Math.round(chatAreaBounds.width), height: Math.round(chatAreaBounds.height), top: Math.round(chatAreaBounds.top), left: Math.round(chatAreaBounds.left) } : null,
+            textarea: textareaBounds ? { width: Math.round(textareaBounds.width), height: Math.round(textareaBounds.height) } : null,
+          },
+          theme: chatTheme,
+          isMobile,
+          isStandalone,
+          isMultiInterface,
+        },
+        session: {
+          conversationId: activeConversationId || 'new-session',
+          conversationTitle: activeTitle,
+          chatMode: emptyStateMode,
+          selectedModel: {
+            id: selectedModel?.id,
+            name: selectedModel?.name,
+            provider: selectedModel?.provider || (selectedModel?.id ? getCompanyNameFromModelId(selectedModel.id) : 'unknown'),
+            contextWindow: selectedModel?.contextWindow,
+            maxTokens: selectedModel?.maxTokens,
+            temperature: selectedModel?.temperature,
+          },
+          systemPrompt: systemPrompt || null,
+          persona: selectedPersona || null,
+          pistonRuntimesCount: pistonRuntimes?.length || 0,
+          totalMessages: messages.length,
+          stats: {
+            totalTokens: realTokenCount,
+            isStreaming: isLoading,
+          },
+        },
+        messages: messages.map((m, idx) => ({
+          index: idx + 1,
+          id: m.id,
+          role: m.role,
+          timestamp: m.timestamp ? new Date(m.timestamp).toISOString() : null,
+          content: m.content,
+          reasoning: (m as any).reasoning || (m as any).thought || null,
+          images: m.images?.map(img => ({ name: img.name, size: img.size, type: img.type })) || [],
+          files: m.files?.map(f => ({ name: f.name, size: f.size, type: f.type })) || [],
+          sources: m.sources?.map(s => ({ title: s.title, url: s.url, snippet: s.snippet })) || [],
+          toolCalls: (m as any).toolCalls || null,
+          searchQuery: (m as any).searchQuery || null,
+          isError: Boolean(m.isError),
+        })),
+      };
+
+      let readableLog = `# XENO Chat Session Transcript\n\n`;
+      readableLog += `- **Exported At:** ${telemetry.exportTimestamp}\n`;
+      readableLog += `- **Conversation:** ${activeTitle} (\`${telemetry.session.conversationId}\`)\n`;
+      readableLog += `- **Model:** ${selectedModel?.name || selectedModel?.id || 'Default'} (\`${selectedModel?.id || 'n/a'}\`)\n`;
+      readableLog += `- **Mode:** \`${emptyStateMode}\` | **Theme:** \`${chatTheme}\` | **Viewport:** ${telemetry.client.viewport.width}x${telemetry.client.viewport.height} (DPR: ${telemetry.client.viewport.devicePixelRatio})\n`;
+      readableLog += `- **Chat Container:** ${telemetry.client.measurements.chatContainer?.width || 'auto'}px × ${telemetry.client.measurements.chatContainer?.height || 'auto'}px\n`;
+      readableLog += `- **Composer Textarea:** ${telemetry.client.measurements.textarea?.width || 'auto'}px × ${telemetry.client.measurements.textarea?.height || 'auto'}px\n\n`;
+      readableLog += `## Message History (${messages.length} messages)\n\n`;
+
+      if (messages.length === 0) {
+        readableLog += `_(No messages in active session)_\n\n`;
+      } else {
+        messages.forEach((m, i) => {
+          readableLog += `### [${i + 1}] ${m.role.toUpperCase()} — ${m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : 'now'}\n\n`;
+          if ((m as any).reasoning || (m as any).thought) {
+            readableLog += `> **Thinking / Reasoning Trace:**\n> ${((m as any).reasoning || (m as any).thought || '').replace(/\\n/g, '\n> ')}\n\n`;
+          }
+          readableLog += `${m.content}\n\n`;
+          if (m.sources && m.sources.length > 0) {
+            readableLog += `**Sources / Citations:**\n`;
+            m.sources.forEach(s => {
+              readableLog += `- [${s.title || s.url}](${s.url}): ${s.snippet || ''}\n`;
+            });
+            readableLog += `\n`;
+          }
+          if ((m as any).toolCalls && (m as any).toolCalls.length > 0) {
+            readableLog += `**Tool Invocations:**\n\`\`\`json\n${JSON.stringify((m as any).toolCalls, null, 2)}\n\`\`\`\n\n`;
+          }
+        });
+      }
+
+      readableLog += `---\n## Diagnostic JSON Snapshot\n\`\`\`json\n${JSON.stringify(telemetry, null, 2)}\n\`\`\`\n`;
+
+      await navigator.clipboard.writeText(readableLog);
+      setIsTranscriptCopied(true);
+      setTimeout(() => setIsTranscriptCopied(false), 2200);
+    } catch (err) {
+      console.error('[ChatWithLLM] Failed to copy transcript to clipboard:', err);
+    }
+  }, [
+    activeConversationId,
+    conversationHistory,
+    chatContainerRef,
+    chatAreaRef,
+    textareaRef,
+    chatTheme,
+    isMobile,
+    isStandalone,
+    isMultiInterface,
+    emptyStateMode,
+    selectedModel,
+    systemPrompt,
+    selectedPersona,
+    pistonRuntimes,
+    messages,
+    realTokenCount,
+    isLoading,
+  ]);
+
   // Helper function to extract the actual URL from Vertex AI search URLs
   const extractActualUrl = useCallback((originalUrl: string): string => {
     try {
