@@ -252,7 +252,9 @@ const Terms: React.FC = () => {
               <p className="text-white/60 mt-2 leading-relaxed">
                 Where the right applies, tell us clearly — an email to{' '}
                 <a href="mailto:support@xenostudio.ai" className="text-white/80 underline underline-offset-2">support@xenostudio.ai</a>{' '}
-                is enough. You may use the model withdrawal form, but you do not have to. We will
+                is enough. You may use the{' '}
+                <Link to="/withdrawal" className="text-white/80 underline underline-offset-2">model withdrawal form</Link>,
+                but you do not have to. We will
                 refund within 14 days of being told, using the same payment method you used.
               </p>
             </div>

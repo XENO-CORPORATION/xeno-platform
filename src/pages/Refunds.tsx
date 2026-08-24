@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import MarketingPage, { Section, Prose, CheckList } from '../components/marketing/MarketingPage';
 
 const Refunds: React.FC = () => (
@@ -107,8 +108,7 @@ const Refunds: React.FC = () => (
                 within a set period (often 14 days). Please note that for digital content and services,
                 this right may not apply once performance has begun with your express consent — for
                 example, once you have started using purchased credits or downloaded a digital item. Where
-                statutory rights apply, they take precedence over the general terms in this policy.
-              </>
+                statutory rights apply, they take precedence over the general terms in this policy. See the{' '}<Link to="/withdrawal" className="text-white/80 underline underline-offset-2">withdrawal instructions</Link>{' '}for the full statutory text.</>
             ),
           },
           {
