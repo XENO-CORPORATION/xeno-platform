@@ -32,6 +32,25 @@ console.log('XENO commercial-readiness preflight');
 console.log('─'.repeat(74));
 console.log('⚠️  Mechanisms only. A green run is NOT a statement that you are compliant.\n');
 
+/* 🔴 This script mixes two kinds of check, and conflating them produced a false
+ * alarm the same day the env checks were added: SUBJECT_HASH_SECRET was reported
+ * unset while production had it, because the run happened on a workstation.
+ *
+ * Repo checks read files and are true anywhere. ENVIRONMENT checks read
+ * process.env and are only ever true about the machine running them — so on a
+ * laptop they describe the laptop, which is never the question being asked. An
+ * unlabelled env finding sends someone to fix a problem that does not exist, or
+ * worse, to believe one is fixed because their shell happens to have the value. */
+const IN_DEPLOYMENT = existsSync('/.dockerenv') || process.env.XENO_PREFLIGHT_ENV === 'production';
+if (!IN_DEPLOYMENT) {
+  console.log('ℹ️  Running OUTSIDE the deployment. Findings marked [env] describe THIS');
+  console.log('   machine, not production. For the real answer:\n');
+  console.log('     sudo docker cp scripts/compliance-preflight.mjs xenostudio-backend:/app/');
+  console.log('     sudo docker exec xenostudio-backend node /app/compliance-preflight.mjs\n');
+}
+/** Marks a finding whose truth depends on where this script is running. */
+const envTag = IN_DEPLOYMENT ? '' : ' [env: this machine, not production]';
+
 /* ── 1 · Right of withdrawal — the one that voids sales ─────────────────── */
 console.log('Right of withdrawal (EU CRD 2011/83; §§ 312g, 356 BGB)');
 
@@ -105,7 +124,7 @@ console.log('\nTax');
 if (process.env.STRIPE_AUTOMATIC_TAX === 'true') {
   ok('Stripe Tax enabled');
 } else {
-  fail('Stripe Tax is OFF (STRIPE_AUTOMATIC_TAX)',
+  fail(`Stripe Tax is OFF (STRIPE_AUTOMATIC_TAX)${envTag}`,
     'B2C digital services are taxed where the CUSTOMER is. Selling cross-border without it accrues a liability you must pay from revenue already collected.');
 }
 warn('VAT registration / OSS is an OPERATOR question',
@@ -182,9 +201,9 @@ else fail('surviving evidence is anonymous',
  * rotated for unrelated reasons. Worth fixing BEFORE the first sale, because
  * afterwards a rotation orphans real evidence rather than an empty table. */
 if (process.env.SUBJECT_HASH_SECRET) {
-  ok('SUBJECT_HASH_SECRET is set explicitly');
+  ok(`SUBJECT_HASH_SECRET is set explicitly${envTag}`);
 } else {
-  warn('SUBJECT_HASH_SECRET is unset — evidence handles are keyed by JWT_SECRET',
+  warn(`SUBJECT_HASH_SECRET is unset — evidence handles are keyed by JWT_SECRET${envTag}`,
     'rotating JWT_SECRET is routine and would silently orphan every consent record. Set this before the first sale; afterwards, retiring a key means listing it in SUBJECT_HASH_SECRET_PREVIOUS.');
 }
 
