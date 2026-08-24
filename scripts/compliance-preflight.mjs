@@ -206,13 +206,45 @@ else fail('no Impressum', 'required for a German provider');
  * A compliance check that passes on a MENTION of the thing is worse than no
  * check: it converts a gap into a green tick. Match the format. */
 const impressum = read('src/pages/Impressum.tsx');
-if (/(DE|ATU|FR|NL|IT|ES|PL)[0-9A-Z]{8,12}/.test(impressum)) {
-  ok('Impressum carries an actual VAT number');
+
+/* The VAT id, matched by FORMAT. Two lessons are baked into this one line.
+ *
+ * 🔴 It once matched the heading "Umsatzsteuer-Identifikationsnummer" and a
+ * source comment saying "add the USt-IdNr line once assigned" — on a page whose
+ * body read "ist beantragt". It reported a VAT id that did not exist.
+ *
+ * 🔴 Then the fix for THAT was written through a tool that processes escapes, and
+ * the two `\b` word boundaries became literal BACKSPACE bytes (U+0008 — Python's
+ * "\b" is chr(8)). A bare 0x08 in a JS regex matches a backspace CHARACTER, so
+ * the pattern could not match any VAT number and the check was dead from the day
+ * it was written. It reported "APPLIED FOR" against a page carrying a valid id.
+ * Caught by `scripts/check-control-characters.mjs` in the workspace root — run it
+ * after any scripted edit that carries a regex. */
+const VAT_ID = /\b(DE|ATU|FR|NL|IT|ES|PL)[0-9A-Z]{8,12}\b/;
+if (VAT_ID.test(impressum)) {
+  ok(`Impressum carries a VAT number (${impressum.match(VAT_ID)[0]})`);
 } else if (/beantragt|applied for|pending/i.test(impressum)) {
-  warn('VAT number is APPLIED FOR, not issued',
-    'you may invoice without it, but not charge VAT under a number you do not have. Confirm the position with a Steuerberater before the first sale.');
+  /* 🔴 Not merely stale — NON-COMPLIANT. § 5 Abs. 1 Nr. 6 DDG requires the
+   * USt-IdNr to be shown ONCE HELD, so "ist beantragt" on a page for a business
+   * that has one is a defect in a legally required disclosure, not a to-do. */
+  fail('Impressum still says the VAT number is APPLIED FOR',
+    'DDG requires it once you hold one. Confirm the number in the EU VIES register before publishing it — a Wirtschafts-Identifikationsnummer shares the DE + 9-digit format WITHOUT being a VAT id.');
 } else {
   warn('Impressum shows no VAT number', 'required on invoices once VAT-registered');
+}
+
+/* 🔴 A seller who charges no VAT must SAY WHY. An invoice with no VAT line and no
+ * explanation is indistinguishable from one where the VAT was simply left off,
+ * and the buyer cannot tell which. § 19 Abs. 1 UStG is what makes it legible.
+ *
+ * ⚠️ Keyed on the NOTICE being present, never on whether § 19 still applies —
+ * this script cannot know your turnover. Crossing into Regelbesteuerung means
+ * REMOVING this notice, and that transition is a Steuerberater instruction. */
+if (/§ ?19( Abs\. ?1)? (UStG|Umsatzsteuergesetz)/.test(impressum)) {
+  ok('Impressum carries the § 19 UStG small-business notice');
+} else {
+  warn('no § 19 UStG small-business notice',
+    'if you are a Kleinunternehmer, charging no VAT needs the statutory explanation. If you are NOT, ignore this — and make sure Stripe Tax carries a registration.');
 }
 
 const privacy = 'src/pages/Privacy.tsx';
