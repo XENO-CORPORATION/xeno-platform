@@ -352,3 +352,60 @@ test('the funnel vocabulary covers every boundary', () => {
     assert.ok(STEPS[s], `the funnel no longer records ${s}`);
   }
 });
+
+/* ── 9 · Expiry, which was declared and then not enforced ────────────────── */
+
+test('expires_at is ENFORCED on read, not only by a sweeper', () => {
+  /* ⚠️ This column existed in the schema with nothing reading it — a policy
+   * nobody enforced. A sweeper alone is not enough either: running every 30
+   * minutes means a link keeps working up to half an hour past its own
+   * deadline, so the deadline is not real. */
+  const fn = funnelSvc.slice(funnelSvc.indexOf('export async function findIntent('));
+  const body = fn.slice(0, fn.indexOf('}') + 1);
+  assert.ok(body.includes('expires_at > NOW()'),
+    'findIntent returns expired intents — expires_at describes a policy nothing enforces');
+});
+
+test('an expired intent is INDISTINGUISHABLE from an unknown one', () => {
+  /* Same reason a stranger's intent 404s: anything that separates "expired"
+   * from "never existed" is an oracle for probing valid tokens. */
+  const g = funnelRoutes.indexOf("if (!intent) {");
+  assert.ok(g > -1, 'the not-found branch is gone');
+  assert.ok(funnelRoutes.slice(g, g + 220).includes('404'), 'a missing or expired intent no longer answers 404');
+});
+
+test('the sweeper MARKS before it deletes', async () => {
+  /* "Tried and never came back" is a real funnel outcome. Deleting expired
+   * intents immediately would silently improve every conversion rate by
+   * erasing exactly the failures the funnel exists to show. */
+  const sw = funnelSvc.slice(funnelSvc.indexOf('export async function sweepExpiredIntents('));
+  const mark = sw.indexOf("status = 'expired'");
+  const del = sw.indexOf('DELETE FROM download_intents');
+  assert.ok(mark > -1, 'the sweeper no longer marks expired intents');
+  assert.ok(del > -1, 'the sweeper no longer prunes, so the table grows without bound');
+  assert.ok(mark < del, 'the sweeper deletes before marking — drop-offs vanish from the funnel');
+  assert.ok(/INTERVAL '\d+ days'/.test(sw.slice(0, 1500)),
+    'pruning is no longer bounded by an age window');
+});
+
+test('the sweeper is actually SCHEDULED', () => {
+  /* The whole defect this replaces was a capability that existed and was
+   * called from nowhere. A sweeper nobody runs is the same bug again. */
+  assert.ok(index.includes('sweepExpiredIntents'), 'the intent sweeper is imported nowhere');
+  /* On a LIVE line. Commenting the call out leaves the substring intact, so a
+   * file-level check stayed green with the sweeper disabled — the same shape
+   * that has fooled a gate five times in this suite now. */
+  const live = index.split(String.fromCharCode(10))
+    .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'));
+  assert.ok(live.some((l) => l.includes('setInterval(sweepIntents')),
+    'the intent sweeper is never scheduled — expires_at is a policy nothing applies');
+  assert.ok(live.some((l) => l.includes('sweepIntents();')),
+    'the sweeper never runs at boot, so a restart leaves a backlog unswept');
+});
+
+test('the sweeper cannot throw into startup', async () => {
+  const { sweepExpiredIntents } = await import('../src/server/services/downloadFunnel.js');
+  const exploding = { async query() { throw new Error('db down'); } };
+  const r = await sweepExpiredIntents(exploding);
+  assert.deepEqual(r, { marked: 0, deleted: 0 }, 'a failing sweep can now take down boot');
+});

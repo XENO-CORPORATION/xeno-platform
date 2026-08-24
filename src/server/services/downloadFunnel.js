@@ -180,10 +180,60 @@ export async function createIntent(pool, {
   return r.rows[0];
 }
 
+/**
+ * An intent, if it is still live.
+ *
+ * 🔴 Expiry is enforced HERE, on read, not only by the sweeper. A sweeper is
+ * hygiene — it keeps the table bounded — and hygiene running every 30 minutes is
+ * not a guarantee. If expiry existed only in the sweeper, a link would keep
+ * working for up to half an hour past its own deadline, which means the deadline
+ * is not real. Lazy refusal makes `expires_at` mean what it says at every
+ * instant; the sweeper then only decides how long the rows are KEPT.
+ *
+ * An expired intent is indistinguishable from an unknown one to the caller, for
+ * the same reason a stranger's intent is: no oracle.
+ */
 export async function findIntent(pool, token) {
   if (typeof token !== 'string' || !token) return null;
-  const r = await pool.query('SELECT * FROM download_intents WHERE token = $1', [token]);
+  const r = await pool.query(
+    'SELECT * FROM download_intents WHERE token = $1 AND expires_at > NOW()',
+    [token],
+  );
   return r.rows[0] || null;
+}
+
+/**
+ * Mark expired intents and delete the long-dead ones.
+ *
+ * ⚠️ This exists because `expires_at` was added to the schema and NOTHING read
+ * it — a column that describes a policy nobody enforces, which is the same
+ * built-but-unreachable shape this codebase keeps finding. An unbounded row per
+ * anonymous button press is a slow disk-filling primitive.
+ *
+ * Two stages on purpose. Marking keeps a recent expiry VISIBLE in the funnel
+ * data — "this person tried and never came back" is a real and useful outcome,
+ * and deleting it immediately would silently improve every conversion rate by
+ * erasing the failures. Only genuinely old rows are removed.
+ */
+export async function sweepExpiredIntents(pool) {
+  let marked = 0;
+  let deleted = 0;
+  try {
+    const m = await pool.query(
+      "UPDATE download_intents SET status = 'expired', updated_at = NOW() "
+      + "WHERE status = 'open' AND expires_at <= NOW()",
+    );
+    marked = m.rowCount || 0;
+    /* Events cascade with the intent. 180 days is well past any reporting window
+     * anyone has asked for, and keeps the table from growing without bound. */
+    const d = await pool.query(
+      "DELETE FROM download_intents WHERE expires_at < NOW() - INTERVAL '180 days'",
+    );
+    deleted = d.rowCount || 0;
+  } catch (e) {
+    console.error('[Funnel] sweep failed:', e.message);
+  }
+  return { marked, deleted };
 }
 
 /**
