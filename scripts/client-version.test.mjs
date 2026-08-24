@@ -193,3 +193,85 @@ test('the self-check endpoint is reachable without auth', () => {
   assert.ok(!routes.includes('authMiddleware'),
     'the deprecation notice requires a session — hidden from exactly the builds that need it');
 });
+
+/* ── 7 · Behaviour, because structure could not see the bug ─────────────── */
+
+/**
+ * 🔴 EVERY GATE ABOVE PASSED WHILE THE EXEMPTION WAS BROKEN IN PRODUCTION.
+ *
+ * The middleware is mounted `app.use('/api/', …)` and Express STRIPS the mount
+ * path, so `req.path` reads `/client-policy`, never `/api/client-policy`. The
+ * exemption list — written in full paths — matched nothing, and the first live
+ * test refused /api/client-policy, /api/downloads and /api/ready to the exact
+ * build being told to update.
+ *
+ * The structural gate asserted those paths appeared in the file. They did. A
+ * substring cannot see a framework stripping a prefix — only CALLING the
+ * middleware can. So these tests call it.
+ */
+const { requireSupportedClient } = await import('../src/server/middleware/requireSupportedClient.js');
+
+/** Mount-path stripping reproduced exactly as Express does it. */
+function mountedReq(fullPath, headers = {}) {
+  const mount = '/api';
+  return {
+    originalUrl: fullPath,
+    url: fullPath.slice(mount.length),
+    path: fullPath.slice(mount.length),   // ← what Express actually gives you
+    baseUrl: mount,
+    headers,
+    db: { async query() { return { rows: [{ product: "hub", min_supported: "0.11.0", min_recommended: null, message: null, enforced_at: null }] }; } },
+  };
+}
+
+function fakeRes() {
+  const r = { statusCode: null, body: null, headers: {} };
+  r.set = (k, v) => { r.headers[k] = v; return r; };
+  r.status = (c) => { r.statusCode = c; return r; };
+  r.json = (b) => { r.body = b; return r; };
+  return r;
+}
+
+const OLD_UA = { "user-agent": "Mozilla/5.0 Chrome/126 Electron/31 XENO-HUB/0.9.0" };
+
+test("🔴 an out-of-date build can still reach the remedy it is told to use", async () => {
+  /* The live failure. A floor that also blocks the update feed bricks the app:
+   * the user is told to update, the app asks where, and we refuse to say. */
+  for (const p of ['/api/client-policy', '/api/updates/hub/grant', '/api/downloads/intent', '/api/ready', '/api/health', '/api/auth/logout']) {
+    invalidatePolicyCache();
+    const res = fakeRes();
+    let passed = false;
+    await requireSupportedClient(mountedReq(p, OLD_UA), res, () => { passed = true; });
+    assert.ok(passed, `${p} was REFUSED to an outdated build — it cannot unblock itself`);
+    assert.equal(res.statusCode, null, `${p} answered ${res.statusCode} instead of passing through`);
+  }
+});
+
+test("an out-of-date build IS refused on a normal API path", async () => {
+  /* The control must still work — the exemption is narrow, not a bypass. */
+  invalidatePolicyCache();
+  const res = fakeRes();
+  let passed = false;
+  await requireSupportedClient(mountedReq('/api/billing/entitlements', OLD_UA), res, () => { passed = true; });
+  assert.equal(passed, false, "an unsupported build was served a normal API path");
+  assert.equal(res.statusCode, 426);
+  assert.equal(res.body?.error?.code, 'client_upgrade_required');
+  assert.ok(res.body?.error?.update?.includes('/download'), 'the refusal does not name where to get the new build');
+});
+
+test("a current build is served", async () => {
+  invalidatePolicyCache();
+  const res = fakeRes();
+  let passed = false;
+  const ok = { 'user-agent': 'Mozilla/5.0 Chrome/126 Electron/31 XENO-HUB/0.11.5' };
+  await requireSupportedClient(mountedReq('/api/billing/entitlements', ok), res, () => { passed = true; });
+  assert.ok(passed, "a supported build was refused");
+});
+
+test("a plain curl is served even under a floor", async () => {
+  invalidatePolicyCache();
+  const res = fakeRes();
+  let passed = false;
+  await requireSupportedClient(mountedReq('/api/billing/entitlements', { 'user-agent': 'curl/8.4.0' }), res, () => { passed = true; });
+  assert.ok(passed, "curl was refused — every script and integration in the estate would break");
+});
