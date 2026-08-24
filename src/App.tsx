@@ -41,7 +41,6 @@ import Withdrawal from './pages/Withdrawal';
 import Impressum from './pages/Impressum';
 import OverviewPage from './pages/Overview';
 import SharedChatView from './pages/SharedChatView';
-import { ChatApp } from './features/chat';
 import OSAuthInterface, { OSStateProvider } from './components/os/OSAuthInterface';
 import OSHomeInterface from './components/os/OSHomeInterface';
 import { OSAuthWithContainers } from './components/dashboard/OSAuthWithContainers';
@@ -252,6 +251,22 @@ function App() {
 
             {/* /chat -> the overview chat */}
             <Route path="/chat" element={<Navigate to="/overview/chat/llm" replace />} />
+
+            {/* Test comparison routes for user evaluation */}
+            <Route path="/test/chat-main" element={
+              <ProtectedRoute>
+                <div className="w-full h-screen">
+                  <MultiChatContainer isStandalone={false} />
+                </div>
+              </ProtectedRoute>
+            } />
+            <Route path="/test/chat-standalone" element={
+              <ProtectedRoute>
+                <div className="w-full h-screen bg-[#0a0a0b]">
+                  <MultiChatContainer isStandalone={true} />
+                </div>
+              </ProtectedRoute>
+            } />
 
             {/* Protected Routes - Only accessible after authentication */}
             <Route path="/overview/*" element={

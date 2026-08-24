@@ -49,7 +49,6 @@ import AudioStudioInterface from '../components/playground/Studio/AudioStudioInt
 // Import Office components
 import CanvasPlanning from '../components/office/CanvasPlanning';
 import CanvasPlanningVisual from '../components/office/CanvasPlanningVisual';
-import { ChatApp } from '../features/chat';
 import PDFChatInterface from '../components/playground/Office/PDFChatInterface';
 import WordChatInterface from '../components/playground/Office/WordChatInterface';
 // Import IOPaint interface
