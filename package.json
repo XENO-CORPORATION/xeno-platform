@@ -71,6 +71,7 @@
     "proof:forum-throttle": "node scripts/forum-throttle-proof.mjs",
     "proof:forum-report": "node scripts/forum-report-proof.mjs",
     "proof:forum-push": "node scripts/forum-push-proof.mjs",
+    "smoke:download-funnel": "node scripts/download-funnel-render.mjs",
     "smoke:forum-ui": "node scripts/forum-ui-render.mjs",
     "smoke:forum-widget": "node scripts/forum-widget-render.mjs",
     "smoke:forum": "node scripts/smoke-forum.mjs",
