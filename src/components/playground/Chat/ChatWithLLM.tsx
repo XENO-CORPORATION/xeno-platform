@@ -52,7 +52,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, MenuDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -14462,9 +14462,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               )}
                       </div>
 
-          {/* Center - Token Count (mobile only, non-multi-interface) - absolutely centered */}
-          {isMobile && !isMultiInterface && (
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+          {/* Center - Token Count (mobile only, non-multi-interface, active conversation only) - absolutely centered */}
+          {isMobile && !isMultiInterface && messages.length > 0 && (
+            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
               {(() => {
                 const totalUsedTokens = realTokenCount;
                 const maxTokens = selectedModel?.maxTokens || 200000;
@@ -14652,8 +14652,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     setIsThemeMenuOpen(false);
                   }}
                 >
-                  <span className="font-medium leading-none">Temporary</span>
-                  <span className="leading-none text-[12px] text-[var(--chat-muted)]">Preview</span>
+                  <span className="hidden sm:inline-flex items-center gap-1">
+                    <span className="font-medium leading-none">Temporary</span>
+                    <span className="leading-none text-[12px] text-[var(--chat-muted)]">Preview</span>
+                  </span>
                 </Button>
               )}
 
@@ -14861,6 +14863,24 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   data-selection={isSharePreviewOpen ? 'on' : 'off'}
                 />
               </div>
+              )}
+
+              {/* Mobile Taskbar Menu Trigger when in open conversation */}
+              {!isMultiInterface && messages.length > 0 && (
+                <div className="relative flex-shrink-0 md:hidden">
+                  <IconButton
+                    icon={MenuDecl}
+                    variant="quiet"
+                    size="lg"
+                    iconSize={16}
+                    className="chat-top-bar-btn"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('open_mobile_taskbar'));
+                    }}
+                    aria-label="All products & tools"
+                    title="All products & tools"
+                  />
+                </div>
               )}
 
               {/* ⋯ only in an open conversation (Share sibling). Theme / Temporary / Settings stay on New chat. */}
@@ -15179,7 +15199,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   variant="quiet"
                   size="lg"
                   iconSize={16}
-                  className="chat-top-bar-btn"
+                  className="chat-top-bar-btn hidden sm:flex"
                   onClick={(event) => {
                     openCustomizePage(event.currentTarget);
                     setIsSettingsModalOpen(false);
@@ -15212,27 +15232,34 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   aria-label="Chat settings"
                   title="Chat settings"
               />
+              <IconButton
+                  icon={MenuDecl}
+                  variant="quiet"
+                  size="lg"
+                  iconSize={16}
+                  className="chat-top-bar-btn md:hidden"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('open_mobile_taskbar'));
+                  }}
+                  aria-label="All products & tools"
+                  title="All products & tools"
+              />
               </div>
               ) : (
-              /* Stays hand-written, and it is not a control: zero by zero, `aria-hidden`, out of
-                 the tab order and pointer-transparent. It exists only so `settingsButtonRef` has
-                 something to point at when the real settings button is not rendered — a popover
-                 anchors against it. Giving it a variant would paint a button nobody can see or
-                 reach. */
-              <button
+                <button
                   ref={settingsButtonRef}
                   type="button"
                   tabIndex={-1}
                   aria-hidden="true"
                   className="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0"
-              />
+                />
               )}
             </div>
           </div>
           {!isMultiInterface && (
             <div
               className="ml-auto h-9 flex-shrink-0"
-              style={{ width: messages.length === 0 ? '15.5rem' : '5.25rem' }}
+              style={{ width: messages.length === 0 ? (isMobile ? '7.5rem' : '15.5rem') : (isMobile ? '7.5rem' : '5.25rem') }}
               aria-hidden="true"
             />
           )}

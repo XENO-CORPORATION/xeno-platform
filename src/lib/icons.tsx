@@ -239,6 +239,7 @@ export {
   GFileX as FileXDecl,
   GContrast as ContrastDecl,
   GUserX as UserRoundXDecl,
+  GMenu as MenuDecl,
   GShare as ShareDecl,
   GMore as MoreVerticalDecl,
   GAttach as PaperclipDecl,

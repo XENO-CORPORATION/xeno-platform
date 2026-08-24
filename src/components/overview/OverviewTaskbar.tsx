@@ -353,7 +353,21 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
     };
   }, []);
 
+  // Listen for open/toggle mobile taskbar events across the platform
+  useEffect(() => {
+    const handleOpen = () => setIsMobileMenuOpen(true);
+    const handleToggle = () => setIsMobileMenuOpen((prev) => !prev);
+
+    window.addEventListener('open_mobile_taskbar', handleOpen);
+    window.addEventListener('toggle_overview_taskbar', handleToggle);
+    return () => {
+      window.removeEventListener('open_mobile_taskbar', handleOpen);
+      window.removeEventListener('toggle_overview_taskbar', handleToggle);
+    };
+  }, []);
+
   const sidebarWidth = 'w-13';
+  const isChatRoute = location.pathname.includes('/chat');
 
   // Close mobile menu when navigating
   const handleMobileNavigation = (path: string) => {
@@ -363,15 +377,17 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
 
   return (
     <>
-      {/* ── Mobile Top-Right Menu Trigger ────────────────────────────────────────── */}
-      <button
-        type="button"
-        onClick={() => setIsMobileMenuOpen(true)}
-        className="fixed top-3.5 right-3.5 z-[240] md:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-black/85 text-white shadow-xl backdrop-blur-md active:scale-95 transition-all duration-150"
-        aria-label="Open taskbar menu"
-      >
-        <Menu size={20} />
-      </button>
+      {/* ── Mobile Top-Right Menu Trigger (on non-chat pages without their own top bar) ── */}
+      {!isChatRoute && (
+        <button
+          type="button"
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="fixed top-3.5 right-3.5 z-[240] md:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-black/85 text-white shadow-xl backdrop-blur-md active:scale-95 transition-all duration-150"
+          aria-label="Open taskbar menu"
+        >
+          <Menu size={20} />
+        </button>
+      )}
 
       {/* ── Full Mobile Taskbar Drawer ───────────────────────────────────────────── */}
       {isMobileMenuOpen && (
