@@ -3126,6 +3126,42 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     localStorage.setItem(chatProjectsStorageKey, JSON.stringify(chatProjects));
   }, [chatProjects, chatProjectsStorageKey]);
 
+  // Cloud sync for projects when authenticated
+  useEffect(() => {
+    if (!chatService.isAuthenticated()) return;
+    let isSubscribed = true;
+
+    chatService.getProjects().then((serverProjects) => {
+      if (!isSubscribed || !Array.isArray(serverProjects) || serverProjects.length === 0) return;
+      setChatProjects((prev) => {
+        const newProjects: ChatHistoryProject[] = serverProjects.map((p) => ({
+          id: p.id,
+          name: (p.name ?? '').slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project',
+          description: p.description || '',
+          instructions: p.custom_instructions || '',
+          files: [],
+          updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : Date.now(),
+        }));
+        const merged = [...prev];
+        for (const np of newProjects) {
+          const idx = merged.findIndex((p) => p.id === np.id);
+          if (idx >= 0) {
+            merged[idx] = { ...merged[idx], name: np.name, description: np.description, instructions: np.instructions };
+          } else {
+            merged.push(np);
+          }
+        }
+        return merged;
+      });
+    }).catch((err) => {
+      console.warn('[ChatWithLLM] Failed to sync projects from backend:', err);
+    });
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, []);
+
   const closeCreateProjectModal = useCallback(() => {
     // Intent only — drafts clear after the exit animation.
     setIsCreateProjectModalOpen(false);

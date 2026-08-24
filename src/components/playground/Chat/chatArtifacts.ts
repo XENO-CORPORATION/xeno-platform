@@ -29,7 +29,9 @@ export type ListArtifactsInput = {
 const day = 24 * 60 * 60 * 1000;
 const now = Date.now();
 
-/** Seed store — session-level until backend persists. */
+import { chatService } from '@/services/chatService';
+
+/** Seed store — session-level fallback until backend responds. */
 let artifactsStore: ChatArtifact[] = [];
 
 const matchesQuery = (artifact: ChatArtifact, query: string): boolean => {
@@ -45,11 +47,40 @@ const matchesQuery = (artifact: ChatArtifact, query: string): boolean => {
 
 /**
  * Lists artifacts for the library page.
- * Mock: filter + sort in memory. Backend: GET /api/chat/artifacts?...
+ * Fetches from backend GET /api/chat/artifacts when authenticated, with local cache fallback.
  */
 export const listArtifacts = async (
   input: ListArtifactsInput = {},
 ): Promise<ChatArtifact[]> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      const serverArtifacts = await chatService.getArtifacts({
+        kind: input.kind,
+        sort: input.sort,
+        query: input.query,
+      });
+
+      if (Array.isArray(serverArtifacts)) {
+        const mapped: ChatArtifact[] = serverArtifacts.map((row) => ({
+          id: row.id,
+          title: row.title,
+          kind: row.kind as ArtifactKind,
+          conversationId: row.conversation_id || '',
+          conversationTitle: row.conversation_title || 'Untitled Chat',
+          previewText: row.preview_text || '',
+          createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+          updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+        }));
+        // Merge into store
+        const existingIds = new Set(mapped.map((a) => a.id));
+        artifactsStore = [...mapped, ...artifactsStore.filter((a) => !existingIds.has(a.id))];
+        return mapped;
+      }
+    }
+  } catch (err) {
+    console.warn('[chatArtifacts] Failed to list artifacts from backend, using local store:', err);
+  }
+
   const kind = input.kind ?? 'all';
   const sort = input.sort ?? 'updated';
   const query = input.query ?? '';
@@ -68,18 +99,44 @@ export const listArtifacts = async (
   return rows;
 };
 
-export const getArtifact = async (id: string): Promise<ChatArtifact | null> =>
-  artifactsStore.find((artifact) => artifact.id === id) ?? null;
+export const getArtifact = async (id: string): Promise<ChatArtifact | null> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      const row = await chatService.getArtifact(id);
+      if (row) {
+        return {
+          id: row.id,
+          title: row.title,
+          kind: row.kind as ArtifactKind,
+          conversationId: row.conversation_id || '',
+          conversationTitle: row.conversation_title || 'Untitled Chat',
+          previewText: row.preview_text || '',
+          createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+          updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[chatArtifacts] Failed to get artifact from backend:', err);
+  }
+  return artifactsStore.find((artifact) => artifact.id === id) ?? null;
+};
 
 /**
  * Share URL for an artifact.
- * Mock path mirrors chat share (`/c/…`); backend will mint real tokens later.
  */
 export const getArtifactShareUrl = (id: string): string =>
   `https://share.xenostudio.ai/a/${id}`;
 
-/** Mock delete — UI can call this; wire to DELETE later. */
+/** Delete artifact from database and local store. */
 export const deleteArtifact = async (id: string): Promise<void> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      await chatService.deleteArtifact(id);
+    }
+  } catch (err) {
+    console.warn('[chatArtifacts] Failed to delete artifact on backend:', err);
+  }
   artifactsStore = artifactsStore.filter((artifact) => artifact.id !== id);
 };
 

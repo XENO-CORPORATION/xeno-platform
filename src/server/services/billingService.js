@@ -635,11 +635,33 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
  * rides on BOTH the session metadata (for checkout.session.completed) and the
  * subscription metadata (for renewal/quantity-change events).
  */
-export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, seats, origin, downloadIntent = null }) {
+export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, seats, origin, downloadIntent = null, consentId = null }) {
   const item = CATALOG.map(resolveItem).find((i) => i.id === 'team_seat');
   if (!item?.available) { const e = new Error('team seat price not configured (set STRIPE_PRICE_TEAM_SEAT_MONTHLY)'); e.status = 400; throw e; }
   const qty = Math.max(1, Math.floor(Number(seats) || 1));
   const base = process.env.BILLING_APP_URL || origin || siteOrigin();
+  /* 🔴 CONSENT IS REQUIRED HERE TOO, and it was not.
+   *
+   * The withdrawal-right consent was added to createCheckout and this path was
+   * missed — so a Team purchase, the most expensive thing on the price list,
+   * completed without the acknowledgement that makes a digital sale final. Every
+   * seat sold would have stayed withdrawable for 14 days regardless of use.
+   *
+   * A control that covers one of two payment paths is not a weaker control, it
+   * is an absent one for the path it misses — and the missed path is the one
+   * where the money is. Same fail-closed treatment as the personal route. */
+  if (await consentReady(pool)) {
+    const usable = consentId || await findUsableConsent(pool, user.id, item.id);
+    if (!usable) {
+      const e = new Error('Consent to immediate performance is required before purchase');
+      e.status = 400;
+      e.code = 'consent_required';
+      throw e;
+    }
+    // eslint-disable-next-line no-param-reassign
+    consentId = usable;
+  }
+
   const seatReturn = checkoutReturn(base, 'team_seat', downloadIntent);
   const customer = await getOrCreateCustomer(pool, user);
   const session = await stripe.checkout.sessions.create({
@@ -660,9 +682,11 @@ export async function createWorkspaceSeatCheckout(pool, user, { workspaceId, sea
     metadata: {
       xenoUserId: String(user.id), itemId: 'team_seat', kind: 'subscription',
       xenoWorkspaceId: String(workspaceId), seats: String(qty),
+      ...(consentId ? { xenoConsentId: String(consentId) } : {}),
       ...(downloadIntent ? { xenoDownloadIntent: String(downloadIntent) } : {}),
     },
   });
+  await consumeConsent(pool, consentId, session.id);
   return { url: session.url, id: session.id };
 }
 

@@ -43,11 +43,46 @@ if (!consentSvc) {
 } else {
   ok('consent service present');
 
-  if (/e\.code = 'consent_required'/.test(billing) && /if \(!usable\)/.test(billing)) {
-    ok('checkout REFUSES without consent (fails closed)');
+  /* 🔴 EVERY payment path, counted — not "does the string appear".
+   *
+   * The first version checked the file for one refusal and passed while
+   * createWorkspaceSeatCheckout had NO consent gate at all: Team, the most
+   * expensive item on the price list, sold without the acknowledgement that
+   * makes a digital sale final. A control covering one of two paths is not a
+   * weaker control, it is an absent one for the path it misses. */
+  const paths = [
+    ['createCheckout', 'personal subscriptions and credit packs'],
+    ['createWorkspaceSeatCheckout', 'per-seat Team'],
+  ];
+  for (const [fn, label] of paths) {
+    const i = billing.indexOf(`export async function ${fn}(`);
+    if (i < 0) { fail(`${fn} is gone`, 'the payment path moved — re-verify the consent gate'); continue; }
+    const body = billing.slice(i, i + 4000);
+    /* ⚠️ findUsableConsent must be CALLED. Checking only for the refusal code and
+     * `if (!usable)` passed when `usable` was hardcoded true — the structure was
+     * all there and could never fire. A gate that sees the shape of a check
+     * rather than its input is the same mechanism-not-outcome miss this file
+     * exists to prevent. */
+    const looksUp = /findUsableConsent\(pool, user\.id, item\.id\)/.test(body);
+    if (looksUp && /e\.code = 'consent_required'/.test(body) && /if \(!usable\)/.test(body)) {
+      ok(`${label} refuses without consent (fails closed)`);
+    } else {
+      fail(`${label} does NOT require consent`,
+        'every sale on this path stays withdrawable for 14 days regardless of use');
+    }
+  }
+
+  /* And the UI that satisfies the refusal. A server that demands consent with no
+   * way to give it is a checkout that 400s for every customer — which is how
+   * this shipped once already, hidden behind the 503 that fires while Stripe is
+   * off. */
+  const dialog = read('src/components/billing/CheckoutConsent.tsx');
+  const pricing = read('src/pages/Pricing.tsx');
+  if (dialog.includes('recordConsent(') && pricing.includes('<CheckoutConsent')) {
+    ok('the checkout UI collects consent');
   } else {
-    fail('checkout does not refuse without consent',
-      'a warning is not a control — the sale still completes and is still voidable');
+    fail('nothing collects consent in the UI',
+      'the server refuses without it, so checkout would 400 for every customer');
   }
 
   for (const [k, label] of [

@@ -40,6 +40,7 @@ import Cookies from './pages/Cookies';
 import Withdrawal from './pages/Withdrawal';
 import Impressum from './pages/Impressum';
 import OverviewPage from './pages/Overview';
+import SharedChatView from './pages/SharedChatView';
 import { ChatApp } from './features/chat';
 import OSAuthInterface, { OSStateProvider } from './components/os/OSAuthInterface';
 import OSHomeInterface from './components/os/OSHomeInterface';
@@ -123,7 +124,7 @@ function App() {
     );
   }
 
-  // Default: Full xeno-studio.com experience
+  // Default: the full xenostudio.ai experience
   return (
     <AuthProvider>
       <WorkspaceProvider>
@@ -244,6 +245,10 @@ function App() {
                 </React.Suspense>
               </ProtectedRoute>
             } />
+
+            {/* Public Shared Conversation Viewer (no auth required) */}
+            <Route path="/c/:token" element={<SharedChatView />} />
+            <Route path="/share/:token" element={<SharedChatView />} />
 
             {/* /chat -> the overview chat */}
             <Route path="/chat" element={<Navigate to="/overview/chat/llm" replace />} />

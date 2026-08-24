@@ -1,5 +1,6 @@
 import express from 'express';
 import { workspaceFromReq, isWorkspaceMember, linkResourceToWorkspace } from '../utils/workspaceContext.js';
+import { computeNextRun, executeScheduledTask } from '../workers/chatScheduledWorker.js';
 
 const router = express.Router();
 
@@ -1059,6 +1060,564 @@ router.post('/sync', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to sync conversations:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================
+// ARTIFACTS ROUTES
+// ============================================
+
+// GET /api/chat/artifacts - List artifacts with filter and sort
+router.get('/artifacts', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { kind, sort = 'updated', query } = req.query;
+    let sql = `SELECT a.*, c.title AS conversation_title 
+               FROM chat_artifacts a 
+               LEFT JOIN chat_conversations c ON a.conversation_id = c.id
+               WHERE a.user_id = $1 AND a.is_archived = FALSE`;
+    const params = [userId];
+
+    if (kind && kind !== 'all') {
+      params.push(kind);
+      sql += ` AND a.kind = $${params.length}`;
+    }
+
+    if (query && query.trim()) {
+      params.push(`%${query.trim()}%`);
+      sql += ` AND (a.title ILIKE $${params.length} OR a.preview_text ILIKE $${params.length})`;
+    }
+
+    if (sort === 'name') sql += ` ORDER BY a.title ASC`;
+    else if (sort === 'created') sql += ` ORDER BY a.created_at DESC`;
+    else sql += ` ORDER BY a.updated_at DESC`;
+
+    const { rows } = await req.db.query(sql, params);
+    res.json({ success: true, artifacts: rows });
+  } catch (error) {
+    console.error('Failed to list artifacts:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /api/chat/artifacts/:id - Get single artifact
+router.get('/artifacts/:id', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id } = req.params;
+    const { rows } = await req.db.query(
+      `SELECT a.*, c.title AS conversation_title 
+       FROM chat_artifacts a 
+       LEFT JOIN chat_conversations c ON a.conversation_id = c.id
+       WHERE a.id = $1 AND a.user_id = $2`,
+      [id, userId]
+    );
+
+    if (rows.length === 0) return res.status(404).json({ success: false, error: 'Artifact not found' });
+    res.json({ success: true, artifact: rows[0] });
+  } catch (error) {
+    console.error('Failed to get artifact:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /api/chat/artifacts - Create or save artifact
+router.post('/artifacts', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { title, kind, language, content, preview_text, conversation_id, message_id } = req.body;
+    if (!title || !kind || !content) {
+      return res.status(400).json({ success: false, error: 'title, kind, and content are required' });
+    }
+
+    const preview = preview_text || content.slice(0, 160).replace(/[\r\n]+/g, ' ');
+
+    const { rows } = await req.db.query(
+      `INSERT INTO chat_artifacts (
+        user_id, conversation_id, message_id, title, kind, language, content, preview_text
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *`,
+      [userId, conversation_id || null, message_id || null, title, kind, language || null, content, preview]
+    );
+
+    res.json({ success: true, artifact: rows[0] });
+  } catch (error) {
+    console.error('Failed to create artifact:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/chat/artifacts/:id - Delete artifact
+router.delete('/artifacts/:id', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id } = req.params;
+    await req.db.query(`DELETE FROM chat_artifacts WHERE id = $1 AND user_id = $2`, [id, userId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete artifact:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================
+// SCHEDULED AUTOMATION TASKS ROUTES
+// ============================================
+
+// GET /api/chat/scheduled - List scheduled tasks
+router.get('/scheduled', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { status, sort = 'next', query } = req.query;
+    let sql = `SELECT * FROM chat_scheduled_tasks WHERE user_id = $1`;
+    const params = [userId];
+
+    if (status && status !== 'all') {
+      params.push(status);
+      sql += ` AND status = $${params.length}`;
+    }
+
+    if (query && query.trim()) {
+      params.push(`%${query.trim()}%`);
+      sql += ` AND (title ILIKE $${params.length} OR prompt ILIKE $${params.length} OR cadence_label ILIKE $${params.length})`;
+    }
+
+    if (sort === 'name') sql += ` ORDER BY title ASC`;
+    else if (sort === 'updated') sql += ` ORDER BY updated_at DESC`;
+    else sql += ` ORDER BY next_run_at ASC`;
+
+    const { rows } = await req.db.query(sql, params);
+    res.json({ success: true, tasks: rows });
+  } catch (error) {
+    console.error('Failed to list scheduled tasks:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /api/chat/scheduled - Create scheduled task
+router.post('/scheduled', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { title, prompt, cadence = 'daily', cadence_label, model_id = 'google/gemini-2.5-flash-preview-05-20', conversation_id, project_id } = req.body;
+    if (!title || !prompt) {
+      return res.status(400).json({ success: false, error: 'title and prompt are required' });
+    }
+
+    const label = cadence_label || (cadence === 'daily' ? 'Every day' : cadence === 'weekly' ? 'Every week' : 'Once');
+    const nextRun = computeNextRun(cadence, new Date());
+
+    const { rows } = await req.db.query(
+      `INSERT INTO chat_scheduled_tasks (
+        user_id, conversation_id, project_id, title, prompt, model_id, cadence, cadence_label, next_run_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *`,
+      [userId, conversation_id || null, project_id || null, title, prompt, model_id, cadence, label, nextRun]
+    );
+
+    res.json({ success: true, task: rows[0] });
+  } catch (error) {
+    console.error('Failed to create scheduled task:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /api/chat/scheduled/:id - Update scheduled task
+router.put('/scheduled/:id', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id } = req.params;
+    const { title, prompt, cadence, cadence_label, status, model_id } = req.body;
+
+    const existing = await req.db.query(`SELECT * FROM chat_scheduled_tasks WHERE id = $1 AND user_id = $2`, [id, userId]);
+    if (existing.rows.length === 0) return res.status(404).json({ success: false, error: 'Task not found' });
+
+    const task = existing.rows[0];
+    const newCadence = cadence || task.cadence;
+    const nextRun = (cadence && cadence !== task.cadence) ? computeNextRun(newCadence, new Date()) : task.next_run_at;
+
+    const { rows } = await req.db.query(
+      `UPDATE chat_scheduled_tasks SET
+        title = COALESCE($1, title),
+        prompt = COALESCE($2, prompt),
+        cadence = COALESCE($3, cadence),
+        cadence_label = COALESCE($4, cadence_label),
+        status = COALESCE($5, status),
+        model_id = COALESCE($6, model_id),
+        next_run_at = $7,
+        updated_at = NOW()
+       WHERE id = $8 AND user_id = $9
+       RETURNING *`,
+      [title, prompt, cadence, cadence_label, status, model_id, nextRun, id, userId]
+    );
+
+    res.json({ success: true, task: rows[0] });
+  } catch (error) {
+    console.error('Failed to update scheduled task:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/chat/scheduled/:id - Delete scheduled task
+router.delete('/scheduled/:id', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id } = req.params;
+    await req.db.query(`DELETE FROM chat_scheduled_tasks WHERE id = $1 AND user_id = $2`, [id, userId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete scheduled task:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /api/chat/scheduled/:id/run - Immediate trigger of scheduled task
+router.post('/scheduled/:id/run', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id } = req.params;
+    const { rows } = await req.db.query(`SELECT * FROM chat_scheduled_tasks WHERE id = $1 AND user_id = $2`, [id, userId]);
+    if (rows.length === 0) return res.status(404).json({ success: false, error: 'Task not found' });
+
+    const result = await executeScheduledTask(req.db, rows[0]);
+    res.json({ success: true, result });
+  } catch (error) {
+    console.error('Failed to execute scheduled task:', error);
+    res.status(500).json({ success: false, error: error.message || 'Execution failed' });
+  }
+});
+
+// ============================================
+// SKILLS LIBRARY ROUTES
+// ============================================
+
+// GET /api/chat/skills - List skills
+router.get('/skills', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { visibility, conversation_id } = req.query;
+    let sql = `SELECT * FROM chat_skills WHERE user_id = $1`;
+    const params = [userId];
+
+    if (visibility) {
+      params.push(visibility);
+      sql += ` AND visibility = $${params.length}`;
+    }
+    if (conversation_id) {
+      params.push(conversation_id);
+      sql += ` AND conversation_id = $${params.length}`;
+    }
+
+    sql += ` ORDER BY updated_at DESC`;
+    const { rows } = await req.db.query(sql, params);
+    res.json({ success: true, skills: rows });
+  } catch (error) {
+    console.error('Failed to list skills:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /api/chat/skills - Create skill
+router.post('/skills', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { name, summary, body, author = 'You', source = 'created', visibility = 'global', conversation_id, category = 'general' } = req.body;
+    if (!name || !body) return res.status(400).json({ success: false, error: 'name and body are required' });
+
+    const { rows } = await req.db.query(
+      `INSERT INTO chat_skills (
+        user_id, name, summary, body, author, source, visibility, conversation_id, category
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *`,
+      [userId, name, summary || body.slice(0, 100), body, author, source, visibility, conversation_id || null, category]
+    );
+
+    res.json({ success: true, skill: rows[0] });
+  } catch (error) {
+    console.error('Failed to create skill:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /api/chat/skills/:id - Update skill
+router.put('/skills/:id', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id } = req.params;
+    const { name, summary, body, is_enabled } = req.body;
+
+    const { rows } = await req.db.query(
+      `UPDATE chat_skills SET
+        name = COALESCE($1, name),
+        summary = COALESCE($2, summary),
+        body = COALESCE($3, body),
+        is_enabled = COALESCE($4, is_enabled),
+        updated_at = NOW()
+       WHERE id = $5 AND user_id = $6
+       RETURNING *`,
+      [name, summary, body, is_enabled, id, userId]
+    );
+
+    if (rows.length === 0) return res.status(404).json({ success: false, error: 'Skill not found' });
+    res.json({ success: true, skill: rows[0] });
+  } catch (error) {
+    console.error('Failed to update skill:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/chat/skills/:id - Delete skill
+router.delete('/skills/:id', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id } = req.params;
+    await req.db.query(`DELETE FROM chat_skills WHERE id = $1 AND user_id = $2`, [id, userId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete skill:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================
+// PROJECTS & KNOWLEDGE FILES ROUTES
+// ============================================
+
+// GET /api/chat/projects - List projects
+router.get('/projects', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { rows } = await req.db.query(
+      `SELECT p.*, 
+              (SELECT COUNT(*) FROM chat_project_files WHERE project_id = p.id) AS file_count,
+              (SELECT COUNT(*) FROM chat_conversations WHERE project_id = p.id) AS chat_count
+       FROM chat_projects p
+       WHERE p.user_id = $1 AND p.is_archived = FALSE
+       ORDER BY p.updated_at DESC`,
+      [userId]
+    );
+
+    res.json({ success: true, projects: rows });
+  } catch (error) {
+    console.error('Failed to list projects:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /api/chat/projects - Create project
+router.post('/projects', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { name, description, custom_instructions, settings } = req.body;
+    if (!name) return res.status(400).json({ success: false, error: 'Project name is required' });
+
+    const { rows } = await req.db.query(
+      `INSERT INTO chat_projects (
+        user_id, name, description, custom_instructions, settings
+      ) VALUES ($1, $2, $3, $4, $5)
+      RETURNING *`,
+      [userId, name, description || null, custom_instructions || null, settings ? JSON.stringify(settings) : '{}']
+    );
+
+    res.json({ success: true, project: rows[0] });
+  } catch (error) {
+    console.error('Failed to create project:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /api/chat/projects/:id - Update project
+router.put('/projects/:id', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id } = req.params;
+    const { name, description, custom_instructions, settings, is_archived } = req.body;
+
+    const { rows } = await req.db.query(
+      `UPDATE chat_projects SET
+        name = COALESCE($1, name),
+        description = COALESCE($2, description),
+        custom_instructions = COALESCE($3, custom_instructions),
+        settings = COALESCE($4, settings),
+        is_archived = COALESCE($5, is_archived),
+        updated_at = NOW()
+       WHERE id = $6 AND user_id = $7
+       RETURNING *`,
+      [name, description, custom_instructions, settings ? JSON.stringify(settings) : null, is_archived, id, userId]
+    );
+
+    if (rows.length === 0) return res.status(404).json({ success: false, error: 'Project not found' });
+    res.json({ success: true, project: rows[0] });
+  } catch (error) {
+    console.error('Failed to update project:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/chat/projects/:id - Delete project
+router.delete('/projects/:id', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id } = req.params;
+    await req.db.query(`DELETE FROM chat_projects WHERE id = $1 AND user_id = $2`, [id, userId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete project:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /api/chat/projects/:id/files - List files in project
+router.get('/projects/:id/files', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id: projectId } = req.params;
+    const { rows } = await req.db.query(
+      `SELECT * FROM chat_project_files WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC`,
+      [projectId, userId]
+    );
+
+    res.json({ success: true, files: rows });
+  } catch (error) {
+    console.error('Failed to list project files:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /api/chat/projects/:id/files - Add file to project
+router.post('/projects/:id/files', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id: projectId } = req.params;
+    const { name, file_type, file_size, content_text } = req.body;
+
+    if (!name || !content_text) {
+      return res.status(400).json({ success: false, error: 'File name and text content are required' });
+    }
+
+    const { rows } = await req.db.query(
+      `INSERT INTO chat_project_files (
+        project_id, user_id, name, file_type, file_size, content_text
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *`,
+      [projectId, userId, name, file_type || 'text/plain', file_size || content_text.length, content_text]
+    );
+
+    res.json({ success: true, file: rows[0] });
+  } catch (error) {
+    console.error('Failed to add project file:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/chat/projects/:id/files/:fileId - Delete file from project
+router.delete('/projects/:id/files/:fileId', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { fileId } = req.params;
+    await req.db.query(`DELETE FROM chat_project_files WHERE id = $1 AND user_id = $2`, [fileId, userId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete project file:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================
+// MEMORIES ROUTES
+// ============================================
+
+// GET /api/chat/memories - List user memories
+router.get('/memories', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { rows } = await req.db.query(
+      `SELECT * FROM chat_user_memories WHERE user_id = $1 AND is_active = TRUE ORDER BY updated_at DESC`,
+      [userId]
+    );
+
+    res.json({ success: true, memories: rows });
+  } catch (error) {
+    console.error('Failed to list memories:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /api/chat/memories - Add memory
+router.post('/memories', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { content, source_conversation_id } = req.body;
+    if (!content) return res.status(400).json({ success: false, error: 'Content is required' });
+
+    const { rows } = await req.db.query(
+      `INSERT INTO chat_user_memories (user_id, content, source_conversation_id)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [userId, content, source_conversation_id || null]
+    );
+
+    res.json({ success: true, memory: rows[0] });
+  } catch (error) {
+    console.error('Failed to add memory:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/chat/memories/:id - Delete memory
+router.delete('/memories/:id', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { id } = req.params;
+    await req.db.query(`DELETE FROM chat_user_memories WHERE id = $1 AND user_id = $2`, [id, userId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete memory:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

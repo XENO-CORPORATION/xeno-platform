@@ -93,6 +93,7 @@ import agentRoutes from './routes/agentRoutes.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { runMigrations } from './services/migrationService.js';
+import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
 
 // Round 8: Infrastructure imports
 import healthRoutes from './routes/healthRoutes.js';
@@ -3929,6 +3930,8 @@ startNotificationEmailSweep(pool);
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
 startWebhookPushSweep(pool);
+// Start chat scheduled automation background worker
+startScheduledTasksWorker(pool);
 
 // Start main server
 server.listen(PORT, () => {

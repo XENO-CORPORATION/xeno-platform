@@ -596,6 +596,417 @@ export const chatService = {
       return [];
     }
   },
+
+  // ============================================
+  // ARTIFACTS API
+  // ============================================
+
+  async getArtifacts(params?: { kind?: string; sort?: string; query?: string }): Promise<any[]> {
+    try {
+      const qs = new URLSearchParams();
+      if (params?.kind) qs.set('kind', params.kind);
+      if (params?.sort) qs.set('sort', params.sort);
+      if (params?.query) qs.set('query', params.query);
+
+      const response = await fetch(`${API_BASE}/artifacts?${qs.toString()}`, {
+        headers: getAuthHeaders(),
+      });
+      const result = await handleResponse<{ artifacts: any[] }>(response);
+      return result.artifacts || [];
+    } catch (error) {
+      console.error('Failed to get artifacts:', error);
+      return [];
+    }
+  },
+
+  async getArtifact(id: string): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/artifacts/${id}`, {
+        headers: getAuthHeaders(),
+      });
+      const result = await handleResponse<{ artifact: any }>(response);
+      return result.artifact || null;
+    } catch (error) {
+      console.error('Failed to get artifact:', error);
+      return null;
+    }
+  },
+
+  async createArtifact(data: {
+    title: string;
+    kind: string;
+    content: string;
+    language?: string;
+    preview_text?: string;
+    conversation_id?: string;
+    message_id?: string;
+  }): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/artifacts`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      const result = await handleResponse<{ artifact: any }>(response);
+      return result.artifact || null;
+    } catch (error) {
+      console.error('Failed to create artifact:', error);
+      return null;
+    }
+  },
+
+  async deleteArtifact(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/artifacts/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      await handleResponse<{ success: boolean }>(response);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete artifact:', error);
+      return false;
+    }
+  },
+
+  // ============================================
+  // SCHEDULED AUTOMATION TASKS API
+  // ============================================
+
+  async getScheduledTasks(params?: { status?: string; sort?: string; query?: string }): Promise<any[]> {
+    try {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set('status', params.status);
+      if (params?.sort) qs.set('sort', params.sort);
+      if (params?.query) qs.set('query', params.query);
+
+      const response = await fetch(`${API_BASE}/scheduled?${qs.toString()}`, {
+        headers: getAuthHeaders(),
+      });
+      const result = await handleResponse<{ tasks: any[] }>(response);
+      return result.tasks || [];
+    } catch (error) {
+      console.error('Failed to get scheduled tasks:', error);
+      return [];
+    }
+  },
+
+  async createScheduledTask(data: {
+    title: string;
+    prompt: string;
+    cadence?: string;
+    cadence_label?: string;
+    model_id?: string;
+    conversation_id?: string;
+    project_id?: string;
+  }): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/scheduled`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      const result = await handleResponse<{ task: any }>(response);
+      return result.task || null;
+    } catch (error) {
+      console.error('Failed to create scheduled task:', error);
+      return null;
+    }
+  },
+
+  async updateScheduledTask(id: string, data: Partial<{
+    title: string;
+    prompt: string;
+    cadence: string;
+    cadence_label: string;
+    status: string;
+    model_id: string;
+  }>): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/scheduled/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      const result = await handleResponse<{ task: any }>(response);
+      return result.task || null;
+    } catch (error) {
+      console.error('Failed to update scheduled task:', error);
+      return null;
+    }
+  },
+
+  async deleteScheduledTask(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/scheduled/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      await handleResponse<{ success: boolean }>(response);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete scheduled task:', error);
+      return false;
+    }
+  },
+
+  async runScheduledTask(id: string): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/scheduled/${id}/run`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const result = await handleResponse<{ success: boolean; result: any }>(response);
+      return result.result || null;
+    } catch (error) {
+      console.error('Failed to run scheduled task:', error);
+      return null;
+    }
+  },
+
+  // ============================================
+  // SKILLS LIBRARY API
+  // ============================================
+
+  async getSkills(params?: { visibility?: string; conversation_id?: string }): Promise<any[]> {
+    try {
+      const qs = new URLSearchParams();
+      if (params?.visibility) qs.set('visibility', params.visibility);
+      if (params?.conversation_id) qs.set('conversation_id', params.conversation_id);
+
+      const response = await fetch(`${API_BASE}/skills?${qs.toString()}`, {
+        headers: getAuthHeaders(),
+      });
+      const result = await handleResponse<{ skills: any[] }>(response);
+      return result.skills || [];
+    } catch (error) {
+      console.error('Failed to get skills:', error);
+      return [];
+    }
+  },
+
+  async createSkill(data: {
+    name: string;
+    summary?: string;
+    body: string;
+    author?: string;
+    source?: string;
+    visibility?: string;
+    conversation_id?: string;
+    category?: string;
+  }): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/skills`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      const result = await handleResponse<{ skill: any }>(response);
+      return result.skill || null;
+    } catch (error) {
+      console.error('Failed to create skill:', error);
+      return null;
+    }
+  },
+
+  async updateSkill(id: string, data: Partial<{
+    name: string;
+    summary: string;
+    body: string;
+    is_enabled: boolean;
+  }>): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/skills/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      const result = await handleResponse<{ skill: any }>(response);
+      return result.skill || null;
+    } catch (error) {
+      console.error('Failed to update skill:', error);
+      return null;
+    }
+  },
+
+  async deleteSkill(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/skills/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      await handleResponse<{ success: boolean }>(response);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete skill:', error);
+      return false;
+    }
+  },
+
+  // ============================================
+  // PROJECTS & FILES API
+  // ============================================
+
+  async getProjects(): Promise<any[]> {
+    try {
+      const response = await fetch(`${API_BASE}/projects`, {
+        headers: getAuthHeaders(),
+      });
+      const result = await handleResponse<{ projects: any[] }>(response);
+      return result.projects || [];
+    } catch (error) {
+      console.error('Failed to get projects:', error);
+      return [];
+    }
+  },
+
+  async createProject(data: {
+    name: string;
+    description?: string;
+    custom_instructions?: string;
+    settings?: any;
+  }): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/projects`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      const result = await handleResponse<{ project: any }>(response);
+      return result.project || null;
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      return null;
+    }
+  },
+
+  async updateProject(id: string, data: Partial<{
+    name: string;
+    description: string;
+    custom_instructions: string;
+    settings: any;
+    is_archived: boolean;
+  }>): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/projects/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      const result = await handleResponse<{ project: any }>(response);
+      return result.project || null;
+    } catch (error) {
+      console.error('Failed to update project:', error);
+      return null;
+    }
+  },
+
+  async deleteProject(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/projects/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      await handleResponse<{ success: boolean }>(response);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      return false;
+    }
+  },
+
+  async getProjectFiles(projectId: string): Promise<any[]> {
+    try {
+      const response = await fetch(`${API_BASE}/projects/${projectId}/files`, {
+        headers: getAuthHeaders(),
+      });
+      const result = await handleResponse<{ files: any[] }>(response);
+      return result.files || [];
+    } catch (error) {
+      console.error('Failed to get project files:', error);
+      return [];
+    }
+  },
+
+  async addProjectFile(projectId: string, file: {
+    name: string;
+    file_type?: string;
+    file_size?: number;
+    content_text: string;
+  }): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/projects/${projectId}/files`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(file),
+      });
+      const result = await handleResponse<{ file: any }>(response);
+      return result.file || null;
+    } catch (error) {
+      console.error('Failed to add project file:', error);
+      return null;
+    }
+  },
+
+  async deleteProjectFile(projectId: string, fileId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/projects/${projectId}/files/${fileId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      await handleResponse<{ success: boolean }>(response);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete project file:', error);
+      return false;
+    }
+  },
+
+  // ============================================
+  // MEMORIES API
+  // ============================================
+
+  async getMemories(): Promise<any[]> {
+    try {
+      const response = await fetch(`${API_BASE}/memories`, {
+        headers: getAuthHeaders(),
+      });
+      const result = await handleResponse<{ memories: any[] }>(response);
+      return result.memories || [];
+    } catch (error) {
+      console.error('Failed to get memories:', error);
+      return [];
+    }
+  },
+
+  async addMemory(content: string, sourceConversationId?: string): Promise<any | null> {
+    try {
+      const response = await fetch(`${API_BASE}/memories`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ content, source_conversation_id: sourceConversationId }),
+      });
+      const result = await handleResponse<{ memory: any }>(response);
+      return result.memory || null;
+    } catch (error) {
+      console.error('Failed to add memory:', error);
+      return null;
+    }
+  },
+
+  async deleteMemory(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/memories/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      await handleResponse<{ success: boolean }>(response);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete memory:', error);
+      return false;
+    }
+  },
 };
 
 export default chatService;

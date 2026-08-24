@@ -4,6 +4,13 @@
  */
 
 import express from 'express';
+/* 🔴 siteOrigin(), not a hardcoded fallback. These share and invite URLs
+ * defaulted to https://xeno-studio.com — a domain that is NOT this site —
+ * whenever FRONTEND_URL was unset, which it is in production. Every
+ * collaboration link sent from the live platform pointed at a dead host.
+ * The canonical helper already defaults to xenostudio.ai and is the only
+ * place that default should live. */
+import { siteOrigin } from '../config/hosts.js';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { authMiddleware } from '../middleware/auth.js';
@@ -71,7 +78,7 @@ router.post('/sessions', authMiddleware, requireEntitlement('collaboration'), as
           containerId: session.container_id,
           name: session.name,
           shareToken: session.share_token,
-          shareUrl: `${process.env.FRONTEND_URL || 'https://xeno-studio.com'}/os/join/${session.share_token}`,
+          shareUrl: `${siteOrigin()}/os/join/${session.share_token}`,
           maxParticipants: session.max_participants,
           permissions: session.permissions,
           expiresAt: session.expires_at,
@@ -140,7 +147,7 @@ router.post('/sessions', authMiddleware, requireEntitlement('collaboration'), as
         containerId: session.container_id,
         name: session.name,
         shareToken: session.share_token,
-        shareUrl: `${process.env.FRONTEND_URL || 'https://xeno-studio.com'}/os/join/${session.share_token}`,
+        shareUrl: `${siteOrigin()}/os/join/${session.share_token}`,
         maxParticipants: session.max_participants,
         permissions: session.permissions,
         expiresAt: session.expires_at,
@@ -410,7 +417,7 @@ router.post('/sessions/:sessionId/invite', authMiddleware, async (req, res) => {
       invitation: {
         id: invitation.id,
         email: invitation.invited_email,
-        inviteUrl: `${process.env.FRONTEND_URL || 'https://xeno-studio.com'}/os/invite/${invitationToken}`,
+        inviteUrl: `${siteOrigin()}/os/invite/${invitationToken}`,
         expiresAt: invitation.expires_at
       }
     });

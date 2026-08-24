@@ -202,10 +202,37 @@ const filterByQuery = (rows: LibrarySkill[], query: string): LibrarySkill[] => {
   );
 };
 
+import { chatService } from '@/services/chatService';
+
 /** Backend: GET /api/chat/skills/library (Profile — global only). */
 export const listLibrarySkills = async (
   input: ListLibraryInput = {},
 ): Promise<LibrarySkill[]> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      const serverSkills = await chatService.getSkills({ visibility: 'global' });
+      if (Array.isArray(serverSkills)) {
+        const mapped: LibrarySkill[] = serverSkills.map((row) => ({
+          id: row.id,
+          name: row.name,
+          summary: row.summary,
+          body: row.body,
+          author: row.author || 'You',
+          source: row.source || 'created',
+          visibility: row.visibility || 'global',
+          conversationId: row.conversation_id || null,
+          originId: row.origin_id || null,
+          createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+          updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+        }));
+        const existingIds = new Set(mapped.map((s) => s.id));
+        libraryStore = [...mapped, ...libraryStore.filter((s) => !existingIds.has(s.id))];
+      }
+    }
+  } catch (err) {
+    console.warn('[chatSkillsLibrary] Failed to list skills from backend:', err);
+  }
+
   const rows = filterByQuery(
     libraryStore.filter((skill) => skill.visibility === 'global'),
     input.query ?? '',
@@ -336,6 +363,43 @@ export const setChatSkillEnabled = async (
 export const createLibrarySkill = async (
   input: CreateLibrarySkillInput,
 ): Promise<LibrarySkill> => {
+  const scope = resolveCreateScope(input.visibility, input.conversationId);
+
+  try {
+    if (chatService.isAuthenticated()) {
+      const serverSkill = await chatService.createSkill({
+        name: input.name.trim() || 'Untitled skill',
+        summary: input.summary.trim(),
+        body: input.body.trim(),
+        visibility: input.visibility,
+        conversation_id: scope ?? undefined,
+      });
+
+      if (serverSkill) {
+        const skill: LibrarySkill = {
+          id: serverSkill.id,
+          name: serverSkill.name,
+          summary: serverSkill.summary,
+          body: serverSkill.body,
+          author: serverSkill.author || 'You',
+          source: serverSkill.source || 'created',
+          visibility: serverSkill.visibility || input.visibility,
+          conversationId: serverSkill.conversation_id || scope,
+          originId: null,
+          createdAt: serverSkill.created_at ? new Date(serverSkill.created_at).getTime() : Date.now(),
+          updatedAt: serverSkill.updated_at ? new Date(serverSkill.updated_at).getTime() : Date.now(),
+        };
+        libraryStore = [skill, ...libraryStore];
+        if (skill.visibility === 'chat' && skill.conversationId) {
+          await setChatSkillEnabled(skill.conversationId, skill.id, true);
+        }
+        return skill;
+      }
+    }
+  } catch (err) {
+    console.warn('[chatSkillsLibrary] Failed to create skill on backend:', err);
+  }
+
   const skill = buildSkill({
     name: input.name.trim() || 'Untitled skill',
     summary: input.summary.trim(),
@@ -343,7 +407,7 @@ export const createLibrarySkill = async (
     author: 'You',
     source: 'created',
     visibility: input.visibility,
-    conversationId: resolveCreateScope(input.visibility, input.conversationId),
+    conversationId: scope,
     originId: null,
   });
   libraryStore = [skill, ...libraryStore];
@@ -570,6 +634,13 @@ export const clearPendingChatSkills = async (): Promise<void> => {
 
 /** Backend: DELETE /api/chat/skills/library/:id */
 export const deleteLibrarySkill = async (id: string): Promise<void> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      await chatService.deleteSkill(id);
+    }
+  } catch (err) {
+    console.warn('[chatSkillsLibrary] Failed to delete skill on backend:', err);
+  }
   libraryStore = libraryStore.filter((skill) => skill.id !== id);
   chatSkillOverrides = Object.fromEntries(
     Object.entries(chatSkillOverrides).map(([scope, map]) => {

@@ -41,7 +41,9 @@ const hour = 60 * 60 * 1000;
 const day = 24 * hour;
 const now = Date.now();
 
-/** Seed store — session-level until backend persists. */
+import { chatService } from '@/services/chatService';
+
+/** Seed store — session-level fallback until backend persists. */
 let scheduledStore: ChatScheduledTask[] = [];
 
 const matchesQuery = (task: ChatScheduledTask, query: string): boolean => {
@@ -63,11 +65,41 @@ const randomId = (): string => {
 
 /**
  * Lists scheduled tasks for the library page.
- * Mock: filter + sort in memory. Backend: GET /api/chat/scheduled?...
+ * Fetches from backend GET /api/chat/scheduled when authenticated, with local cache fallback.
  */
 export const listScheduledTasks = async (
   input: ListScheduledInput = {},
 ): Promise<ChatScheduledTask[]> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      const serverTasks = await chatService.getScheduledTasks({
+        status: input.status,
+        sort: input.sort,
+        query: input.query,
+      });
+
+      if (Array.isArray(serverTasks)) {
+        const mapped: ChatScheduledTask[] = serverTasks.map((row) => ({
+          id: row.id,
+          title: row.title,
+          prompt: row.prompt,
+          cadence: row.cadence as ScheduledCadence,
+          cadenceLabel: row.cadence_label || row.cadence,
+          status: row.status as ScheduledStatus,
+          nextRunAt: row.next_run_at ? new Date(row.next_run_at).getTime() : Date.now() + day,
+          lastRunAt: row.last_run_at ? new Date(row.last_run_at).getTime() : null,
+          createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+          updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+        }));
+        const existingIds = new Set(mapped.map((t) => t.id));
+        scheduledStore = [...mapped, ...scheduledStore.filter((t) => !existingIds.has(t.id))];
+        return mapped;
+      }
+    }
+  } catch (err) {
+    console.warn('[chatScheduled] Failed to list scheduled tasks from backend:', err);
+  }
+
   const status = input.status ?? 'all';
   const sort = input.sort ?? 'next';
   const query = input.query ?? '';
@@ -88,14 +120,46 @@ export const listScheduledTasks = async (
 
 export const getScheduledTask = async (
   id: string,
-): Promise<ChatScheduledTask | null> =>
-  scheduledStore.find((task) => task.id === id) ?? null;
+): Promise<ChatScheduledTask | null> => {
+  return scheduledStore.find((task) => task.id === id) ?? null;
+};
 
-/** Mock create — UI can call this; wire to POST later. */
+/** Create scheduled task in database and local cache. */
 export const createScheduledTask = async (
   input: CreateScheduledInput,
 ): Promise<ChatScheduledTask> => {
   const stamp = Date.now();
+
+  try {
+    if (chatService.isAuthenticated()) {
+      const serverTask = await chatService.createScheduledTask({
+        title: input.title.trim() || 'Untitled task',
+        prompt: input.prompt.trim(),
+        cadence: input.cadence ?? 'daily',
+        cadence_label: input.cadenceLabel ?? 'Daily · 09:00',
+      });
+
+      if (serverTask) {
+        const task: ChatScheduledTask = {
+          id: serverTask.id,
+          title: serverTask.title,
+          prompt: serverTask.prompt,
+          cadence: serverTask.cadence as ScheduledCadence,
+          cadenceLabel: serverTask.cadence_label,
+          status: serverTask.status as ScheduledStatus,
+          nextRunAt: serverTask.next_run_at ? new Date(serverTask.next_run_at).getTime() : stamp + day,
+          lastRunAt: serverTask.last_run_at ? new Date(serverTask.last_run_at).getTime() : null,
+          createdAt: serverTask.created_at ? new Date(serverTask.created_at).getTime() : stamp,
+          updatedAt: serverTask.updated_at ? new Date(serverTask.updated_at).getTime() : stamp,
+        };
+        scheduledStore = [task, ...scheduledStore];
+        return task;
+      }
+    }
+  } catch (err) {
+    console.warn('[chatScheduled] Failed to create scheduled task on backend:', err);
+  }
+
   const task: ChatScheduledTask = {
     id: randomId(),
     title: input.title.trim() || 'Untitled task',
@@ -117,6 +181,14 @@ export const setScheduledTaskStatus = async (
   status: ScheduledStatus,
 ): Promise<ChatScheduledTask | null> => {
   const stamp = Date.now();
+  try {
+    if (chatService.isAuthenticated()) {
+      await chatService.updateScheduledTask(id, { status });
+    }
+  } catch (err) {
+    console.warn('[chatScheduled] Failed to update task status on backend:', err);
+  }
+
   let updated: ChatScheduledTask | null = null;
   scheduledStore = scheduledStore.map((task) => {
     if (task.id !== id) return task;
@@ -127,6 +199,13 @@ export const setScheduledTaskStatus = async (
 };
 
 export const deleteScheduledTask = async (id: string): Promise<void> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      await chatService.deleteScheduledTask(id);
+    }
+  } catch (err) {
+    console.warn('[chatScheduled] Failed to delete scheduled task on backend:', err);
+  }
   scheduledStore = scheduledStore.filter((task) => task.id !== id);
 };
 
