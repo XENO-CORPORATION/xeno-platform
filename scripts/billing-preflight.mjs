@@ -34,6 +34,8 @@
  * src/server/services/, and inside the backend container /app IS src/server, so
  * there is no scripts/ dir to be relative to. Try both rather than making the
  * operator care — the same footgun already cost a cycle on grant-internal-plan. */
+import { readFileSync } from 'node:fs';
+
 let getInternalCatalog;
 for (const p of ['../src/server/services/billingService.js', './services/billingService.js', '/app/services/billingService.js']) {
   try { ({ getInternalCatalog } = await import(p)); break; } catch { /* try the next layout */ }
@@ -125,6 +127,60 @@ if (KEY && configured.length) {
       const cadence = i.kind === 'subscription' ? `/${price.recurring.interval}` : ' one-time';
       console.log(`  ✓  ${i.id.padEnd(20)} ${(price.unit_amount / 100).toFixed(2)} ${price.currency.toUpperCase()}${cadence}`);
     }
+  }
+
+  /* ── The webhook must DELIVER what the code handles ─────────────────────── */
+  /*
+   * 🔴 Found in production 2026-08-24: the endpoint was subscribed to TWO events
+   * while billingService.js handled ELEVEN. The other nine were written, tested
+   * and unreachable, and every one of them is a money path:
+   *
+   *   customer.subscription.deleted -> sets the plan to 'free'. Never ran, so a
+   *                                    cancelled customer kept access forever.
+   *   charge.refunded               -> claws back the entitlement. Never ran.
+   *   charge.dispute.created        -> alerts a human. Never ran — and Stripe
+   *                                    sets a DEADLINE that silence loses.
+   *   invoice.payment_failed        -> marks past_due. No dunning at all.
+   *
+   * Nothing errors in this failure. Stripe delivers exactly what it was asked
+   * for, the handlers never fire, and every log looks healthy.
+   *
+   * The handled set is DERIVED from the source, never restated here. A
+   * hand-kept copy is how the gap opened: someone adds a `case`, nobody updates
+   * the endpoint, and the new handler is dead on arrival with no signal. */
+  console.log('');
+  console.log('Webhook delivers every event the code handles');
+  console.log('─'.repeat(72));
+  try {
+    let svc = '';
+    for (const p of ['src/server/services/billingService.js', 'services/billingService.js', '/app/services/billingService.js']) {
+      try { svc = readFileSync(p, 'utf8'); break; } catch { /* try the next layout */ }
+    }
+    const handled = [...new Set([...svc.matchAll(/case '([a-z_]+\.[a-z_.]+)':/g)].map((m) => m[1]))].sort();
+
+    if (handled.length < 5) {
+      /* Guard the DERIVATION. If the parser stops finding cases, the honest
+       * report is "I cannot tell", never "the webhook is fine". */
+      console.log(`  ⚠  could not read the handled events (found ${handled.length}) — coverage NOT verified`);
+    } else {
+      const eps = (await stripe.webhookEndpoints.list({ limit: 10 })).data;
+      if (!eps.length) {
+        warn('no webhook endpoint is registered — no payment would ever be recorded');
+      }
+      for (const ep of eps) {
+        const enabled = new Set(ep.enabled_events || []);
+        const missing = enabled.has('*') ? [] : handled.filter((e) => !enabled.has(e));
+        if (missing.length) {
+          warn(`${ep.url} is missing ${missing.length} of ${handled.length} handled event(s): ${missing.join(', ')}`);
+        } else {
+          console.log(`  ✓  ${ep.url} delivers all ${handled.length}`);
+        }
+      }
+    }
+  } catch (e) {
+    /* Advisory: this needs a live Stripe call, and a network blip must not read
+     * as a broken configuration. */
+    console.log(`  ⚠  could not verify webhook coverage — ${e.message}`);
   }
 }
 
