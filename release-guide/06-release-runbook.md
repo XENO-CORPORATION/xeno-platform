@@ -260,7 +260,7 @@ node scripts/publish-cli-releases.mjs \
 - `--notes` takes the CLI's `release-notes.ts` **or** a `.json` file of the same shape (`scripts/release-notes/<slug>.json`) for products whose notes live in a CHANGELOG. See **03-release-data.md** §6.2.
 - Writes `apps/<slug>/releases.json` and an npm-shaped `apps/<slug>/version.json` (carries `version`/`date`/`npm`/`install`/`notes`, no windows/mac/linux keys). Both go through the gated uploader, which snapshots the previous object to `_snapshots/` and applies `Cache-Control: no-cache`.
 - `--dry-run` prints the plan and the `rclone` commands without uploading. **Always dry-run first.**
-- CLI products have no installer, so `/product/<slug>/download/win` correctly returns a **404 JSON `NO_ASSET`**, not a 302. That is the expected result — do not "fix" it by inventing an asset.
+- CLI products have no installer, so `/product/<slug>/download/win` correctly returns a **404 JSON `NO_ASSET`**, not a 302. ⚠️ Since the 2026-08-24 paywall an *anonymous* caller is refused **401 before** the asset lookup, so you only see `NO_ASSET` with a valid grant — the refusal deliberately precedes the lookup so it cannot leak what it refused. That is the expected result — do not "fix" it by inventing an asset.
 
 > **Alternative (single manual entry):** a CLI release can also be published through `xeno-release.mjs` with no installer flags, e.g.
 > `node scripts/xeno-release.mjs publish --app agent-cli --version 0.4.0 --date 2026-06-28 --type release --notes "$(cat CHANGELOG-0.4.0.md)"`.
@@ -277,9 +277,17 @@ curl -s https://updates.xenostudio.ai/apps/<slug>/releases.json | head
 # derived latest-stable pointer — headers + body
 curl -sI https://updates.xenostudio.ai/apps/<slug>/version.json
 
-# stable download deep-link must 302 to the installer (desktop products)
-curl -sI "https://xenostudio.ai/product/<slug>/download/win"
+# stable download deep-link — PAYWALLED since 2026-08-24, so an anonymous
+# request must be REFUSED, never 302'd. A 302 here is the gate being open.
+curl -si "https://xenostudio.ai/product/<slug>/download/win" | head -1
+#   expect: HTTP/2 401   (curl sends Accept: */*, so it gets the JSON refusal)
+#   a browser (Accept: text/html) gets 302 -> /auth?returnUrl=... instead
 ```
+
+> A signed-in customer never types this URL: the SPA mints a short-lived grant
+> (`POST /api/downloads/grant`) and appends `?grant=…`. To verify the *happy*
+> path end to end, click Download on the live product page while signed in with
+> a plan that has `canDownload`. See `docs/DOWNLOAD-GATE.md`.
 
 Then open the live pages in a browser and confirm the new version appears (the SPA fetches the feed live):
 
@@ -405,7 +413,8 @@ A release is complete only when **every** applicable box is checked.
 - [ ] `curl -s https://updates.xenostudio.ai/apps/<slug>/releases.json` shows the new version as the first entry, with exactly one stable entry flagged `latest`.
 - [ ] `curl -sI https://updates.xenostudio.ai/apps/<slug>/version.json` returns 200 and points at the new latest-stable.
 - [ ] Live `https://xenostudio.ai/product/<slug>/releases` shows the new release.
-- [ ] **(desktop)** `curl -sI "https://xenostudio.ai/product/<slug>/download/win"` returns **302** to the new installer.
+- [ ] **(desktop)** `curl -si "https://xenostudio.ai/product/<slug>/download/win" | head -1` returns **401**, not a 302 — the deep link is paywalled (2026-08-24 owner override). A 302 to an installer for an anonymous caller means the gate is open; stop and fix it before announcing.
+- [ ] **(desktop)** Signed in on a plan with `canDownload`, the Download button on `/product/<slug>` starts the download. That is the only path that proves the grant mint works; the curl above only proves the refusal.
 - [ ] **(desktop, in-app auto-update)** `curl -s https://updates.xenostudio.ai/apps/<slug>/latest.yml` returns **200** with the new `version:`, and **every `url:`/`path:` inside it starts with `v<version>/`** — a bare filename there means the download will 404 even though the check succeeds. Then confirm the referenced installer resolves:
       ```bash
       curl -sI -r 0-99 "https://updates.xenostudio.ai/apps/<slug>/v<version>/<InstallerFilename>"   # expect 206

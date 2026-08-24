@@ -15,6 +15,7 @@ import { Mockup } from '../components/product/mockups';
 import {
   fetchReleases, latestRelease, downloadLink, experimentalNotice, type Release, type Product,
 } from '../lib/productCatalog';
+import { downloadClickHandler } from '../lib/startDownload';
 import type { ProductContent, Media } from '../content/products/_types';
 import { getProductDocs } from '../content/docs';
 import ForumThreadsWidget from '../components/product/ForumThreadsWidget';
@@ -125,7 +126,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
       )}
       {product.delivery === 'desktop' && (
         downloadUrl(os) ? (
-          <a href={downloadUrl(os)!} className="group inline-flex items-center gap-2 rounded-[6px] bg-white px-6 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
+          <a href={downloadUrl(os)!} onClick={downloadClickHandler(product.slug, os)} className="group inline-flex items-center gap-2 rounded-[6px] bg-white px-6 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
             <Download className="h-4 w-4" />Download for {OS_NAME[os]}
           </a>
         ) : (

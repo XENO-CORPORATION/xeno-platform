@@ -450,16 +450,24 @@ export function latestRelease(releases: Release[]): Release | undefined {
 
 /** Absolute R2 URL for a release asset. `file` is RELATIVE to apps/:app/
  *  (e.g. "v0.4.1/Setup.exe"). Encode each path segment (spaces → %20) while
- *  keeping the "/" separators. Accepts a Product or a bare app/slug string. */
+ *  keeping the "/" separators. Accepts a Product or a bare app/slug string.
+ *
+ *  🔴 NOT FOR DOWNLOAD LINKS. This returns the raw public CDN URL, which
+ *  bypasses the paid-plan gate entirely — a Download button pointing here is
+ *  not a leak in the gate, it is a hole beside it. Use `downloadLink()`.
+ *  Pinned by scripts/download-gate.test.mjs. */
 export function assetUrl(p: Product | string, file: string): string {
   const app = typeof p === 'string' ? p : (p.r2 ?? p.slug);
   const path = file.split('/').map(encodeURIComponent).join('/');
   return `${R2_BASE}/apps/${app}/${path}`;
 }
 
-/** Stable backend download deep-link — 302s to the current installer and never
- *  changes as versions bump (SPEC §4). Use for "download the latest" CTAs. */
-export function downloadLink(p: Product, os: 'windows' | 'mac' | 'linux', version?: string): string {
+/** Stable backend download deep-link (SPEC §4). The URL never changes as
+ *  versions bump, and since the 2026-08-24 owner override it is also the only
+ *  route that enforces the paid-plan gate — it serves nothing without a grant.
+ *  Every Download control must point here. Accepts a Product or a bare slug. */
+export function downloadLink(p: Product | string, os: 'windows' | 'mac' | 'linux', version?: string): string {
+  const slug = typeof p === 'string' ? p : p.slug;
   const o = os === 'windows' ? 'win' : os;
-  return `/product/${p.slug}/download/${o}${version ? `/${encodeURIComponent(version)}` : ''}`;
+  return `/product/${slug}/download/${o}${version ? `/${encodeURIComponent(version)}` : ''}`;
 }

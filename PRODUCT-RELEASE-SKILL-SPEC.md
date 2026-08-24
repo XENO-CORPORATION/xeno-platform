@@ -364,7 +364,7 @@ cited file before running anything. Never improvise release commands.
 Run the chosen command with `--dry-run`, show the plan, wait for confirmation, then run for real.
 
 ## 4. Verify  (release-guide/06 / 07)
-- Release: `curl -s https://updates.xenostudio.ai/apps/<slug>/releases.json` (new entry present). Desktop only: `curl -sI https://xenostudio.ai/product/<slug>/download/win` (302 → installer). CLI: also check the live `/product/<slug>/releases` page renders the new version (a CLI has no installer 302).
+- Release: `curl -s https://updates.xenostudio.ai/apps/<slug>/releases.json` (new entry present). Desktop only: `curl -si https://xenostudio.ai/product/<slug>/download/win | head -1` (**401** — the deep link is paywalled since 2026-08-24; a 302 to an installer means the gate is open). CLI: also check the live `/product/<slug>/releases` page renders the new version (a CLI has no installer 302).
 - Content: `curl -sI https://xenostudio.ai/product/<slug>` (200) + a headless screenshot.
 - On any failure → release-guide/07-troubleshooting.md.
 

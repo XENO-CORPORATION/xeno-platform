@@ -58,7 +58,7 @@ real change requires.**
 
 ## 5. Verify the whole surface  (`release-guide/06` §Verify, `release-guide/07`)
 - **R2:** `releases.json` shows the new entry; `version.json` updated.
-- **Releases page** live shows the new version; **desktop** `download/win` → `302`.
+- **Releases page** live shows the new version; **desktop** `download/win` → **`401`** for an anonymous caller (the deep link is paywalled — a `302` means the gate is open). The Download button, signed in on a plan with `canDownload`, is what proves the happy path.
 - **Landing** `/product/<slug>` → `200` and reflects any deployed content.
 - **Docs** `/docs/<slug>` render and are **accurate for this release** (spot-check the pages your plan touched).
 - Any failure → `release-guide/07-troubleshooting.md`.
