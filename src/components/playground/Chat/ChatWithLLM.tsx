@@ -45,14 +45,14 @@ import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type
 import CodeBlockWithHeader from './CodeBlockWithHeader';
 import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
 import ThinkingStatus from './ThinkingStatus';
+import { chatComplete } from '@/services/aiService';
 import { getGroupedModels, GroupedModels, Model } from '@/services/modelService';
 import { chatService } from '@/services/chatService';
-import { chatComplete } from '@/services/aiService';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, Star, Contrast, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -5437,6 +5437,7 @@ interface QueueState {
   const createConversationForMessages = async (
     conversationMessages: ChatMessage[],
   ): Promise<string | null> => {
+    if (isTemporaryChat) return null;
     if (activeConversationIdRef.current || isCreatingConversationRef.current) return null;
     if (conversationMessages.length === 0) return null;
     isCreatingConversationRef.current = true;
@@ -15234,6 +15235,45 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               aria-hidden="true"
             />
           )}
+          </div>
+        </div>
+
+        {/* Temporary Chat Privacy Banner (ChatGPT-style slide-down from top) */}
+        <div
+          aria-live="polite"
+          data-temporary-chat-banner
+          className={`w-full overflow-hidden transition-all duration-300 ease-out z-20 ${
+            isTemporaryChat
+              ? 'max-h-24 opacity-100 translate-y-0 border-b border-[var(--chat-border)] bg-[var(--chat-surface)]/85 backdrop-blur-md shadow-sm'
+              : 'max-h-0 opacity-0 -translate-y-2 pointer-events-none border-b-0'
+          }`}
+        >
+          <div className={`${isMultiInterface ? 'max-w-full px-3' : (isWideChatEnabled ? 'max-w-[67.5rem] px-4' : 'max-w-[45rem] px-4')} mx-auto py-2 flex items-center justify-between gap-3`}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--chat-hover)] text-[var(--chat-text)] border border-[var(--chat-border)]">
+                <UserRoundX size={14} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-[var(--chat-text)]">Temporary Chat</span>
+                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
+                    Incognito
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--chat-muted)] truncate sm:whitespace-normal">
+                  This chat won't appear in your history, use or create memories, or be stored in the cloud.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsTemporaryChat(false)}
+                className="text-xs font-medium text-[var(--chat-muted)] hover:text-[var(--chat-text)] px-2.5 py-1 rounded-md border border-[var(--chat-border)] bg-[var(--chat-overlay)] hover:bg-[var(--chat-hover)] transition-colors active:scale-[0.98]"
+              >
+                Turn off
+              </button>
+            </div>
           </div>
         </div>
 
