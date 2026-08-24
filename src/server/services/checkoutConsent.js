@@ -12,6 +12,7 @@
  * thirteen days and demand a full refund — and be entitled to it.
  */
 import crypto from 'crypto';
+import { subjectHashForUser, subjectHashCandidates } from './subjectHash.js';
 
 /**
  * The exact wording presented at checkout.
@@ -73,14 +74,20 @@ export async function recordConsent(pool, {
     throw e;
   }
 
+  /* A pseudonymous handle so this row still answers "did THIS person consent?"
+   * after the account is gone. Account deletion is self-service and sets
+   * user_id to NULL; without the handle the surviving row proves only that
+   * SOMEBODY agreed, which rebuts nothing. Never throws — see subjectHash.js. */
+  const subject = await subjectHashForUser(pool, userId);
+
   const r = await pool.query(
     `INSERT INTO checkout_consents
        (user_id, item_id, immediate_performance, withdrawal_acknowledged, terms_accepted,
-        consent_text, consent_hash, locale, client_ip, user_agent)
-     VALUES ($1,$2,TRUE,TRUE,TRUE,$3,$4,$5,$6,$7)
+        consent_text, consent_hash, locale, client_ip, user_agent, subject_hash)
+     VALUES ($1,$2,TRUE,TRUE,TRUE,$3,$4,$5,$6,$7,$8)
      RETURNING id`,
     [String(userId), String(itemId), CONSENT_TEXT, CONSENT_HASH,
-      locale, clientIp, String(userAgent || '').slice(0, 512)],
+      locale, clientIp, String(userAgent || '').slice(0, 512), subject],
   );
   return r.rows[0].id;
 }
@@ -127,4 +134,42 @@ export async function consumeConsent(pool, consentId, checkoutSessionId) {
      * everything right, over a write that only links two records. */
     console.error('[Consent] failed to mark consumed:', e.message);
   }
+}
+
+/**
+ * Retrieve the consent evidence for one person, by email address.
+ *
+ * 🔴 This is the function the whole never-prune policy exists to make possible,
+ * and without it the policy is storage with no reachable purpose. When a
+ * chargeback lands or a customer writes "I never agreed to give up my
+ * withdrawal right", THIS is what answers them — including after they have
+ * deleted their account, which is precisely when the question gets asked.
+ *
+ * Matching is by keyed handle (`subject_hash`), never by joining `users`: the
+ * account may be gone, and if it is gone the join returns nothing while the
+ * evidence is sitting right there.
+ *
+ * Every candidate handle is tried, so a key rotation does not silently orphan
+ * older records — see subjectHash.js.
+ *
+ * ⚠️ Returns the WORDING as it was shown, not today's wording. Answering a
+ * dispute with the current text would be quoting words the customer may never
+ * have seen, which is the same failure the staleness check in
+ * `findUsableConsent` exists to prevent — one direction is a bad sale, the
+ * other is a bad answer to a regulator.
+ */
+export async function findConsentEvidence(pool, email, { limit = 50 } = {}) {
+  const candidates = subjectHashCandidates(email);
+  if (!candidates.length) return [];
+  const r = await pool.query(
+    `SELECT id, item_id, consented_at, consumed_at, checkout_session_id,
+            consent_text, consent_hash, locale, client_ip, user_agent,
+            (user_id IS NULL) AS account_deleted
+       FROM checkout_consents
+      WHERE subject_hash = ANY($1)
+      ORDER BY consented_at DESC
+      LIMIT $2`,
+    [candidates, limit],
+  );
+  return r.rows;
 }

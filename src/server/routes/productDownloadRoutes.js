@@ -35,6 +35,7 @@ import { updatesOrigin } from '../config/hosts.js';
 import { assertEntitlement } from '../middleware/requireEntitlement.js';
 import { mintDownloadGrant, verifyDownloadGrant, GRANT_TTL_SECONDS } from '../utils/downloadGrant.js';
 import { rateLimitKey } from '../utils/clientIp.js';
+import { subjectHashForUser } from '../services/subjectHash.js';
 import {
   findIntent, claimIntent, record, flag, STEPS, funnelReady,
 } from '../services/downloadFunnel.js';
@@ -222,11 +223,16 @@ async function enforceGrantCap(req, userId) {
  */
 async function auditGrant(req, { userId, intentId, slug, os, version, plan }) {
   try {
+    /* Survives the account. `user_id` is SET NULL on deletion, so without a
+     * handle an erased customer's download history becomes unattributable —
+     * and a chargeback or a leaked-build investigation arrives after the fact,
+     * often after the account is gone. */
+    const subject = await subjectHashForUser(req.db, userId);
     await req.db.query(
-      `INSERT INTO download_grants (user_id, intent_id, slug, os, version, plan, client_ip, user_agent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      `INSERT INTO download_grants (user_id, intent_id, slug, os, version, plan, client_ip, user_agent, subject_hash)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [userId, intentId || null, slug, os, version || '', plan || null,
-        ipOfReq(req), String(req.headers['user-agent'] || '').slice(0, 512)],
+        ipOfReq(req), String(req.headers['user-agent'] || '').slice(0, 512), subject],
     );
   } catch (e) {
     console.error('[Downloads] failed to audit grant', e.message);

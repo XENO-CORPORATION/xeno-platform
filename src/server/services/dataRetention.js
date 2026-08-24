@@ -29,7 +29,20 @@
 const DAY = 86_400_000;
 
 /**
- * @typedef {{table: string, column: string, days: number|null, why: string}} Policy
+ * `days` is what THIS sweeper deletes after. `prunedBy` is who actually does
+ * it, and the two are not the same question:
+ *
+ *   'sweeper' — this file deletes it, after `days`.
+ *   'cascade' — something else deletes it, and `days` is null here so the two
+ *               clocks cannot disagree. NOT the same as "kept forever".
+ *   'never'   — genuinely retained, deliberately.
+ *
+ * 🔴 The distinction is load-bearing for the auditor answer. Reporting a
+ * cascading table as "kept indefinitely" — which the first version of the ops
+ * summary did — is a false statement about how long we hold personal data, made
+ * to the one audience that must not be told a false one.
+ *
+ * @typedef {{table: string, column: string, days: number|null, prunedBy: 'sweeper'|'cascade'|'never', why: string}} Policy
  */
 
 /** @type {Policy[]} */
@@ -37,6 +50,7 @@ export const POLICIES = [
   {
     table: 'client_version_refusals',
     column: 'at',
+    prunedBy: 'sweeper',
     days: 90,
     why: 'operational only. A refusal is useful while a version floor is live and '
       + 'while someone is asking "how many did we lock out?". Nobody asks that '
@@ -45,6 +59,7 @@ export const POLICIES = [
   {
     table: 'download_grants',
     column: 'at',
+    prunedBy: 'sweeper',
     days: 400,
     /* 🔴 Deliberately longer than a year. A grant is the security audit of who
      * took which binary, and the questions it answers arrive late: a chargeback
@@ -57,6 +72,7 @@ export const POLICIES = [
   {
     table: 'download_intent_events',
     column: 'at',
+    prunedBy: 'cascade',
     days: null,
     /* Not pruned HERE on purpose. Events cascade when their intent is deleted by
      * the funnel sweeper, so a second policy on the same rows would be two
@@ -68,6 +84,7 @@ export const POLICIES = [
   {
     table: 'checkout_consents',
     column: 'consented_at',
+    prunedBy: 'never',
     days: null,
     /* 🔴 OFF, and this is the load-bearing default in the file. */
     why: 'EVIDENCE that a customer waived a statutory right. Deleting it means we '
@@ -132,12 +149,17 @@ export async function sweepRetention(pool) {
 
 /** What the policy currently is — for the ops summary and for answering auditors. */
 export function describeRetention() {
-  return POLICIES.map((p) => ({
-    table: p.table,
-    days: daysFor(p),
-    pruned: Boolean(daysFor(p)),
-    why: p.why,
-  }));
+  return POLICIES.map((p) => {
+    const days = daysFor(p);
+    return {
+      table: p.table,
+      days,
+      /* Who deletes it, not merely whether WE do. See the Policy typedef. */
+      prunedBy: p.prunedBy,
+      pruned: p.prunedBy !== 'never',
+      why: p.why,
+    };
+  });
 }
 
 export const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;

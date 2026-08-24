@@ -156,6 +156,55 @@ for (const [re, label] of [[/erasure|deletion/i, 'erasure'], [/lawful basis|Art\
   else warn(`Privacy does not clearly cover ${label}`, 'GDPR Art. 13/15–17 — have this reviewed');
 }
 
+/* ── 4b · Retention, and the evidence that has to outlive an account ────── */
+console.log('\nRetention and evidence');
+
+const retentionSvc = read('src/server/services/dataRetention.js');
+const evidenceMig = read('src/server/database/migrations/20260824200000-evidence-survives-erasure.sql');
+
+/* 🔴 The defect this exists for: checkout_consents was ON DELETE CASCADE while
+ * account deletion is self-service. Buy, download, delete the account, dispute
+ * the charge — and the proof of agreement went with the account, on the
+ * customer's initiative, at exactly the moment it mattered. */
+if (/REFERENCES users\(id\) ON DELETE SET NULL/.test(evidenceMig)
+    && !/REFERENCES users\(id\) ON DELETE CASCADE/.test(evidenceMig)) {
+  ok('consent evidence survives account deletion');
+} else {
+  fail('deleting an account destroys the consent evidence',
+    'the customer can erase our proof they waived withdrawal, then dispute the charge');
+}
+
+if (/subject_hash/.test(consentSvc)) ok('surviving evidence can still identify its subject');
+else fail('surviving evidence is anonymous',
+  'a row proving SOMEBODY consented rebuts nothing — and retention with no purpose is its own GDPR problem');
+
+/* Advisory, not a blocker: it works, it is just coupled to a secret that gets
+ * rotated for unrelated reasons. Worth fixing BEFORE the first sale, because
+ * afterwards a rotation orphans real evidence rather than an empty table. */
+if (process.env.SUBJECT_HASH_SECRET) {
+  ok('SUBJECT_HASH_SECRET is set explicitly');
+} else {
+  warn('SUBJECT_HASH_SECRET is unset — evidence handles are keyed by JWT_SECRET',
+    'rotating JWT_SECRET is routine and would silently orphan every consent record. Set this before the first sale; afterwards, retiring a key means listing it in SUBJECT_HASH_SECRET_PREVIOUS.');
+}
+
+/* Art. 13(2)(a): the storage period, or the criteria for it, must be given.
+ * Derived from the policy file so a table added later and left undisclosed is
+ * caught here rather than by a regulator. */
+const undisclosed = [...retentionSvc.matchAll(/days: (\d+),/g)]
+  .map((m) => m[1])
+  .filter((d) => !has(privacy, new RegExp(`${d} days`)));
+if (undisclosed.length) {
+  fail(`retention periods not disclosed on the Privacy page: ${[...new Set(undisclosed)].join(', ')} days`,
+    'GDPR Art. 13(2)(a) requires the storage period, or the criteria used to determine it');
+} else {
+  ok('every retention period in the code is disclosed');
+}
+
+if (has(privacy, /17\(3\)\(e\)/)) ok('the basis for keeping data past an erasure request is stated');
+else fail('Privacy does not state why some data survives deletion',
+  'Art. 17(3)(e) permits it for legal claims — but only if the person is told');
+
 /* ── 5 · Things a script must not claim to have checked ─────────────────── */
 console.log('\nOut of scope for any script');
 console.log('  · whether the consent WORDING is legally sufficient in your jurisdiction');
