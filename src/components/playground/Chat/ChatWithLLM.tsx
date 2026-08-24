@@ -11471,6 +11471,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             scrollAffordance={composerScrollAffordance}
             isActive={options?.forceCompact ? false : messages.length === 0}
             isCompact={isMultiInterface}
+            isTemporaryChat={isTemporaryChat}
             hideToolRail={options?.forceCompact}
             activeMode={emptyStateMode}
             canAnalyzeDocument={modelSupportsFileUpload(selectedModel)}
@@ -14633,7 +14634,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   nothing in this codebase reads. The active fill has never painted. Saying
                   `data-selection` — which the component's axis is named for — makes a dormant rule
                   live, and the token it reaches for exists in all three palettes. */}
-              {!isMultiInterface && messages.length === 0 && (
+              {!isMultiInterface && (messages.length === 0 || isTemporaryChat) && (
                 <Button
                   variant="quiet"
                   size="lg"
@@ -14642,7 +14643,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   className="chat-top-bar-btn"
                   data-selection={isTemporaryChat ? 'on' : 'off'}
                   aria-pressed={isTemporaryChat}
-                  aria-label="Temporary chat preview"
+                  aria-label="Temporary chat toggle"
                   title="Temporary chat"
                   onClick={() => {
                     setIsTemporaryChat((current) => !current);
@@ -14652,7 +14653,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   }}
                 >
                   <span className="font-medium leading-none">Temporary</span>
-                  <span className="leading-none text-[12px] text-[var(--chat-muted)]">Preview</span>
+                  <span className={`leading-none text-[12px] ${isTemporaryChat ? 'text-emerald-400 font-semibold' : 'text-[var(--chat-muted)]'}`}>
+                    {isTemporaryChat ? 'On' : 'Preview'}
+                  </span>
                 </Button>
               )}
 
@@ -15238,15 +15241,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           </div>
         </div>
 
-        {/* Temporary Chat Privacy Banner (ChatGPT-style slide-down from top) */}
+        {/* Temporary Chat Privacy Banner (ChatGPT-style slide-down from behind top bar) */}
         <div
           aria-live="polite"
           data-temporary-chat-banner
-          className={`w-full overflow-hidden transition-all duration-300 ease-out z-20 ${
+          className={`absolute left-0 right-0 z-20 overflow-hidden transition-all duration-300 ease-out border-b border-[var(--chat-border)] bg-[var(--chat-surface)]/95 backdrop-blur-md shadow-md ${
             isTemporaryChat
-              ? 'max-h-24 opacity-100 translate-y-0 border-b border-[var(--chat-border)] bg-[var(--chat-surface)]/85 backdrop-blur-md shadow-sm'
-              : 'max-h-0 opacity-0 -translate-y-2 pointer-events-none border-b-0'
+              ? 'max-h-24 opacity-100 translate-y-0 pointer-events-auto'
+              : 'max-h-0 opacity-0 -translate-y-full pointer-events-none border-b-0'
           }`}
+          style={{
+            top: CHAT_CHROME_BAR_HEIGHT_PX,
+            left: !isMultiInterface && isHistoryOpen && !isMobile ? '260px' : '0px',
+            right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px',
+          }}
         >
           <div className={`${isMultiInterface ? 'max-w-full px-3' : (isWideChatEnabled ? 'max-w-[67.5rem] px-4' : 'max-w-[45rem] px-4')} mx-auto py-2 flex items-center justify-between gap-3`}>
             <div className="flex items-center gap-2.5 min-w-0">

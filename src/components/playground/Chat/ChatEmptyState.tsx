@@ -50,6 +50,7 @@ interface ChatEmptyStateProps {
    * flow and would otherwise open straight on top of it.
    */
   scrollAffordance?: React.ReactNode;
+  isTemporaryChat?: boolean;
   updates?: ChatUpdate[];
 }
 
@@ -158,6 +159,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   onUploadFile,
   renderToolPanel,
   scrollAffordance,
+  isTemporaryChat = false,
   updates = [],
 }) => {
   const railRef = useRef<HTMLElement>(null);
@@ -998,12 +1000,19 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       // the 16px it floats above the box, plus breathing room.
       className="relative flex w-full flex-col items-center gap-12 overflow-visible [container-type:inline-size] md:gap-14"
     >
-      <h1
-        id="chat-empty-state-title"
-        className="-translate-y-6 text-center font-display text-3xl font-semibold leading-[1.1] tracking-[-0.01em] text-[var(--chat-text)] sm:text-[2.5rem]"
-      >
-        What would you like to explore?
-      </h1>
+      <div className="flex flex-col items-center">
+        <h1
+          id="chat-empty-state-title"
+          className="-translate-y-6 text-center font-display text-3xl font-semibold leading-[1.1] tracking-[-0.01em] text-[var(--chat-text)] sm:text-[2.5rem]"
+        >
+          {isTemporaryChat ? 'Temporary Chat' : 'What would you like to explore?'}
+        </h1>
+        {isTemporaryChat && (
+          <p className="-mt-4 -translate-y-4 text-center text-xs text-[var(--chat-muted)] max-w-md">
+            This chat won't appear in your history, use memories, or train models.
+          </p>
+        )}
+      </div>
 
       {composerReveal}
 
