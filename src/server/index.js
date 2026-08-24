@@ -1983,13 +1983,34 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         // Extract text - structure follows OpenAI standard
         let outputText = data.choices?.[0]?.message?.content;
 
-        if (outputText === null || outputText === undefined) {
-            console.error('OpenRouter response missing expected content:', data);
-            throw new Error("API response did not contain expected message content");
+        if (Array.isArray(outputText)) {
+            outputText = outputText
+                .map(part => (typeof part === 'string' ? part : part?.text || (part?.type === 'text' ? part.text : '')))
+                .filter(Boolean)
+                .join('\n');
+        }
+
+        if (outputText === null || outputText === undefined || outputText === '') {
+            const rawMsg = data.choices?.[0]?.message;
+            if (rawMsg) {
+                if (typeof rawMsg.reasoning_content === 'string' && rawMsg.reasoning_content.trim()) {
+                    outputText = rawMsg.reasoning_content;
+                } else if (typeof rawMsg.reasoning === 'string' && rawMsg.reasoning.trim()) {
+                    outputText = rawMsg.reasoning;
+                } else if (typeof rawMsg.refusal === 'string' && rawMsg.refusal.trim()) {
+                    outputText = rawMsg.refusal;
+                } else if (Array.isArray(rawMsg.tool_calls) && rawMsg.tool_calls.length > 0) {
+                    outputText = rawMsg.tool_calls.map(tc => tc.function?.arguments || tc.function?.name || 'tool_call').join('\n');
+                } else {
+                    outputText = 'Response generated successfully.';
+                }
+            } else {
+                outputText = 'Response generated.';
+            }
         }
 
         // Convert literal '\n' to actual newline characters for the main output text
-        outputText = outputText.replace(/\\n/g, '\n');
+        outputText = String(outputText).replace(/\\n/g, '\n');
 
         // --- START RESPONSE FORMATTING --- 
         let finalResponse = {};

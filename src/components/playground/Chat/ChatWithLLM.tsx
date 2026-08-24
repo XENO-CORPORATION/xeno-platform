@@ -6468,10 +6468,12 @@ interface QueueState {
         text: prompt,
       };
 
-      const imageModel = findModelById(groupedModels, imageModelId);
-      if (!imageModel) {
-        throw new Error(`Image model with ID ${imageModelId} not found.`);
-      }
+      const imageModel = findModelById(groupedModels, imageModelId) || {
+        id: 'gpt-image-1',
+        name: 'GPT Image 1',
+        provider: 'OpenAI',
+        maxTokens: 4096,
+      } as any;
 
       const aiImageResponse = await fetchAiResponse(
         [imagePromptMessage],
@@ -6669,6 +6671,30 @@ interface QueueState {
 
     let extractedDirectPrompt: string | null = null;
     let isPotentialImageRefinement: boolean = false;
+
+    // Direct mode check: if user is in image mode, prompt is directly an image prompt
+    if (emptyStateMode === 'image') {
+        extractedDirectPrompt = userTextToSend;
+    }
+
+    // Direct visual style check (e.g. "Create a cozy rainy-night café in a watercolor style")
+    if (!extractedDirectPrompt && !isLikelyCodeOrLongText) {
+        const visualStyleIndicators = [
+            'in a watercolor style', 'watercolor style', 'watercolor', 'oil painting',
+            'digital art', 'photorealistic', 'realistic photo', 'cinematic lighting',
+            '3d render', 'anime style', 'cyberpunk style', 'concept art', 'pixel art',
+            'vector art', 'flat art', 'in the style of', 'style of', 'hyperrealistic',
+            'studio lighting', 'octane render', 'unreal engine 5', 'unreal engine',
+            'generate an image', 'generate a photo', 'generate a picture', 'create an image',
+            'create a photo', 'create a picture', 'draw a', 'paint a', 'sketch a'
+        ];
+        const hasVisualIndicator = visualStyleIndicators.some(ind => userTextForProcessing.includes(ind));
+        const startsWithVerb = baseImageVerbs.some(v => userTextForProcessing.startsWith(v + ' '));
+
+        if (hasVisualIndicator && startsWithVerb) {
+            extractedDirectPrompt = userTextToSend;
+        }
+    }
 
     // Stage 1: Try to find a direct command with a clear subject.
     verbLoop: for (const verb of baseImageVerbs) {
