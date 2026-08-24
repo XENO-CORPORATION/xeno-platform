@@ -179,14 +179,20 @@ test('the seat cap is enforced at invite time, and NOT again at entitlement time
 test('the per-seat Team checkout carries the download intent', () => {
   /* Without this a Team buyer who came from a Download button lands on the
    * billing page with no download and no explanation. */
-  const fn = billing.slice(billing.indexOf('export async function createWorkspaceSeatCheckout('));
+  /* ⚠️ Scoped to the whole FUNCTION, not a fixed byte window. This used to slice
+   * 1600 chars, and adding the consent gate above seatReturn pushed the anchor
+   * past the window — the assertion failed against code that was strictly more
+   * correct. A fixed-size slice is a test that breaks when the file grows. */
+  const seatStart = billing.indexOf('export async function createWorkspaceSeatCheckout(');
+  const seatEnd = billing.indexOf('async function setWorkspacePlan(', seatStart);
+  const fn = billing.slice(seatStart, seatEnd > -1 ? seatEnd : seatStart + 4000);
   /* The PARAMETER, not the word somewhere in the body: the signature is what
    * decides whether an intent can reach this function at all. */
   assert.ok(/createWorkspaceSeatCheckout\(pool, user, \{[^}]*downloadIntent/.test(billing),
     'the Team checkout cannot accept a download intent');
-  assert.ok(fn.slice(0, 1600).includes("checkoutReturn(base, 'team_seat', downloadIntent)"),
+  assert.ok(fn.includes("checkoutReturn(base, 'team_seat', downloadIntent)"),
     'the Team checkout does not build its return from the intent');
-  assert.ok(fn.slice(0, 1600).includes('seatReturn.successUrl'),
+  assert.ok(fn.includes('seatReturn.successUrl'),
     'the Team checkout still hardcodes its return URL — a download-driven purchase lands nowhere');
   assert.ok(wsRoutes.includes('downloadIntent'), 'the subscribe route never forwards an intent');
 });
