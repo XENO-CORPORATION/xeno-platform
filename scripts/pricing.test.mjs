@@ -651,3 +651,79 @@ test('a card with no workspace count simply omits the strip', () => {
   assert.doesNotMatch(el.textContent, /In your workspace/, 'an empty strip is rendered');
   assert.doesNotMatch(el.textContent, /undefined|NaN/, 'a missing count leaks into the card');
 });
+
+/* ── The page a refused download lands on ─────────────────────────────────
+ *
+ * The download gate (docs/DOWNLOAD-GATE.md) refuses a free account with a 403
+ * that says "get a plan" and points here. On 2026-08-24 that formed a CLOSED
+ * LOOP in production: Stripe was off, so the visitor clicked the only button
+ * on the page and got a red toast reading "Billing is not configured on this
+ * server" — our infrastructure blamed for our own decision, and nowhere to go.
+ *
+ * A gate that refuses everyone is the failure this repo keeps re-shipping. If
+ * the door is shut, the page has to SAY so.
+ */
+
+const pricingPage = read('src/pages/Pricing.tsx');
+const billingClient = read('src/services/billingService.ts');
+
+test('checkout availability is THREE-state, so a dropped request is not a refusal', () => {
+  /* getBillingConfig() collapses a network error into enabled:false. Reusing it
+   * here would tell a paying customer the product is closed for business because
+   * one fetch failed. \'unknown\' must exist and must behave like today. */
+  assert.ok(billingClient.includes('BillingAvailability'),
+    'the three-state availability signal is gone — the page is back to guessing from enabled:false');
+  /* Pin the BRANCHES, not one occurrence: the catch block also returns
+   * 'unknown', so a file-level check stayed green with the HTTP-error path
+   * flipped to 'disabled' — a 502 from the config endpoint would then have
+   * closed the shop. */
+  assert.ok(billingClient.includes("if (!res.ok) return 'unknown';"),
+    'an HTTP error on the config fetch no longer resolves to unknown — a blip now reads as "not for sale"');
+  assert.ok(billingClient.includes("if (typeof data?.enabled !== 'boolean') return 'unknown';"),
+    'a malformed config body no longer resolves to unknown');
+});
+
+test('a KNOWN-disabled checkout says so instead of offering a dead button', () => {
+  /* ⚠️ Assert the GUARDED BRANCH, not the file. Two call sites carry this
+   * string (the plan CTA and the credit packs), so a file-level check stayed
+   * green with the plan CTA's guard replaced by `if (false)`. Fourth time this
+   * exact shape fooled a gate in this session — a substring is satisfied by any
+   * line, including the one you were not thinking about. */
+  const guard = pricingPage.indexOf("if (checkout.availability === 'disabled') {");
+  assert.ok(guard > -1, 'the plan CTA no longer branches on checkout being disabled');
+  const branch = pricingPage.slice(guard, guard + 900);
+  assert.ok(branch.includes('Not yet purchasable'),
+    'the disabled branch no longer says so — the CTA looks live with no checkout behind it');
+  assert.ok(pricingPage.includes("const off = checkout.availability === 'disabled'"),
+    'the credit packs stopped checking, so they still offer a Buy that cannot complete');
+});
+
+test('the disabled state is DEFINITE — never triggered by unknown', () => {
+  /* The whole point of the third state. If the page ever branches on
+   * !== \'live\', a transient error silently closes the shop. */
+  assert.ok(!pricingPage.includes("availability !== 'live'"),
+    'the page treats unknown as disabled — one failed request now stops every sale');
+});
+
+test('the pricing page carries no retired accent colour', () => {
+  /* DESIGN_SYSTEM.md is the LOCKED authority and the brand is monochromatic.
+   * #a760ff was on this page six times, including the "Most popular" badge —
+   * on the one page that most needs to look like the company means it.
+   * ⚠️ 19 OTHER files still carry it (UpgradePrompt, DocsLayout, landing-v3…).
+   * That is a site-wide visual pass, deliberately NOT swept in here; this gate
+   * covers the page it was fixed on so it cannot come back. */
+  for (const retired of ['a760ff', '8a2be2', 'a855f7', '7c5cfc']) {
+    assert.ok(!pricingPage.includes(retired),
+      `Pricing.tsx uses the retired accent #${retired} — see DESIGN_SYSTEM.md`);
+  }
+});
+
+test('the page no longer says the apps are free', () => {
+  /* Owner override 2026-08-24. This is a statement of PRICING POLICY that the
+   * owner changed, not a capability claim being quietly retired — the reasoning
+   * is kept visible in src/config/pricing.ts and the pricing standard. */
+  assert.ok(!pricingPage.includes('The tools are free'),
+    'the pricing page still headlines that the tools are free, which the download gate made false');
+  assert.ok(!pricingPage.includes('they don\'t unlock the tool'),
+    'the FAQ still tells visitors a plan does not unlock the app');
+});
