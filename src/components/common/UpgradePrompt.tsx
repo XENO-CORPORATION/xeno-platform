@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
 import { getBillingSummary, type BillingSummary } from '../../services/billingService';
 
-const ACCENT = '#a760ff';
+const ACCENT = '#e8e3dc';
 
 interface UpgradePromptProps {
   /** Where it's shown, for the copy. */
@@ -48,7 +48,7 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({ context = 'general', vari
       <button
         onClick={goToBilling}
         className={`inline-flex items-center gap-1.5 text-[12px] font-medium rounded-full px-2.5 py-1 transition-colors ${className}`}
-        style={{ color: ACCENT, background: 'rgba(167,96,255,0.12)' }}
+        style={{ color: ACCENT, background: 'rgba(255, 255, 255,0.12)' }}
       >
         <Sparkles className="w-3 h-3" /> {c.title} — go Pro
       </button>
@@ -57,8 +57,8 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({ context = 'general', vari
 
   return (
     <div className={`relative flex items-center gap-3 rounded-xl border px-4 py-3 ${className}`}
-      style={{ borderColor: 'rgba(167,96,255,0.3)', background: 'rgba(167,96,255,0.08)' }}>
-      <div className="grid place-items-center w-9 h-9 rounded-lg shrink-0" style={{ background: 'rgba(167,96,255,0.15)' }}>
+      style={{ borderColor: 'rgba(255, 255, 255,0.3)', background: 'rgba(255, 255, 255,0.08)' }}>
+      <div className="grid place-items-center w-9 h-9 rounded-lg shrink-0" style={{ background: 'rgba(255, 255, 255,0.15)' }}>
         <Sparkles className="w-4.5 h-4.5" style={{ color: ACCENT }} />
       </div>
       <div className="min-w-0 flex-1">

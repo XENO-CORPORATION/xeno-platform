@@ -68,7 +68,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
             </button>
             <Link
               to="/auth"
-              className="group inline-flex h-[54px] items-center gap-4 rounded-[10px] border border-[#9f6fff]/45 bg-[#1a1029]/20 px-7 text-[15px] font-semibold text-[#b98cff] shadow-[0_0_34px_rgba(130,76,255,0.12),inset_0_0_22px_rgba(174,130,255,0.06)] transition-all duration-300 hover:border-[#caa8ff]/75 hover:text-white hover:shadow-[0_0_44px_rgba(158,111,255,0.22),inset_0_0_24px_rgba(174,130,255,0.10)]"
+              className="group inline-flex h-[54px] items-center gap-4 rounded-[10px] border border-white/45 bg-[#1a1029]/20 px-7 text-[15px] font-semibold text-[#b98cff] shadow-[0_0_34px_rgba(130,76,255,0.12),inset_0_0_22px_rgba(174,130,255,0.06)] transition-all duration-300 hover:border-[#caa8ff]/75 hover:text-white hover:shadow-[0_0_44px_rgba(158,111,255,0.22),inset_0_0_24px_rgba(174,130,255,0.10)]"
             >
               Launch XENO
               <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />

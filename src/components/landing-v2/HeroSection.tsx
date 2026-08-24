@@ -165,7 +165,7 @@ function OfficePanel() {
           </div>
         ))}
       </div>
-      <div className="absolute bottom-0 right-0 z-[1] h-[78%] w-[40%] rounded-tl-[64px] bg-[linear-gradient(135deg,rgba(21,14,32,0.28),rgba(122,72,255,0.62))] opacity-56" />
+      <div className="absolute bottom-0 right-0 z-[1] h-[78%] w-[40%] rounded-tl-[64px] bg-[linear-gradient(135deg,rgba(21,14,32,0.28),rgba(255, 255, 255,0.62))] opacity-56" />
     </div>
     <Callout id="06" label="Office" side="right" panelClass="hero-panel-right-low" angledWrap />
     </div>
@@ -235,13 +235,13 @@ const HeroSection: React.FC = () => {
 
 <div className="pointer-events-none relative z-20 flex min-h-[100svh] flex-col justify-end px-6 pb-6 pt-[78px] sm:px-10 lg:px-[4.7vw]">
         <div className="pointer-events-auto w-full max-w-[900px] pb-8 sm:pb-9 lg:pb-10">
-          <div className="mb-5 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#a760ff] drop-shadow-[0_0_14px_rgba(167,96,255,0.4)]">
-            <span className="h-2 w-2 rounded-full bg-[#a760ff]" />
+          <div className="mb-5 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#e8e3dc] drop-shadow-[0_0_14px_rgba(255, 255, 255,0.4)]">
+            <span className="h-2 w-2 rounded-full bg-white" />
             The complete AI operating environment
           </div>
           <h1 className="max-w-[900px] text-[clamp(3.7rem,4.3vw,4.85rem)] font-extralight leading-[1.02] tracking-normal text-white drop-shadow-[0_0_18px_rgba(255,255,255,0.12)]">
             <span className="block">Where humans</span>
-            <span className="block sm:whitespace-nowrap">imagine and <span className="font-light text-[#a760ff] drop-shadow-[0_0_20px_rgba(167,96,255,0.45)]">AI</span> builds.</span>
+            <span className="block sm:whitespace-nowrap">imagine and <span className="font-light text-[#e8e3dc] drop-shadow-[0_0_20px_rgba(255, 255, 255,0.45)]">AI</span> builds.</span>
           </h1>
           <p className="mt-5 max-w-[540px] text-[15px] font-medium leading-7 text-white/80">
             All the tools. All the models. All connected by agents.

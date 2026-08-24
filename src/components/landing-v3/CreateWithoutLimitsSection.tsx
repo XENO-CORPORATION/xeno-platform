@@ -32,7 +32,7 @@ const CreateWithoutLimitsSection: React.FC = () => {
             style={{
               background: `
                 radial-gradient(circle 720px at 105% 60%, rgba(220,190,160,0.55) 0%, rgba(120,90,70,0.55) 18%, rgba(40,30,25,0.95) 32%, transparent 45%),
-                radial-gradient(circle 920px at 110% 60%, rgba(167,96,255,0.16) 28%, transparent 40%),
+                radial-gradient(circle 920px at 110% 60%, rgba(255, 255, 255,0.16) 28%, transparent 40%),
                 radial-gradient(circle 1100px at 115% 60%, rgba(120,160,210,0.08) 30%, transparent 36%)
               `,
             }}

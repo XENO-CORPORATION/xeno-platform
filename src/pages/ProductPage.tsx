@@ -28,7 +28,7 @@ const OS_NAME: Record<OS, string> = { windows: 'Windows', mac: 'macOS', linux: '
 function StatusPill({ status }: { status: Product['status'] }) {
   const map = {
     shipping: { label: 'Available now', cls: 'border-emerald-400/30 text-emerald-300/90' },
-    beta: { label: 'Beta', cls: 'border-[#9f6fff]/35 text-[#b69dff]' },
+    beta: { label: 'Beta', cls: 'border-white/35 text-[#e8e3dc]' },
     'coming-soon': { label: 'Coming soon', cls: 'border-white/[0.12] text-[#948d83]' },
   }[status];
   return <span className={`rounded-[4px] border px-2 py-0.5 text-[11px] font-medium ${map.cls}`}>{map.label}</span>;
@@ -68,7 +68,7 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
       <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────── */}
         <section className="page-gutter relative overflow-hidden pt-[clamp(92px,12vh,140px)] pb-[clamp(28px,4vh,52px)]">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-[380px] bg-[radial-gradient(ellipse_55%_75%_at_50%_-10%,rgba(167,96,255,0.10),transparent_70%)]" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-[380px] bg-[radial-gradient(ellipse_55%_75%_at_50%_-10%,rgba(255, 255, 255,0.10),transparent_70%)]" />
           <div className="relative mx-auto max-w-[820px]">
             <Reveal delay={60}>
               <div className="flex flex-wrap items-center gap-3">

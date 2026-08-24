@@ -66,7 +66,7 @@ const C = {
   titleHover: '#ffffff',
   desc: '#8d867e',          // warm taupe-grey description
   label: '#827b71',         // muted category label
-  accent: '#b69dff',
+  accent: '#ece7df',
   border: 'rgba(255,255,255,0.08)',
   divider: 'rgba(255,255,255,0.07)',
   hover: 'rgba(255,255,255,0.05)',
@@ -409,15 +409,15 @@ function NavDropdown({ entry, onOpen, onClose }: { entry: NavEntry; onOpen: () =
               <Link
                 to="/download"
                 className="group/hub flex items-center gap-3 rounded-[10px] border px-3.5 py-2.5 transition-colors hover:brightness-125"
-                style={{ borderColor: C.border, backgroundColor: 'rgba(167,96,255,0.06)' }}
+                style={{ borderColor: C.border, backgroundColor: 'rgba(255, 255, 255,0.06)' }}
               >
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px]" style={{ backgroundColor: 'rgba(167,96,255,0.12)' }}>
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px]" style={{ backgroundColor: 'rgba(255, 255, 255,0.12)' }}>
                   <img src="/xeno-logo.svg" alt="" className="h-5 w-5 invert" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-[13.5px] font-semibold" style={{ color: '#f2efe9' }}>
                     XENO Hub
-                    <span className="rounded-[4px] px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-[0.12em]" style={{ color: C.accent, backgroundColor: 'rgba(167,96,255,0.14)' }}>
+                    <span className="rounded-[4px] px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-[0.12em]" style={{ color: C.accent, backgroundColor: 'rgba(255, 255, 255,0.14)' }}>
                       All-in-one
                     </span>
                   </div>
@@ -492,7 +492,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
               <span className="text-[#46423b]">/</span>
               <a href="#create" className="text-[#756f66] transition-colors hover:text-[#b6afa5]">CREATE</a>
               <span className="text-[#46423b]">/</span>
-              <a href="#innovate" className="text-[#a760ff] transition-colors hover:text-[#bf85ff]">INNOVATE</a>
+              <a href="#innovate" className="text-[#e8e3dc] transition-colors hover:text-white">INNOVATE</a>
             </nav>
           </div>
 

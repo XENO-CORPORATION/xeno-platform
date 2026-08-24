@@ -29,7 +29,7 @@ const DocsSidebar: React.FC<{
     </button>
 
     <div className="mb-4 px-3">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#a760ff]">{product.productName}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#e8e3dc]">{product.productName}</div>
     </div>
 
     {product.sections.map((section) => (
@@ -46,7 +46,7 @@ const DocsSidebar: React.FC<{
                   aria-current={active ? 'page' : undefined}
                   className={`block rounded-[7px] px-3 py-1.5 transition-colors ${
                     active
-                      ? 'bg-[#9f6fff]/[0.12] font-medium text-[#d3c4ff]'
+                      ? 'bg-white/[0.12] font-medium text-[#d3c4ff]'
                       : 'text-[#948d83] hover:bg-white/[0.03] hover:text-[#cdc7be]'
                   }`}
                 >

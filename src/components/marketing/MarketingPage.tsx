@@ -22,7 +22,7 @@ export const MarketingPage: React.FC<{
       <Header onGetStarted={() => navigate('/auth')} visible={true} />
       <main className="flex-1">
         <section className="page-gutter relative overflow-hidden pt-[clamp(92px,12vh,140px)] pb-[clamp(24px,4vh,48px)]">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-[360px] bg-[radial-gradient(ellipse_55%_75%_at_50%_-10%,rgba(167,96,255,0.10),transparent_70%)]" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-[360px] bg-[radial-gradient(ellipse_55%_75%_at_50%_-10%,rgba(255, 255, 255,0.10),transparent_70%)]" />
           <div className="relative mx-auto max-w-[880px]">
             <Reveal>
               <Link to="/" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">
@@ -31,7 +31,7 @@ export const MarketingPage: React.FC<{
             </Reveal>
             {eyebrow && (
               <Reveal delay={40}>
-                <div className="mt-6 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#a760ff]">{eyebrow}</div>
+                <div className="mt-6 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#e8e3dc]">{eyebrow}</div>
               </Reveal>
             )}
             <Reveal delay={80}>
@@ -95,7 +95,7 @@ export const CheckList: React.FC<{ items: string[] }> = ({ items }) => (
   <ul className="space-y-2.5">
     {items.map((it) => (
       <li key={it} className="flex items-start gap-2.5 text-[13.5px] leading-[1.55] text-[#b6afa5]">
-        <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#a760ff]" />
+        <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#e8e3dc]" />
         <span>{it}</span>
       </li>
     ))}

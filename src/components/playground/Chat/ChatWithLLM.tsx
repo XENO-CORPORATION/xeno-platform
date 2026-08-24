@@ -7787,7 +7787,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           onClick={() => handleModelSelect(model)}
                                           className={`px-3 py-2 flex items-center justify-between cursor-pointer transition-colors border-l-2 ${
                                             selectedModel.id === model.id
-                                              ? 'bg-[#a760ff]/10 text-white border-[#a760ff]'
+                                              ? 'bg-white/10 text-white border-white/25'
                                               : 'text-gray-400 hover:bg-white/[0.05] hover:text-white border-transparent'
                                           }`}
                                         >
@@ -9064,7 +9064,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   ) : (inputValue.trim() || attachedFiles.length > 0) ? (
                     <button
                       onClick={handleGenerate}
-                      className="w-10 h-10 rounded-lg bg-[#a760ff] hover:bg-[#b578ff] flex items-center justify-center transition-all shadow-md disabled:opacity-40"
+                      className="w-10 h-10 rounded-lg bg-white hover:bg-white flex items-center justify-center transition-all shadow-md disabled:opacity-40"
                       disabled={isContextLimitReached}
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>

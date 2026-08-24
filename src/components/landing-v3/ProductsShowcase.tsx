@@ -80,14 +80,14 @@ function ProductVisual({ kind }: { kind: Kind }) {
         <div className="absolute inset-0 flex flex-col gap-2 p-3.5">
           <div className="grid flex-1 grid-cols-2 grid-rows-2 gap-2">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className={cx('rounded-[7px] border', i === 1 ? 'border-[#a760ff]/60 shadow-[0_0_22px_rgba(167,96,255,0.35)]' : 'border-white/[0.08]')}
-                style={{ background: i === 1 ? 'radial-gradient(circle at 50% 45%, rgba(190,150,255,0.55), rgba(20,16,32,0.9) 70%)' : 'radial-gradient(circle at 50% 45%, rgba(167,96,255,0.16), rgba(12,10,18,0.92) 70%)' }} />
+              <div key={i} className={cx('rounded-[7px] border', i === 1 ? 'border-white/60 shadow-[0_0_22px_rgba(255, 255, 255,0.35)]' : 'border-white/[0.08]')}
+                style={{ background: i === 1 ? 'radial-gradient(circle at 50% 45%, rgba(190,150,255,0.55), rgba(20,16,32,0.9) 70%)' : 'radial-gradient(circle at 50% 45%, rgba(255, 255, 255,0.16), rgba(12,10,18,0.92) 70%)' }} />
             ))}
           </div>
           <div className="flex items-center gap-2 rounded-[6px] border border-white/[0.07] bg-black/30 px-2.5 py-1.5">
-            <Sparkles className="h-3 w-3 shrink-0 text-[#bf85ff]" />
+            <Sparkles className="h-3 w-3 shrink-0 text-white" />
             <span className="h-1 flex-1 rounded-[4px] bg-white/15" />
-            <span className="rounded-[4px] bg-[#1a1029] px-2 py-0.5 text-[8.5px] font-semibold text-[#bf85ff]">Generate</span>
+            <span className="rounded-[4px] bg-[#1a1029] px-2 py-0.5 text-[8.5px] font-semibold text-white">Generate</span>
           </div>
         </div>
       );
@@ -95,10 +95,10 @@ function ProductVisual({ kind }: { kind: Kind }) {
       return (
         <div className="absolute inset-0 flex gap-2 p-3.5">
           <div className="flex w-7 flex-col gap-1.5">
-            {[0, 1, 2].map((i) => (<div key={i} className={cx('h-7 rounded-[5px] border', i === 0 ? 'border-[#a760ff]/50 bg-[#1a1029]/50' : 'border-white/[0.07] bg-white/[0.03]')} />))}
+            {[0, 1, 2].map((i) => (<div key={i} className={cx('h-7 rounded-[5px] border', i === 0 ? 'border-white/50 bg-[#1a1029]/50' : 'border-white/[0.07] bg-white/[0.03]')} />))}
           </div>
           <div className="relative flex-1 overflow-hidden rounded-[8px] border border-white/[0.07]" style={{ background: 'radial-gradient(circle at 55% 50%, rgba(190,150,255,0.40), rgba(10,8,16,0.95) 70%)' }}>
-            <div className="absolute left-1/2 top-1/2 h-[52%] w-[52%] -translate-x-1/2 -translate-y-1/2 rounded-[8px] border border-[#a760ff]/45 shadow-[0_0_28px_rgba(167,96,255,0.4)]" />
+            <div className="absolute left-1/2 top-1/2 h-[52%] w-[52%] -translate-x-1/2 -translate-y-1/2 rounded-[8px] border border-white/45 shadow-[0_0_28px_rgba(255, 255, 255,0.4)]" />
           </div>
         </div>
       );
@@ -110,9 +110,9 @@ function ProductVisual({ kind }: { kind: Kind }) {
           </div>
           <div className="relative space-y-1 rounded-[6px] border border-white/[0.06] bg-black/25 p-1.5">
             {[['w-1/2', 'w-1/4'], ['w-1/3', 'w-2/5'], ['w-1/5', 'w-1/3']].map((row, r) => (
-              <div key={r} className="flex gap-1">{row.map((w, c) => <span key={c} className={cx('h-2 rounded-[2px]', w, c === 0 ? 'bg-[#a760ff]/55' : 'bg-white/12')} />)}</div>
+              <div key={r} className="flex gap-1">{row.map((w, c) => <span key={c} className={cx('h-2 rounded-[2px]', w, c === 0 ? 'bg-white/55' : 'bg-white/12')} />)}</div>
             ))}
-            <span className="pointer-events-none absolute inset-y-1 left-[42%] w-px bg-[#bf85ff]/80" />
+            <span className="pointer-events-none absolute inset-y-1 left-[42%] w-px bg-white/80" />
           </div>
         </div>
       );
@@ -120,11 +120,11 @@ function ProductVisual({ kind }: { kind: Kind }) {
       return (
         <div className="absolute inset-0 flex flex-col justify-center gap-3 p-3.5">
           <div className="flex h-1/2 items-center gap-[3px]">
-            {Array.from({ length: 30 }).map((_, i) => (<span key={i} className="flex-1 rounded-[4px] bg-gradient-to-t from-[#7a4fd0]/40 to-[#bf85ff]/90" style={{ height: `${22 + Math.abs(Math.sin(i * 0.5)) * 72}%` }} />))}
+            {Array.from({ length: 30 }).map((_, i) => (<span key={i} className="flex-1 rounded-[4px] bg-gradient-to-t from-[#7a4fd0]/40 to-white/90" style={{ height: `${22 + Math.abs(Math.sin(i * 0.5)) * 72}%` }} />))}
           </div>
           <div className="flex items-center gap-2">
             <div className="grid h-6 w-6 shrink-0 place-items-center rounded-[4px] border border-white/15"><Play className="h-2.5 w-2.5 fill-white text-white" /></div>
-            <span className="h-1 flex-1 overflow-hidden rounded-[4px] bg-white/12"><span className="block h-1 w-1/3 rounded-[4px] bg-[#a760ff]" /></span>
+            <span className="h-1 flex-1 overflow-hidden rounded-[4px] bg-white/12"><span className="block h-1 w-1/3 rounded-[4px] bg-white" /></span>
           </div>
         </div>
       );
@@ -132,22 +132,22 @@ function ProductVisual({ kind }: { kind: Kind }) {
       return (
         <div className="absolute inset-0 grid place-items-center p-3.5">
           <svg viewBox="0 0 100 100" className="h-[80%] w-[80%]">
-            <circle cx="50" cy="50" r="33" fill="rgba(167,96,255,0.06)" stroke="rgba(167,96,255,0.5)" strokeWidth="1" />
+            <circle cx="50" cy="50" r="33" fill="rgba(255, 255, 255,0.06)" stroke="rgba(255, 255, 255,0.5)" strokeWidth="1" />
             <ellipse cx="50" cy="50" rx="33" ry="11" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="0.7" />
             <ellipse cx="50" cy="50" rx="11" ry="33" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="0.7" />
             <ellipse cx="50" cy="50" rx="24" ry="33" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="0.7" />
-            <rect x="48" y="48" width="4" height="4" rx="1" fill="#bf85ff" />
+            <rect x="48" y="48" width="4" height="4" rx="1" fill="#ffffff" />
           </svg>
         </div>
       );
     case 'cad':
       return (
         <div className="absolute inset-0 p-3.5">
-          <div className="relative h-full w-full overflow-hidden rounded-[6px] border border-white/[0.07]" style={{ backgroundImage: 'linear-gradient(rgba(167,96,255,0.10) 1px,transparent 1px),linear-gradient(90deg,rgba(167,96,255,0.10) 1px,transparent 1px)', backgroundSize: '13px 13px' }}>
+          <div className="relative h-full w-full overflow-hidden rounded-[6px] border border-white/[0.07]" style={{ backgroundImage: 'linear-gradient(rgba(255, 255, 255,0.10) 1px,transparent 1px),linear-gradient(90deg,rgba(255, 255, 255,0.10) 1px,transparent 1px)', backgroundSize: '13px 13px' }}>
             <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 56" preserveAspectRatio="none">
-              <path d="M12 12 H72 V36 H44 V46 H12 Z" fill="rgba(167,96,255,0.05)" stroke="rgba(191,133,255,0.85)" strokeWidth="1.1" />
+              <path d="M12 12 H72 V36 H44 V46 H12 Z" fill="rgba(255, 255, 255,0.05)" stroke="rgba(255, 255, 255,0.85)" strokeWidth="1.1" />
               <line x1="44" y1="12" x2="44" y2="36" stroke="rgba(255,255,255,0.28)" strokeWidth="0.7" strokeDasharray="2 2" />
-              <rect x="10.6" y="10.6" width="2.8" height="2.8" rx="0.7" fill="#bf85ff" /><rect x="70.6" y="34.6" width="2.8" height="2.8" rx="0.7" fill="#bf85ff" />
+              <rect x="10.6" y="10.6" width="2.8" height="2.8" rx="0.7" fill="#ffffff" /><rect x="70.6" y="34.6" width="2.8" height="2.8" rx="0.7" fill="#ffffff" />
             </svg>
           </div>
         </div>
@@ -156,7 +156,7 @@ function ProductVisual({ kind }: { kind: Kind }) {
       return (
         <div className="absolute inset-0 flex gap-2 p-3.5">
           <div className="flex w-[34%] flex-col gap-1">
-            {['Scene', 'Player', 'Terrain', 'Lights'].map((l, i) => (<div key={l} className={cx('truncate rounded-[3px] px-1.5 py-1 text-[7.5px]', i === 1 ? 'bg-[#1a1029]/60 text-[#bf85ff]' : 'text-[#807970]')}>{i === 0 ? l : `▸ ${l}`}</div>))}
+            {['Scene', 'Player', 'Terrain', 'Lights'].map((l, i) => (<div key={l} className={cx('truncate rounded-[3px] px-1.5 py-1 text-[7.5px]', i === 1 ? 'bg-[#1a1029]/60 text-white' : 'text-[#807970]')}>{i === 0 ? l : `▸ ${l}`}</div>))}
           </div>
           <div className="relative flex-1 overflow-hidden rounded-[6px] border border-white/[0.07]" style={{ background: 'radial-gradient(circle at 50% 62%, rgba(140,100,220,0.35), rgba(8,8,14,0.95) 70%)' }}>
             <svg viewBox="0 0 100 80" className="absolute inset-0 h-full w-full">
@@ -173,7 +173,7 @@ function ProductVisual({ kind }: { kind: Kind }) {
           <div className="flex h-full flex-col gap-2 rounded-[6px] border border-white/[0.07] bg-white/[0.02] p-3">
             <div className="h-1.5 w-1/2 rounded-[4px] bg-white/30" />
             <div className="mt-1 space-y-1.5">{['w-full', 'w-[92%]', 'w-[78%]', 'w-full', 'w-[55%]'].map((w, i) => <div key={i} className={cx('h-1 rounded-[4px] bg-white/12', w)} />)}</div>
-            <div className="mt-auto flex items-center gap-1.5"><span className="h-2.5 w-px bg-[#bf85ff]" /><span className="h-1 w-1/4 rounded-[4px] bg-[#a760ff]/55" /></div>
+            <div className="mt-auto flex items-center gap-1.5"><span className="h-2.5 w-px bg-white" /><span className="h-1 w-1/4 rounded-[4px] bg-white/55" /></div>
           </div>
         </div>
       );
@@ -182,7 +182,7 @@ function ProductVisual({ kind }: { kind: Kind }) {
         <div className="absolute inset-0 flex items-center justify-center p-3.5">
           {['Input', 'Agent', 'Publish'].map((n, i) => (
             <React.Fragment key={n}>
-              <div className={cx('rounded-[5px] border px-2 py-1.5 text-[8px] font-medium', i === 1 ? 'border-[#a760ff]/50 bg-[#1a1029]/55 text-[#bf85ff]' : 'border-white/[0.08] bg-white/[0.02] text-[#948d83]')}>{n}</div>
+              <div className={cx('rounded-[5px] border px-2 py-1.5 text-[8px] font-medium', i === 1 ? 'border-white/50 bg-[#1a1029]/55 text-white' : 'border-white/[0.08] bg-white/[0.02] text-[#948d83]')}>{n}</div>
               {i < 2 && <span className="mx-1.5 h-px w-5" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.4) 1px, transparent 1.5px)', backgroundSize: '5px 1px' }} />}
             </React.Fragment>
           ))}
@@ -192,18 +192,18 @@ function ProductVisual({ kind }: { kind: Kind }) {
       return (
         <div className="absolute inset-0 flex flex-col justify-center gap-2 p-4">
           <div className="max-w-[72%] self-start rounded-[8px] rounded-bl-[2px] border border-white/[0.06] bg-white/[0.04] px-2.5 py-1.5"><div className="h-1 w-16 rounded-[4px] bg-white/25" /><div className="mt-1 h-1 w-10 rounded-[4px] bg-white/12" /></div>
-          <div className="max-w-[72%] self-end rounded-[8px] rounded-br-[2px] border border-[#9f6fff]/30 bg-[#1a1029]/55 px-2.5 py-1.5"><div className="h-1 w-20 rounded-[4px] bg-[#bf85ff]/60" /><div className="mt-1 h-1 w-12 rounded-[4px] bg-[#bf85ff]/30" /></div>
+          <div className="max-w-[72%] self-end rounded-[8px] rounded-br-[2px] border border-white/30 bg-[#1a1029]/55 px-2.5 py-1.5"><div className="h-1 w-20 rounded-[4px] bg-white/60" /><div className="mt-1 h-1 w-12 rounded-[4px] bg-white/30" /></div>
         </div>
       );
     case 'cli':
       return (
         <div className="absolute inset-0 p-3.5">
           <div className="flex h-full flex-col rounded-[6px] border border-white/[0.07] bg-black/45 p-2.5 font-mono text-[8.5px] leading-[1.7]">
-            <span className="text-[#c2bbb2]"><span className="text-[#bf85ff]">$</span> xeno build</span>
+            <span className="text-[#c2bbb2]"><span className="text-white">$</span> xeno build</span>
             <span className="text-[#807970]">→ analyzing project…</span>
             <span className="text-[#807970]">→ 3 agents dispatched</span>
             <span className="text-emerald-300/70">✓ ready in 4.2s</span>
-            <span className="mt-auto flex items-center text-[#bf85ff]">$<span className="ml-1 inline-block h-2.5 w-1 bg-white/60" /></span>
+            <span className="mt-auto flex items-center text-white">$<span className="ml-1 inline-block h-2.5 w-1 bg-white/60" /></span>
           </div>
         </div>
       );
@@ -213,11 +213,11 @@ function ProductVisual({ kind }: { kind: Kind }) {
           <div className="flex h-full flex-col gap-1.5 rounded-[6px] border border-white/[0.07] bg-black/25 p-2.5">
             {[['xeno-pro', '98%'], ['xeno-vision', 'ready'], ['llama-3', 'ready'], ['flux-pro', 'ready']].map(([m, s], i) => (
               <div key={m} className="flex items-center gap-2 text-[8.5px]">
-                <span className={cx('h-1.5 w-1.5 shrink-0 rounded-[2px]', i === 0 ? 'bg-emerald-400' : 'bg-[#a760ff]')} />
+                <span className={cx('h-1.5 w-1.5 shrink-0 rounded-[2px]', i === 0 ? 'bg-emerald-400' : 'bg-white')} />
                 <span className="font-mono text-[#c2bbb2]">{m}</span><span className="ml-auto text-[#756f66]">{s}</span>
               </div>
             ))}
-            <div className="mt-auto h-1 w-full overflow-hidden rounded-[4px] bg-white/10"><span className="block h-1 w-2/3 rounded-[4px] bg-gradient-to-r from-[#7a4fd0] to-[#bf85ff]" /></div>
+            <div className="mt-auto h-1 w-full overflow-hidden rounded-[4px] bg-white/10"><span className="block h-1 w-2/3 rounded-[4px] bg-gradient-to-r from-[#7a4fd0] to-white" /></div>
           </div>
         </div>
       );

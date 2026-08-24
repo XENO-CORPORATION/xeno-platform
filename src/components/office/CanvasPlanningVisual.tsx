@@ -273,7 +273,7 @@ const COLORS = [
 
 const DARK_COLORS = [
   '#3B82F6', // Blue
-  '#8B5CF6', // Purple
+  '#e8e3dc', // Purple
   '#EC4899', // Pink
   '#10B981', // Green
   '#F59E0B', // Orange

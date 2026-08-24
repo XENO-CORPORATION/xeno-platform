@@ -47,7 +47,7 @@ const ProductReleaseDetail: React.FC = () => {
             <Reveal delay={60}>
               <h1 className="mt-6 text-[clamp(1.8rem,3vw,2.6rem)] font-semibold text-[#ece7df]">Release not found</h1>
               <p className="mt-2 text-[14px] text-[#948d83]">v{version} isn't published for {product.name}.</p>
-              <Link to={`/product/${product.slug}/releases`} className="mt-5 inline-block text-[13px] text-[#b69dff] hover:text-white">See all releases →</Link>
+              <Link to={`/product/${product.slug}/releases`} className="mt-5 inline-block text-[13px] text-[#e8e3dc] hover:text-white">See all releases →</Link>
             </Reveal>
           ) : (
             <>

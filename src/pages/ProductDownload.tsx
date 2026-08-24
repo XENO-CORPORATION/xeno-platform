@@ -151,7 +151,7 @@ const ProductDownload: React.FC = () => {
                   <div className="mt-10">
                     <div className="mb-3 flex items-center gap-2.5">
                       <h2 className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#756f66]">Beta channel</h2>
-                      <span className="rounded-[4px] border border-[#9f6fff]/30 px-2 py-0.5 text-[11px] font-medium text-[#b69dff]">v{beta!.version}</span>
+                      <span className="rounded-[4px] border border-white/30 px-2 py-0.5 text-[11px] font-medium text-[#e8e3dc]">v{beta!.version}</span>
                     </div>
                     {channelBlock(beta!, 'beta')}
                   </div>
@@ -165,7 +165,7 @@ const ProductDownload: React.FC = () => {
                       ? `This build does not update itself — reinstall from here to move to a newer ${product.name} version.`
                       : `Updates install automatically from inside ${product.name}.`}
                   </span>
-                  <Link to={`/product/${product.slug}/releases`} className="text-[#b69dff] transition-colors hover:text-white">All versions & release notes →</Link>
+                  <Link to={`/product/${product.slug}/releases`} className="text-[#e8e3dc] transition-colors hover:text-white">All versions & release notes →</Link>
                 </div>
               </Reveal>
             </>

@@ -680,7 +680,7 @@ const Settings: React.FC = () => {
       { name: 'Applications (/opt)', icon: <Package size={20} />, bytes: storageData?.breakdown?.applications || 0, color: '#10b981' },
       { name: 'User files (/home)', icon: <FileText size={20} />, bytes: storageData?.breakdown?.home || 0, color: '#f59e0b' },
       { name: 'Root directory', icon: <HardDrive size={20} />, bytes: storageData?.breakdown?.root || 0, color: '#ef4444' },
-      { name: 'Temporary (/tmp)', icon: <Folder size={20} />, bytes: storageData?.breakdown?.temp || 0, color: '#8b5cf6' },
+      { name: 'Temporary (/tmp)', icon: <Folder size={20} />, bytes: storageData?.breakdown?.temp || 0, color: '#e8e3dc' },
       { name: 'Log files (/var/log)', icon: <FileText size={20} />, bytes: storageData?.breakdown?.logs || 0, color: '#06b6d4' },
       { name: 'Cache & other', icon: <Package size={20} />, bytes: storageData?.breakdown?.other || 0, color: '#6b7280' }
     ];

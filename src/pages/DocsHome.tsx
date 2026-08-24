@@ -50,14 +50,14 @@ const DocsHome: React.FC = () => {
             <Link
               key={p.slug}
               to={`/docs/${p.slug}`}
-              className="group flex flex-col rounded-[14px] border border-[#9f6fff]/25 bg-[#9f6fff]/[0.05] p-5 transition-colors hover:border-[#9f6fff]/45"
+              className="group flex flex-col rounded-[14px] border border-white/25 bg-white/[0.05] p-5 transition-colors hover:border-white/45"
             >
               <div className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-[#b69dff]" />
+                <BookOpen className="h-4 w-4 text-[#e8e3dc]" />
                 <span className="text-[15px] font-semibold text-[#ece7df]">{p.productName}</span>
               </div>
               <p className="mt-2 flex-1 text-[13px] leading-[1.6] text-[#948d83]">{p.tagline}</p>
-              <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-[#b69dff] transition-colors group-hover:text-white">
+              <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-[#e8e3dc] transition-colors group-hover:text-white">
                 Read the docs <ArrowRight className="h-3.5 w-3.5" />
               </span>
             </Link>
