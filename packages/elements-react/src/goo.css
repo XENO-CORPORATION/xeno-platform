@@ -15,12 +15,8 @@
  * children cannot assume a stride, so it measures. Same effect, two honest implementations.
  */
 .xeno-goo-host {
-  /* How far the pill misbehaves on the way. Restrained on purpose — enough deformation to read as
-     weight, not enough to look like jelly on something you use constantly. */
-  --xeno-goo-stretch: 0.14;
-  --xeno-goo-squeeze: 0.06;
-  --xeno-goo-dur: 220ms;
-  --xeno-goo-pill-ease: cubic-bezier(0.34, 1.12, 0.5, 1);
+  --xeno-goo-dur: 150ms;
+  --xeno-goo-pill-ease: cubic-bezier(0.16, 1, 0.3, 1);
   isolation: isolate;
 }
 
@@ -57,30 +53,6 @@
 .xeno-goo-host[data-goo='on'] > .xeno-goo-pill {
   opacity: 1;
 }
-
-/* The stretch, keyed off the row index so re-pointing restarts it — a browser will not replay an
-   animation whose name did not change. Ten rows; past that the pill still travels, it just stops
-   stretching, which is a fair trade for a list nobody scans by deformation anyway. */
-.xeno-goo-host[data-goo='on'][data-goo-index='0'] > .xeno-goo-pill { animation: xeno-goo-pill-0 var(--xeno-goo-dur) 1; }
-.xeno-goo-host[data-goo='on'][data-goo-index='1'] > .xeno-goo-pill { animation: xeno-goo-pill-1 var(--xeno-goo-dur) 1; }
-.xeno-goo-host[data-goo='on'][data-goo-index='2'] > .xeno-goo-pill { animation: xeno-goo-pill-2 var(--xeno-goo-dur) 1; }
-.xeno-goo-host[data-goo='on'][data-goo-index='3'] > .xeno-goo-pill { animation: xeno-goo-pill-3 var(--xeno-goo-dur) 1; }
-.xeno-goo-host[data-goo='on'][data-goo-index='4'] > .xeno-goo-pill { animation: xeno-goo-pill-4 var(--xeno-goo-dur) 1; }
-.xeno-goo-host[data-goo='on'][data-goo-index='5'] > .xeno-goo-pill { animation: xeno-goo-pill-5 var(--xeno-goo-dur) 1; }
-.xeno-goo-host[data-goo='on'][data-goo-index='6'] > .xeno-goo-pill { animation: xeno-goo-pill-6 var(--xeno-goo-dur) 1; }
-.xeno-goo-host[data-goo='on'][data-goo-index='7'] > .xeno-goo-pill { animation: xeno-goo-pill-7 var(--xeno-goo-dur) 1; }
-.xeno-goo-host[data-goo='on'][data-goo-index='8'] > .xeno-goo-pill { animation: xeno-goo-pill-8 var(--xeno-goo-dur) 1; }
-.xeno-goo-host[data-goo='on'][data-goo-index='9'] > .xeno-goo-pill { animation: xeno-goo-pill-9 var(--xeno-goo-dur) 1; }
-@keyframes xeno-goo-pill-0 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-pill-1 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-pill-2 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-pill-3 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-pill-4 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-pill-5 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-pill-6 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-pill-7 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-pill-8 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-pill-9 { 0% { scale: 1 1; } 50% { scale: calc(1 - var(--xeno-goo-squeeze)) calc(1 + var(--xeno-goo-stretch)); } 100% { scale: 1 1; } }
 
 /* Nothing here raises the rows, on purpose. A negative `z-index` child paints below its parent's in-flow
    content, so the rows are already over the pill without a single declaration — and a blanket

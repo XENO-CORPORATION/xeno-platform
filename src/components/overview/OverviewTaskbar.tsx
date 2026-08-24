@@ -597,7 +597,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
           {/* XENO Logo — Home */}
           <button
             onClick={() => navigate('/overview')}
-            className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
+            className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-150"
             style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
             aria-label="Home"
           >
@@ -612,7 +612,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
           {/* OS Button */}
           <button
             onClick={() => navigate('/os/connect')}
-            className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
+            className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-150"
             style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
             aria-label="OS"
           >
@@ -622,7 +622,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
           {/* Search Button */}
           <button
             onClick={() => navigate('/overview/search')}
-            className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
+            className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-150"
             style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
             aria-label="Search"
           >
@@ -632,7 +632,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
           {/* Create Lab Button */}
           <button
             onClick={onCreateLab}
-            className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
+            className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-150"
             style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
             aria-label="Create Lab"
           >
@@ -660,7 +660,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
               >
                 <button
                   onClick={() => handleCategoryClick(section.id)}
-                  className={`flex items-center justify-center rounded-md font-medium transition-colors duration-300 ${
+                  className={`flex items-center justify-center rounded-md font-medium transition-colors duration-150 ${
                     openDropdown === section.id
                       ? 'bg-white/20 text-white'
                       : 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
@@ -680,7 +680,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
 
               {/* Inline Dropdown Container */}
               {openDropdown === section.id && (
-                <div style={{ width: 34 }} className="mt-1 mb-1 p-1 bg-white/5 backdrop-blur-sm border border-white/5 rounded-md space-y-1 flex flex-col items-center transition-all duration-300">
+                <div style={{ width: 34 }} className="mt-1 mb-1 p-1 bg-white/5 backdrop-blur-sm border border-white/5 rounded-md space-y-1 flex flex-col items-center transition-all duration-150">
                   {section.pages.map((page) => {
                     const subcategoryKey = `${section.id}:${page.id}`;
                     const isSubcategoryActive = isPageActive(page.path);
@@ -697,7 +697,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
                             navigate(page.path);
                             // Keep dropdown open for active section
                           }}
-                          className={`flex items-center justify-center rounded-md font-medium transition-colors duration-300 ${
+                          className={`flex items-center justify-center rounded-md font-medium transition-colors duration-150 ${
                             isSubcategoryActive
                               ? 'bg-white/20 text-white'
                               : 'bg-white/5 text-white/70 hover:bg-white/15 hover:text-white'
@@ -731,7 +731,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
                 <div key={lab.id} className="relative">
                   <button
                     onClick={() => handleCategoryClick(`lab-${lab.id}`)}
-                    className={`flex items-center justify-center rounded-md font-medium transition-colors duration-300 ${
+                    className={`flex items-center justify-center rounded-md font-medium transition-colors duration-150 ${
                       openDropdown === `lab-${lab.id}`
                         ? 'bg-white/20 text-white'
                         : 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
@@ -749,7 +749,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
                           navigate(`/overview/labs/${lab.id}`);
                           // Keep dropdown open for active section
                         }}
-                        className="flex items-center justify-center rounded-md font-medium bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-colors duration-300"
+                        className="flex items-center justify-center rounded-md font-medium bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-colors duration-150"
                         style={{ width: 28, height: 28, minWidth: 28, minHeight: 28, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
                         aria-label={`${lab.name} - Open`}
                       >
@@ -768,7 +768,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
       <div className="w-full p-2 space-y-2 flex flex-col items-center">
         {/* Notification/News Button */}
         <button
-          className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
+          className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-150"
           style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
           aria-label="Notifications"
         >
@@ -777,7 +777,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
 
         {/* Light Theme Switch Button */}
         <button
-          className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-300"
+          className="flex items-center justify-center rounded-md font-medium bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors duration-150"
           style={{ width: 34, height: 34, minWidth: 34, minHeight: 34, boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', padding: 0 }}
           aria-label="Light Theme"
         >
@@ -787,7 +787,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
         {/* Profile Button - Toggleable Modal */}
         <button
           onClick={() => setShowAccountModal(!showAccountModal)}
-          className={`flex items-center justify-center rounded-md font-medium transition-colors duration-300 ${
+          className={`flex items-center justify-center rounded-md font-medium transition-colors duration-150 ${
             showAccountModal
               ? 'bg-white/20 text-white'
               : 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'

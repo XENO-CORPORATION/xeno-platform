@@ -16,7 +16,7 @@
      three up together to get the full CodePen bounce back. */
   --xeno-goo-squash-x: 0.95;
   --xeno-goo-squash-y: 1.1;
-  --xeno-goo-ease: cubic-bezier(0.34, 1.12, 0.5, 1);
+  --xeno-goo-ease: cubic-bezier(0.16, 1, 0.3, 1);
   position: fixed;
   inset-block: 0;
   inset-inline-start: 0;
@@ -137,15 +137,8 @@
 }
 
 /* ── The goo pill (the travelling hover surface) ──────────────────────────────────────
- * ONE filled pill per group, painted behind the rows, that FLIES to whichever row you point at and
- * squashes on the way — narrower and taller as it launches, back to true as it lands. That squash is
- * the whole illusion: a rectangle that only slid would read as a scrollbar; one that deforms reads as
- * something with mass. Adapted from One_div's gooey nav, in XENO ink: the pill is `--xeno-control`,
- * the monochrome step above the panel, not an accent colour.
- *
- * Pure CSS, no measuring: the pill is the LAST child of the group, so every row keeps its natural
- * `:nth-child` number and a hovered row reaches the pill with `~`. Travel is `row index x stride`, and
- * the stride comes from the row tokens above, so it cannot drift out of step with the layout. */
+ * ONE filled pill per group, painted behind the rows, that FLIES to whichever row you point at.
+ * Adapted in XENO ink: the pill is `--xeno-control`, the monochrome step above the panel. */
 .xeno-sidebar-goo {
   position: absolute;
   z-index: 0;
@@ -158,7 +151,7 @@
   opacity: 0;
   pointer-events: none;
   transition:
-    top var(--xeno-dur-entrance, 240ms) var(--xeno-goo-ease),
+    top 160ms var(--xeno-goo-ease),
     opacity var(--xeno-dur, 0.14s) ease;
 }
 /* The pill RESTS on the selected row of its group (so the selection indicator is the same object
@@ -180,64 +173,44 @@
 /* Hover takes it over. Same specificity as the rules above ON PURPOSE — these come later, so pointing
    at a row always wins over the resting position, and letting go hands it back. */
 .xeno-sidebar-item:hover ~ .xeno-sidebar-goo { opacity: 1; }
-.xeno-sidebar-item:nth-child(1):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 0; animation: xeno-goo-1 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(2):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 1; animation: xeno-goo-2 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(3):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 2; animation: xeno-goo-3 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(4):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 3; animation: xeno-goo-4 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(5):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 4; animation: xeno-goo-5 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(6):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 5; animation: xeno-goo-6 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(7):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 6; animation: xeno-goo-7 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(8):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 7; animation: xeno-goo-8 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(9):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 8; animation: xeno-goo-9 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(10):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 9; animation: xeno-goo-10 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(11):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 10; animation: xeno-goo-11 var(--xeno-dur-entrance, 240ms) 1; }
-.xeno-sidebar-item:nth-child(12):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 11; animation: xeno-goo-12 var(--xeno-dur-entrance, 240ms) 1; }
+.xeno-sidebar-item:nth-child(1):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 0; }
+.xeno-sidebar-item:nth-child(2):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 1; }
+.xeno-sidebar-item:nth-child(3):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 2; }
+.xeno-sidebar-item:nth-child(4):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 3; }
+.xeno-sidebar-item:nth-child(5):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 4; }
+.xeno-sidebar-item:nth-child(6):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 5; }
+.xeno-sidebar-item:nth-child(7):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 6; }
+.xeno-sidebar-item:nth-child(8):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 7; }
+.xeno-sidebar-item:nth-child(9):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 8; }
+.xeno-sidebar-item:nth-child(10):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 9; }
+.xeno-sidebar-item:nth-child(11):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 10; }
+.xeno-sidebar-item:nth-child(12):hover ~ .xeno-sidebar-goo { --xeno-goo-row: 11; }
 
-/* One keyframe track PER ROW, all identical. They have to be separate NAMES: re-pointing at another row
-   only swaps which rule matches, and a browser does not restart an animation whose name did not change —
-   so a single shared `xeno-goo` would squash once and then never again as you slide down the list. */
-@keyframes xeno-goo-1 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-2 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-3 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-4 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-5 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-6 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-7 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-8 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-9 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-10 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-11 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-@keyframes xeno-goo-12 { 0% { scale: 1 1; } 50% { scale: var(--xeno-goo-squash-x) var(--xeno-goo-squash-y); } 100% { scale: 1 1; } }
-
-/* ── The XENO nav hover animation ─────────────────────────────────────────────────────
- * The icon + label NUDGE right — the icon leads, the label follows a beat later (a small cascade), on
- * the interaction easing (E2). There is no left rail: the goo pill above already marks both the hovered
- * row and the active one, and a second marker on the same edge only competed with it. */
+/* ── The XENO nav hover animation ───────────────────────────────────────────────────── */
 .xeno-sidebar-item-icon {
   display: inline-flex;
   flex: none;
   color: var(--xeno-muted);
   transition:
     color var(--xeno-dur) ease,
-    transform var(--xeno-dur-entrance, 240ms) var(--xeno-ease-stagger, cubic-bezier(0.22, 0.7, 0.2, 1));
+    transform 160ms var(--xeno-goo-ease);
 }
 .xeno-sidebar-item-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: transform var(--xeno-dur-entrance, 240ms) var(--xeno-ease-stagger, cubic-bezier(0.22, 0.7, 0.2, 1));
+  transition: transform 160ms var(--xeno-goo-ease);
 }
 .xeno-sidebar-item:hover .xeno-sidebar-item-icon,
 .xeno-sidebar-item[data-selection='on'] .xeno-sidebar-item-icon {
   color: var(--xeno-text);
 }
 .xeno-sidebar-item:hover .xeno-sidebar-item-icon {
-  transform: translateX(6px);
+  transform: translateX(2px);
 }
 .xeno-sidebar-item:hover .xeno-sidebar-item-label {
-  transform: translateX(6px);
-  transition-delay: 45ms; /* label follows the icon — the cascade */
+  transform: translateX(2px);
 }
 
 /* Per-glyph icon animations are global now — see `icon-motion.css`, triggered by
