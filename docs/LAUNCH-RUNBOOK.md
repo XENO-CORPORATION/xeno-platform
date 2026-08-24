@@ -269,9 +269,19 @@ box rather than in a test.
 ## Step 8 — Go live
 
 Swap to `sk_live_`, **re-create the webhook** (the signing secret differs per
-endpoint), re-run both preflights, and buy **one real plan with a real card**
+endpoint), **re-check the webhook EVENT LIST**, re-run both preflights, and buy
+**one real plan with a real card**
 before telling anyone. Refund it afterwards — `charge.refunded` is handled, so
 that exercises the clawback path too.
+
+
+🔴 **A new endpoint does not inherit the old event list.** In test mode the
+endpoint was subscribed to TWO events while the code handled ELEVEN, so
+cancellations never downgraded a plan, refunds never clawed back, disputes never
+alerted and failed cards never entered dunning — silently, because Stripe
+delivers exactly what it was asked for and every log looks healthy. The billing
+preflight now derives the handled set from the source and fails if the endpoint
+does not cover it, so running it after creating the live endpoint is the check.
 
 ---
 
