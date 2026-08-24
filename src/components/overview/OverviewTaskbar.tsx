@@ -228,9 +228,6 @@ const playgroundSections = [
   }
 ];
 
-// Mobile navigation mode type
-type MobileNavMode = 'radial' | 'edge-handle';
-
 const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
   labs,
   onCreateLab,
@@ -254,19 +251,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
   const [hoveredSubcategory, setHoveredSubcategory] = useState<string | null>(null);
 
-  // Mobile navigation experiment state
-  const [mobileNavMode, setMobileNavMode] = useState<MobileNavMode>('radial');
-
-  // Radial menu state (Option 3)
-  const [radialMenuOpen, setRadialMenuOpen] = useState(false);
-  const [radialMenuPosition, setRadialMenuPosition] = useState({ x: 0, y: 0 });
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-  const touchStartPos = useRef({ x: 0, y: 0 });
-
-  // Edge handle state (Option 2)
-  const [edgeHandleExpanded, setEdgeHandleExpanded] = useState(false);
-  const [edgeHandleDragging, setEdgeHandleDragging] = useState(false);
-  const [edgeHandleOffset, setEdgeHandleOffset] = useState(0);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   // Handle closing the mobile menu with animation
   const closeMobileMenu = () => {
@@ -274,8 +259,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
     setTimeout(() => {
       setIsMobileMenuOpen(false);
       setIsClosingMobileMenu(false);
-      setOpenDropdown(null);
-    }, 250); // Match animation duration
+    }, 250);
   };
 
   // Function to get active section based on current path
@@ -320,312 +304,29 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
   };
 
   const handleClaimCredits = () => {
-    setShowAccountModal(false); // Close account modal first
+    setShowAccountModal(false);
     setShowClaimCreditsModal(true);
   };
 
   const handleClaimSuccess = () => {
-    // Refresh the page to update user credits
     window.location.reload();
-  };
-
-  // ============================================
-  // OPTION 3: Long-Press Radial Menu Handlers
-  // ============================================
-
-  // Track if long-press is in progress (to block scrolling)
-  const [isLongPressActive, setIsLongPressActive] = useState(false);
-
-  // Disable text selection when radial mode is active (prevents selection on long-press)
-  useEffect(() => {
-    if (mobileNavMode !== 'radial') return;
-
-    // Add CSS to disable selection
-    document.body.style.webkitUserSelect = 'none';
-    document.body.style.userSelect = 'none';
-    document.body.style.webkitTouchCallout = 'none';
-
-    return () => {
-      // Re-enable selection when leaving radial mode
-      document.body.style.webkitUserSelect = '';
-      document.body.style.userSelect = '';
-      document.body.style.webkitTouchCallout = '';
-    };
-  }, [mobileNavMode]);
-
-  // Prevent scrolling when long-press is active or radial menu is open
-  useEffect(() => {
-    if (mobileNavMode !== 'radial') return;
-    if (!isLongPressActive && !radialMenuOpen) return;
-
-    const preventScroll = (e: TouchEvent) => {
-      e.preventDefault();
-    };
-
-    document.addEventListener('touchmove', preventScroll, { passive: false });
-
-    return () => {
-      document.removeEventListener('touchmove', preventScroll);
-    };
-  }, [mobileNavMode, isLongPressActive, radialMenuOpen]);
-
-  // Additional refs for menu open timer and double-tap detection
-  const menuOpenTimer = useRef<NodeJS.Timeout | null>(null);
-  const lastTapTime = useRef<number>(0);
-  const longPressTriggered = useRef<boolean>(false);
-
-  useEffect(() => {
-    if (mobileNavMode !== 'radial') return;
-
-    const openMenu = () => {
-      setRadialMenuOpen(true);
-      if (navigator.vibrate) navigator.vibrate(50);
-    };
-
-    const handleTouchStart = (e: TouchEvent) => {
-      // Don't trigger on interactive elements
-      const target = e.target as HTMLElement;
-      if (target.closest('button, a, input, select, textarea, [role="button"]')) return;
-
-      const touch = e.touches[0];
-      touchStartPos.current = { x: touch.clientX, y: touch.clientY };
-      longPressTriggered.current = false;
-
-      // Start tracking long-press after a short delay (150ms)
-      longPressTimer.current = setTimeout(() => {
-        setIsLongPressActive(true);
-      }, 150);
-
-      // Open menu after full long-press duration (500ms)
-      menuOpenTimer.current = setTimeout(() => {
-        longPressTriggered.current = true;
-        openMenu();
-      }, 500);
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      const touch = e.touches[0];
-      const dx = touch.clientX - touchStartPos.current.x;
-      const dy = touch.clientY - touchStartPos.current.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      // Cancel long press if finger moves too much
-      if (distance > 10) {
-        if (longPressTimer.current) {
-          clearTimeout(longPressTimer.current);
-          longPressTimer.current = null;
-        }
-        if (menuOpenTimer.current) {
-          clearTimeout(menuOpenTimer.current);
-          menuOpenTimer.current = null;
-        }
-        setIsLongPressActive(false);
-      }
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      // Clear long-press timers
-      if (longPressTimer.current) {
-        clearTimeout(longPressTimer.current);
-        longPressTimer.current = null;
-      }
-      if (menuOpenTimer.current) {
-        clearTimeout(menuOpenTimer.current);
-        menuOpenTimer.current = null;
-      }
-      setIsLongPressActive(false);
-
-      // Skip double-tap if long-press triggered
-      if (longPressTriggered.current) {
-        longPressTriggered.current = false;
-        return;
-      }
-
-      // Don't trigger on interactive elements
-      const target = e.target as HTMLElement;
-      if (target.closest('button, a, input, select, textarea, [role="button"]')) return;
-
-      // Check if finger moved (was a swipe, not a tap)
-      const touch = e.changedTouches[0];
-      if (touch) {
-        const dx = touch.clientX - touchStartPos.current.x;
-        const dy = touch.clientY - touchStartPos.current.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance > 15) return; // Was a swipe, not a tap
-      }
-
-      // Timestamp-based double-tap detection (more reliable)
-      const currentTime = new Date().getTime();
-      const tapInterval = currentTime - lastTapTime.current;
-
-      if (tapInterval < 400 && tapInterval > 0) {
-        // Double tap detected - prevent default and open menu
-        e.preventDefault();
-        lastTapTime.current = 0; // Reset to prevent triple-tap
-        openMenu();
-      } else {
-        // First tap - record time
-        lastTapTime.current = currentTime;
-      }
-    };
-
-    // Prevent context menu on long press
-    const handleContextMenu = (e: Event) => {
-      e.preventDefault();
-    };
-
-    // Use passive: false for touchend to allow preventDefault() for double-tap
-    document.addEventListener('touchstart', handleTouchStart, { passive: true });
-    document.addEventListener('touchmove', handleTouchMove, { passive: true });
-    document.addEventListener('touchend', handleTouchEnd, { passive: false });
-    document.addEventListener('contextmenu', handleContextMenu);
-
-    return () => {
-      document.removeEventListener('touchstart', handleTouchStart);
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleTouchEnd);
-      document.removeEventListener('contextmenu', handleContextMenu);
-      if (longPressTimer.current) clearTimeout(longPressTimer.current);
-      if (menuOpenTimer.current) clearTimeout(menuOpenTimer.current);
-    };
-  }, [mobileNavMode]);
-
-  const closeRadialMenu = () => {
-    setRadialMenuOpen(false);
-    setExpandedCategory(null);
-  };
-
-  // Track which category is expanded in radial menu
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-
-  // Handle category tap in radial menu - shows sub-pages in inner ring
-  const handleRadialCategoryTap = (categoryId: string) => {
-    if (expandedCategory === categoryId) {
-      setExpandedCategory(null);
-    } else {
-      setExpandedCategory(categoryId);
-    }
-  };
-
-  // Handle page navigation from radial menu
-  const handleRadialPageTap = (path: string) => {
-    navigate(path);
-    closeRadialMenu();
-  };
-
-  // Calculate responsive radius based on viewport size
-  const getResponsiveRadius = () => {
-    if (typeof window === 'undefined') return { outer: 135, inner: 68 };
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const minDimension = Math.min(vw, vh);
-    // Outer ring: 38% of smaller viewport dimension, clamped between 100-160px
-    const outer = Math.min(Math.max(minDimension * 0.38, 100), 160);
-    // Inner ring: 50% of outer radius
-    const inner = outer * 0.5;
-    return { outer, inner };
-  };
-
-  // Get radial items positioned in a circle - ALL categories (OUTER RING)
-  const getRadialCategories = () => {
-    const { outer: radius } = getResponsiveRadius();
-    const startAngle = -90; // Start from top
-    const angleStep = 360 / playgroundSections.length;
-
-    return playgroundSections.map((section, index) => {
-      const angle = (startAngle + index * angleStep) * (Math.PI / 180);
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      return { ...section, x, y };
-    });
-  };
-
-  // Get sub-pages for expanded category (INNER RING)
-  const getExpandedPages = () => {
-    if (!expandedCategory) return [];
-    const section = playgroundSections.find(s => s.id === expandedCategory);
-    if (!section) return [];
-
-    const { inner: radius } = getResponsiveRadius();
-    const startAngle = -90;
-    const angleStep = 360 / section.pages.length;
-
-    return section.pages.map((page, index) => {
-      const angle = (startAngle + index * angleStep) * (Math.PI / 180);
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      return { ...page, x, y };
-    });
-  };
-
-  // Quick access items (Home, Settings, Profile) - positioned at center
-  const quickAccessItems = [
-    { id: 'home', icon: <Home size={16} />, label: 'Home', path: '/overview' },
-    { id: 'settings', icon: <Settings size={16} />, label: 'Settings', path: '/overview/settings' },
-    { id: 'profile', icon: <User size={16} />, label: 'Profile', action: () => { setShowAccountModal(true); closeRadialMenu(); } },
-  ];
-
-  // ============================================
-  // OPTION 2: Edge Handle Handlers
-  // ============================================
-  const handleEdgeHandleTap = () => {
-    if (mobileNavMode !== 'edge-handle') return;
-    setEdgeHandleExpanded(!edgeHandleExpanded);
-  };
-
-  const handleEdgeHandleDragStart = (e: React.TouchEvent) => {
-    if (mobileNavMode !== 'edge-handle') return;
-    setEdgeHandleDragging(true);
-  };
-
-  const handleEdgeHandleDrag = (e: React.TouchEvent) => {
-    if (mobileNavMode !== 'edge-handle' || !edgeHandleDragging) return;
-    const touch = e.touches[0];
-    const offset = Math.min(Math.max(touch.clientX, 0), 280);
-    setEdgeHandleOffset(offset);
-    if (offset > 140) {
-      setEdgeHandleExpanded(true);
-    }
-  };
-
-  const handleEdgeHandleDragEnd = () => {
-    if (mobileNavMode !== 'edge-handle') return;
-    setEdgeHandleDragging(false);
-    if (edgeHandleOffset > 140) {
-      setEdgeHandleExpanded(true);
-    } else {
-      setEdgeHandleExpanded(false);
-    }
-    setEdgeHandleOffset(0);
   };
 
   const handleLogout = async () => {
     try {
-      // Close the account modal first
       setShowAccountModal(false);
-      
-      // Clear localStorage
+      setIsMobileMenuOpen(false);
       localStorage.clear();
-      
-      // Clear sessionStorage
       sessionStorage.clear();
-      
-      // Clear any cookies (basic implementation)
       document.cookie.split(";").forEach((c) => {
         const eqPos = c.indexOf("=");
         const name = eqPos > -1 ? c.substr(0, eqPos) : c;
         document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
       });
-      
-      // Wait a moment to ensure cleanup is complete
       await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Redirect to homepage after logout is complete
       navigate('/');
-      
     } catch (error) {
       console.error('Logout failed:', error);
-      // Still redirect even if there's an error
       navigate('/');
     }
   };
@@ -635,7 +336,6 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       if (taskbarRef.current && !taskbarRef.current.contains(target)) {
-        // Don't close if clicking inside settings or account containers
         const settingsContainer = document.querySelector('[data-container="settings"]');
         const accountContainer = document.querySelector('[data-container="account"]');
         
@@ -653,7 +353,7 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
     };
   }, []);
 
-  const sidebarWidth = 'w-13'; // Slightly wider taskbar
+  const sidebarWidth = 'w-13';
 
   // Close mobile menu when navigating
   const handleMobileNavigation = (path: string) => {
@@ -663,274 +363,212 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
 
   return (
     <>
-      {/* ============================================ */}
-      {/* OPTION 3: Long-Press Radial Menu */}
-      {/* ============================================ */}
-      {mobileNavMode === 'radial' && radialMenuOpen && (
-        <div className="fixed inset-0 z-[250] md:hidden">
-          {/* Backdrop - Two-step close: first closes subpages, second closes menu */}
+      {/* ── Mobile Top-Right Menu Trigger ────────────────────────────────────────── */}
+      <button
+        type="button"
+        onClick={() => setIsMobileMenuOpen(true)}
+        className="fixed top-3.5 right-3.5 z-[240] md:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-black/85 text-white shadow-xl backdrop-blur-md active:scale-95 transition-all duration-150"
+        aria-label="Open taskbar menu"
+      >
+        <Menu size={20} />
+      </button>
+
+      {/* ── Full Mobile Taskbar Drawer ───────────────────────────────────────────── */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[250] md:hidden flex flex-col justify-end">
+          {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
-            onClick={() => {
-              if (expandedCategory) {
-                setExpandedCategory(null); // First tap: close subpages
-              } else {
-                closeRadialMenu(); // Second tap: close entire menu
-              }
-            }}
+            className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+            onClick={() => setIsMobileMenuOpen(false)}
           />
 
-          {/* Settings - Top Left */}
-          <button
-            onClick={() => { navigate('/overview/settings'); closeRadialMenu(); }}
-            className="absolute top-4 left-4 w-12 h-12 rounded-xl bg-white/10 border border-white/20 text-white active:bg-white/30 flex items-center justify-center"
-            style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
-          >
-            <Settings size={20} />
-          </button>
-
-          {/* Profile - Top Right */}
-          <button
-            onClick={() => { setShowAccountModal(true); closeRadialMenu(); }}
-            className="absolute top-4 right-4 w-12 h-12 rounded-xl bg-white/10 border border-white/20 text-white active:bg-white/30 flex items-center justify-center"
-            style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
-          >
-            <User size={20} />
-          </button>
-
-          {/* Credits - Bottom Left */}
-          <div
-            className="absolute bottom-4 left-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white"
-            style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
-          >
-            <Coins size={18} className="text-yellow-400" />
-            <span className="text-sm font-semibold">{user?.credits?.toLocaleString() || 0}</span>
-          </div>
-
-          {/* Home - Bottom Right */}
-          <button
-            onClick={() => { navigate('/overview'); closeRadialMenu(); }}
-            className="absolute bottom-4 right-4 w-12 h-12 rounded-xl bg-white/10 border border-white/30 text-white active:bg-white/30 flex items-center justify-center"
-            style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
-          >
-            <Home size={20} />
-          </button>
-
-          {/* Radial Menu - Centered */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-
-            {/* Category Buttons - Outer Ring */}
-            {(() => {
-              // Short names for display
-              const shortNames: Record<string, string> = {
-                'coding': 'Code',
-                'tools': 'Tools',
-                'download': 'DL',
-                'generation': 'Gen',
-                'enhance': 'Up',
-                'train': 'Train',
-                'chat': 'Chat',
-                'studio': 'Studio',
-                'content-creation': 'Create',
-                'office': 'Office'
-              };
-
-              const total = playgroundSections.length;
-              // Calculate radius based on screen width to fit all buttons
-              const screenW = typeof window !== 'undefined' ? window.innerWidth : 375;
-              const radius = Math.min(screenW * 0.38, 155);
-
-              return playgroundSections.map((section, index) => {
-                const angle = (-90 + (index * 360 / total)) * (Math.PI / 180);
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
-                const displayName = shortNames[section.id] || section.name;
-
-                return (
-                  <button
-                    key={section.id}
-                    onClick={() => handleRadialCategoryTap(section.id)}
-                    className={`absolute w-20 h-9 rounded-lg border flex items-center justify-center gap-1.5 transition-all ${
-                      expandedCategory === section.id
-                        ? 'bg-white/30 border-white/50 text-white'
-                        : 'bg-black/90 border-white/20 text-white/80 active:bg-white/20'
-                    }`}
-                    style={{
-                      left: x,
-                      top: y,
-                      transform: 'translate(-50%, -50%)',
-                    }}
-                  >
-                    {section.icon}
-                    <div className="w-px h-4 bg-white/30" />
-                    <span className="text-[11px] font-medium">{displayName}</span>
-                  </button>
-                );
-              });
-            })()}
-
-            {/* Subpage Buttons - Inner Ring (when category expanded) */}
-            {expandedCategory && (() => {
-              const section = playgroundSections.find(s => s.id === expandedCategory);
-              if (!section) return null;
-
-              const total = section.pages.length;
-              // Smaller radius for inner ring
-              const screenW = typeof window !== 'undefined' ? window.innerWidth : 375;
-              const radius = Math.min(screenW * 0.15, 60);
-
-              return section.pages.map((page, index) => {
-                const angle = (-90 + (index * 360 / total)) * (Math.PI / 180);
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
-
-                // Shorten page names
-                const shortPageName = page.id.length > 6 ? page.id.slice(0, 5) : page.id;
-
-                return (
-                  <button
-                    key={page.id}
-                    onClick={() => handleRadialPageTap(page.path)}
-                    className={`absolute h-7 px-2 rounded-md border flex items-center gap-1 transition-all whitespace-nowrap ${
-                      location.pathname === page.path
-                        ? 'bg-white/30 border-white/50 text-white'
-                        : 'bg-black/90 border-white/20 text-white/80 active:bg-white/20'
-                    }`}
-                    style={{
-                      left: x,
-                      top: y,
-                      transform: 'translate(-50%, -50%)',
-                    }}
-                  >
-                    {page.icon}
-                    <div className="w-px h-3 bg-white/30" />
-                    <span className="text-[9px] font-medium capitalize">{shortPageName}</span>
-                  </button>
-                );
-              });
-            })()}
-
-            {/* Center hint text */}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-              <span className="text-white/40 text-[9px]">
-                {expandedCategory ? 'tap page' : 'tap'}
-              </span>
+          {/* Drawer Panel */}
+          <div className="relative z-10 flex flex-col h-[90dvh] w-full rounded-t-3xl border-t border-x border-white/15 bg-[#0a0a0c]/95 backdrop-blur-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
+            {/* Top Drag Indicator */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-white/20" />
             </div>
-          </div>
 
-        </div>
-      )}
-
-      {/* ============================================ */}
-      {/* OPTION 2: Edge Handle */}
-      {/* ============================================ */}
-      {mobileNavMode === 'edge-handle' && (
-        <>
-          {/* Backdrop when expanded */}
-          {edgeHandleExpanded && (
-            <div
-              className="fixed inset-0 z-[250] md:hidden bg-black/70 backdrop-blur-md"
-              onClick={() => { setEdgeHandleExpanded(false); setExpandedCategory(null); }}
-            />
-          )}
-
-          {/* Edge Handle + Menu Panel */}
-          <div
-            className={`fixed left-0 top-1/2 -translate-y-1/2 z-[260] md:hidden flex items-center transition-transform duration-300 ease-out`}
-            style={{
-              transform: `translateY(-50%) translateX(${edgeHandleExpanded ? '0' : edgeHandleDragging ? edgeHandleOffset - 320 : '-320'}px)`,
-            }}
-          >
-            {/* Menu Panel */}
-            <div className="w-[320px] bg-black/95 backdrop-blur-xl border-r border-y border-white/10 rounded-r-2xl p-3 flex flex-col max-h-[80vh] overflow-hidden">
-              {/* Quick Access Row */}
-              <div className="flex gap-2 mb-3 pb-3 border-b border-white/10">
-                {quickAccessItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      if (item.action) {
-                        item.action();
-                        setEdgeHandleExpanded(false);
-                      } else {
-                        navigate(item.path!);
-                        setEdgeHandleExpanded(false);
-                        setExpandedCategory(null);
-                      }
-                    }}
-                    className="flex-1 h-11 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/15 hover:text-white flex items-center justify-center gap-2 transition-all duration-200"
-                  >
-                    {item.icon}
-                    <span className="text-[11px] font-medium">{item.label}</span>
-                  </button>
-                ))}
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
+                  <svg width="18" height="18" viewBox="0 0 1082 1082" fill="currentColor">
+                    <path d="M489.1 219.763L323.457 39.7072L101.649 30.4597C51.6926 28.3769 39.5494 67.5718 39.7224 87.4296L30.4124 310.735L347.816 655.757L475.833 537.987L241.73 283.514C207.644 246.462 222.019 240.156 233.467 241.634L455.275 250.881L489.1 219.763Z" />
+                    <path d="M861.765 489.52L1041.69 323.704L1050.94 101.684C1053.03 51.6793 1013.87 39.5273 994.024 39.7019L770.9 30.3995L426.135 348.133L543.8 476.263L798.083 241.917C835.108 207.796 841.408 222.184 839.931 233.644L830.674 455.664L861.765 489.52Z" />
+                    <path d="M592.871 862.143L758.514 1042.2L980.322 1051.45C1030.28 1053.53 1042.42 1014.33 1042.25 994.477L1051.56 771.171L734.155 426.15L606.138 543.919L840.241 798.392C874.327 835.444 859.952 841.751 848.504 840.272L626.696 831.025L592.871 862.143Z" />
+                    <path d="M220.763 592.907L40.7063 758.55L31.4588 980.358C29.3761 1030.31 68.5709 1042.46 88.4287 1042.28L311.735 1051.59L656.756 734.191L538.986 606.174L284.514 840.277C247.462 874.363 241.155 859.988 242.633 848.54L251.881 626.733L220.763 592.907Z" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-white">XENO Studio</div>
+                  <div className="text-[11px] text-white/50">{user?.display_name || user?.email || 'Guest'}</div>
+                </div>
               </div>
 
-              {/* Categories Grid */}
-              <div className="grid grid-cols-4 gap-2">
-                {playgroundSections.map((section) => (
-                  <button
-                    key={section.id}
-                    onClick={() => handleRadialCategoryTap(section.id)}
-                    className={`aspect-square rounded-xl border flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
-                      expandedCategory === section.id
-                        ? 'bg-white/20 border-white/30 text-white'
-                        : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    {section.icon}
-                    <span className="text-[8px] font-medium opacity-70 leading-tight text-center px-1">{section.name}</span>
-                  </button>
-                ))}
+              <div className="flex items-center gap-2">
+                {/* Credits Pill */}
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-white text-xs">
+                  <Coins size={14} className="text-yellow-400" />
+                  <span className="font-semibold">{user?.credits?.toLocaleString() || 0}</span>
+                </div>
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/80 hover:text-white active:scale-95"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Actions Row */}
+            <div className="px-5 py-3 border-b border-white/10 overflow-x-auto hide-scrollbar">
+              <div className="flex items-center gap-2 min-w-max">
+                <button
+                  onClick={() => handleMobileNavigation('/overview')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 border border-white/10 text-xs font-medium text-white hover:bg-white/20 active:scale-95 transition-all"
+                >
+                  <Home size={14} />
+                  <span>Overview</span>
+                </button>
+                <button
+                  onClick={() => handleMobileNavigation('/os/connect')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 border border-white/10 text-xs font-medium text-white hover:bg-white/20 active:scale-95 transition-all"
+                >
+                  <span className="text-[11px] font-bold">OS</span>
+                  <span>Connect</span>
+                </button>
+                <button
+                  onClick={() => handleMobileNavigation('/overview/search')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 border border-white/10 text-xs font-medium text-white hover:bg-white/20 active:scale-95 transition-all"
+                >
+                  <Search size={14} />
+                  <span>Search</span>
+                </button>
+                <button
+                  onClick={() => { onCreateLab(); setIsMobileMenuOpen(false); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 border border-white/10 text-xs font-medium text-white hover:bg-white/20 active:scale-95 transition-all"
+                >
+                  <Plus size={14} />
+                  <span>New Lab</span>
+                </button>
+                <button
+                  onClick={() => handleMobileNavigation('/overview/settings')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 border border-white/10 text-xs font-medium text-white hover:bg-white/20 active:scale-95 transition-all"
+                >
+                  <Settings size={14} />
+                  <span>Settings</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Categories List */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                Products & Workspaces
               </div>
 
-              {/* Expanded Category Pages */}
-              {expandedCategory && (
-                <div className="mt-3 pt-3 border-t border-white/10 overflow-y-auto">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-white/40 text-[10px] uppercase tracking-wider">
-                      {playgroundSections.find(s => s.id === expandedCategory)?.name}
-                    </span>
-                    <div className="flex-1 h-px bg-white/10" />
+              <div className="space-y-2">
+                {playgroundSections.map((section) => {
+                  const isExpanded = expandedCategory === section.id || getActiveSection() === section.id;
+                  return (
+                    <div
+                      key={section.id}
+                      className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden transition-colors"
+                    >
+                      {/* Section Header Button */}
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCategory(expandedCategory === section.id ? null : section.id)}
+                        className="flex w-full items-center justify-between p-3 text-left hover:bg-white/[0.05] transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white">
+                            {section.icon}
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-white">{section.name}</div>
+                            <div className="text-[10px] text-white/40">{section.pages.length} interfaces</div>
+                          </div>
+                        </div>
+                        <ChevronDown
+                          size={16}
+                          className={`text-white/40 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-white' : ''}`}
+                        />
+                      </button>
+
+                      {/* Subpages / Tools */}
+                      {isExpanded && (
+                        <div className="grid grid-cols-2 gap-1.5 p-2.5 pt-0 border-t border-white/5 bg-black/20">
+                          {section.pages.map((page) => {
+                            const isActive = isPageActive(page.path);
+                            return (
+                              <button
+                                key={page.id}
+                                type="button"
+                                onClick={() => handleMobileNavigation(page.path)}
+                                className={`flex items-center gap-2 p-2 rounded-lg text-xs font-medium transition-all ${
+                                  isActive
+                                    ? 'bg-white/20 text-white border border-white/30 font-semibold'
+                                    : 'bg-white/5 text-white/75 hover:bg-white/10 hover:text-white border border-transparent'
+                                }`}
+                              >
+                                <span className="text-white/70">{page.icon}</span>
+                                <span className="truncate">{formatSubcategoryLabel(page.id)}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Recent Labs */}
+              {labs.length > 0 && (
+                <div className="pt-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-white/40 mb-2">
+                    Recent Labs
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {playgroundSections
-                      .find(s => s.id === expandedCategory)
-                      ?.pages.map((page) => (
-                        <button
-                          key={page.id}
-                          onClick={() => {
-                            navigate(page.path);
-                            setEdgeHandleExpanded(false);
-                            setExpandedCategory(null);
-                          }}
-                          className={`h-12 rounded-xl border flex items-center justify-center gap-2 transition-all duration-200 ${
-                            location.pathname === page.path
-                              ? 'bg-white/20 border-white/30 text-white'
-                              : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white'
-                          }`}
-                        >
-                          {page.icon}
-                          <span className="text-[10px] font-medium capitalize">{page.id}</span>
-                        </button>
-                      ))}
+                  <div className="space-y-1.5">
+                    {labs.slice(0, 4).map((lab) => (
+                      <button
+                        key={lab.id}
+                        onClick={() => handleMobileNavigation(`/overview/labs/${lab.id}`)}
+                        className="flex w-full items-center gap-2.5 p-2.5 rounded-xl border border-white/10 bg-white/[0.03] text-left hover:bg-white/[0.06] text-xs text-white"
+                      >
+                        <Beaker size={14} className="text-white/50" />
+                        <span className="truncate font-medium">{lab.name}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* The Handle itself */}
-            <div
-              className="w-5 h-20 bg-white/10 hover:bg-white/20 border border-white/20 rounded-r-xl flex items-center justify-center cursor-pointer transition-all duration-200"
-              onClick={handleEdgeHandleTap}
-              onTouchStart={handleEdgeHandleDragStart}
-              onTouchMove={handleEdgeHandleDrag}
-              onTouchEnd={handleEdgeHandleDragEnd}
-            >
-              <div className="w-0.5 h-6 bg-white/40 rounded-full" />
+            {/* Footer Account Actions */}
+            <div className="border-t border-white/10 bg-black/50 p-4 pb-6 flex items-center justify-between">
+              <button
+                onClick={() => { setShowAccountModal(true); setIsMobileMenuOpen(false); }}
+                className="flex items-center gap-2 text-xs text-white/70 hover:text-white font-medium"
+              >
+                <User size={15} />
+                <span>{user?.display_name || 'Account'}</span>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white transition-colors"
+              >
+                <LogOut size={14} />
+                <span>Log out</span>
+              </button>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* Desktop Sidebar */}
