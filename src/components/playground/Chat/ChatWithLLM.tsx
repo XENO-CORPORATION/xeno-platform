@@ -9936,6 +9936,154 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     };
   }, [hoveredElementRef.current, startHideTimer, sourcePreviewRef]);
 
+  // Dot-Matrix Canvas Image Generation Placeholder
+  const DotMatrixImagePlaceholder: React.FC<{ prompt?: string }> = ({ prompt }) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      let animId: number;
+      let cells: { x: number; y: number; phase: number; speed: number; base: number }[] = [];
+      let w = 0, h = 0;
+      const mouse = { x: -9999, y: -9999 };
+
+      const CFG = {
+        pitch: 18,
+        cellSize: 5.5,
+        cornerRadius: 1.5,
+        cellColor: '#8a8a9e',
+        glowRadius: 160,
+        sweepSpeed: 0.35,
+        sweepWidth: 0.45,
+        axis: 'x' as const,
+        dir: 1
+      };
+
+      const handleMouseMove = (e: PointerEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = e.clientX - rect.left;
+        mouse.y = e.clientY - rect.top;
+      };
+      const handleMouseLeave = () => {
+        mouse.x = -9999;
+        mouse.y = -9999;
+      };
+
+      canvas.addEventListener('pointermove', handleMouseMove);
+      canvas.addEventListener('pointerleave', handleMouseLeave);
+
+      const build = () => {
+        if (!canvas || !ctx) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        w = canvas.clientWidth;
+        h = canvas.clientHeight;
+        if (!w || !h) return;
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        cells = [];
+        const p = CFG.pitch;
+        for (let y = p / 2; y < h; y += p) {
+          for (let x = p / 2; x < w; x += p) {
+            cells.push({
+              x: Math.round(x),
+              y: Math.round(y),
+              phase: Math.random() * Math.PI * 2,
+              speed: 0.4 + Math.random() * 1.6,
+              base: Math.random()
+            });
+          }
+        }
+      };
+
+      const ro = new ResizeObserver(build);
+      ro.observe(canvas);
+      build();
+
+      const t0 = performance.now();
+      const frame = () => {
+        if (!ctx || !w || !h) {
+          animId = requestAnimationFrame(frame);
+          return;
+        }
+        const t = (performance.now() - t0) / 1000;
+        const cycle = 1 + CFG.sweepWidth;
+        const prog = (t * CFG.sweepSpeed) % cycle;
+        const head = CFG.dir === 1 ? prog - CFG.sweepWidth : 1 - prog;
+
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = CFG.cellColor;
+
+        const s = CFG.cellSize;
+        const r = CFG.cornerRadius;
+        const radius = CFG.glowRadius;
+
+        for (let i = 0; i < cells.length; i++) {
+          const cell = cells[i];
+          const u = cell.x / w;
+          const rel = (u - head) / CFG.sweepWidth;
+          const sweep = rel > 0 && rel < 1 ? Math.sin(rel * Math.PI) : 0;
+          let a = 0.08 + 0.22 * cell.base + 0.25 * (0.5 + 0.5 * Math.sin(t * cell.speed + cell.phase)) + 0.65 * sweep * (0.4 + 0.6 * cell.base);
+
+          const dx = cell.x - mouse.x;
+          const dy = cell.y - mouse.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < radius) {
+            a += (1 - dist / radius) * 0.75;
+          }
+
+          ctx.globalAlpha = Math.min(Math.max(a, 0.05), 1);
+          ctx.beginPath();
+          if (typeof (ctx as any).roundRect === 'function') {
+            (ctx as any).roundRect(cell.x - (s / 2), cell.y - (s / 2), s, s, r);
+          } else {
+            ctx.rect(cell.x - (s / 2), cell.y - (s / 2), s, s);
+          }
+          ctx.fill();
+        }
+
+        ctx.globalAlpha = 1;
+        animId = requestAnimationFrame(frame);
+      };
+
+      frame();
+
+      return () => {
+        cancelAnimationFrame(animId);
+        ro.disconnect();
+        canvas.removeEventListener('pointermove', handleMouseMove);
+        canvas.removeEventListener('pointerleave', handleMouseLeave);
+      };
+    }, []);
+
+    return (
+      <div className="relative w-full aspect-square flex flex-col justify-between overflow-hidden bg-[#0a0a0d]">
+        {/* Header with generation status badge */}
+        <div className="p-3.5 z-10 flex items-center justify-between pointer-events-none">
+          <div className="flex items-center gap-2 px-3 py-1 bg-black/60 backdrop-blur-md rounded-full border border-white/10 text-xs text-gray-200">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-medium tracking-wide">Generating image with GPT Image 2</span>
+          </div>
+        </div>
+
+        {/* Dot Matrix Canvas */}
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block cursor-crosshair" />
+
+        {/* Bottom hint badge */}
+        <div className="p-3.5 z-10 pointer-events-none">
+          <div className="px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-lg border border-white/10 text-[11px] text-gray-300 truncate shadow-lg">
+            {prompt || 'Rendering visual scene — hang tight...'}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Image Generation Component
   const ImageContainer: React.FC<{ message: ChatMessage }> = ({ message }) => {
     if (!message.isGeneratingImage && !message.imageData) {
@@ -9948,21 +10096,17 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       
       // Check if imageData is already a complete data URI
       if (message.imageData.startsWith('data:')) {
-        // Handle malformed nested data URIs from GPT Image 1
+        // Handle malformed nested data URIs
         if (message.imageData.includes('data:image/svg+xml;base64,data:image/png;base64,')) {
           console.warn('⚠️ Detected malformed nested data URI, extracting PNG data...');
-          // Extract the PNG data from the nested structure
           const pngMatch = message.imageData.match(/data:image\/png;base64,([A-Za-z0-9+/=]+)/);
           if (pngMatch && pngMatch[1]) {
-            const pngBase64 = pngMatch[1].split('data:')[0]; // Remove any trailing nested data
+            const pngBase64 = pngMatch[1].split('data:')[0];
             return `data:image/png;base64,${pngBase64}`;
           }
         }
-        // Return as-is if it's already a valid data URI
         return message.imageData;
       }
-      
-      // If it's just base64 data, add the data URI prefix
       return `data:image/png;base64,${message.imageData}`;
     };
 
@@ -9971,37 +10115,51 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         const imageUrl = getImageUrl();
         setFullScreenImageUrl(imageUrl);
         setIsFullScreenImageOpen(true);
-        setViewerShowsDownloadButton(true); // Ensure download button is shown for AI images
+        setViewerShowsDownloadButton(true);
       }
     };
 
-    // console.log('Rendering ImageContainer:',
-    //   message.isGeneratingImage ? 'Loading animation' : 'Generated image',
-    //   'Message ID:', message.id,
-    //   'isGeneratingImage:', message.isGeneratingImage,
-    //   'has imageData:', !!message.imageData
-    //   );
-
-    const containerClassName = `image-container ${message.isGeneratingImage && !message.imageData ? 'loading' : ''}`;
+    const promptText = (message.text || '').replace(/^Generating image with prompt:\s*"?/, '').replace(/"?$/, '');
 
     return (
-      <div className={containerClassName}>
+      <div className="w-full max-w-[440px] aspect-square rounded-2xl overflow-hidden bg-[#111114] border border-[#222228] shadow-2xl my-3 transition-all duration-300">
         {message.isGeneratingImage && !message.imageData ? (
-          <div className="image-generation-loading">
-            {/* <div style={{color: 'white', fontSize: '20px', textAlign: 'center', padding: '20px'}}>IMAGE CONTAINER LOADING TEST</div> REMOVED DEBUG TEXT */}
-            <div className="dots-grid-container">
-              {Array.from({ length: 100 }).map((_, index) => (
-                <div key={index} className="pulsing-dot" />
-              ))}
+          <DotMatrixImagePlaceholder prompt={promptText} />
+        ) : message.imageData ? (
+          <div className="relative group w-full h-full overflow-hidden">
+            <img
+              src={getImageUrl()}
+              alt="AI generated image"
+              className="w-full h-full object-cover cursor-pointer transition-transform duration-300 group-hover:scale-[1.02]"
+              onClick={handleImageClick}
+            />
+            {/* Hover overlay with action buttons */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between p-3.5 pointer-events-none">
+              <div className="flex justify-end">
+                <span className="px-2.5 py-0.5 bg-black/70 backdrop-blur-md rounded-full text-[11px] font-medium text-emerald-400 border border-emerald-500/30">
+                  GPT Image 2
+                </span>
+              </div>
+              <div className="flex items-center justify-between pointer-events-auto">
+                <button
+                  onClick={handleImageClick}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-lg text-xs text-white font-medium transition-colors"
+                >
+                  <Search size={13} />
+                  <span>View Full</span>
+                </button>
+                <a
+                  href={getImageUrl()}
+                  download="xeno-gpt-image-2.png"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-lg text-xs text-white font-medium transition-colors"
+                >
+                  <Download size={13} />
+                  <span>Save</span>
+                </a>
+              </div>
             </div>
           </div>
-        ) : message.imageData ? (
-          <img
-            src={getImageUrl()}
-            alt="AI generated image"
-            className="generated-image cursor-pointer"
-            onClick={handleImageClick}
-          />
         ) : null}
       </div>
     );
