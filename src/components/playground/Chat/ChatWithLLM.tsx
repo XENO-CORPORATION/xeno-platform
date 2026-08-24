@@ -3122,6 +3122,135 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   /** If set, the next created project receives this conversation. */
   const [pendingProjectAssignConversationId, setPendingProjectAssignConversationId] = useState<string | null>(null);
 
+  const [isTranscriptCopied, setIsTranscriptCopied] = useState(false);
+
+  const handleCopySessionTranscript = useCallback(async () => {
+    try {
+      const activeTitle = activeConversationId
+        ? (conversationHistory.find(c => c.id === activeConversationId)?.title || 'Untitled Conversation')
+        : 'New Conversation';
+
+      const containerBounds = chatContainerRef.current?.getBoundingClientRect();
+      const chatAreaBounds = chatAreaRef.current?.getBoundingClientRect();
+      const textareaBounds = textareaRef.current?.getBoundingClientRect();
+
+      const telemetry = {
+        exportTimestamp: new Date().toISOString(),
+        client: {
+          url: window.location.href,
+          userAgent: navigator.userAgent,
+          viewport: {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            devicePixelRatio: window.devicePixelRatio,
+            orientation: window.screen?.orientation?.type || (window.innerWidth > window.innerHeight ? 'landscape' : 'portrait'),
+          },
+          measurements: {
+            chatContainer: containerBounds ? { width: Math.round(containerBounds.width), height: Math.round(containerBounds.height), top: Math.round(containerBounds.top), left: Math.round(containerBounds.left) } : null,
+            chatArea: chatAreaBounds ? { width: Math.round(chatAreaBounds.width), height: Math.round(chatAreaBounds.height), top: Math.round(chatAreaBounds.top), left: Math.round(chatAreaBounds.left) } : null,
+            textarea: textareaBounds ? { width: Math.round(textareaBounds.width), height: Math.round(textareaBounds.height) } : null,
+          },
+          theme: chatTheme,
+          isMobile,
+          isStandalone,
+          isMultiInterface,
+        },
+        session: {
+          conversationId: activeConversationId || 'new-session',
+          conversationTitle: activeTitle,
+          chatMode,
+          selectedModel: {
+            id: selectedModel?.id,
+            name: selectedModel?.name,
+            provider: selectedModel?.provider || (selectedModel?.id ? getCompanyNameFromModelId(selectedModel.id) : 'unknown'),
+            contextWindow: selectedModel?.contextWindow,
+            maxTokens: selectedModel?.maxTokens,
+            temperature: selectedModel?.temperature,
+          },
+          systemPrompt: systemPrompt || null,
+          persona: selectedPersona || null,
+          pistonRuntimesCount: pistonRuntimes?.length || 0,
+          totalMessages: messages.length,
+          stats: {
+            totalTokens: totalUsedTokens,
+            isStreaming: isLoading,
+          },
+        },
+        messages: messages.map((m, idx) => ({
+          index: idx + 1,
+          id: m.id,
+          role: m.role,
+          timestamp: m.timestamp ? new Date(m.timestamp).toISOString() : null,
+          content: m.content,
+          reasoning: (m as any).reasoning || (m as any).thought || null,
+          images: m.images?.map(img => ({ name: img.name, size: img.size, type: img.type })) || [],
+          files: m.files?.map(f => ({ name: f.name, size: f.size, type: f.type })) || [],
+          sources: m.sources?.map(s => ({ title: s.title, url: s.url, snippet: s.snippet })) || [],
+          toolCalls: (m as any).toolCalls || null,
+          searchQuery: (m as any).searchQuery || null,
+          isError: Boolean(m.isError),
+        })),
+      };
+
+      let readableLog = `# XENO Chat Session Transcript\n\n`;
+      readableLog += `- **Exported At:** ${telemetry.exportTimestamp}\n`;
+      readableLog += `- **Conversation:** ${activeTitle} (\`${telemetry.session.conversationId}\`)\n`;
+      readableLog += `- **Model:** ${selectedModel?.name || selectedModel?.id || 'Default'} (\`${selectedModel?.id || 'n/a'}\`)\n`;
+      readableLog += `- **Mode:** \`${chatMode}\` | **Theme:** \`${chatTheme}\` | **Viewport:** ${telemetry.client.viewport.width}x${telemetry.client.viewport.height} (DPR: ${telemetry.client.viewport.devicePixelRatio})\n`;
+      readableLog += `- **Chat Container:** ${telemetry.client.measurements.chatContainer?.width || 'auto'}px × ${telemetry.client.measurements.chatContainer?.height || 'auto'}px\n`;
+      readableLog += `- **Composer Textarea:** ${telemetry.client.measurements.textarea?.width || 'auto'}px × ${telemetry.client.measurements.textarea?.height || 'auto'}px\n\n`;
+      readableLog += `## Message History (${messages.length} messages)\n\n`;
+
+      if (messages.length === 0) {
+        readableLog += `_(No messages in active session)_\n\n`;
+      } else {
+        messages.forEach((m, i) => {
+          readableLog += `### [${i + 1}] ${m.role.toUpperCase()} — ${m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : 'now'}\n\n`;
+          if ((m as any).reasoning || (m as any).thought) {
+            readableLog += `> **Thinking / Reasoning Trace:**\n> ${((m as any).reasoning || (m as any).thought || '').replace(/\\n/g, '\n> ')}\n\n`;
+          }
+          readableLog += `${m.content}\n\n`;
+          if (m.sources && m.sources.length > 0) {
+            readableLog += `**Sources / Citations:**\n`;
+            m.sources.forEach(s => {
+              readableLog += `- [${s.title || s.url}](${s.url}): ${s.snippet || ''}\n`;
+            });
+            readableLog += `\n`;
+          }
+          if ((m as any).toolCalls && (m as any).toolCalls.length > 0) {
+            readableLog += `**Tool Invocations:**\n\`\`\`json\n${JSON.stringify((m as any).toolCalls, null, 2)}\n\`\`\`\n\n`;
+          }
+        });
+      }
+
+      readableLog += `---\n## Diagnostic JSON Snapshot\n\`\`\`json\n${JSON.stringify(telemetry, null, 2)}\n\`\`\`\n`;
+
+      await navigator.clipboard.writeText(readableLog);
+      setIsTranscriptCopied(true);
+      setTimeout(() => setIsTranscriptCopied(false), 2200);
+    } catch (err) {
+      console.error('[ChatWithLLM] Failed to copy transcript to clipboard:', err);
+    }
+  }, [
+    activeConversationId,
+    conversationHistory,
+    chatContainerRef,
+    chatAreaRef,
+    textareaRef,
+    chatTheme,
+    isMobile,
+    isStandalone,
+    isMultiInterface,
+    chatMode,
+    selectedModel,
+    systemPrompt,
+    selectedPersona,
+    pistonRuntimes,
+    messages,
+    totalUsedTokens,
+    isLoading,
+  ]);
+
   useEffect(() => {
     localStorage.setItem(chatProjectsStorageKey, JSON.stringify(chatProjects));
   }, [chatProjects, chatProjectsStorageKey]);
@@ -14480,135 +14609,144 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             </div>
           )}
 
-          {/* Center - Conversation Selector (only in multi-interface mode) - absolutely centered */}
-          {isMultiInterface && (
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-              {/* `quiet` + `data-selection`, and here that pairing means exactly what the library
-                  wrote it for: a quiet button is ON while the thing it opened is on screen. The other
-                  accent-bordered triggers in this file mark a CHOICE and stay hand-written; this one
-                  marks a panel, which is the disclosure the variant already names. It trades the
-                  accent border for the `--chat-control` fill, which is that sentence in the library's
-                  grammar.
-                  Both glyphs go to 16 — `iconSize` is one number for both slots, and the chevron was
-                  14. The chevron still flips, through `.chat-icon-turn` reading `aria-expanded`, an
-                  attribute this trigger did not have and should have. */}
-              <Button
-                ref={conversationSelectorButtonRef}
-                variant="quiet"
-                size="lg"
-                iconSize={16}
-                leadingIcon={MessageSquarePlusDecl}
-                trailingIcon={ChevronDownDecl}
-                className="chat-icon-turn max-w-[14rem] [--chat-icon-turn:180deg]"
-                data-selection={isConversationSelectorOpen ? 'on' : 'off'}
-                aria-expanded={isConversationSelectorOpen}
-                aria-haspopup="dialog"
-                onClick={() => setIsConversationSelectorOpen(!isConversationSelectorOpen)}
-              >
-                <span className="max-w-[10rem] truncate">
-                  {activeConversationId
-                    ? (conversationHistory.find(c => c.id === activeConversationId)?.title || 'Select Chat')
-                    : 'New Chat'}
-                </span>
-              </Button>
+          {/* Top Center - Copy Session Transcript & Multi-Interface Selector */}
+          <div className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2">
+            {/* Conversation Selector (only in multi-interface mode) */}
+            {isMultiInterface && (
+              <div className="relative">
+                <Button
+                  ref={conversationSelectorButtonRef}
+                  variant="quiet"
+                  size="lg"
+                  iconSize={16}
+                  leadingIcon={MessageSquarePlusDecl}
+                  trailingIcon={ChevronDownDecl}
+                  className="chat-icon-turn max-w-[14rem] [--chat-icon-turn:180deg]"
+                  data-selection={isConversationSelectorOpen ? 'on' : 'off'}
+                  aria-expanded={isConversationSelectorOpen}
+                  aria-haspopup="dialog"
+                  onClick={() => setIsConversationSelectorOpen(!isConversationSelectorOpen)}
+                >
+                  <span className="max-w-[10rem] truncate">
+                    {activeConversationId
+                      ? (conversationHistory.find(c => c.id === activeConversationId)?.title || 'Select Chat')
+                      : 'New Chat'}
+                  </span>
+                </Button>
 
-              {/* Conversation Selector Dropdown */}
-              <div
-                ref={conversationSelectorDropdownRef}
-                className={`
-                  absolute left-1/2 top-full z-20 mt-[10px] origin-top -translate-x-1/2
-                  max-h-80 w-64 overflow-hidden rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
-                  transition-all duration-200 ease-out
-                  ${isConversationSelectorOpen
-                    ? 'visible scale-100 opacity-100'
-                    : 'pointer-events-none invisible scale-95 opacity-0'
-                  }
-                `}
-              >
-                {/* Search */}
-                <div className="border-b border-[var(--chat-border)] p-2">
-                  {/* The recent-files search's twin, converted the same way. One difference worth
-                      naming: its focus border was `--chat-accent` and the component focuses to
-                      `--chat-muted`. Every other field in this chat focuses to muted, including the
-                      one two panels away that this was copied from, so the odd one out is the one
-                      being corrected. */}
-                  <TextInput
-                    size="sm"
-                    iconSize={14}
-                    leadingIcon={SearchDecl}
-                    className="w-full"
-                    type="text"
-                    placeholder="Search conversations..."
-                    value={conversationSearchQuery}
-                    onChange={(e) => setConversationSearchQuery(e.target.value)}
-                    aria-label="Search conversations"
-                  />
-                </div>
+                {/* Conversation Selector Dropdown */}
+                <div
+                  ref={conversationSelectorDropdownRef}
+                  className={`
+                    absolute left-1/2 top-full z-20 mt-[10px] origin-top -translate-x-1/2
+                    max-h-80 w-64 overflow-hidden rounded-lg border border-[var(--chat-border)] bg-[var(--chat-elevated)] shadow-xl
+                    transition-all duration-200 ease-out
+                    ${isConversationSelectorOpen
+                      ? 'visible scale-100 opacity-100'
+                      : 'pointer-events-none invisible scale-95 opacity-0'
+                    }
+                  `}
+                >
+                  {/* Search */}
+                  <div className="border-b border-[var(--chat-border)] p-2">
+                    <TextInput
+                      size="sm"
+                      iconSize={14}
+                      leadingIcon={SearchDecl}
+                      className="w-full"
+                      type="text"
+                      placeholder="Search conversations..."
+                      value={conversationSearchQuery}
+                      onChange={(e) => setConversationSearchQuery(e.target.value)}
+                      aria-label="Search conversations"
+                    />
+                  </div>
 
-                {/* Conversation List */}
-                <div className="hide-scrollbar max-h-56 overflow-y-auto">
-                  {isSelectorLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <Spinner size={20} />
-                    </div>
-                  ) : selectorConversations.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-4 text-center">
-                      <Clock size={20} className="mb-2 text-[var(--chat-muted)]" />
-                      <p className="text-xs text-[var(--chat-muted)]">No conversations yet</p>
-                    </div>
-                  ) : (() => {
-                    const filteredConversations = selectorConversations
-                      .filter(convo =>
-                        !conversationSearchQuery.trim() ||
-                        convo.title.toLowerCase().includes(conversationSearchQuery.toLowerCase())
-                      )
-                      .sort((a, b) => b.timestamp - a.timestamp);
-
-                    return filteredConversations.length === 0 ? (
+                  {/* Conversation List */}
+                  <div className="hide-scrollbar max-h-56 overflow-y-auto">
+                    {isSelectorLoading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Spinner size={20} />
+                      </div>
+                    ) : selectorConversations.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-4 text-center">
-                        <Search size={20} className="mb-2 text-[var(--chat-muted)]" />
-                        <p className="text-xs text-[var(--chat-muted)]">No matches found</p>
+                        <Clock size={20} className="mb-2 text-[var(--chat-muted)]" />
+                        <p className="text-xs text-[var(--chat-muted)]">No conversations yet</p>
                       </div>
-                    ) : (
-                      <div className="py-1">
-                        {/* A title over a date, both truncating, a hover that paints the row and a
-                            `--chat-control` fill on the active one — `ListRow` with `subtitle` and
-                            `selected`, which is the shape this was already drawing by hand. */}
-                        {filteredConversations.map(convo => (
-                          <ListRow
-                            key={convo.id}
-                            title={convo.title}
-                            subtitle={new Date(convo.timestamp).toLocaleDateString()}
-                            selected={activeConversationId === convo.id}
-                            onSelect={() => {
-                              handleLoadConversation(convo.id);
-                              setIsConversationSelectorOpen(false);
-                              setConversationSearchQuery('');
-                            }}
-                          />
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
+                    ) : (() => {
+                      const filteredConversations = selectorConversations
+                        .filter(convo =>
+                          !conversationSearchQuery.trim() ||
+                          convo.title.toLowerCase().includes(conversationSearchQuery.toLowerCase())
+                        )
+                        .sort((a, b) => b.timestamp - a.timestamp);
 
-                {/* New Chat option */}
-                <div className="border-t border-[var(--chat-border)] p-2">
-                  {/* The rows above it are `ListRow`s now, so this is one too — a leading glyph and
-                      a title, with the same hover painting the whole row. It keeps the list's rhythm
-                      instead of being a slightly smaller button pinned under it. */}
-                  <ListRow
-                    leading={<Plus size={14} aria-hidden="true" />}
-                    title="New Conversation"
-                    onSelect={() => {
-                      handleNewChat();
-                      setIsConversationSelectorOpen(false);
-                    }}
-                  />
+                      return filteredConversations.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-4 text-center">
+                          <Search size={20} className="mb-2 text-[var(--chat-muted)]" />
+                          <p className="text-xs text-[var(--chat-muted)]">No matches found</p>
+                        </div>
+                      ) : (
+                        <div className="py-1">
+                          {filteredConversations.map(convo => (
+                            <ListRow
+                              key={convo.id}
+                              title={convo.title}
+                              subtitle={new Date(convo.timestamp).toLocaleDateString()}
+                              selected={activeConversationId === convo.id}
+                              onSelect={() => {
+                                handleLoadConversation(convo.id);
+                                setIsConversationSelectorOpen(false);
+                                setConversationSearchQuery('');
+                              }}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* New Chat option */}
+                  <div className="border-t border-[var(--chat-border)] p-2">
+                    <ListRow
+                      leading={<Plus size={14} aria-hidden="true" />}
+                      title="New Conversation"
+                      onSelect={() => {
+                        handleNewChat();
+                        setIsConversationSelectorOpen(false);
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Copy Session Transcript Button */}
+            <button
+              type="button"
+              onClick={handleCopySessionTranscript}
+              className={`group flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11.5px] font-medium tracking-tight shadow-sm transition-all duration-150 ${
+                isTranscriptCopied
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+                  : 'border-[var(--chat-border)] bg-[var(--chat-elevated)]/85 text-[var(--chat-muted)] backdrop-blur-md hover:border-[var(--chat-text)]/25 hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]'
+              }`}
+              title="Copy full chat transcript, telemetry, layout metrics, and diagnostic JSON"
+              aria-label="Copy Session Transcript"
+            >
+              {isTranscriptCopied ? (
+                <>
+                  <CheckDecl size={13} className="text-emerald-400 flex-shrink-0 animate-in fade-in zoom-in-75 duration-150" />
+                  <span className="text-emerald-400 font-semibold">Transcript Copied!</span>
+                </>
+              ) : (
+                <>
+                  <CopyDecl size={13} className="opacity-70 group-hover:opacity-100 flex-shrink-0 transition-opacity" />
+                  <span className="hidden sm:inline">Copy Session Transcript</span>
+                  <span className="inline sm:hidden">Transcript</span>
+                </>
+              )}
+            </button>
+          </div>
 
           {/* Right side:
               New chat → Temporary Preview · Theme · Settings
