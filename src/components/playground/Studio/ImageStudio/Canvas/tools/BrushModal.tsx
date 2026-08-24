@@ -545,7 +545,7 @@ const BrushSettingModal: React.FC<BrushSettingModalProps> = ({
               200,
               (value) => onBrushSettingsChange({ ...brushSettings, spacing: value }),
               '%',
-              '#8b5cf6'
+              '#e8e3dc'
             )}
 
             {/* Shape Controls */}
@@ -677,7 +677,7 @@ const BrushSettingModal: React.FC<BrushSettingModalProps> = ({
               100,
               (value) => onBrushSettingsChange({ ...brushSettings, opacityJitter: value }),
               '%',
-              '#8b5cf6'
+              '#e8e3dc'
             )}
           </div>
         );

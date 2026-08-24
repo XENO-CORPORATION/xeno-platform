@@ -48,7 +48,7 @@ const PrivacyPricingSection: React.FC = () => {
       {/* ── Privacy card ─────────────────────────────────────────── */}
       <Reveal>
         <div className="relative mx-auto overflow-hidden rounded-[20px] border border-white/[0.05] bg-[#101010] px-[clamp(24px,2.6vw,56px)] py-[clamp(32px,4.4vh,60px)]">
-          <div className="pointer-events-none absolute -left-24 -top-24 h-64 w-64 rounded-[4px] bg-[radial-gradient(circle,rgba(167,96,255,0.20),transparent_70%)]" />
+          <div className="pointer-events-none absolute -left-24 -top-24 h-64 w-64 rounded-[4px] bg-[radial-gradient(circle,rgba(255, 255, 255,0.20),transparent_70%)]" />
           <div className="relative grid grid-cols-1 gap-[clamp(28px,3vw,56px)] lg:grid-cols-[minmax(260px,34%)_1fr]">
             <div>
               <Eyebrow>Private by default</Eyebrow>
@@ -93,12 +93,12 @@ const PrivacyPricingSection: React.FC = () => {
               className={cx(
                 'relative flex flex-col rounded-[18px] border p-[clamp(22px,1.8vw,34px)] transition-colors',
                 plan.highlight
-                  ? 'border-[#9f6fff]/45 bg-[#14101f] shadow-[0_30px_80px_-32px_rgba(167,96,255,0.55)]'
+                  ? 'border-white/45 bg-[#14101f] shadow-[0_30px_80px_-32px_rgba(255, 255, 255,0.55)]'
                   : 'border-white/[0.05] bg-[#151515] hover:border-white/[0.12]',
               )}
             >
               {plan.highlight && (
-                <span className="absolute right-5 top-5 rounded-[4px] border border-[#9f6fff]/40 bg-[#1a1029] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#bf85ff]">
+                <span className="absolute right-5 top-5 rounded-[4px] border border-white/40 bg-[#1a1029] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
                   Most popular
                 </span>
               )}
@@ -112,7 +112,7 @@ const PrivacyPricingSection: React.FC = () => {
               <ul className="mt-[clamp(18px,2.4vh,28px)] flex flex-col gap-[clamp(9px,1.2vh,14px)]">
                 {plan.perks.map((perk) => (
                   <li key={perk} className="flex items-start gap-2.5 text-[clamp(12px,0.86vw,14px)] leading-snug text-[#c2bbb2]">
-                    <span className={cx('mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-[4px]', plan.highlight ? 'bg-[#a760ff]/20 text-[#bf85ff]' : 'bg-white/[0.06] text-[#b6afa5]')}>
+                    <span className={cx('mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-[4px]', plan.highlight ? 'bg-white/20 text-white' : 'bg-white/[0.06] text-[#b6afa5]')}>
                       <Check className="h-2.5 w-2.5" strokeWidth={2.4} />
                     </span>
                     {perk}

@@ -24,9 +24,9 @@ const FlowSection: React.FC = () => {
           {steps.map((step, i) => (
             <React.Fragment key={step.label}>
               <Reveal as="li" delay={i * 90} className="flex flex-1 flex-col items-center text-center md:px-2">
-                <div className="relative grid h-[clamp(52px,4vw,70px)] w-[clamp(52px,4vw,70px)] place-items-center rounded-[16px] border border-white/[0.12] bg-[#151515] text-[#d8d2ca] transition-colors duration-300 hover:border-[#9f6fff]/40">
+                <div className="relative grid h-[clamp(52px,4vw,70px)] w-[clamp(52px,4vw,70px)] place-items-center rounded-[16px] border border-white/[0.12] bg-[#151515] text-[#d8d2ca] transition-colors duration-300 hover:border-white/40">
                   <step.icon className="h-[42%] w-[42%]" strokeWidth={1.4} />
-                  <span className="absolute -right-2 -top-2 grid h-[22px] w-[22px] place-items-center rounded-[4px] border border-[#9f6fff]/40 bg-[#1a1029] text-[9.5px] font-bold tabular-nums text-[#bf85ff]">
+                  <span className="absolute -right-2 -top-2 grid h-[22px] w-[22px] place-items-center rounded-[4px] border border-white/40 bg-[#1a1029] text-[9.5px] font-bold tabular-nums text-white">
                     {i + 1}
                   </span>
                 </div>

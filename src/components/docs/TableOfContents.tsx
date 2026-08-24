@@ -47,7 +47,7 @@ const TableOfContents: React.FC<{ body: string }> = ({ body }) => {
               }}
               className={`-ml-px block border-l py-1 pl-3 transition-colors ${
                 active === h.id
-                  ? 'border-[#a760ff] text-[#cdb8ff]'
+                  ? 'border-white/25 text-[#cdb8ff]'
                   : 'border-transparent text-[#827b71] hover:text-[#cdc7be]'
               }`}
             >

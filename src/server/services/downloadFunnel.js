@@ -26,6 +26,20 @@
  * fix, and telling someone "there is no macOS build" after they have paid is a
  * refund; telling them before is honesty.
  *
+ * ── ONBOARDING IS SEQUENCING, NOT ENFORCEMENT ───────────────────────────────
+ *
+ * 🔴 The grant endpoint deliberately does NOT require onboarding. This state
+ * machine ROUTES a person through it, because that is the moment they are most
+ * willing to tell us what they came for — but the only thing that guards the
+ * bytes is `canDownload`.
+ *
+ * Someone calling the API directly with a paid plan therefore gets their file
+ * without answering a survey, and that is correct. Adding onboarding to the
+ * entitlement check would refuse a paying customer over an unanswered
+ * questionnaire, which is a support incident dressed up as a control. If you are
+ * here because "you can skip onboarding via the API" looked like a hole: it is
+ * not a hole, it is the boundary between UX and enforcement, and a gate pins it.
+ *
  * ── WHAT AN INTENT IS NOT ───────────────────────────────────────────────────
  *
  * It is not a credential. `resolve()` re-derives everything from the live

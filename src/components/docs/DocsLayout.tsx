@@ -77,7 +77,7 @@ const DocsLayout: React.FC<{ product: ProductDocs; page: DocPage; sectionTitle: 
               <span className="text-[#948d83]">{sectionTitle}</span>
             </nav>
 
-            {page.description && <p className="mb-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[#a760ff]">{sectionTitle}</p>}
+            {page.description && <p className="mb-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[#e8e3dc]">{sectionTitle}</p>}
 
             <article>
               <DocMarkdown body={page.body} />

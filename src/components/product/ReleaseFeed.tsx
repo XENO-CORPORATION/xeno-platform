@@ -23,7 +23,7 @@ function TypeBadge({ r }: { r: Release }) {
   if (t === 'patch') {
     return <span className="rounded-[4px] border border-white/[0.10] bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9b948a]">Patch</span>;
   }
-  return <span className="rounded-[4px] border border-[#9f6fff]/25 bg-[#a760ff]/[0.08] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#b69dff]">Release</span>;
+  return <span className="rounded-[4px] border border-white/25 bg-white/[0.08] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#ece7df]">Release</span>;
 }
 
 function ReleaseRow({ release, slug, defaultOpen, linkToDetail }: { release: Release; slug: string; defaultOpen: boolean; linkToDetail: boolean }) {

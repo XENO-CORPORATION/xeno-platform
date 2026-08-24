@@ -92,7 +92,7 @@ function priceLabel(pricing?: Pricing[]): string {
 }
 
 function TrustBadge({ tier }: { tier?: string }) {
-  if (tier === 'official') return <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-[#b69dff]"><ShieldCheck className="h-3 w-3" />Official</span>;
+  if (tier === 'official') return <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-[#ece7df]"><ShieldCheck className="h-3 w-3" />Official</span>;
   if (tier === 'verified') return <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-[#8fb6ff]"><BadgeCheck className="h-3 w-3" />Verified</span>;
   return <span className="text-[10.5px] font-medium text-[#69635b]">Community</span>;
 }
@@ -230,9 +230,9 @@ const Marketplace: React.FC = () => {
       <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────────── */}
         <section className="page-gutter relative overflow-hidden pt-[clamp(96px,13vh,150px)] pb-[clamp(28px,4vh,52px)]">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_60%_80%_at_50%_-10%,rgba(167,96,255,0.12),transparent_70%)]" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_60%_80%_at_50%_-10%,rgba(255, 255, 255,0.12),transparent_70%)]" />
           <div className="relative mx-auto flex max-w-[760px] flex-col items-center text-center">
-            <Reveal><span className="inline-flex items-center gap-2 rounded-[4px] border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-[11px] font-medium text-[#b6afa5]"><Store className="h-3.5 w-3.5 text-[#b69dff]" />XENO Marketplace</span></Reveal>
+            <Reveal><span className="inline-flex items-center gap-2 rounded-[4px] border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-[11px] font-medium text-[#b6afa5]"><Store className="h-3.5 w-3.5 text-[#ece7df]" />XENO Marketplace</span></Reveal>
             <Reveal delay={60}>
               <h1 className="mt-5 text-[clamp(2.2rem,4vw,3.6rem)] font-semibold leading-[1.06] tracking-[-0.02em] text-[#ece7df]">
                 Everything for your<br />AI workspace.
@@ -287,7 +287,7 @@ const Marketplace: React.FC = () => {
           <div className="mx-auto max-w-[1180px]">
             {status === 'ready' && degraded && (
               <div className="mb-5 flex items-center justify-center gap-2 rounded-[10px] border border-white/[0.06] bg-white/[0.02] px-4 py-2.5 text-[12px] text-[#948d83]">
-                <Sparkles className="h-3.5 w-3.5 text-[#b69dff]" />
+                <Sparkles className="h-3.5 w-3.5 text-[#ece7df]" />
                 Showing featured XENO listings — the live community catalog is still warming up.
               </div>
             )}
@@ -326,7 +326,7 @@ const Marketplace: React.FC = () => {
         <section className="page-gutter pb-[clamp(56px,8vh,110px)]">
           <Reveal className="mx-auto max-w-[1180px]">
             <div className="relative overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#0d0d0d] px-[clamp(24px,4vw,64px)] py-[clamp(36px,6vh,72px)]">
-              <div className="pointer-events-none absolute right-[-10%] top-[-40%] h-[420px] w-[420px] rounded-[4px] bg-[radial-gradient(circle,rgba(167,96,255,0.16),transparent_65%)]" />
+              <div className="pointer-events-none absolute right-[-10%] top-[-40%] h-[420px] w-[420px] rounded-[4px] bg-[radial-gradient(circle,rgba(255, 255, 255,0.16),transparent_65%)]" />
               <div className="relative flex flex-col items-start gap-6 md:flex-row md:items-center md:justify-between">
                 <div className="max-w-[560px]">
                   <h2 className="text-[clamp(1.5rem,2.4vw,2.4rem)] font-semibold leading-[1.1] tracking-[-0.01em] text-[#ece7df]">Build it. Publish it. Earn from it.</h2>

@@ -11,7 +11,7 @@ import {
 } from '../../services/billingService';
 import { formatPrice } from '../../config/pricing';
 
-const ACCENT = '#a760ff';
+const ACCENT = '#e8e3dc';
 
 const PLAN_META: Record<string, { label: string; color: string; sub: string }> = {
   free: { label: 'Free', color: 'rgba(255,255,255,0.65)', sub: 'The full local tool — clean, no watermark, local export' },

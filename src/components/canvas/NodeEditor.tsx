@@ -1984,7 +1984,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ className = '' }) => {
       '#10B981', // Green
       '#F59E0B', // Amber
       '#EF4444', // Red
-      '#8B5CF6', // Purple
+      '#e8e3dc', // Purple
       '#EC4899'  // Pink
     ];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];

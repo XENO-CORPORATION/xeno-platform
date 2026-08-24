@@ -12,7 +12,7 @@ import { getProductContent } from '../content/products';
 
 const STATUS: Record<Product['status'], { label: string; cls: string }> = {
   shipping: { label: 'Available', cls: 'border-emerald-400/30 text-emerald-300/90' },
-  beta: { label: 'Beta', cls: 'border-[#9f6fff]/35 text-[#b69dff]' },
+  beta: { label: 'Beta', cls: 'border-white/35 text-[#e8e3dc]' },
   'coming-soon': { label: 'Soon', cls: 'border-white/[0.12] text-[#948d83]' },
 };
 const DELIVERY_ICON: Record<Product['delivery'], React.ComponentType<{ className?: string }> | null> = {

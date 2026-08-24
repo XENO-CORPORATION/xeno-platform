@@ -68,10 +68,10 @@ const components: any = {
   p: ({ children }: any) => <p className="my-4 text-[14.5px] leading-[1.75] text-[#b6afa5]">{children}</p>,
   a: ({ href, children }: any) => {
     if (href && (href.startsWith('/') || href.startsWith('#'))) {
-      return <Link to={href} className="font-medium text-[#b69dff] underline-offset-2 transition-colors hover:text-white hover:underline">{children}</Link>;
+      return <Link to={href} className="font-medium text-[#e8e3dc] underline-offset-2 transition-colors hover:text-white hover:underline">{children}</Link>;
     }
     return (
-      <a href={href} target="_blank" rel="noreferrer" className="font-medium text-[#b69dff] underline-offset-2 transition-colors hover:text-white hover:underline">
+      <a href={href} target="_blank" rel="noreferrer" className="font-medium text-[#e8e3dc] underline-offset-2 transition-colors hover:text-white hover:underline">
         {children}
       </a>
     );
@@ -83,7 +83,7 @@ const components: any = {
   em: ({ children }: any) => <em className="italic text-[#cdc7be]">{children}</em>,
   hr: () => <hr className="my-9 border-white/[0.07]" />,
   blockquote: ({ children }: any) => (
-    <blockquote className="my-5 rounded-r-[8px] border-l-2 border-[#9f6fff]/50 bg-[#9f6fff]/[0.05] py-1 pl-4 pr-3 text-[13.5px] text-[#a9a299] [&>p]:my-2">{children}</blockquote>
+    <blockquote className="my-5 rounded-r-[8px] border-l-2 border-white/50 bg-white/[0.05] py-1 pl-4 pr-3 text-[13.5px] text-[#a9a299] [&>p]:my-2">{children}</blockquote>
   ),
   table: ({ children }: any) => (
     <div className="my-6 overflow-x-auto rounded-[10px] border border-white/[0.08]">

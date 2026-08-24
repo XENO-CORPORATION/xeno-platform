@@ -66,7 +66,7 @@ router.get('/authorize', async (req, res) => {
 <title>Sign in with XENO</title><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{box-sizing:border-box}
-:root{--bg:#121212;--panel:#17171b;--border:#26262d;--muted:#9aa0aa;--text:#f4f4f6;--accent:#a760ff;--accent2:#7c5cff}
+:root{--bg:#121212;--panel:#17171b;--border:#26262d;--muted:#9aa0aa;--text:#f4f4f6;--accent:#ece7df;--accent2:#ffffff}
 html,body{margin:0}
 body{font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:grid;place-items:center}
 /* Loading interface — mirrors the dashboard's auth-gate loader (ProtectedRoute) */

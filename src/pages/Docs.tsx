@@ -83,7 +83,7 @@ const Docs: React.FC = () => (
               p: (
                 <>
                   Product docs live with each product. Open a product page — for example{' '}
-                  <a href="/product/hub" className="text-[#a760ff] hover:underline">
+                  <a href="/product/hub" className="text-[#e8e3dc] hover:underline">
                     Hub
                   </a>{' '}
                   — to jump into its release notes, downloads, and reference.

@@ -414,3 +414,20 @@ test('the sweeper cannot throw into startup', async () => {
   const r = await sweepExpiredIntents(exploding);
   assert.deepEqual(r, { marked: 0, deleted: 0 }, 'a failing sweep can now take down boot');
 });
+
+test('the GRANT endpoint does not require onboarding', () => {
+  /* 🔴 Onboarding is sequencing; entitlement is enforcement. The funnel routes a
+   * person through onboarding, but the only thing guarding the bytes is
+   * canDownload — so a paying customer calling the API directly gets their file
+   * without answering a survey, and that is correct.
+   *
+   * This gate exists because the opposite looks like a security hole to a reader
+   * ("you can skip onboarding!") and the obvious fix — requiring onboarding in
+   * the mint — would refuse a paying customer over an unanswered questionnaire. */
+  const route = read('src/server/routes/productDownloadRoutes.js');
+  const mint = route.slice(route.indexOf('grantRouter.post('));
+  assert.ok(mint.includes("assertEntitlement(req.db, userId, 'canDownload')"),
+    'the mint no longer checks the entitlement');
+  assert.ok(!/onboard/i.test(mint.slice(0, 2000)),
+    'the grant mint now requires onboarding — that refuses paying API callers over a survey');
+});

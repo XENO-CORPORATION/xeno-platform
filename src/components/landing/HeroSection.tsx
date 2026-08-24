@@ -990,7 +990,7 @@ const HeroSection: React.FC = () => {
           background: radial-gradient(ellipse at 20% 50%, rgba(99,102,241,0.12) 0%, transparent 50%),
                       radial-gradient(ellipse at 80% 50%, rgba(168,85,247,0.10) 0%, transparent 50%),
                       radial-gradient(ellipse at 50% 20%, rgba(59,130,246,0.08) 0%, transparent 50%),
-                      radial-gradient(ellipse at 50% 80%, rgba(139,92,246,0.06) 0%, transparent 50%);
+                      radial-gradient(ellipse at 50% 80%, rgba(255, 255, 255,0.06) 0%, transparent 50%);
           background-size: 200% 200%;
           animation: meshMove 20s ease-in-out infinite;
         }

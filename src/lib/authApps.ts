@@ -25,10 +25,10 @@ export interface AuthApp {
 }
 
 const APPS: Record<string, AuthApp> = {
-  post: { slug: 'post', productPath: '/product/post', displayName: 'XENO Post', accent: '#a760ff', tagline: 'Authorize XENO Post to use your XENO account.' },
+  post: { slug: 'post', productPath: '/product/post', displayName: 'XENO Post', accent: '#e8e3dc', tagline: 'Authorize XENO Post to use your XENO account.' },
   cli: { slug: 'cli', displayName: 'XENO CLI', accent: '#7ee0a0', tagline: 'A XENO command-line tool wants to sign in to your account.' },
   hub: { slug: 'hub', productPath: '/product/hub', displayName: 'XENO Hub', accent: '#8fb6ff', tagline: 'Authorize XENO Hub to use your XENO account.' },
-  pixel: { slug: 'pixel', productPath: '/product/pixel', displayName: 'XENO Pixel', accent: '#bf85ff', tagline: 'Authorize XENO Pixel to use your XENO account.' },
+  pixel: { slug: 'pixel', productPath: '/product/pixel', displayName: 'XENO Pixel', accent: '#ffffff', tagline: 'Authorize XENO Pixel to use your XENO account.' },
   motion: { slug: 'motion', productPath: '/product/motion', displayName: 'XENO Motion', accent: '#ff8fc8', tagline: 'Authorize XENO Motion to use your XENO account.' },
 };
 

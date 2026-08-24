@@ -50,7 +50,7 @@ const Roadmap: React.FC = () => (
       <p className="text-[13.5px] leading-[1.7] text-[#9b948a]">
         Roadmaps move. Priorities shift as we learn what creators and developers actually need —
         and your input shapes them.{' '}
-        <Link to="/contact" className="text-[#a760ff] hover:underline">
+        <Link to="/contact" className="text-[#e8e3dc] hover:underline">
           Tell us what to build next
         </Link>
         .

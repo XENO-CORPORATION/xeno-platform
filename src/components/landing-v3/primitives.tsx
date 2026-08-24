@@ -11,8 +11,8 @@ export const T = {
   inset: '#0f0f0f',     // panel inside a card
   border: 'rgba(255,255,255,0.07)',
   borderHi: 'rgba(255,255,255,0.18)',
-  accent: '#a760ff',    // primary violet
-  accentHi: '#bf85ff',  // bright violet
+  accent: '#e8e3dc',    // primary violet
+  accentHi: '#ffffff',  // bright violet
   title: '#ffffff',
   light: '#d8d2ca',
   body: '#948d83',      // muted body

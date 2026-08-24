@@ -60,13 +60,13 @@ const Impressum: React.FC = () => {
               <li>Telefon: +49 1515 3602959</li>
               <li>
                 E-Mail:{' '}
-                <a href="mailto:support@xenostudio.ai" className="text-[#a760ff] hover:underline">
+                <a href="mailto:support@xenostudio.ai" className="text-[#e8e3dc] hover:underline">
                   support@xenostudio.ai
                 </a>
               </li>
               <li>
                 Kontaktformular:{' '}
-                <Link to="/contact" className="text-[#a760ff] hover:underline">
+                <Link to="/contact" className="text-[#e8e3dc] hover:underline">
                   xenostudio.ai/contact
                 </Link>
               </li>
