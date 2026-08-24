@@ -720,7 +720,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
           <div
             role="tablist"
             aria-label="Chat mode"
-            className="relative z-10 flex min-w-max items-center gap-1.5"
+            className="relative z-10 flex max-w-full min-w-max items-center gap-1.5 overflow-x-auto overscroll-contain hide-scrollbar"
           >
               {CHAT_MODE_TABS.map((mode, index) => {
                 const Icon = modeIconById[mode.id];

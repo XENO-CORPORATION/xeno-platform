@@ -529,7 +529,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
         </div>
       )}
 
-      {/* ── Mobile Model Selector Bottom Sheet Drawer ────────────────────────── */}
+      {/* ── Mobile Model Selector Bottom Sheet Drawer (Platform Design) ───────── */}
       {isOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[300] md:hidden flex flex-col justify-end">
           {/* Backdrop */}
@@ -539,28 +539,28 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
           />
 
           {/* Bottom Sheet Drawer */}
-          <div className="relative z-10 flex flex-col max-h-[85dvh] w-full rounded-t-3xl border-t border-x border-[var(--chat-border)] bg-[var(--chat-elevated)] backdrop-blur-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
+          <div className="relative z-10 flex flex-col h-[85dvh] max-h-[85dvh] w-full rounded-t-3xl border-t border-x border-white/15 bg-[#0a0a0c]/95 backdrop-blur-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
             {/* Drag Handle */}
             <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-[var(--chat-border)] opacity-80" />
+              <div className="w-10 h-1 rounded-full bg-white/20" />
             </div>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--chat-border)]">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--chat-surface)] text-[var(--chat-text)] border border-[var(--chat-border)]">
-                  {isReasoningActive ? <BrainCircuit size={16} /> : <Brain size={16} />}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white border border-white/10">
+                  {isReasoningActive ? <BrainCircuit size={18} /> : <Brain size={18} />}
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-[var(--chat-text)]">Select Model</div>
-                  <div className="text-[11px] text-[var(--chat-muted)]">Choose the AI intelligence for this chat</div>
+                  <div className="text-sm font-semibold text-white">Select Model</div>
+                  <div className="text-[11px] text-white/50">Choose AI model intelligence</div>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => closeInlineTray()}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--chat-surface)] text-[var(--chat-muted)] hover:text-[var(--chat-text)] active:scale-95 transition-all"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/80 hover:text-white active:scale-95 transition-all"
                 aria-label="Close model selector"
               >
                 <X size={16} />
@@ -568,37 +568,37 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
             </div>
 
             {/* Search Input */}
-            <div className="px-4 pt-3 pb-2">
+            <div className="px-5 py-3 border-b border-white/10">
               <div className="relative flex items-center">
-                <Search size={14} className="absolute left-3 text-[var(--chat-muted)] pointer-events-none" />
+                <Search size={15} className="absolute left-3 text-white/40 pointer-events-none" />
                 <input
                   type="text"
                   value={mobileSearchQuery}
                   onChange={(e) => setMobileSearchQuery(e.target.value)}
                   placeholder="Search models or providers..."
-                  className="w-full h-9 pl-9 pr-8 rounded-xl bg-[var(--chat-surface)] border border-[var(--chat-border)] text-xs text-[var(--chat-text)] placeholder:text-[var(--chat-muted)] focus:outline-none focus:border-[var(--chat-text)]"
+                  className="w-full h-10 pl-9 pr-8 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder:text-white/40 focus:outline-none focus:border-white/30 focus:bg-white/10 transition-all"
                 />
                 {mobileSearchQuery && (
                   <button
                     type="button"
                     onClick={() => setMobileSearchQuery('')}
-                    className="absolute right-2.5 p-0.5 text-[var(--chat-muted)] hover:text-[var(--chat-text)]"
+                    className="absolute right-2.5 p-1 text-white/40 hover:text-white"
                   >
-                    <X size={12} />
+                    <X size={13} />
                   </button>
                 )}
               </div>
             </div>
 
             {/* Provider Filter Chips */}
-            <div className="flex items-center gap-1.5 px-4 pb-2.5 overflow-x-auto hide-scrollbar">
+            <div className="flex items-center gap-2 px-5 py-2.5 border-b border-white/10 overflow-x-auto hide-scrollbar">
               <button
                 type="button"
                 onClick={() => setMobileProviderFilter('all')}
-                className={`flex-shrink-0 h-7 px-3 rounded-full text-xs font-medium border transition-colors ${
+                className={`flex-shrink-0 h-8 px-3.5 rounded-xl text-xs font-medium border transition-all ${
                   mobileProviderFilter === 'all'
-                    ? 'bg-[var(--chat-text)] text-[var(--chat-canvas)] border-[var(--chat-text)]'
-                    : 'bg-[var(--chat-surface)] text-[var(--chat-muted)] border-[var(--chat-border)] hover:text-[var(--chat-text)]'
+                    ? 'bg-white/20 text-white border-white/25 shadow-sm font-semibold'
+                    : 'bg-white/5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white'
                 }`}
               >
                 All Models
@@ -608,14 +608,16 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                   key={group.companyName}
                   type="button"
                   onClick={() => setMobileProviderFilter(group.companyName)}
-                  className={`flex-shrink-0 h-7 px-3 rounded-full text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+                  className={`flex-shrink-0 h-8 px-3.5 rounded-xl text-xs font-medium border transition-all flex items-center gap-1.5 ${
                     mobileProviderFilter === group.companyName
-                      ? 'bg-[var(--chat-text)] text-[var(--chat-canvas)] border-[var(--chat-text)]'
-                      : 'bg-[var(--chat-surface)] text-[var(--chat-muted)] border-[var(--chat-border)] hover:text-[var(--chat-text)]'
+                      ? 'bg-white/20 text-white border-white/25 shadow-sm font-semibold'
+                      : 'bg-white/5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <span>{group.companyName}</span>
-                  <span className={`text-[10px] tabular-nums ${mobileProviderFilter === group.companyName ? 'opacity-80' : 'text-[var(--chat-muted)]'}`}>
+                  <span className={`text-[10px] tabular-nums px-1.5 py-0.5 rounded-md ${
+                    mobileProviderFilter === group.companyName ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40'
+                  }`}>
                     {group.models.length}
                   </span>
                 </button>
@@ -623,18 +625,18 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
             </div>
 
             {/* Models List */}
-            <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-2 space-y-2">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-3 space-y-3 pb-10">
               {filteredMobileGroups.length === 0 ? (
-                <div className="py-12 text-center text-xs text-[var(--chat-muted)]">
+                <div className="py-16 text-center text-xs text-white/40">
                   No models match your search.
                 </div>
               ) : (
                 filteredMobileGroups.map((group) => (
-                  <div key={group.companyName} className="space-y-1.5">
-                    <div className="text-[11px] font-semibold tracking-wide uppercase text-[var(--chat-muted)] px-1 pt-1">
+                  <div key={group.companyName} className="space-y-2">
+                    <div className="text-[11px] font-semibold tracking-wider uppercase text-white/40 px-1 pt-1">
                       {group.companyName}
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       {group.models.map((model) => {
                         const isSelected = selectedModel.id === model.id;
                         return (
@@ -645,42 +647,44 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                               handleSelect(model);
                               closeInlineTray();
                             }}
-                            className={`w-full flex items-center justify-between p-3 rounded-2xl border text-left transition-all active:scale-[0.99] ${
+                            className={`w-full flex items-center justify-between p-3.5 rounded-2xl border text-left transition-all active:scale-[0.99] ${
                               isSelected
-                                ? 'bg-[var(--chat-surface)] border-[var(--chat-text)] shadow-sm'
-                                : 'bg-[var(--chat-surface)]/50 border-[var(--chat-border)] hover:border-[var(--chat-muted)]'
+                                ? 'bg-white/[0.08] border-white/25 shadow-lg'
+                                : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-white/20'
                             }`}
                           >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border ${
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border transition-colors ${
                                 isSelected
-                                  ? 'bg-[var(--chat-text)] text-[var(--chat-canvas)] border-[var(--chat-text)]'
-                                  : 'bg-[var(--chat-canvas)] text-[var(--chat-muted)] border-[var(--chat-border)]'
+                                  ? 'bg-white text-black border-white shadow'
+                                  : 'bg-white/5 text-white/60 border-white/10'
                               }`}>
                                 <Brain size={18} />
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium text-xs text-[var(--chat-text)] truncate">{model.name}</span>
+                                  <span className="font-medium text-sm text-white truncate">{model.name}</span>
                                   {isSelected && (
-                                    <span className="inline-flex items-center rounded-full bg-[var(--chat-text)]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[var(--chat-text)]">
+                                    <span className="inline-flex items-center rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold text-white">
                                       Active
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--chat-muted)]">
+                                <div className="flex items-center gap-2 mt-1 text-xs text-white/50">
                                   <span>{group.companyName}</span>
                                   <span>•</span>
-                                  <span className="tabular-nums">{formatTokenCount(model.maxTokens)} context</span>
+                                  <span className="px-1.5 py-0.5 rounded-md bg-white/5 text-[11px] font-mono text-white/70 border border-white/5 tabular-nums">
+                                    {formatTokenCount(model.maxTokens)} context
+                                  </span>
                                 </div>
                               </div>
                             </div>
 
                             <div className="flex items-center pl-2 flex-shrink-0">
-                              <div className={`flex h-5 w-5 items-center justify-center rounded-full border ${
+                              <div className={`flex h-5 w-5 items-center justify-center rounded-full border transition-all ${
                                 isSelected
-                                  ? 'bg-[var(--chat-text)] text-[var(--chat-canvas)] border-[var(--chat-text)]'
-                                  : 'border-[var(--chat-border)] text-transparent'
+                                  ? 'bg-white text-black border-white'
+                                  : 'border-white/20 text-transparent'
                               }`}>
                                 {isSelected && <Check size={12} strokeWidth={2.5} />}
                               </div>
