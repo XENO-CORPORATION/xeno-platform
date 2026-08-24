@@ -33,11 +33,30 @@ const ALWAYS_ALLOWED = [
   '/api/client-policy',                    // so a client can read its own verdict
 ];
 
+/**
+ * 🔴 originalUrl, NOT req.path.
+ *
+ * This middleware is mounted with `app.use('/api/', …)`, and Express STRIPS the
+ * mount path from `req.path` — inside the handler it reads `/client-policy`,
+ * never `/api/client-policy`. So an exemption list written in full paths matched
+ * nothing, and the first live test refused /api/client-policy, /api/downloads
+ * and /api/ready to the very build being told to update: the app is told to
+ * update, asks where the update is, and is refused.
+ *
+ * The unit gate passed the whole time, because it asserted the exempt PATHS were
+ * present in the file rather than that exemption FIRES. Structural checks cannot
+ * see a framework stripping a prefix; only calling the middleware can.
+ */
+function requestPath(req) {
+  const raw = req.originalUrl || req.url || req.path || '';
+  return String(raw).split('?')[0];
+}
+
 const exempt = (p) => ALWAYS_ALLOWED.some((a) => p === a || p.startsWith(`${a}/`));
 
 export async function requireSupportedClient(req, res, next) {
   try {
-    if (exempt(req.path)) return next();
+    if (exempt(requestPath(req))) return next();
 
     const identity = identifyClient(req);
     if (!identity) return next();
@@ -67,7 +86,7 @@ export async function requireSupportedClient(req, res, next) {
          VALUES ($1,$2,$3,$4,$5,$6)`,
         [
           identity.product, identity.version, req.user?.id || null,
-          String(req.path).slice(0, 256),
+          requestPath(req).slice(0, 256),
           (() => { try { return rateLimitKey(req); } catch { return null; } })(),
           String(req.headers['user-agent'] || '').slice(0, 512),
         ],
