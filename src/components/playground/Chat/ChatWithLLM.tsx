@@ -2922,9 +2922,25 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     activeConversationIdRef.current = activeConversationId;
   }, [activeConversationId]);
 
-  // URL Route parameter synchronization (e.g. /c/:conversationId or /overview/chat/llm/:conversationId)
+  // URL Route parameter synchronization (e.g. /c/:conversationId, /projects, /scheduled, /artifacts, etc.)
   useEffect(() => {
-    if (routeConversationId && routeConversationId !== activeConversationIdRef.current && !isHistoryLoading) {
+    const path = window.location.pathname;
+    if (path.startsWith('/projects') || path.startsWith('/overview/chat/projects')) {
+      const match = path.match(/\/(?:projects|overview\/chat\/projects)\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        openProject(match[1]);
+      } else {
+        openProjectsPage();
+      }
+    } else if (path.startsWith('/scheduled') || path.startsWith('/overview/chat/scheduled')) {
+      openScheduledPage();
+    } else if (path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
+      openArtifactsPage();
+    } else if (path.startsWith('/customize') || path.startsWith('/overview/chat/customize')) {
+      openCustomizePage();
+    } else if (path.startsWith('/settings') || path.startsWith('/overview/chat/settings')) {
+      openGlobalSettingsPage();
+    } else if (routeConversationId && routeConversationId !== activeConversationIdRef.current && !isHistoryLoading) {
       void handleLoadConversation(routeConversationId);
     }
   }, [routeConversationId, isHistoryLoading]);
@@ -2932,7 +2948,34 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   // Listen to browser Back/Forward popstate buttons
   useEffect(() => {
     const handlePopState = () => {
-      const match = window.location.pathname.match(/\/(?:c|overview\/chat\/llm)\/([a-zA-Z0-9_-]+)/);
+      const path = window.location.pathname;
+      if (path.startsWith('/projects') || path.startsWith('/overview/chat/projects')) {
+        const match = path.match(/\/(?:projects|overview\/chat\/projects)\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+          openProject(match[1]);
+        } else {
+          openProjectsPage();
+        }
+        return;
+      }
+      if (path.startsWith('/scheduled') || path.startsWith('/overview/chat/scheduled')) {
+        openScheduledPage();
+        return;
+      }
+      if (path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
+        openArtifactsPage();
+        return;
+      }
+      if (path.startsWith('/customize') || path.startsWith('/overview/chat/customize')) {
+        openCustomizePage();
+        return;
+      }
+      if (path.startsWith('/settings') || path.startsWith('/overview/chat/settings')) {
+        openGlobalSettingsPage();
+        return;
+      }
+
+      const match = path.match(/\/(?:c|overview\/chat\/llm)\/([a-zA-Z0-9_-]+)/);
       const targetId = match ? match[1] : null;
       if (targetId && targetId !== activeConversationIdRef.current) {
         void handleLoadConversation(targetId);
@@ -3858,6 +3901,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsChatsCatalogFilterOpen(false);
     setProjectsPageSearch('');
     setIsProjectsSortOpen(false);
+    if (typeof window !== 'undefined' && window.location.pathname !== '/projects' && window.location.pathname !== '/overview/chat/projects') {
+      window.history.pushState({ view: 'projects' }, '', '/projects');
+    }
     try {
       localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'true');
     } catch {
@@ -3876,6 +3922,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsChatsCatalogOpen(false);
     setIsChatsCatalogFilterOpen(false);
     setIsProjectsSortOpen(false);
+    if (typeof window !== 'undefined' && window.location.pathname !== '/artifacts' && window.location.pathname !== '/overview/chat/artifacts') {
+      window.history.pushState({ view: 'artifacts' }, '', '/artifacts');
+    }
     try {
       localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
       localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
@@ -3895,6 +3944,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsChatsCatalogOpen(false);
     setIsChatsCatalogFilterOpen(false);
     setIsProjectsSortOpen(false);
+    if (typeof window !== 'undefined' && window.location.pathname !== '/settings' && window.location.pathname !== '/overview/chat/settings') {
+      window.history.pushState({ view: 'settings' }, '', '/settings');
+    }
     try {
       localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
       localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
@@ -3914,6 +3966,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsChatsCatalogOpen(false);
     setIsChatsCatalogFilterOpen(false);
     setIsProjectsSortOpen(false);
+    if (typeof window !== 'undefined' && window.location.pathname !== '/scheduled' && window.location.pathname !== '/overview/chat/scheduled') {
+      window.history.pushState({ view: 'scheduled' }, '', '/scheduled');
+    }
     try {
       localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
       localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
@@ -3931,6 +3986,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setCustomizeMotionFrom(measureModalFromTrigger(el));
     setIsSettingsModalOpen(false);
     setIsCustomizePageOpen(true);
+    if (typeof window !== 'undefined' && window.location.pathname !== '/customize' && window.location.pathname !== '/overview/chat/customize') {
+      window.history.pushState({ view: 'customize' }, '', '/customize');
+    }
   }, []);
 
   const openChatSettings = useCallback(() => {
@@ -4080,6 +4138,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsProjectDescExpanded(false);
     setIsProjectFilesExpanded(false);
     setIsProjectSidebarOpen(true);
+    if (typeof window !== 'undefined' && window.location.pathname !== `/projects/${projectId}` && window.location.pathname !== `/overview/chat/projects/${projectId}`) {
+      window.history.pushState({ view: 'project', projectId }, '', `/projects/${projectId}`);
+    }
     // Any conversation the reused composer starts from here should link to this project.
     pendingChatProjectIdRef.current = projectId;
     // Remember which conversation was active on entry so we only auto-leave the workspace
@@ -4105,6 +4166,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsProjectScheduledPreviewShown(false);
     setProjectScheduledPreview(null);
     setIsProjectScheduledCreateOpen(false);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ view: 'projects' }, '', '/projects');
+    }
     try {
       localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
     } catch {
