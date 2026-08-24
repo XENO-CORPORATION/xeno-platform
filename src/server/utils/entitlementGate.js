@@ -11,9 +11,20 @@ import { getEntitlements } from '../services/billingService.js';
 
 const RES_CAP_PX = { standard: 1024, '4k': 4096 };
 
-// Fail-closed fallback — mirrors PLAN_ENTITLEMENTS.free (v2). watermark always false.
+/* Fail-closed fallback — the shape of PLAN_ENTITLEMENTS.free (v2), MINUS the
+ * booleans that grant something. watermark always false.
+ *
+ * `canDownload: false` is written out rather than left absent. Absence already
+ * refuses (grants() coerces undefined to false), but an explicit false is the
+ * difference between "we decided" and "nobody added it" — and this row is what
+ * every paying customer resolves to during a database fault.
+ *
+ * ⚠️ `canUse` is deliberately still absent, so a fault refuses API access even
+ * to free. That predates the download gate and is NOT tidied here: adding it
+ * would hand out inference during an outage, which is a separate decision from
+ * this one. Flagged so the next reader knows it is a choice, not an oversight. */
 const FREE_ENT = {
-  plan: 'free', commercial: false, maxResolution: 'standard', priority: false,
+  plan: 'free', canDownload: false, commercial: false, maxResolution: 'standard', priority: false,
   inHouseDailyLimit: 50, privateProjects: false, teamSeats: 0,
   cloudSync: false, crossApp: false, agents: false, collaboration: false, watermark: false,
 };

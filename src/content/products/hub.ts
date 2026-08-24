@@ -135,7 +135,7 @@ const hub: ProductContent = {
   ],
   faq: [
     { q: 'What is XENO Hub?', a: 'It’s the desktop launcher for the whole XENO ecosystem — one window to install, update and launch every XENO app, run a built-in agent and tools, browse the marketplace, and manage your credits.' },
-    { q: 'Is it free?', a: 'Yes, the Hub itself is a free download. Some cloud AI features spend credits, and paid marketplace items (agents, models, subscriptions) meter on your credit balance.' },
+    { q: 'Is it free?', a: 'Downloading the Hub requires a XENO account with an active plan. Once installed it runs on your machine; cloud AI features spend credits, and paid marketplace items (agents, models, subscriptions) meter on your credit balance.' },
     { q: 'Which platforms are supported?', a: 'Windows today — that’s the only build we publish. macOS and Linux are planned; the download page lists every build and past version we actually ship, so it will show them as soon as they exist.' },
     { q: 'How do updates work?', a: 'The Hub checks the XENO update feed in the background and updates itself, and it detects when your installed apps have a new version — you update with one click and a restart. It’s the same open version feed the website reads.' },
     { q: 'What’s in the marketplace?', a: 'One store with shelves for native XENO apps, sandboxed community apps, agents (Minds and swarms), workbench panels & plugins, and inference models — each tagged Official, Verified or Community, with capability consent before anything gets access.' },

@@ -170,7 +170,7 @@ const sheets: ProductContent = {
     { q: 'Will it update itself?', a: 'No. This build has no in-app updater — it will never prompt you and never upgrade on its own. When a newer version is published you will need to come back here and install it over the top. XENO Hub, which polls for new versions, can tell you when one is out.' },
     { q: 'Does it do pivot tables, sorting or filtering?', a: 'Not in this build. There is a pivot panel in the sidebar, but it is a static mockup with nothing behind it, and sorting and filtering exist in the engine with no way to reach them from the interface. We would rather name that plainly than let a panel imply a feature. They are on the list.' },
     { q: 'Can it open my existing spreadsheets?', a: 'Yes — .xlsx and .csv, both directions. You can also save in the native .xsheet format and export the sheet to PDF. Very complex Excel workbooks (macros, exotic chart types, unusual formats) will not survive a round trip intact; this is an early build.' },
-    { q: 'What does it cost?', a: 'The experimental build is free to download. AI features require a XENO account and draw on credits. Pricing for the finished product will be announced closer to a stable release.' },
+    { q: 'What does it cost?', a: 'Downloading the experimental build requires a XENO account with an active plan. AI features draw on credits. Pricing for the finished product will be announced closer to a stable release.' },
   ],
   seo: {
     title: 'XENO Sheets — the AI-native spreadsheet',

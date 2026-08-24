@@ -185,7 +185,7 @@ const slides: ProductContent = {
     { q: 'Why does Windows warn me about the installer?', a: 'Because it is not code-signed yet. Windows SmartScreen shows “Windows protected your PC” for any installer without a signing certificate, regardless of what it contains. Choose “More info”, then “Run anyway”. Code signing is planned; until then we would rather tell you the warning is coming than pretend it is not.' },
     { q: 'Will it update itself?', a: 'No. There is no in-app updater — the updater library is not even bundled, so this build will never prompt you and never upgrade on its own. When a newer version is published you will need to come back here and install it over the top. XENO Hub, which polls for new versions, can tell you when one is out.' },
     { q: 'Can it export video?', a: 'Not from the interface in this build. The rendering code that turns slides into frames is there — it is what produces the PDF and PNG exports — but the video encoders have no menu command yet, so we are not claiming it.' },
-    { q: 'What does it cost?', a: 'The experimental build is free to download. AI features require a XENO account and draw on credits. Pricing for the finished product will be announced closer to a stable release.' },
+    { q: 'What does it cost?', a: 'Downloading the experimental build requires a XENO account with an active plan. AI features draw on credits. Pricing for the finished product will be announced closer to a stable release.' },
   ],
   seo: {
     title: 'XENO Slides — the AI-native presentation editor',

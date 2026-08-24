@@ -177,7 +177,7 @@ const workflow: ProductContent = {
     { q: 'What is the engine written in?', a: 'TypeScript. Earlier copy on this page described a “Rust execution engine”; that was wrong and we have corrected it. The only Rust in the project is a spatial index for canvas virtualization — it is not the execution engine, and it is not what runs your workflow.' },
     { q: 'How is it different from other automation tools?', a: 'Two things it genuinely does differently: it runs on your desktop rather than in someone else’s account, and it checkpoints every node so you can step back through a finished run, edit the intermediate data and replay from that point. The XENO-native ambition — driving Pixel, Motion, Sound and 3D from a graph — is real work in progress, not a feature you can use today.' },
     { q: 'Can it drive the other XENO apps?', a: 'Not yet. Node types for Pixel, Motion, Sound, 3D, Architect and Engine exist in the codebase, but they need the target app running and exposing an automation API, and that work is still in progress across those apps. It is the goal, not the current state.' },
-    { q: 'Will it be free?', a: 'The beta is free to download and use. General-release pricing hasn’t been announced; running a graph locally stays free, and only cloud features such as the Agent node would ever draw on credits.' },
+    { q: 'Will it be free?', a: 'Downloading the beta requires a XENO account with an active plan. General-release pricing hasn’t been announced; once installed, running a graph locally spends nothing, and only cloud features such as the Agent node draw on credits.' },
   ],
   seo: {
     title: 'XENO Workflow — a visual automation studio you can replay',
