@@ -62,7 +62,7 @@ import collaborationRoutes from './routes/collaborationRoutes.js';
 import emailRoutes from './routes/emailRoutes.js';
 import officeCanvasRoutes from './routes/officeCanvasRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
-import productDownloadRoutes, { grantRouter as downloadGrantRouter } from './routes/productDownloadRoutes.js';
+import productDownloadRoutes, { grantRouter as downloadGrantRouter, updateGrantRouter } from './routes/productDownloadRoutes.js';
 import xenoRoutes from './routes/xenoRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
 import billingRoutes, { stripeWebhook } from './routes/billingRoutes.js';
@@ -650,6 +650,11 @@ app.use('/api/download', databaseMiddleware, authMiddleware, downloadRoutes);
 // (owner override 2026-08-24). 401 belongs to authMiddleware and 403 to the
 // canDownload entitlement, so this must sit behind both.
 app.use('/api/downloads', databaseMiddleware, authMiddleware, downloadGrantRouter);
+// The UPDATER's half (Phase 3). Same two middlewares for the same reasons; a
+// separate mount because "may install" and "may receive a security fix for what
+// is already installed" are not obviously the same permission, and collapsing
+// them would decide that by accident. See productDownloadRoutes.js.
+app.use('/api/updates', databaseMiddleware, authMiddleware, updateGrantRouter);
 
 // The deep-link stays public and un-DB'd, because its URL is printed in release
 // notes and emails and must not 404. It no longer serves bytes on its own: a

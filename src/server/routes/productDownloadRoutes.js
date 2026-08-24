@@ -207,3 +207,93 @@ grantRouter.post('/grant', async (req, res) => {
 });
 
 export default router;
+
+/**
+ * The UPDATER's half — Phase 3 of docs/DOWNLOAD-GATE.md.
+ *
+ * Mount at /api/updates behind databaseMiddleware + authMiddleware.
+ *
+ *   GET /api/updates/:slug/grant?os=win[&version=…][&channel=beta]
+ *     → 200 { version, filename, url, expiresInSeconds }
+ *     → 403 plan_upgrade_required
+ *     → 404 NO_RELEASES | NO_RELEASE | NO_ASSET
+ *
+ * ── WHY THIS IS NOT JUST `POST /api/downloads/grant` ────────────────────────
+ *
+ * Two reasons, and the second is the one that matters.
+ *
+ * 1. It RESOLVES as well as mints. A browser already knows which version it
+ *    wants because the page rendered it; an updater does not, and making it do
+ *    an unauthenticated version.json fetch first would mean the fact that an
+ *    update exists is public while the bytes are not — two sources of truth for
+ *    one decision. One authenticated call returns both.
+ *
+ * 2. 🔴 It keeps UPDATE and DOWNLOAD separable. They are not obviously the same
+ *    permission: "may this account install our software for the first time" and
+ *    "may this account receive a SECURITY FIX for software it already installed
+ *    and paid for" have different right answers, and the second one is the kind
+ *    of question a company gets wrong by never having asked it. Collapsing the
+ *    two endpoints today would foreclose that with no decision having been made.
+ *
+ * Both check `canDownload` right now, because nobody has decided otherwise and
+ * inventing a `canUpdate` policy here would be making a product call that is not
+ * mine to make. The seam is the CAPABILITY constant below: splitting them later
+ * is one line here plus a row in PLAN_ENTITLEMENTS, not a refactor.
+ *
+ * ⚠️ This endpoint does not yet close the updater door — it opens the LOCK, it
+ * does not turn it. Installed Hubs still poll the public CDN directly and will
+ * keep working until R2 is locked, which must not happen until a Hub that calls
+ * this has actually reached users. See docs/DOWNLOAD-GATE.md.
+ */
+const UPDATE_CAPABILITY = 'canDownload';
+
+export const updateGrantRouter = express.Router();
+
+updateGrantRouter.get('/:slug/grant', async (req, res) => {
+  const slug = String(req.params.slug || '').toLowerCase();
+  const osParam = String(req.query.os || '').toLowerCase();
+  const os = OS_ALIASES[osParam];
+  const version = req.query.version ? String(req.query.version).replace(/^v/i, '') : '';
+  const channel = req.query.channel === 'beta' ? 'beta' : 'stable';
+  res.set('Cache-Control', 'no-store');
+
+  if (!/^[a-z0-9-]+$/.test(slug) || !os) {
+    return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'slug and os are required (os = win|mac|linux)' } });
+  }
+
+  // authMiddleware owns 401; reaching here without a user is a wiring bug.
+  const userId = req.user?.id;
+  if (!userId || !req.db) {
+    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Sign in to update.' } });
+  }
+
+  /* The paywall, BEFORE the lookup — same ordering rule as the deep link, and
+   * for the same reason: a refusal must not leak the version it refused. */
+  const check = await assertEntitlement(req.db, userId, UPDATE_CAPABILITY);
+  if (!check.allowed) return res.status(403).json(check.body);
+
+  const releases = await loadReleases(slug);
+  if (!releases.length) {
+    return res.status(404).json({ error: { code: 'NO_RELEASES', message: `No releases published for "${slug}"` } });
+  }
+  const release = pickRelease(releases, { version, channel });
+  if (!release) {
+    return res.status(404).json({ error: { code: 'NO_RELEASE', message: `Release ${version || `(${channel})`} not found for "${slug}"` } });
+  }
+  const asset = release.assets?.[os]?.[0];
+  if (!asset?.file) {
+    return res.status(404).json({ error: { code: 'NO_ASSET', message: `No ${os} build for ${slug} ${release.version}` } });
+  }
+
+  /* Bound to the RESOLVED version, never to the empty "latest". An updater that
+   * held a latest-shaped grant across a release would silently start pointing at
+   * different bytes than the ones it decided to install. */
+  const grant = mintDownloadGrant({ userId, slug, os, version: release.version });
+  return res.json({
+    version: release.version,
+    channel: release.channel || 'stable',
+    filename: asset.file,
+    url: `/product/${slug}/download/${osParam}/${release.version}?grant=${encodeURIComponent(grant)}`,
+    expiresInSeconds: GRANT_TTL_SECONDS,
+  });
+});
