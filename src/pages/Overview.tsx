@@ -43,6 +43,7 @@ import AudioStudioInterface from '../components/playground/Studio/AudioStudioInt
 // Import Office components
 import CanvasPlanning from '../components/office/CanvasPlanning';
 import CanvasPlanningVisual from '../components/office/CanvasPlanningVisual';
+import { ChatApp } from '../features/chat';
 import PDFChatInterface from '../components/playground/Office/PDFChatInterface';
 import WordChatInterface from '../components/playground/Office/WordChatInterface';
 // Import IOPaint interface
@@ -266,7 +267,8 @@ const OverviewContent: React.FC = () => {
             <Route path="train/lora" element={<LoRaImageTrainComponent />} />
             <Route path="train/lora-video" element={<LoRaVideoTrainComponent />} />
             <Route path="train/llm" element={<TextLLMTrainComponent />} />
-            <Route path="chat/llm" element={<MultiChatContainer />} />
+            <Route path="chat/llm" element={<ChatApp />} />
+            <Route path="chat/multi" element={<MultiChatContainer />} />
             {/* XENO: voice mode route disabled — voice de-scoped (no direct provider calls) */}
             {/* <Route path="chat/voice" element={<ChatWithVoice />} /> */}
             <Route path="chat/search" element={<SearchChatInterface />} />
