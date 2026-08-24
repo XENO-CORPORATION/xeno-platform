@@ -8,8 +8,17 @@ import { ArrowLeft } from 'lucide-react';
  * (Einzelunternehmen), so the natural person's name + address are shown, as
  * required. Reachable from the footer of every page (Anbieterkennzeichnung).
  *
- * NOTE: standard template — have it verified by a Steuerberater/Rechtsanwalt, and
- * add the USt-IdNr line once the Bundeszentralamt für Steuern assigns it.
+ * NOTE: standard template — have it verified by a Steuerberater/Rechtsanwalt.
+ *
+ * The USt-IdNr is DE463398455, assigned by the Bundeszentralamt für Steuern on
+ * 2026-07-02 and confirmed VALID against the EU VIES register before being
+ * published here. That check mattered: the notification arrived as a
+ * W-IdNr-Mitteilung, and a Wirtschafts-Identifikationsnummer shares the DE +
+ * 9-digit format WITHOUT being a VAT ID — publishing one as the other would be
+ * wrong on a legally required page. VIES only validates real VAT IDs.
+ *
+ * § 5 Abs. 1 Nr. 6 DDG requires it to be shown ONCE HELD, so the previous
+ * 'ist beantragt' wording was not merely stale, it was non-compliant.
  */
 const Impressum: React.FC = () => {
   return (
@@ -76,8 +85,17 @@ const Impressum: React.FC = () => {
           <section>
             <h2 className="text-2xl font-semibold mb-4 text-white">Umsatzsteuer-Identifikationsnummer</h2>
             <p className="text-white/60 leading-relaxed">
-              Eine Umsatzsteuer-Identifikationsnummer gemäß § 27a Umsatzsteuergesetz ist beantragt
-              und wird nach Zuteilung durch das Bundeszentralamt für Steuern an dieser Stelle ergänzt.
+              Umsatzsteuer-Identifikationsnummer gemäß § 27a Umsatzsteuergesetz:
+              <br />
+              <span className="text-white/80 font-medium">DE463398455</span>
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Umsatzsteuer</h2>
+            <p className="text-white/60 leading-relaxed">
+              Als Kleinunternehmer im Sinne von § 19 Abs. 1 Umsatzsteuergesetz wird keine
+              Umsatzsteuer berechnet und daher auch nicht in Rechnungen ausgewiesen.
             </p>
           </section>
 

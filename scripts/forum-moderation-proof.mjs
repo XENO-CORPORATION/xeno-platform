@@ -232,7 +232,13 @@ try {
       fail('the public log names the REPORTER — this turns moderation into a pillory and nobody flags twice');
     } else pass('the log does NOT name the reporter');
 
-    if (!blob.includes(moderator.username) && !blob.includes(moderator.display_name || ' ')) {
+    /* The sentinel must be a string that CANNOT occur in JSON text. It was a raw
+     * NUL byte here, invisible in every editor; it is now written as an escape.
+     *
+     * Do NOT "simplify" it to '': String.includes('') is ALWAYS true, so an empty
+     * fallback would make this branch pass for a log that names nobody — turning
+     * an accountability check into a green tick. */
+    if (!blob.includes(moderator.username) && !blob.includes(moderator.display_name || '\0')) {
       fail('the log does not name the moderator either — an anonymous decision is not accountability');
     } else pass('it DOES name the moderator — decisions are attributable');
   }
