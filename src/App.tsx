@@ -40,6 +40,7 @@ import Cookies from './pages/Cookies';
 import Withdrawal from './pages/Withdrawal';
 import Impressum from './pages/Impressum';
 import OverviewPage from './pages/Overview';
+import { ChatApp } from './features/chat';
 import OSAuthInterface, { OSStateProvider } from './components/os/OSAuthInterface';
 import OSHomeInterface from './components/os/OSHomeInterface';
 import { OSAuthWithContainers } from './components/dashboard/OSAuthWithContainers';
@@ -244,8 +245,12 @@ function App() {
               </ProtectedRoute>
             } />
 
-            {/* /chat -> the overview chat (ChatWithLLM UI WITH the left taskbar). */}
-            <Route path="/chat" element={<Navigate to="/overview/chat/llm" replace />} />
+            {/* /chat -> standalone full-viewport ChatApp with artifacts and streaming */}
+            <Route path="/chat" element={
+              <ProtectedRoute>
+                <ChatApp />
+              </ProtectedRoute>
+            } />
 
             {/* Protected Routes - Only accessible after authentication */}
             <Route path="/overview/*" element={
