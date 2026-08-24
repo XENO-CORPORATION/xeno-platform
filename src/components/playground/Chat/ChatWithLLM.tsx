@@ -4318,20 +4318,37 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
             isStreaming: isLoading,
           },
         },
-        messages: messages.map((m, idx) => ({
-          index: idx + 1,
-          id: m.id || `msg-${idx + 1}`,
-          role: m.role || (m as any).sender || 'user',
-          timestamp: m.timestamp ? new Date(m.timestamp).toISOString() : null,
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content || ''),
-          reasoning: (m as any).reasoning || (m as any).thought || null,
-          images: m.images?.map(img => ({ name: img.name, size: img.size, type: img.type })) || [],
-          files: m.files?.map(f => ({ name: f.name, size: f.size, type: f.type })) || [],
-          sources: m.sources?.map(s => ({ title: s.title, url: s.url, snippet: s.snippet })) || [],
-          toolCalls: (m as any).toolCalls || null,
-          searchQuery: (m as any).searchQuery || null,
-          isError: Boolean(m.isError),
-        })),
+        messages: messages.map((m, idx) => {
+          const role = m.sender || (m as any).role || 'user';
+          const content = m.parsedAnswer || m.text || (m as any).content || '';
+          const reasoning = m.parsedThinking || m.thinkingContent || (m as any).reasoning || null;
+          const images = (m.userImageAttachments || (m.userImageAttachment ? [m.userImageAttachment] : [])).map(img => ({
+            name: img.name,
+            type: img.type,
+            hasData: Boolean(img.base64Data),
+          }));
+          const files = m.userFileAttachment ? [{ name: m.userFileAttachment.name, type: m.userFileAttachment.type }] : [];
+          const sources = (m.searchInfo?.sources || (m as any).sources || []).map((s: any) => ({
+            title: s.title || s.uri || s.url || 'Source',
+            url: s.uri || s.url || '',
+            snippet: s.snippet || '',
+          }));
+
+          return {
+            index: idx + 1,
+            id: m.id || `msg-${idx + 1}`,
+            role,
+            timestamp: m.timestamp ? new Date(m.timestamp).toISOString() : null,
+            content,
+            reasoning,
+            images,
+            files,
+            sources,
+            thinkingDuration: m.thinkingDuration || null,
+            modelIdUsed: m.modelIdUsed || null,
+            isError: Boolean(m.isError),
+          };
+        }),
       };
 
       let readableLog = `# XENO Chat Session Transcript\n\n`;
@@ -4347,24 +4364,25 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         readableLog += `_(No messages in active session)_\n\n`;
       } else {
         messages.forEach((m, i) => {
-          const roleLabel = String(m.role || (m as any).sender || (m as any).type || 'message').toUpperCase();
+          const roleLabel = String(m.sender || (m as any).role || 'message').toUpperCase();
           const timeLabel = m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : 'now';
-          const contentText = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '');
+          const contentText = m.parsedAnswer || m.text || (m as any).content || '';
+          const thinkingText = m.parsedThinking || m.thinkingContent || (m as any).reasoning || null;
 
           readableLog += `### [${i + 1}] ${roleLabel} — ${timeLabel}\n\n`;
-          if ((m as any).reasoning || (m as any).thought) {
-            readableLog += `> **Thinking / Reasoning Trace:**\n> ${String((m as any).reasoning || (m as any).thought || '').replace(/\\n/g, '\n> ')}\n\n`;
+          if (thinkingText) {
+            readableLog += `> **Thinking / Reasoning Trace:**\n> ${String(thinkingText).replace(/\\n/g, '\n> ')}\n\n`;
           }
           readableLog += `${contentText}\n\n`;
-          if (m.sources && m.sources.length > 0) {
+          const sources = m.searchInfo?.sources || (m as any).sources || [];
+          if (sources && sources.length > 0) {
             readableLog += `**Sources / Citations:**\n`;
-            m.sources.forEach(s => {
-              readableLog += `- [${s.title || s.url}](${s.url}): ${s.snippet || ''}\n`;
+            sources.forEach((s: any) => {
+              const url = s.uri || s.url || '';
+              const title = s.title || url || 'Source';
+              readableLog += `- [${title}](${url})\n`;
             });
             readableLog += `\n`;
-          }
-          if ((m as any).toolCalls && (m as any).toolCalls.length > 0) {
-            readableLog += `**Tool Invocations:**\n\`\`\`json\n${JSON.stringify((m as any).toolCalls, null, 2)}\n\`\`\`\n\n`;
           }
         });
       }
