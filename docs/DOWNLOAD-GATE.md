@@ -10,7 +10,7 @@ There are **three** doors to the same bytes, and they are not equally closed:
 
 | Door | Who uses it | State |
 |---|---|---|
-| `/product/:slug/download/:os` | the website Download CTA | **Phase 2 — gated** |
+| `/product/:slug/download/:os` | the website Download CTA | ✅ **Phase 2 — GATED, live since 2026-08-24** |
 | `updates.xenostudio.ai/apps/...` | anyone with the URL; `ReleaseFeed` used to link it directly | **Phase 3 — still public** |
 | `version.json` / `latest.yml` polling | Hub + every shipped app updater | **Phase 3 — still public** |
 
@@ -21,6 +21,27 @@ CDN.** Gating the website is the first door, not the last one. Do not tell anyon
 That ordering is deliberate, not laziness: locking the CDN first would kill the
 updater in every copy of Hub already installed, because those binaries poll a
 hardcoded public URL. Hub has to learn to ask for a grant *before* the door shuts.
+
+## Proven in production, 2026-08-24
+
+Not asserted from a build log — walked against `https://xenostudio.ai` with a real
+account, in both directions:
+
+| Step | Result |
+|---|---|
+| anonymous `curl` (`Accept: */*`) | **401** `download_grant_required` |
+| anonymous browser navigation (`Accept: text/html`) | **302 → `/auth?returnUrl=%2Fproduct%2Fhub%2Fdownload%2Fwin`** |
+| forged grant | **401** |
+| `POST /api/downloads/grant` with no token | **401** |
+| fresh **free** account mints | **403** `plan_upgrade_required`, `currentPlan: free`, `requiredPlan: pro` |
+| same account on **internal** mints, then follows | **302 → `…/apps/hub/v0.11.5/XENO-HUB Setup 0.11.5.exe`** |
+| that installer actually resolves | **206**, 140,966,210 bytes |
+| the Hub grant replayed against `pixel` / `hub-linux` / a pinned version | **`wrong_artifact`** on all three |
+| plan revoked, **same token** retried | **403** again |
+
+That last row is the one worth keeping: the entitlement is re-checked per mint
+against the live plan, so it is not baked into the session token. Revoking a plan
+closes the door immediately rather than at the next sign-in.
 
 ## What enforces it
 

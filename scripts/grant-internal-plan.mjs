@@ -19,10 +19,18 @@
  *     because that row may be a real Stripe subscription and this script has
  *     no way to put it back.
  *
- * Usage (on xeno-platform-001, inside the backend container):
- *   node scripts/grant-internal-plan.mjs someone@example.com            # dry run
- *   node scripts/grant-internal-plan.mjs someone@example.com --confirm  # write
- *   node scripts/grant-internal-plan.mjs someone@example.com --revoke --confirm
+ * Usage — run it INSIDE the backend container, which is where DATABASE_URL and
+ * the `pg` dependency live. ⚠️ The container's /app is `src/server`, so there is
+ * no `scripts/` directory in it: copy the file to /app first, and remove it after.
+ *
+ *   scp/git-archive the file to the box, then:
+ *     sudo docker cp scripts/grant-internal-plan.mjs xenostudio-backend:/app/
+ *     sudo docker exec xenostudio-backend node /app/grant-internal-plan.mjs a@b.com
+ *     sudo docker exec xenostudio-backend node /app/grant-internal-plan.mjs a@b.com --confirm
+ *     sudo docker exec xenostudio-backend node /app/grant-internal-plan.mjs a@b.com --revoke --confirm
+ *     sudo docker exec -u root xenostudio-backend rm -f /app/grant-internal-plan.mjs
+ *
+ * (the `-u root` on the delete is required — the app user cannot unlink it)
  */
 import pg from 'pg';
 
