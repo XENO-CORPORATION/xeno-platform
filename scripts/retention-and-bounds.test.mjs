@@ -138,16 +138,46 @@ test('🔴 the cap runs AFTER the entitlement check and fails OPEN', () => {
    * Direction: the entitlement has already passed, so the caller HAS paid.
    * Refusing them because we could not read a count would punish a customer for
    * our database. */
+  /* Two separate questions, asserted separately. This required the cap to be
+   * INLINE between the entitlement check and the mint, and went red when the cap
+   * was extracted into a helper shared by both minting paths — better code,
+   * failing gate.
+   *
+   * (a) ORDER at the call site. */
   const ent = route.indexOf("assertEntitlement(req.db, userId, 'canDownload')");
-  const cap = route.indexOf('GRANT_HOURLY_CAP');
+  const cap = route.indexOf('await enforceGrantCap(req, userId)');
   const mint = route.indexOf('const grant = mintDownloadGrant(');
   assert.ok(ent > -1 && cap > -1 && mint > -1, 'the mint path changed shape — re-verify the ordering');
   assert.ok(ent < cap, 'the cap runs before the entitlement check — an unpaid caller would get 429, not 403');
   assert.ok(cap < mint, 'the cap runs after the grant is minted, which is not a cap');
 
-  const block = route.slice(cap, mint);
-  assert.ok(/catch \(e\)/.test(block) && /allowing/.test(block),
+  /* (b) DIRECTION inside the helper. */
+  const helper = route.slice(route.indexOf('async function enforceGrantCap('), route.indexOf('async function auditGrant('));
+  assert.ok(/catch \(e\)/.test(helper) && /allowing/.test(helper),
     'the cap fails closed — a database hiccup would refuse a paying customer');
+  assert.ok(/return null;/.test(helper), 'the cap no longer has an allow path');
+});
+
+test('🔴 BOTH minting paths are capped AND audited', () => {
+  /* The gap this replaces: the download route had a cap and an audit, and the
+   * UPDATER route minted the SAME authority — a grant that opens an installer —
+   * with neither. Two doors to one permission where only one is watched is not a
+   * weaker control; the attacker uses the other door.
+   *
+   * Asserted per PATH, because a file-level "is there a cap" passed the entire
+   * time one path had none. */
+  const paths = [
+    ["grantRouter.post('/grant'", 'the download mint'],
+    ["updateGrantRouter.get('/:slug/grant'", 'the updater mint'],
+  ];
+  for (const [marker, label] of paths) {
+    const i = route.indexOf(marker);
+    assert.ok(i > -1, `${label} is gone`);
+    const end = route.indexOf(String.fromCharCode(10) + '});', i);
+    const body = route.slice(i, end > -1 ? end : i + 4000);
+    assert.ok(body.includes('enforceGrantCap'), `${label} is not rate-capped — an unwatched door to the same authority`);
+    assert.ok(/auditGrant\(/.test(body), `${label} writes no audit row`);
+  }
 });
 
 test('the cap is generous enough not to catch real people', () => {

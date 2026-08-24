@@ -178,6 +178,63 @@ router.get('/:slug/download/:os/:version?', async (req, res) => {
  * Returns a URL rather than the bytes: the browser then navigates to it, which
  * keeps the large transfer on the CDN instead of through Node.
  */
+/**
+ * The per-account bound and the audit row, shared by BOTH minting paths.
+ *
+ * 🔴 Extracted rather than copied. The download route had a cap and an audit; the
+ * updater route minted the SAME authority — a grant that opens an installer —
+ * with neither. Two paths to one permission where only one is instrumented is
+ * not a weaker control, it is an unmonitored door next to a monitored one, and
+ * the attacker picks the door.
+ *
+ * Copying the block would have fixed today and drifted tomorrow: the next change
+ * to the cap would land on whichever path its author was looking at.
+ */
+async function enforceGrantCap(req, userId) {
+  const CAP = Number(process.env.GRANT_HOURLY_CAP || 60);
+  try {
+    const recent = await req.db.query(
+      "SELECT count(*)::int AS n FROM download_grants WHERE user_id = $1 AND at > NOW() - INTERVAL '1 hour'",
+      [userId],
+    );
+    if ((recent.rows[0]?.n || 0) >= CAP) {
+      console.warn(`[Downloads] grant cap reached for user ${userId} (${CAP}/hour)`);
+      return {
+        error: {
+          code: 'grant_rate_limited',
+          message: 'Too many downloads started recently. Try again in a little while.',
+          retryAfterSeconds: 900,
+        },
+      };
+    }
+  } catch (e) {
+    /* Fails OPEN: the entitlement has already passed, so the caller has PAID.
+     * Refusing them because we could not read a count would punish a customer
+     * for our database. */
+    console.error('[Downloads] grant cap check failed, allowing:', e.message);
+  }
+  return null;
+}
+
+/**
+ * Record that a grant was issued. Never throws — this is a log, not a gate, and
+ * a failed write must not refuse a download that was legitimately authorised.
+ */
+async function auditGrant(req, { userId, intentId, slug, os, version, plan }) {
+  try {
+    await req.db.query(
+      `INSERT INTO download_grants (user_id, intent_id, slug, os, version, plan, client_ip, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [userId, intentId || null, slug, os, version || '', plan || null,
+        ipOfReq(req), String(req.headers['user-agent'] || '').slice(0, 512)],
+    );
+  } catch (e) {
+    console.error('[Downloads] failed to audit grant', e.message);
+  }
+}
+
+const ipOfReq = (req) => { try { return rateLimitKey(req); } catch { return null; } };
+
 export const grantRouter = express.Router();
 
 grantRouter.post('/grant', async (req, res) => {
@@ -216,25 +273,8 @@ grantRouter.post('/grant', async (req, res) => {
    * Fails OPEN: if the audit table cannot be read we allow the download. The
    * entitlement has already passed, so the caller has PAID — refusing them over
    * a failed count would punish a customer for our database. */
-  const CAP = Number(process.env.GRANT_HOURLY_CAP || 60);
-  try {
-    const recent = await req.db.query(
-      "SELECT count(*)::int AS n FROM download_grants WHERE user_id = $1 AND at > NOW() - INTERVAL '1 hour'",
-      [userId],
-    );
-    if ((recent.rows[0]?.n || 0) >= CAP) {
-      console.warn(`[Downloads] grant cap reached for user ${userId} (${CAP}/hour)`);
-      return res.status(429).json({
-        error: {
-          code: 'grant_rate_limited',
-          message: 'Too many downloads started recently. Try again in a little while.',
-          retryAfterSeconds: 900,
-        },
-      });
-    }
-  } catch (e) {
-    console.error('[Downloads] grant cap check failed, allowing:', e.message);
-  }
+  const capped = await enforceGrantCap(req, userId);
+  if (capped) return res.status(429).json(capped);
 
   const grant = mintDownloadGrant({ userId, slug, os, version });
   const path = version
@@ -265,16 +305,9 @@ grantRouter.post('/grant', async (req, res) => {
     console.error('[Downloads] intent lookup failed', e.message);
   }
 
-  try {
-    await req.db.query(
-      `INSERT INTO download_grants (user_id, intent_id, slug, os, version, plan, client_ip, user_agent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [userId, intent?.id || null, slug, os, version,
-        check.ent?.plan || null, clientIp, String(req.headers['user-agent'] || '').slice(0, 512)],
-    );
-  } catch (e) {
-    console.error('[Downloads] failed to audit grant', e.message);
-  }
+  await auditGrant(req, {
+    userId, intentId: intent?.id, slug, os, version, plan: check.ent?.plan,
+  });
 
   if (intent) {
     /* Fulfilment is the funnel's terminal event and the only one that means the
@@ -375,10 +408,19 @@ updateGrantRouter.get('/:slug/grant', async (req, res) => {
     return res.status(404).json({ error: { code: 'NO_ASSET', message: `No ${os} build for ${slug} ${release.version}` } });
   }
 
+  /* Same bound as the download path — this mints the same authority, so it gets
+   * the same limit and the same audit row. */
+  const capped = await enforceGrantCap(req, userId);
+  if (capped) return res.status(429).json(capped);
+
   /* Bound to the RESOLVED version, never to the empty "latest". An updater that
    * held a latest-shaped grant across a release would silently start pointing at
    * different bytes than the ones it decided to install. */
   const grant = mintDownloadGrant({ userId, slug, os, version: release.version });
+
+  await auditGrant(req, {
+    userId, slug, os, version: release.version, plan: check.ent?.plan || null,
+  });
   return res.json({
     version: release.version,
     channel: release.channel || 'stable',

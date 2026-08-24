@@ -325,21 +325,26 @@ test('the funnel is mounted user-AWARE, before the authenticated grant router', 
 test('the grant mint writes an audit row', () => {
   /* A grant is an exercise of authority. Without this, "what did this account
    * actually take, and when?" has no answer at all. */
+  /* Assert the CALL, not inline position. This required the raw INSERT to appear
+   * after the entitlement check IN FILE ORDER, and went red the moment the audit
+   * was extracted into a helper shared by both minting paths — a gate failing
+   * against strictly better code. */
   const route = read('src/server/routes/productDownloadRoutes.js');
-  assert.ok(route.includes('INSERT INTO download_grants'), 'grants are no longer audited');
-  const mint = route.indexOf('const grant = mintDownloadGrant({ userId, slug, os, version });');
-  const audit = route.indexOf('INSERT INTO download_grants');
+  assert.ok(route.includes('INSERT INTO download_grants'), 'grants are no longer audited anywhere');
+  assert.ok(/async function auditGrant\(/.test(route), 'the shared audit helper is gone');
   const gate = route.indexOf('if (!check.allowed) return res.status(403)');
-  assert.ok(gate < audit, 'the audit records attempts rather than grants');
-  assert.ok(mint > -1, 'the mint moved — re-verify the audit still follows the entitlement check');
+  const mint = route.indexOf('const grant = mintDownloadGrant({ userId, slug, os, version });');
+  assert.ok(gate > -1 && mint > -1, 'the mint path changed shape — re-verify the ordering');
+  assert.ok(gate < mint, 'the grant is minted before the entitlement is checked');
 });
 
 test('the audit cannot refuse a legitimate download', () => {
   /* It is a log, not a second gate. */
   const route = read('src/server/routes/productDownloadRoutes.js');
-  const a = route.indexOf('INSERT INTO download_grants');
-  const before = route.slice(Math.max(0, a - 400), a);
-  assert.ok(before.includes('try {'), 'a failing audit write now blocks an authorised download');
+  /* The helper, wherever it lives. */
+  const h = route.slice(route.indexOf('async function auditGrant('));
+  assert.ok(/try \{/.test(h.slice(0, 900)) && /catch/.test(h.slice(0, 900)),
+    'a failing audit write now blocks an authorised download');
 });
 
 test('os aliases normalise consistently', () => {
