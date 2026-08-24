@@ -156,12 +156,19 @@ try {
       check(Boolean(cta && cta.includes('/auth')), `the CTA leads to /auth (${cta || 'none'})`);
     }
 
+    /* 🔴 Snapshot BEFORE the deliberate 404 below. The unknown-token navigation
+     * is SUPPOSED to produce a 404, and letting it into the error tally makes
+     * this check assert that a correct refusal never happens — a harness that
+     * fails on the behaviour it is verifying. */
+    const errorsBeforeDeliberate404 = errors.length;
+
     /* An expired/unknown token must be a clear message, never a blank page. */
     await page.goto(`${BASE}/download/resume?i=definitelynotarealtoken`, { waitUntil: 'networkidle2', timeout: 45000 });
     const dead = await page.evaluate(() => document.body.innerText);
     check(/expired|went wrong/i.test(dead), 'an unknown token renders an honest message, not a blank page');
 
-    check(errors.length === 0, `no console errors on the resume page${errors.length ? ` (${errors[0].slice(0, 90)})` : ''}`);
+    check(errorsBeforeDeliberate404 === 0,
+      `no console errors on a VALID resume${errorsBeforeDeliberate404 ? ` (${errors[0].slice(0, 90)})` : ''}`);
     await page.close();
   }
 
