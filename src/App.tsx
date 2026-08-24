@@ -106,9 +106,7 @@ function App() {
           {/* Standalone Chat Interface - Full viewport */}
           <Route path="/" element={
             <ProtectedRoute>
-              <div className="w-full h-screen bg-[#0a0a0b]">
-                <MultiChatContainer isStandalone={true} />
-              </div>
+              <ChatApp />
             </ProtectedRoute>
           } />
 
@@ -250,8 +248,12 @@ function App() {
             <Route path="/c/:token" element={<SharedChatView />} />
             <Route path="/share/:token" element={<SharedChatView />} />
 
-            {/* /chat -> the overview chat */}
-            <Route path="/chat" element={<Navigate to="/overview/chat/llm" replace />} />
+            {/* /chat -> standalone full-viewport ChatApp with live artifacts and streaming */}
+            <Route path="/chat" element={
+              <ProtectedRoute>
+                <ChatApp />
+              </ProtectedRoute>
+            } />
 
             {/* Protected Routes - Only accessible after authentication */}
             <Route path="/overview/*" element={

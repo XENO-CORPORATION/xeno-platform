@@ -287,7 +287,7 @@ const OverviewContent: React.FC = () => {
             <Route path="train/lora" element={<LoRaImageTrainComponent />} />
             <Route path="train/lora-video" element={<LoRaVideoTrainComponent />} />
             <Route path="train/llm" element={<TextLLMTrainComponent />} />
-            <Route path="chat/llm" element={<MultiChatContainer />} />
+            <Route path="chat/llm" element={<ChatApp />} />
             <Route path="chat/artifacts" element={<ChatArtifactsPage />} />
             <Route path="chat/artifacts/:artifactId" element={<ChatArtifactsPage />} />
             <Route path="chat/customize" element={<ChatCustomizePage />} />

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 /* Lazy-loaded real apps — mounted only when a hero panel is launched */
-const ChatApp = lazy(() => import('../playground/Chat/MultiChatContainer'));
+const ChatApp = lazy(() => import('../../features/chat').then(m => ({ default: m.ChatApp })));
 const ImageApp = lazy(() => import('../playground/Generation/ImageGenerationInterface2'));
 const StudioApp = lazy(() => import('../playground/Studio/ImageStudio'));
 
