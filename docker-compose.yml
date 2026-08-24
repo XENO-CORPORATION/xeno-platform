@@ -165,6 +165,49 @@ services:
       - AUTH_FRONTEND_URL=${AUTH_FRONTEND_URL}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN}
       - XENO_FLOW_URL=http://host.docker.internal:8090
+      # ── Billing / Stripe ─────────────────────────────────────────────
+      # 🔴 DECLARED HERE ON PURPOSE, all via ${VAR:-} so an unset one is empty
+      # rather than a compose error. On 2026-08-24 this file was overwritten from
+      # the repo and four box-only values were destroyed — signup closed for
+      # everyone, forum email stopped, extension CORS broke, outbound mail died.
+      # The durable fix is that VALUES live in the box's .env and NAMES live
+      # here, so an overwrite can no longer erase a setting. Keep it that way:
+      # never paste a literal secret into this file.
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_AUTOMATIC_TAX=${STRIPE_AUTOMATIC_TAX:-}
+      # What the customer sees on their bank statement. An unrecognised line is
+      # the most common cause of a "what is this?" chargeback.
+      - STRIPE_STATEMENT_DESCRIPTOR=${STRIPE_STATEMENT_DESCRIPTOR:-}
+      - BILLING_APP_URL=${BILLING_APP_URL:-}
+      - BILLING_CURRENCY=${BILLING_CURRENCY:-}
+      # Where dispute notifications go. Disputes are handled either way, but
+      # Stripe sets a DEADLINE for evidence and an unanswered dispute is lost by
+      # default. Falls back to billing@ — fine only if somebody reads it.
+      - DISPUTE_ALERT_EMAIL=${DISPUTE_ALERT_EMAIL:-}
+      - STRIPE_PRICE_PRO_MONTHLY=${STRIPE_PRICE_PRO_MONTHLY:-}
+      - STRIPE_PRICE_PRO_ANNUAL=${STRIPE_PRICE_PRO_ANNUAL:-}
+      - STRIPE_PRICE_STUDIO_MONTHLY=${STRIPE_PRICE_STUDIO_MONTHLY:-}
+      - STRIPE_PRICE_TEAM_MONTHLY=${STRIPE_PRICE_TEAM_MONTHLY:-}
+      - STRIPE_PRICE_TEAM_SEAT_MONTHLY=${STRIPE_PRICE_TEAM_SEAT_MONTHLY:-}
+      - STRIPE_PRICE_TEAM_SEAT_ANNUAL=${STRIPE_PRICE_TEAM_SEAT_ANNUAL:-}
+      - STRIPE_PRICE_EVERYTHING_MONTHLY=${STRIPE_PRICE_EVERYTHING_MONTHLY:-}
+      - STRIPE_PRICE_EVERYTHING_ANNUAL=${STRIPE_PRICE_EVERYTHING_ANNUAL:-}
+      - STRIPE_PRICE_CREDITS_SMALL=${STRIPE_PRICE_CREDITS_SMALL:-}
+      - STRIPE_PRICE_CREDITS_MEDIUM=${STRIPE_PRICE_CREDITS_MEDIUM:-}
+      - STRIPE_PRICE_CREDITS_LARGE=${STRIPE_PRICE_CREDITS_LARGE:-}
+      # ── Evidence retention ───────────────────────────────────────────
+      # 🔴 Keys the one-way handle that lets consent evidence survive account
+      # deletion (GDPR Art. 17(3)(e)). Unset, it falls back to JWT_SECRET — which
+      # works until JWT_SECRET is rotated for an unrelated reason, silently
+      # orphaning every consent record made before it. Set this BEFORE the first
+      # sale; retiring a key later means listing the old value in
+      # SUBJECT_HASH_SECRET_PREVIOUS (comma-separated) or matching stops working.
+      - SUBJECT_HASH_SECRET=${SUBJECT_HASH_SECRET:-}
+      - SUBJECT_HASH_SECRET_PREVIOUS=${SUBJECT_HASH_SECRET_PREVIOUS:-}
+      # Per-account cap on download-grant minting (default 60/hour).
+      - GRANT_HOURLY_CAP=${GRANT_HOURLY_CAP:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

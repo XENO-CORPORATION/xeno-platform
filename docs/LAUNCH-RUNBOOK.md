@@ -176,8 +176,21 @@ changing. Values now live in the box's `.env` and compose reads them via
 ```
 STRIPE_SECRET_KEY  STRIPE_PUBLISHABLE_KEY  STRIPE_WEBHOOK_SECRET
 STRIPE_AUTOMATIC_TAX=true  BILLING_APP_URL  BILLING_CURRENCY=eur
+STRIPE_STATEMENT_DESCRIPTOR=XENOSTUDIO  DISPUTE_ALERT_EMAIL=...
+SUBJECT_HASH_SECRET=<32+ random bytes>
 + the STRIPE_PRICE_* set
 ```
+
+Three of those are new and each exists for a reason that only shows up later:
+
+| Variable | If you skip it |
+|---|---|
+| `STRIPE_STATEMENT_DESCRIPTOR` | the charge appears on the bank statement under whatever Stripe defaults to. An unrecognised line item is the single most common cause of a "I don't know what this is" chargeback, and a chargeback costs the fee plus the disputed amount |
+| `DISPUTE_ALERT_EMAIL` | disputes are still handled, but nobody is told. Stripe gives a **deadline** to submit evidence and a dispute nobody answers is lost by default. Falls back to `billing@`, which is fine only if somebody reads it |
+| `SUBJECT_HASH_SECRET` | evidence handles fall back to being keyed by `JWT_SECRET`. That works — until `JWT_SECRET` is rotated for an unrelated security reason, which silently orphans every consent record made before it. **Set it before the first sale**; afterwards, retiring a key means listing the old one in `SUBJECT_HASH_SECRET_PREVIOUS` or the evidence stops matching |
+
+🔴 `SUBJECT_HASH_SECRET` is the one to do now rather than later, because the cost
+of getting it wrong grows with every sale. Today it orphans an empty table.
 
 Then, **inside the container**:
 
@@ -207,10 +220,21 @@ and the charge agree perfectly and both disagree with the number you chose.
 - [ ] cancel → row goes `free` / `canceled` → **the same download is refused again**
 - [ ] `4000 0000 0000 0341` (fails after attach) → `past_due`, **download still works**
 - [ ] buy **Team** on a workspace → a workspace *member* gets `canDownload`
+- [ ] the test charge shows your **statement descriptor**, not a Stripe default
+- [ ] 🔴 **delete the test account, then run
+      `node scripts/compliance-evidence.mjs consent <that email>`** — the consent
+      record must still be found, marked `account_deleted`
 
-🔴 The last three are the point. The gate has to **open and close**, dunning must
+🔴 Most of these are the point. The gate has to **open and close**, dunning must
 not evict a paying customer over a card that will retry, and Team must license
 the people it was bought for.
+
+🔴 **The deletion check is not a formality.** `checkout_consents` was
+`ON DELETE CASCADE` while account deletion is self-service, so a customer could
+buy, download, delete their account and dispute the charge — destroying our proof
+they agreed, on their own initiative, at exactly the moment it mattered. It is
+fixed and gated, but this is the one step that proves it end to end on the real
+box rather than in a test.
 
 ---
 
@@ -228,6 +252,29 @@ that exercises the clawback path too.
 The site is `noindex` sitewide and 198 of 218 accounts are suspended. Both are
 deliberate. Lifting them is a growth decision, not a launch blocker — and it is
 the right last step, because it is the only one that is hard to undo.
+
+---
+
+## Answering an auditor, a dispute, or a data request
+
+Not a step — the thing you will need afterwards, written down while it is fresh.
+
+```bash
+node scripts/compliance-evidence.mjs retention              # what we keep, how long, why
+node scripts/compliance-evidence.mjs consent   <email>      # did this person waive withdrawal
+node scripts/compliance-evidence.mjs downloads <email>      # which binaries they obtained
+```
+
+All three are read-only. `retention` needs no database and its output is meant to
+be pasted into a reply. The other two work **after** the account is deleted,
+which is when they are actually asked — matching is by a keyed one-way handle,
+never by joining `users`, because that join is empty exactly when the answer
+matters.
+
+⚠️ "No consent record" is **not** proof nobody consented. Records written before
+2026-08-24 carry no handle, and a handle made under a retired key that is not
+listed in `SUBJECT_HASH_SECRET_PREVIOUS` cannot be matched. The tool says so
+rather than letting you read absence as evidence.
 
 ---
 

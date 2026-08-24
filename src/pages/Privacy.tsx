@@ -196,10 +196,78 @@ const Privacy: React.FC = () => {
               <li>Account data is retained while your account is active</li>
               <li>OAuth tokens are deleted immediately when you disconnect a platform</li>
               <li>Content you delete is removed from our active systems within 30 days</li>
-              <li>Upon account deletion, all personal data is removed within 30 days, except where
-                  we are required to retain it for legal or legitimate business purposes</li>
+              <li>Upon account deletion, your personal data is removed within 30 days, apart from
+                  the two narrow exceptions set out below</li>
               <li>Anonymous, aggregated data may be retained for analytics purposes</li>
             </ul>
+
+            <h3 className="text-lg font-semibold mt-6 mb-3 text-white/90">Specific periods</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left text-white/60">
+                <thead className="text-white/80 border-b border-white/10">
+                  <tr>
+                    <th className="py-2 pr-4 font-medium">What</th>
+                    <th className="py-2 pr-4 font-medium">How long</th>
+                    <th className="py-2 font-medium">Why</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  <tr>
+                    <td className="py-2 pr-4">Download records (which app, which version, when)</td>
+                    <td className="py-2 pr-4">400 days</td>
+                    <td className="py-2">Security and licence auditing. Payment disputes and
+                        licence questions routinely arrive more than a year later.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-4">Download session records</td>
+                    <td className="py-2 pr-4">180 days</td>
+                    <td className="py-2">To resume an interrupted download or purchase, and to
+                        understand where the process fails.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-4">Records of outdated app versions being refused</td>
+                    <td className="py-2 pr-4">90 days</td>
+                    <td className="py-2">Operational only — to see how many people a minimum
+                        version requirement affects.</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-4">Purchase acknowledgements (see below)</td>
+                    <td className="py-2 pr-4">Retained</td>
+                    <td className="py-2">Evidence of the agreement you gave at checkout.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3 className="text-lg font-semibold mt-6 mb-3 text-white/90">
+              What survives account deletion, and why
+            </h3>
+            <p className="text-white/60 leading-relaxed mb-4">
+              Two things are kept after you delete your account. We are telling you plainly rather
+              than relying on a general clause about &ldquo;legitimate business purposes&rdquo;:
+            </p>
+            <ul className="list-disc list-inside text-white/60 space-y-2 mb-4">
+              <li><strong className="text-white/80">Your checkout acknowledgement.</strong> Before
+                  a purchase you confirm that you want immediate access and that you understand
+                  this ends your 14-day right of withdrawal. We keep that record, its exact
+                  wording and its timestamp.</li>
+              <li><strong className="text-white/80">Your download record.</strong> Which
+                  application and version was obtained, and when, for up to 400 days.</li>
+            </ul>
+            <p className="text-white/60 leading-relaxed mb-4">
+              Both are kept under Article 17(3)(e) GDPR, which permits retention where it is
+              necessary for the establishment, exercise or defence of legal claims. Both are the
+              evidence in a payment dispute, and a dispute is usually raised after an account has
+              been closed &mdash; so deleting them on request would mean deleting them at exactly
+              the moment they are needed.
+            </p>
+            <p className="text-white/60 leading-relaxed">
+              <strong className="text-white/80">Your email address is not kept.</strong> It is
+              replaced by a keyed one-way code that cannot be turned back into an address. Its only
+              use is to answer a question you yourself raise: if you contact us about a charge, we
+              can derive the same code from the address you write from and locate the record. It
+              cannot be used to identify you in any other context, and we cannot reverse it.
+            </p>
           </section>
 
           {/* User Rights */}
