@@ -1885,3 +1885,33 @@ div:has([data-composer-reveal][data-reveal-open="true"]) > [data-chat-scroll-to-
     opacity: 1;
   }
 }
+
+/* ── Chat Empty State Hero Emergence ──────────────────────────────────────────
+   Rises smoothly upward from behind the composer into viewport on mode switch */
+.chat-hero-text-enter {
+  animation: chatHeroTextEmergence 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.chat-hero-subtitle-enter {
+  animation: chatHeroTextEmergence 400ms cubic-bezier(0.16, 1, 0.3, 1) 60ms both;
+}
+
+@keyframes chatHeroTextEmergence {
+  0% {
+    opacity: 0;
+    transform: translateY(22px) scale(0.97);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-hero-text-enter,
+  .chat-hero-subtitle-enter {
+    animation: none;
+  }
+}

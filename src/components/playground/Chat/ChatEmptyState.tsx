@@ -1001,17 +1001,22 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       className="relative flex w-full flex-col items-center gap-12 overflow-visible [container-type:inline-size] md:gap-14"
     >
       <div className="flex flex-col items-center">
-        <h1
-          id="chat-empty-state-title"
-          className="-translate-y-6 text-center font-display text-3xl font-semibold leading-[1.1] tracking-[-0.01em] text-[var(--chat-text)] sm:text-[2.5rem]"
+        <div
+          key={isTemporaryChat ? 'temporary-hero' : 'standard-hero'}
+          className="chat-hero-text-enter flex flex-col items-center select-none"
         >
-          {isTemporaryChat ? 'Temporary Chat' : 'What would you like to explore?'}
-        </h1>
-        {isTemporaryChat && (
-          <p className="-mt-4 -translate-y-4 text-center text-xs text-[var(--chat-muted)] max-w-md">
-            This chat won't appear in your history, use memories, or train models.
-          </p>
-        )}
+          <h1
+            id="chat-empty-state-title"
+            className="-translate-y-6 text-center font-display text-3xl font-semibold leading-[1.1] tracking-[-0.01em] text-[var(--chat-text)] sm:text-[2.5rem]"
+          >
+            {isTemporaryChat ? 'Temporary Chat' : 'What would you like to explore?'}
+          </h1>
+          {isTemporaryChat && (
+            <p className="-translate-y-2 text-center text-xs text-[var(--chat-muted)] max-w-md chat-hero-subtitle-enter">
+              This chat won't appear in your history, use memories, or train models.
+            </p>
+          )}
+        </div>
       </div>
 
       {composerReveal}
