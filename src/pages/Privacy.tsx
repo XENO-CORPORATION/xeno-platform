@@ -220,7 +220,7 @@ const Privacy: React.FC = () => {
                   </tr>
                   <tr>
                     <td className="py-2 pr-4">Download session records</td>
-                    <td className="py-2 pr-4">180 days</td>
+                    <td className="py-2 pr-4">210 days</td>
                     <td className="py-2">To resume an interrupted download or purchase, and to
                         understand where the process fails.</td>
                   </tr>

@@ -62,7 +62,8 @@ function showRetention() {
       sweeper: `${p.days} days`,
       /* 🔴 Not "kept indefinitely". It is deleted — by the funnel sweeper, with
        * its parent row — and saying otherwise overstates how long we hold it. */
-      cascade: 'deleted with its parent record (see download_intents)',
+      cascade: `${p.days} days — deleted with its parent record (download_intents)`,
+      elsewhere: `${p.days} days — deleted by another sweeper, not this one`,
       never: 'retained — no automatic deletion',
     }[p.prunedBy] || 'UNKNOWN — a policy with no prunedBy is a gap, not a period';
     console.log(`  ${p.table}`);

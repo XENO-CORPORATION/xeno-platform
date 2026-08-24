@@ -42,7 +42,14 @@ const DAY = 86_400_000;
  * summary did — is a false statement about how long we hold personal data, made
  * to the one audience that must not be told a false one.
  *
- * @typedef {{table: string, column: string, days: number|null, prunedBy: 'sweeper'|'cascade'|'never', why: string}} Policy
+ * 🔴 `days` and `documentedDays` are deliberately separate, and conflating them
+ * is how a public retention claim went wrong. `days` is what THIS sweeper
+ * deletes after — non-null ONLY when we sweep, so two clocks can never disagree
+ * about the same rows. `documentedDays` is how long the data actually lives when
+ * somebody else does the deleting. The auditor answer needs the second; the
+ * sweeper must only ever read the first.
+ *
+ * @typedef {{table: string, column: string, days: number|null, documentedDays?: number, prunedBy: 'sweeper'|'cascade'|'elsewhere'|'never', why: string}} Policy
  */
 
 /** @type {Policy[]} */
@@ -70,16 +77,35 @@ export const POLICIES = [
       + 'outlives a year deliberately.',
   },
   {
+    table: 'download_intents',
+    column: 'expires_at',
+    prunedBy: 'elsewhere',
+    days: null,
+    documentedDays: 210,
+    /* 🔴 Absent from this file entirely until 2026-08-24, while its CHILD was
+     * listed — so the auditor answer described the cascade and not the thing
+     * that causes it. The real period is also not the number in that sweeper:
+     * rows get a 30-day TTL and are deleted 180 days AFTER expiry, so they live
+     * 210 days. Reading the `INTERVAL '180 days'` literal as the retention
+     * period understates it by a month — and that understatement reached the
+     * Privacy page before this row existed. */
+    why: 'swept by downloadFunnel.sweepExpiredIntents. A 30-day TTL, then deleted '
+      + '180 days after expiry — 210 days of life, not 180. Kept to resume an '
+      + 'interrupted purchase and to see where the funnel fails.',
+  },
+  {
     table: 'download_intent_events',
     column: 'at',
     prunedBy: 'cascade',
     days: null,
+    documentedDays: 210,
     /* Not pruned HERE on purpose. Events cascade when their intent is deleted by
      * the funnel sweeper, so a second policy on the same rows would be two
      * clocks disagreeing about the same data — and the one that fires first
      * would silently win. */
-    why: 'cascades with download_intents, which the funnel sweeper prunes at 180 '
-      + 'days. A second clock on the same rows would be two policies disagreeing.',
+    why: 'cascades with download_intents, whose rows live 210 days. A second clock '
+      + 'on the same rows would be two policies disagreeing, and the earlier one '
+      + 'would silently win.',
   },
   {
     table: 'checkout_consents',
@@ -153,7 +179,10 @@ export function describeRetention() {
     const days = daysFor(p);
     return {
       table: p.table,
-      days,
+      /* The period a person is entitled to be told, whoever enforces it. */
+      days: days ?? p.documentedDays ?? null,
+      /* What the sweeper in THIS file acts on — null unless we do the deleting. */
+      enforcedHere: days,
       /* Who deletes it, not merely whether WE do. See the Policy typedef. */
       prunedBy: p.prunedBy,
       pruned: p.prunedBy !== 'never',
