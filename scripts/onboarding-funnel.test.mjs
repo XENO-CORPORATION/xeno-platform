@@ -122,9 +122,27 @@ test('next= is allowlisted — an open redirect is refused', () => {
   assert.equal(isAllowedOnboardingNext('javascript:alert(1)'), false);
 });
 
-test('Skip for now writes skipped — otherwise the gate is a trap', () => {
-  assert.match(page, /skipped:\s*true/);
-  assert.match(page, /Skip for now/);
+test('the plan step FINISHES without a purchase — otherwise the gate is a trap', () => {
+  // Skip was removed by request (scripts/keyboard-flow.test.mjs holds that
+  // line). Continue is the only way forward, so the anti-trap property moved:
+  // the LAST step's Continue must call finish() — which writes completed and
+  // leaves — and must never be disabled. No plan is purchasable while Stripe
+  // is unconfigured, so a plan step that demanded one would strand everybody.
+  // Scoped to finish(). `completed: true` also appears in startCheckout(), so
+  // a file-wide match would stay green with finish() gutted. Bounded by the
+  // next declaration rather than a multi-line regex — that pattern is one
+  // escape away from silently matching nothing.
+  const fStart = page.indexOf('const finish = async');
+  assert.ok(fStart > -1, 'finish() is gone — re-verify the flow still completes');
+  const fEnd = page.indexOf('const back', fStart);
+  assert.ok(fEnd > fStart, 'cannot bound finish() — re-verify it records completion');
+  const finishBody = page.slice(fStart, fEnd);
+  assert.match(finishBody, /completed:\s*true/, 'finish() no longer records completion');
+
+  const planNav = page.match(/<Nav onBack=\{\(\) => back\(2\)\}[^/]*\/>/);
+  assert.ok(planNav, 'the plan step Nav changed shape — re-verify it still finishes');
+  assert.match(planNav[0], /onNext=\{\(\) => finish\(\)\}/, 'the last step no longer finishes');
+  assert.doesNotMatch(planNav[0], /nextDisabled/, 'the plan step Continue can be disabled — that is the trap');
 });
 
 test('an https next leaves the document — navigate() cannot open the portal', () => {

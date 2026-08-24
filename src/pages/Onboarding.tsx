@@ -405,11 +405,6 @@ const Onboarding: React.FC = () => {
     leaveTo(productPath);
   };
 
-  const skip = async () => {
-    await save({ skipped: true }, { wait: true });
-    leaveTo('/overview');
-  };
-
   /**
    * Go BACK, clearing the answer of the step being returned to.
    *
@@ -459,10 +454,10 @@ const Onboarding: React.FC = () => {
    * meant to mirror.
    *
    * Steps 1 and 3 return null on purpose. The role step has no Continue —
-   * choosing IS advancing — and on the plan step the only forward actions are
-   * "Skip for now" and starting a CHECKOUT. Binding Enter to either would be a
-   * keystroke that either dismisses a paywall or opens a payment flow, and
-   * neither is something to do by accident.
+   * choosing IS advancing — and on the plan step the forward actions are
+   * finishing WITHOUT a plan and starting a CHECKOUT. Binding Enter to either
+   * would be a keystroke that either leaves the paywall behind or opens a
+   * payment flow, and neither is something to do by accident.
    */
   const primaryAction = (): (() => void) | null => {
     if (step === 0) return () => { save(answers); setStep(1); };
@@ -758,7 +753,7 @@ const Onboarding: React.FC = () => {
                   </label>
                 </div>
 
-                <Nav onNext={() => primaryAction()?.()} onSkip={skip} nextLabel="Continue" />
+                <Nav onNext={() => primaryAction()?.()} nextLabel="Continue" />
               </>
             )}
 
@@ -773,7 +768,7 @@ const Onboarding: React.FC = () => {
                 {/* Four across on a wide screen, two on a laptop. The cards
                     carry a header and a body now, so at two columns eight of
                     them run past the fold — and a step that scrolls hides the
-                    Back and Skip a user is most likely to want here. */}
+                    Back and Continue a user is most likely to want here. */}
                 {/* One tab stop, arrows within. Without a roving tabindex,
                     crossing this question costs eight Tab presses — a cost a
                     keyboard user pays on every visit while a mouse user pays
@@ -802,7 +797,6 @@ const Onboarding: React.FC = () => {
                 <Nav
                   onBack={() => back(0)}
                   onNext={() => primaryAction()?.()}
-                  onSkip={skip}
                   nextLabel="Continue"
                   nextDisabled={parseRoles(answers.role).length === 0}
                 />
@@ -835,7 +829,6 @@ const Onboarding: React.FC = () => {
                 <Nav
                   onBack={() => back(1)}
                   onNext={() => primaryAction()?.()}
-                  onSkip={skip}
                   nextLabel="Continue"
                   nextDisabled={!answers.workspace}
                   hidden={everythingHover}
@@ -1004,14 +997,14 @@ const Onboarding: React.FC = () => {
                   </div>
                 )}
 
-                {/* No Skip here either — but the flow still has to END somewhere.
+                {/* No Skip anywhere — but the flow still has to END somewhere.
                     Continue leads into the workspace WITHOUT a plan, and that
                     is not a hole in the paywall: the gate is server-side on
                     `canUse`, so an unpaid account can look and cannot run.
                     Trapping people on this screen would strand every single
                     one of them today, because no plan is purchasable until
                     Stripe is configured. */}
-                <Nav onBack={() => back(2)} onNext={() => finish()} onSkip={skip} nextLabel="Continue" />
+                <Nav onBack={() => back(2)} onNext={() => finish()} nextLabel="Continue" />
               </>
             )}
 
@@ -1032,19 +1025,20 @@ const Onboarding: React.FC = () => {
  * The primary action is anchored FAR RIGHT and the quiet ones sit left. That
  * is the direction of travel in a left-to-right flow: forward belongs on the
  * leading edge, and "leave" belongs where you came from. It also puts real
- * distance between Continue and Skip, so the two are hard to confuse at speed
+ * distance between Continue and Back, so the two are hard to confuse at speed
  * — they sat side by side before, which is a misclick waiting to happen on the
  * one screen where a wrong click costs somebody their whole answer.
  *
- * Skip stays plain text. A skip styled to compete with the primary action is a
- * dark pattern in reverse.
+ * There is deliberately no Skip. Continue is the ONLY way forward, so there is
+ * never a second control racing it. Removed by request; the gate in
+ * scripts/keyboard-flow.test.mjs keeps it removed.
  */
 const Nav: React.FC<{
-  onBack?: () => void; onNext?: () => void; onSkip?: () => void;
+  onBack?: () => void; onNext?: () => void;
   nextLabel?: string; nextDisabled?: boolean;
   /** Drops the whole row away — used while the everything-bar is hovered. */
   hidden?: boolean;
-}> = ({ onBack, onNext, onSkip, nextLabel, nextDisabled, hidden }) => (
+}> = ({ onBack, onNext, nextLabel, nextDisabled, hidden }) => (
   /* Falls DOWN and out rather than fading. A row that merely fades is still
      occupying its space and still reads as present-but-greyed; falling out of
      the frame reads as making way. `pointer-events-none` while gone, so a
@@ -1055,7 +1049,6 @@ const Nav: React.FC<{
                 ${hidden ? 'pointer-events-none translate-y-3 opacity-0' : 'translate-y-0 opacity-100'}`}
   >
     {onBack && <TextButton onClick={onBack}>Back</TextButton>}
-    {onSkip && <TextButton onClick={onSkip}>Skip for now</TextButton>}
     {/* Pushes the primary action to the far edge whether or not the left-hand
         links are present — `justify-between` would collapse it to the left on
         a step that has neither. */}
