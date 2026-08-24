@@ -101,13 +101,35 @@ export type ListConnectorsInput = ListQueryInput & {
   status?: ConnectorStatus | 'all';
 };
 
+import { chatService } from '@/services/chatService';
+
 /**
  * Lists personas for the Customize table.
- * Mock: filter in memory. Backend: GET /api/chat/customize/personas
+ * Fetches from backend /api/chat/personas when authenticated, with local cache fallback.
  */
 export const listPersonas = async (
   input: ListQueryInput = {},
 ): Promise<ChatPersona[]> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      const serverPersonas = await chatService.getPersonas();
+      if (serverPersonas && Array.isArray(serverPersonas)) {
+        const mapped: ChatPersona[] = serverPersonas.map((p) => ({
+          id: p.id,
+          label: p.name || p.label || 'Untitled Persona',
+          summary: p.description || p.prompt.slice(0, 80),
+          prompt: p.prompt,
+          updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : Date.now(),
+        }));
+        // Merge into store
+        const existingIds = new Set(mapped.map((p) => p.id));
+        personasStore = [...mapped, ...personasStore.filter((p) => !existingIds.has(p.id))];
+      }
+    }
+  } catch (err) {
+    console.warn('[chatCustomize] Failed to fetch personas from backend:', err);
+  }
+
   const q = (input.query ?? '').trim().toLowerCase();
   let rows = [...personasStore];
   if (q) {

@@ -31,6 +31,8 @@ export type ShareLink = {
 
 export type SocialPlatform = 'linkedin' | 'x' | 'facebook' | 'reddit';
 
+import { chatService } from '@/services/chatService';
+
 /** Session-only store so Delete link works without a backend. */
 const mockLinksByConversation = new Map<string, ShareLink>();
 
@@ -43,11 +45,31 @@ const randomId = (): string => {
 
 /**
  * Creates (or replaces) a share link for a conversation snapshot.
- * Mock: unguessable-looking path, no server persistence.
+ * Tries server-side database share first, falling back to local link if offline/unauthenticated.
  */
 export const createShareLink = async (
   input: CreateShareLinkInput,
 ): Promise<ShareLink> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      const serverShare = await chatService.createShareLink(input.conversationId);
+      if (serverShare && serverShare.share_token) {
+        const link: ShareLink = {
+          id: serverShare.share_token,
+          url: serverShare.share_url || `https://share.xenostudio.ai/c/${serverShare.share_token}`,
+          visibility: input.visibility,
+          conversationId: input.conversationId,
+          messageCount: input.messageCount,
+          createdAt: Date.now(),
+        };
+        mockLinksByConversation.set(input.conversationId, link);
+        return link;
+      }
+    }
+  } catch (err) {
+    console.warn('[chatShare] Backend share link creation failed, using local link', err);
+  }
+
   const id = randomId();
   const link: ShareLink = {
     id,
@@ -65,6 +87,13 @@ export const getActiveShareLink = (conversationId: string): ShareLink | null =>
   mockLinksByConversation.get(conversationId) ?? null;
 
 export const deleteShareLink = async (conversationId: string): Promise<void> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      await chatService.revokeShareLinks(conversationId);
+    }
+  } catch (err) {
+    console.warn('[chatShare] Backend share revocation failed', err);
+  }
   mockLinksByConversation.delete(conversationId);
 };
 
