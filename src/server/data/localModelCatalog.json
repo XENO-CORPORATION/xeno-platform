@@ -32,6 +32,35 @@
       }
     },
     {
+      "id": "ornith-1.5-35b-a3b",
+      "name": "Ornith 1.5 35B A3B Q4_K_M",
+      "provider": "empero-ai",
+      "category": "llm",
+      "description": "High-capacity reasoning and code model for xeno-rt. 35B MoE architecture with A3B active routing, quantized to Q4_K_M.",
+      "size": "20.2 GB",
+      "sizeBytes": 21713462848,
+      "parameters": "35B",
+      "tags": [
+        "quality",
+        "reasoning",
+        "coding",
+        "local"
+      ],
+      "license": "Apache 2.0",
+      "installable": true,
+      "runtime": "xeno-rt-chat",
+      "installSpec": {
+        "source": "r2",
+        "artifactKey": "models/local-chat/ornith-1.5-35b-a3b/Ornith-1.5-35B-Q4_K_M.gguf",
+        "filename": "Ornith-1.5-35B-Q4_K_M.gguf",
+        "sizeBytes": 21713462848,
+        "sha256": "ca6ea26329c88b78ffd90a85163be2e746c2fafd1024f56db47e499f117f9a7f",
+        "expectedLocalIds": [
+          "Ornith-1.5-35B-Q4_K_M"
+        ]
+      }
+    },
+    {
       "id": "flux-schnell",
       "name": "FLUX.1 Schnell",
       "provider": "Black Forest Labs",
