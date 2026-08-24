@@ -12180,7 +12180,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
              transcript with no clock under every line until you go looking. Its row holds its height
              either way, so nothing moves. */
           .chat-message-bubble {
-            --xeno-message-max: 75%;
+            --xeno-message-max: 88%;
           }
           .chat-message-bubble .xeno-message-time {
             opacity: 0;
@@ -12929,10 +12929,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               display: none !important;
             }
             .chat-message-bubble {
-              --xeno-message-max: 90%;
+              --xeno-message-max: 96%;
             }
             .chat-message-editor {
-              max-width: 90% !important;
+              max-width: 96% !important;
             }
             .chat-input-container {
               padding: 0.75rem !important;
@@ -12969,10 +12969,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               margin-left: 0 !important;
             }
             .chat-message-bubble {
-              --xeno-message-max: 95%;
+              --xeno-message-max: 98%;
             }
             .chat-message-editor {
-              max-width: 95% !important;
+              max-width: 98% !important;
             }
             .chat-top-bar {
               padding-top: 0.375rem !important;
@@ -15440,7 +15440,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                            {isUser ? (
                                editingMessageId === message.id ? (
                                      <div
-                                         className="chat-message-editor flex w-full max-w-[90%] flex-col gap-2 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-[var(--chat-text)] md:max-w-[75%]"
+                                         className="chat-message-editor flex w-full max-w-[98%] flex-col gap-2 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-surface)] p-2 text-[var(--chat-text)] md:max-w-[88%]"
                                      >
                                          <div className="rounded-lg border border-[var(--chat-accent)]/70 bg-[var(--chat-canvas)]/40 px-2.5 py-2 transition-colors focus-within:border-[var(--chat-accent)] focus-within:ring-1 focus-within:ring-[var(--chat-accent)]/25">
                                          {/* Stays hand-written — bare inside a box it does not

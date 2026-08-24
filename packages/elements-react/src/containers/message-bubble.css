@@ -14,7 +14,7 @@
      usually a MEDIA QUERY — a bubble that reads well at 80% on a desktop column is cramped at 80% of
      a phone — and a breakpoint belongs in the product's stylesheet, not threaded through React state.
      Override it on the turn, on the transcript, or in an `@media` block; the default stands alone. */
-  --xeno-message-max: 80%;
+  --xeno-message-max: 88%;
 }
 
 /* Sides: user hugs the right rail, assistant the left. */

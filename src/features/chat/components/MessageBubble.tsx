@@ -115,7 +115,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     return (
       <div className="group flex flex-col items-end gap-1 py-3">
         {editing ? (
-          <div className="w-full max-w-[85%] rounded-2xl border border-[#ece7df]/40 bg-[#151515] p-2">
+          <div className="w-full max-w-[98%] md:max-w-[88%] rounded-2xl border border-[#ece7df]/40 bg-[#151515] p-2">
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -142,7 +142,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         ) : (
           <>
-            <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-[#1e1a24] px-4 py-2.5 text-[15px] leading-relaxed text-[#efeae2]">
+            <div className="max-w-[98%] md:max-w-[88%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-[#1e1a24] px-4 py-2.5 text-[15px] leading-relaxed text-[#efeae2]">
               {message.content}
             </div>
             <div className="flex items-center gap-0.5">
