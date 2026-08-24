@@ -9,6 +9,7 @@ import {
   listChatSkills,
   setChatSkillEnabled,
 } from './chatSkillsLibrary';
+import { chatService } from '@/services/chatService';
 
 export type ChatPersona = {
   id: string;
@@ -330,11 +331,33 @@ export const setPluginInstalled = async (
 };
 
 /** Backend: GET /api/chat/customize/memory */
-export const getMemorySettings = async (): Promise<MemorySettings> => ({
-  generateFromChats: memoryStore.generateFromChats,
-  entries: [...memoryStore.entries],
-  updatedAt: memoryStore.updatedAt,
-});
+export const getMemorySettings = async (): Promise<MemorySettings> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      const serverMemories = await chatService.getMemories();
+      if (Array.isArray(serverMemories)) {
+        const mappedEntries: MemoryEntry[] = serverMemories.map((m) => ({
+          id: m.id,
+          text: m.content,
+          updatedAt: m.updated_at ? new Date(m.updated_at).getTime() : Date.now(),
+        }));
+        memoryStore = {
+          ...memoryStore,
+          entries: mappedEntries,
+          updatedAt: Date.now(),
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[chatCustomize] Failed to get memories from backend:', err);
+  }
+
+  return {
+    generateFromChats: memoryStore.generateFromChats,
+    entries: [...memoryStore.entries],
+    updatedAt: memoryStore.updatedAt,
+  };
+};
 
 /** Backend: PUT /api/chat/customize/memory */
 export const setMemoryGenerateFromChats = async (
@@ -350,6 +373,14 @@ export const setMemoryGenerateFromChats = async (
 
 /** Backend: DELETE /api/chat/customize/memory/:id */
 export const deleteMemoryEntry = async (id: string): Promise<MemorySettings> => {
+  try {
+    if (chatService.isAuthenticated()) {
+      await chatService.deleteMemory(id);
+    }
+  } catch (err) {
+    console.warn('[chatCustomize] Failed to delete memory from backend:', err);
+  }
+
   memoryStore = {
     ...memoryStore,
     entries: memoryStore.entries.filter((entry) => entry.id !== id),
