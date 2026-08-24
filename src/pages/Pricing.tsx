@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import MarketingPage, { Section, Prose, CheckList } from '../components/marketing/MarketingPage';
-import { startCheckout, isAuthed, getLivePriceMap } from '../services/billingService';
+import { startCheckout, isAuthed, getLivePriceMap, getBillingAvailability, type BillingAvailability } from '../services/billingService';
 import {
   PRICING_TIERS,
   CREDIT_PACKS,
@@ -19,6 +19,15 @@ type LivePrice = { price: number; currency: string };
 function useCheckout() {
   const navigate = useNavigate();
   const [busyId, setBusyId] = React.useState<string | null>(null);
+  /* 'unknown' until the config answers, and 'unknown' behaves exactly like
+   * today — the button stays live and the server remains the authority. Only a
+   * definite 'disabled' changes what the page says. */
+  const [availability, setAvailability] = React.useState<BillingAvailability>('unknown');
+  React.useEffect(() => {
+    let on = true;
+    getBillingAvailability().then((v) => { if (on) setAvailability(v); }).catch(() => {});
+    return () => { on = false; };
+  }, []);
   const start = React.useCallback(
     async (itemId: string) => {
       if (!isAuthed()) {
@@ -35,7 +44,7 @@ function useCheckout() {
     },
     [navigate],
   );
-  return { start, busyId };
+  return { start, busyId, availability };
 }
 
 const ctaClass = (featured?: boolean) =>
@@ -47,9 +56,27 @@ const ctaClass = (featured?: boolean) =>
 
 /** A plan's call-to-action: one-click Stripe Checkout for billing plans (Pro/Team),
  *  a plain link for Free (download) / Enterprise (contact). */
+/* 🔴 A refused download sends people here. If checkout is off, the honest answer
+ * is to say so — not to render a Buy button whose only outcome is a red toast
+ * reading "Billing is not configured on this server", which blames our
+ * infrastructure for a decision we made and leaves the visitor with nowhere to
+ * go. The download gate refuses, points at /pricing, and /pricing has to be a
+ * real destination or the whole loop is closed. */
 const PlanCTA: React.FC<{ plan: PricingTier; checkout: ReturnType<typeof useCheckout> }> = ({ plan, checkout }) => {
   if (plan.itemId) {
     const busy = checkout.busyId === plan.itemId;
+    if (checkout.availability === 'disabled') {
+      return (
+        <div className="mt-6">
+          <div className="w-full cursor-not-allowed rounded-[8px] border border-white/[0.09] px-4 py-2.5 text-center text-[13px] font-semibold text-[#69635b]">
+            Not yet purchasable
+          </div>
+          <p className="mt-2 text-[11px] leading-[1.5] text-[#69635b]">
+            Plans aren't on sale yet. Create a free account and you'll be first to know when they open.
+          </p>
+        </div>
+      );
+    }
     return (
       <button
         type="button"
@@ -75,6 +102,7 @@ const CreditPackCard: React.FC<{
   checkout: ReturnType<typeof useCheckout>;
 }> = ({ pack, live, checkout }) => {
   const busy = checkout.busyId === pack.id;
+  const off = checkout.availability === 'disabled';
   const price = formatPrice(live ? live.price : pack.price, live ? live.currency : pack.currency);
   return (
     <div className="flex items-center justify-between gap-3 rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] px-5 py-4">
@@ -82,7 +110,7 @@ const CreditPackCard: React.FC<{
         <div className="flex items-center gap-2">
           <span className="text-[13.5px] font-semibold text-[#ece7df]">{pack.label}</span>
           {pack.badge && (
-            <span className="rounded-full border border-[#a760ff]/40 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[#a760ff]">
+            <span className="rounded-full border border-white/25 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[#ece7df]">
               {pack.badge}
             </span>
           )}
@@ -94,10 +122,11 @@ const CreditPackCard: React.FC<{
         <button
           type="button"
           onClick={() => checkout.start(pack.id)}
-          disabled={busy}
+          disabled={off || busy}
+          title={off ? "Credit packs aren't on sale yet" : undefined}
           className="rounded-[8px] border border-white/[0.12] px-3 py-1.5 text-[12px] font-semibold text-[#ece7df] transition-colors hover:border-white/[0.22] disabled:opacity-60"
         >
-          {busy ? '…' : 'Buy'}
+          {off ? '—' : busy ? '…' : 'Buy'}
         </button>
       </div>
     </div>
@@ -125,15 +154,16 @@ const Pricing: React.FC = () => {
   return (
   <MarketingPage
     eyebrow="PRICING"
-    title="The tools are free. The platform is the upgrade."
-    subtitle="Every XENO app is free and fully usable on its own — local editing, local files, clean full-resolution export. Pro and Team connect those tools into one platform: cloud sync, cross-app workflows, agents, and collaboration."
+    title="One plan. Every app, and the platform they run on."
+    subtitle="A XENO account is free and real — the in-house API, credits, and the whole platform surface. Installing the apps takes a plan, and one plan covers all of them plus what connects them: cloud sync, cross-app workflows, agents, and collaboration."
     updated="July 2026"
   >
     <Section>
       <div className="mb-6 rounded-[12px] border border-white/[0.09] bg-[#0d0d0d] px-5 py-4 text-[13px] leading-[1.6] text-[#b6afa5]">
-        <span className="font-semibold text-[#ece7df]">Free is a real, standalone tool — not a trial.</span>{' '}
-        Every XENO app runs on your machine with clean, full-resolution export. Paid plans don't take
-        limits off the tool — they connect your tools into one platform: sync, agents and collaboration.
+        <span className="font-semibold text-[#ece7df]">A free account is real — but the apps need a plan.</span>{' '}
+        Free gives you the account, the in-house API and credits to use it. Downloading and running the
+        desktop apps requires a paid plan, and one plan covers every app plus the platform around them:
+        sync, cross-app workflows, agents and collaboration. No per-app pricing, ever.
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -141,11 +171,11 @@ const Pricing: React.FC = () => {
           <div
             key={plan.name}
             className={`flex flex-col rounded-[14px] border bg-[#0d0d0d] p-6 ${
-              plan.featured ? 'border-[#a760ff]/40' : 'border-white/[0.07]'
+              plan.featured ? 'border-white/30' : 'border-white/[0.07]'
             }`}
           >
             {plan.featured && (
-              <div className="mb-3 inline-flex w-fit rounded-full border border-[#a760ff]/40 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#a760ff]">
+              <div className="mb-3 inline-flex w-fit rounded-full border border-white/25 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#ece7df]">
                 Most popular
               </div>
             )}
@@ -169,8 +199,9 @@ const Pricing: React.FC = () => {
 
     <Section title="Tool vs platform — where the line actually is">
       <p className="mb-5 text-[14px] leading-[1.75] text-[#9b948a]">
-        The difference isn't crippled features or export limits. It's enforceability: the free tool is
-        genuinely complete on its own; paid plans switch on the connected platform around it.
+        Nothing about an app is crippled or time-limited — there is no reduced edition and no watermark.
+        The line is simply where it has always been for desktop software: a plan is what gets you the
+        app, and the same plan is what connects the apps to each other.
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] p-6">
@@ -182,8 +213,8 @@ const Pricing: React.FC = () => {
             It's an island: no cloud, no cross-app workflows, no agents, no collaboration.
           </p>
         </div>
-        <div className="rounded-[12px] border border-[#a760ff]/25 bg-[#0d0d0d] p-6">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#a760ff]">The platform · Pro &amp; Team</div>
+        <div className="rounded-[12px] border border-white/20 bg-[#0d0d0d] p-6">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ece7df]">The platform · Pro &amp; Team</div>
           <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">Wires the tools together</h3>
           <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
             One account turns the tools into a server-backed platform: projects sync across every device,
@@ -213,11 +244,11 @@ const Pricing: React.FC = () => {
         blocks={[
           {
             h: 'Is the free version a trial?',
-            p: <>No. Every XENO app is a real, standalone tool — local editing, local files, and clean full-resolution export, for as long as you like, with no card. Pro and Team add the connected platform on top; they don't unlock the tool.</>,
+            p: <>The account is. The apps are not — installing any XENO desktop app needs an active plan. What you get for free is a real account rather than a trial: the in-house API, credits, the Forum and the whole web platform, with no card and no expiry. What a plan buys is the software itself, and one plan covers every app rather than one per product.</>,
           },
           {
             h: 'What actually changes when I upgrade?',
-            p: <>The line is enforceability, not cosmetics. Free is an island — it runs on your machine with no cloud, cross-app workflows, agents or collaboration. Pro switches on the server-backed platform: cloud sync and multi-device, workflows that span apps, agents and automation, private cloud projects, managed-premium inference priority, and the commercial-use license. Team adds real-time collaboration and shared workspace billing.</>,
+            p: <>A plan gets you the desktop apps themselves, and everything that connects them: cloud sync and multi-device, workflows that span apps, agents and automation, private cloud projects, managed-premium inference priority, and the commercial-use license. Team adds real-time collaboration and shared workspace billing. A free account keeps the web platform, the in-house API and credits — it just does not install software.</>,
           },
           {
             h: 'Do I need credits to use XENO?',
@@ -247,7 +278,7 @@ const Pricing: React.FC = () => {
           },
           {
             h: 'Can I change plans?',
-            p: <>Yes. Upgrade or downgrade at any time from your <Link to="/overview/billing" className="text-[#a760ff] hover:underline">account billing</Link> — changes take effect on your next cycle and your remaining credits stay intact. See the <Link to="/refunds" className="text-[#a760ff] hover:underline">refund policy</Link> for eligibility and timing.</>,
+            p: <>Yes. Upgrade or downgrade at any time from your <Link to="/overview/billing" className="text-[#ece7df] hover:underline">account billing</Link> — changes take effect on your next cycle and your remaining credits stay intact. See the <Link to="/refunds" className="text-[#ece7df] hover:underline">refund policy</Link> for eligibility and timing.</>,
           },
         ]}
       />

@@ -43,6 +43,32 @@ export async function getBillingConfig(): Promise<BillingConfig> {
   }
 }
 
+/**
+ * Is checkout actually purchasable right now?
+ *
+ * 🔴 THREE states, not two, and the third is the point. `getBillingConfig()`
+ * collapses a network error into `enabled: false`, which is the right default
+ * for "can I show a publishable key" and the WRONG one for "should I stop this
+ * person buying": a transient fetch failure would tell a paying customer the
+ * product is closed for business.
+ *
+ * So an error is `unknown`, and `unknown` keeps the buy button live. The server
+ * is the authority either way — the worst case is the error the user already
+ * gets today, instead of a refusal we invented from a dropped request.
+ */
+export type BillingAvailability = 'live' | 'disabled' | 'unknown';
+
+export async function getBillingAvailability(): Promise<BillingAvailability> {
+  try {
+    const res = await fetch(`${API_BASE}/billing/config`);
+    if (!res.ok) return 'unknown';
+    const data = await res.json();
+    if (typeof data?.enabled !== 'boolean') return 'unknown';
+    return data.enabled ? 'live' : 'disabled';
+  } catch {
+    return 'unknown';
+  }
+}
 /** Map catalog itemId → live price (for overlaying onto the static pricing tiers). */
 export async function getLivePriceMap(): Promise<Record<string, { price: number; currency: string }>> {
   const cfg = await getBillingConfig();
