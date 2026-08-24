@@ -286,7 +286,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
               data-gooey-rail="model"
               data-gooey-dir="rtl"
               data-gooey-from="[data-chat-model-trigger]"
-              className="ml-auto flex min-w-max items-center gap-1.5"
+              className="flex min-w-max items-center gap-1.5 px-0.5"
             >
               {inlineProviderGroups.length === 0 ? (
                 <span className="whitespace-nowrap px-1 text-xs text-[var(--chat-muted)]">
@@ -294,15 +294,9 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                 </span>
               ) : activeInlineProviderGroup ? (
                 <>
-                {/* Both hooks were dropped when this became an IconButton and both are load-bearing.
-                    `scripts/test-chat-model-selector.mjs` reaches for the first; index.css reaches
-                    for the second twice — once to pour this chip out of the composer with the rest of
-                    its family, and once for the rule that keeps a Back arrow square-ish rather than
-                    13px wide. The test had been red since, and the padding rule had quietly stopped
-                    matching. */}
                 <IconButton
                   icon={ArrowRightDecl}
-                  className="chat-icon-flip-x"
+                  className="chat-icon-flip-x !rounded-[10px]"
                   variant="quiet"
                   size="md"
                   iconSize={14}
@@ -316,14 +310,6 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                 {activeInlineProviderGroup.models.map((model, index) => {
                   const isSelected = selectedModel.id === model.id;
 
-                  /* Stays hand-written, and the blocker is a SURFACE the variant set has no member
-                     for. Unselected, this chip rests on `--chat-overlay`, which is
-                     `rgba(0, 0, 0, 0.18)` — a translucent wash that darkens the composer behind it,
-                     not a colour. Every fill the library offers is opaque, and swapping an opaque
-                     `--xeno-control` in would make these sit ON the composer instead of IN it.
-                     That substitution has been made once before in this project, in the other
-                     direction — `--chat-hover` used as a rest fill — and it would have left every
-                     chip looking permanently hovered. Same class of mistake. */
                   return (
                     <button
                       key={model.id}
@@ -334,14 +320,11 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                       disabled={isInlineTrayClosing}
                       onClick={() => handleSelect(model)}
                       style={{ animationDelay: getInlineAnimationDelay(index + 1) }}
-                      className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${inlineItemAnimationClass} ${
+                      className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border px-3 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${inlineItemAnimationClass} ${
                         isSelected
                           ? 'border-[var(--chat-muted)] bg-[var(--chat-control)] text-[var(--chat-text)]'
                           : 'border-[var(--chat-border)] bg-[var(--chat-overlay)] text-[var(--chat-muted)]'
                       }`}
-                      // No `title`: selecting a model unmounts this chip, and a native
-                      // tooltip outlives it — a stray black box left hanging over the
-                      // closing tray. The provider is already the rail you drilled into.
                       aria-label={`${activeInlineProviderGroup.companyName} ${model.name}`}
                     >
                       <span className="flex items-center gap-1.5">
@@ -356,7 +339,6 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                 inlineProviderGroups.map((group, index) => {
                 const isSelectedProvider = group.companyName === selectedProviderName;
 
-                // Stays hand-written: the model chip's twin one rail up, same `--chat-overlay` rest.
                 return (
                   <button
                     key={group.companyName}
@@ -367,7 +349,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                     disabled={isInlineTrayClosing}
                     onClick={() => transitionInlineProvider(group.companyName)}
                     style={{ animationDelay: getInlineAnimationDelay(index) }}
-                    className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${inlineItemAnimationClass} ${
+                    className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border px-2 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${inlineItemAnimationClass} ${
                       isSelectedProvider
                         ? 'border-[var(--chat-muted)] bg-[var(--chat-control)] text-[var(--chat-text)]'
                         : 'border-[var(--chat-border)] bg-[var(--chat-overlay)] text-[var(--chat-muted)]'
@@ -384,29 +366,24 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
             </div>
           </div>
 
-          {/* Stays hand-written, both of them: these are not buttons wearing a gradient, they ARE
-              the gradient — a 40px fade over the rail's edge that happens to be clickable and to
-              hold a hint chevron. There is no box, no label and no rest state for a variant to
-              decide. Three more of the same shape live elsewhere in the chat. */}
           {isInlineRailSettled && inlineRailScrollState.canScrollLeft && (
             <button
               type="button"
               data-inline-model-scroll="left"
               onClick={() => scrollInlineRail('left')}
-              className="group absolute inset-y-0 left-0 z-10 flex w-10 items-center justify-start bg-gradient-to-r from-[var(--chat-composer-fill)] via-[var(--chat-composer-fill)]/90 to-transparent pl-1 focus-visible:outline-none"
+              className="group absolute inset-y-0 left-0 z-10 flex w-7 items-center justify-start bg-gradient-to-r from-[var(--chat-canvas,#0a0a0b)]/80 to-transparent pl-1 focus-visible:outline-none"
               aria-label="Show previous models"
             >
               <ChevronLeft data-inline-model-scroll-hint size={14} className="text-[var(--chat-muted)]" />
             </button>
           )}
 
-          {/* Stays hand-written — the right-hand half of the pair above, same reason. */}
           {isInlineRailSettled && inlineRailScrollState.canScrollRight && (
             <button
               type="button"
               data-inline-model-scroll="right"
               onClick={() => scrollInlineRail('right')}
-              className="group absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end bg-gradient-to-l from-[var(--chat-composer-fill)] via-[var(--chat-composer-fill)]/90 to-transparent pr-1 focus-visible:outline-none"
+              className="group absolute inset-y-0 right-0 z-10 flex w-7 items-center justify-end bg-gradient-to-l from-[var(--chat-canvas,#0a0a0b)]/80 to-transparent pr-1 focus-visible:outline-none"
               aria-label="Show more models"
             >
               <ChevronRight data-inline-model-scroll-hint size={14} className="text-[var(--chat-muted)]" />
@@ -414,11 +391,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
           )}
         </div>
       )}
-      {/* Stays hand-written, and it was already decided: the library's ModelPicker has no place for
-          the gooey inline tray this opens. Three further things hold it here even as a plain
-          `<Button>` — it rests on `--chat-overlay` in its minimal form, index.css pins its whole
-          chip family with `!important` so no size token would survive, and its face is four
-          conditional glyphs deep (spinner, brain-circuit, brain, chevron). */}
+
       <button
         ref={triggerRef}
         type="button"
@@ -439,8 +412,8 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
         }}
         className={`chat-model-trigger flex items-center justify-center gap-1.5 border text-xs font-medium text-[var(--chat-text)] transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${
           isMinimal
-            ? 'h-8 rounded-lg border-[var(--chat-border)] bg-[var(--chat-overlay)] px-3'
-            : 'h-9 rounded-lg border-[var(--chat-border)] bg-transparent px-2.5'
+            ? 'h-8 rounded-[10px] border-[var(--chat-border)] bg-[var(--chat-overlay)] px-3'
+            : 'h-9 rounded-[10px] border-[var(--chat-border)] bg-transparent px-2.5'
         } ${
           isCompact ? 'max-w-[6.5rem]' : 'max-w-[7.5rem]'
         }`}

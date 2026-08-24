@@ -1664,8 +1664,8 @@ input:-webkit-autofill:active {
 
 .chat-gooey-blob {
   position: absolute;
-  border-radius: 0.625rem;
-  background: var(--chat-composer-fill, var(--chat-elevated, #141416));
+  border-radius: 10px;
+  background: var(--chat-overlay, rgba(255, 255, 255, 0.08));
   opacity: 0;
   transform-origin: center;
   transform: translate(var(--gooey-tx, 0px), var(--gooey-ty, 0px)) scale(var(--gooey-sx, 1), var(--gooey-sy, 1));
@@ -1871,20 +1871,6 @@ div:has([data-composer-reveal][data-reveal-open="true"]) > [data-chat-scroll-to-
 
 [data-composer-reveal-row][data-reveal-state="open"] {
   pointer-events: auto;
-}
-
-/* The stroke is drawn by the filter, around the whole fused silhouette — so the box must
-   not draw a CSS border of its own on top of it, or the two disagree by a pixel and a
-   straight line ends up cutting the liquid neck in half. */
-[data-composer-reveal] [data-chat-composer-shell] {
-  border-color: transparent !important;
-}
-
-/* Ink for that outline. Set from CSS rather than as an SVG attribute so it follows the
-   active chat theme. */
-#chat-composer-gooey-filter feFlood {
-  flood-color: var(--chat-composer-border, var(--chat-border, rgba(255, 255, 255, 0.12)));
-  flood-opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {

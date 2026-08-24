@@ -939,14 +939,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
            (and its popovers) still paint above the updates carousel underneath. */
         className="relative z-20 w-full"
       >
-        <svg aria-hidden="true" focusable="false" width="0" height="0" className="absolute">
+        <svg aria-hidden="true" focusable="false" width="0" height="0" className="absolute pointer-events-none">
           <defs>
-            {/* Blur, then crush the alpha ramp back to a hard edge: neighbouring blobs
-                that overlap in the blurred pass fuse into one shape.
-                The silhouette then gets its own 1px stroke (dilate, subtract, flood). It
-                cannot rely on fill contrast: in the light theme the canvas and the composer
-                fill are both #ffffff, so an unstroked blob is literally invisible — and this
-                way the liquid neck is stroked too, which is what "one stroked box" means. */}
+            {/* Clean metaball blend: blur and alpha crunch without artificial stroke overlay */}
             <filter id={GOOEY_FILTER_ID} x="-20%" y="-20%" width="140%" height="140%">
               <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
               <feColorMatrix
@@ -955,16 +950,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                 values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9"
                 result="goo"
               />
-              <feComposite in="SourceGraphic" in2="goo" operator="atop" result="fill" />
-              <feMorphology in="goo" operator="dilate" radius="1" result="fat" />
-              <feComposite in="fat" in2="goo" operator="out" result="ringMask" />
-              {/* flood-color is set from CSS so it follows the active chat theme. */}
-              <feFlood result="ink" />
-              <feComposite in="ink" in2="ringMask" operator="in" result="stroke" />
-              <feMerge>
-                <feMergeNode in="fill" />
-                <feMergeNode in="stroke" />
-              </feMerge>
+              <feComposite in="SourceGraphic" in2="goo" operator="atop" />
             </filter>
           </defs>
         </svg>
