@@ -37,6 +37,7 @@ import Partners from './pages/Partners';
 import Security from './pages/Security';
 import Refunds from './pages/Refunds';
 import Cookies from './pages/Cookies';
+import Withdrawal from './pages/Withdrawal';
 import Impressum from './pages/Impressum';
 import OverviewPage from './pages/Overview';
 import OSAuthInterface, { OSStateProvider } from './components/os/OSAuthInterface';
@@ -226,6 +227,12 @@ function App() {
             <Route path="/security" element={<Security />} />
             <Route path="/refunds" element={<Refunds />} />
             <Route path="/cookies" element={<Cookies />} />
+            {/* Statutory withdrawal instruction (Art. 246a EGBGB Anlage 1/2).
+                Both spellings routed: /widerruf is what a German consumer will
+                type, /withdrawal is what the English pages link to. An
+                instruction nobody can reach has instructed nobody. */}
+            <Route path="/withdrawal" element={<Withdrawal />} />
+            <Route path="/widerruf" element={<Withdrawal />} />
             <Route path="/impressum" element={<Impressum />} />
 
             {/* Standalone Video Studio Canvas - Full page interface */}
