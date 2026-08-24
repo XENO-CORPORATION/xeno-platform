@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom'; // Import createPortal
 import { Button, IconButton, ListRow, MenuItem, MessageBubble, Spinner, Tab, Textarea, TextInput, useDialog, useGooPill, useMenu, useTabs } from '@xenosystem/elements-react';
 // The palettes and the preference that picks one live outside this file now: the CSS at the entry
@@ -2899,6 +2900,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isSyncingToDb, setIsSyncingToDb] = useState<boolean>(false);
   // --- END NEW ---
 
+  // Route hooks for URL synchronization
+  const { conversationId: routeConversationId } = useParams<{ conversationId?: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+
   // Ref to prevent double conversation creation
   const isCreatingConversationRef = useRef(false);
   // Ref to prevent double conversation updates
@@ -2915,6 +2921,28 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId;
   }, [activeConversationId]);
+
+  // URL Route parameter synchronization (e.g. /c/:conversationId or /overview/chat/llm/:conversationId)
+  useEffect(() => {
+    if (routeConversationId && routeConversationId !== activeConversationIdRef.current && !isHistoryLoading) {
+      void handleLoadConversation(routeConversationId);
+    }
+  }, [routeConversationId, isHistoryLoading]);
+
+  // Listen to browser Back/Forward popstate buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const match = window.location.pathname.match(/\/(?:c|overview\/chat\/llm)\/([a-zA-Z0-9_-]+)/);
+      const targetId = match ? match[1] : null;
+      if (targetId && targetId !== activeConversationIdRef.current) {
+        void handleLoadConversation(targetId);
+      } else if (!targetId && activeConversationIdRef.current) {
+        handleNewChat();
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // --- NEW: State for History Search --- 
   const [historySearchTerm, setHistorySearchTerm] = useState('');
@@ -5610,6 +5638,9 @@ interface QueueState {
       activeConversationIdRef.current = id;
       setConversationHistory((prevHistory) => [newConversation, ...prevHistory]);
       setActiveConversationId(id);
+      if (typeof window !== 'undefined') {
+        window.history.pushState({ conversationId: id }, '', `/c/${id}`);
+      }
       void bindPendingChatSkills(id);
       void bindPendingChatPersona(id);
       // The pending project link (if any) has now been applied to the new conversation.
@@ -7372,94 +7403,109 @@ Please provide a well-structured response using this search context and any mult
     void handleGenerate();
   };
 
-  // --- NEW: Function to Load a Conversation from History ---
+  // --- Function to Load a Conversation from History or Direct URL ---
   const handleLoadConversation = async (conversationId: string) => {
+    if (!conversationId) return;
+
+    // Leave full-page overlays so the loaded chat is visible
+    dismissChatOverlays();
+    setHistoryNavView('chats');
+    setActiveConversationId(conversationId);
+
+    // Sync URL in browser address bar (ChatGPT URL standard: /c/:id)
+    if (typeof window !== 'undefined') {
+      const currentPath = window.location.pathname;
+      if (currentPath !== `/c/${conversationId}` && currentPath !== `/overview/chat/llm/${conversationId}`) {
+        window.history.pushState({ conversationId }, '', `/c/${conversationId}`);
+      }
+    }
+
     const conversationToLoad = conversationHistory.find(convo => convo.id === conversationId);
-    if (conversationToLoad) {
-        // console.log("Loading conversation:", conversationId);
 
-        // Leave full-page overlays so the loaded chat is visible, not buried under them.
-        dismissChatOverlays();
-        setHistoryNavView('chats');
+    // Always load from database when authenticated or when not cached yet
+    if (isDbAuthenticated || !conversationToLoad) {
+      try {
+        const fullConversation = await chatService.getConversation(conversationId);
+        if (fullConversation && fullConversation.messages) {
+          // Convert database message format to local format
+          const localMessages: ChatMessage[] = fullConversation.messages.map((msg: DBChatMessage, index: number) => {
+            const isAi = msg.role === 'assistant';
+            return {
+              id: msg.id || `msg-${index}`,
+              sender: isAi ? 'ai' as const : 'user' as const,
+              text: msg.content,
+              parsedAnswer: isAi ? msg.content : undefined,
+              modelId: msg.model_id,
+              modelIdUsed: msg.model_id,
+              thinkingContent: msg.thinking,
+              hasThinking: msg.has_thinking,
+            };
+          });
+          setMessages(localMessages);
 
-        setActiveConversationId(conversationId);
-
-        // Always load from database when authenticated to ensure fresh data
-        if (isDbAuthenticated) {
-          try {
-            const fullConversation = await chatService.getConversation(conversationId);
-            if (fullConversation && fullConversation.messages) {
-              // Convert database message format to local format
-              const localMessages: ChatMessage[] = fullConversation.messages.map((msg: DBChatMessage, index: number) => {
-                const isAi = msg.role === 'assistant';
-                return {
-                  id: msg.id || `msg-${index}`,
-                  sender: isAi ? 'ai' as const : 'user' as const,
-                  text: msg.content,
-                  // For AI messages, content is the parsedAnswer (displayed content)
-                  parsedAnswer: isAi ? msg.content : undefined,
-                  modelId: msg.model_id,
-                  modelIdUsed: msg.model_id,
-                  thinkingContent: msg.thinking,
-                  hasThinking: msg.has_thinking,
-                };
-              });
-              setMessages(localMessages);
-
-              // Update cache in conversation history
-              setConversationHistory(prevHistory =>
-                prevHistory.map(convo =>
-                  convo.id === conversationId
-                    ? { ...convo, messages: localMessages, isUnread: false }
-                    : convo
-                )
+          // Update cache in conversation history
+          setConversationHistory(prevHistory => {
+            const exists = prevHistory.some(convo => convo.id === conversationId);
+            if (exists) {
+              return prevHistory.map(convo =>
+                convo.id === conversationId
+                  ? { ...convo, messages: localMessages, isUnread: false }
+                  : convo
               );
             } else {
-              setMessages(conversationToLoad.messages || []);
-              patchConversation(conversationId, { isUnread: false });
+              return [
+                {
+                  id: fullConversation.id,
+                  title: fullConversation.title || 'Conversation',
+                  timestamp: fullConversation.created_at ? new Date(fullConversation.created_at).getTime() : Date.now(),
+                  messages: localMessages,
+                  systemPrompt: fullConversation.system_prompt,
+                  isArchived: Boolean(fullConversation.is_archived),
+                },
+                ...prevHistory
+              ];
             }
-          } catch (error) {
-            console.error("Error loading conversation from database:", error);
-            setMessages(conversationToLoad.messages || []);
-            patchConversation(conversationId, { isUnread: false });
-          }
-        } else {
+          });
+        } else if (conversationToLoad) {
           setMessages(conversationToLoad.messages || []);
           patchConversation(conversationId, { isUnread: false });
         }
-
-        // --- Load System Prompt / This-chat persona ---
-        const storedPersonaId = await getChatPersonaId(conversationId);
-        if (storedPersonaId) {
-          const persona = await getPersona(storedPersonaId);
-          if (persona) {
-            setSelectedPersona(persona.id);
-            setSystemPrompt(persona.prompt);
-            setSavedSystemPrompt(persona.prompt);
-          } else {
-            const loadedPrompt = conversationToLoad.systemPrompt || '';
-            setSystemPrompt(loadedPrompt);
-            setSavedSystemPrompt(loadedPrompt);
-            setSelectedPersona(null);
-          }
-        } else {
-          const loadedPrompt = conversationToLoad.systemPrompt || '';
-          setSystemPrompt(loadedPrompt);
-          setSavedSystemPrompt(loadedPrompt);
-          setSelectedPersona(null);
+      } catch (error) {
+        console.error("Error loading conversation from database:", error);
+        if (conversationToLoad) {
+          setMessages(conversationToLoad.messages || []);
+          patchConversation(conversationId, { isUnread: false });
         }
-        setIsSystemPromptOpen(false);
-        // --- End Load System Prompt ---
-        // Keep history open — it closes only via the panel X.
-        // Optional: Reset input, system prompt, etc. or load them from conversation if saved
-        setInputValue('');
-        setShowThinkingId(null);
-        // Sync toggles based on the *last used model* in the loaded conversation?
-        // For simplicity, let's sync to the currently selected model for now.
-        syncTogglesForModel(selectedModel);
-    } else {
-        console.error("Could not find conversation to load:", conversationId);
+      }
+    } else if (conversationToLoad) {
+      setMessages(conversationToLoad.messages || []);
+      patchConversation(conversationId, { isUnread: false });
     }
+
+    // --- Load System Prompt / This-chat persona ---
+    const storedPersonaId = await getChatPersonaId(conversationId);
+    if (storedPersonaId) {
+      const persona = await getPersona(storedPersonaId);
+      if (persona) {
+        setSelectedPersona(persona.id);
+        setSystemPrompt(persona.prompt);
+        setSavedSystemPrompt(persona.prompt);
+      } else {
+        const loadedPrompt = conversationToLoad?.systemPrompt || '';
+        setSystemPrompt(loadedPrompt);
+        setSavedSystemPrompt(loadedPrompt);
+        setSelectedPersona(null);
+      }
+    } else {
+      const loadedPrompt = conversationToLoad?.systemPrompt || '';
+      setSystemPrompt(loadedPrompt);
+      setSavedSystemPrompt(loadedPrompt);
+      setSelectedPersona(null);
+    }
+    setIsSystemPromptOpen(false);
+    setInputValue('');
+    setShowThinkingId(null);
+    syncTogglesForModel(selectedModel);
   };
 
   // --- Refresh current conversation from database ---
@@ -8212,7 +8258,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     setIsCustomPromptOpen(false);
   };
 
-  // Placeholder for New Chat action
+  // Action for New Chat
   const handleNewChat = () => {
       // Same overlay trap as loading a conversation: a blank chat under Projects/catalog
       // looks like nothing happened.
@@ -8220,6 +8266,9 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       setHistoryNavView('chats');
       setMessages([]); // Clear current messages
       setActiveConversationId(null); // Set active ID to null (indicates new chat)
+      if (typeof window !== 'undefined' && window.location.pathname !== '/overview/chat/llm' && window.location.pathname !== '/c') {
+        window.history.pushState(null, '', '/overview/chat/llm');
+      }
       void clearPendingChatSkills();
       void clearPendingChatPersona();
       setInputValue(''); // Clear the input field

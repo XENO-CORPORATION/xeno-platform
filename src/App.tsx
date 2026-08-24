@@ -245,12 +245,33 @@ function App() {
               </ProtectedRoute>
             } />
 
+            {/* Direct Conversation and Sub-surface Routes */}
+            <Route path="/c/:conversationId" element={
+              <ProtectedRoute>
+                <OverviewPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/c" element={
+              <ProtectedRoute>
+                <OverviewPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/projects" element={<Navigate to="/overview/chat/projects" replace />} />
+            <Route path="/scheduled" element={<Navigate to="/overview/chat/scheduled" replace />} />
+            <Route path="/artifacts" element={<Navigate to="/overview/chat/artifacts" replace />} />
+            <Route path="/customize" element={<Navigate to="/overview/chat/customize" replace />} />
+
             {/* Public Shared Conversation Viewer (no auth required) */}
-            <Route path="/c/:token" element={<SharedChatView />} />
             <Route path="/share/:token" element={<SharedChatView />} />
+            <Route path="/share/e/:token" element={<SharedChatView />} />
 
             {/* /chat -> the overview chat */}
             <Route path="/chat" element={<Navigate to="/overview/chat/llm" replace />} />
+            <Route path="/chat/c/:conversationId" element={
+              <ProtectedRoute>
+                <OverviewPage />
+              </ProtectedRoute>
+            } />
 
             {/* Test comparison routes for user evaluation */}
             <Route path="/test/chat-main" element={

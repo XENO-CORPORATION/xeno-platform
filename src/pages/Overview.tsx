@@ -286,11 +286,23 @@ const OverviewContent: React.FC = () => {
             <Route path="train/lora" element={<LoRaImageTrainComponent />} />
             <Route path="train/lora-video" element={<LoRaVideoTrainComponent />} />
             <Route path="train/llm" element={<TextLLMTrainComponent />} />
+            <Route path="c/:conversationId" element={<MultiChatContainer />} />
+            <Route path="c" element={<MultiChatContainer />} />
             <Route path="chat/llm" element={<MultiChatContainer />} />
+            <Route path="chat/llm/:conversationId" element={<MultiChatContainer />} />
+            <Route path="chat/c/:conversationId" element={<MultiChatContainer />} />
+            <Route path="chat/projects" element={<MultiChatContainer />} />
+            <Route path="chat/projects/:projectId" element={<MultiChatContainer />} />
+            <Route path="projects" element={<MultiChatContainer />} />
+            <Route path="projects/:projectId" element={<MultiChatContainer />} />
             <Route path="chat/artifacts" element={<ChatArtifactsPage />} />
             <Route path="chat/artifacts/:artifactId" element={<ChatArtifactsPage />} />
+            <Route path="artifacts" element={<ChatArtifactsPage />} />
+            <Route path="artifacts/:artifactId" element={<ChatArtifactsPage />} />
             <Route path="chat/customize" element={<ChatCustomizePage />} />
+            <Route path="customize" element={<ChatCustomizePage />} />
             <Route path="chat/scheduled" element={<ChatScheduledPage />} />
+            <Route path="scheduled" element={<ChatScheduledPage />} />
             <Route path="chat/settings" element={<ChatGlobalSettingsPage />} />
             <Route path="chat/skills" element={<ChatSkillsWorkspace />} />
             <Route path="chat/multi" element={<MultiChatContainer />} />
