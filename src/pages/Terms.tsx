@@ -199,11 +199,67 @@ const Terms: React.FC = () => {
               <li>Refunds are provided in accordance with our refund policy</li>
               <li>We reserve the right to change pricing with reasonable notice</li>
             </ul>
+
+            <h3 className="text-lg font-semibold mt-6 mb-3 text-white">Subscription term and automatic renewal</h3>
+            <p className="text-white/60 leading-relaxed">
+              A subscription runs for the period shown at purchase — monthly or annual — and{' '}
+              <strong className="text-white/80">renews automatically</strong> for the same period unless
+              you cancel before the current period ends. The renewal price is the price shown on your
+              billing page. If we change it, we will tell you by email before the change takes effect,
+              and you may cancel before it applies.
+            </p>
+
+            <h3 className="text-lg font-semibold mt-6 mb-3 text-white">Cancelling</h3>
+            <p className="text-white/60 leading-relaxed">
+              You may cancel at any time from your billing page, or by emailing{' '}
+              <a href="mailto:billing@xenostudio.ai" className="text-white/80 underline underline-offset-2">billing@xenostudio.ai</a>.
+              Your plan stays active until the end of the period you have already paid for; we do not
+              pro-rate the remainder. After that it does not renew and you are not charged again.
+              Cancelling does not delete your account or your data, and it does not remove software
+              already installed — but features that depend on an active plan stop working.
+            </p>
           </section>
 
           {/* Limitation of Liability */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">9. Limitation of Liability</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">9. Right of Withdrawal (consumers in the EU)</h2>
+            <p className="text-white/60 leading-relaxed">
+              If you are a consumer resident in the European Union, you normally have{' '}
+              <strong className="text-white/80">14 days</strong> to withdraw from a distance contract
+              without giving any reason.
+            </p>
+            <p className="text-white/60 leading-relaxed mt-4">
+              Because our software and platform are made available to you immediately after payment,
+              we ask you at checkout to request that immediate access and to confirm that you
+              understand{' '}
+              <strong className="text-white/80">this ends your right of withdrawal</strong> for that
+              digital content. We record that confirmation, the exact wording you agreed to, and the
+              time you gave it.
+            </p>
+            <p className="text-white/60 leading-relaxed mt-4">
+              If you would rather keep your withdrawal right, do not complete checkout — contact{' '}
+              <a href="mailto:support@xenostudio.ai" className="text-white/80 underline underline-offset-2">support@xenostudio.ai</a>{' '}
+              and we will arrange delayed access instead.
+            </p>
+            <p className="text-white/60 leading-relaxed mt-4">
+              This statutory right is separate from our{' '}
+              <Link to="/refunds" className="text-white/80 underline underline-offset-2">Refund Policy</Link>,
+              which may be more generous and is never less. Nothing in these Terms limits rights you
+              have under mandatory consumer law.
+            </p>
+            <div className="mt-4 p-6 bg-white/[0.02] border border-white/[0.06] rounded-xl">
+              <p className="text-white/80 font-medium">Exercising the right</p>
+              <p className="text-white/60 mt-2 leading-relaxed">
+                Where the right applies, tell us clearly — an email to{' '}
+                <a href="mailto:support@xenostudio.ai" className="text-white/80 underline underline-offset-2">support@xenostudio.ai</a>{' '}
+                is enough. You may use the model withdrawal form, but you do not have to. We will
+                refund within 14 days of being told, using the same payment method you used.
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold mb-4 text-white">10. Limitation of Liability</h2>
             <p className="text-white/60 leading-relaxed mb-4">
               THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND,
               EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO IMPLIED WARRANTIES OF
@@ -228,7 +284,7 @@ const Terms: React.FC = () => {
 
           {/* Indemnification */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">10. Indemnification</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">11. Indemnification</h2>
             <p className="text-white/60 leading-relaxed">
               You agree to indemnify, defend, and hold harmless Xeno Studio, its officers,
               directors, employees, and agents from any claims, damages, losses, liabilities,
@@ -240,7 +296,7 @@ const Terms: React.FC = () => {
 
           {/* Termination */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">11. Termination</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">12. Termination</h2>
 
             <h3 className="text-lg font-medium mb-2 text-white/90">By Us</h3>
             <p className="text-white/60 leading-relaxed mb-4">
@@ -265,7 +321,7 @@ const Terms: React.FC = () => {
 
           {/* Dispute Resolution */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">12. Dispute Resolution</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">13. Dispute Resolution</h2>
             <p className="text-white/60 leading-relaxed">
               Any disputes arising out of or relating to these Terms or the Service shall be
               resolved through good-faith negotiations. If negotiations fail, disputes shall
@@ -276,7 +332,7 @@ const Terms: React.FC = () => {
 
           {/* Governing Law */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">13. Governing Law</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">14. Governing Law</h2>
             <p className="text-white/60 leading-relaxed">
               These Terms shall be governed by and construed in accordance with applicable laws,
               without regard to conflict of law principles. You agree to submit to the personal
@@ -287,7 +343,7 @@ const Terms: React.FC = () => {
 
           {/* General Provisions */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">14. General Provisions</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">15. General Provisions</h2>
             <ul className="list-disc list-inside text-white/60 space-y-2">
               <li><strong className="text-white/80">Entire Agreement:</strong> These Terms constitute the entire agreement between you and Xeno Studio regarding the Service.</li>
               <li><strong className="text-white/80">Severability:</strong> If any provision is found unenforceable, the remaining provisions will continue in effect.</li>
@@ -298,13 +354,13 @@ const Terms: React.FC = () => {
 
           {/* Contact */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">15. Contact Us</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">16. Contact Us</h2>
             <p className="text-white/60 leading-relaxed">
               If you have any questions about these Terms of Service, please contact us at:
             </p>
             <div className="mt-4 p-6 bg-white/[0.02] border border-white/[0.06] rounded-xl">
               <p className="text-white/80 font-medium">Xeno Studio</p>
-              <p className="text-white/60 mt-2">Email: legal@xeno-studio.com</p>
+              <p className="text-white/60 mt-2">Email: legal@xenostudio.ai</p>
             </div>
           </section>
         </div>

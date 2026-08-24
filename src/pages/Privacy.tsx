@@ -41,7 +41,7 @@ const Privacy: React.FC = () => {
               Welcome to Xeno Studio ("we," "our," or "us"). Xeno Studio is a content creation platform
               that provides AI-powered tools for image generation, video editing, and social media publishing.
               This Privacy Policy explains how we collect, use, disclose, and safeguard your information
-              when you use our website at xeno-studio.com and our services.
+              when you use our website at xenostudio.ai and our services.
             </p>
             <p className="text-white/60 leading-relaxed mt-4">
               By using Xeno Studio, you agree to the collection and use of information in accordance with
@@ -241,7 +241,83 @@ const Privacy: React.FC = () => {
 
           {/* Changes to Policy */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">9. Changes to This Policy</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">9. Who Else Receives Your Data</h2>
+            <p className="text-white/60 leading-relaxed">
+              We use a small number of processors to run the service. Each receives only what it
+              needs, under a data-processing agreement, and none of them may use your data for their
+              own purposes.
+            </p>
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/[0.08]">
+                    <th className="py-2 pr-4 font-semibold text-white/80">Processor</th>
+                    <th className="py-2 pr-4 font-semibold text-white/80">What it receives</th>
+                    <th className="py-2 font-semibold text-white/80">Why</th>
+                  </tr>
+                </thead>
+                <tbody className="text-white/60">
+                  <tr className="border-b border-white/[0.05]">
+                    <td className="py-2 pr-4">Stripe</td>
+                    <td className="py-2 pr-4">name, email, billing address, payment token</td>
+                    <td className="py-2">taking payments and preventing fraud</td>
+                  </tr>
+                  <tr className="border-b border-white/[0.05]">
+                    <td className="py-2 pr-4">Cloudflare</td>
+                    <td className="py-2 pr-4">IP address, request metadata</td>
+                    <td className="py-2">serving the site and blocking abuse</td>
+                  </tr>
+                  <tr className="border-b border-white/[0.05]">
+                    <td className="py-2 pr-4">Resend</td>
+                    <td className="py-2 pr-4">email address, message content</td>
+                    <td className="py-2">sending account and notification email</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 pr-4">Our hosting provider</td>
+                    <td className="py-2 pr-4">everything stored in the service</td>
+                    <td className="py-2">running the servers and databases</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="text-white/60 leading-relaxed mt-4">
+              Where a processor operates outside the EEA, transfers are covered by the European
+              Commission&apos;s Standard Contractual Clauses. We do not sell your data, and we do not
+              share it for advertising.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold mb-4 text-white">10. Our Legal Basis (GDPR Art. 6)</h2>
+            <p className="text-white/60 leading-relaxed">
+              We process personal data only where we have a lawful basis for it:
+            </p>
+            <ul className="list-disc list-inside text-white/60 space-y-2 mt-4">
+              <li>
+                <strong className="text-white/80">Performance of a contract</strong> (Art. 6(1)(b)) —
+                to create and run your account, provide the software and platform you subscribed to,
+                and take payment for it.
+              </li>
+              <li>
+                <strong className="text-white/80">Legal obligation</strong> (Art. 6(1)(c)) — to issue
+                and keep invoices and tax records for as long as the law requires, which is why some
+                billing data outlives a deleted account.
+              </li>
+              <li>
+                <strong className="text-white/80">Legitimate interests</strong> (Art. 6(1)(f)) — to
+                keep the service secure, investigate abuse, and understand which features are used.
+                You may object to processing on this basis at any time.
+              </li>
+              <li>
+                <strong className="text-white/80">Consent</strong> (Art. 6(1)(a)) — where we ask for
+                it explicitly, such as optional email you can unsubscribe from. You may withdraw
+                consent at any time without affecting processing already carried out.
+              </li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold mb-4 text-white">11. Changes to This Policy</h2>
             <p className="text-white/60 leading-relaxed">
               We may update this Privacy Policy from time to time. We will notify you of any
               significant changes by posting a notice on our website or sending you an email.
@@ -253,14 +329,14 @@ const Privacy: React.FC = () => {
 
           {/* Contact */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">10. Contact Us</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">12. Contact Us</h2>
             <p className="text-white/60 leading-relaxed">
               If you have any questions about this Privacy Policy, your personal data, or wish to
               exercise your rights, please contact us at:
             </p>
             <div className="mt-4 p-6 bg-white/[0.02] border border-white/[0.06] rounded-xl">
               <p className="text-white/80 font-medium">Xeno Studio</p>
-              <p className="text-white/60 mt-2">Email: privacy@xeno-studio.com</p>
+              <p className="text-white/60 mt-2">Email: privacy@xenostudio.ai</p>
             </div>
           </section>
         </div>
