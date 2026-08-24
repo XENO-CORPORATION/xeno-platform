@@ -165,6 +165,23 @@ services:
       - AUTH_FRONTEND_URL=${AUTH_FRONTEND_URL}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN}
       - XENO_FLOW_URL=http://host.docker.internal:8090
+      # ── Settings that fail SILENTLY when absent ──────────────────────
+      # 🔴 Every one of these was set in the box's .env on 2026-08-24 and reached
+      # NO container, because the `${VAR}` line that reads it was never restored
+      # after that file was overwritten. Measured 2026-08-24: signup answered 403
+      # to everyone, outbound mail was dead, forum notifications were off and the
+      # extension's CORS origin was unknown — for a day, with nothing logged as an
+      # error, because each of these degrades quietly by design.
+      #
+      # ⚠️ A value in .env does NOT reach a container on its own. Compose reads
+      # .env for ${} SUBSTITUTION only; without a line here the value is simply
+      # never passed. That distinction is the whole bug.
+      - REGISTRATION_OPEN=${REGISTRATION_OPEN:-}
+      - REGISTRATION_OPEN_UNTIL=${REGISTRATION_OPEN_UNTIL:-}
+      - REGISTRATION_ALLOWLIST=${REGISTRATION_ALLOWLIST:-}
+      - FORUM_NOTIFICATION_EMAILS=${FORUM_NOTIFICATION_EMAILS:-}
+      - XENO_EXTENSION_ORIGINS=${XENO_EXTENSION_ORIGINS:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
       # ── Billing / Stripe ─────────────────────────────────────────────
       # 🔴 DECLARED HERE ON PURPOSE, all via ${VAR:-} so an unset one is empty
       # rather than a compose error. On 2026-08-24 this file was overwritten from

@@ -451,3 +451,42 @@ test('the runner really does wrap each migration', () => {
   assert.ok(/client\.query\('COMMIT'\)/.test(body) && /ROLLBACK/.test(body),
     'the runner no longer commits or rolls back per migration');
 });
+
+/* ── 10 · Settings that fail SILENTLY must be declared ───────────────────── */
+
+test('🔴 every silently-degrading setting has a compose slot', () => {
+  /* Measured in production on 2026-08-24: signup answered 403 to everyone,
+   * outbound mail was dead, forum notifications were off and the extension's
+   * CORS origin was unknown. All four values were present in the box's `.env`.
+   * None reached a container, because the `${VAR}` line that reads it was never
+   * restored after that file was overwritten.
+   *
+   * 🔴 A value in `.env` does NOT reach a container on its own — compose reads
+   * `.env` for ${} SUBSTITUTION only. Without a line in `environment:` the value
+   * is simply never passed. That distinction is the entire bug, and it is
+   * invisible: `grep FORUM_NOTIFICATION_EMAILS .env` succeeds while the feature
+   * is off.
+   *
+   * What these have in common is not importance, it is SILENCE. Each degrades to
+   * a plausible-looking state — "registration is closed", "email is disabled" —
+   * so nothing errors and nothing alerts. A missing DB_HOST would crash on boot
+   * and needs no gate; these are the ones that need one. */
+  const compose = read('docker-compose.yml');
+  const SILENT = {
+    REGISTRATION_OPEN: 'signup answers 403 to everyone, with no error',
+    REGISTRATION_OPEN_UNTIL: 'the timed signup window cannot be set',
+    FORUM_NOTIFICATION_EMAILS: 'forum notifications go nowhere and log "disabled"',
+    XENO_EXTENSION_ORIGINS: 'the browser extension is refused by CORS',
+    RESEND_API_KEY: 'every outbound email is dropped',
+    STRIPE_SECRET_KEY: 'billing is entirely inert',
+    STRIPE_WEBHOOK_SECRET: 'payments complete and are never recorded',
+  };
+  for (const [name, consequence] of Object.entries(SILENT)) {
+    /* ⚠️ `\\s`, not `\s`. In a TEMPLATE LITERAL `\s` is an escape for a plain
+     * "s", so the pattern silently became `^s*- NAME=` and matched nothing. It
+     * failed loudly here, which is the lucky direction — the same slip in a
+     * negative assertion would have passed forever. */
+    assert.ok(new RegExp(`^\\s*- ${name}=`, 'm').test(compose),
+      `${name} has no compose slot — ${consequence}`);
+  }
+});
