@@ -1,0 +1,157 @@
+/**
+ * A local `convo-<timestamp>` id is UI-only. Sending it to Postgres is a 500
+ * (`invalid input syntax for type uuid`). After createConversation fails
+ * (often because the backend is 502), ChatWithLLM falls through to that
+ * local id and the next persist hits this path.
+ *
+ * Server: 400 with code invalid_conversation_id BEFORE any query.
+ * Client: addMessage / addMessagesBatch refuse the fetch entirely.
+ *
+ * Source-only. Mutation-checked by extracting the handler / function body.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const ROUTES = readFileSync(join(ROOT, 'src', 'server', 'routes', 'chatRoutes.js'), 'utf8');
+const SERVICE = readFileSync(join(ROOT, 'src', 'services', 'chatService.ts'), 'utf8');
+const CONTEXT = readFileSync(join(ROOT, 'src', 'server', 'utils', 'workspaceContext.js'), 'utf8');
+const codeOnly = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+function extractFrom(src, marker) {
+  const start = src.indexOf(marker);
+  if (start === -1) return '';
+  const from = src.slice(start);
+  const brace = from.indexOf('{');
+  if (brace === -1) return from.slice(0, 4000);
+  let depth = 0;
+  let inStr = null;
+  let escaped = false;
+  for (let i = brace; i < from.length; i++) {
+    const c = from[i];
+    if (inStr) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (c === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (c === inStr) inStr = null;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      inStr = c;
+      continue;
+    }
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) return from.slice(0, i + 1);
+    }
+  }
+  return from.slice(0, 4000);
+}
+
+function extractRoute(src, method, pathLit) {
+  const needle = `router.${method}('${pathLit}'`;
+  const start = src.indexOf(needle);
+  if (start === -1) return '';
+  return extractFrom(src.slice(start), `router.${method}`);
+}
+
+const UUID_SRC = CONTEXT.match(/export const UUID_RE = \/[^/]+\/i/);
+assert.ok(UUID_SRC, 'server UUID_RE is missing — this gate cannot pin the client copies');
+
+test('the two message POST routes reject a non-UUID id before SQL', () => {
+  const helper = extractFrom(ROUTES, 'function rejectIfNotPersistedConversationId');
+  assert.match(helper, /invalid_conversation_id/, 'the helper must name the code');
+  assert.match(helper, /status\(400\)/, 'the helper must be 400, not 500');
+  for (const pathLit of ['/conversations/:id/messages', '/conversations/:id/messages/batch']) {
+    const body = extractRoute(ROUTES, 'post', pathLit);
+    assert.ok(body, `POST ${pathLit} is missing`);
+    const firstQuery = body.indexOf('req.db.query');
+    const rejectAt = body.indexOf('rejectIfNotPersistedConversationId');
+    assert.ok(rejectAt !== -1, `POST ${pathLit} never calls rejectIfNotPersistedConversationId`);
+    assert.ok(
+      firstQuery === -1 || rejectAt < firstQuery,
+      `POST ${pathLit} queries before validating the id — convo-* still 500s`,
+    );
+  }
+});
+
+test('rejectIfNotPersistedConversationId uses the shared UUID_RE', () => {
+  const helper = extractFrom(ROUTES, 'function rejectIfNotPersistedConversationId');
+  assert.match(helper, /UUID_RE\.test/, 'the helper must use UUID_RE, not a private copy');
+});
+
+test('addMessage and addMessagesBatch refuse a local convo-* id', () => {
+  // Slice between methods. extractFrom stops at the first `{`, which in
+  // addMessage is the TypeScript argument type, not the function body.
+  const src = codeOnly(SERVICE);
+  const addStart = src.indexOf('async addMessage(');
+  const batchStart = src.indexOf('async addMessagesBatch(');
+  const nextStart = src.indexOf('async updateMessage(');
+  assert.ok(addStart !== -1 && batchStart !== -1 && nextStart !== -1);
+  const add = src.slice(addStart, batchStart);
+  const batch = src.slice(batchStart, nextStart);
+  assert.match(
+    add,
+    /isPersistedConversationId\(conversationId\)/,
+    'addMessage must refuse a non-UUID id before fetch — that is the 500.',
+  );
+  assert.match(
+    batch,
+    /isPersistedConversationId\(conversationId\)/,
+    'addMessagesBatch must refuse a non-UUID id before fetch.',
+  );
+  const addFetch = add.indexOf('fetch(');
+  const addGuard = add.indexOf('isPersistedConversationId');
+  assert.ok(addGuard !== -1 && addGuard < addFetch, 'addMessage guard must precede fetch');
+});
+
+test('updateConversation and deleteConversation refuse a local convo-* id', () => {
+  const src = codeOnly(SERVICE);
+  const updateStart = src.indexOf('async updateConversation(');
+  const deleteStart = src.indexOf('async deleteConversation(');
+  const nextAfterDelete = src.indexOf('async addMessage(');
+  assert.ok(updateStart !== -1 && deleteStart !== -1);
+  const update = src.slice(updateStart, deleteStart);
+  const del = nextAfterDelete > deleteStart
+    ? src.slice(deleteStart, nextAfterDelete)
+    : src.slice(deleteStart);
+  assert.match(update, /isPersistedConversationId\(id\)/, 'updateConversation must refuse a non-UUID id');
+  assert.match(del, /isPersistedConversationId\(id\)/, 'deleteConversation must refuse a non-UUID id');
+  const updateFetch = update.indexOf('fetch(');
+  const updateGuard = update.indexOf('isPersistedConversationId');
+  assert.ok(updateGuard !== -1 && updateGuard < updateFetch, 'updateConversation guard must precede fetch');
+});
+
+test('share routes reject a non-UUID id before SQL', () => {
+  for (const [method, pathLit] of [
+    ['post', '/conversations/:id/share'],
+    ['delete', '/conversations/:id/share'],
+    ['get', '/conversations/:id/shares'],
+  ]) {
+    const body = extractRoute(ROUTES, method, pathLit);
+    assert.ok(body, `${method.toUpperCase()} ${pathLit} is missing`);
+    const firstQuery = body.indexOf('req.db.query');
+    const rejectAt = body.indexOf('rejectIfNotPersistedConversationId');
+    assert.ok(rejectAt !== -1, `${method.toUpperCase()} ${pathLit} never rejects a local id`);
+    assert.ok(
+      firstQuery === -1 || rejectAt < firstQuery,
+      `${method.toUpperCase()} ${pathLit} queries before validating the id`,
+    );
+  }
+});
+
+test('client conversation-id regex matches the server UUID_RE source', () => {
+  const clientRe = SERVICE.match(/export const PERSISTED_CONVERSATION_ID_RE =\s*(\/[^/\n]+\/i)/);
+  const serverRe = CONTEXT.match(/export const UUID_RE = (\/[^/\n]+\/i)/);
+  assert.ok(clientRe && serverRe, 'could not read both UUID regexes');
+  assert.equal(clientRe[1], serverRe[1], 'client regex drifted from server UUID_RE');
+});

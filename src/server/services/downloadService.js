@@ -8,6 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { fileURLToPath } from 'url';
+import { purgeOrphanedDownloadFiles } from './purgeOrphanedDownloadFiles.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -398,28 +399,30 @@ export const deleteDownload = (downloadId, userId) => {
 };
 
 /**
- * Clean up old downloads (files older than 1 hour)
+ * Clean up old downloads (files older than 1 hour).
+ *
+ * Must never throw: this runs on a timer, and an uncaught throw exits the
+ * process (see the cookies/ EISDIR crash). Cookie jars live in a subdirectory
+ * and are skipped by purgeOrphanedDownloadFiles.
  */
 export const cleanupOldDownloads = () => {
-  const oneHourAgo = Date.now() - (60 * 60 * 1000);
+  try {
+    const olderThanMs = 60 * 60 * 1000;
+    const cutoff = Date.now() - olderThanMs;
 
-  // Clean up completed downloads from memory
-  for (const [id, download] of activeDownloads.entries()) {
-    if (download.completedAt && new Date(download.completedAt).getTime() < oneHourAgo) {
-      deleteDownload(id);
-    }
-  }
-
-  // Clean up orphaned files
-  if (fs.existsSync(DOWNLOADS_DIR)) {
-    const files = fs.readdirSync(DOWNLOADS_DIR);
-    for (const file of files) {
-      const filepath = path.join(DOWNLOADS_DIR, file);
-      const stats = fs.statSync(filepath);
-      if (stats.mtimeMs < oneHourAgo) {
-        fs.unlinkSync(filepath);
+    for (const [id, download] of activeDownloads.entries()) {
+      if (download.completedAt && new Date(download.completedAt).getTime() < cutoff) {
+        try {
+          deleteDownload(id);
+        } catch (err) {
+          console.error('[downloadService] failed to drop expired download', id, err);
+        }
       }
     }
+
+    purgeOrphanedDownloadFiles(DOWNLOADS_DIR, olderThanMs);
+  } catch (err) {
+    console.error('[downloadService] cleanupOldDownloads failed:', err);
   }
 };
 
@@ -464,8 +467,15 @@ const extractFormats = (formats) => {
     .slice(0, 10); // Limit to 10 formats
 };
 
-// Start cleanup interval
-setInterval(cleanupOldDownloads, 15 * 60 * 1000); // Every 15 minutes
+// Start cleanup interval. A throw here used to take down the whole API.
+const cleanupTimer = setInterval(() => {
+  try {
+    cleanupOldDownloads();
+  } catch (err) {
+    console.error('[downloadService] cleanup interval failed:', err);
+  }
+}, 15 * 60 * 1000);
+if (typeof cleanupTimer.unref === 'function') cleanupTimer.unref();
 
 export default {
   fetchMediaInfo,
