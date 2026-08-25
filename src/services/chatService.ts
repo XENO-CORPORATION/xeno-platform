@@ -3,6 +3,14 @@
 
 const API_BASE = '/api/chat';
 
+/** Same shape as server `UUID_RE`. Local `convo-<ts>` ids must never hit the API. */
+export const PERSISTED_CONVERSATION_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isPersistedConversationId(id: string | null | undefined): id is string {
+  return typeof id === 'string' && PERSISTED_CONVERSATION_ID_RE.test(id);
+}
+
 // ============================================
 // TYPES
 // ============================================
@@ -92,16 +100,24 @@ const getAuthHeaders = (): HeadersInit => {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     // Phase 5: active workspace → conversations get tagged with workspace_id + a parent tuple.
-    ...(workspace ? { 'x-xeno-workspace': workspace } : {}),
+    ...(isPersistedConversationId(workspace) ? { 'x-xeno-workspace': workspace } : {}),
   };
 };
 
 const handleResponse = async <T>(response: Response): Promise<T> => {
-  const data = await response.json();
-  if (!response.ok || !data.success) {
-    throw new Error(data.error || 'Request failed');
+  const raw = await response.text();
+  let data: { success?: boolean; error?: string };
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    throw new Error(
+      `API request failed with status ${response.status}. Non-JSON response.`,
+    );
   }
-  return data;
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || `Request failed with status ${response.status}`);
+  }
+  return data as T;
 };
 
 // ============================================
@@ -146,6 +162,9 @@ export const chatService = {
 
   // Get single conversation with messages
   async getConversation(id: string): Promise<Conversation | null> {
+    if (!isPersistedConversationId(id)) {
+      return null;
+    }
     try {
       const response = await fetch(`${API_BASE}/conversations/${id}`, {
         headers: getAuthHeaders(),
@@ -193,6 +212,9 @@ export const chatService = {
       is_archived?: boolean;
     }
   ): Promise<Conversation | null> {
+    if (!isPersistedConversationId(id)) {
+      return null;
+    }
     try {
       const response = await fetch(`${API_BASE}/conversations/${id}`, {
         method: 'PUT',
@@ -210,6 +232,9 @@ export const chatService = {
 
   // Delete conversation
   async deleteConversation(id: string, permanent = false): Promise<boolean> {
+    if (!isPersistedConversationId(id)) {
+      return false;
+    }
     try {
       const response = await fetch(
         `${API_BASE}/conversations/${id}?permanent=${permanent}`,
@@ -243,6 +268,9 @@ export const chatService = {
       total_tokens?: number;
     }
   ): Promise<ChatMessage | null> {
+    if (!isPersistedConversationId(conversationId)) {
+      return null;
+    }
     try {
       const response = await fetch(
         `${API_BASE}/conversations/${conversationId}/messages`,
@@ -266,6 +294,9 @@ export const chatService = {
     conversationId: string,
     messages: ChatMessage[]
   ): Promise<ChatMessage[]> {
+    if (!isPersistedConversationId(conversationId)) {
+      return [];
+    }
     try {
       const response = await fetch(
         `${API_BASE}/conversations/${conversationId}/messages/batch`,

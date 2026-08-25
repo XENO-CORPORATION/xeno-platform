@@ -1,6 +1,17 @@
 import express from 'express';
-import { workspaceFromReq, isWorkspaceMember, linkResourceToWorkspace } from '../utils/workspaceContext.js';
+import { workspaceFromReq, isWorkspaceMember, linkResourceToWorkspace, UUID_RE } from '../utils/workspaceContext.js';
 import { computeNextRun, executeScheduledTask } from '../workers/chatScheduledWorker.js';
+
+/** Local `convo-<timestamp>` ids are UI-only. Sending one to Postgres is a 500. */
+function rejectIfNotPersistedConversationId(res, conversationId) {
+  if (UUID_RE.test(conversationId)) return false;
+  res.status(400).json({
+    success: false,
+    error: 'Conversation id must be a persisted UUID.',
+    code: 'invalid_conversation_id',
+  });
+  return true;
+}
 
 const router = express.Router();
 
@@ -178,6 +189,7 @@ router.get('/conversations/:id', async (req, res) => {
     }
 
     const { id } = req.params;
+    if (rejectIfNotPersistedConversationId(res, id)) return;
 
     // Get conversation
     const convResult = await req.db.query(
@@ -254,6 +266,7 @@ router.put('/conversations/:id', async (req, res) => {
     }
 
     const { id } = req.params;
+    if (rejectIfNotPersistedConversationId(res, id)) return;
     const { title, model_id, system_prompt, persona_id, is_archived } = req.body;
 
     // Build dynamic update query
@@ -317,6 +330,7 @@ router.delete('/conversations/:id', async (req, res) => {
     }
 
     const { id } = req.params;
+    if (rejectIfNotPersistedConversationId(res, id)) return;
     const { permanent = false } = req.query;
 
     if (permanent === 'true') {
@@ -353,6 +367,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
     }
 
     const { id: conversationId } = req.params;
+    if (rejectIfNotPersistedConversationId(res, conversationId)) return;
     const {
       role,
       content,
@@ -434,6 +449,7 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
     }
 
     const { id: conversationId } = req.params;
+    if (rejectIfNotPersistedConversationId(res, conversationId)) return;
     const { messages } = req.body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -748,6 +764,7 @@ router.post('/conversations/:id/share', async (req, res) => {
     }
 
     const { id: conversationId } = req.params;
+    if (rejectIfNotPersistedConversationId(res, conversationId)) return;
     const { expires_in_days = 7 } = req.body;
 
     // Verify conversation belongs to user
@@ -945,6 +962,7 @@ router.delete('/conversations/:id/share', async (req, res) => {
     }
 
     const { id: conversationId } = req.params;
+    if (rejectIfNotPersistedConversationId(res, conversationId)) return;
 
     // Revoke all active shares for this conversation
     await req.db.query(
@@ -969,6 +987,7 @@ router.get('/conversations/:id/shares', async (req, res) => {
     }
 
     const { id: conversationId } = req.params;
+    if (rejectIfNotPersistedConversationId(res, conversationId)) return;
 
     const result = await req.db.query(
       `SELECT * FROM chat_shared_conversations

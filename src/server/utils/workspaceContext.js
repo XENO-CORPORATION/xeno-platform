@@ -10,7 +10,7 @@
  */
 import { check, writeTuples } from './authzReBAC.js';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The validated active-workspace id from the request, or null. */
 export function workspaceFromReq(req) {
