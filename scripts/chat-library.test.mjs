@@ -113,6 +113,18 @@ test('shared image component exports draggable signed URLs and chat persists ref
   assert.match(libraryClient, /\/api\/library\/assets/);
 });
 
+test('Library viewer is a shell-isolated portal with bounded, honest preview states', () => {
+  assert.match(page, /createPortal\(/);
+  assert.match(page, /document\.body/);
+  assert.match(viewer, /data-library-asset-viewer="true"/);
+  assert.match(viewer, /MAX_VISIBLE_THUMBNAILS = 9/);
+  assert.match(viewer, /Preview unavailable/);
+  assert.match(viewer, /disabled=\{!canExport\}/);
+  assert.match(image, /data-library-image-state=\{state\}/);
+  assert.match(image, /state !== 'ready' \|\| !url/);
+  assert.doesNotMatch(image, /src=\{url \|\| undefined\}/);
+});
+
 test('legacy artifacts paths remain a compatibility boundary', () => {
   assert.match(app, /path="\/artifacts" element=\{<LibraryRouteRedirect/);
   assert.match(chat, /path\.startsWith\('\/artifacts'\)/);

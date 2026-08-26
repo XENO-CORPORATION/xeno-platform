@@ -1538,6 +1538,11 @@ input:-webkit-autofill:active {
    panels all subtract from it. The component gives the top bar its final
    available width; these container rules compact labels from that width rather
    than from the unrelated browser breakpoint. */
+html[data-library-viewer-open='true'],
+html[data-library-viewer-open='true'] body {
+  overflow: hidden !important;
+}
+
 .chat-top-bar {
   container: chat-topbar / inline-size;
   min-width: 0;
