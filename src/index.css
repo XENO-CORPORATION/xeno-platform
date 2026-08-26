@@ -1535,7 +1535,7 @@ input:-webkit-autofill:active {
 
 /* ══════════════════════════════════════════════════════════════════════════════
    Composer gooey reveal
-   The mode tabs and agent actions emerge from the composer as liquid: one
+   The mode tabs, agent actions and model catalog emerge from the composer as liquid: one
    SVG-filtered layer ("the skin") holds the box plus a blob
    per button, so the metaball filter can melt them together and grow a neck while a
    button pulls away. See composerGooey.ts for the mechanics.
@@ -1668,6 +1668,15 @@ input:-webkit-autofill:active {
 
 .chat-gooey-item.chat-gooey-item--up {
   transform: none;
+}
+
+/* Overflowing rails need stable control geometry even while their liquid skin moves.
+   The real button stays at its final rect; only its duplicate blob receives the chain
+   transform. Chrome and label hand-off still use the ordinary gooey lifecycle. */
+.chat-gooey-item.chat-gooey-item--fixed,
+.chat-gooey-item.chat-gooey-item--fixed.chat-gooey-item--up {
+  transform: none !important;
+  will-change: auto;
 }
 
 /* No chrome while the blob is acting as this button's body.
@@ -1840,27 +1849,14 @@ div:has([data-composer-reveal][data-reveal-open="true"]) > [data-chat-scroll-to-
   padding-inline: 10px !important;
 }
 
-/* The model catalog can exceed the available row width. Keep every pill in its final
-   position and animate the rail as one unit; transforming individual pill geometry in
-   an overflow box produces clipped blobs and labels detached from their controls. */
+/* The model catalog can exceed the available row width. Its actual buttons keep final
+   geometry while the SVG-filtered duplicate skin performs the gooey chain. */
 .chat-inline-model-rail {
-  animation: chatInlineModelRailIn 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
   transform-origin: right center;
 }
 
 .chat-inline-model-actions[data-inline-model-actions-state="closing"] .chat-inline-model-rail {
-  animation: chatInlineModelRailOut 140ms ease-in both;
   pointer-events: none;
-}
-
-@keyframes chatInlineModelRailIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes chatInlineModelRailOut {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(3px); }
 }
 
 [data-composer-reveal-row][data-reveal-state="closed"] {
@@ -1872,11 +1868,6 @@ div:has([data-composer-reveal][data-reveal-open="true"]) > [data-chat-scroll-to-
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-inline-model-rail,
-  .chat-inline-model-actions[data-inline-model-actions-state="closing"] .chat-inline-model-rail {
-    animation: none;
-  }
-
   .chat-gooey-item,
   .chat-gooey-item.chat-gooey-item--up,
   .chat-gooey-blob {
