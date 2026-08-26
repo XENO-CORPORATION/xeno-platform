@@ -14,41 +14,87 @@ export const MarketingPage: React.FC<{
   title: string;
   subtitle?: string;
   updated?: string;
+  /** Decision pages can center the hero over the controls/cards they introduce.
+   * Editorial and legal pages retain the left-aligned default. */
+  heroAlign?: 'left' | 'center';
+  showHomeLink?: boolean;
+  heroActions?: React.ReactNode;
   /** Most prose pages use a readable 880px measure. Decision grids such as
    * pricing can opt into the wider onboarding measure without forking the
    * marketing shell. */
   contentMaxWidth?: number;
   children: React.ReactNode;
-}> = ({ eyebrow, title, subtitle, updated, contentMaxWidth = 880, children }) => {
+}> = ({
+  eyebrow,
+  title,
+  subtitle,
+  updated,
+  heroAlign = 'left',
+  showHomeLink = true,
+  heroActions,
+  contentMaxWidth = 880,
+  children,
+}) => {
   const navigate = useNavigate();
+  const centeredHero = heroAlign === 'center';
   return (
     <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
       <Header onGetStarted={() => navigate('/login')} visible={true} />
       <main className="flex-1">
-        <section className="page-gutter relative overflow-hidden pt-[clamp(92px,12vh,140px)] pb-[clamp(24px,4vh,48px)]">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-[360px] bg-[radial-gradient(ellipse_55%_75%_at_50%_-10%,rgba(255, 255, 255,0.10),transparent_70%)]" />
-          <div className="relative mx-auto w-full" style={{ maxWidth: contentMaxWidth }}>
-            <Reveal>
-              <Link to="/" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">
-                <ArrowLeft className="h-3.5 w-3.5" /> Home
-              </Link>
-            </Reveal>
+        <section
+          data-hero-align={heroAlign}
+          className={`page-gutter relative overflow-hidden ${centeredHero
+            ? 'pt-[clamp(126px,16vh,176px)] pb-[clamp(54px,7vh,82px)]'
+            : 'pt-[clamp(92px,12vh,140px)] pb-[clamp(24px,4vh,48px)]'
+          }`}
+        >
+          <div className={`pointer-events-none absolute inset-x-0 top-0 ${centeredHero
+            ? 'h-[520px] bg-[radial-gradient(ellipse_60%_70%_at_50%_0%,rgba(255,255,255,0.11),transparent_72%)]'
+            : 'h-[360px] bg-[radial-gradient(ellipse_55%_75%_at_50%_-10%,rgba(255,255,255,0.10),transparent_70%)]'
+          }`} />
+          {centeredHero && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-[520px] opacity-[0.035]"
+              style={{
+                backgroundImage: 'linear-gradient(rgba(255,255,255,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.16) 1px, transparent 1px)',
+                backgroundSize: '56px 56px',
+                maskImage: 'linear-gradient(to bottom, black, transparent 78%)',
+              }}
+            />
+          )}
+          <div className={`relative mx-auto w-full ${centeredHero ? 'text-center' : ''}`} style={{ maxWidth: contentMaxWidth }}>
+            {showHomeLink && (
+              <Reveal>
+                <Link to="/" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">
+                  <ArrowLeft className="h-3.5 w-3.5" /> Home
+                </Link>
+              </Reveal>
+            )}
             {eyebrow && (
               <Reveal delay={40}>
-                <div className="mt-6 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#e8e3dc]">{eyebrow}</div>
+                <div className={`${showHomeLink ? 'mt-6' : ''} text-[11px] font-semibold uppercase tracking-[0.2em] text-[#e8e3dc]`}>{eyebrow}</div>
               </Reveal>
             )}
             <Reveal delay={80}>
-              <h1 className="mt-3 text-[clamp(2.2rem,4vw,3.4rem)] font-semibold leading-[1.05] tracking-[-0.02em] text-[#ece7df]">{title}</h1>
+              <h1 className={`${centeredHero
+                ? 'mx-auto mt-4 max-w-[1100px] text-[clamp(2.65rem,5.2vw,4.75rem)] leading-[0.98] tracking-[-0.045em]'
+                : 'mt-3 text-[clamp(2.2rem,4vw,3.4rem)] leading-[1.05] tracking-[-0.02em]'
+              } font-semibold text-[#ece7df]`}>{title}</h1>
             </Reveal>
             {subtitle && (
               <Reveal delay={120}>
-                <p className="mt-4 max-w-[640px] text-[clamp(14px,1.1vw,17px)] leading-[1.6] text-[#948d83]">{subtitle}</p>
+                <p className={`${centeredHero ? 'mx-auto mt-6 max-w-[700px]' : 'mt-4 max-w-[640px]'} text-[clamp(14px,1.1vw,17px)] leading-[1.6] text-[#948d83]`}>{subtitle}</p>
               </Reveal>
             )}
             {updated && (
               <Reveal delay={140}>
                 <p className="mt-3 text-[12px] text-[#69635b]">Last updated: {updated}</p>
+              </Reveal>
+            )}
+            {heroActions && (
+              <Reveal delay={160}>
+                <div className={`${centeredHero ? 'mt-8 flex flex-col items-center' : 'mt-7'}`}>{heroActions}</div>
               </Reveal>
             )}
           </div>
