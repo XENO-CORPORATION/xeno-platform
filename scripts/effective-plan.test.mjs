@@ -190,11 +190,21 @@ test('the per-seat Team checkout carries the download intent', () => {
    * decides whether an intent can reach this function at all. */
   assert.ok(/createWorkspaceSeatCheckout\(pool, user, \{[^}]*downloadIntent/.test(billing),
     'the Team checkout cannot accept a download intent');
-  assert.ok(fn.includes("checkoutReturn(base, 'team_seat', downloadIntent)"),
+  assert.ok(fn.includes('checkoutReturn(base, item.id, downloadIntent)'),
     'the Team checkout does not build its return from the intent');
   assert.ok(fn.includes('seatReturn.successUrl'),
     'the Team checkout still hardcodes its return URL — a download-driven purchase lands nowhere');
   assert.ok(wsRoutes.includes('downloadIntent'), 'the subscribe route never forwards an intent');
+  assert.ok(wsRoutes.includes('consentId'), 'the subscribe route never forwards the recorded consent');
+  assert.ok(wsRoutes.includes('itemId'), 'the subscribe route cannot preserve monthly versus annual Team pricing');
+});
+
+test('a per-seat SKU can never be sold as a personal subscription', () => {
+  const start = billing.indexOf('export async function createCheckout(');
+  const end = billing.indexOf('export async function createWorkspaceSeatCheckout(', start);
+  const fn = billing.slice(start, end);
+  assert.ok(fn.includes('if (item.perSeat)'), 'generic checkout accepts a Team seat without a workspace');
+  assert.ok(fn.includes("e.code = 'workspace_required'"), 'the refusal is not machine-actionable');
 });
 
 test('the WORKSPACE webhook branch attributes the purchase', () => {

@@ -529,8 +529,9 @@ router.patch('/:id/billing/mode', wrapId(async (req, res) => {
   res.json({ success: true, billing_mode: mode });
 }));
 
-// POST /api/workspaces/:id/billing/subscribe { seats } — owner starts the per-seat
-// Team subscription (Stripe Checkout). seats defaults to the current member count.
+// POST /api/workspaces/:id/billing/subscribe { itemId, seats, consentId, downloadIntent }
+// — owner starts a per-seat Team subscription. seats defaults to the current
+// member count; consent remains mandatory at the billing-service boundary.
 router.post('/:id/billing/subscribe', wrapId(async (req, res) => {
   const wsId = req.params.id;
   const ws = await getWorkspace(req.db, wsId);
@@ -545,13 +546,15 @@ router.post('/:id/billing/subscribe', wrapId(async (req, res) => {
      * button, so a Team purchase returns to the download and is attributable
      * to it. Opaque token only — the return URL is built server-side. */
     const downloadIntent = typeof req.body?.downloadIntent === 'string' ? req.body.downloadIntent : null;
+    const consentId = typeof req.body?.consentId === 'string' ? req.body.consentId : null;
+    const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : 'team_seat';
     const out = await createWorkspaceSeatCheckout(req.db, req.user, {
-      workspaceId: wsId, seats, origin: req.headers.origin, downloadIntent,
+      workspaceId: wsId, seats, origin: req.headers.origin, itemId, downloadIntent, consentId,
     });
-    await audit(req.db, wsId, req.user.id, 'billing.subscribe', wsId, { seats });
+    await audit(req.db, wsId, req.user.id, 'billing.subscribe', wsId, { seats, itemId });
     res.json({ success: true, url: out.url });
   } catch (e) {
-    return res.status(e.status || 500).json({ success: false, error: e.message });
+    return res.status(e.status || 500).json({ success: false, error: e.message, code: e.code || 'checkout_failed' });
   }
 }));
 

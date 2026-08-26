@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import MarketingPage, { Section, Prose, CheckList } from '../components/marketing/MarketingPage';
-import { startCheckout, isAuthed, getLivePriceMap, getBillingAvailability, type BillingAvailability } from '../services/billingService';
+import { startCheckout, startTeamCheckout, isAuthed, getBillingConfig, getBillingAvailability, type BillingAvailability, type BillingItem } from '../services/billingService';
 import { useSearchParams } from 'react-router-dom';
 import CheckoutConsent from '../components/billing/CheckoutConsent';
 import {
@@ -62,7 +62,9 @@ function useCheckout() {
   const proceed = React.useCallback(async (itemId: string, consentId: string) => {
     setPending(null);
     setBusyId(itemId);
-    const r = await startCheckout(itemId, downloadIntent || undefined, consentId);
+    const r = itemId === 'team_seat' || itemId === 'team_annual'
+      ? await startTeamCheckout(itemId, { consentId, downloadIntent: downloadIntent || undefined })
+      : await startCheckout(itemId, downloadIntent || undefined, consentId);
     if (!r.ok) {
       setBusyId(null);
       toast.error(r.error || 'Could not start checkout');
@@ -164,11 +166,41 @@ const Pricing: React.FC = () => {
   // Prefer the LIVE catalog price (which mirrors the Stripe Price actually charged) so the
   // advertised price always equals the charged price; fall back to the static value.
   const [live, setLive] = React.useState<Record<string, LivePrice>>({});
+  const [offered, setOffered] = React.useState<Record<string, BillingItem>>({});
   React.useEffect(() => {
     let on = true;
-    getLivePriceMap().then((m) => { if (on) setLive(m); }).catch(() => {});
+    getBillingConfig().then((cfg) => {
+      if (!on) return;
+      const prices: Record<string, LivePrice> = {};
+      const plans: Record<string, BillingItem> = {};
+      for (const item of cfg.catalog) {
+        prices[item.id] = { price: item.price, currency: item.currency || cfg.currency };
+        if (item.kind === 'subscription' && item.plan && item.interval === 'month') plans[item.plan] = item;
+      }
+      setLive(prices);
+      setOffered(plans);
+    }).catch(() => {});
     return () => { on = false; };
   }, []);
+
+  /* The server offers exactly one Everything generation (founding OR list).
+   * Replace the static fallback id and amount with that offered item together,
+   * so the button can never advertise one price and submit another SKU. */
+  const displayPlans = PRICING_TIERS.map((plan) => {
+    const livePlan = plan.id === 'pro' ? offered.pro : offered[plan.id];
+    if (!livePlan) return plan;
+    return {
+      ...plan,
+      itemId: livePlan.id,
+      price: livePlan.price,
+      currency: livePlan.currency,
+      note: plan.id === 'pro'
+        ? (livePlan.founding
+          ? 'Founding price €24/mo or €228/year — locked while subscribed. List price is €39/mo or €348/year.'
+          : '€39/mo, or €348/year (€29/month).')
+        : plan.note,
+    } satisfies PricingTier;
+  });
 
   const priceLabel = (plan: PricingTier): string => {
     if (plan.price === 'custom') return 'Custom';
@@ -181,8 +213,8 @@ const Pricing: React.FC = () => {
   {checkout.pending && (
     <CheckoutConsent
       itemId={checkout.pending.itemId}
-      planLabel={PRICING_TIERS.find((t) => t.itemId === checkout.pending!.itemId)?.name || 'XENO'}
-      priceLabel={priceLabel(PRICING_TIERS.find((t) => t.itemId === checkout.pending!.itemId) || PRICING_TIERS[0])}
+      planLabel={displayPlans.find((t) => t.itemId === checkout.pending!.itemId)?.name || 'XENO'}
+      priceLabel={priceLabel(displayPlans.find((t) => t.itemId === checkout.pending!.itemId) || displayPlans[0])}
       onCancel={() => checkout.setPending(null)}
       onConsented={(consentId) => void checkout.proceed(checkout.pending!.itemId, consentId)}
     />
@@ -190,19 +222,19 @@ const Pricing: React.FC = () => {
   <MarketingPage
     eyebrow="PRICING"
     title="One plan. Every app, and the platform they run on."
-    subtitle="A XENO account is free and real — the in-house API, credits, and the whole platform surface. Installing the apps takes a plan, and one plan covers all of them plus what connects them: cloud sync, cross-app workflows, agents, and collaboration."
-    updated="July 2026"
+    subtitle="A XENO account and web workspace are free. An active plan unlocks new desktop installers and the connected platform. Team adds collaboration per paid seat."
+    updated="August 2026"
   >
     <Section>
       <div className="mb-6 rounded-[12px] border border-white/[0.09] bg-[#0d0d0d] px-5 py-4 text-[13px] leading-[1.6] text-[#b6afa5]">
         <span className="font-semibold text-[#ece7df]">A free account is real — but the apps need a plan.</span>{' '}
-        Free gives you the account, the in-house API and credits to use it. Downloading and running the
-        desktop apps requires a paid plan, and one plan covers every app plus the platform around them:
-        sync, cross-app workflows, agents and collaboration. No per-app pricing, ever.
+        Free gives you the account and web workspace. Obtaining a new desktop installer requires a paid
+        plan; an app you already installed keeps working locally. Everything covers every currently
+        available app plus the paid platform entitlements. Team adds collaboration per paid seat.
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {PRICING_TIERS.map((plan) => (
+        {displayPlans.map((plan) => (
           <div
             key={plan.name}
             className={`flex flex-col rounded-[14px] border bg-[#0d0d0d] p-6 ${
@@ -232,29 +264,29 @@ const Pricing: React.FC = () => {
       </div>
     </Section>
 
-    <Section title="Tool vs platform — where the line actually is">
+    <Section title="Account, software, and platform — where the line is">
       <p className="mb-5 text-[14px] leading-[1.75] text-[#9b948a]">
-        Nothing about an app is crippled or time-limited — there is no reduced edition and no watermark.
-        The line is simply where it has always been for desktop software: a plan is what gets you the
-        app, and the same plan is what connects the apps to each other.
+        There is no watermark or time-limited edition. A free account can use the web workspace, and an
+        app already on your machine keeps working locally. An active plan is required to obtain a new
+        desktop installer and to use the paid platform capabilities attached to it.
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] p-6">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#69635b]">The tool · Free</div>
-          <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">Runs on your machine</h3>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#69635b]">Free account</div>
+          <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">A real web workspace</h3>
           <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
-            Every app installs and runs locally — edit local files, export clean at full resolution, and
-            drive inference with your own API key or in-house open models. No account required to create.
-            It's an island: no cloud, no cross-app workflows, no agents, no collaboration.
+            Browse products and release notes, use the web surfaces available to your account, and keep
+            using desktop apps you already obtained. Free does not grant a new installer, commercial-use
+            rights, cloud sync, agent identity access, or collaboration.
           </p>
         </div>
         <div className="rounded-[12px] border border-white/20 bg-[#0d0d0d] p-6">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ece7df]">The platform · Pro &amp; Team</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ece7df]">Everything &amp; Team</div>
           <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">Wires the tools together</h3>
           <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
-            One account turns the tools into a server-backed platform: projects sync across every device,
-            work flows between apps, agents handle the busywork, and the commercial-use license covers your
-            output. Team adds real-time collaboration and shared workspace billing on top.
+            One account unlocks the server-backed platform: cloud projects and sync, agent identities,
+            and the cross-app layer as product integrations roll out. The commercial-use license covers
+            your output. Team adds real-time collaboration and shared workspace billing on top.
           </p>
         </div>
       </div>
@@ -263,9 +295,9 @@ const Pricing: React.FC = () => {
     <Section title="Optional: credit packs">
       <p className="mb-5 text-[14px] leading-[1.75] text-[#9b948a]">
         Credits are separate from your plan and entirely optional. They're à-la-carte fuel for
-        managed-premium inference (frontier and third-party models) and the marketplace — never required
-        for bring-your-own-key or in-house open models, and never bundled into a subscription. Paid
-        credits don't expire.
+        managed-premium inference (frontier and third-party models) and the marketplace. They are never
+        bundled into a subscription, and paid credits do not expire. BYOK is planned; local xeno-rt uses
+        your own hardware when available and is not a hosted-credit charge.
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {CREDIT_PACKS.map((pack) => (
@@ -279,15 +311,15 @@ const Pricing: React.FC = () => {
         blocks={[
           {
             h: 'Is the free version a trial?',
-            p: <>The account is. The apps are not — installing any XENO desktop app needs an active plan. What you get for free is a real account rather than a trial: the in-house API, credits, the Forum and the whole web platform, with no card and no expiry. What a plan buys is the software itself, and one plan covers every app rather than one per product.</>,
+            p: <>The account is not a trial. It has no card requirement or expiry. A new XENO desktop installer requires an active plan; software already obtained keeps working locally. Hosted in-house inference is not currently served, so it is not presented as an available Free feature.</>,
           },
           {
             h: 'What actually changes when I upgrade?',
-            p: <>A plan gets you the desktop apps themselves, and everything that connects them: cloud sync and multi-device, workflows that span apps, agents and automation, private cloud projects, managed-premium inference priority, and the commercial-use license. Team adds real-time collaboration and shared workspace billing. A free account keeps the web platform, the in-house API and credits — it just does not install software.</>,
+            p: <>Everything grants the available desktop installers and paid platform entitlements: cloud sync, private cloud projects, agent identity access, managed-premium priority, commercial-use rights, and the cross-app layer as product integrations roll out. Team adds real-time collaboration and workspace billing per paid seat.</>,
           },
           {
             h: 'Do I need credits to use XENO?',
-            p: <>No. Your subscription unlocks features; credits are a separate, optional top-up. Credits fuel only managed-premium (frontier and third-party) inference and the marketplace — bring-your-own-key and in-house xeno-rt open models never cost credits.</>,
+            p: <>No. A subscription unlocks software and platform capabilities. Credits are a separate optional top-up for managed-premium inference and marketplace purchases. BYOK is planned and not yet available; local xeno-rt runs on your own hardware when available.</>,
           },
           {
             h: 'Do credits expire?',

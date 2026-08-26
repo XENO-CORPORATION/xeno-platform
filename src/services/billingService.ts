@@ -20,6 +20,10 @@ export interface BillingItem {
   price: number;        // display amount in `currency` (mirrors the Stripe Price)
   currency: string;     // ISO code, lowercase ('eur')
   interval?: string;
+  plan?: string;
+  perMonth?: number;
+  founding?: boolean;
+  becomes?: { price: number; perMonth?: number | null };
   perSeat?: boolean;
   badge?: string;
   available: boolean;
@@ -130,6 +134,60 @@ export async function startCheckout(itemId: string, downloadIntent?: string, con
       return { ok: true };
     }
     return { ok: false, error: data?.error || `Checkout failed (${res.status})` };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message || 'Network error' };
+  }
+}
+
+/**
+ * Start a real per-seat Team checkout.
+ *
+ * Team is owned by a workspace, never by the person who happened to pay. Reuse
+ * an owned team workspace when one exists; otherwise create the workspace that
+ * the subscription will fund. The server remains authoritative for ownership,
+ * member-count minimums, consent, price selection, and Stripe quantity.
+ */
+export async function startTeamCheckout(
+  itemId: 'team_seat' | 'team_annual',
+  opts: { seats?: number; consentId: string; downloadIntent?: string; workspaceName?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const listRes = await fetch(`${API_BASE}/workspaces`, { headers: { ...authHeaders() } });
+    const listData = await listRes.json().catch(() => ({}));
+    if (!listRes.ok) return { ok: false, error: listData?.error || `Could not load workspaces (${listRes.status})` };
+
+    let workspace = (listData?.workspaces || []).find(
+      (w: { workspace_type?: string; member_role?: string }) => w.workspace_type === 'team' && w.member_role === 'owner',
+    );
+    if (!workspace) {
+      const createRes = await fetch(`${API_BASE}/workspaces`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ name: opts.workspaceName || 'My Team', workspace_type: 'team' }),
+      });
+      const createData = await createRes.json().catch(() => ({}));
+      if (!createRes.ok || !createData?.workspace) {
+        return { ok: false, error: createData?.error || `Could not create the team workspace (${createRes.status})` };
+      }
+      workspace = createData.workspace;
+    }
+
+    const res = await fetch(`${API_BASE}/workspaces/${encodeURIComponent(workspace.id)}/billing/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({
+        itemId,
+        seats: Math.max(1, Math.floor(Number(opts.seats) || 1)),
+        consentId: opts.consentId,
+        downloadIntent: opts.downloadIntent,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.url) {
+      window.location.href = data.url;
+      return { ok: true };
+    }
+    return { ok: false, error: data?.error || `Team checkout failed (${res.status})` };
   } catch (e) {
     return { ok: false, error: (e as Error).message || 'Network error' };
   }

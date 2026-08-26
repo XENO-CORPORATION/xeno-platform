@@ -9,6 +9,7 @@
  * being a member of the workspace.
  */
 import { check, writeTuples } from './authzReBAC.js';
+import { entitlementsFor, getPlan } from '../services/billingService.js';
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -63,22 +64,36 @@ export async function tagResourceWorkspace(db, req, { objectType, objectId, tabl
 }
 
 // ── Seats (Phase 4 per-seat billing enforcement) ─────────────────────────────
-// Free/unsubscribed workspaces get a small default so small teams can try before
-// subscribing; a Stripe per-seat subscription raises the limit (workspaces.metadata.billing.seat_limit).
-const DEFAULT_FREE_SEATS = Number(process.env.WORKSPACE_FREE_SEATS || 3);
+// An unsubscribed workspace contains its owner only. Inviting another person is
+// the paid Team boundary; granting three free seats here made the checkout's
+// per-seat contract optional for precisely the first small team it targets.
+const DEFAULT_FREE_SEATS = Number(process.env.WORKSPACE_FREE_SEATS || 1);
 
 /** { limit, used, plan } — used = active members + pending invites. */
 export async function workspaceSeatInfo(db, workspaceId, activeMembers) {
-  const ws = (await db.query('SELECT metadata FROM workspaces WHERE id = $1', [workspaceId])).rows[0];
+  const ws = (await db.query('SELECT owner_user_id, metadata FROM workspaces WHERE id = $1', [workspaceId])).rows[0];
   const billing = ws?.metadata?.billing || {};
   const onTeamPlan = billing.plan === 'team' && ['active', 'trialing', 'past_due'].includes(billing.status);
-  const limit = onTeamPlan && Number.isFinite(Number(billing.seat_limit))
+  let plan = onTeamPlan ? 'team' : 'free';
+  let limit = onTeamPlan && Number.isFinite(Number(billing.seat_limit))
     ? Number(billing.seat_limit)
     : DEFAULT_FREE_SEATS;
+
+  // Studio is a personal subscription whose contract includes a larger shared
+  // workspace. Without resolving the owner's plan here, the UI could sell
+  // Studio while every invite after the owner still failed at the Free limit.
+  if (!onTeamPlan && ws?.owner_user_id) {
+    const ownerPlan = await getPlan(db, ws.owner_user_id);
+    const includedSeats = Number(entitlementsFor(ownerPlan.plan).teamSeats || 0);
+    if (includedSeats > limit) {
+      plan = ownerPlan.plan;
+      limit = includedSeats;
+    }
+  }
   const pending = Number((await db.query(
     "SELECT count(*)::int c FROM workspace_invites WHERE workspace_id = $1 AND status = 'pending'", [workspaceId],
   )).rows[0].c);
-  return { limit, used: (activeMembers ?? 0) + pending, plan: onTeamPlan ? 'team' : 'free', seat_limit: limit };
+  return { limit, used: (activeMembers ?? 0) + pending, plan, seat_limit: limit };
 }
 
 export default { workspaceFromReq, isWorkspaceMember, linkResourceToWorkspace, workspaceSeatInfo };

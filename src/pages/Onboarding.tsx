@@ -5,6 +5,7 @@ import {
   Megaphone, Building2, GraduationCap, MoreHorizontal,
 } from 'lucide-react';
 import AuthMark from '../components/auth/AuthMark';
+import CheckoutConsent from '../components/billing/CheckoutConsent';
 import WorkspaceChooser from '../components/onboarding/WorkspaceChooser';
 import useStepTransition from '../components/onboarding/useStepTransition';
 import RoleCard from '../components/onboarding/RoleCard';
@@ -21,6 +22,7 @@ import {
   AUTH_TOKEN_KEY, ONBOARDING_DONE_KEY, destinationAfterOnboarding,
   consumeOnboardingNext, isExternalOnboardingNext,
 } from '../lib/onboardingHandoff.js';
+import { startCheckout as startPersonalCheckout, startTeamCheckout } from '../services/billingService';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * ONBOARDING — workspace → about you → role → plan → where to start
@@ -80,6 +82,7 @@ type Answers = {
  *  when the item has no Stripe price id — the server's own fail-safe, which
  *  this UI respects rather than rendering a button that cannot charge. */
 type Entitlements = {
+  plan?: string;
   canUse?: boolean; commercial?: boolean; maxResolution?: string; priority?: boolean;
   inHouseDailyLimit?: number | null; privateProjects?: boolean; teamSeats?: number;
   cloudSync?: boolean; crossApp?: boolean; agents?: boolean; collaboration?: boolean;
@@ -127,15 +130,17 @@ function allFeatures(e?: Entitlements, serves?: Serves): string[] {
     if (e.inHouseDailyLimit === null) out.push('Unlimited in-house generation');
     else if (e.inHouseDailyLimit) out.push(`${e.inHouseDailyLimit} in-house generations/day`);
   }
-  if (e.agents) out.push('AI agents across every app');
-  if (e.crossApp) out.push('Cross-app workflows');
+  if (e.agents) out.push('Agent identities and access credentials');
+  if (e.crossApp) out.push('Cross-app workflow layer (integrations rolling out)');
   if (e.cloudSync) out.push('Cloud sync and multi-device');
   if (e.privateProjects) out.push('Private cloud projects');
   if (e.maxResolution === '4k') out.push('Up to 4K server-side output');
   if (e.commercial) out.push('Commercial-use licence');
   if (e.priority) out.push('Priority queue');
   if (e.collaboration) out.push('Real-time collaboration');
-  if (e.teamSeats) out.push(`${e.teamSeats} team seats included`);
+  // Team quantity is purchased and stored on the workspace, not included in a
+  // static entitlement. Only Studio has an included fixed workspace capacity.
+  if (e.plan === 'studio' && e.teamSeats) out.push(`Up to ${e.teamSeats} workspace members`);
   return out;
 }
 
@@ -150,7 +155,7 @@ function allFeatures(e?: Entitlements, serves?: Serves): string[] {
  * So a tier that is a superset of a cheaper one leads with what is NEW, then
  * rolls the rest up into one "Everything in X" line. That is both shorter and
  * a truer description of the decision being made — nobody compares Team to
- * nothing, they compare it to Pro.
+ * nothing, they compare it to Everything.
  */
 function featuresFor(
   e?: Entitlements,
@@ -163,7 +168,7 @@ function featuresFor(
   const base = new Set(allFeatures(baseline.entitlements, serves));
   const added = mine.filter((f) => !base.has(f));
   // Only roll up when this tier genuinely contains the cheaper one. If it does
-  // not, "Everything in Pro" would be a lie and the full list is correct.
+  // not, an "Everything in …" roll-up would be a lie and the full list is correct.
   const isSuperset = mine.length > 0 && [...base].every((f) => mine.includes(f));
   if (!isSuperset || added.length === 0) return mine.slice(0, 6);
 
@@ -304,6 +309,7 @@ const Onboarding: React.FC = () => {
     serves?: Serves;
   } | null>(null);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
+  const [pendingCheckout, setPendingCheckout] = useState<CatalogItem | null>(null);
   /* Raised by the workspace step's everything-bar. The nav drops away while it
    * is hovered, so the bar has the screen to itself for the moment somebody is
    * considering it. */
@@ -368,19 +374,15 @@ const Onboarding: React.FC = () => {
     if (wait) { setSaving(true); await req; setSaving(false); }
   };
 
-  const startCheckout = async (itemId: string) => {
+  const proceedToCheckout = async (itemId: string, consentId: string) => {
+    setPendingCheckout(null);
     setCheckingOut(itemId);
     try {
-      await save({ ...answers, completed: true });
-      const res = await fetch('/api/billing/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ itemId }),
-      });
-      const data = await res.json();
-      // Stripe is an EXTERNAL origin — a document navigation, never the router.
-      if (data?.url) { window.location.assign(data.url); return; }
-      setCheckingOut(null);
+      await save({ ...answers, completed: true }, { wait: true });
+      const result = itemId === 'team_seat' || itemId === 'team_annual'
+        ? await startTeamCheckout(itemId, { consentId })
+        : await startPersonalCheckout(itemId, undefined, consentId);
+      if (!result.ok) setCheckingOut(null);
     } catch { setCheckingOut(null); }
   };
 
@@ -665,6 +667,16 @@ const Onboarding: React.FC = () => {
   }
 
   return (
+    <>
+    {pendingCheckout && (
+      <CheckoutConsent
+        itemId={pendingCheckout.id}
+        planLabel={pendingCheckout.label}
+        priceLabel={formatPrice(pendingCheckout.perMonth ?? pendingCheckout.price, billing?.currency)}
+        onCancel={() => setPendingCheckout(null)}
+        onConsented={(consentId) => void proceedToCheckout(pendingCheckout.id, consentId)}
+      />
+    )}
     <div
       className="relative flex h-screen h-[100dvh] flex-col overflow-hidden text-white"
       style={{ background: '#060606' }}
@@ -707,7 +719,13 @@ const Onboarding: React.FC = () => {
                  needs the full row; the role grid is four short ones and wants
                  less; the forms stay a readable measure. One width for all
                  three would have to be wrong for two of them. */
-              t.rendered === 2 ? 'max-w-[1240px]' : t.rendered === 1 ? 'max-w-[980px]' : 'max-w-[620px]',
+              t.rendered === 2
+                ? 'max-w-[1240px]'
+                : t.rendered === 3
+                  ? 'max-w-[1040px]'
+                  : t.rendered === 1
+                    ? 'max-w-[980px]'
+                    : 'max-w-[620px]',
             )}
           >
 
@@ -841,14 +859,12 @@ const Onboarding: React.FC = () => {
               <>
                 <StepHeading
                   title="Everything&rsquo;s ready. Choose how you run it."
-                  /* Names what they picked, then draws the one line that
-                     matters: the apps genuinely open on free, and the compute
-                     is what costs. Both halves are true, which is why it can be
-                     said this plainly - `requireEntitlement('canUse')` gates
-                     the spending routes and nothing else. */
+                  /* Names what they picked without erasing the newer download
+                     boundary: existing installs remain local and usable, but a
+                     newly-created Free account cannot obtain an installer. */
                   sub={workspaceSummary
-                    ? `${workspaceSummary} installs and opens for free. Running it — generation, agents, cloud projects — is what a plan is for.`
-                    : 'Browsing stays free. Generation, agents and cloud projects need a plan.'}
+                    ? `${workspaceSummary} is mapped into your web workspace. Existing desktop installs keep working; obtaining a new installer and connected platform features requires a plan.`
+                    : 'The web workspace is free. New desktop installers and connected platform features require a plan.'}
                 />
 
                 {/* ── Billing interval ─────────────────────────────────────
@@ -928,18 +944,12 @@ const Onboarding: React.FC = () => {
                            argument by subtraction. Neither is typed. */
                         features={featuresFor(billing.freePlan.entitlements, undefined, billing.serves)}
                         locked={lockedFor(billing.freePlan.entitlements, anchor?.entitlements, billing.serves)}
-                        /* The same number, twice, differing only in what
-                           CONNECTS it. That is the paywall in the pricing
-                           standard: the apps are Layer 1 and free, and what
-                           costs money is our servers joining them up.
-                           ⚠️ This line used to read "None of them run", which
-                           was not true and — worse — not enforceable: the apps
-                           are local Electron installers and `canUse` gates our
-                           API, so a free user disproves it by opening one
-                           offline. A claim a customer can falsify in ten
-                           minutes discredits every other claim on the page. */
+                        /* Existing installs remain usable, but the account owner
+                           moved NEW installer access behind `canDownload` on
+                           2026-08-24. Do not imply that a newly-created Free
+                           account can obtain or run the desktop suite. */
                         unlock={workspaceApps
-                          ? { count: workspaceApps, verdict: `All ${workspaceApps}, running on this machine.` }
+                          ? { count: workspaceApps, verdict: `All ${workspaceApps} products mapped here; existing installs keep working.` }
                           : undefined}
                         current
                         style={wave(0, 0.10, 0.07)}
@@ -972,13 +982,13 @@ const Onboarding: React.FC = () => {
                         // from position, so reordering the catalog cannot move
                         // the highlight onto the wrong card.
                         unlock={workspaceApps
-                          ? { count: workspaceApps, verdict: `All ${workspaceApps}, connected to each other.` }
+                          ? { count: workspaceApps, verdict: `All ${workspaceApps} products in one paid workspace.` }
                           : undefined}
                         highlighted={item.plan === 'pro'}
                         badge={item.plan === 'pro' ? 'Most popular' : item.badge}
                         available={Boolean(item.available)}
                         busy={checkingOut === item.id}
-                        onSelect={() => startCheckout(item.id)}
+                        onSelect={() => setPendingCheckout(item)}
                         style={wave(i + 1, 0.10, 0.07)}
                       />
                     ))}
@@ -1016,6 +1026,7 @@ const Onboarding: React.FC = () => {
         <FlowControls step={step} total={STEPS} keys={stepKeys} />
       </footer>
     </div>
+    </>
   );
 };
 
