@@ -2411,6 +2411,40 @@ app.post('/api/v2/engine/dynamic-search', databaseMiddleware, authMiddleware, as
   }
 });
 
+/**
+ * Authenticated provider-specific search proxies. Provider credentials stay in
+ * the internal xeno-search container and are never sent to the browser.
+ */
+for (const provider of ['google', 'brave']) {
+  app.post(`/api/v2/engine/${provider}-search`, databaseMiddleware, authMiddleware, async (req, res) => {
+    const { query } = req.body;
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ error: 'Search query is required.' });
+    }
+
+    const serviceUrl = process.env.NODE_ENV === 'production'
+      ? `http://xeno-search:8000/api/v2/engine/${provider}-search`
+      : `http://localhost:8000/api/v2/engine/${provider}-search`;
+
+    try {
+      const body = provider === 'google'
+        ? { query, num_results: Math.min(Math.max(parseInt(req.body.num_results, 10) || 10, 1), 50) }
+        : { query, count: Math.min(Math.max(parseInt(req.body.count, 10) || 10, 1), 50) };
+      const response = await postJsonToService(serviceUrl, body, { timeoutMs: 45000 });
+      if (!response.ok) {
+        const detail = response.data?.detail || response.data?.error || `${provider} search service error`;
+        return res.status(response.status || 500).json({ error: detail });
+      }
+      return res.json(response.data);
+    } catch (error) {
+      console.error(`[${provider} Search] Error:`, error.message);
+      return res.status(error.isNoResponse ? 503 : 500).json({
+        error: error.isNoResponse ? `${provider} Search service unreachable.` : 'Internal server error.'
+      });
+    }
+  });
+}
+
 // API endpoint to fetch metadata from a URL
 app.post('/api/fetch-metadata', databaseMiddleware, authMiddleware, async (req, res) => {
   const { url } = req.body;

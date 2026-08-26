@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { Send, Globe, ChevronDown, Eye, Check, Zap, Link2, Sparkles, ExternalLink, Bot, Navigation, ScanEye, Layers, FileOutput, Search as SearchIcon, Clock, PaperclipDecl, XDecl, Trash2Decl, SendDecl, StopCircleDecl, EditDecl, LightbulbDecl, GlobeDecl, BotDecl, BrainDecl } from '@/lib/icons';
 import { getGroupedModels, GroupedModels, Model, FALLBACK_MODELS } from '@/services/modelService';
 import { chatService, Conversation as DbConversation, ChatMessage as DbChatMessage } from '@/services/chatService';
+import { chatComplete } from '@/services/aiService';
 import XenoBrowser, { XenoBrowserRef } from '../Browser/XenoBrowser';
 import { useChatTheme } from './chatTheme';
 
@@ -165,6 +166,7 @@ const SearchChatInterface: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   // Split panel animation state
   const [showResultsPanel, setShowResultsPanel] = useState(false);
@@ -526,44 +528,46 @@ IMPORTANT:
   };
 
   const performSearch = async (query: string): Promise<SearchResult[]> => {
-    try {
-      // Use different endpoints based on search engine
-      let endpoint = '/api/v2/engine/dynamic-search';
-      let body: any = { query, max_pages: 10, index_results: true };
+    // Use different endpoints based on search engine
+    let endpoint = '/api/v2/engine/dynamic-search';
+    let body: any = { query, max_pages: 10, index_results: true };
 
-      if (searchEngine === 'google') {
-        endpoint = '/api/v2/engine/google-search';
-        body = { query, num_results: 10 };
-      } else if (searchEngine === 'brave') {
-        endpoint = '/api/v2/engine/brave-search';
-        body = { query, count: 10 };
-      }
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-
-      if (!response.ok) throw new Error('Search failed');
-
-      const data = await response.json();
-      return data.results?.map((r: any) => {
-        const title = r.title || 'Untitled';
-        const snippet = r.snippet || r.description || '';
-        return {
-          url: r.url,
-          title,
-          snippet,
-          relevance_score: calculateRelevanceScore(query, title, snippet),
-          domain: new URL(r.url).hostname,
-          favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`
-        };
-      }).sort((a: SearchResult, b: SearchResult) => (b.relevance_score || 0) - (a.relevance_score || 0)) || [];
-    } catch (error) {
-      console.error('Search error:', error);
-      return [];
+    if (searchEngine === 'google') {
+      endpoint = '/api/v2/engine/google-search';
+      body = { query, num_results: 10 };
+    } else if (searchEngine === 'brave') {
+      endpoint = '/api/v2/engine/brave-search';
+      body = { query, count: 10 };
     }
+
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('xenoos_auth_token') : null;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(body)
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = data?.detail || data?.error || `Search failed (${response.status})`;
+      throw new Error(typeof detail === 'string' ? detail : `Search failed (${response.status})`);
+    }
+
+    return data.results?.map((r: any) => {
+      const title = r.title || 'Untitled';
+      const snippet = r.snippet || r.description || '';
+      return {
+        url: r.url,
+        title,
+        snippet,
+        relevance_score: calculateRelevanceScore(query, title, snippet),
+        domain: new URL(r.url).hostname,
+        favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`
+      };
+    }).sort((a: SearchResult, b: SearchResult) => (b.relevance_score || 0) - (a.relevance_score || 0)) || [];
   };
 
   const callAI = async (userMessage: string, context?: string): Promise<string> => {
@@ -572,28 +576,18 @@ IMPORTANT:
         ? `You are a helpful AI assistant. The user is viewing a webpage. Here is the content of the page they're looking at:\n\n${context}\n\nHelp them understand and interact with this content.`
         : `You are a helpful AI assistant that can search the web and help users find information. When users ask questions, provide helpful, accurate responses.`;
 
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: selectedModel.id,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...messages.filter(m => m.role !== 'system').map(m => ({
-              role: m.role,
-              content: m.content
-            })),
-            { role: 'user', content: userMessage }
-          ]
-        })
+      const data = await chatComplete({
+        model: selectedModel.id,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...messages.filter(m => m.role !== 'system').map(m => ({
+            role: m.role,
+            content: m.content
+          })),
+          { role: 'user', content: userMessage }
+        ]
       });
-
-      if (!response.ok) {
-        throw new Error('AI request failed');
-      }
-
-      const data = await response.json();
-      return data.content || data.message || 'Sorry, I could not generate a response.';
+      return data.content || 'Sorry, I could not generate a response.';
     } catch (error) {
       console.error('AI error:', error);
       return 'Sorry, there was an error connecting to the AI. Please try again.';
@@ -703,10 +697,19 @@ IMPORTANT:
       setIsLoading(false);
     } else if (searchMode === 'web') {
       setIsSearching(true);
+      setSearchError('');
       setVisibleResults(0);
       setShowResultsPanel(true);
 
-      const results = await performSearch(userInput);
+      let results: SearchResult[] = [];
+      let searchFailure = '';
+      try {
+        results = await performSearch(userInput);
+      } catch (error) {
+        console.error('Search error:', error);
+        searchFailure = error instanceof Error ? error.message : 'Search failed. Please try again.';
+        setSearchError(searchFailure);
+      }
       setSearchResults(results);
       setIsSearching(false);
 
@@ -731,20 +734,14 @@ Based on these search results, provide a helpful, accurate, and concise answer t
 - Don't mention "search results" or "sources" - just answer naturally`;
 
         try {
-          const response = await fetch('/api/ai/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: selectedModel.id,
-              messages: [
-                { role: 'system', content: searchSystemPrompt },
-                { role: 'user', content: userInput }
-              ]
-            })
+          const data = await chatComplete({
+            model: selectedModel.id,
+            messages: [
+              { role: 'system', content: searchSystemPrompt },
+              { role: 'user', content: userInput }
+            ]
           });
-
-          const data = await response.json();
-          const aiResponse = data.content || data.message || 'I found some results but couldn\'t generate a summary.';
+          const aiResponse = data.content || 'I found some results but couldn\'t generate a summary.';
 
           const assistantMessage: ChatMessage = {
             id: `msg-${Date.now()}`,
@@ -774,7 +771,9 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         const assistantMessage: ChatMessage = {
           id: `msg-${Date.now()}`,
           role: 'assistant',
-          content: `No results found for "${userInput}". Try a different search term.`,
+          content: searchFailure
+            ? `Search failed: ${searchFailure}`
+            : `No results found for "${userInput}". Try a different search term.`,
           timestamp: Date.now()
         };
         const finalMessages = [...newMessages, assistantMessage];
@@ -840,28 +839,22 @@ Based on these search results, provide a helpful, accurate, and concise answer t
           // Limit to last 5 relevant steps to keep context focused
           const recentSteps = relevantSteps.slice(-5);
 
-          const response = await fetch('/api/ai/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: selectedModel.id,
-              messages: [
-                { role: 'system', content: systemPrompt },
-                ...messages.filter(m => m.role !== 'system').map(m => ({
-                  role: m.role,
-                  content: m.content
-                })),
-                { role: 'user', content: userInput },
-                ...recentSteps.map(step => ({
-                  role: 'assistant' as const,
-                  content: `[On ${step.url || 'unknown page'}]\n${step.thought}${step.result ? `\n\nResult: ${step.result}` : ''}`
-                }))
-              ]
-            })
+          const data = await chatComplete({
+            model: selectedModel.id,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              ...messages.filter(m => m.role !== 'system').map(m => ({
+                role: m.role,
+                content: m.content
+              })),
+              { role: 'user', content: userInput },
+              ...recentSteps.map(step => ({
+                role: 'assistant' as const,
+                content: `[On ${step.url || 'unknown page'}]\n${step.thought}${step.result ? `\n\nResult: ${step.result}` : ''}`
+              }))
+            ]
           });
-
-          const data = await response.json();
-          const aiResponse = data.content || data.message || '';
+          const aiResponse = data.content || '';
 
           // Check if AI wants to perform an action
           const actionParsed = parseAgentAction(aiResponse);
@@ -1664,6 +1657,8 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                     <span className="text-[var(--chat-muted)]"> / </span>
                     <span>{searchResults.length} results for "{currentQuery}"</span>
                   </>
+                ) : searchError ? (
+                  `Search failed: ${searchError}`
                 ) : (
                   'No results found'
                 )}
@@ -1991,6 +1986,12 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                 <div className="flex flex-col items-center justify-center py-12">
                   <Spinner size={32} className="mb-3" />
                   <p className="text-sm text-[var(--chat-muted)]">Searching the web...</p>
+                </div>
+              ) : searchError ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Globe size={32} className="text-red-500 mb-3" />
+                  <p className="text-sm text-red-500">Search failed</p>
+                  <p className="text-xs text-[var(--chat-muted)] mt-1 max-w-md">{searchError}</p>
                 </div>
               ) : searchResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
