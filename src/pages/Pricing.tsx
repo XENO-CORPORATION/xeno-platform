@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import MarketingPage, { Section, Prose } from '../components/marketing/MarketingPage';
+import MarketingPage, { Section } from '../components/marketing/MarketingPage';
 import { PlanCard } from '../components/onboarding/OnboardingPieces';
 import { startCheckout, startTeamCheckout, isAuthed, getBillingConfig, getBillingAvailability, type BillingAvailability, type BillingItem } from '../services/billingService';
 import { useSearchParams } from 'react-router-dom';
@@ -337,72 +337,125 @@ const Pricing: React.FC = () => {
       </div>
     </Section>
 
-    <Section title="Account, software, and platform — where the line is">
-      <p className="mb-5 text-[14px] leading-[1.75] text-[#9b948a]">
-        There is no watermark or time-limited edition. A free account can use the web workspace, and an
-        app already on your machine keeps working locally. An active plan is required to obtain a new
-        desktop installer and to use the paid platform capabilities attached to it.
-      </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] p-6">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#69635b]">Free account</div>
-          <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">A real web workspace</h3>
-          <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
-            Browse products and release notes, use the web surfaces available to your account, and keep
-            using desktop apps you already obtained. Free does not grant a new installer, commercial-use
-            rights, cloud sync, agent identity access, or collaboration.
+    <Section className="mt-[clamp(72px,9vw,120px)] border-t border-white/[0.07] pt-[clamp(64px,8vw,104px)]">
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,0.78fr)_minmax(560px,1.22fr)] lg:gap-[clamp(64px,8vw,120px)]">
+        <div className="lg:pt-4">
+          <div className="text-[10.5px] font-semibold uppercase tracking-[0.22em] text-[#756f66]">The access boundary</div>
+          <h2 className="mt-4 max-w-[520px] text-[clamp(2rem,3.6vw,3.5rem)] font-semibold leading-[1.04] tracking-[-0.045em] text-[#f1ede6]">
+            Account, software, and platform — where the line is.
+          </h2>
+          <p className="mt-6 max-w-[520px] text-[14.5px] leading-[1.75] text-[#968f85]">
+            There is no watermark or time-limited edition. A free account can use the web workspace, and an
+            app already on your machine keeps working locally. An active plan is required to obtain a new
+            desktop installer and to use the paid platform capabilities attached to it.
           </p>
+          <div className="mt-7 flex flex-wrap gap-2" aria-label="Free account assurances">
+            {['No expiry', 'No watermark', 'Local apps keep working'].map((item) => (
+              <span key={item} className="rounded-full border border-white/[0.08] bg-white/[0.025] px-3 py-1.5 text-[11.5px] text-[#8d867d]">
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="rounded-[12px] border border-white/20 bg-[#0d0d0d] p-6">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ece7df]">Everything &amp; Team</div>
-          <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">Wires the tools together</h3>
-          <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
-            One account unlocks the server-backed platform: cloud projects and sync, agent identities,
-            and the cross-app layer as product integrations roll out. The commercial-use license covers
-            your output. Team adds real-time collaboration and shared workspace billing on top.
-          </p>
+
+        <div className="relative overflow-hidden rounded-[18px] border border-white/[0.09] bg-[#0b0b0b]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_78%,rgba(255,255,255,0.06),transparent_38%)]" />
+          <div className="relative grid min-h-[220px] grid-cols-[48px_1fr] gap-1 border-b border-white/[0.07] p-6 sm:grid-cols-[64px_1fr] sm:p-8">
+            <div className="pt-0.5 text-[11px] font-medium tabular-nums text-white/25">01</div>
+            <div>
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-[#756f66]">Free account</div>
+              <h3 className="mt-3 text-[clamp(1.25rem,2vw,1.7rem)] font-semibold tracking-[-0.025em] text-[#ece7df]">A real web workspace</h3>
+              <p className="mt-3 max-w-[600px] text-[13.5px] leading-[1.75] text-[#918a81]">
+                Browse products and release notes, use the web surfaces available to your account, and keep
+                using desktop apps you already obtained. Free does not grant a new installer, commercial-use
+                rights, cloud sync, agent identity access, or collaboration.
+              </p>
+            </div>
+          </div>
+          <div className="relative grid min-h-[238px] grid-cols-[48px_1fr] gap-1 bg-white/[0.025] p-6 sm:grid-cols-[64px_1fr] sm:p-8">
+            <div className="pt-0.5 text-[11px] font-medium tabular-nums text-white/45">02</div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-[#d8d2c9]">Everything &amp; Team</div>
+                <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-black">Active plan</span>
+              </div>
+              <h3 className="mt-3 text-[clamp(1.25rem,2vw,1.7rem)] font-semibold tracking-[-0.025em] text-[#f3efe8]">Wires the tools together</h3>
+              <p className="mt-3 max-w-[600px] text-[13.5px] leading-[1.75] text-[#a49d93]">
+                One account unlocks the server-backed platform: cloud projects and sync, agent identities,
+                and the cross-app layer as product integrations roll out. The commercial-use license covers
+                your output. Team adds real-time collaboration and shared workspace billing on top.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </Section>
 
-    <Section title="Platform subscriptions and API usage are separate">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-[12px] border border-white/20 bg-[#0d0d0d] p-6">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ece7df]">This page</div>
-          <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">Software and platform access</h3>
-          <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
-            The plans above cover XENO software, connected workspace capabilities, commercial-use
-            rights, and collaboration. They are the complete subscription choices for the main platform.
+    <Section className="mt-[clamp(72px,9vw,120px)]">
+      <div className="overflow-hidden rounded-[18px] border border-white/[0.09] bg-[#0a0a0a]">
+        <div className="border-b border-white/[0.07] px-6 py-8 sm:px-9 lg:flex lg:items-end lg:justify-between lg:gap-12 lg:px-11 lg:py-10">
+          <div>
+            <div className="text-[10.5px] font-semibold uppercase tracking-[0.22em] text-[#756f66]">One clear commercial boundary</div>
+            <h2 className="mt-3 max-w-[720px] text-[clamp(1.7rem,3vw,2.7rem)] font-semibold leading-[1.08] tracking-[-0.035em] text-[#f1ede6]">
+              Platform subscriptions and API usage are separate.
+            </h2>
+          </div>
+          <p className="mt-4 max-w-[370px] shrink-0 text-[13px] leading-[1.65] text-[#817a72] lg:mt-0">
+            Subscribe for the workspace. Pay for managed inference only when your developer product calls it.
           </p>
         </div>
-        <div className="rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] p-6">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#69635b]">Developer API</div>
-          <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">Managed inference is usage-based</h3>
-          <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
-            Hosted model calls are a separate developer product with their own usage billing. Local
-            inference on your hardware is not a hosted API call. <Link to="/api-reference" className="text-[#ece7df] hover:underline">Read the API reference</Link>.
-          </p>
+        <div className="grid lg:grid-cols-2">
+          <div className="relative p-6 sm:p-9 lg:border-r lg:border-white/[0.07] lg:p-11">
+            <div className="absolute right-6 top-6 text-[44px] font-semibold leading-none tracking-[-0.06em] text-white/[0.035] sm:right-9 sm:top-9">01</div>
+            <div className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-[#d8d2c9]">This page</div>
+            <h3 className="mt-4 text-[20px] font-semibold tracking-[-0.025em] text-[#ece7df]">Software and platform access</h3>
+            <p className="mt-3 max-w-[500px] text-[13.5px] leading-[1.75] text-[#918a81]">
+              The plans above cover XENO software, connected workspace capabilities, commercial-use
+              rights, and collaboration. They are the complete subscription choices for the main platform.
+            </p>
+            <div className="mt-7 text-[11px] font-medium uppercase tracking-[0.15em] text-white/35">Recurring subscription</div>
+          </div>
+          <div className="relative border-t border-white/[0.07] p-6 sm:p-9 lg:border-t-0 lg:p-11">
+            <div className="absolute right-6 top-6 text-[44px] font-semibold leading-none tracking-[-0.06em] text-white/[0.035] sm:right-9 sm:top-9">02</div>
+            <div className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-[#756f66]">Developer API</div>
+            <h3 className="mt-4 text-[20px] font-semibold tracking-[-0.025em] text-[#ece7df]">Managed inference is usage-based</h3>
+            <p className="mt-3 max-w-[500px] text-[13.5px] leading-[1.75] text-[#918a81]">
+              Hosted model calls are a separate developer product with their own usage billing. Local
+              inference on your hardware is not a hosted API call.
+            </p>
+            <Link to="/api-reference" className="mt-7 inline-flex items-center gap-2 text-[12.5px] font-medium text-[#e8e3da] transition-colors hover:text-white">
+              Read the API reference <span aria-hidden="true">→</span>
+            </Link>
+          </div>
         </div>
       </div>
     </Section>
 
-    <Section title="Frequently asked questions">
-      <Prose
-        blocks={[
-          {
-            h: 'Is the free version a trial?',
-            p: <>The account is not a trial. It has no card requirement or expiry. A new XENO desktop installer requires an active plan; software already obtained keeps working locally. Hosted in-house inference is not currently served, so it is not presented as an available Free feature.</>,
-          },
-          {
-            h: 'What actually changes when I upgrade?',
-            p: <>Everything grants the available desktop installers and paid platform entitlements: cloud sync, private cloud projects, agent identity access, managed-premium priority, commercial-use rights, and the cross-app layer as product integrations roll out. Team adds real-time collaboration and workspace billing per paid seat.</>,
-          },
-          {
-            h: 'Is managed API usage included in these plans?',
-            p: <>No. The main platform subscription and hosted developer inference are separate products. API usage is billed on the developer surface; local inference runs on your own hardware when available.</>,
-          },
-          {
-            h: 'Which AI models can I run?',
+    <Section className="mt-[clamp(72px,9vw,120px)] border-t border-white/[0.07] pt-[clamp(64px,8vw,104px)]">
+      <div className="grid gap-10 lg:grid-cols-[minmax(280px,0.62fr)_minmax(0,1.38fr)] lg:gap-[clamp(64px,8vw,120px)]">
+        <div>
+          <div className="text-[10.5px] font-semibold uppercase tracking-[0.22em] text-[#756f66]">Questions</div>
+          <h2 className="mt-4 text-[clamp(2rem,3.2vw,3.1rem)] font-semibold leading-[1.05] tracking-[-0.04em] text-[#f1ede6]">Frequently asked.</h2>
+          <p className="mt-5 max-w-[360px] text-[13.5px] leading-[1.7] text-[#8d867d]">
+            The practical details about access, models, billing, and changing your plan.
+          </p>
+        </div>
+        <div className="divide-y divide-white/[0.07] border-y border-white/[0.07]">
+          {[
+            {
+              q: 'Is the free version a trial?',
+              a: <>The account is not a trial. It has no card requirement or expiry. A new XENO desktop installer requires an active plan; software already obtained keeps working locally. Hosted in-house inference is not currently served, so it is not presented as an available Free feature.</>,
+            },
+            {
+              q: 'What actually changes when I upgrade?',
+              a: <>Everything grants the available desktop installers and paid platform entitlements: cloud sync, private cloud projects, agent identity access, managed-premium priority, commercial-use rights, and the cross-app layer as product integrations roll out. Team adds real-time collaboration and workspace billing per paid seat.</>,
+            },
+            {
+              q: 'Is managed API usage included in these plans?',
+              a: <>No. The main platform subscription and hosted developer inference are separate products. API usage is billed on the developer surface; local inference runs on your own hardware when available.</>,
+            },
+            {
+              q: 'Which AI models can I run?',
             /*
              * BYOK was removed from this answer on 2026-07-30 because it does not
              * exist anywhere in the estate. The platform's own inference router
@@ -417,14 +470,27 @@ const Pricing: React.FC = () => {
              * this in the same commit that makes the byok path return something
              * other than an error — not before.
              */
-            p: <>XENO supports open models through xeno-rt and offers separate managed routing for supported frontier models through the developer API. Connecting your own provider key (BYOK) is planned and not yet available. We don't claim exclusive models or to replace any one provider.</>,
-          },
-          {
-            h: 'Can I change plans?',
-            p: <>Yes. Upgrade or downgrade at any time from your <Link to="/overview/billing" className="text-[#ece7df] hover:underline">account billing</Link> — changes take effect on your next cycle. See the <Link to="/refunds" className="text-[#ece7df] hover:underline">refund policy</Link> for eligibility and timing.</>,
-          },
-        ]}
-      />
+              a: <>XENO supports open models through xeno-rt and offers separate managed routing for supported frontier models through the developer API. Connecting your own provider key (BYOK) is planned and not yet available. We don't claim exclusive models or to replace any one provider.</>,
+            },
+            {
+              q: 'Can I change plans?',
+              a: <>Yes. Upgrade or downgrade at any time from your <Link to="/overview/billing" className="text-[#ece7df] underline decoration-white/20 underline-offset-4 hover:decoration-white/60">account billing</Link> — changes take effect on your next cycle. See the <Link to="/refunds" className="text-[#ece7df] underline decoration-white/20 underline-offset-4 hover:decoration-white/60">refund policy</Link> for eligibility and timing.</>,
+            },
+          ].map((item, index) => (
+            <details key={item.q} className="group py-5 sm:py-6" open={index === 0}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-6 text-[15px] font-medium text-[#e7e2d9] marker:hidden sm:text-[16px]">
+                <span>{item.q}</span>
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/[0.09] text-[17px] font-light text-[#7b746b] transition-all duration-200 group-open:rotate-45 group-open:border-white/[0.16] group-open:text-[#d8d2c9]" aria-hidden="true">+</span>
+              </summary>
+              <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 group-open:grid-rows-[1fr]">
+                <div className="overflow-hidden">
+                  <p className="max-w-[740px] pb-1 pr-10 pt-4 text-[13.5px] leading-[1.75] text-[#918a81]">{item.a}</p>
+                </div>
+              </div>
+            </details>
+          ))}
+        </div>
+      </div>
     </Section>
   </MarketingPage>
   </>
