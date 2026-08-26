@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, ChevronDown, Download, Menu, X } from 'lucide-react';
 import { slugify } from '../../lib/productCatalog';
@@ -452,12 +452,20 @@ function NavDropdown({ entry, onOpen, onClose }: { entry: NavEntry; onOpen: () =
 const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scrimOn, setScrimOn] = useState(false);
+  const [hasScrolled, setHasScrolled] = useState(false);
   const closeT = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openScrim = () => { if (closeT.current) clearTimeout(closeT.current); setScrimOn(true); };
   const closeScrim = (delay = 150) => {
     if (closeT.current) clearTimeout(closeT.current);
     closeT.current = setTimeout(() => setScrimOn(false), delay);
   };
+
+  useEffect(() => {
+    const syncScrolledState = () => setHasScrolled(window.scrollY > 16);
+    syncScrolledState();
+    window.addEventListener('scroll', syncScrolledState, { passive: true });
+    return () => window.removeEventListener('scroll', syncScrolledState);
+  }, []);
 
   return (
     <>
@@ -470,11 +478,22 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
       />
 
       <header
+        data-scrolled={hasScrolled ? 'true' : 'false'}
         onMouseLeave={() => closeScrim(150)}
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ${
           visible ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'
         }`}
       >
+        {/* Keep backdrop-filter off the header ancestor: fixed mega-menus live
+            inside it, and a filtered ancestor would become their containing block. */}
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 border-b transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300 motion-reduce:transition-none ${
+            hasScrolled
+              ? 'border-white/[0.08] bg-[rgba(6,6,6,0.92)] shadow-[0_14px_38px_rgba(0,0,0,0.32)] backdrop-blur-xl'
+              : 'border-transparent bg-transparent shadow-none backdrop-blur-none'
+          }`}
+        />
         <div className="relative flex h-[56px] w-full items-center justify-between px-[1.4vw]">
           {/* ── Left: Logo + breadcrumb ─────────────────────────────── */}
           <div className="flex items-center gap-8">
