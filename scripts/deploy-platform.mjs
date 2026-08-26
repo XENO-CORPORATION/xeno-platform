@@ -54,12 +54,12 @@ const REMOTE_TMP = '/tmp/xeno-deploy';
 // backend: ship the image inputs plus docker-compose.yml. Runtime wiring (service
 //   hostnames, feature flags, provider keys) is part of a correct backend release,
 //   not host-local state that may silently drift from the committed contract.
-// frontend: Dockerfile.frontend's builder copies configs + public/ + src/ + scripts/.
+// frontend: Dockerfile.frontend's builder copies configs + public/ + src/ + packages/ + scripts/.
 //   We ship a superset of exactly those, existence-filtered against HEAD.
 const PATHS = {
   backend: ['src/server', 'Dockerfile.backend', '.dockerignore', 'docker-compose.yml'],
   frontend: [
-    'src', 'public', 'scripts', 'index.html', 'Dockerfile.frontend', '.dockerignore', 'nginx',
+    'src', 'packages', 'public', 'scripts', 'index.html', 'Dockerfile.frontend', '.dockerignore', 'nginx',
     'package.json', 'package-lock.json',
     'vite.config.ts', 'vite.config.js',
     'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json',

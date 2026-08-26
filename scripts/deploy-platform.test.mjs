@@ -6,12 +6,22 @@ const deploy = readFileSync(new URL('./deploy-platform.mjs', import.meta.url), '
 const remote = readFileSync(new URL('./remote-deploy.sh', import.meta.url), 'utf8');
 const dockerignore = readFileSync(new URL('../.dockerignore', import.meta.url), 'utf8');
 const backendDockerfile = readFileSync(new URL('../Dockerfile.backend', import.meta.url), 'utf8');
+const frontendDockerfile = readFileSync(new URL('../Dockerfile.frontend', import.meta.url), 'utf8');
 
 test('backend deploy ships the Docker context policy with every source archive', () => {
   assert.match(
     deploy,
     /backend:\s*\[[^\]]*['"]\.dockerignore['"]/,
     'backend PATHS must include .dockerignore so the host cannot retain a stale context policy',
+  );
+});
+
+test('frontend deploy ships every first-party source tree copied by its Dockerfile', () => {
+  assert.match(frontendDockerfile, /COPY packages\/ \.\/packages\//, 'expected the frontend image to consume packages/');
+  assert.match(
+    deploy,
+    /frontend:\s*\[[^\]]*['"]packages['"]/,
+    'frontend PATHS must include packages/ so shared controls cannot build from stale host bytes',
   );
 });
 
