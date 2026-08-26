@@ -317,7 +317,7 @@ services:
       - BRAVE_SEARCH_API_KEY=${BRAVE_API_KEY:-}
       # Google Custom Search (get from https://developers.google.com/custom-search)
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - GOOGLE_CX=${GOOGLE_CX:-}
+      - GOOGLE_CX=${GOOGLE_SEARCH_CX:-}
       # Bing Search (get from https://azure.microsoft.com/en-us/services/cognitive-services/bing-web-search-api/)
       - BING_API_KEY=${BING_API_KEY:-}
       # NLP/ML configuration
