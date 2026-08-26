@@ -23,7 +23,6 @@ import {
   chainDurationMs,
   reverseDelays,
   GOOEY_FILTER_ID,
-  MODEL_CHAIN,
   TAB_CHAIN,
   TAB_REVEAL,
   runGooey,
@@ -290,7 +289,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         cancels.delete(rail);
         lastChips.delete(rail);
 
-        const config = rail.dataset.gooeyRail === 'model' ? MODEL_CHAIN : AGENT_CHAIN;
+        const config = AGENT_CHAIN;
         const entrance = entranceDelays(rail, chips.length, config.staggerMs);
         const fromSelector = rail.dataset.gooeyFrom;
 
@@ -321,7 +320,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       cancels.get(rail)?.();
       cancels.delete(rail);
 
-      const config = rail.dataset.gooeyRail === 'model' ? MODEL_CHAIN : AGENT_CHAIN;
+      const config = AGENT_CHAIN;
       const delays = entranceDelays(rail, chips.length, config.staggerMs);
       const fromSelector = rail.dataset.gooeyFrom;
       const fromEl = fromSelector ? row.querySelector<HTMLElement>(fromSelector) : null;
@@ -345,10 +344,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     /** A rail marks itself `closing` before it unmounts; that is the cue to play it out. */
     const closingRailFrom = (node: Node): HTMLElement | null => {
       if (!(node instanceof HTMLElement)) return null;
-      const state = node.dataset.agentActionsState ?? node.dataset.inlineModelActionsState;
+      const state = node.dataset.agentActionsState;
       if (state !== 'closing') return null;
-      // Agents marks the rail itself; the model tray marks the scroll box around it.
-      return node.matches('[data-gooey-rail]') ? node : node.querySelector('[data-gooey-rail]');
+      return node.matches('[data-gooey-rail]') ? node : null;
     };
 
     const observer = new window.MutationObserver((records) => {
@@ -377,16 +375,16 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       // checkpoint of the commit that made the change — still before paint. Deferring it
       // by even one task let the browser paint the chips at rest first: the whole rail
       // flashed into view fully formed, vanished, and only then animated.
-      rails.forEach(runRail);
+      rails.forEach((rail) => runRail(rail));
     });
 
     observer.observe(row, {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['data-agent-actions-state', 'data-inline-model-actions-state'],
+      attributeFilter: ['data-agent-actions-state'],
     });
-    row.querySelectorAll<HTMLElement>('[data-gooey-rail]').forEach(runRail);
+    row.querySelectorAll<HTMLElement>('[data-gooey-rail]').forEach((rail) => runRail(rail));
 
     return () => {
       observer.disconnect();
@@ -668,11 +666,15 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
           key={`${action.id}-${agentActionsEpoch}`}
           variant="secondary"
           size="md"
-          iconSize={13}
           leadingIcon={agentActionIconById[action.id]}
           className="chat-mode-action whitespace-nowrap"
           data-mock-action="true"
-          data-gooey-chip
+          ref={(button) => {
+            // React's component prop types reject arbitrary data attributes even though
+            // Button forwards them. A commit-time ref still marks the node before the
+            // MutationObserver microtask drives the rail entrance.
+            if (button) button.dataset.gooeyChip = 'true';
+          }}
           onClick={() => closeAgentActions(() => onAgentActionSelect(action.id))}
         >
           {action.label}
