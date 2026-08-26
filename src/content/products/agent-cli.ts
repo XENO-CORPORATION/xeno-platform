@@ -63,7 +63,7 @@ const agentCli: ProductContent = {
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(170,140,255,0.18), transparent 60%), linear-gradient(165deg,#141020,#070707 74%)',
       title: 'It remembers how you work',
       desc: 'Four-level hierarchical memory (global → project → role → session) with cross-session context, plus a layered identity system.',
-      bullets: ['Auto-memory on errors, patterns & preferences', 'Persistent sessions, checkpoints, --resume', 'Project & role identity files', 'Token-budgeted context injection'],
+      bullets: ['Auto-memory on errors, patterns & preferences', 'Persistent sessions, checkpoints, --resume', 'Open the same session in XENO Agent with --interface', 'Project & role identity files'],
     },
     {
       eyebrow: 'Governance', icon: 'ShieldCheck',
@@ -95,7 +95,7 @@ const agentCli: ProductContent = {
   howItWorks: [
     { step: '1', title: 'Install', desc: 'npm install -g @xenosystem/agent-cli (Node ≥ 20). npm is the install channel.' },
     { step: '2', title: 'Pick a model', desc: 'Use the built-in XENO API, your own key, or a local Ollama / xeno-rt model.' },
-    { step: '3', title: 'Run xeno', desc: 'Chat, or xeno run "…" to let it plan, edit and execute — every step audited.' },
+    { step: '3', title: 'Work in either surface', desc: 'Stay in the terminal, or run xeno --interface to open the latest session for this workspace in XENO Agent.' },
   ],
   comparison: {
     competitor: 'most AI coding CLIs',
@@ -120,6 +120,7 @@ const agentCli: ProductContent = {
     { q: 'Which models can it use?', a: 'Cloud Claude, GPT, Gemini, Kimi and Composer via the XENO API or your own key — or run fully local with Ollama or the xeno-rt runtime. Switch models mid-session with /model.' },
     { q: 'Is it safe to let it run commands?', a: 'You stay in control: it asks before writes, edits and shell commands by default. Switch to auto-accept-edits or full-access when you want, and every action is written to an audit ledger.' },
     { q: 'Can I use it in CI / scripts?', a: 'Yes — xeno run --json "…" returns a typed result (status, answer, audit file, token usage, tool summary) with meaningful exit codes.' },
+    { q: 'Can I continue a CLI session in the desktop app?', a: 'Yes. Run `xeno --interface` from the workspace to open its most recent durable session in XENO Agent, or combine it with `--resume <session-id>` to open an exact session. The handoff reuses the session instead of copying its transcript into a new conversation.' },
     { q: 'Is it open source?', a: 'Not currently — it’s proprietary, in beta (v0.5.x). It’s the reference CLI for the XENO agent SDK, and it ships on top of @xenosystem/agent-sdk.' },
     { q: 'Is it free?', a: 'The CLI is free to install; model calls route through the XENO API (or your own key / local model). Hosted-usage pricing is announced separately.' },
   ],

@@ -57,7 +57,7 @@ const agent: ProductContent = {
   slug: 'agent',
   hero: {
     headline: 'The agent-native workspace for building software.',
-    sub: 'XENO Agent runs a real agent against a workspace you choose — it reads the code, proposes edits as diffs you approve, runs terminal commands, and keeps every session durable. Bring any provider. Nothing about the model is baked into the UI.',
+    sub: 'XENO Agent runs a real agent against a workspace you choose — it reads the code, proposes edits as diffs you approve, runs terminal commands, and keeps every session durable. Open the same session from XENO Agent CLI. Bring any provider.',
     media: { type: 'mockup', src: 'agent-hero', alt: 'XENO Agent — conversation tabs, a diff review, and a terminal session in one workspace' },
     badges: ['Windows', 'Linux', 'Free', 'Any provider'],
     note: 'Free desktop app for Windows and Linux x64 · proprietary. A macOS build is not out yet.',
@@ -129,7 +129,7 @@ const agent: ProductContent = {
     { title: 'Your provider, your terms', icon: 'Lock', desc: 'Connect the agent you already use over ACP, or run through XENO Cloud. The workspace and the execution stay on your machine.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Pick a workspace', desc: 'Choose the folder the agent may work in. It gets no authority beyond what you grant.' },
+    { step: '1', title: 'Start or resume', desc: 'Choose a workspace in the app, or run xeno --interface to attach the CLI session already working there.' },
     { step: '2', title: 'Pick a provider', desc: 'Connect an ACP agent, the XENO Agent SDK, or XENO Cloud. Models and reasoning modes populate from the provider.' },
     { step: '3', title: 'Review before it lands', desc: 'Edits arrive as diffs. Accept a file, accept a hunk, or reject — then checkpoint and keep going.' },
   ],
@@ -161,7 +161,7 @@ const agent: ProductContent = {
     },
     {
       q: 'How is this different from XENO Agent CLI?',
-      a: 'Same family, different surface. The CLI is a terminal agent; XENO Agent is the desktop workspace — session tabs, diff review, an integrated terminal, and durable state across restarts.',
+      a: 'Same family, different surface. The CLI is a terminal agent; XENO Agent is the desktop workspace — session tabs, diff review, an integrated terminal, and durable state across restarts. Run `xeno --interface` to open the latest session for the current workspace, or add `--resume <session-id>` for an exact handoff.',
     },
   ],
   seo: {

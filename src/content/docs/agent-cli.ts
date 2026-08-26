@@ -49,7 +49,7 @@ The CLI is **Layer 3 (Agent & Automation)** of the XENO ecosystem. It consumes t
 - [Quickstart](/docs/agent-cli/quickstart) — your first chat and your first \`run\`
 - [Authentication & API keys](/docs/agent-cli/authentication)
 
-> XENO Agent CLI is proprietary software, © 2026 XENO Corporation. It is currently in beta (v0.4.x).`,
+> XENO Agent CLI is proprietary software, © 2026 XENO Corporation. It is currently in beta (v0.5.x).`,
         },
         {
           slug: 'installation',
@@ -105,7 +105,7 @@ xeno update
 
 \`xeno update\` reports the resolved install command, how to roll back, the active release channel, and the native checksum URL.
 
-> **Not yet available:** Homebrew and WinGet packages are planned but not shipping today — use npm or the install scripts.
+> **Not yet available:** Homebrew and WinGet packages are planned but not shipping today — use npm.
 
 Next: [Quickstart →](/docs/agent-cli/quickstart)`,
         },
@@ -152,7 +152,10 @@ xeno chat --model claude-sonnet-4-6      # pick a model
 xeno chat --permission-mode acceptEdits  # auto-accept edits, still ask for commands
 xeno run --bg "run the full test suite"  # background run
 xeno run --delegate "refactor the payments module"  # planner→executor→reviewer
+xeno --interface                         # open this workspace's latest session in XENO Agent
 \`\`\`
+
+Use \`xeno --interface --resume <session-id>\` when you want an exact session rather than the latest one for the current workspace. XENO Agent attaches to that durable SDK session; it does not create a transcript copy.
 
 ## Next steps
 
@@ -379,6 +382,9 @@ Sessions are stored under \`~/.xeno-agent/sessions/<id>/\` with a JSONL transcri
 \`\`\`bash
 xeno sessions              # list sessions
 xeno chat --resume         # resume the most recent session
+xeno chat --resume <id>    # resume an exact session in the terminal
+xeno --interface           # open this workspace's latest session in XENO Agent
+xeno --interface --resume <id>  # open an exact session in XENO Agent
 xeno chat --checkpoint     # start from a checkpoint
 \`\`\`
 
@@ -503,6 +509,7 @@ Run \`xeno --help\` for the full, version-accurate list. The most common command
 | Command | Purpose |
 |---------|---------|
 | \`xeno chat\` | Interactive session (default) |
+| \`xeno --interface [--resume [id]]\` | Open the latest or exact durable session in XENO Agent |
 | \`xeno run <prompt>\` | One-shot task |
 | \`xeno login\` / \`logout\` / \`auth\` | Authentication |
 | \`xeno update\` | Update the CLI |
