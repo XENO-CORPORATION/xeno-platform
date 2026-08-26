@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, TextInput } from '@xenosystem/elements-react';
 import {
   Download,
@@ -504,7 +505,7 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose
         </div>
       )}
 
-      {selected?.category === 'images' && (
+      {selected?.category === 'images' && createPortal(
         <LibraryAssetViewer
           items={items.filter((item) => item.category === 'images').map((item) => ({
             id: item.id,
@@ -515,7 +516,8 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose
           }))}
           activeId={selected.id}
           onClose={() => setSelected(null)}
-        />
+        />,
+        document.body,
       )}
 
       {selected && selected.category !== 'images' && (
