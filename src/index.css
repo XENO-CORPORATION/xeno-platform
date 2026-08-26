@@ -1533,6 +1533,50 @@ input:-webkit-autofill:active {
   }
 }
 
+/* ── Chat workspace equilibrium ──────────────────────────────────────────────
+   The viewport is not the chat workspace: the taskbar, history and context
+   panels all subtract from it. The component gives the top bar its final
+   available width; these container rules compact labels from that width rather
+   than from the unrelated browser breakpoint. */
+.chat-top-bar {
+  container: chat-topbar / inline-size;
+  min-width: 0;
+}
+
+@container chat-topbar (max-width: 48rem) {
+  .chat-top-bar [data-chat-transcript-label="long"] {
+    display: none !important;
+  }
+
+  .chat-top-bar [data-chat-transcript-label="short"] {
+    display: inline !important;
+  }
+
+  .chat-top-bar [data-chat-temporary-label],
+  .chat-top-bar [data-chat-model-provider] {
+    display: none !important;
+  }
+
+  .chat-top-bar [data-chat-current-model] {
+    max-width: 11rem;
+  }
+}
+
+@container chat-topbar (max-width: 38rem) {
+  .chat-top-bar [data-chat-transcript-label] {
+    display: none !important;
+  }
+
+  .chat-top-bar [data-chat-current-model] {
+    max-width: 9rem;
+    padding-inline: 0.625rem;
+  }
+
+  .chat-top-bar .chat-top-bar-buttons {
+    gap: 0.25rem !important;
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
    Composer gooey reveal
    The mode tabs, agent actions and model catalog emerge from the composer as liquid: one
@@ -1847,6 +1891,26 @@ div:has([data-composer-reveal][data-reveal-open="true"]) > [data-chat-scroll-to-
 
 [data-composer-reveal] [data-composer-reveal-row] [data-inline-model-provider] {
   padding-inline: 10px !important;
+}
+
+/* The mode row responds to the composer's real width after side panels have
+   taken their share. On a narrow workspace the four modes keep their icons and
+   hit targets while labels step away; the canonical model trigger stays visible. */
+@container chat-composer (max-width: 32rem) {
+  [data-composer-reveal] [data-chat-mode] {
+    width: 34px;
+    min-width: 34px;
+    padding-inline: 9px !important;
+  }
+
+  [data-composer-reveal] [data-chat-mode-label] {
+    display: none;
+  }
+
+  [data-composer-reveal] [data-chat-model-trigger] {
+    min-width: 7.5rem;
+    max-width: 8.5rem;
+  }
 }
 
 /* The model catalog can exceed the available row width. Its actual buttons keep final
