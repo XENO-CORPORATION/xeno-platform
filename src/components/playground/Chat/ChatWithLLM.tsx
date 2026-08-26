@@ -24,7 +24,7 @@ import ChatEmptyState, { ComposerRevealControls, type ChatEmptyStateTool } from 
 import ChatModelSelector from './ChatModelSelector';
 import ChatShareModal from './ChatShareModal';
 import { isOutlineDebugOn, OUTLINE_DEBUG_CSS } from './outlineDebug';
-import ChatArtifactsPage from './ChatArtifactsPage';
+  import ChatLibraryPage from './ChatLibraryPage';
 import ChatScheduledPage from './ChatScheduledPage';
 import ChatGlobalSettingsPage from './ChatGlobalSettingsPage';
 import ChatCustomizePage from './ChatCustomizePage';
@@ -54,7 +54,7 @@ import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/ser
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
 import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
-import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Shapes, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, MenuDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
+import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Library, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, MenuDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -2923,7 +2923,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     activeConversationIdRef.current = activeConversationId;
   }, [activeConversationId]);
 
-  // URL Route parameter synchronization (e.g. /c/:conversationId, /projects, /scheduled, /artifacts, etc.)
+  // URL Route parameter synchronization (e.g. /c/:conversationId, /projects, /scheduled, /library, etc.)
   useEffect(() => {
     const path = window.location.pathname;
     if (path.startsWith('/projects') || path.startsWith('/overview/chat/projects')) {
@@ -2935,7 +2935,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       }
     } else if (path.startsWith('/scheduled') || path.startsWith('/overview/chat/scheduled')) {
       openScheduledPage();
-    } else if (path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
+    } else if (path.startsWith('/library') || path.startsWith('/overview/chat/library') || path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
       openArtifactsPage();
     } else if (path.startsWith('/customize') || path.startsWith('/overview/chat/customize')) {
       openCustomizePage();
@@ -2963,7 +2963,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
         openScheduledPage();
         return;
       }
-      if (path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
+      if (path.startsWith('/library') || path.startsWith('/overview/chat/library') || path.startsWith('/artifacts') || path.startsWith('/overview/chat/artifacts')) {
         openArtifactsPage();
         return;
       }
@@ -3978,8 +3978,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsChatsCatalogOpen(false);
     setIsChatsCatalogFilterOpen(false);
     setIsProjectsSortOpen(false);
-    if (typeof window !== 'undefined' && window.location.pathname !== '/artifacts' && window.location.pathname !== '/overview/chat/artifacts') {
-      window.history.pushState({ view: 'artifacts' }, '', '/artifacts');
+    if (typeof window !== 'undefined' && window.location.pathname !== '/library' && window.location.pathname !== '/overview/chat/library') {
+      window.history.pushState({ view: 'library' }, '', '/library');
     }
     try {
       localStorage.setItem(PROJECTS_PAGE_OPEN_STORAGE_KEY, 'false');
@@ -9281,6 +9281,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
+        // Selection is the moment the browser has the real bytes. Persist them now;
+        // the old recent-file callback only wrote metadata and was never invoked,
+        // which made attachments disappear from every other device.
+        for (const file of Array.from(files)) {
+          void chatService.uploadLibraryFile(file, 'chat-attachment').catch((error) => {
+            console.error('Failed to save chat attachment to Library:', error);
+          });
+        }
         const newFiles: AttachedFile[] = Array.from(files).map(file => ({
             id: `${file.name}-${file.lastModified}-${file.size}`,
             name: file.name,
@@ -13535,7 +13543,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 className="animate-chat-history-chrome-enter-delay -ml-1 flex h-9 items-center font-display text-[1.05rem] font-medium leading-normal tracking-tight text-[var(--chat-muted)]"
                 aria-current="page"
               >
-                Artifacts
+                Library
               </span>
             )}
             {isGlobalSettingsPageOpen && (
@@ -14268,11 +14276,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           );
         })()}
         {isArtifactsPageOpen && (
-          <ChatArtifactsPage
+          <ChatLibraryPage
             pageLeft={!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0}
             onClose={() => {
               setIsArtifactsPageOpen(false);
               setHistoryNavView('chats');
+              if (typeof window !== 'undefined') {
+                window.history.pushState({ view: 'chats' }, '', '/chat');
+              }
             }}
           />
         )}
@@ -18671,8 +18682,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           data-goo-row="" className={historyNavItemClass(historyNavView === 'artifacts' || isArtifactsPageOpen)}
                           onClick={openArtifactsPage}
                         >
-                          <Shapes size={16} className="flex-shrink-0" />
-                          <span>Artifacts</span>
+                          <Library size={16} className="flex-shrink-0" />
+                          <span>Library</span>
                       </button>
                       {/* Stays hand-written — one of the seven nav rows decided above. */}
                       <button
@@ -18931,7 +18942,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                         {historyNavView === 'artifacts' && !isArtifactsPageOpen && (
                           <div className="px-3 py-8 text-center">
                             <p className="text-[12px] text-[var(--chat-muted)]">
-                              Artifacts open in the main panel.
+                              Library opens in the main panel.
                             </p>
                           </div>
                         )}

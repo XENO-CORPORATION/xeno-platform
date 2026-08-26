@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 
 import Home from "./pages/Home";
 import Home2 from "./pages/Home2";
@@ -93,6 +93,11 @@ const ConversationRouteRedirect: React.FC = () => {
     ? `/overview/chat/llm/${encodeURIComponent(conversationId)}`
     : '/overview/chat/llm';
   return <Navigate to={target} replace />;
+};
+
+const LibraryRouteRedirect: React.FC = () => {
+  const location = useLocation();
+  return <Navigate to={`/overview/chat/library${location.search}`} replace />;
 };
 
 function App() {
@@ -277,7 +282,8 @@ function App() {
             <Route path="/c" element={<ConversationRouteRedirect />} />
             <Route path="/projects" element={<Navigate to="/overview/chat/projects" replace />} />
             <Route path="/scheduled" element={<Navigate to="/overview/chat/scheduled" replace />} />
-            <Route path="/artifacts" element={<Navigate to="/overview/chat/artifacts" replace />} />
+            <Route path="/library" element={<LibraryRouteRedirect />} />
+            <Route path="/artifacts" element={<LibraryRouteRedirect />} />
             <Route path="/customize" element={<Navigate to="/overview/chat/customize" replace />} />
 
             {/* Public Shared Conversation Viewer (no auth required) */}

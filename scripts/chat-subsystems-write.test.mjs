@@ -25,7 +25,7 @@ const chat = (...p) => join(ROOT, 'src', 'components', 'playground', 'Chat', ...
 const codeOnly = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 const ARTIFACTS = codeOnly(readFileSync(chat('chatArtifacts.ts'), 'utf8'));
-const ARTIFACTS_PAGE = codeOnly(readFileSync(chat('ChatArtifactsPage.tsx'), 'utf8'));
+const ARTIFACTS_PAGE = codeOnly(readFileSync(chat('ChatLibraryPage.tsx'), 'utf8'));
 const SCHEDULED = codeOnly(readFileSync(chat('chatScheduled.ts'), 'utf8'));
 const SCHEDULED_PAGE = codeOnly(readFileSync(chat('ChatScheduledPage.tsx'), 'utf8'));
 const SKILLS = codeOnly(readFileSync(chat('chatSkillsLibrary.ts'), 'utf8'));
@@ -81,12 +81,12 @@ function extractRoute(src, pathLit) {
   return extractFrom(src.slice(start), 'router.post');
 }
 
-test('artifacts: the page calls createArtifact, and that body hits the service', () => {
-  const page = extractFrom(ARTIFACTS_PAGE, 'const handleCreate = async');
+test('library documents: the page calls createArtifact, and that body hits the service', () => {
+  const page = extractFrom(ARTIFACTS_PAGE, 'const createDocument = async');
   assert.match(
     page,
     /await createArtifact\(/,
-    'ChatArtifactsPage.create control never calls createArtifact — the form is a dead button.',
+    'ChatLibraryPage new-document control never calls createArtifact — the form is a dead button.',
   );
   const body = extractFrom(ARTIFACTS, 'export const createArtifact');
   assert.match(

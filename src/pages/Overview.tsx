@@ -22,7 +22,6 @@ import VideoUpscaleInterface from '../components/playground/Enhance/VideoEnhance
 import MultiChatContainer from '../components/playground/Chat/MultiChatContainer';
 import ChatWithVoice from '../components/playground/Chat/ChatWithVoice';
 import SearchChatInterface from '../components/playground/Chat/SearchChatInterface';
-import ChatArtifactsPage from '../components/playground/Chat/ChatArtifactsPage';
 import ChatCustomizePage from '../components/playground/Chat/ChatCustomizePage';
 import ChatScheduledPage from '../components/playground/Chat/ChatScheduledPage';
 import ChatGlobalSettingsPage from '../components/playground/Chat/ChatGlobalSettingsPage';
@@ -295,10 +294,14 @@ const OverviewContent: React.FC = () => {
             <Route path="chat/projects/:projectId" element={<MultiChatContainer />} />
             <Route path="projects" element={<MultiChatContainer />} />
             <Route path="projects/:projectId" element={<MultiChatContainer />} />
-            <Route path="chat/artifacts" element={<ChatArtifactsPage />} />
-            <Route path="chat/artifacts/:artifactId" element={<ChatArtifactsPage />} />
-            <Route path="artifacts" element={<ChatArtifactsPage />} />
-            <Route path="artifacts/:artifactId" element={<ChatArtifactsPage />} />
+            <Route path="chat/library" element={<MultiChatContainer />} />
+            <Route path="chat/library/:libraryItemId" element={<MultiChatContainer />} />
+            <Route path="library" element={<MultiChatContainer />} />
+            <Route path="library/:libraryItemId" element={<MultiChatContainer />} />
+            <Route path="chat/artifacts" element={<MultiChatContainer />} />
+            <Route path="chat/artifacts/:artifactId" element={<MultiChatContainer />} />
+            <Route path="artifacts" element={<MultiChatContainer />} />
+            <Route path="artifacts/:artifactId" element={<MultiChatContainer />} />
             <Route path="chat/customize" element={<ChatCustomizePage />} />
             <Route path="customize" element={<ChatCustomizePage />} />
             <Route path="chat/scheduled" element={<ChatScheduledPage />} />
