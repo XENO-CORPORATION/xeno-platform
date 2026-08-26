@@ -16,8 +16,8 @@ WORKDIR /app
 # Copy package files from server directory (with correct ownership)
 COPY --chown=appuser:appgroup src/server/package*.json ./
 
-# Install dependencies (production only) as root then fix ownership
-RUN npm install --omit=dev && npm cache clean --force && chown -R appuser:appgroup node_modules
+# Install the locked production dependency graph as root, then fix ownership.
+RUN npm ci --omit=dev && npm cache clean --force && chown -R appuser:appgroup node_modules
 
 # Copy server source code (with correct ownership — avoids expensive recursive chown)
 COPY --chown=appuser:appgroup src/server/ ./
