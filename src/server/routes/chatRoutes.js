@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { workspaceFromReq, isWorkspaceMember, linkResourceToWorkspace, UUID_RE } from '../utils/workspaceContext.js';
 import { computeNextRun, executeScheduledTask } from '../workers/chatScheduledWorker.js';
+import { assertOwnedLibraryAttachments } from '../services/libraryAssets.js';
 
 /** Local `convo-<timestamp>` ids are UI-only. Sending one to Postgres is a 500. */
 function rejectIfNotPersistedConversationId(res, conversationId) {
@@ -452,6 +453,17 @@ router.post('/conversations/:id/messages', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
 
+    try {
+      await assertOwnedLibraryAttachments(req.db, userId, attachments);
+    } catch (attachmentError) {
+      const invalid = attachmentError.code === 'invalid_attachments' || attachmentError.code === 'invalid_library_asset_id';
+      return res.status(invalid ? 400 : 404).json({
+        success: false,
+        error: attachmentError.message,
+        code: attachmentError.code,
+      });
+    }
+
     // Get next message index
     const indexResult = await req.db.query(
       `SELECT COALESCE(MAX(message_index), -1) + 1 as next_index FROM chat_messages WHERE conversation_id = $1`,
@@ -525,6 +537,19 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
 
     if (convCheck.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    try {
+      for (const message of messages) {
+        await assertOwnedLibraryAttachments(req.db, userId, message.attachments);
+      }
+    } catch (attachmentError) {
+      const invalid = attachmentError.code === 'invalid_attachments' || attachmentError.code === 'invalid_library_asset_id';
+      return res.status(invalid ? 400 : 404).json({
+        success: false,
+        error: attachmentError.message,
+        code: attachmentError.code,
+      });
     }
 
     // Get starting message index
@@ -1227,7 +1252,7 @@ router.get('/library', async (req, res) => {
           CASE
             WHEN f.storage_type = 'platform-upload'
               AND COALESCE(f.mime_type, f.file_type, '') LIKE 'image/%'
-              THEN '/api/chat/library/file/' || f.id::text || '/content'
+              THEN '/api/library/assets/' || f.id::text || '/content'
             ELSE NULL
           END,
           NULL::uuid,

@@ -45,6 +45,7 @@ import conversionRoutes from './routes/conversionRoutes.js';
 import videoRoutes from './routes/videoRoutes.js';
 import imageRoutes, { imagePublicRoutes } from './routes/imageRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import libraryRoutes from './routes/libraryRoutes.js';
 import tokenizerRoutes from './routes/tokenizerRoutes.js';
 import userDataRoutes from './routes/userDataRoutes.js';
 import browserRoutes from './routes/browserRoutes.js';
@@ -95,6 +96,7 @@ import { initCleanupService } from './services/cleanupService.js';
 import { runMigrations } from './services/migrationService.js';
 import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
 import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chatModelCapabilities.js';
+import { registerManagedLibraryFile } from './services/libraryAssets.js';
 
 // Round 8: Infrastructure imports
 import healthRoutes from './routes/healthRoutes.js';
@@ -640,6 +642,11 @@ const chatAuthMiddleware = (req, res, next) => {
 app.use('/api/chat', databaseMiddleware, chatAuthMiddleware, chatRoutes);
 console.log('💬 Chat routes integrated: /api/chat/*');
 
+// Canonical account asset plane. Chat keeps compatibility aliases, while every
+// product can consume this route without depending on chat internals.
+app.use('/api/library', databaseMiddleware, libraryRoutes);
+console.log('📚 Library routes integrated: /api/library/*');
+
 // Tokenizer routes - no auth required (public utility)
 app.use('/api/tokenize', tokenizerRoutes);
 console.log('🔢 Tokenizer routes integrated: /api/tokenize/*');
@@ -965,23 +972,16 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
   try {
     const filePath = req.file.path;
     const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${path.basename(filePath)}`;
-    const { rows } = await req.db.query(
-      `INSERT INTO user_files (
-         user_id, filename, original_name, file_type, mime_type, file_size,
-         storage_path, storage_type, metadata
-       ) VALUES ($1, $2, $3, $4, $4, $5, $6, 'platform-upload', $7)
-       RETURNING id, created_at`,
-      [
-        req.user.id,
-        path.basename(filePath),
-        req.file.originalname,
-        req.file.mimetype,
-        req.file.size,
-        filePath,
-        { source: req.body?.source || 'upload' },
-      ],
-    );
-    const libraryId = rows[0].id;
+    const stored = await registerManagedLibraryFile(req.db, {
+      userId: req.user.id,
+      filename: path.basename(filePath),
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileSize: req.file.size,
+      storagePath: filePath,
+      metadata: { source: req.body?.source || 'upload' },
+    });
+    const libraryId = stored.id;
 
     res.json({
       success: true,
@@ -992,8 +992,8 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
         size: req.file.size,
         type: req.file.mimetype,
         url: fileUrl,
-        content_url: `/api/chat/library/file/${libraryId}/content`,
-        created_at: rows[0].created_at,
+        content_url: `/api/library/assets/${libraryId}/content`,
+        created_at: stored.created_at,
       }
     });
   } catch (error) {
@@ -1184,22 +1184,16 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                 let libraryItemId = null;
                 try {
                     await fs.promises.writeFile(storedPath, imageBuffer);
-                    const stored = await req.db.query(
-                        `INSERT INTO user_files (
-                           user_id, filename, original_name, file_type, mime_type, file_size,
-                           storage_path, storage_type, metadata
-                         ) VALUES ($1, $2, $3, 'image/png', 'image/png', $4, $5, 'platform-upload', $6)
-                         RETURNING id`,
-                        [
-                            imgUserId,
-                            storedName,
-                            `XENO image ${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
-                            imageBuffer.length,
-                            storedPath,
-                            { source: 'chat-generation', prompt: imagePrompt, model: modelLabel },
-                        ],
-                    );
-                    libraryItemId = stored.rows[0].id;
+                    const stored = await registerManagedLibraryFile(req.db, {
+                        userId: imgUserId,
+                        filename: storedName,
+                        originalName: `XENO image ${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
+                        mimeType: 'image/png',
+                        fileSize: imageBuffer.length,
+                        storagePath: storedPath,
+                        metadata: { source: 'chat-generation', prompt: imagePrompt, model: modelLabel },
+                    });
+                    libraryItemId = stored.id;
                 } catch (persistError) {
                     try { await fs.promises.unlink(storedPath); } catch { /* no file or best-effort cleanup */ }
                     console.error('[imggen] failed to persist generated image in account library:', persistError.message);
@@ -1213,7 +1207,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                     responseId: respId,               // opaque token — preserves the ImageStudio contract
                     imageGenerationCallId: callId,    // opaque token — preserves the ImageStudio contract
                     libraryItemId,
-                    libraryContentUrl: `/api/chat/library/file/${libraryItemId}/content`,
+                    libraryContentUrl: `/api/library/assets/${libraryItemId}/content`,
                     entitlement: gateMeta(imgEnt),
                 });
             };

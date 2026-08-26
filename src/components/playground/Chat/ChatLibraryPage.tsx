@@ -16,10 +16,15 @@ import {
 } from '@/lib/icons';
 import {
   chatService,
+} from '@/services/chatService';
+import {
+  libraryItemToAssetRef,
+  libraryService,
   type LibraryItemRecord,
   type LibrarySort,
   type LibraryTab,
-} from '@/services/chatService';
+} from '@/services/libraryService';
+import LibraryAssetViewer from '@/components/library/LibraryAssetViewer';
 import { createArtifact, type ArtifactKind } from './chatArtifacts';
 
 type LibraryView = 'list' | 'grid';
@@ -167,7 +172,7 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose
       return;
     }
     try {
-      const next = await chatService.getLibraryItems({ tab, query, sort, limit: 200 });
+      const next = await libraryService.list({ tab, query, sort, limit: 200 });
       setItems(next);
     } catch (reason) {
       setItems([]);
@@ -217,7 +222,7 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose
     setError('');
     try {
       for (const file of Array.from(files)) {
-        await chatService.uploadLibraryFile(file, 'library');
+        await libraryService.upload(file, 'library');
       }
       await refresh();
     } catch (reason) {
@@ -254,7 +259,7 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose
 
   const downloadItem = async (item: LibraryItemRecord) => {
     const url = item.source === 'file'
-      ? `/api/chat/library/file/${item.source_id}/content?download=1`
+      ? await libraryService.createSignedLink(item.source_id, { download: true })
       : item.preview_url;
     if (!url) return;
     try {
@@ -273,7 +278,7 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose
   };
 
   const deleteItem = async (item: LibraryItemRecord) => {
-    const removed = await chatService.deleteLibraryItem(item.source, item.source_id);
+    const removed = await libraryService.delete(item.source, item.source_id);
     if (!removed) {
       setError('Could not delete this item.');
       return;
@@ -499,7 +504,21 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose
         </div>
       )}
 
-      {selected && (
+      {selected?.category === 'images' && (
+        <LibraryAssetViewer
+          items={items.filter((item) => item.category === 'images').map((item) => ({
+            id: item.id,
+            name: item.name,
+            asset: libraryItemToAssetRef(item),
+            sourceUrl: item.preview_url || undefined,
+            context: item.conversation_title || 'Account',
+          }))}
+          activeId={selected.id}
+          onClose={() => setSelected(null)}
+        />
+      )}
+
+      {selected && selected.category !== 'images' && (
         <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`${selected.name} preview`} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}>
           <div className="flex max-h-[82vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border shadow-2xl" style={{ background: 'var(--chat-elevated)', borderColor: 'var(--chat-border)' }}>
             <div className="flex items-start justify-between gap-4 border-b px-4 py-3" style={{ borderColor: 'var(--chat-border)' }}>
@@ -507,7 +526,7 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose
               <button type="button" className="text-[var(--chat-muted)] hover:text-[var(--chat-text)]" onClick={() => setSelected(null)} aria-label="Close preview"><X size={16} /></button>
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-4">
-              {selected.category === 'images' ? <LibraryThumbnail item={selected} className="mx-auto max-h-[56vh] max-w-full rounded-xl" /> : <pre className="whitespace-pre-wrap break-words rounded-xl border bg-[var(--chat-surface)] p-4 font-mono text-[11.5px] leading-relaxed" style={{ borderColor: 'var(--chat-border)' }}>{selectedBody || 'Preview is not available for this file type.'}</pre>}
+              <pre className="whitespace-pre-wrap break-words rounded-xl border bg-[var(--chat-surface)] p-4 font-mono text-[11.5px] leading-relaxed" style={{ borderColor: 'var(--chat-border)' }}>{selectedBody || 'Preview is not available for this file type.'}</pre>
             </div>
             <div className="flex items-center justify-between gap-3 border-t px-4 py-3" style={{ borderColor: 'var(--chat-border)' }}>
               <Button variant="danger" size="sm" onClick={() => void deleteItem(selected)}><Trash size={13} /> Delete</Button>
