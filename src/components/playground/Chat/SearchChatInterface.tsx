@@ -1106,11 +1106,41 @@ Based on these search results, provide a helpful, accurate, and concise answer t
     setIsAgentWorking(false);
   };
 
-  const loadConversation = (conversation: SearchConversation) => {
-    setMessages(conversation.messages);
-    setActiveConversationId(conversation.id);
-    setSearchEngine(conversation.searchEngine);
-    setIsHistoryOpen(false);
+  const loadConversation = async (conversation: SearchConversation) => {
+    try {
+      // The list endpoint intentionally returns conversation metadata only. Fetch
+      // the detail before opening history so a hard reload cannot produce an
+      // apparently clickable conversation with an empty message pane.
+      const detail = await chatService.getConversation(conversation.id);
+      if (!detail) throw new Error('Conversation could not be loaded.');
+
+      const loadedMessages: ChatMessage[] = (detail.messages || []).map(msg => ({
+        id: msg.id || `msg-${Date.now()}`,
+        role: msg.role as 'user' | 'assistant' | 'system',
+        content: msg.content,
+        timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
+        searchResults: msg.search_context as SearchResult[] | undefined
+      }));
+      const lastResultMessage = [...loadedMessages].reverse().find(msg => msg.searchResults?.length);
+      const lastUserMessage = [...loadedMessages].reverse().find(msg => msg.role === 'user');
+      const restoredEngine = (detail.system_prompt?.includes('google') ? 'google' :
+        detail.system_prompt?.includes('brave') ? 'brave' : conversation.searchEngine) as SearchEngine;
+      const restoredModel = groupedModels.flatMap(group => group.models).find(model => model.id === detail.model_id);
+
+      setMessages(loadedMessages);
+      setActiveConversationId(conversation.id);
+      setSearchEngine(restoredEngine);
+      if (restoredModel) setSelectedModel(restoredModel);
+      setSearchResults(lastResultMessage?.searchResults || []);
+      setVisibleResults(lastResultMessage?.searchResults?.length || 0);
+      setShowResultsPanel(Boolean(lastResultMessage?.searchResults?.length));
+      setCurrentQuery(lastUserMessage?.content || conversation.title);
+      setSearchError('');
+      setIsHistoryOpen(false);
+    } catch (error) {
+      console.error('Failed to load search conversation:', error);
+      setSearchError(error instanceof Error ? error.message : 'Conversation could not be loaded.');
+    }
   };
 
   const deleteConversation = async (conversationId: string, e: React.MouseEvent) => {
