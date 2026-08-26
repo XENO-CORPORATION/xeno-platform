@@ -12,6 +12,7 @@ export interface UserSettings {
     wideMode?: boolean;
     alignment?: 'center' | 'left' | 'right';
     showTokenCount?: boolean;
+    fontSize?: 'small' | 'medium' | 'large';
   };
   appearance?: {
     theme?: 'dark' | 'light';

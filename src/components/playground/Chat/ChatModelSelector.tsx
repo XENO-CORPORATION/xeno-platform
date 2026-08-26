@@ -12,9 +12,12 @@ interface ChatModelSelectorProps {
   isMinimal?: boolean;
   isLoading: boolean;
   isReasoningActive: boolean;
+  openRequestKey?: number | null;
+  onOpenRequestHandled?: () => void;
   onOpenChange?: (isOpen: boolean) => void;
   onSelect: (model: Model) => void | Promise<void>;
   selectedModel: Model;
+  triggerId?: string;
 }
 
 const formatTokenCount = (tokens: number): string => {
@@ -37,9 +40,12 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
   isMinimal = false,
   isLoading,
   isReasoningActive,
+  openRequestKey = null,
+  onOpenRequestHandled,
   onOpenChange,
   onSelect,
   selectedModel,
+  triggerId,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isInlineTrayClosing, setIsInlineTrayClosing] = useState(false);
@@ -152,6 +158,19 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
 
   useEffect(() => () => clearInlineTrayCloseTimer(), []);
 
+  // A persistent model chip in the chat header opens this one canonical selector. The
+  // request is acknowledged after consumption so remounting the composer later cannot
+  // replay a stale request and unexpectedly reopen the tray.
+  useEffect(() => {
+    if (openRequestKey === null) return;
+
+    clearInlineTrayCloseTimer();
+    setIsInlineTrayClosing(false);
+    setIsOpen(true);
+    onOpenChange?.(true);
+    onOpenRequestHandled?.();
+  }, [openRequestKey]);
+
   const handleSelect = (model: Model) => {
     // Tell the parent only once the liquid exit has finished so the selected-state update
     // cannot replace the rail in the middle of its transition.
@@ -254,10 +273,10 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
     <div
       ref={rootRef}
       data-inline-model-selector={isInlineTray ? 'true' : 'false'}
-      className={isInlineTray ? 'flex min-w-0 flex-1 items-center gap-1' : 'relative flex-shrink-0'}
+      className={isInlineTray ? 'flex min-w-0 flex-1 items-center justify-end gap-2' : 'relative flex-shrink-0'}
     >
       {isInlineTray && isOpen && (
-        <div className="relative min-w-0 flex-1">
+        <div className="relative min-w-0 max-w-full flex-[0_1_auto]">
           <div
             ref={inlineRailRef}
             data-inline-model-actions
@@ -381,6 +400,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
 
       <button
         ref={triggerRef}
+        id={triggerId}
         type="button"
         data-chat-model-trigger
         data-gooey-tab
@@ -402,7 +422,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
             ? 'h-8 rounded-[10px] border-[var(--chat-border)] bg-[var(--chat-overlay)] px-3'
             : 'h-9 rounded-[10px] border-[var(--chat-border)] bg-transparent px-2.5'
         } ${
-          isCompact ? 'max-w-[6.5rem]' : 'max-w-[7.5rem]'
+          isCompact ? 'min-w-[7.5rem] max-w-[9rem]' : 'min-w-[8.5rem] max-w-[11rem]'
         }`}
       >
         {/* One wrapper so the gooey reveal can fade the whole label as a unit. */}

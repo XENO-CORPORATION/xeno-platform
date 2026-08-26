@@ -16,6 +16,9 @@ export interface Model {
   supportsReasoning?: 'alwaysOn' | 'toggleable' | 'disabled';
   supportsVision?: boolean;
   supportsFileUpload?: boolean;
+  provider?: string;
+  contextWindow?: number;
+  temperature?: number;
 }
 
 export interface ModelsResponse {
