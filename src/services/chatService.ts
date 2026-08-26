@@ -2,6 +2,14 @@
 // Replaces localStorage-based chat history with database persistence
 
 const API_BASE = '/api/chat';
+import {
+  libraryService,
+  type LibraryItemRecord,
+  type LibrarySort,
+  type LibrarySource,
+  type LibraryTab,
+} from './libraryService';
+export type { LibraryAssetRef, LibraryItemRecord, LibrarySort, LibrarySource, LibraryTab } from './libraryService';
 
 /** Same shape as server `UUID_RE`. Local `convo-<ts>` ids must never hit the API. */
 export const PERSISTED_CONVERSATION_ID_RE =
@@ -44,27 +52,9 @@ export interface ChatAttachment {
   name: string;
   content: string;
   mimeType?: string;
-}
-
-export type LibraryTab = 'all' | 'images' | 'files';
-export type LibrarySort = 'updated' | 'created' | 'name' | 'size';
-export type LibrarySource = 'artifact' | 'file' | 'generation' | 'image_asset';
-
-export interface LibraryItemRecord {
-  id: string;
-  source: LibrarySource;
-  source_id: string;
-  name: string;
-  category: 'images' | 'files';
-  item_type: 'image' | 'video' | 'audio' | 'file' | 'document' | 'code' | 'html';
-  mime_type?: string;
-  size_bytes?: number | string | null;
-  description?: string;
-  preview_url?: string | null;
-  conversation_id?: string | null;
-  conversation_title?: string | null;
-  created_at: string;
-  updated_at: string;
+  asset_id?: string;
+  content_url?: string;
+  size_bytes?: number;
 }
 
 export interface Conversation {
@@ -663,16 +653,7 @@ export const chatService = {
     limit?: number;
   }): Promise<LibraryItemRecord[]> {
     try {
-      const qs = new URLSearchParams();
-      if (params?.tab) qs.set('tab', params.tab);
-      if (params?.sort) qs.set('sort', params.sort);
-      if (params?.query) qs.set('query', params.query);
-      if (params?.limit) qs.set('limit', String(params.limit));
-      const response = await fetch(`${API_BASE}/library?${qs.toString()}`, {
-        headers: getAuthHeaders(),
-      });
-      const result = await handleResponse<{ items: LibraryItemRecord[] }>(response);
-      return result.items || [];
+      return await libraryService.list(params);
     } catch (error) {
       console.error('Failed to get account library:', error);
       throw error;
@@ -681,12 +662,7 @@ export const chatService = {
 
   async deleteLibraryItem(source: LibrarySource, id: string): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/library/${source}/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-      await handleResponse<{ success: boolean }>(response);
-      return true;
+      return await libraryService.delete(source, id);
     } catch (error) {
       console.error('Failed to delete library item:', error);
       return false;
@@ -700,23 +676,14 @@ export const chatService = {
     type: string;
     content_url: string;
   }> {
-    const token = localStorage.getItem('xenoos_auth_token');
-    const form = new FormData();
-    form.append('image', file);
-    form.append('source', source);
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: form,
-    });
-    const result = await handleResponse<{ file: {
-      id: string;
-      name: string;
-      size: number;
-      type: string;
-      content_url: string;
-    } }>(response);
-    return result.file;
+    const asset = await libraryService.upload(file, source);
+    return {
+      id: asset.assetId,
+      name: asset.name,
+      size: asset.size || file.size,
+      type: asset.mimeType,
+      content_url: asset.contentUrl,
+    };
   },
 
   // ============================================

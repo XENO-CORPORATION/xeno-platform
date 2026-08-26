@@ -50,10 +50,13 @@ import ThinkingStatus from './ThinkingStatus';
 import { chatComplete } from '@/services/aiService';
 import { getGroupedModels, GroupedModels, Model } from '@/services/modelService';
 import { chatService, isPersistedConversationId } from '@/services/chatService';
+import { libraryService, type LibraryAssetRef } from '@/services/libraryService';
+import LibraryAssetImage from '@/components/library/LibraryAssetImage';
+import LibraryAssetViewer, { type LibraryViewerItem } from '@/components/library/LibraryAssetViewer';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
-import type { Conversation as DBConversation, ChatMessage as DBChatMessage } from '@/services/chatService';
+import type { Conversation as DBConversation, ChatAttachment as DBChatAttachment, ChatMessage as DBChatMessage } from '@/services/chatService';
 import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Library, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, MenuDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -249,9 +252,22 @@ const estimateTokens = (text: string): number => {
 interface AttachedFile {
   id: string;
   name: string;
-    type: string; // Mime type or simple type like 'image', 'pdf', 'doc'
-    fileObject?: File; // Optional: Store the actual File object if needed later
+  type: string; // Mime type or simple type like 'image', 'pdf', 'doc'
+  fileObject?: File; // Optional: Store the actual File object if needed later
+  assetId?: string;
+  contentUrl?: string;
+  size?: number;
 }
+
+type MessageImageAttachment = {
+  file?: File;
+  name: string;
+  type: string;
+  base64Data?: string;
+  assetId?: string;
+  contentUrl?: string;
+  size?: number;
+};
 
 // Interface for Chat Message state - Revert to simpler version
 interface ChatMessage {
@@ -285,10 +301,11 @@ interface ChatMessage {
     thinkingContent?: string; // New field for thinking content
     imageData?: string; // Added field for storing generated image data (base64)
     isGeneratingImage?: boolean; // Flag for image generation in progress
-    userImageAttachment?: { file?: File; name: string; type: string; base64Data?: string; }; // Updated for serialization (first image; kept for older history)
+    userImageAttachment?: MessageImageAttachment; // Updated for serialization (first image; kept for older history)
     /** All image attachments for a user turn — rendered above the text bubble by aspect ratio. */
-    userImageAttachments?: { file?: File; name: string; type: string; base64Data?: string; }[];
-    userFileAttachment?: { file?: File; name: string; type: string; content?: string; encoding?: 'text' | 'base64' }; // Updated for serialization
+    userImageAttachments?: MessageImageAttachment[];
+    userFileAttachment?: { file?: File; name: string; type: string; content?: string; encoding?: 'text' | 'base64'; assetId?: string; contentUrl?: string; size?: number }; // Updated for serialization
+    generatedImageAsset?: LibraryAssetRef;
     isCancelled?: boolean; // New field to indicate if the AI response was cancelled
     isXenoSearchCancelled?: boolean; // New field to indicate if cancelled due to Xeno Search failure
     answerTokenCount?: number; // NEW: Token count for the AI's answer
@@ -296,6 +313,85 @@ interface ChatMessage {
     isXenoDeepSearchContainer?: boolean; // New flag to identify deep search containers
     isStreaming?: boolean; // True while the answer is being revealed (typewriter); actions hidden until done
 }
+
+const messageLibraryAttachments = (message: ChatMessage): DBChatAttachment[] => {
+  const images = message.userImageAttachments?.length
+    ? message.userImageAttachments
+    : message.userImageAttachment ? [message.userImageAttachment] : [];
+  const persisted: DBChatAttachment[] = images.filter((image) => image.assetId).map((image) => ({
+    type: 'image',
+    name: image.name,
+    content: '',
+    mimeType: image.type,
+    asset_id: image.assetId,
+    content_url: image.contentUrl,
+    size_bytes: image.size,
+  }));
+  if (message.userFileAttachment?.assetId) {
+    persisted.push({
+      type: 'document',
+      name: message.userFileAttachment.name,
+      content: '',
+      mimeType: message.userFileAttachment.type,
+      asset_id: message.userFileAttachment.assetId,
+      content_url: message.userFileAttachment.contentUrl,
+      size_bytes: message.userFileAttachment.size,
+    });
+  }
+  if (message.generatedImageAsset?.assetId) {
+    persisted.push({
+      type: 'image',
+      name: message.generatedImageAsset.name,
+      content: '',
+      mimeType: message.generatedImageAsset.mimeType,
+      asset_id: message.generatedImageAsset.assetId,
+      content_url: message.generatedImageAsset.contentUrl,
+      size_bytes: message.generatedImageAsset.size,
+    });
+  }
+  return persisted;
+};
+
+const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
+  const isAi = msg.role === 'assistant';
+  const attachments = Array.isArray(msg.attachments) ? msg.attachments : [];
+  const images = attachments.filter((attachment) => attachment.type === 'image' && attachment.asset_id).map((attachment) => ({
+    name: attachment.name,
+    type: attachment.mimeType || 'image/*',
+    assetId: attachment.asset_id,
+    contentUrl: attachment.content_url || `/api/library/assets/${attachment.asset_id}/content`,
+    size: attachment.size_bytes,
+  }));
+  const file = attachments.find((attachment) => attachment.type !== 'image' && attachment.asset_id);
+  const generated = isAi ? images[0] : undefined;
+  return {
+    id: msg.id || `msg-${index}`,
+    sender: isAi ? 'ai' : 'user',
+    text: msg.content,
+    parsedAnswer: isAi ? msg.content : undefined,
+    modelId: msg.model_id,
+    modelIdUsed: msg.model_id,
+    thinkingContent: msg.thinking,
+    hasThinking: msg.has_thinking,
+    timestamp: msg.created_at ? new Date(msg.created_at).getTime() : undefined,
+    userImageAttachment: !isAi ? images[0] : undefined,
+    userImageAttachments: !isAi && images.length ? images : undefined,
+    userFileAttachment: !isAi && file ? {
+      name: file.name,
+      type: file.mimeType || 'application/octet-stream',
+      assetId: file.asset_id,
+      contentUrl: file.content_url || `/api/library/assets/${file.asset_id}/content`,
+      size: file.size_bytes,
+    } : undefined,
+    generatedImageAsset: generated ? {
+      assetId: generated.assetId!,
+      name: generated.name,
+      mimeType: generated.type,
+      size: generated.size,
+      contentUrl: generated.contentUrl!,
+    } : undefined,
+  };
+};
 
 // --- NEW: Interface for Conversation History Item ---
 interface Conversation {
@@ -2707,6 +2803,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const [isRecentFilesOpen, setIsRecentFilesOpen] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const [recentFiles, setRecentFiles] = useState<Array<{
     id: string;
     name: string;
@@ -2714,6 +2811,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     size: number;
     lastUsed: number;
     preview?: string;
+    assetId?: string;
+    contentUrl?: string;
   }>>([]);
   const [recentFilesSearchQuery, setRecentFilesSearchQuery] = useState('');
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
@@ -4280,7 +4379,28 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isFullScreenImageShown, setIsFullScreenImageShown] = useState(false);
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState<string | null>(null);
   const [viewerShowsDownloadButton, setViewerShowsDownloadButton] = useState(false); // New state for download button visibility
+  const [libraryViewerSelection, setLibraryViewerSelection] = useState<{ items: LibraryViewerItem[]; activeId: string } | null>(null);
   // --- END Full-screen Image Viewer STATE ---
+
+  const conversationLibraryViewerItems = useMemo<LibraryViewerItem[]>(() => messages.flatMap((message) => {
+    const output: LibraryViewerItem[] = [];
+    if (message.generatedImageAsset) {
+      output.push({ id: `${message.id}:generated`, name: message.generatedImageAsset.name, asset: message.generatedImageAsset, context: 'Chat' });
+    }
+    const images = message.userImageAttachments?.length
+      ? message.userImageAttachments
+      : message.userImageAttachment ? [message.userImageAttachment] : [];
+    images.forEach((image, index) => {
+      if (!image.assetId || !image.contentUrl) return;
+      output.push({
+        id: `${message.id}:attachment:${index}`,
+        name: image.name,
+        asset: { assetId: image.assetId, name: image.name, mimeType: image.type, size: image.size, contentUrl: image.contentUrl },
+        context: 'Chat',
+      });
+    });
+    return output;
+  }), [messages]);
 
   // Must sit below the useState above — otherwise TDZ crashes the whole chat (black screen).
   useEffect(() => {
@@ -5803,6 +5923,7 @@ interface QueueState {
                 model_id: msg.modelIdUsed || msg.modelId,
                 thinking: msg.thinkingContent,
                 has_thinking: !!msg.thinkingContent,
+                attachments: messageLibraryAttachments(msg),
               })),
             );
             return register(dbConversation.id);
@@ -5832,7 +5953,7 @@ interface QueueState {
     xenoContext?: { summary?: string; sources?: XenoSource[] },
     // <<< NEW: Add direct xenoSearchInfo parameter >>>
     xenoSearchInfo?: ChatMessage['searchInfo']
-  ): Promise<ChatMessage | { refinedPromptText: string; modelIdUsed: string } | { imageData: string; modelIdUsed: string } | undefined> => {
+  ): Promise<ChatMessage | { refinedPromptText: string; modelIdUsed: string } | { imageData: string; modelIdUsed: string; libraryItemId?: string; libraryContentUrl?: string } | undefined> => {
 
     // *** DIAGNOSTIC LOGGING: Track task parameter value ***
     console.log(`>>> [FETCHAIRESPONSE ENTRY] Received taskArg:`, taskArg);
@@ -5965,25 +6086,39 @@ interface QueueState {
                 messagePayload.parts.push({ type: 'text', text: textContent });
             }
 
-            // Add user image attachment if present
-            if (msg.sender === 'user' && msg.userImageAttachment && msg.userImageAttachment.file) {
+            // Resolve Library references only at the model boundary. Chat storage keeps
+            // stable asset ids/URLs; base64 exists only for the provider request.
+            const userImages = msg.userImageAttachments?.length
+              ? msg.userImageAttachments
+              : msg.userImageAttachment ? [msg.userImageAttachment] : [];
+            for (const image of msg.sender === 'user' ? userImages : []) {
                 try {
-                    const base64Image = await fileToBase64(msg.userImageAttachment.file);
-                    const base64Data = base64Image.split(',')[1];
+                    let base64Data = image.base64Data;
+                    if (!base64Data && image.file) base64Data = (await fileToBase64(image.file)).split(',')[1];
+                    if (!base64Data && image.assetId && image.contentUrl) {
+                      const blob = await libraryService.fetchAssetBlob({ assetId: image.assetId, contentUrl: image.contentUrl });
+                      base64Data = (await fileToBase64(new globalThis.File([blob], image.name, { type: image.type }))).split(',')[1];
+                    }
+                    if (!base64Data) throw new Error('Image bytes unavailable');
                     messagePayload.parts.push({
                         type: 'image',
-                        media_type: msg.userImageAttachment.type,
+                        media_type: image.type,
                         data: base64Data
                     });
                 } catch (error) {
                     console.error("Error converting user image to base64 for API payload:", error);
-                    messagePayload.parts.push({ type: 'text', text: `[Error processing image: ${msg.userImageAttachment.name}]` });
+                    messagePayload.parts.push({ type: 'text', text: `[Error processing image: ${image.name}]` });
                 }
             }
             
             // Add user file attachment if present (separate condition to allow both image and file)
-            if (msg.sender === 'user' && msg.userFileAttachment && msg.userFileAttachment.file) {
-                const file = msg.userFileAttachment.file;
+            if (msg.sender === 'user' && msg.userFileAttachment && (msg.userFileAttachment.file || msg.userFileAttachment.assetId)) {
+                let file = msg.userFileAttachment.file;
+                if (!file && msg.userFileAttachment.assetId && msg.userFileAttachment.contentUrl) {
+                  const blob = await libraryService.fetchAssetBlob({ assetId: msg.userFileAttachment.assetId, contentUrl: msg.userFileAttachment.contentUrl });
+                  file = new globalThis.File([blob], msg.userFileAttachment.name, { type: msg.userFileAttachment.type });
+                }
+                if (!file) throw new Error(`Library file unavailable: ${msg.userFileAttachment.name}`);
                 const isCommonTextType = file.type.startsWith('text/') ||
                                      [ '.md', '.json', '.csv', '.xml', '.html', '.css', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.c', '.cpp', '.cs', '.php', '.rb', '.go', '.swift', '.kt', '.rs', '.toml', '.yaml', '.yml'].some(ext => file.name.toLowerCase().endsWith(ext));
 
@@ -6020,12 +6155,17 @@ interface QueueState {
             }
 
             // NEW: Add AI-generated image if present in an AI message
-            if (msg.sender === 'ai' && msg.imageData) {
+            if (msg.sender === 'ai' && (msg.imageData || msg.generatedImageAsset)) {
                 // console.log(`[API Prep] Adding AI-generated image to payload for AI message ID ${msg.id}`);
+                let generatedData = msg.imageData;
+                if (!generatedData && msg.generatedImageAsset) {
+                  const blob = await libraryService.fetchAssetBlob(msg.generatedImageAsset);
+                  generatedData = (await fileToBase64(new globalThis.File([blob], msg.generatedImageAsset.name, { type: msg.generatedImageAsset.mimeType }))).split(',')[1];
+                }
                 messagePayload.parts.push({
                     type: 'image',
                     media_type: 'image/png',
-                    data: msg.imageData
+                    data: generatedData || ''
                 });
             }
 
@@ -6138,7 +6278,9 @@ interface QueueState {
             // console.log(`[fetchAiResponse] Received image data directly from backend.`);
             return { 
                 imageData: data.imageData,
-                modelIdUsed: data.modelIdUsed || 'gpt-image-2' // Default to gpt-image-2 if not specified
+                modelIdUsed: data.modelIdUsed || 'gpt-image-2', // Default to gpt-image-2 if not specified
+                libraryItemId: data.libraryItemId,
+                libraryContentUrl: data.libraryContentUrl,
             };
         }
         // --- END NEW: Handle Image Generation Response Directly ---
@@ -6648,7 +6790,7 @@ interface QueueState {
         'image',
         undefined,
         undefined
-      ) as { imageData: string; modelIdUsed: string } | undefined; // Adjusted expected type
+      ) as { imageData: string; modelIdUsed: string; libraryItemId?: string; libraryContentUrl?: string } | undefined;
 
       // Check for abort *after* fetchAiResponse has completed or aborted
       if (controllerForThisRequest?.signal.aborted) {
@@ -6673,6 +6815,13 @@ interface QueueState {
       }
 
       if (aiImageResponse?.imageData) {
+           const generatedImageAsset = aiImageResponse.libraryItemId ? {
+             assetId: aiImageResponse.libraryItemId,
+             name: `XENO image ${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
+             mimeType: 'image/png',
+             contentUrl: aiImageResponse.libraryContentUrl || `/api/library/assets/${aiImageResponse.libraryItemId}/content`,
+           } satisfies LibraryAssetRef : undefined;
+           const completedText = `Image generated for prompt: "${prompt}"`;
            // console.log(`[ChatWithLLM] Image data received via fetchAiResponse for message ${messageId}`);
              setMessages(prevMessages =>
                 prevMessages.map(msg =>
@@ -6684,11 +6833,41 @@ interface QueueState {
                         text: msg.text?.includes('Initializing') || msg.text?.includes('Generating image') ? `Image generated for prompt: \"${prompt}\"` : msg.text,
                         parsedAnswer: msg.text?.includes('Initializing') || msg.text?.includes('Generating image') ? `Image generated for prompt: \"${prompt}\"` : msg.parsedAnswer,
                         modelIdUsed: aiImageResponse.modelIdUsed || imageModelId,
+                        generatedImageAsset,
                         isCancelled: false
                     }
                     : msg
                 )
             );
+           const persistedImageMessage: ChatMessage = {
+             id: messageId,
+             sender: 'ai',
+             text: completedText,
+             parsedAnswer: completedText,
+             timestamp: Date.now(),
+             modelIdUsed: aiImageResponse.modelIdUsed || imageModelId,
+             imageData: aiImageResponse.imageData,
+             generatedImageAsset,
+           };
+           const conversationId = activeConversationIdRef.current ?? activeConversationId;
+           if (conversationId) {
+             setConversationHistory((history) => history.map((conversation) => conversation.id === conversationId
+               ? {
+                   ...conversation,
+                   messages: conversation.messages.some((entry) => entry.id === messageId)
+                     ? conversation.messages.map((entry) => entry.id === messageId ? persistedImageMessage : entry)
+                     : [...conversation.messages, persistedImageMessage],
+                 }
+               : conversation));
+             if (isDbAuthenticated) {
+               void chatService.addMessage(conversationId, {
+                 role: 'assistant',
+                 content: completedText,
+                 model_id: persistedImageMessage.modelIdUsed,
+                 attachments: messageLibraryAttachments(persistedImageMessage),
+               }).catch((error) => console.error('Error saving generated Library image message:', error));
+             }
+           }
       } else { // Covers undefined aiImageResponse (not aborted) or if it returned text/error
             const errorTextFromResponse = (aiImageResponse as any)?.text; // Attempt to get text if it was an error object from fetchAiResponse
             const errorMsg = errorTextFromResponse || 'Error generating image: Unexpected response or format.';
@@ -6735,7 +6914,7 @@ interface QueueState {
   const handleGenerate = async (inputOverride?: string) => {
     const composerText = inputOverride ?? inputValue;
     const canSend = composerText.trim() || attachedFiles.length > 0;
-    if (!canSend || isLoading) return;
+    if (!canSend || isLoading || isUploadingAttachments) return;
     if (isContextLimitReached) return;
 
     // Prepare the new user message
@@ -6747,11 +6926,14 @@ interface QueueState {
 
     // --- Prepare newUserMessage with potential image/file attachment ---
     const imageAttachmentsPayload = filesToSend
-      .filter((f) => f.fileObject && f.type.startsWith('image/'))
+      .filter((f) => f.type.startsWith('image/'))
       .map((f) => ({
-        file: f.fileObject as File,
+        file: f.fileObject,
         name: f.name,
         type: f.type,
+        assetId: f.assetId,
+        contentUrl: f.contentUrl,
+        size: f.size,
       }));
     const userImageAttachmentsPayload =
       imageAttachmentsPayload.length > 0 ? imageAttachmentsPayload : undefined;
@@ -6759,12 +6941,15 @@ interface QueueState {
 
     let userFileAttachmentPayload: ChatMessage['userFileAttachment'] = undefined;
     // Allow file attachment regardless of whether there's also an image
-      const firstNonImageFile = filesToSend.find(f => f.fileObject && !f.type.startsWith('image/'));
-      if (firstNonImageFile && firstNonImageFile.fileObject) {
+      const firstNonImageFile = filesToSend.find(f => !f.type.startsWith('image/'));
+      if (firstNonImageFile) {
         userFileAttachmentPayload = {
           file: firstNonImageFile.fileObject,
           name: firstNonImageFile.name,
           type: firstNonImageFile.type,
+          assetId: firstNonImageFile.assetId,
+          contentUrl: firstNonImageFile.contentUrl,
+          size: firstNonImageFile.size,
         };
       console.log('Attaching non-image file to user message:', firstNonImageFile.name);
     }
@@ -6802,6 +6987,7 @@ interface QueueState {
       chatService.addMessage(activeConversationIdRef.current, {
         role: 'user',
         content: newUserMessage.text,
+        attachments: messageLibraryAttachments(newUserMessage),
       }).catch(error => {
         console.error("Error adding user message to database:", error);
       });
@@ -7550,19 +7736,7 @@ Please provide a well-structured response using this search context and any mult
         const fullConversation = await chatService.getConversation(conversationId);
         if (fullConversation && fullConversation.messages) {
           // Convert database message format to local format
-          const localMessages: ChatMessage[] = fullConversation.messages.map((msg: DBChatMessage, index: number) => {
-            const isAi = msg.role === 'assistant';
-            return {
-              id: msg.id || `msg-${index}`,
-              sender: isAi ? 'ai' as const : 'user' as const,
-              text: msg.content,
-              parsedAnswer: isAi ? msg.content : undefined,
-              modelId: msg.model_id,
-              modelIdUsed: msg.model_id,
-              thinkingContent: msg.thinking,
-              hasThinking: msg.has_thinking,
-            };
-          });
+          const localMessages: ChatMessage[] = fullConversation.messages.map(dbMessageToLocal);
           setMessages(localMessages);
 
           // Update cache in conversation history
@@ -7642,19 +7816,7 @@ Please provide a well-structured response using this search context and any mult
       const fullConversation = await chatService.getConversation(activeConversationId);
       if (fullConversation && fullConversation.messages) {
         // Convert database message format to local format
-        const localMessages: ChatMessage[] = fullConversation.messages.map((msg: DBChatMessage, index: number) => {
-          const isAi = msg.role === 'assistant';
-          return {
-            id: msg.id || `msg-${index}`,
-            sender: isAi ? 'ai' as const : 'user' as const,
-            text: msg.content,
-            parsedAnswer: isAi ? msg.content : undefined,
-            modelId: msg.model_id,
-            modelIdUsed: msg.model_id,
-            thinkingContent: msg.thinking,
-            hasThinking: msg.has_thinking,
-          };
-        });
+        const localMessages: ChatMessage[] = fullConversation.messages.map(dbMessageToLocal);
         setMessages(localMessages);
 
         // Update cache in conversation history
@@ -9278,33 +9440,45 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   };
   
   // Handle file selection from the hidden input
-  const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
         // Selection is the moment the browser has the real bytes. Persist them now;
         // the old recent-file callback only wrote metadata and was never invoked,
         // which made attachments disappear from every other device.
-        for (const file of Array.from(files)) {
-          void chatService.uploadLibraryFile(file, 'chat-attachment').catch((error) => {
-            console.error('Failed to save chat attachment to Library:', error);
-          });
+        setIsUploadingAttachments(true);
+        let newFiles: AttachedFile[] = [];
+        try {
+          newFiles = await Promise.all(Array.from(files).map(async (file) => {
+            const asset = await libraryService.upload(file, 'chat-attachment');
+            return {
+              id: asset.assetId,
+              name: asset.name,
+              type: asset.mimeType || file.type || 'application/octet-stream',
+              fileObject: file,
+              assetId: asset.assetId,
+              contentUrl: asset.contentUrl,
+              size: asset.size || file.size,
+            };
+          }));
+        } catch (error) {
+          console.error('Failed to save chat attachment to Library:', error);
+          return;
+        } finally {
+          setIsUploadingAttachments(false);
         }
-        const newFiles: AttachedFile[] = Array.from(files).map(file => ({
-            id: `${file.name}-${file.lastModified}-${file.size}`,
-            name: file.name,
-            type: file.type || 'unknown',
-            fileObject: file 
-        }));
         
         // Add files to recent files list
         const now = Date.now();
-        const newRecentFiles = Array.from(files).map(file => ({
-          id: `${file.name}-${file.lastModified}-${file.size}`,
+        const newRecentFiles = newFiles.map((file) => ({
+          id: file.id,
           name: file.name,
-          type: file.type || 'unknown',
-          size: file.size,
+          type: file.type,
+          size: file.size || 0,
           lastUsed: now,
-          preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
+          assetId: file.assetId,
+          contentUrl: file.contentUrl,
+          preview: file.fileObject && file.type.startsWith('image/') ? URL.createObjectURL(file.fileObject) : undefined
         }));
 
         setRecentFiles(prev => {
@@ -9346,6 +9520,10 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
   // Handle re-attaching a recent file
   const handleReattachRecentFile = async (recentFile: typeof recentFiles[0]) => {
     console.log('[Recent Files] Re-attaching file:', recentFile.name);
+    if (!recentFile.assetId || !recentFile.contentUrl) {
+      console.warn('[Recent Files] Legacy metadata-only item cannot be attached; choose the file again so it enters Library.');
+      return;
+    }
     
     // Create a new AttachedFile object without the actual File object
     // Since we can't recreate the File object from localStorage data,
@@ -9354,6 +9532,9 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       id: `recent-${recentFile.id}-${Date.now()}`,
       name: recentFile.name,
       type: recentFile.type,
+      assetId: recentFile.assetId,
+      contentUrl: recentFile.contentUrl,
+      size: recentFile.size,
       // Note: fileObject will be undefined for recent files
       // The UI should handle this gracefully by showing metadata only
     };
@@ -10265,7 +10446,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
 
   // Image Generation Component
   const ImageContainer: React.FC<{ message: ChatMessage }> = ({ message }) => {
-    if (!message.isGeneratingImage && !message.imageData) {
+    if (!message.isGeneratingImage && !message.imageData && !message.generatedImageAsset) {
       return null;
     }
 
@@ -10290,6 +10471,10 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     };
 
     const handleImageClick = () => {
+      if (message.generatedImageAsset) {
+        setLibraryViewerSelection({ items: conversationLibraryViewerItems, activeId: `${message.id}:generated` });
+        return;
+      }
       if (message.imageData) {
         const imageUrl = getImageUrl();
         setFullScreenImageUrl(imageUrl);
@@ -10304,10 +10489,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       <div className="w-full max-w-[440px] aspect-square rounded-2xl overflow-hidden bg-[#111114] border border-[#222228] shadow-2xl my-3 transition-all duration-300">
         {message.isGeneratingImage && !message.imageData ? (
           <DotMatrixImagePlaceholder prompt={promptText} />
-        ) : message.imageData ? (
+        ) : (message.imageData || message.generatedImageAsset) ? (
           <div className="relative group w-full h-full overflow-hidden">
-            <img
-              src={getImageUrl()}
+            <LibraryAssetImage
+              asset={message.generatedImageAsset}
+              sourceUrl={message.imageData ? getImageUrl() : undefined}
               alt="AI generated image"
               className="w-full h-full object-cover cursor-pointer transition-transform duration-300 group-hover:scale-[1.02]"
               onClick={handleImageClick}
@@ -10327,15 +10513,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                   <Search size={13} />
                   <span>View Full</span>
                 </button>
-                <a
-                  href={getImageUrl()}
-                  download="xeno-gpt-image-2.png"
-                  onClick={(e) => e.stopPropagation()}
+                <button
+                  type="button"
+                  onClick={(event) => { event.stopPropagation(); handleImageClick(); }}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-lg text-xs text-white font-medium transition-colors"
                 >
                   <Download size={13} />
-                  <span>Save</span>
-                </a>
+                  <span>Open Library</span>
+                </button>
               </div>
             </div>
           </div>
@@ -11299,7 +11484,14 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
           name: string;
           type: string;
           base64Data?: string;
+          assetId?: string;
+          contentUrl?: string;
+          size?: number;
         }) => {
+          if (attachment.assetId && attachment.contentUrl) {
+            const { file: _file, base64Data: _base64Data, ...libraryReference } = attachment;
+            return libraryReference;
+          }
           if (attachment.file instanceof File) {
             const base64Url = await fileToBase64(attachment.file);
             return {
@@ -11348,7 +11540,11 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         }
 
         // Serialize file attachments
-        if (message.userFileAttachment && message.userFileAttachment.file instanceof File) {
+        if (message.userFileAttachment?.assetId && message.userFileAttachment.contentUrl) {
+            delete message.userFileAttachment.file;
+            delete message.userFileAttachment.content;
+            delete message.userFileAttachment.encoding;
+        } else if (message.userFileAttachment && message.userFileAttachment.file instanceof File) {
             try {
                 const liveFileObject = message.userFileAttachment.file;
                 if (isCommonTextFile(liveFileObject)) {
@@ -11677,12 +11873,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             ? [message.userImageAttachment]
             : [];
       images.forEach((image, index) => {
-        if (!image?.name && !image?.file && !image?.base64Data) return;
+        if (!image?.name && !image?.file && !image?.base64Data && !image?.assetId) return;
         items.push({
           key: `${message.id}-image-${index}`,
           name: image.name || 'Image',
           kind: 'image',
-          content: image.base64Data
+          content: image.base64Data || image.assetId
             ? `[Image: ${image.name || 'attachment'}]\n\nPreview is available in the message bubble.`
             : `[Image: ${image.name || 'attachment'}]`,
         });
@@ -16053,9 +16249,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                  : message.userImageAttachment
                                                    ? [message.userImageAttachment]
                                                    : []
-                                             ).filter((img) => img.file || img.base64Data);
+                                             ).filter((img) => img.file || img.base64Data || img.assetId);
 
                                              const openUserImageFullView = (img: typeof imageAttachments[number]) => {
+                                               if (img.assetId) {
+                                                 const activeIndex = imageAttachments.indexOf(img);
+                                                 setLibraryViewerSelection({ items: conversationLibraryViewerItems, activeId: `${message.id}:attachment:${activeIndex}` });
+                                                 return;
+                                               }
                                                const url = img.base64Data
                                                  ? `data:${img.type};base64,${img.base64Data}`
                                                  : img.file
@@ -16074,7 +16275,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                imageAttachments.length > 0 ||
                                                Boolean(
                                                  message.userFileAttachment &&
-                                                   (message.userFileAttachment.file || message.userFileAttachment.content),
+                                                   (message.userFileAttachment.file || message.userFileAttachment.content || message.userFileAttachment.assetId),
                                                );
 
                                              return (
@@ -16095,7 +16296,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                          ? `data:${img.type};base64,${img.base64Data}`
                                                          : img.file
                                                            ? URL.createObjectURL(img.file)
-                                                           : '';
+                                                           : img.contentUrl || '';
                                                        if (!src) return null;
                                                        /* Stays hand-written: a 148 x 200 image card.
                                                           Its whole surface is the picture — no ink, no
@@ -16112,8 +16313,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                            aria-label={`View ${img.name} full size`}
                                                            className="block h-[200px] w-[148px] flex-shrink-0 overflow-hidden rounded-xl focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)]"
                                                          >
-                                                           <img
-                                                             src={src}
+                                                           <LibraryAssetImage
+                                                             asset={img.assetId && img.contentUrl ? { assetId: img.assetId, name: img.name, mimeType: img.type, size: img.size, contentUrl: img.contentUrl } : undefined}
+                                                             sourceUrl={src}
                                                              alt={img.name}
                                                              className="h-full w-full cursor-pointer object-cover transition-opacity hover:opacity-95"
                                                            />
@@ -16123,7 +16325,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                              </div>
                                            )}
 
-                                           {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content) && (
+                                           {message.userFileAttachment && (message.userFileAttachment.file || message.userFileAttachment.content || message.userFileAttachment.assetId) && (
                                             /* A BUTTON, not a `<div onClick>`. It opens the file in
                                                 the context panel, so a keyboard has to reach it —
                                                 and did not. `text-left` because a button centres its
@@ -16144,6 +16346,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                       fileObject: message.userFileAttachment.file
                                                     };
                                                     handleShowFileInContextPanel(fileToShow);
+                                                  } else if (message.userFileAttachment.assetId) {
+                                                    void libraryService.createSignedLink(message.userFileAttachment.assetId).then((url) => window.open(url, '_blank', 'noopener'));
                                                   } else {
                                                     handleShowFileInContextPanel(message.userFileAttachment as any);
                                                   }
@@ -16494,6 +16698,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                            !message.isLoading &&
                                            !message.isGeneratingImage &&
                                            !message.imageData &&
+                                           !message.generatedImageAsset &&
                                            message.sender === 'ai' &&
                                            !message.isThinkingPlaceholder &&
                                            !message.isDotPlaceholder &&
@@ -16514,7 +16719,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               </div>
                                           )}
 
-                                          {(message.isGeneratingImage || message.imageData) && (
+                                          {(message.isGeneratingImage || message.imageData || message.generatedImageAsset) && (
                                               <ImageContainer message={message} />
                                           )}
 
@@ -18213,6 +18418,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             />,
             document.body,
           )}
+        {libraryViewerSelection && createPortal(
+          <LibraryAssetViewer
+            items={libraryViewerSelection.items}
+            activeId={libraryViewerSelection.activeId}
+            onClose={() => setLibraryViewerSelection(null)}
+          />,
+          document.body,
+        )}
 
         {/* History Sidebar - Slides in from left */}
         {/* In multi-interface mode: render inside the interface container */}
