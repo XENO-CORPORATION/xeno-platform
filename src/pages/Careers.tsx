@@ -47,7 +47,7 @@ const Careers: React.FC = () => (
           },
           {
             title: 'Growth',
-            desc: 'Own acquisition, lifecycle, and the credits-based funnel — experiments, analytics, and storytelling that scales.',
+            desc: 'Own acquisition, lifecycle, and subscription growth — experiments, analytics, and storytelling that scales.',
           },
         ]}
       />

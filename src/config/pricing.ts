@@ -9,24 +9,24 @@
 //              cloud sync + multi-device, cross-app workflows, agents/automation, private
 //              cloud projects, managed-premium inference priority, and the commercial license.
 //   • Team   — €40/seat/mo. Everything in Everything PLUS real-time collaboration,
-//              a shared/pooled credit wallet, one consolidated invoice, spend budgets,
+//              shared workspace billing, one consolidated invoice, usage budgets,
 //              admin/governance, and workspace tenancy. Per-seat is ALWAYS >= individual Pro.
 //   • Studio — €99/mo. The shipped higher-capacity tier; custom enterprise terms are
 //              discussed separately and are not represented as shipped capabilities.
 //
-// CREDITS ARE ORTHOGONAL. Subscriptions gate FEATURES. Credits are a separate, OPTIONAL
-// à-la-carte top-up that fuels ONLY managed-premium (frontier / 3rd-party) inference and
-// the marketplace — BYOK and in-house xeno-rt open models never cost credits, and paid
-// credits never expire. Credits are NOT the product and must never dominate the page.
+// MANAGED API USAGE IS ORTHOGONAL. Subscriptions gate platform features; hosted
+// inference is a separate developer product. Its catalog and purchase controls stay on
+// the API/account surfaces and must not be promoted by this public subscription module.
 //
 // Prices here are the LOCKED values and mirror the server billing catalog
 // (src/server/services/billingService.js), which in turn mirrors the Stripe Price objects.
 // Components should PREFER the live price from GET /api/billing/config (getLivePriceMap,
-// matched by `itemId`) and fall back to `price`/`credits` here — so the ADVERTISED price
+// matched by `itemId`) and fall back to `price` here — so the ADVERTISED price
 // always equals the CHARGED price, even if Stripe is re-priced.
 //
 // Currency is EUR (EU entity + Impressum + Stripe VAT). Live plan keys: pro_monthly (€24),
-// team_seat (€40/seat). Credit packs: credits_small/medium/large (€10/€50/€100).
+// team_seat (€40/seat). Managed API usage products deliberately do not live in this public
+// subscription module; they are offered only on the developer/account billing surfaces.
 //
 // NOTE: features must be TRUE (enforced or real). No vaporware, no "remove watermark"
 // (watermarking is retired), and no false "replaces X / exclusive models" claims — XENO
@@ -52,16 +52,6 @@ export interface PricingTier {
   featured?: boolean;
 }
 
-/** An optional à-la-carte credit top-up pack (fuels managed-premium + marketplace only). */
-export interface CreditPack {
-  id: string;            // catalog item id (credits_small/medium/large) — used for Checkout
-  label: string;
-  credits: number;
-  price: number;
-  currency: string;
-  badge?: string;
-}
-
 const CURRENCY_SYMBOLS: Record<string, string> = { eur: '€', usd: '$', gbp: '£' };
 
 /** Currency symbol for an ISO code (defaults to €). */
@@ -73,11 +63,6 @@ export function currencySymbol(code?: string): string {
 export function formatPrice(amount: number | 'custom', code?: string): string {
   if (amount === 'custom') return 'Custom';
   return `${currencySymbol(code)}${amount}`;
-}
-
-/** Format a credit count like "1,000 credits". */
-export function formatCredits(n: number): string {
-  return `${n.toLocaleString('en-US')} credits`;
 }
 
 export const PRICING_TIERS: PricingTier[] = [
@@ -148,7 +133,7 @@ export const PRICING_TIERS: PricingTier[] = [
     features: [
       'Everything, for every paid seat',
       'Real-time collaboration',
-      'Shared, pooled credit wallet',
+      'Shared workspace usage controls',
       'One consolidated invoice',
       'Spend budgets & controls',
       'Admin roles & governance',
@@ -177,13 +162,4 @@ export const PRICING_TIERS: PricingTier[] = [
     cta: 'Choose Studio',
     href: '/signup',
   },
-];
-
-// Optional à-la-carte credit packs. These come from the LIVE catalog (getLivePriceMap
-// overlays exact price by id); the values below are static fallbacks that mirror the
-// server catalog (credits_small/medium/large). Paid credits never expire.
-export const CREDIT_PACKS: CreditPack[] = [
-  { id: 'credits_small',  label: 'Starter',  credits: 1000,  price: 10,  currency: 'eur' },
-  { id: 'credits_medium', label: 'Plus',     credits: 5500,  price: 50,  currency: 'eur', badge: 'Best value' },
-  { id: 'credits_large',  label: 'Pro pack', credits: 12000, price: 100, currency: 'eur' },
 ];

@@ -8,14 +8,10 @@ import { useSearchParams } from 'react-router-dom';
 import CheckoutConsent from '../components/billing/CheckoutConsent';
 import {
   PRICING_TIERS,
-  CREDIT_PACKS,
   formatPrice,
-  formatCredits,
   type PricingTier,
-  type CreditPack,
 } from '../config/pricing';
 
-type LivePrice = { price: number; currency: string };
 type BillingInterval = 'month' | 'year';
 
 const planKey = (plan: string, interval: string = 'month') => `${plan}:${interval}`;
@@ -158,44 +154,6 @@ const PlanCTA: React.FC<{ plan: PricingTier; checkout: ReturnType<typeof useChec
   );
 };
 
-/** A single optional credit pack — understated, reuses the same Checkout flow. */
-const CreditPackCard: React.FC<{
-  pack: CreditPack;
-  live?: LivePrice;
-  checkout: ReturnType<typeof useCheckout>;
-}> = ({ pack, live, checkout }) => {
-  const busy = checkout.busyId === pack.id;
-  const off = checkout.availability === 'disabled';
-  const price = formatPrice(live ? live.price : pack.price, live ? live.currency : pack.currency);
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] px-5 py-4">
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="text-[13.5px] font-semibold text-[#ece7df]">{pack.label}</span>
-          {pack.badge && (
-            <span className="rounded-full border border-white/25 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[#ece7df]">
-              {pack.badge}
-            </span>
-          )}
-        </div>
-        <div className="mt-0.5 text-[12px] text-[#948d83]">{formatCredits(pack.credits)}</div>
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="text-[16px] font-semibold text-[#ece7df]">{price}</span>
-        <button
-          type="button"
-          onClick={() => checkout.start(pack.id)}
-          disabled={off || busy}
-          title={off ? "Credit packs aren't on sale yet" : undefined}
-          className="rounded-[8px] border border-white/[0.12] px-3 py-1.5 text-[12px] font-semibold text-[#ece7df] transition-colors hover:border-white/[0.22] disabled:opacity-60"
-        >
-          {off ? '—' : busy ? '…' : 'Buy'}
-        </button>
-      </div>
-    </div>
-  );
-};
-
 const Pricing: React.FC = () => {
   const checkout = useCheckout();
   const navigate = useNavigate();
@@ -203,20 +161,16 @@ const Pricing: React.FC = () => {
 
   // Prefer the LIVE catalog price (which mirrors the Stripe Price actually charged) so the
   // advertised price always equals the charged price; fall back to the static value.
-  const [live, setLive] = React.useState<Record<string, LivePrice>>({});
   const [offered, setOffered] = React.useState<Record<string, BillingItem>>({});
   const [catalog, setCatalog] = React.useState<BillingItem[]>([]);
   React.useEffect(() => {
     let on = true;
     getBillingConfig().then((cfg) => {
       if (!on) return;
-      const prices: Record<string, LivePrice> = {};
       const plans: Record<string, BillingItem> = {};
       for (const item of cfg.catalog) {
-        prices[item.id] = { price: item.price, currency: item.currency || cfg.currency };
         if (item.kind === 'subscription' && item.plan) plans[planKey(item.plan, item.interval)] = item;
       }
-      setLive(prices);
       setOffered(plans);
       setCatalog(cfg.catalog);
     }).catch(() => {});
@@ -402,17 +356,24 @@ const Pricing: React.FC = () => {
       </div>
     </Section>
 
-    <Section title="Optional: credit packs">
-      <p className="mb-5 text-[14px] leading-[1.75] text-[#9b948a]">
-        Credits are separate from your plan and entirely optional. They're à-la-carte fuel for
-        managed-premium inference (frontier and third-party models) and the marketplace. They are never
-        bundled into a subscription, and paid credits do not expire. BYOK is planned; local xeno-rt uses
-        your own hardware when available and is not a hosted-credit charge.
-      </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {CREDIT_PACKS.map((pack) => (
-          <CreditPackCard key={pack.id} pack={pack} live={live[pack.id]} checkout={checkout} />
-        ))}
+    <Section title="Platform subscriptions and API usage are separate">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-[12px] border border-white/20 bg-[#0d0d0d] p-6">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ece7df]">This page</div>
+          <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">Software and platform access</h3>
+          <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
+            The plans above cover XENO software, connected workspace capabilities, commercial-use
+            rights, and collaboration. They are the complete subscription choices for the main platform.
+          </p>
+        </div>
+        <div className="rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] p-6">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#69635b]">Developer API</div>
+          <h3 className="mt-2 text-[15px] font-semibold text-[#ece7df]">Managed inference is usage-based</h3>
+          <p className="mt-2 text-[13px] leading-[1.65] text-[#948d83]">
+            Hosted model calls are a separate developer product with their own usage billing. Local
+            inference on your hardware is not a hosted API call. <Link to="/api-reference" className="text-[#ece7df] hover:underline">Read the API reference</Link>.
+          </p>
+        </div>
       </div>
     </Section>
 
@@ -428,12 +389,8 @@ const Pricing: React.FC = () => {
             p: <>Everything grants the available desktop installers and paid platform entitlements: cloud sync, private cloud projects, agent identity access, managed-premium priority, commercial-use rights, and the cross-app layer as product integrations roll out. Team adds real-time collaboration and workspace billing per paid seat.</>,
           },
           {
-            h: 'Do I need credits to use XENO?',
-            p: <>No. A subscription unlocks software and platform capabilities. Credits are a separate optional top-up for managed-premium inference and marketplace purchases. BYOK is planned and not yet available; local xeno-rt runs on your own hardware when available.</>,
-          },
-          {
-            h: 'Do credits expire?',
-            p: <>Purchased credits never expire. They stay in your balance until you use them — or, on Team, in a shared pooled wallet.</>,
+            h: 'Is managed API usage included in these plans?',
+            p: <>No. The main platform subscription and hosted developer inference are separate products. API usage is billed on the developer surface; local inference runs on your own hardware when available.</>,
           },
           {
             h: 'Which AI models can I run?',
@@ -451,11 +408,11 @@ const Pricing: React.FC = () => {
              * this in the same commit that makes the byok path return something
              * other than an error — not before.
              */
-            p: <>XENO aggregates the models you can already reach: open models that run in-house on xeno-rt, plus managed-premium routing that reaches frontier models for you and meters them in credits. Connecting your own provider key (BYOK) is planned and not yet available. We don't claim exclusive models or to replace any one provider.</>,
+            p: <>XENO supports open models through xeno-rt and offers separate managed routing for supported frontier models through the developer API. Connecting your own provider key (BYOK) is planned and not yet available. We don't claim exclusive models or to replace any one provider.</>,
           },
           {
             h: 'Can I change plans?',
-            p: <>Yes. Upgrade or downgrade at any time from your <Link to="/overview/billing" className="text-[#ece7df] hover:underline">account billing</Link> — changes take effect on your next cycle and your remaining credits stay intact. See the <Link to="/refunds" className="text-[#ece7df] hover:underline">refund policy</Link> for eligibility and timing.</>,
+            p: <>Yes. Upgrade or downgrade at any time from your <Link to="/overview/billing" className="text-[#ece7df] hover:underline">account billing</Link> — changes take effect on your next cycle. See the <Link to="/refunds" className="text-[#ece7df] hover:underline">refund policy</Link> for eligibility and timing.</>,
           },
         ]}
       />

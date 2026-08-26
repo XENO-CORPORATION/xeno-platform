@@ -24,8 +24,8 @@ interface Plan {
 }
 
 // The self-serve tiers, sourced from the single canonical pricing module
-// (src/config/pricing.ts → mirrors the server catalog → mirrors Stripe). No hardcoded prices; no "pay-as-you-grow" (the
-// LOCKED model sells the subscription, not metered credits).
+// (src/config/pricing.ts → mirrors the server catalog → mirrors Stripe). No hardcoded prices; this
+// public surface sells platform subscriptions, while managed API usage stays on developer/account billing.
 const UNIT_FOR: Record<string, string> = {
   free: 'free — the whole suite',
   pro: 'per creator · monthly',
@@ -98,7 +98,7 @@ const PrivacyPricingSection: React.FC = () => {
         <SectionHeading
           eyebrow="Pricing"
           title="One subscription. The whole suite."
-          sub="Every app on one plan, powered by one shared credit balance. Start free, upgrade when you're ready — no lock-in, no surprises."
+          sub="Every app on one plan, with one account and one connected workspace. Start free, upgrade when you're ready — no lock-in, no surprises."
         />
 
         <div className="mx-auto mt-[clamp(40px,6vh,72px)] grid max-w-[1320px] grid-cols-1 items-stretch gap-[clamp(16px,1.2vw,24px)] md:grid-cols-2 xl:grid-cols-4">

@@ -83,7 +83,7 @@ const CreateWithoutLimitsSection: React.FC = () => {
             </div>
 
             <p className="mt-[clamp(16px,2vh,26px)] text-[clamp(11px,0.78vw,12.5px)] text-[#807970]">
-              1000 free credits · No credit card required
+              Free workspace · No credit card required
             </p>
           </div>
         </div>

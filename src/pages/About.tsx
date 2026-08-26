@@ -6,7 +6,7 @@ const About: React.FC = () => (
   <MarketingPage
     eyebrow="ABOUT"
     title="Building the AI-native creative platform"
-    subtitle="XENO is one integrated ecosystem for making things — creative apps, productivity tools, and AI agents that work together on a single, credits-based platform."
+    subtitle="XENO is one integrated ecosystem for making things — creative apps, productivity tools, and AI agents that work together on a shared platform."
     updated="June 2026"
   >
     <Section title="Our mission">
@@ -78,17 +78,17 @@ const About: React.FC = () => (
                 The platform spans creative apps — <Link to="/products" className="text-[#cdc7be] underline decoration-white/20 underline-offset-2 hover:text-white">Pixel, Motion, Sound, and Canvas</Link> —
                 alongside the XENO Hub launcher, an embeddable agent runtime, and a marketplace where
                 developers can publish panels, plugins, models, and agents. Underneath sits a unified
-                inference runtime and a cloud OS that handles auth, credits, and sync.
+                inference runtime and a cloud OS that handles identity, entitlements, usage, and sync.
               </>
             ),
           },
           {
-            h: 'Powered by credits, not lock-in',
+            h: 'Local-first, without lock-in',
             p: (
               <>
-                One credits balance powers AI generation across the whole suite, so you don't juggle a
-                dozen meters. Apps run on your machine and in the cloud, and everything is designed to
-                interoperate with the tools you already use rather than trap you inside ours.
+                Apps can run on your machine and connect to cloud capabilities when you choose. Standard
+                formats, documented APIs, and a shared engine keep your work portable rather than trapping
+                it inside one product or provider.
               </>
             ),
           },
