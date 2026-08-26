@@ -123,6 +123,25 @@ docker tag "$IMAGE:latest" "$IMAGE:$SHA" || true
 NEW_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE:latest" 2>/dev/null || echo unknown)"
 log "built $SERVICE -> $IMAGE:latest ($NEW_ID), also tagged :$SHA"
 
+# A Docker build can succeed while a stale on-box node_modules tree copied late
+# in the Dockerfile silently replaces the graph installed by `npm ci`. Prove the
+# production graph inside the actual image before it is ever swapped into service.
+if [ "$SERVICE" = "backend" ]; then
+  DEPENDENCY_LOG="$(mktemp)"
+  if ! docker run --rm --entrypoint npm "$IMAGE:latest" ls --omit=dev >"$DEPENDENCY_LOG" 2>&1; then
+    cat "$DEPENDENCY_LOG" >&2
+    rm -f "$DEPENDENCY_LOG"
+    log "production dependency graph FAILED inside $IMAGE:latest — refusing swap"
+    if docker image inspect "$IMAGE:rollback" >/dev/null 2>&1; then
+      docker tag "$IMAGE:rollback" "$IMAGE:latest"
+      log "restored $IMAGE:latest to :rollback after pre-swap gate failure"
+    fi
+    exit 1
+  fi
+  rm -f "$DEPENDENCY_LOG"
+  log "production dependency graph PASSED inside $IMAGE:latest"
+fi
+
 if [ "$MODE" = "build-only" ]; then
   log "build-only mode: NOT swapping. Running container is untouched."
   log "=== deploy end (build-only) service=$SERVICE sha=$SHA OK ==="

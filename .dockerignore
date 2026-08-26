@@ -20,6 +20,14 @@ src/server/**
 !src/server/lib/
 !src/server/lib/chatModelCapabilities.js
 
+# The exceptions above re-open parent paths while Docker walks the context. Keep
+# dependency trees excluded explicitly at every depth: an on-box node_modules
+# directory must never overwrite the lockfile-built /app/node_modules layer.
+**/node_modules
+**/node_modules/**
+src/server/node_modules/
+src/server/node_modules/**
+
 node_modules
 npm-debug.log
 .git

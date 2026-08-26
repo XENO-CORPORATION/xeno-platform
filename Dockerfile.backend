@@ -16,11 +16,16 @@ WORKDIR /app
 # Copy package files from server directory (with correct ownership)
 COPY --chown=appuser:appgroup src/server/package*.json ./
 
-# Install the locked production dependency graph as root, then fix ownership.
-RUN npm ci --omit=dev && npm cache clean --force && chown -R appuser:appgroup node_modules
-
-# Copy server source code (with correct ownership — avoids expensive recursive chown)
+# Copy server source code (with correct ownership — avoids expensive recursive chown).
 COPY --chown=appuser:appgroup src/server/ ./
+
+# The production host may contain an untracked src/server/node_modules tree. Even
+# if an older Docker implementation fails to honor the nested ignore pattern,
+# it cannot replace the lockfile graph: delete it after COPY, then install last.
+RUN rm -rf node_modules && \
+    npm ci --omit=dev && \
+    npm cache clean --force && \
+    chown -R appuser:appgroup node_modules
 
 # Create uploads, conversions, and downloads directories.
 # NOTE: fileSystemRoutes.js resolves its upload dir cwd-relative as
