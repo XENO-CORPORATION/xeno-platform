@@ -591,7 +591,10 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
           {/* Version marker for deployment verification */}
           <div className="absolute -top-10 left-0 opacity-0 pointer-events-none">v2.1.0</div>
       {/* Main Navigation */}
-      <div className="w-full flex-1 p-2 space-y-2 flex flex-col items-center">
+      <div
+        data-overview-taskbar-scroll
+        className="hide-scrollbar min-h-0 w-full flex-1 overflow-y-auto overscroll-contain p-2 space-y-2 flex flex-col items-center"
+      >
         {/* Core Navigation Buttons */}
         <div className="w-full space-y-2 flex flex-col items-center">
           {/* XENO Logo — Home */}

@@ -794,7 +794,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                           sees. The contract carries the weight; a call site should not restate it,
                           because a restated number is one that can be restated WRONG. */}
                       <Icon size={13} aria-hidden="true" />
-                      <span>{mode.label}</span>
+                      <span data-chat-mode-label>{mode.label}</span>
                     </span>
                   </button>
                 );
@@ -1023,7 +1023,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     return (
       <div
         data-conversation-composer-frame
-        className="relative flex w-full flex-col overflow-visible [container-type:inline-size]"
+        className="relative flex w-full flex-col overflow-visible [container-type:inline-size] [container-name:chat-composer]"
       >
         {composerReveal}
       </div>
@@ -1036,7 +1036,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       // The floating mode row is out of flow, so it reserves no space of its own and used
       // to open straight into the title. The gap here has to clear it: 34px of chips plus
       // the 16px it floats above the box, plus breathing room.
-      className="relative flex w-full flex-col items-center gap-12 overflow-visible [container-type:inline-size] md:gap-14"
+      className="relative flex w-full flex-col items-center gap-12 overflow-visible [container-type:inline-size] [container-name:chat-composer] md:gap-14"
     >
       <div className="flex flex-col items-center">
         <div

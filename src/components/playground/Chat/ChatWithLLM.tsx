@@ -86,6 +86,8 @@ function withAuthHeaders(extra: Record<string, string> = {}): Record<string, str
 // Uses a REAL endpoint model id — no fabricated fallback.
 /** Matches history sidebar `duration-300` close before floating chrome enters. */
 const HISTORY_SIDEBAR_CLOSE_MS = 300;
+/** One width owner for every surface that yields to the conversation history. */
+const HISTORY_SIDEBAR_WIDTH_PX = 260;
 
 const DEFAULT_MODEL: Model = {
   id: "gpt-5.6-terra",
@@ -4522,6 +4524,14 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const initialMouseX = useRef(0);
   const initialPanelWidth = useRef(0);
 
+  // The chat has three horizontal zones: history | workspace | context. Every
+  // surface below reads these same insets, so opening a panel cannot leave the
+  // header, messages and composer centered against different rectangles.
+  const historyWorkspaceInsetPx =
+    !isMultiInterface && isHistoryOpen && !isMobile ? HISTORY_SIDEBAR_WIDTH_PX : 0;
+  const contextWorkspaceInsetPx =
+    !isMultiInterface && isContextPanelOpen ? contextPanelWidth : 0;
+
   // --- NEW: State for the animated ellipsis text ---
   const [ellipsisText, setEllipsisText] = useState('.');
   // --- END NEW ---
@@ -8661,7 +8671,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         style={{
           left:
             (isTaskbarHidden ? 0 : 52) +
-            (!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0),
+            historyWorkspaceInsetPx,
           backgroundColor: isCreateProjectModalShown
             ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
             : 'color-mix(in srgb, var(--chat-text) 0%, transparent)',
@@ -13685,12 +13695,16 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         ref={chatContainerRef}
         className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} relative flex h-full flex-col overflow-hidden main-content-transition ${isMobile ? 'chat-mobile-container' : ''} ${isMobile && isHistoryOpen ? 'chat-sidebar-open' : ''}`}
         data-chat-theme-preference={chatTheme}
+        data-chat-history-open={historyWorkspaceInsetPx > 0 ? 'true' : 'false'}
+        data-chat-context-open={contextWorkspaceInsetPx > 0 ? 'true' : 'false'}
         style={{
           paddingRight: '0px',
           backgroundColor: 'var(--chat-canvas)',
           color: 'var(--chat-text)',
+          '--chat-history-inset': `${historyWorkspaceInsetPx}px`,
+          '--chat-context-inset': `${contextWorkspaceInsetPx}px`,
           ...chatThemePreviewStyle,
-        }}
+        } as React.CSSProperties}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
@@ -13785,8 +13799,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             })
             .sort((a, b) => b.timestamp - a.timestamp);
           const selectedCount = chatsCatalogSelectedIds.length;
-          const catalogLeft =
-            !isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0;
+          const catalogLeft = historyWorkspaceInsetPx;
           const exitCatalogSelection = () => {
             setIsChatsCatalogSelecting(false);
             setChatsCatalogSelectedIds([]);
@@ -14121,8 +14134,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           );
         })()}
         {isProjectsPageOpen && (() => {
-          const pageLeft =
-            !isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0;
+          const pageLeft = historyWorkspaceInsetPx;
           const query = projectsPageSearch.trim().toLowerCase();
           const sortLabels: Record<ProjectsSort, string> = {
             updated: 'Last updated',
@@ -14473,7 +14485,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         })()}
         {isArtifactsPageOpen && (
           <ChatLibraryPage
-            pageLeft={!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0}
+            pageLeft={historyWorkspaceInsetPx}
             onClose={() => {
               setIsArtifactsPageOpen(false);
               setHistoryNavView('chats');
@@ -14485,7 +14497,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         )}
         {isScheduledPageOpen && (
           <ChatScheduledPage
-            pageLeft={!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0}
+            pageLeft={historyWorkspaceInsetPx}
             onClose={() => {
               setIsScheduledPageOpen(false);
               setHistoryNavView('chats');
@@ -14494,7 +14506,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         )}
         {isGlobalSettingsPageOpen && (
           <ChatGlobalSettingsPage
-            pageLeft={!isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0}
+            pageLeft={historyWorkspaceInsetPx}
             onClose={() => {
               setIsGlobalSettingsPageOpen(false);
               setHistoryNavView('chats');
@@ -14593,8 +14605,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {activeProjectId && (() => {
           const project = chatProjects.find((p) => p.id === activeProjectId);
           if (!project) return null;
-          const pageLeft =
-            !isMultiInterface && isHistoryOpen && !isMobile ? 260 : 0;
+          const pageLeft = historyWorkspaceInsetPx;
           const description =
             project.description?.trim() || 'No description yet.';
           const hasLongDescription = description.length > 160;
@@ -14619,7 +14630,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 left: pageLeft,
                 right:
                   isContextPanelOpen && !isMultiInterface
-                    ? contextPanelWidth
+                    ? contextWorkspaceInsetPx
                     : 0,
                 backgroundColor: 'var(--chat-canvas)',
                 color: 'var(--chat-text)',
@@ -15045,7 +15056,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             isMultiInterface ? 'flex-col px-2 py-1' : 'items-center px-0'
           }`}
           style={{
-            right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px',
+            left: `${historyWorkspaceInsetPx}px`,
+            right: `${contextWorkspaceInsetPx}px`,
             backgroundColor: 'var(--chat-canvas)',
             ...(!isMultiInterface ? { height: CHAT_CHROME_BAR_HEIGHT_PX } : null),
           }}
@@ -15053,8 +15065,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           {/* Buttons row */}
           <div className="relative flex h-full w-full flex-shrink-0 items-center justify-between">
           {/* Left side - System Prompt, Clear/Save (history opens from floating chrome / sidebar) */}
-          <div ref={leftButtonsRef} className={`chat-top-bar-buttons relative flex items-center ${isMultiInterface ? 'gap-1' : 'gap-2 md:gap-2'} transition-all duration-300 ease-in-out`}
-            style={{ marginLeft: !isMultiInterface && isHistoryOpen && !isMobile ? '260px' : '0px' }}>
+          <div ref={leftButtonsRef} className={`chat-top-bar-buttons relative flex min-w-0 items-center ${isMultiInterface ? 'gap-1' : 'gap-2 md:gap-2'} transition-all duration-300 ease-in-out`}>
               {/* Spacer: floating icon/XENO (z-60) sits here when history chrome is visible. */}
               {!isMultiInterface && showClosedHistoryChrome && (
                 <div
@@ -15083,7 +15094,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   }}
                 >
                   <Brain size={15} className="flex-shrink-0" />
-                  <span className="hidden flex-shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--chat-muted)] lg:inline">
+                  <span data-chat-model-provider className="hidden flex-shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--chat-muted)] lg:inline">
                     {selectedModelProviderName}
                   </span>
                   <span className="min-w-0 truncate font-medium text-[var(--chat-text)]">
@@ -15345,8 +15356,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
               ) : (
                 <>
                   <Copy size={13} className="opacity-70 group-hover:opacity-100 flex-shrink-0 transition-opacity" />
-                  <span className="hidden sm:inline">Copy Session Transcript</span>
-                  <span className="inline sm:hidden">Transcript</span>
+                  <span data-chat-transcript-label="long" className="hidden sm:inline">Copy Session Transcript</span>
+                  <span data-chat-transcript-label="short" className="inline sm:hidden">Transcript</span>
                 </>
               )}
             </button>
@@ -15394,7 +15405,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                     setIsThemeMenuOpen(false);
                   }}
                 >
-                  <span className="hidden sm:inline-flex items-center gap-1">
+                  <span data-chat-temporary-label className="hidden sm:inline-flex items-center gap-1">
                     <span className="font-medium leading-none">Temporary</span>
                     <span className="leading-none text-[12px] text-[var(--chat-muted)]">Preview</span>
                   </span>
@@ -16055,8 +16066,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           translate="no"
           className="hide-scrollbar flex-grow w-full overflow-y-auto px-2 pt-16 pb-56 md:pb-60 main-content-transition notranslate"
           style={{
-            // Match composer clearance when history is open so the column stays centered.
-            paddingLeft: !isMultiInterface && isHistoryOpen && !isMobile ? 260 : undefined,
+            // Match both panel clearances so messages and composer share one centre line.
+            paddingLeft: historyWorkspaceInsetPx || undefined,
+            paddingRight: contextWorkspaceInsetPx || undefined,
           }}
         >
                         {/* `clip`, not `hidden`: it contains the same overflow, but `hidden`
@@ -16897,8 +16909,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           )
         }`}
              style={{
-               left: !isMultiInterface && isHistoryOpen && !isMobile ? '260px' : '0px',
-               right: isContextPanelOpen && !isMultiInterface ? `${contextPanelWidth}px` : '0px',
+               left: `${historyWorkspaceInsetPx}px`,
+               right: `${contextWorkspaceInsetPx}px`,
              }}
         >
           {/* Subtle mask so message text fades gently before it reaches the floating composer. */}
@@ -19192,7 +19204,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 style={{
                   top: '12px',
                   bottom: '12px',
-                  left: isHistoryOpen ? '12px' : '-260px',
+                  left: isHistoryOpen ? '12px' : `-${HISTORY_SIDEBAR_WIDTH_PX}px`,
                   pointerEvents: isHistoryOpen ? 'auto' : 'none',
                   ...historySurfaceStyle,
                 }}
@@ -19208,11 +19220,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             return createPortal(
               <div
                 ref={historySidebarRef}
-                className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-sidebar fixed z-[50] w-[260px] border rounded-lg overflow-hidden transition-all duration-300 ease-in-out ${!isHistoryOpen ? 'chat-history-sidebar-closed' : ''}`}
+                className={`chat-themed xeno-icon-hosts chat-theme-${resolvedChatTheme} chat-history-sidebar fixed z-[50] border rounded-lg overflow-hidden transition-all duration-300 ease-in-out ${!isHistoryOpen ? 'chat-history-sidebar-closed' : ''}`}
                 data-chat-theme-preference={chatTheme}
                 style={{
                   top: '12px',
                   bottom: '12px',
+                  width: HISTORY_SIDEBAR_WIDTH_PX,
                   left: isHistoryOpen ? '12px' : '-100%',
                   pointerEvents: isHistoryOpen ? 'auto' : 'none',
                   ...historySurfaceStyle,
@@ -19235,7 +19248,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 top: 0,
                 bottom: 0,
                 left: historyLeftInset,
-                width: 260,
+                width: HISTORY_SIDEBAR_WIDTH_PX,
                 overflow: 'hidden',
                 pointerEvents: isHistoryOpen ? 'auto' : 'none',
               }}
