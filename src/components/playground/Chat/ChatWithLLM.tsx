@@ -16216,7 +16216,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                                   const match = /language-(\w+)/.exec(className || ""); 
                                                                   if (!inline) { 
                                                                       const codeString = String(children).replace(/\n$/, ""); 
-                                                                      if (codeString.includes("\n")) { 
+                                                                      if (match || codeString.includes("\n")) { 
                                                                       const blockIndex = node?.position?.start?.line ?? (node?.index ?? Date.now());
                                                                       const codeBlockId = `${message.id}-thinking-code-${blockIndex}`;
                                                                       return <CodeBlockWithHeader
@@ -16453,7 +16453,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
       const match = /language-(\w+)/.exec(className || "");
       if (!inline) {
         const codeString = String(children).replace(/\n$/, "");
-        if (codeString.includes("\n")) {
+        if (match || codeString.includes("\n")) {
                                                               const blockIndex = node?.position?.start?.line ?? (node?.index ?? Date.now());
                                                               const codeBlockId = `${message.id}-code-${blockIndex}`;
 

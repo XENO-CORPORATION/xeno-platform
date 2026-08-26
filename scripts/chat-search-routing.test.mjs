@@ -37,3 +37,9 @@ test('Research errors stay visible instead of deleting their placeholder first',
   assert.match(chat.slice(errorBranch, emptyBranch), /isError: true/);
   assert.doesNotMatch(chat.slice(errorBranch, emptyBranch), /filter\(msg => msg\.id !== searchResultsMessageId\)/);
 });
+
+test('single-line language-fenced code remains executable in both answer renderers', () => {
+  const executableFenceBranches = chat.match(/if \(match \|\| codeString\.includes\("\\n"\)\)/g) || [];
+  assert.equal(executableFenceBranches.length, 2);
+  assert.doesNotMatch(chat, /if \(codeString\.includes\("\\n"\)\)/);
+});
