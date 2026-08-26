@@ -143,7 +143,14 @@ if [ "$SERVICE" = "backend" ]; then
 fi
 
 if [ "$MODE" = "build-only" ]; then
-  log "build-only mode: NOT swapping. Running container is untouched."
+  # Preserve the candidate under :$SHA, but put :latest back on the last-good
+  # image. Otherwise the next deploy snapshots the unserved candidate as
+  # :rollback and silently destroys the actual rollback point before swapping.
+  if [ -n "$PREV_ID" ] && docker image inspect "$IMAGE:rollback" >/dev/null 2>&1; then
+    docker tag "$IMAGE:rollback" "$IMAGE:latest"
+    log "build-only mode: restored $IMAGE:latest to the last-good :rollback image"
+  fi
+  log "build-only mode: NOT swapping. Candidate remains tagged :$SHA; running container is untouched."
   log "=== deploy end (build-only) service=$SERVICE sha=$SHA OK ==="
   exit 0
 fi

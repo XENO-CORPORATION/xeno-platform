@@ -40,3 +40,12 @@ test('backend install runs after source COPY and removes any host dependency tre
   assert.ok(removeDependencies > sourceCopy, 'host node_modules must be removed after source COPY');
   assert.ok(lockedInstall > removeDependencies, 'locked install must rebuild the graph after removal');
 });
+
+test('build-only preserves the candidate by SHA and restores latest to last-good', () => {
+  const branch = remote.slice(
+    remote.indexOf('if [ "$MODE" = "build-only" ]'),
+    remote.indexOf('# --- 5. Swap'),
+  );
+  assert.match(branch, /docker tag "\$IMAGE:rollback" "\$IMAGE:latest"/);
+  assert.match(branch, /Candidate remains tagged :\$SHA/);
+});
