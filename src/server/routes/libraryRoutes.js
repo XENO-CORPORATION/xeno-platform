@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import { authMiddleware } from '../middleware/auth.js';
+import { siteOrigin } from '../config/hosts.js';
 import {
   createSignedLibraryContentPath,
   deleteLibraryItem,
@@ -86,7 +87,10 @@ router.post('/assets/:id/link', async (req, res) => {
     });
     res.json({
       success: true,
-      url: `${req.protocol}://${req.get('host')}${contentPath}`,
+      // Mint the platform's canonical public authority. `req.protocol` sees the
+      // last trusted proxy hop and was emitting http:// behind CF -> nginx,
+      // which makes browser drag targets downgrade and breaks strict consumers.
+      url: `${siteOrigin()}${contentPath}`,
       content_path: contentPath,
       name: file.original_name || file.filename,
       mime_type: file.mime_type,

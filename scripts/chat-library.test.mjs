@@ -88,6 +88,8 @@ test('signed Library links are short-lived account-bound capabilities', () => {
   assert.equal(verifySignedLibraryContentRequest({ ...request, signature: tamperedSignature }), false);
   assert.match(libraryRoutes, /Access-Control-Allow-Origin/);
   assert.match(libraryRoutes, /Cross-Origin-Resource-Policy/);
+  assert.match(libraryRoutes, /url: `\$\{siteOrigin\(\)\}\$\{contentPath\}`/);
+  assert.doesNotMatch(libraryRoutes, /url: `\$\{req\.protocol\}:\/\//);
 });
 
 test('message asset references are ownership checked before SQL persistence', async () => {
