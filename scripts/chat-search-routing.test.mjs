@@ -15,7 +15,8 @@ test('search compose variables match the service configuration contract', () => 
   const service = compose.slice(compose.indexOf('\n  xeno-search:'), compose.indexOf('\n  xenorun:'));
   assert.match(service, /BRAVE_SEARCH_API_KEY=/);
   assert.match(service, /SEMANTIC_SEARCH_ENABLED=true/);
-  assert.match(service, /SEARCH_ENGINES=duckduckgo,brave/);
+  assert.match(service, /SEARCH_ENGINES=\["duckduckgo","brave"\]/);
+  assert.doesNotMatch(service, /SEARCH_ENGINES=duckduckgo,brave/);
   assert.doesNotMatch(service, /\n\s+- BRAVE_API_KEY=/);
   assert.doesNotMatch(service, /\n\s+- ENABLE_SEMANTIC_SEARCH=/);
 });
