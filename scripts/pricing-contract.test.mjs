@@ -15,6 +15,7 @@ const agentRoutes = read('src/server/routes/agentRoutes.js');
 const canvasRoutes = read('src/server/routes/officeCanvasRoutes.js');
 const publicDownload = read('public/download/index.html');
 const landingHeader = read('src/components/landing-v3/Header.tsx');
+const marketingPage = read('src/components/marketing/MarketingPage.tsx');
 const publicPlatformMarketing = [
   'src/pages/Pricing.tsx',
   'src/pages/Features.tsx',
@@ -49,6 +50,21 @@ test('public pricing shares the onboarding decision-card design', () => {
     'the onboarding-style three-plan decision row is not explicit');
   assert.match(pricing, /studioPlan[\s\S]*highest shipped plan|studioPlan\.line/,
     'Studio disappeared while matching the onboarding three-card row');
+});
+
+test('public pricing uses a centered decision hero instead of the editorial breadcrumb layout', () => {
+  assert.match(pricing, /heroAlign="center"/,
+    'pricing fell back to the left-aligned prose-page hero');
+  assert.match(pricing, /showHomeLink=\{false\}/,
+    'the redundant Home breadcrumb returned above the pricing decision');
+  assert.match(pricing, /heroActions=\{\([\s\S]*aria-label="Billing interval"[\s\S]*aria-label="Purchase assurances"/,
+    'billing controls are no longer composed into the pricing hero');
+  assert.doesNotMatch(pricing, /updated="[^"]+"/,
+    'the pricing hero is again leading with an editorial update stamp');
+  assert.match(marketingPage, /data-hero-align=\{heroAlign\}/,
+    'the shared shell no longer exposes the selected hero layout for rendered verification');
+  assert.match(marketingPage, /centeredHero \? 'mx-auto mt-6 max-w-\[700px\]'/,
+    'the centered hero description no longer shares the headline axis');
 });
 
 test('public platform marketing is subscription-led, never credit-led', () => {

@@ -232,17 +232,16 @@ const Pricing: React.FC = () => {
   <MarketingPage
     eyebrow="PRICING"
     title="Choose how you run XENO."
-    subtitle="A XENO account and web workspace are free. An active plan unlocks new desktop installers and the connected platform. Team adds collaboration per paid seat."
-    updated="August 2026"
-    contentMaxWidth={1240}
-  >
-    <Section className="mx-auto max-w-[1040px]">
-      {hasAnnual && (
-        <div className="mb-10 flex justify-center">
+    subtitle="Start with a free XENO account and web workspace. Everything unlocks every available desktop installer and connected workflow; Team adds collaboration per paid seat."
+    heroAlign="center"
+    showHomeLink={false}
+    heroActions={(
+      <div className="flex flex-col items-center gap-4">
+        {hasAnnual && (
           <div
             role="group"
             aria-label="Billing interval"
-            className="inline-flex gap-[2px] rounded-[9px] border border-white/[0.08] bg-[#08080a] p-1"
+            className="inline-flex gap-[2px] rounded-[10px] border border-white/[0.09] bg-[#08080a]/90 p-1 shadow-[0_18px_55px_rgba(0,0,0,0.38)] backdrop-blur-xl"
           >
             {([
               { id: 'month' as const, label: 'Monthly' },
@@ -255,8 +254,10 @@ const Pricing: React.FC = () => {
                   type="button"
                   aria-pressed={selected}
                   onClick={() => setBillingInterval(option.id)}
-                  className={`rounded-[6px] px-4 py-2 text-[12.5px] font-medium transition-all duration-200 ${
-                    selected ? 'bg-[#242424] text-white' : 'text-white/40 hover:text-white/70'
+                  className={`rounded-[7px] px-5 py-2.5 text-[12.5px] font-medium transition-all duration-200 ${
+                    selected
+                      ? 'bg-[#292929] text-white shadow-[0_1px_0_rgba(255,255,255,0.08)_inset]'
+                      : 'text-white/40 hover:text-white/70'
                   }`}
                 >
                   {option.label}
@@ -269,9 +270,17 @@ const Pricing: React.FC = () => {
               );
             })}
           </div>
+        )}
+        <div aria-label="Purchase assurances" className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11.5px] text-white/35">
+          <span>Cancel any time</span>
+          <span aria-hidden="true" className="h-0.5 w-0.5 rounded-full bg-white/25" />
+          <span>Secure checkout</span>
         </div>
-      )}
-
+      </div>
+    )}
+    contentMaxWidth={1240}
+  >
+    <Section className="mx-auto max-w-[1040px]">
       <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
         {primaryPlans.map((plan) => {
           const item = displayedItems[plan.id];
