@@ -65,6 +65,10 @@ test('public pricing uses a centered decision hero instead of the editorial brea
     'the shared shell no longer exposes the selected hero layout for rendered verification');
   assert.match(marketingPage, /centeredHero \? 'mx-auto mt-6 max-w-\[700px\]'/,
     'the centered hero description no longer shares the headline axis');
+  assert.match(marketingPage, /data-hero-to-content-fade="veil"[\s\S]*linear-gradient\(to bottom, transparent/,
+    'the centered hero no longer dissolves into the content surface');
+  assert.match(marketingPage, /data-hero-to-content-fade="ambient"[\s\S]*radial-gradient\(ellipse 72% 100% at 50% 0%/,
+    'the centered hero atmosphere no longer continues behind the first decision row');
 });
 
 test('public pricing explains access and API boundaries as decision support, not a prose appendix', () => {

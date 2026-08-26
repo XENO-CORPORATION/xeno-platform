@@ -63,6 +63,16 @@ export const MarketingPage: React.FC<{
               }}
             />
           )}
+          {centeredHero && (
+            <div
+              data-hero-to-content-fade="veil"
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-[clamp(140px,20vh,220px)]"
+              style={{
+                background: 'linear-gradient(to bottom, transparent 0%, rgba(6,6,6,0.48) 54%, #060606 100%)',
+              }}
+            />
+          )}
           <div className={`relative mx-auto w-full ${centeredHero ? 'text-center' : ''}`} style={{ maxWidth: contentMaxWidth }}>
             {showHomeLink && (
               <Reveal>
@@ -99,8 +109,18 @@ export const MarketingPage: React.FC<{
             )}
           </div>
         </section>
-        <section className="page-gutter pb-[clamp(56px,8vh,110px)]">
-          <div className="mx-auto w-full" style={{ maxWidth: contentMaxWidth }}>{children}</div>
+        <section className="page-gutter relative pb-[clamp(56px,8vh,110px)]">
+          {centeredHero && (
+            <div
+              data-hero-to-content-fade="ambient"
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-[clamp(210px,28vh,320px)]"
+              style={{
+                background: 'radial-gradient(ellipse 72% 100% at 50% 0%, rgba(255,255,255,0.042), rgba(6,6,6,0.018) 48%, transparent 82%)',
+              }}
+            />
+          )}
+          <div className="relative mx-auto w-full" style={{ maxWidth: contentMaxWidth }}>{children}</div>
         </section>
       </main>
       <Footer />
