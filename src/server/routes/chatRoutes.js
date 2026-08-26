@@ -813,7 +813,7 @@ router.get('/share/:token', async (req, res) => {
 
     // Get share record
     const shareResult = await req.db.query(
-      `SELECT s.*, c.title, c.model_id, c.system_prompt, u.email as owner_email, u.displayname as owner_name
+      `SELECT s.*, c.title, c.model_id, c.system_prompt, u.email as owner_email, u.display_name as owner_name
        FROM chat_shared_conversations s
        JOIN chat_conversations c ON c.id = s.conversation_id
        JOIN users u ON u.id = s.owner_id
