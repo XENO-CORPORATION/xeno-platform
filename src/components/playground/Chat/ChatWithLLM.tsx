@@ -2664,8 +2664,6 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
   const [isReasonToggled, setIsReasonToggled] = useState(true);
   const [isSearchToggled, setIsSearchToggled] = useState(false);
-  const [searchProvider, setSearchProvider] = useState<'google' | 'brave'>('google');
-  const [isSearchProviderDropdownOpen, setIsSearchProviderDropdownOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model>(DEFAULT_MODEL);
   const [groupedModels, setGroupedModels] = useState<GroupedModels[]>([]);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
@@ -7272,13 +7270,13 @@ Please provide a comprehensive, well-structured response using this deep search 
 
                 try {
                     // Reset search progress
-                    const providerName = searchProvider === 'google' ? 'Google' : 'Brave';
-                    setSearchProgress({ message: `Searching with ${providerName}...`, progress: 0 });
+                    setSearchProgress({ message: 'Searching with XENO Search...', progress: 0 });
 
-                    // Use the multi-provider search helper
-                    const searchResult = await performProviderSearch(
+                    // Provider selection is a server concern. The authenticated XENO Search
+                    // route fans out over the configured engines and survives one provider
+                    // failing; the retired direct Google/Brave browser routes do not.
+                    const searchResult = await performXenoSearch(
                         enhancedQuery.query.trim(),
-                        searchProvider,
                         Math.min(Math.max(XENO_SEARCH_CONFIG.defaultNumResults, 1), XENO_SEARCH_CONFIG.maxNumResults)
                     );
 
@@ -7289,9 +7287,26 @@ Please provide a comprehensive, well-structured response using this deep search 
                         error: searchResult.error
                     };
 
-                    // Check if we have sources before updating the search results message
-                    const hasSearchSources = xenoData.sources && xenoData.sources.length > 0;
+                    if (xenoData.error) {
+                        console.error("Xeno Search Error:", xenoData.error);
+                        setMessages(prev => prev.map(msg =>
+                            msg.id === searchResultsMessageId
+                                ? {
+                                    ...msg,
+                                    isLoading: false,
+                                    isError: true,
+                                    text: `🔍 Search failed: ${xenoData.error}`
+                                  }
+                                : msg
+                        ));
+                        setPendingXenoSearchInfo(null);
+                        return;
+                    }
 
+                    // Check if we have sources before updating the search results message.
+                    // Errors are handled first so the placeholder is never removed before
+                    // it can be converted into a visible failure state.
+                    const hasSearchSources = xenoData.sources && xenoData.sources.length > 0;
                     if (hasSearchSources) {
                         // Update the search results message with Xeno results
                         setMessages(prev => prev.map(msg =>
@@ -7316,27 +7331,7 @@ Please provide a comprehensive, well-structured response using this deep search 
                         setMessages(prev => prev.filter(msg => msg.id !== searchResultsMessageId));
                     }
 
-                    if (xenoData.error) {
-                        console.error("Xeno Search Error:", xenoData.error);
-
-                        // Show error message from service
-                        const errorMessage = `🔍 Search failed: ${xenoData.error}`;
-
-                        // Update search results message to show error state
-                        setMessages(prev => prev.map(msg =>
-                            msg.id === searchResultsMessageId
-                                ? {
-                                    ...msg,
-                                    isLoading: false,
-                                    isError: true,
-                                    text: errorMessage
-                                  }
-                                : msg
-                        ));
-
-                        setPendingXenoSearchInfo(null); // Clear if there was an error
-                        return; // Exit early, don't call fetchAiResponse
-                    } else {
+                    {
                         // Performance monitoring based on guide recommendations
                         const searchDuration = Date.now() - searchStartTime;
                         console.log(`[Xeno Search] Completed successfully in ${searchDuration}ms. Found ${xenoData.sources?.length || 0} sources.`);
@@ -11575,36 +11570,25 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     }
   };
 
-  // Multi-provider search helper function (Google & Brave only)
-  const performProviderSearch = async (
+  // One authenticated platform seam; the search service owns provider fan-out.
+  const performXenoSearch = async (
     query: string,
-    provider: 'google' | 'brave',
     numResults: number = 10
   ): Promise<{ sources: XenoSource[]; summary?: string; error?: string }> => {
     try {
-      console.log(`[Search] Performing ${provider} search for: "${query}"`);
-
-      // Use Google or Brave search endpoints
-      const endpoint = provider === 'google'
-        ? '/api/v2/engine/google-search'
-        : '/api/v2/engine/brave-search';
-
-      const body = provider === 'google'
-        ? { query, num_results: numResults }
-        : { query, count: numResults };
-
-      const response = await fetch(endpoint, {
+      console.log(`[Search] Performing XENO Search for: "${query}"`);
+      const response = await fetch('/api/xeno-search', {
         method: 'POST',
         headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(body)
+        body: JSON.stringify({ query, search_type: 'normal', num_results: numResults })
       });
 
       if (!response.ok) {
-        throw new Error(`${provider} search failed: ${response.status}`);
+        throw new Error(`XENO Search failed: ${response.status}`);
       }
 
       const data = await response.json();
-      const results = data.results || [];
+      const results = data.sources || data.results || [];
 
       // Transform results to XenoSource format
       const sources: XenoSource[] = results.map((r: any) => ({
@@ -11614,10 +11598,10 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         summary: r.description || r.snippet || ''
       }));
 
-      console.log(`[${provider} Search] Found ${sources.length} results`);
-      return { sources };
+      console.log(`[XENO Search] Found ${sources.length} results`);
+      return { sources, summary: data.summary };
     } catch (error) {
-      console.error(`[${provider} Search] Error:`, error);
+      console.error('[XENO Search] Error:', error);
       return {
         sources: [],
         error: error instanceof Error ? error.message : 'Search failed'
