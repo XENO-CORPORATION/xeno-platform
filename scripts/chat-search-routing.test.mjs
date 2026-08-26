@@ -40,6 +40,14 @@ test('standalone Search keeps provider failures visible', () => {
   assert.doesNotMatch(searchChat, /catch \(error\) \{\s*console\.error\('Search error:', error\);\s*return \[\];/);
 });
 
+test('Search history fetches conversation detail before restoring a hard-reloaded chat', () => {
+  assert.match(searchChat, /const detail = await chatService\.getConversation\(conversation\.id\)/);
+  assert.match(searchChat, /setMessages\(loadedMessages\)/);
+  assert.match(searchChat, /setSearchResults\(lastResultMessage\?\.searchResults \|\| \[\]\)/);
+  assert.match(searchChat, /setSelectedModel\(restoredModel\)/);
+  assert.doesNotMatch(searchChat, /const loadConversation = \(conversation: SearchConversation\) => \{\s*setMessages\(conversation\.messages\)/);
+});
+
 test('Research mode uses the authenticated, provider-isolated XENO Search route', () => {
   assert.match(chat, /fetch\('\/api\/xeno-search'/);
   assert.match(chat, /withAuthHeaders\(\{ 'Content-Type': 'application\/json' \}\)/);
