@@ -113,6 +113,21 @@ test('global marketing navigation uses real routes and backed landing anchors', 
   }
 });
 
+test('the shared public header gains a readable surface only after scrolling', () => {
+  assert.match(landingHeader, /window\.scrollY > 16/,
+    'the shared header no longer has an explicit top-versus-scrolled threshold');
+  assert.match(landingHeader, /addEventListener\('scroll', syncScrolledState, \{ passive: true \}\)/,
+    'the header scroll listener is missing or no longer passive');
+  assert.match(landingHeader, /data-scrolled=\{hasScrolled \? 'true' : 'false'\}/,
+    'the rendered header no longer exposes its scroll state for verification');
+  assert.match(landingHeader, /border-white\/\[0\.08\].*bg-\[rgba\(6,6,6,0\.92\)\].*backdrop-blur-xl/,
+    'the scrolled state no longer supplies the dark surface, divider, and blur');
+  assert.match(landingHeader, /border-transparent bg-transparent shadow-none backdrop-blur-none/,
+    'the top-of-page header is no longer transparent');
+  assert.doesNotMatch(landingHeader, /<header[^>]*backdrop-blur-xl/,
+    'backdrop blur moved onto the header ancestor and can break its fixed mega-menus');
+});
+
 test('retired public pricing claims cannot silently return', () => {
   const surfaces = [onboarding, pricing, billingPage, read('src/config/pricing.ts'), read('src/components/common/UpgradePrompt.tsx')].join('\n');
   for (const stale of [/€30/, /No per-app pricing ever/i, /Every app installs/i, /Upgrade to Pro/i]) {
