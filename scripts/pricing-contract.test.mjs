@@ -67,6 +67,21 @@ test('public pricing uses a centered decision hero instead of the editorial brea
     'the centered hero description no longer shares the headline axis');
 });
 
+test('public pricing explains access and API boundaries as decision support, not a prose appendix', () => {
+  assert.match(pricing, /The access boundary/,
+    'the account-to-platform boundary lost its visual introduction');
+  assert.match(pricing, /aria-label="Free account assurances"/,
+    'the durable Free assurances are no longer scannable');
+  assert.match(pricing, /One clear commercial boundary/,
+    'the platform-versus-API distinction lost its dedicated comparison surface');
+  assert.match(pricing, /<details key=\{item\.q\}/,
+    'pricing questions fell back to an always-expanded prose wall');
+  assert.match(pricing, /<summary[\s\S]*?group-open:rotate-45/,
+    'the FAQ rows are no longer visibly interactive');
+  assert.doesNotMatch(pricing, /<Prose/,
+    'the pricing decision support regressed to the generic editorial prose component');
+});
+
 test('public platform marketing is subscription-led, never credit-led', () => {
   const retiredCreditMarketing = /free credits|starter credit|buy credits|credits-based|shared credit balance|powered by credits|credit-based funnel|credit packs/i;
   for (const path of publicPlatformMarketing) {
