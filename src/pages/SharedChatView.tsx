@@ -57,10 +57,10 @@ export const SharedChatView: React.FC = () => {
       try {
         setLoading(true);
         const data = await chatService.getSharedConversation(token);
-        if (!data || !data.conversation) {
+        if (!data) {
           setError('This shared conversation link has expired or does not exist.');
         } else {
-          setConversation(data.conversation);
+          setConversation(data);
         }
       } catch (err: any) {
         console.error('Failed to load shared conversation:', err);

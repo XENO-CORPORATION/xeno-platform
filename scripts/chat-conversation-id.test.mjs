@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ROUTES = readFileSync(join(ROOT, 'src', 'server', 'routes', 'chatRoutes.js'), 'utf8');
 const SERVER = readFileSync(join(ROOT, 'src', 'server', 'index.js'), 'utf8');
+const SHARED_VIEW = readFileSync(join(ROOT, 'src', 'pages', 'SharedChatView.tsx'), 'utf8');
 const SERVICE = readFileSync(join(ROOT, 'src', 'services', 'chatService.ts'), 'utf8');
 const CONTEXT = readFileSync(join(ROOT, 'src', 'server', 'utils', 'workspaceContext.js'), 'utf8');
 const codeOnly = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -162,6 +163,17 @@ test('public share lookup uses the production users.display_name column', () => 
     body,
     /u\.displayname\b/i,
     'users.displayname does not exist in the production schema and makes valid shares return 500',
+  );
+  assert.match(body, /c\.created_at\s+AS\s+conversation_created_at/i, 'share payload needs the conversation date');
+  assert.match(body, /created_at:\s*share\.conversation_created_at/, 'share response must expose created_at');
+});
+
+test('SharedChatView consumes the service return shape directly', () => {
+  assert.match(SHARED_VIEW, /setConversation\(data\)/, 'chatService returns the share object directly');
+  assert.doesNotMatch(
+    SHARED_VIEW,
+    /data\.conversation/,
+    'a successful share response has no data.conversation wrapper and would render Unavailable',
   );
 });
 

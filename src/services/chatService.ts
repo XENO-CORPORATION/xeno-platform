@@ -558,6 +558,7 @@ export const chatService = {
     model_id: string;
     system_prompt: string;
     owner_name: string;
+    created_at: string;
     expires_at: string;
     messages: ChatMessage[];
   } | null> {
