@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { workspaceFromReq, isWorkspaceMember, linkResourceToWorkspace, UUID_RE } from '../utils/workspaceContext.js';
 import { computeNextRun, executeScheduledTask } from '../workers/chatScheduledWorker.js';
 
@@ -778,7 +779,7 @@ router.post('/conversations/:id/share', async (req, res) => {
     }
 
     // Generate unique share token
-    const shareToken = require('crypto').randomBytes(32).toString('hex');
+    const shareToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + expires_in_days);
 
