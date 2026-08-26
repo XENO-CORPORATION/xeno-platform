@@ -149,6 +149,21 @@ test('share routes reject a non-UUID id before SQL', () => {
   }
 });
 
+test('public share lookup uses the production users.display_name column', () => {
+  const body = extractRoute(ROUTES, 'get', '/share/:token');
+  assert.ok(body, 'GET /share/:token is missing');
+  assert.match(
+    body,
+    /u\.display_name\s+as\s+owner_name/i,
+    'public share lookup must select users.display_name as owner_name',
+  );
+  assert.doesNotMatch(
+    body,
+    /u\.displayname\b/i,
+    'users.displayname does not exist in the production schema and makes valid shares return 500',
+  );
+});
+
 test('client conversation-id regex matches the server UUID_RE source', () => {
   const clientRe = SERVICE.match(/export const PERSISTED_CONVERSATION_ID_RE =\s*(\/[^/\n]+\/i)/);
   const serverRe = CONTEXT.match(/export const UUID_RE = (\/[^/\n]+\/i)/);
