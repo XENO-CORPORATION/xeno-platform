@@ -47,3 +47,8 @@ test('the chat route sends the preferred field and catalog uses the shared contr
   assert.match(server, /bodyPayload\.reasoning_effort = reasoningEffort/);
   assert.doesNotMatch(server, /function isReasoningCapableModel/);
 });
+
+test('the shared contract is present in the frontend Docker build context', () => {
+  const dockerignore = readFileSync(new URL('../.dockerignore', import.meta.url), 'utf8');
+  assert.match(dockerignore, /!src\/server\/lib\/chatModelCapabilities\.js/);
+});

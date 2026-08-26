@@ -13,6 +13,13 @@ src/server/**
 !src/server/config/
 !src/server/config/hosts.js
 
+# Chat reasoning has the same shared-module seam: the backend imports this file
+# directly and the frontend uses it to render the exact same capability contract.
+# Keep only this zero-dependency leaf in the frontend build context; the rest of
+# src/server remains excluded.
+!src/server/lib/
+!src/server/lib/chatModelCapabilities.js
+
 node_modules
 npm-debug.log
 .git
