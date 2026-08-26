@@ -265,7 +265,7 @@ router.post('/files', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const { filename, original_name, file_type, mime_type, file_size, storage_path, storage_type, metadata } = req.body;
+    const { filename, original_name, file_type, mime_type, file_size, storage_type, metadata } = req.body;
 
     if (!filename) {
       return res.status(400).json({ success: false, error: 'Filename required' });
@@ -275,7 +275,17 @@ router.post('/files', async (req, res) => {
       `INSERT INTO user_files (user_id, filename, original_name, file_type, mime_type, file_size, storage_path, storage_type, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [userId, filename, original_name || filename, file_type, mime_type, file_size, storage_path, storage_type || 'local', metadata || {}]
+      [
+        userId,
+        filename,
+        original_name || filename,
+        file_type,
+        mime_type,
+        file_size,
+        null,
+        storage_type === 'platform-upload' ? 'client-reference' : (storage_type || 'client-reference'),
+        metadata || {},
+      ]
     );
 
     res.json({ success: true, file: result.rows[0] });

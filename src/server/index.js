@@ -935,11 +935,16 @@ app.get('/api/test-db', async (req, res) => {
 const ALLOWED_UPLOAD_MIMES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
   'application/pdf', 'text/plain', 'application/json',
+  'text/csv', 'text/markdown', 'text/html', 'application/xml',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/zip', 'application/octet-stream',
   'video/mp4', 'video/webm', 'audio/mpeg', 'audio/wav', 'audio/mp4',
 ]);
 const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB
 
-app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image'), (req, res) => {
+app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -957,19 +962,45 @@ app.post('/api/upload', databaseMiddleware, authMiddleware, upload.single('image
     return res.status(400).json({ error: 'File exceeds maximum size of 100MB' });
   }
 
-  const filePath = req.file.path;
-  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${path.basename(filePath)}`;
+  try {
+    const filePath = req.file.path;
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${path.basename(filePath)}`;
+    const { rows } = await req.db.query(
+      `INSERT INTO user_files (
+         user_id, filename, original_name, file_type, mime_type, file_size,
+         storage_path, storage_type, metadata
+       ) VALUES ($1, $2, $3, $4, $4, $5, $6, 'platform-upload', $7)
+       RETURNING id, created_at`,
+      [
+        req.user.id,
+        path.basename(filePath),
+        req.file.originalname,
+        req.file.mimetype,
+        req.file.size,
+        filePath,
+        { source: req.body?.source || 'upload' },
+      ],
+    );
+    const libraryId = rows[0].id;
 
-  res.json({
-    success: true,
-    message: 'File uploaded successfully',
-    file: {
-      name: req.file.originalname,
-      size: req.file.size,
-      type: req.file.mimetype,
-      url: fileUrl
-    }
-  });
+    res.json({
+      success: true,
+      message: 'File uploaded successfully',
+      file: {
+        id: libraryId,
+        name: req.file.originalname,
+        size: req.file.size,
+        type: req.file.mimetype,
+        url: fileUrl,
+        content_url: `/api/chat/library/file/${libraryId}/content`,
+        created_at: rows[0].created_at,
+      }
+    });
+  } catch (error) {
+    try { fs.unlinkSync(req.file.path); } catch { /* best-effort orphan cleanup */ }
+    console.error('Failed to persist uploaded file:', error);
+    res.status(500).json({ success: false, error: 'Failed to persist uploaded file' });
+  }
 });
 
 // Define a list of models that use the standard chat completions endpoint
@@ -1147,12 +1178,42 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
                         return res.status(500).json({ error: 'Image generation failed. Please try again.' });
                     }
                 }
+                const imageBuffer = Buffer.from(outImageData, 'base64');
+                const storedName = `${randomUUID()}-xeno-generated.png`;
+                const storedPath = path.join(uploadsDir, storedName);
+                let libraryItemId = null;
+                try {
+                    await fs.promises.writeFile(storedPath, imageBuffer);
+                    const stored = await req.db.query(
+                        `INSERT INTO user_files (
+                           user_id, filename, original_name, file_type, mime_type, file_size,
+                           storage_path, storage_type, metadata
+                         ) VALUES ($1, $2, $3, 'image/png', 'image/png', $4, $5, 'platform-upload', $6)
+                         RETURNING id`,
+                        [
+                            imgUserId,
+                            storedName,
+                            `XENO image ${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
+                            imageBuffer.length,
+                            storedPath,
+                            { source: 'chat-generation', prompt: imagePrompt, model: modelLabel },
+                        ],
+                    );
+                    libraryItemId = stored.rows[0].id;
+                } catch (persistError) {
+                    try { await fs.promises.unlink(storedPath); } catch { /* no file or best-effort cleanup */ }
+                    console.error('[imggen] failed to persist generated image in account library:', persistError.message);
+                    if (imgCharged) await refundImgCharge();
+                    return res.status(500).json({ error: 'Image generation could not be saved. Please try again.' });
+                }
                 await logCreditUsage(req.db, imgUserId, 'image:gpt-image-2', imgCost, { route: '/api/chat/generate:image' }).catch(() => {});
                 return res.json({
                     imageData: outImageData,
                     modelIdUsed: modelLabel,
                     responseId: respId,               // opaque token — preserves the ImageStudio contract
                     imageGenerationCallId: callId,    // opaque token — preserves the ImageStudio contract
+                    libraryItemId,
+                    libraryContentUrl: `/api/chat/library/file/${libraryItemId}/content`,
                     entitlement: gateMeta(imgEnt),
                 });
             };
