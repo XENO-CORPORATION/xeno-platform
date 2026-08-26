@@ -225,7 +225,7 @@ const Marketplace: React.FC = () => {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
-      <Header onGetStarted={() => navigate('/auth')} visible={true} />
+      <Header onGetStarted={() => navigate('/login')} visible={true} />
 
       <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────────── */}
@@ -335,7 +335,7 @@ const Marketplace: React.FC = () => {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col gap-2.5 sm:flex-row">
-                  <a href="/auth" className="inline-flex items-center justify-center gap-2 rounded-[9px] bg-white px-5 py-2.5 text-[13px] font-semibold text-black transition-colors hover:bg-white/90">Become a creator<ArrowUpRight className="h-4 w-4" /></a>
+                  <a href="/signup" className="inline-flex items-center justify-center gap-2 rounded-[9px] bg-white px-5 py-2.5 text-[13px] font-semibold text-black transition-colors hover:bg-white/90">Become a creator<ArrowUpRight className="h-4 w-4" /></a>
                   <Link to="/learn" className="inline-flex items-center justify-center gap-2 rounded-[9px] border border-white/15 px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.06]">Developer docs</Link>
                 </div>
               </div>

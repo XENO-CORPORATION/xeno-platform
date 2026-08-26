@@ -139,7 +139,7 @@ router.get('/:slug/download/:os/:version?', async (req, res) => {
       // Send the browser somewhere it can act. The SPA reads returnUrl and
       // comes back here with a grant once the account can actually download.
       const back = encodeURIComponent(req.originalUrl.split('?')[0]);
-      return res.redirect(302, `/auth?returnUrl=${back}`);
+      return res.redirect(302, `/login?returnUrl=${back}`);
     }
     return res.status(401).json({
       error: {

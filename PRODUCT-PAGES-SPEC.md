@@ -42,7 +42,7 @@ and the legacy plural pages are redirected and retired.
 | **D2** | **The product catalog (`src/lib/productCatalog.ts`) is the single source of truth** for product identity, metadata, delivery type, and routing. Adding a product = one catalog entry + its R2 data. No per-product page code. |
 | **D3** | **Canonical release data is `releases.json`** (full history array) at `https://updates.xenostudio.ai/apps/:slug/releases.json`. `version.json` is **retained** as a derived "latest stable" pointer (Hub auto-update + fast latest lookups) and MUST equal the latest stable entry in `releases.json`. **Both are published together, every release.** |
 | **D4** | **Product pages are SEO-correct via build-time prerendering** of the canonical routes (static HTML emitted per product/release from the catalog). The legacy `public/products/` generator (`add-seo-to-products.js`) is retired once prerender ships. |
-| **D5** | **Stable download links are backend 302 redirects** (`/product/:slug/download/:os`) that resolve the current asset from R2 at request time — the link never changes as versions bump. 🔴 **AMENDED 2026-08-24 (owner override): the redirect is PAYWALLED.** The URL shape is unchanged — it is printed in release notes and emails — but it now 302s only when the request carries a valid short-lived grant, which is minted for a signed-in account whose plan has `canDownload`. Anonymous: **401 JSON**, or a redirect to `/auth?returnUrl=…` for a browser navigation. See §4.1 and `docs/DOWNLOAD-GATE.md`. |
+| **D5** | **Stable download links are backend 302 redirects** (`/product/:slug/download/:os`) that resolve the current asset from R2 at request time — the link never changes as versions bump. 🔴 **AMENDED 2026-08-24 (owner override): the redirect is PAYWALLED.** The URL shape is unchanged — it is printed in release notes and emails — but it now 302s only when the request carries a valid short-lived grant, which is minted for a signed-in account whose plan has `canDownload`. Anonymous: **401 JSON**, or a redirect to `/login?returnUrl=…` for a browser navigation. See §4.1 and `docs/DOWNLOAD-GATE.md`. |
 | **D6** | `releases.json` carries the **full version history** (newest-first). The product page shows the latest + a few recent; `/releases` shows all. |
 | **D7** | **One slug, everywhere.** The catalog `slug` is the URL segment, the R2 folder id, and the product key across Hub, website, and the release pipeline. No aliases except an explicit `r2` override for legacy R2 folders. |
 
@@ -132,7 +132,7 @@ a refusal cannot leak the version or filename it refused.
 
 | Caller | Result |
 |---|---|
-| Browser navigation (`Accept: text/html`), no grant | **302 → `/auth?returnUrl=…`** |
+| Browser navigation (`Accept: text/html`), no grant | **302 → `/login?returnUrl=…`** |
 | Anything else, no grant | **401** `download_grant_required` |
 | Valid grant | the 302 described below |
 

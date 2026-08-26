@@ -281,7 +281,7 @@ curl -sI https://updates.xenostudio.ai/apps/<slug>/version.json
 # request must be REFUSED, never 302'd. A 302 here is the gate being open.
 curl -si "https://xenostudio.ai/product/<slug>/download/win" | head -1
 #   expect: HTTP/2 401   (curl sends Accept: */*, so it gets the JSON refusal)
-#   a browser (Accept: text/html) gets 302 -> /auth?returnUrl=... instead
+#   a browser (Accept: text/html) gets 302 -> /login?returnUrl=... instead
 ```
 
 > A signed-in customer never types this URL: the SPA mints a short-lived grant

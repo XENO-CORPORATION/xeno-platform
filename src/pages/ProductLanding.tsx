@@ -120,7 +120,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
   ) : (
     <>
       {product.delivery === 'web' && (
-        <Link to={product.launchPath ?? '/auth'} className="group inline-flex items-center gap-2 rounded-[6px] bg-white px-6 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
+        <Link to={product.launchPath ?? '/login'} className="group inline-flex items-center gap-2 rounded-[6px] bg-white px-6 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
           Open {product.name}<ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </Link>
       )}
@@ -142,7 +142,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
         </div>
       )}
       {product.delivery === 'soon' && (
-        <Link to="/auth" className="inline-flex items-center gap-2 rounded-[6px] bg-white px-6 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
+        <Link to="/signup" className="inline-flex items-center gap-2 rounded-[6px] bg-white px-6 py-3 text-[14px] font-semibold text-black transition-colors hover:bg-white/90">
           <Bell className="h-4 w-4" />Get notified
         </Link>
       )}
@@ -169,7 +169,7 @@ const ProductLanding: React.FC<{ product: Product; content: ProductContent }> = 
 
   return (
     <div data-accent={accent} className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
-      <Header onGetStarted={() => navigate('/auth')} visible={true} />
+      <Header onGetStarted={() => navigate('/login')} visible={true} />
 
       <main className="flex-1">
         {/* ── Hero ─────────────────────────────────────────── */}

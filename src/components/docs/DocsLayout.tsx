@@ -46,7 +46,7 @@ const DocsLayout: React.FC<{ product: ProductDocs; page: DocPage; sectionTitle: 
 
   return (
     <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
-      <Header onGetStarted={() => navigate('/auth')} visible={true} />
+      <Header onGetStarted={() => navigate('/login')} visible={true} />
       <DocsSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       {/* Mobile docs bar */}

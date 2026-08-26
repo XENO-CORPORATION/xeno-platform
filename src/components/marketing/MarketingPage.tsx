@@ -19,7 +19,7 @@ export const MarketingPage: React.FC<{
   const navigate = useNavigate();
   return (
     <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
-      <Header onGetStarted={() => navigate('/auth')} visible={true} />
+      <Header onGetStarted={() => navigate('/login')} visible={true} />
       <main className="flex-1">
         <section className="page-gutter relative overflow-hidden pt-[clamp(92px,12vh,140px)] pb-[clamp(24px,4vh,48px)]">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[360px] bg-[radial-gradient(ellipse_55%_75%_at_50%_-10%,rgba(255, 255, 255,0.10),transparent_70%)]" />

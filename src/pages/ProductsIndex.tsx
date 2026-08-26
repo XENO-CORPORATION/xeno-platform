@@ -59,7 +59,7 @@ const ProductsIndex: React.FC = () => {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
-      <Header onGetStarted={() => navigate('/auth')} visible={true} />
+      <Header onGetStarted={() => navigate('/login')} visible={true} />
       <main className="flex-1 page-gutter pt-[clamp(92px,12vh,140px)] pb-[clamp(56px,8vh,110px)]">
         <div className="mx-auto max-w-[1080px]">
           <Reveal>

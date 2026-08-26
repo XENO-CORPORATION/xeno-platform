@@ -36,7 +36,7 @@ account, in both directions:
 | Step | Result |
 |---|---|
 | anonymous `curl` (`Accept: */*`) | **401** `download_grant_required` |
-| anonymous browser navigation (`Accept: text/html`) | **302 → `/auth?returnUrl=%2Fproduct%2Fhub%2Fdownload%2Fwin`** |
+| anonymous browser navigation (`Accept: text/html`) | **302 → `/login?returnUrl=%2Fproduct%2Fhub%2Fdownload%2Fwin`** |
 | forged grant | **401** |
 | `POST /api/downloads/grant` with no token | **401** |
 | fresh **free** account mints | **403** `plan_upgrade_required`, `currentPlan: free`, `requiredPlan: pro` |

@@ -250,7 +250,7 @@ const HeroSection: React.FC = () => {
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-5">
             <a
-              href="/auth"
+              href="/signup"
               className="group inline-flex h-[44px] items-center gap-3 rounded-[10px] bg-white px-6 text-[14px] font-semibold text-[#111114] shadow-[0_0_28px_rgba(255,255,255,0.24)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/90"
             >
               Get Started Free

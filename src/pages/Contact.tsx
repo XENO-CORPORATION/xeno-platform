@@ -217,7 +217,7 @@ const Contact = () => {
           <p className="text-xs text-white/30">© 2026 Xeno. All rights reserved.</p>
           <div className="flex items-center gap-6">
             <Link to="/help" className="text-xs text-white/30 hover:text-white/60 transition-colors">Help</Link>
-            <Link to="/auth" className="text-xs text-white/30 hover:text-white/60 transition-colors">Sign In</Link>
+            <Link to="/login" className="text-xs text-white/30 hover:text-white/60 transition-colors">Sign In</Link>
           </div>
         </footer>
       </div>

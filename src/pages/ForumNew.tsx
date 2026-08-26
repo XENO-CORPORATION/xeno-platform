@@ -178,7 +178,7 @@ const ForumNew: React.FC = () => {
           <div className="mt-8 rounded-md border border-white/10 bg-[#060608] p-6">
             <p className="text-[14px] text-[#a8a8b1]">You need an account to post.</p>
             <a
-              href="/auth"
+              href="/login"
               className="mt-4 inline-flex h-9 items-center rounded-md border border-white/[0.15] px-4 text-[13px] font-medium text-white transition-colors hover:bg-white/[0.05]"
             >
               Sign in

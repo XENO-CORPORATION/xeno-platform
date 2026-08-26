@@ -14,10 +14,13 @@ import { authMiddleware } from '../middleware/auth.js';
 import {
   jwks,
   discovery,
+  getClient,
+  validateAuthorizationRequest,
   createAuthorizationCode,
   exchangeAuthorizationCode,
   refreshTokenGrant,
   startDeviceAuthorization,
+  inspectDeviceAuthorization,
   approveDevice,
   deviceTokenGrant,
   revokeToken,
@@ -41,6 +44,20 @@ router.get('/jwks', async (req, res) => {
 router.get('/openid-configuration', (req, res) => res.json(discovery()));
 router.get('/.well-known/openid-configuration', (req, res) => res.json(discovery()));
 
+// Public presentation metadata for the login consent sentence. Only registered
+// database values are returned; raw query text is never rendered as an app name.
+router.get('/client_info', async (req, res) => {
+  try {
+    const clientId = String(req.query.client_id || '');
+    const client = clientId ? await getClient(req.db, clientId) : null;
+    if (!client) return res.status(404).json({ error: 'invalid_client' });
+    res.set('cache-control', 'no-store');
+    return res.json({ client_id: client.client_id, name: client.name });
+  } catch {
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // GET /oauth2/authorize — browser entry point for "Sign in with XENO". This IS
 // the XENO auth screen (served on the xenostudio.ai origin, like Google's consent
 // page): if the user already has a session (localStorage 'xenoos_auth_token') it
@@ -48,18 +65,21 @@ router.get('/.well-known/openid-configuration', (req, res) => res.json(discovery
 // in against /api/auth/*, then continues — so the user never hits a dead end.
 // First-party clients auto-approve the grant (Identity Plan §2.3).
 router.get('/authorize', async (req, res) => {
-  res.set('content-type', 'text/html; charset=utf-8');
-  // Resolve a human-friendly client name server-side from the registered client
-  // (never echo the raw ?client_id= param — that is attacker-controlled and would
-  // let a crafted value phish as a trusted app). Unknown clients → generic label.
   const rawId = String(req.query.client_id || '');
-  let appName = 'an application';
+  let client;
   try {
-    if (rawId) {
-      const r = await req.db.query('SELECT name FROM oauth_clients WHERE client_id = $1', [rawId]);
-      if (r.rows[0] && r.rows[0].name) appName = r.rows[0].name;
-    }
-  } catch { /* keep the generic label if the lookup fails */ }
+    client = await validateAuthorizationRequest(req.db, {
+      clientId: rawId,
+      redirectUri: String(req.query.redirect_uri || ''),
+      codeChallenge: String(req.query.code_challenge || ''),
+      codeChallengeMethod: String(req.query.code_challenge_method || ''),
+    });
+  } catch (e) {
+    // Never redirect an invalid request: redirect_uri has not been trusted.
+    return sendOauthError(res, e);
+  }
+  res.set('content-type', 'text/html; charset=utf-8');
+  const appName = client.name || 'an application';
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const app = esc(appName);
   res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -116,9 +136,9 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
 (function(){
   var p=new URLSearchParams(location.search);
   var $=function(id){return document.getElementById(id)};
-  // Unified auth: hand unauthenticated users to the branded /auth/:app login
-  // (full email/password + GitHub/social + MFA), returning here to finish the grant.
-  function toAuth(){ var s=(p.get('client_id')||'app').replace(/^xeno-/,''); location.href='/auth/'+encodeURIComponent(s)+'?returnUrl='+encodeURIComponent(location.pathname+location.search); }
+  // Hand unauthenticated users to the canonical human login route. The login
+  // UI derives its consent label from this validated authorize transaction.
+  function toAuth(){ location.href='/login?returnUrl='+encodeURIComponent(location.pathname+location.search); }
   var mode='signin';
   function show(el,on){el.classList[on?'remove':'add']('hide')}
   function setStatus(t){show($('loader'),true);show($('cardWrap'),false);$('status').textContent=t}
@@ -128,7 +148,7 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   function continueWith(tok){
     setStatus('Signing you in…');
     fetch('/api/oauth2/authorize',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+tok},
-      body:JSON.stringify({client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),state:p.get('state')})})
+      body:JSON.stringify({client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce')})})
     .then(function(r){ if(r.status===401){ localStorage.removeItem('xenoos_auth_token'); toAuth(); throw 0;} return r.json(); })
     .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
     .catch(function(e){ if(e!==0) showForm('Error: '+(e&&e.message||e)); });
@@ -190,6 +210,7 @@ router.post('/authorize', authMiddleware, async (req, res) => {
       redirectUri: b.redirect_uri,
       scope: b.scope,
       codeChallenge: b.code_challenge,
+      codeChallengeMethod: b.code_challenge_method,
       nonce: b.nonce,
     });
     const sep = String(b.redirect_uri).includes('?') ? '&' : '?';
@@ -251,6 +272,12 @@ router.post('/end_session', authMiddleware, async (req, res) => {
 });
 
 // POST /oauth2/device/approve — authenticated; the activate UI calls this.
+router.post('/device/inspect', authMiddleware, async (req, res) => {
+  try {
+    res.json(await inspectDeviceAuthorization(req.db, { userCode: (req.body || {}).user_code }));
+  } catch (e) { sendOauthError(res, e); }
+});
+
 router.post('/device/approve', authMiddleware, async (req, res) => {
   try {
     res.json(await approveDevice(req.db, { userCode: (req.body || {}).user_code, userId: req.user.id }));

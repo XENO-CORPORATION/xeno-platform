@@ -174,6 +174,21 @@ function downscope(requested, allowedScopes) {
   return granted.join(' ');
 }
 
+/** Validate the browser authorization request before showing any login UI. */
+export async function validateAuthorizationRequest(db, {
+  clientId,
+  redirectUri,
+  codeChallenge,
+  codeChallengeMethod,
+}) {
+  const client = await getClient(db, clientId);
+  if (!client) throw oauthError('invalid_client', 'unknown client');
+  if (!clientAllowsRedirect(client, redirectUri)) throw oauthError('invalid_request', 'redirect_uri mismatch');
+  if (!codeChallenge) throw oauthError('invalid_request', 'code_challenge required (PKCE S256)');
+  if (codeChallengeMethod !== 'S256') throw oauthError('invalid_request', 'code_challenge_method must be S256');
+  return client;
+}
+
 // ── Token minting ───────────────────────────────────────────────────────────
 
 async function userClaims(db, userId) {
@@ -269,11 +284,21 @@ async function issueRefreshToken(db, { userId, clientId, scope, sid, familyId })
  * proves identity with a valid platform token → authMiddleware → req.user).
  * First-party clients skip the consent screen (Identity Plan §2.3).
  */
-export async function createAuthorizationCode(db, { clientId, userId, redirectUri, scope, codeChallenge, nonce }) {
-  const client = await getClient(db, clientId);
-  if (!client) throw oauthError('invalid_client', 'unknown client');
-  if (!clientAllowsRedirect(client, redirectUri)) throw oauthError('invalid_request', 'redirect_uri mismatch');
-  if (!codeChallenge) throw oauthError('invalid_request', 'code_challenge required (PKCE S256)');
+export async function createAuthorizationCode(db, {
+  clientId,
+  userId,
+  redirectUri,
+  scope,
+  codeChallenge,
+  codeChallengeMethod = 'S256',
+  nonce,
+}) {
+  const client = await validateAuthorizationRequest(db, {
+    clientId,
+    redirectUri,
+    codeChallenge,
+    codeChallengeMethod,
+  });
   const grantedScope = downscope(scope || 'openid profile email', client.allowed_scopes);
   const code = crypto.randomBytes(32).toString('base64url');
   await db.query(
@@ -363,11 +388,29 @@ export async function startDeviceAuthorization(db, { clientId, scope }) {
   };
 }
 
+/** Registered client + requested scopes for the authenticated consent screen. */
+export async function inspectDeviceAuthorization(db, { userCode }) {
+  const normalized = String(userCode || '').toUpperCase();
+  const r = await db.query(
+    `SELECT dc.client_id, dc.scope, c.name AS client_name
+       FROM oauth_device_codes dc
+       JOIN oauth_clients c ON c.client_id = dc.client_id
+      WHERE dc.user_code = $1
+        AND dc.approved = false
+        AND dc.denied = false
+        AND dc.expires_at > now()`,
+    [normalized],
+  );
+  const row = r.rows[0];
+  if (!row) throw oauthError('invalid_request', 'invalid or expired user_code');
+  return { client_id: row.client_id, client_name: row.client_name, scope: row.scope };
+}
+
 /** Approve a device code for an authenticated user (called from the activate UI/API). */
 export async function approveDevice(db, { userCode, userId }) {
   const r = await db.query(
     "UPDATE oauth_device_codes SET approved = true, user_id = $1 WHERE user_code = $2 AND approved = false AND denied = false AND expires_at > now() RETURNING device_code",
-    [userId, userCode.toUpperCase()],
+    [userId, String(userCode || '').toUpperCase()],
   );
   if (r.rows.length === 0) throw oauthError('invalid_request', 'invalid or expired user_code');
   return { ok: true };

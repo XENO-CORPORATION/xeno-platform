@@ -63,7 +63,7 @@ const ForgotPassword = () => {
 
 
         <Link
-          to="/auth"
+          to="/login"
           className="flex items-center gap-1.5 text-sm text-white/40 hover:text-white/70 transition-all duration-300 hover:gap-2"
         >
           <ArrowLeft size={14} className="transition-transform duration-300" />
@@ -103,7 +103,7 @@ const ForgotPassword = () => {
               </p>
 
               <Link
-                to="/auth"
+                to="/login"
                 className="group mt-8 w-full py-4 bg-white text-black text-sm font-semibold rounded-[6px] flex items-center justify-center gap-0 transition-all duration-300 ease-out hover:bg-white/90 hover:shadow-lg hover:shadow-white/10 active:scale-[0.98] overflow-hidden"
               >
                 <span className="transition-transform duration-300 group-hover:-translate-x-1">Back to sign in</span>
@@ -172,7 +172,7 @@ const ForgotPassword = () => {
 
               <p className="text-center text-sm text-white/30 mt-8">
                 Remembered it?{' '}
-                <Link to="/auth" className="text-white/50 hover:text-white transition-colors underline underline-offset-2">
+                <Link to="/login" className="text-white/50 hover:text-white transition-colors underline underline-offset-2">
                   Sign in
                 </Link>
               </p>

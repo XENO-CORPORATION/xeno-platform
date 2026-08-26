@@ -63,7 +63,7 @@ export default function LearnTutorial() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#08080a] text-white font-['Inter',sans-serif] antialiased">
-        <Header onGetStarted={() => navigate('/auth')} visible={true} />
+        <Header onGetStarted={() => navigate('/login')} visible={true} />
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="w-6 h-6 border-2 border-white/10 border-t-white/50 rounded-full animate-spin" />
         </div>
@@ -75,7 +75,7 @@ export default function LearnTutorial() {
   if (notFound || !tutorial) {
     return (
       <div className="min-h-screen bg-[#08080a] text-white font-['Inter',sans-serif] antialiased">
-        <Header onGetStarted={() => navigate('/auth')} visible={true} />
+        <Header onGetStarted={() => navigate('/login')} visible={true} />
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
           <p className="text-[20px] text-white/40 mb-3">Tutorial not found</p>
           <Link to="/learn" className="text-[13px] text-white/30 hover:text-white/50 transition-colors flex items-center gap-1.5">
@@ -98,7 +98,7 @@ export default function LearnTutorial() {
 
   return (
     <div className="min-h-screen bg-[#08080a] text-white font-['Inter',sans-serif] antialiased">
-      <Header onGetStarted={() => navigate('/auth')} visible={true} />
+      <Header onGetStarted={() => navigate('/login')} visible={true} />
 
       <main className="pt-[46px]">
         <article className="max-w-3xl mx-auto px-6 pt-16 pb-24">
