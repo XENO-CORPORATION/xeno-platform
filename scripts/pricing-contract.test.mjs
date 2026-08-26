@@ -42,6 +42,14 @@ test('priced platform capabilities have reachable server gates', () => {
     'collaboration is advertised without a reachable gate');
 });
 
+test('the agent route module loads with its entitlement middleware', async () => {
+  // Source assertions cannot detect importing the right symbol from the wrong
+  // module. That defect passes every regex gate and crashes the entire backend
+  // at ESM instantiation, before readiness can open.
+  const route = await import('../src/server/routes/agentRoutes.js');
+  assert.ok(route.default, 'agent route has no default router export');
+});
+
 test('the public download directory does not publish raw CDN installer links', () => {
   assert.doesNotMatch(publicDownload, /updates\.xenostudio\.ai|\.exe|\.dmg|\.AppImage/i);
   assert.match(publicDownload, /\/product\/hub\/download/,

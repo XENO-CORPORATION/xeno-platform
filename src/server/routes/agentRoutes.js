@@ -14,7 +14,7 @@
 
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
-import { requireEntitlement } from '../utils/entitlementGate.js';
+import { requireEntitlement } from '../middleware/requireEntitlement.js';
 import * as identity from '../services/agentIdentity.js';
 import { AgentIdentityError } from '../services/agentIdentity.js';
 
