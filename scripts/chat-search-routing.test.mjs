@@ -48,6 +48,14 @@ test('Search history fetches conversation detail before restoring a hard-reloade
   assert.doesNotMatch(searchChat, /const loadConversation = \(conversation: SearchConversation\) => \{\s*setMessages\(conversation\.messages\)/);
 });
 
+test('Search history stays inside the viewport and is keyboard accessible', () => {
+  assert.match(searchChat, /isHistoryOpen\s*\?\s*'calc\(100% - 320px\)'/);
+  assert.match(searchChat, /role="button"/);
+  assert.match(searchChat, /tabIndex=\{0\}/);
+  assert.match(searchChat, /event\.key === 'Enter' \|\| event\.key === ' '/);
+  assert.match(searchChat, /aria-label=\{`Open search conversation: \$\{conv\.title\}`\}/);
+});
+
 test('Research mode uses the authenticated, provider-isolated XENO Search route', () => {
   assert.match(chat, /fetch\('\/api\/xeno-search'/);
   assert.match(chat, /withAuthHeaders\(\{ 'Content-Type': 'application\/json' \}\)/);

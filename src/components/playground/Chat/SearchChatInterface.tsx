@@ -1287,11 +1287,20 @@ Based on these search results, provide a helpful, accurate, and concise answer t
                 <div
                   key={conv.id}
                   onClick={() => loadConversation(conv)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      loadConversation(conv);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open search conversation: ${conv.title}`}
                   className={`group flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                     activeConversationId === conv.id
                       ? 'bg-[var(--chat-control)]'
                       : 'hover:bg-[var(--chat-surface)]'
-                  }`}
+                  } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-muted)]`}
                 >
                   <div className="flex-shrink-0 mt-0.5 text-[var(--chat-muted)]">
                     {getEngineIcon(conv.searchEngine)}
@@ -1323,7 +1332,15 @@ Based on these search results, provide a helpful, accurate, and concise answer t
         className="flex flex-col transition-all duration-300 ease-in-out"
         style={{
           marginLeft: isHistoryOpen ? '320px' : '0px',
-          width: (showResultsPanel || isBrowserOpen) ? '45%' : '100%'
+          // The history drawer is absolutely positioned, so its matching margin
+          // must be subtracted from the main pane. A 100% pane plus a 320px
+          // margin created horizontal overflow and scrolled the drawer itself
+          // mostly outside the viewport after a hard reload.
+          width: (showResultsPanel || isBrowserOpen)
+            ? '45%'
+            : isHistoryOpen
+              ? 'calc(100% - 320px)'
+              : '100%'
         }}
       >
         {/* Top Bar */}
