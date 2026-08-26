@@ -14,6 +14,7 @@ const workspaceRoutes = read('src/server/routes/workspaceRoutes.js');
 const agentRoutes = read('src/server/routes/agentRoutes.js');
 const canvasRoutes = read('src/server/routes/officeCanvasRoutes.js');
 const publicDownload = read('public/download/index.html');
+const landingHeader = read('src/components/landing-v3/Header.tsx');
 
 test('every interactive purchase producer records and forwards consent', () => {
   for (const [name, source] of [['onboarding', onboarding], ['pricing', pricing], ['billing page', billingPage]]) {
@@ -54,6 +55,20 @@ test('the public download directory does not publish raw CDN installer links', (
   assert.doesNotMatch(publicDownload, /updates\.xenostudio\.ai|\.exe|\.dmg|\.AppImage/i);
   assert.match(publicDownload, /\/product\/hub\/download/,
     'the compatibility URL no longer enters the authenticated download funnel');
+});
+
+test('global marketing navigation uses real routes and backed landing anchors', () => {
+  assert.match(landingHeader, /label: 'Pricing', href: '\/pricing'/);
+  assert.match(landingHeader, /to="\/product\/hub\/download"/);
+  assert.doesNotMatch(landingHeader, /href="#(?:explore|create|innovate|pricing)"/);
+  for (const [anchor, source] of [
+    ['explore', read('src/components/landing-v3/ProductsShowcase.tsx')],
+    ['create', read('src/components/landing-v3/FlowSection.tsx')],
+    ['innovate', read('src/components/landing-v3/UseCasesSection.tsx')],
+    ['pricing', read('src/components/landing-v3/PrivacyPricingSection.tsx')],
+  ]) {
+    assert.match(source, new RegExp(`id=["']${anchor}["']`), `missing landing anchor: ${anchor}`);
+  }
 });
 
 test('retired public pricing claims cannot silently return', () => {

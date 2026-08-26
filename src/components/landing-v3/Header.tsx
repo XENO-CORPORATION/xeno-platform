@@ -239,7 +239,7 @@ const navItems: NavEntry[] = [
     ],
   },
   { label: 'Docs', href: '/docs' },
-  { label: 'Pricing', href: '#pricing' },
+  { label: 'Pricing', href: '/pricing' },
   { label: 'Blog', href: '/blog' },
 ];
 
@@ -488,11 +488,11 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
             </Link>
 
             <nav className="hidden items-center gap-2 text-[9.5px] font-semibold tracking-[0.22em] md:flex">
-              <a href="#explore" className="text-[#756f66] transition-colors hover:text-[#b6afa5]">EXPLORE</a>
+              <a href="/#explore" className="text-[#756f66] transition-colors hover:text-[#b6afa5]">EXPLORE</a>
               <span className="text-[#46423b]">/</span>
-              <a href="#create" className="text-[#756f66] transition-colors hover:text-[#b6afa5]">CREATE</a>
+              <a href="/#create" className="text-[#756f66] transition-colors hover:text-[#b6afa5]">CREATE</a>
               <span className="text-[#46423b]">/</span>
-              <a href="#innovate" className="text-[#e8e3dc] transition-colors hover:text-white">INNOVATE</a>
+              <a href="/#innovate" className="text-[#e8e3dc] transition-colors hover:text-white">INNOVATE</a>
             </nav>
           </div>
 
@@ -525,7 +525,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
               Sign in
             </button>
             <Link
-              to="/download"
+              to="/product/hub/download"
               className="group inline-flex h-[36px] items-center gap-2.5 rounded-[5px] border border-white/20 bg-transparent px-5 text-[12px] font-medium text-white transition-colors hover:border-white/45 hover:bg-white/[0.04]"
             >
               Download
@@ -572,7 +572,7 @@ const Header: React.FC<HeaderProps> = ({ onGetStarted, visible = true }) => {
               Sign in
             </button>
             <Link
-              to="/download"
+              to="/product/hub/download"
               onClick={() => setIsMobileMenuOpen(false)}
               className="flex h-12 items-center justify-center gap-2 rounded-[6px] border border-white/20 text-sm font-medium text-white"
             >
