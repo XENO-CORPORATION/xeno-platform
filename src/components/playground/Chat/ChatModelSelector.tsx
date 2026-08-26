@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { IconButton, Spinner } from '@xenosystem/elements-react';
 import { Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight, ArrowRightDecl, Search, X } from '@/lib/icons';
 import type { GroupedModels, Model } from '@/services/modelService';
+import { chainDurationMs, MODEL_CHAIN } from './composerGooey';
 
 interface ChatModelSelectorProps {
   groupedModels: GroupedModels[];
@@ -15,10 +16,6 @@ interface ChatModelSelectorProps {
   onSelect: (model: Model) => void | Promise<void>;
   selectedModel: Model;
 }
-
-// The rail keeps its final geometry throughout the transition. A short whole-rail
-// fade is enough to preserve context without making labels and pills drift apart.
-const INLINE_TRAY_EXIT_MS = 140;
 
 const formatTokenCount = (tokens: number): string => {
   if (tokens >= 1_000_000) {
@@ -87,6 +84,11 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
     }
   };
 
+  const inlineTrayExitMs = () => {
+    const chipCount = inlineRailRef.current?.querySelectorAll('[data-gooey-chip]').length ?? 0;
+    return chainDurationMs(chipCount, MODEL_CHAIN);
+  };
+
   const closeInlineTray = (afterClose?: () => void) => {
     if (isInlineTrayClosing) return;
 
@@ -103,7 +105,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
       setIsInlineTrayClosing(false);
       updateOpen(false);
       afterClose?.();
-    }, INLINE_TRAY_EXIT_MS);
+    }, inlineTrayExitMs());
   };
 
   const transitionInlineProvider = (nextProvider: string | null) => {
@@ -120,7 +122,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
       inlineTrayCloseTimerRef.current = null;
       setActiveInlineProvider(nextProvider);
       setIsInlineTrayClosing(false);
-    }, INLINE_TRAY_EXIT_MS);
+    }, inlineTrayExitMs());
   };
 
   useEffect(() => {
@@ -151,7 +153,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
   useEffect(() => () => clearInlineTrayCloseTimer(), []);
 
   const handleSelect = (model: Model) => {
-    // Tell the parent only once the short exit has finished so the selected-state update
+    // Tell the parent only once the liquid exit has finished so the selected-state update
     // cannot replace the rail in the middle of its transition.
     closeInlineTray(() => {
       void onSelect(model);
@@ -267,6 +269,10 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
             <div
               key={activeInlineProvider ?? 'providers'}
               data-inline-model-rail
+              data-gooey-rail="model"
+              data-gooey-dir="rtl"
+              data-gooey-from="[data-chat-model-trigger]"
+              data-gooey-preserve-geometry="true"
               className="chat-inline-model-rail flex min-w-max items-center gap-1.5 px-0.5"
             >
               {inlineProviderGroups.length === 0 ? (
@@ -283,6 +289,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                   iconSize={14}
                   data-inline-model-provider-back
                   data-inline-model-chip
+                  data-gooey-chip
                   disabled={isInlineTrayClosing}
                   onClick={() => transitionInlineProvider(null)}
                   aria-label="Back to providers"
@@ -296,6 +303,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                       type="button"
                       data-inline-model-action
                       data-inline-model-chip
+                      data-gooey-chip
                       aria-current={isSelected ? 'true' : undefined}
                       disabled={isInlineTrayClosing}
                       onClick={() => handleSelect(model)}
@@ -324,6 +332,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                     type="button"
                     data-inline-model-provider={group.companyName}
                     data-inline-model-chip
+                    data-gooey-chip
                     aria-current={isSelectedProvider ? 'true' : undefined}
                     disabled={isInlineTrayClosing}
                     onClick={() => transitionInlineProvider(group.companyName)}

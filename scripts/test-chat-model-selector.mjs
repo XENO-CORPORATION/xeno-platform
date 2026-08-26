@@ -66,7 +66,7 @@ try {
   let selectedModelId = null;
   const waitForInlineMotion = async () => {
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 180));
+      await new Promise((resolve) => setTimeout(resolve, 900));
     });
   };
 
@@ -124,10 +124,15 @@ try {
   assert.ok(document.querySelector('[data-inline-model-actions]'), 'The empty-chat selector should show provider choices inline instead of over the composer.');
   assert.equal(document.querySelectorAll('[data-inline-model-provider]').length, 1, 'The inline selector should start with providers, not a long model list.');
   assert.ok(document.querySelector('[data-inline-model-rail]'), 'The inline selector should reveal its catalog as one stable rail.');
-  assert.equal(document.querySelector('[data-gooey-rail="model"]'), null, 'The overflowing model rail must not distort individual pill geometry through the gooey chain.');
+  assert.ok(document.querySelector('[data-gooey-rail="model"]'), 'The inline model rail should retain its gooey chain.');
+  assert.equal(
+    document.querySelector('[data-gooey-rail="model"]')?.getAttribute('data-gooey-preserve-geometry'),
+    'true',
+    'The gooey model rail should keep the real controls at their final geometry.',
+  );
   assert.ok(
-    [...document.querySelectorAll('[data-inline-model-chip]')].every((button) => !('gooeyChip' in button.dataset)),
-    'Inline model pills must keep their own chrome and label geometry throughout the transition.',
+    [...document.querySelectorAll('[data-inline-model-chip]')].every((button) => 'gooeyChip' in button.dataset),
+    'Every inline model pill should participate in the liquid skin hand-off.',
   );
   assert.deepEqual(inlineOpenStates, [true], 'Opening the inline selector should notify its composer parent.');
 

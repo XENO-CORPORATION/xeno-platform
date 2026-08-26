@@ -7,7 +7,8 @@
  * SVG-filtered layer (the "skin") that also holds the composer body. Because the blobs
  * and the box live in the SAME filtered layer, the metaball filter melts them together
  * and a liquid neck forms while a button pulls away. Once a button has landed its own
- * chrome snaps on and its blob dissolves behind it.
+ * chrome snaps on and its blob dissolves behind it. Overflowing rails can keep the real
+ * controls fixed at their final geometry while only this duplicate skin travels.
  *
  * Two emergence shapes:
  *   • rise  (chain: false) — every item climbs out of the composer box, staggered.
@@ -39,6 +40,8 @@ export const GOOEY_CLASS = {
    * value before the flip, or the browser sees `none → none` and never animates.
    */
   still: 'chat-gooey-item--still',
+  /** Keeps the real control at its final rect while its duplicate skin travels. */
+  fixed: 'chat-gooey-item--fixed',
   blob: 'chat-gooey-blob',
   blobGone: 'chat-gooey-blob--gone',
   /**
@@ -69,6 +72,13 @@ export interface GooeyRunOptions {
   durationMs: number;
   /** true = chained sideways, false = every item rises out of the box. */
   chain: boolean;
+  /**
+   * Animate only the filtered duplicate. The real control keeps its final bounding box,
+   * while its chrome and label wait for the duplicate to land. This is required for
+   * horizontally scrolling rails: transforming the real controls produces clipped nubs
+   * and labels that appear detached from their buttons.
+   */
+  preserveItemGeometry?: boolean;
   /** 'in' plays the emergence, 'out' plays it backwards. */
   direction?: 'in' | 'out';
   /** The control the chain grows out of — it goes liquid for that moment. */
@@ -139,6 +149,7 @@ export const runGooey = (options: GooeyRunOptions): (() => void) => {
     orderDelays,
     durationMs,
     chain,
+    preserveItemGeometry = false,
     direction = 'in',
     fromEl = null,
     fromRect: explicitFromRect = null,
@@ -163,6 +174,7 @@ export const runGooey = (options: GooeyRunOptions): (() => void) => {
         GOOEY_CLASS.up,
         GOOEY_CLASS.measure,
         GOOEY_CLASS.still,
+        GOOEY_CLASS.fixed,
       );
       clearStartVars(item);
     });
@@ -182,7 +194,13 @@ export const runGooey = (options: GooeyRunOptions): (() => void) => {
   const restoreChrome = (element: HTMLElement) => {
     element.classList.remove(GOOEY_CLASS.bare);
     window.requestAnimationFrame(() => {
-      element.classList.remove(GOOEY_CLASS.item, GOOEY_CLASS.up, GOOEY_CLASS.still, GOOEY_CLASS.measure);
+      element.classList.remove(
+        GOOEY_CLASS.item,
+        GOOEY_CLASS.up,
+        GOOEY_CLASS.still,
+        GOOEY_CLASS.measure,
+        GOOEY_CLASS.fixed,
+      );
       clearStartVars(element);
     });
   };
@@ -211,6 +229,7 @@ export const runGooey = (options: GooeyRunOptions): (() => void) => {
   items.forEach((item) => {
     item.classList.remove(GOOEY_CLASS.up);
     item.classList.add(GOOEY_CLASS.item, GOOEY_CLASS.bare, GOOEY_CLASS.measure, GOOEY_CLASS.still);
+    item.classList.toggle(GOOEY_CLASS.fixed, preserveItemGeometry);
   });
   const skinRect = skin.getBoundingClientRect();
   const rects = items.map((item) => item.getBoundingClientRect());
@@ -392,8 +411,11 @@ export const TAB_REVEAL = { durationMs: 600, staggerMs: 80 } as const;
 export const TAB_CHAIN = { durationMs: 520, staggerMs: 170 } as const;
 /** Agent actions: only 3–4 buttons, so the chain can afford to be deliberate. */
 export const AGENT_CHAIN = { durationMs: 440, staggerMs: 190 } as const;
-/** Model chips: up to a dozen, so the chain has to move. */
-export const MODEL_CHAIN = { durationMs: 340, staggerMs: 110 } as const;
+/**
+ * Model chips: the duplicate skin still chains right-to-left, but the real controls do
+ * not move. Keep the cascade compact so a twelve-model provider completes in < 0.9 s.
+ */
+export const MODEL_CHAIN = { durationMs: 280, staggerMs: 42 } as const;
 
 interface ChainTiming { durationMs: number; staggerMs: number }
 
