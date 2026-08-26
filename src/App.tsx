@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 
 import Home from "./pages/Home";
 import Home2 from "./pages/Home2";
@@ -80,6 +80,20 @@ const isXenoChatDomain = typeof window !== 'undefined' &&
   (window.location.hostname === 'xeno-chat.com' ||
    window.location.hostname === 'www.xeno-chat.com' ||
    window.location.hostname === 'chat.xeno-studio.com');
+
+/**
+ * Keep the compact conversation URLs shareable without asking OverviewPage's
+ * nested router to match a path outside `/overview/*`. A same-page chat can
+ * safely use `/c/:id`, but a hard reload must first enter the canonical route
+ * so the conversation component mounts and hydrates the persisted messages.
+ */
+const ConversationRouteRedirect: React.FC = () => {
+  const { conversationId } = useParams<{ conversationId?: string }>();
+  const target = conversationId
+    ? `/overview/chat/llm/${encodeURIComponent(conversationId)}`
+    : '/overview/chat/llm';
+  return <Navigate to={target} replace />;
+};
 
 function App() {
   // Fix iOS Safari 100vh issue
@@ -259,16 +273,8 @@ function App() {
             } />
 
             {/* Direct Conversation and Sub-surface Routes */}
-            <Route path="/c/:conversationId" element={
-              <ProtectedRoute>
-                <OverviewPage />
-              </ProtectedRoute>
-            } />
-            <Route path="/c" element={
-              <ProtectedRoute>
-                <OverviewPage />
-              </ProtectedRoute>
-            } />
+            <Route path="/c/:conversationId" element={<ConversationRouteRedirect />} />
+            <Route path="/c" element={<ConversationRouteRedirect />} />
             <Route path="/projects" element={<Navigate to="/overview/chat/projects" replace />} />
             <Route path="/scheduled" element={<Navigate to="/overview/chat/scheduled" replace />} />
             <Route path="/artifacts" element={<Navigate to="/overview/chat/artifacts" replace />} />
@@ -281,9 +287,7 @@ function App() {
             {/* /chat -> the overview chat */}
             <Route path="/chat" element={<Navigate to="/overview/chat/llm" replace />} />
             <Route path="/chat/c/:conversationId" element={
-              <ProtectedRoute>
-                <OverviewPage />
-              </ProtectedRoute>
+              <ConversationRouteRedirect />
             } />
 
             {/* Test comparison routes for user evaluation */}
