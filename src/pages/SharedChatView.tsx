@@ -15,25 +15,14 @@ import {
   ShieldCheck,
   AlertCircle
 } from 'lucide-react';
-import { chatService } from '../services/chatService';
-
-interface SharedMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  model_id?: string;
-  thinking?: string;
-  has_thinking?: boolean;
-  attachments?: any[];
-  created_at: string;
-}
+import { chatService, type ChatMessage } from '../services/chatService';
 
 interface SharedConversation {
   id: string;
   title: string;
   model_id?: string;
   created_at: string;
-  messages: SharedMessage[];
+  messages: ChatMessage[];
 }
 
 export const SharedChatView: React.FC = () => {
@@ -201,11 +190,12 @@ export const SharedChatView: React.FC = () => {
         <div className="space-y-8">
           {conversation.messages.map((msg, index) => {
             const isUser = msg.role === 'user';
-            const isExpanded = expandedThinking[msg.id] ?? false;
+            const messageKey = msg.id || `${index}`;
+            const isExpanded = expandedThinking[messageKey] ?? false;
 
             return (
               <div
-                key={msg.id || index}
+                key={messageKey}
                 className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} group`}
               >
                 <div className="flex items-center gap-2 mb-1.5 px-1">
@@ -230,7 +220,7 @@ export const SharedChatView: React.FC = () => {
                   {!isUser && (msg.thinking || msg.has_thinking) && (
                     <div className="mb-4 rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
                       <button
-                        onClick={() => toggleThinking(msg.id)}
+                        onClick={() => toggleThinking(messageKey)}
                         className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs text-white/60 hover:bg-white/[0.02] transition-colors"
                       >
                         <div className="flex items-center gap-2 font-mono text-[11px]">
@@ -255,16 +245,16 @@ export const SharedChatView: React.FC = () => {
                   {/* Copy Button */}
                   <div className="mt-4 pt-3 border-t border-white/[0.04] flex items-center justify-end">
                     <button
-                      onClick={() => handleCopyText(msg.content, msg.id || `${index}`)}
+                      onClick={() => handleCopyText(msg.content, messageKey)}
                       className="opacity-0 group-hover:opacity-100 focus:opacity-100 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/80 transition-all"
                       title="Copy message"
                     >
-                      {copiedId === (msg.id || `${index}`) ? (
+                      {copiedId === messageKey ? (
                         <Check className="w-3.5 h-3.5 text-emerald-400" />
                       ) : (
                         <Copy className="w-3.5 h-3.5" />
                       )}
-                      <span>{copiedId === (msg.id || `${index}`) ? 'Copied' : 'Copy'}</span>
+                      <span>{copiedId === messageKey ? 'Copied' : 'Copy'}</span>
                     </button>
                   </div>
                 </div>
