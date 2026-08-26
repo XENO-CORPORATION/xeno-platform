@@ -26,6 +26,14 @@ export type ListArtifactsInput = {
   sort?: 'updated' | 'created' | 'name';
 };
 
+export type CreateArtifactInput = {
+  title: string;
+  kind: ArtifactKind;
+  content: string;
+  conversationId?: string;
+  conversationTitle?: string;
+};
+
 const day = 24 * 60 * 60 * 1000;
 const now = Date.now();
 
@@ -33,6 +41,13 @@ import { chatService } from '@/services/chatService';
 
 /** Seed store — session-level fallback until backend responds. */
 let artifactsStore: ChatArtifact[] = [];
+
+const randomId = (): string => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `art-${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`;
+  }
+  return `art-${Date.now().toString(36)}`;
+};
 
 const matchesQuery = (artifact: ChatArtifact, query: string): boolean => {
   const q = query.trim().toLowerCase();
@@ -127,6 +142,64 @@ export const getArtifact = async (id: string): Promise<ChatArtifact | null> => {
  */
 export const getArtifactShareUrl = (id: string): string =>
   `https://share.xenostudio.ai/a/${id}`;
+
+/** Backend: POST /api/chat/artifacts — server id when authenticated. */
+export const createArtifact = async (
+  input: CreateArtifactInput,
+): Promise<ChatArtifact> => {
+  const stamp = Date.now();
+  const title = input.title.trim() || 'Untitled artifact';
+  const content = input.content;
+  const previewText = content.trim().slice(0, 160);
+  const conversationId = input.conversationId ?? '';
+  const conversationTitle = input.conversationTitle ?? 'Untitled Chat';
+
+  try {
+    if (chatService.isAuthenticated()) {
+      const serverRow = await chatService.createArtifact({
+        title,
+        kind: input.kind,
+        content,
+        preview_text: previewText,
+        conversation_id: conversationId || undefined,
+      });
+      if (serverRow) {
+        const artifact: ChatArtifact = {
+          id: serverRow.id,
+          title: serverRow.title,
+          kind: (serverRow.kind as ArtifactKind) || input.kind,
+          conversationId: serverRow.conversation_id || conversationId,
+          conversationTitle:
+            serverRow.conversation_title || conversationTitle,
+          previewText: serverRow.preview_text || previewText,
+          createdAt: serverRow.created_at
+            ? new Date(serverRow.created_at).getTime()
+            : stamp,
+          updatedAt: serverRow.updated_at
+            ? new Date(serverRow.updated_at).getTime()
+            : stamp,
+        };
+        artifactsStore = [artifact, ...artifactsStore];
+        return artifact;
+      }
+    }
+  } catch (err) {
+    console.warn('[chatArtifacts] Failed to create artifact on backend:', err);
+  }
+
+  const artifact: ChatArtifact = {
+    id: randomId(),
+    title,
+    kind: input.kind,
+    conversationId,
+    conversationTitle,
+    previewText,
+    createdAt: stamp,
+    updatedAt: stamp,
+  };
+  artifactsStore = [artifact, ...artifactsStore];
+  return artifact;
+};
 
 /** Delete artifact from database and local store. */
 export const deleteArtifact = async (id: string): Promise<void> => {

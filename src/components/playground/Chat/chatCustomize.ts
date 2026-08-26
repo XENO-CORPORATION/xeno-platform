@@ -92,6 +92,13 @@ let memoryStore: MemorySettings = {
 const matches = (haystack: string, query: string): boolean =>
   haystack.toLowerCase().includes(query.trim().toLowerCase());
 
+const randomId = (prefix: string): string => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `${prefix}-${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`;
+  }
+  return `${prefix}-${Date.now().toString(36)}`;
+};
+
 export type ListQueryInput = {
   query?: string;
   /** Skills only: null = New chat draft; string = that conversation. */
@@ -101,8 +108,6 @@ export type ListQueryInput = {
 export type ListConnectorsInput = ListQueryInput & {
   status?: ConnectorStatus | 'all';
 };
-
-import { chatService } from '@/services/chatService';
 
 /**
  * Lists personas for the Customize table.
@@ -369,6 +374,63 @@ export const setMemoryGenerateFromChats = async (
     updatedAt: Date.now(),
   };
   return getMemorySettings();
+};
+
+/** Backend: POST /api/chat/customize/memory — server id when authenticated. */
+export const addMemoryEntry = async (text: string): Promise<MemorySettings> => {
+  const content = text.trim();
+  if (!content) {
+    return {
+      generateFromChats: memoryStore.generateFromChats,
+      entries: [...memoryStore.entries],
+      updatedAt: memoryStore.updatedAt,
+    };
+  }
+
+  const stamp = Date.now();
+
+  try {
+    if (chatService.isAuthenticated()) {
+      const serverMemory = await chatService.addMemory(content);
+      if (serverMemory) {
+        const entry: MemoryEntry = {
+          id: serverMemory.id,
+          text: serverMemory.content,
+          updatedAt: serverMemory.updated_at
+            ? new Date(serverMemory.updated_at).getTime()
+            : stamp,
+        };
+        memoryStore = {
+          ...memoryStore,
+          entries: [entry, ...memoryStore.entries],
+          updatedAt: stamp,
+        };
+        return {
+          generateFromChats: memoryStore.generateFromChats,
+          entries: [...memoryStore.entries],
+          updatedAt: memoryStore.updatedAt,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[chatCustomize] Failed to add memory on backend:', err);
+  }
+
+  const entry: MemoryEntry = {
+    id: randomId('mem'),
+    text: content,
+    updatedAt: stamp,
+  };
+  memoryStore = {
+    ...memoryStore,
+    entries: [entry, ...memoryStore.entries],
+    updatedAt: stamp,
+  };
+  return {
+    generateFromChats: memoryStore.generateFromChats,
+    entries: [...memoryStore.entries],
+    updatedAt: memoryStore.updatedAt,
+  };
 };
 
 /** Backend: DELETE /api/chat/customize/memory/:id */

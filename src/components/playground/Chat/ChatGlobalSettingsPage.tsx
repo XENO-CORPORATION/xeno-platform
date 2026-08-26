@@ -4,6 +4,7 @@ import { Button, IconButton, Switch, TextInput, useTabs } from '@xenosystem/elem
 import { Check, Settings, Trash2Decl, SearchDecl } from '@/lib/icons';
 import ChatSkillsWorkspace from './ChatSkillsWorkspace';
 import {
+  addMemoryEntry,
   deleteMemoryEntry,
   getCustomizeProfile,
   getMemorySettings,
@@ -103,6 +104,8 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
   const [plugins, setPlugins] = useState<ChatPlugin[]>([]);
   const [memoryOn, setMemoryOn] = useState(false);
   const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
+  const [memoryDraft, setMemoryDraft] = useState('');
+  const [memoryCreating, setMemoryCreating] = useState(false);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -168,6 +171,19 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
     void refreshSection(section);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section, query, connectorFilter]);
+
+  const handleAddMemory = async () => {
+    const text = memoryDraft.trim();
+    if (!text || memoryCreating) return;
+    setMemoryCreating(true);
+    try {
+      const next = await addMemoryEntry(text);
+      setMemoryEntries(next.entries);
+      setMemoryDraft('');
+    } finally {
+      setMemoryCreating(false);
+    }
+  };
 
   const handleSaveInstructions = async () => {
     if (!dirty || saving) return;
@@ -372,7 +388,7 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
               >
                 {(() => {
                   const memoryTotal =
-                    1 + Math.max(1, memoryEntries.length || 1);
+                    2 + Math.max(1, memoryEntries.length || 1);
                   return (
                     <>
                       <motion.div
@@ -411,9 +427,42 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                         />
                       </motion.div>
 
+                      <motion.div
+                        custom={{ index: 1, total: memoryTotal }}
+                        variants={staggerItemVariants}
+                        className="flex min-w-0 items-center gap-2"
+                      >
+                        <TextInput
+                          size="lg"
+                          type="text"
+                          className="min-w-0 flex-1"
+                          value={memoryDraft}
+                          onChange={(event) =>
+                            setMemoryDraft(event.target.value)
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              void handleAddMemory();
+                            }
+                          }}
+                          placeholder="New memory…"
+                          aria-label="New memory entry"
+                        />
+                        <Button
+                          variant="secondary"
+                          size="lg"
+                          className="flex-shrink-0"
+                          onClick={() => void handleAddMemory()}
+                          disabled={!memoryDraft.trim() || memoryCreating}
+                        >
+                          {memoryCreating ? 'Adding…' : 'Add'}
+                        </Button>
+                      </motion.div>
+
                       {memoryEntries.length === 0 ? (
                         <motion.p
-                          custom={{ index: 1, total: memoryTotal }}
+                          custom={{ index: 2, total: memoryTotal }}
                           variants={staggerItemVariants}
                           className="py-6 text-center text-[12.5px] text-[var(--chat-muted)]"
                         >
@@ -424,7 +473,7 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                           <motion.div
                             key={entry.id}
                             custom={{
-                              index: index + 1,
+                              index: index + 2,
                               total: memoryTotal,
                             }}
                             variants={staggerItemVariants}

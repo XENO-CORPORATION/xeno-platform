@@ -1,5 +1,14 @@
--- Migration 015: Full Scale Chat Platform Extensions
--- Adds chat_artifacts, chat_scheduled_tasks, chat_skills, chat_projects, chat_project_files, chat_user_memories
+-- UP
+-- Chat full-scale tables — artifacts, projects, files, scheduled tasks, skills, memories.
+--
+-- Moved from src/server/migrations/015_chat_full_scale.sql. That folder is not
+-- MIGRATIONS_DIR. migrationRunner.js only reads src/server/database/migrations
+-- and only keeps files matching ^(\d{14})[-_](.+)\.sql$, so the 015_ copy was
+-- a schema that existed as a file and as a service and was created nowhere.
+--
+-- Idempotent throughout: CREATE/INDEX/ADD COLUMN all use IF NOT EXISTS.
+-- The runner wraps every migration in its own transaction — no BEGIN/COMMIT
+-- here (see 20260824200000-evidence-survives-erasure.sql).
 
 -- ============================================================================
 -- 1. CHAT ARTIFACTS
