@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { workspaceFromReq, isWorkspaceMember, linkResourceToWorkspace, UUID_RE } from '../utils/workspaceContext.js';
 import { computeNextRun, executeScheduledTask } from '../workers/chatScheduledWorker.js';
-import { assertOwnedLibraryAttachments } from '../services/libraryAssets.js';
+import { assertOwnedLibraryAttachments, listLibraryItems } from '../services/libraryAssets.js';
 
 /** Local `convo-<timestamp>` ids are UI-only. Sending one to Postgres is a 500. */
 function rejectIfNotPersistedConversationId(res, conversationId) {
@@ -1182,149 +1182,8 @@ router.get('/library', async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const tab = ['all', 'images', 'files'].includes(String(req.query.tab))
-      ? String(req.query.tab)
-      : 'all';
-    const query = String(req.query.query || '').trim().slice(0, 200);
-    const sort = ['updated', 'created', 'name', 'size'].includes(String(req.query.sort))
-      ? String(req.query.sort)
-      : 'updated';
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 200);
-    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-    const orderBy = {
-      updated: 'updated_at DESC NULLS LAST, created_at DESC',
-      created: 'created_at DESC NULLS LAST',
-      name: 'name ASC, updated_at DESC NULLS LAST',
-      size: 'size_bytes DESC NULLS LAST, updated_at DESC NULLS LAST',
-    }[sort];
-
-    const sql = `
-      WITH library_items AS (
-        SELECT
-          'artifact:' || a.id::text AS id,
-          'artifact'::text AS source,
-          a.id AS source_id,
-          a.title AS name,
-          CASE WHEN a.kind = 'image' THEN 'images' ELSE 'files' END AS category,
-          a.kind AS item_type,
-          CASE a.kind
-            WHEN 'html' THEN 'text/html'
-            WHEN 'code' THEN 'text/plain'
-            WHEN 'document' THEN 'text/plain'
-            ELSE 'image/*'
-          END AS mime_type,
-          octet_length(a.content)::bigint AS size_bytes,
-          a.preview_text AS description,
-          CASE
-            WHEN a.kind = 'image' AND (a.content LIKE 'https://%' OR a.content LIKE 'http://%' OR a.content LIKE '/%')
-              THEN a.content
-            ELSE NULL
-          END AS preview_url,
-          a.conversation_id,
-          c.title AS conversation_title,
-          a.created_at,
-          a.updated_at
-        FROM chat_artifacts a
-        LEFT JOIN chat_conversations c ON c.id = a.conversation_id
-        WHERE a.user_id = $1 AND a.is_archived = FALSE
-
-        UNION ALL
-
-        SELECT
-          'file:' || f.id::text,
-          'file'::text,
-          f.id,
-          COALESCE(NULLIF(f.original_name, ''), f.filename),
-          CASE
-            WHEN COALESCE(f.mime_type, f.file_type, '') LIKE 'image/%' THEN 'images'
-            ELSE 'files'
-          END,
-          CASE
-            WHEN COALESCE(f.mime_type, f.file_type, '') LIKE 'image/%' THEN 'image'
-            WHEN COALESCE(f.mime_type, '') LIKE 'video/%' THEN 'video'
-            WHEN COALESCE(f.mime_type, '') LIKE 'audio/%' THEN 'audio'
-            ELSE 'file'
-          END,
-          COALESCE(f.mime_type, f.file_type, 'application/octet-stream'),
-          f.file_size::bigint,
-          COALESCE(f.metadata->>'description', f.metadata->>'prompt', ''),
-          CASE
-            WHEN f.storage_type = 'platform-upload'
-              AND COALESCE(f.mime_type, f.file_type, '') LIKE 'image/%'
-              THEN '/api/library/assets/' || f.id::text || '/content'
-            ELSE NULL
-          END,
-          NULL::uuid,
-          NULL::text,
-          f.created_at AT TIME ZONE 'UTC',
-          COALESCE(f.last_used_at, f.created_at) AT TIME ZONE 'UTC'
-        FROM user_files f
-        WHERE f.user_id = $1 AND f.deleted_at IS NULL
-
-        UNION ALL
-
-        SELECT
-          'generation:' || g.id::text || ':' || generated.ordinality::text,
-          'generation'::text,
-          g.id,
-          COALESCE(NULLIF(left(g.prompt, 96), ''), 'Generated image'),
-          'images'::text,
-          'image'::text,
-          'image/*'::text,
-          NULL::bigint,
-          g.prompt,
-          CASE
-            WHEN generated.url LIKE 'https://%' OR generated.url LIKE 'http://%' OR generated.url LIKE '/%'
-              THEN generated.url
-            ELSE NULL
-          END,
-          NULL::uuid,
-          NULL::text,
-          g.created_at AT TIME ZONE 'UTC',
-          g.created_at AT TIME ZONE 'UTC'
-        FROM image_generations g
-        CROSS JOIN LATERAL jsonb_array_elements_text(
-          CASE WHEN jsonb_typeof(g.image_urls) = 'array' THEN g.image_urls ELSE '[]'::jsonb END
-        ) WITH ORDINALITY AS generated(url, ordinality)
-        WHERE g.user_id = $1
-
-        UNION ALL
-
-        SELECT
-          'image_asset:' || ia.id::text,
-          'image_asset'::text,
-          ia.id,
-          ia.name,
-          'images'::text,
-          'image'::text,
-          COALESCE(NULLIF(ia.format, ''), 'image/*'),
-          ia.file_size::bigint,
-          COALESCE(ia.prompt, ''),
-          CASE
-            WHEN COALESCE(ia.thumbnail_url, ia.file_url) LIKE 'https://%'
-              OR COALESCE(ia.thumbnail_url, ia.file_url) LIKE 'http://%'
-              OR COALESCE(ia.thumbnail_url, ia.file_url) LIKE '/%'
-              THEN COALESCE(ia.thumbnail_url, ia.file_url)
-            ELSE NULL
-          END,
-          NULL::uuid,
-          NULL::text,
-          ia.created_at AT TIME ZONE 'UTC',
-          ia.created_at AT TIME ZONE 'UTC'
-        FROM image_assets ia
-        WHERE ia.user_id = $1
-      )
-      SELECT *
-      FROM library_items
-      WHERE ($2 = 'all' OR category = $2)
-        AND ($3 = '' OR name ILIKE '%' || $3 || '%' OR description ILIKE '%' || $3 || '%')
-      ORDER BY ${orderBy}
-      LIMIT $4 OFFSET $5
-    `;
-
-    const { rows } = await req.db.query(sql, [userId, tab, query, limit, offset]);
-    res.json({ success: true, items: rows, tab, sort, limit, offset });
+    const result = await listLibraryItems(req.db, userId, req.query);
+    res.json({ success: true, ...result });
   } catch (error) {
     console.error('Failed to list account library:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
