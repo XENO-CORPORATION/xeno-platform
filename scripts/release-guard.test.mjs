@@ -37,6 +37,7 @@ const PATTERNS = loadPatterns();
 const FAKE_XENO_KEY = ['xeno-', 'deadbeef'.repeat(6)].join('');       // xeno- + 48 hex
 const FAKE_ANTHROPIC = ['sk-', 'ant-', 'A'.repeat(40)].join('');
 const FAKE_AWS = ['AKIA', 'Z'.repeat(16)].join('');
+const FAKE_RESEND = ['re_', 'Ab1_', 'Cd2E'.repeat(8)].join('');
 
 function tmp(prefix = 'guard-') {
   const d = mkdtempSync(join(tmpdir(), prefix));
@@ -189,6 +190,29 @@ test('a finding is REDACTED — the secret is never returned', async () => {
     assert.match(f.preview, /^.{4}…$/);
     assert.match(f.fingerprint, /^[a-f0-9]{8}$/);
   }
+});
+
+test('a Resend-shaped token is detected while an exact audited binary-symbol fingerprint is ignored', () => {
+  assert.ok(
+    scanBuffer(Buffer.from(`token=${FAKE_RESEND}`), PATTERNS)
+      .some((finding) => finding.patternId === 'resend-key'),
+    'the audited exemption must not weaken ordinary Resend-key detection',
+  );
+
+  const nativeSymbol = ['re_', 'electron_native_symbol_1_with_underscores_and_tail'].join('');
+  const ignoredHash = createHash('sha256').update(nativeSymbol).digest('hex');
+  const patterns = [{
+    id: 'resend-key',
+    name: 'Resend API key',
+    rx: /\bre_[A-Za-z0-9_\-]{24,}\b/g,
+    ignoreSha256: [ignoredHash],
+  }];
+  assert.deepEqual(scanBuffer(Buffer.from(nativeSymbol), patterns), []);
+  assert.equal(
+    scanBuffer(Buffer.from(`${nativeSymbol}x`), patterns).length,
+    1,
+    'the exemption is exact, not a prefix or pattern bypass',
+  );
 });
 
 test('a clean ZIP passes the scan', async () => {
