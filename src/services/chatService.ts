@@ -59,6 +59,7 @@ export interface Conversation {
   last_message_at?: string;
   is_archived?: boolean;
   message_count?: number;
+  project_id?: string | null;
   messages?: ChatMessage[];
   // Legacy fields for compatibility
   timestamp?: number;
@@ -185,6 +186,7 @@ export const chatService = {
     system_prompt?: string;
     persona_id?: string;
     interface_id?: string;
+    project_id?: string;
   }): Promise<Conversation | null> {
     try {
       const response = await fetch(`${API_BASE}/conversations`, {

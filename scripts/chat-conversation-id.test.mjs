@@ -188,6 +188,41 @@ test('chat auth exposes the exact shared-conversation GET but not share mutation
   );
 });
 
+test('full-scale writes authorize every supplied foreign id before inserting', () => {
+  const helperStart = ROUTES.indexOf('async function rejectUnownedChatReferences');
+  const helperEnd = ROUTES.indexOf('const router = express.Router()', helperStart);
+  const helper = ROUTES.slice(helperStart, helperEnd);
+  assert.match(helper, /chat_conversations[\s\S]*user_id\s*=\s*\$2/, 'conversation references need ownership');
+  assert.match(helper, /chat_messages[\s\S]*user_id\s*=\s*\$2/, 'message references need ownership');
+  assert.match(helper, /chat_projects[\s\S]*user_id\s*=\s*\$2/, 'project references need ownership');
+
+  for (const pathLit of [
+    '/conversations',
+    '/artifacts',
+    '/scheduled',
+    '/skills',
+    '/projects/:id/files',
+    '/memories',
+  ]) {
+    const body = extractRoute(ROUTES, 'post', pathLit);
+    assert.ok(body, `POST ${pathLit} is missing`);
+    const guardAt = body.indexOf('rejectUnownedChatReferences');
+    const insertAt = body.indexOf('INSERT INTO');
+    assert.ok(guardAt !== -1, `POST ${pathLit} does not authorize its foreign references`);
+    assert.ok(insertAt === -1 || guardAt < insertAt, `POST ${pathLit} authorizes after inserting`);
+  }
+});
+
+test('project conversations cross the client and server persistence boundary', () => {
+  const createRoute = extractRoute(ROUTES, 'post', '/conversations');
+  assert.match(createRoute, /project_id/, 'conversation create route must accept project_id');
+  assert.match(createRoute, /INSERT INTO chat_conversations[\s\S]*project_id/, 'project_id must be persisted');
+  const createStart = SERVICE.indexOf('async createConversation(');
+  const updateStart = SERVICE.indexOf('async updateConversation(');
+  const createClient = SERVICE.slice(createStart, updateStart);
+  assert.match(createClient, /project_id\?: string/, 'chat service must carry project_id');
+});
+
 test('client conversation-id regex matches the server UUID_RE source', () => {
   const clientRe = SERVICE.match(/export const PERSISTED_CONVERSATION_ID_RE =\s*(\/[^/\n]+\/i)/);
   const serverRe = CONTEXT.match(/export const UUID_RE = (\/[^/\n]+\/i)/);

@@ -14,6 +14,62 @@ function rejectIfNotPersistedConversationId(res, conversationId) {
   return true;
 }
 
+/**
+ * Optional foreign ids on the full-scale chat surfaces are an authorization
+ * boundary, not just foreign keys. PostgreSQL proves that a row exists; these
+ * checks prove that it belongs to the authenticated user before it can be linked.
+ */
+async function rejectUnownedChatReferences(req, res, {
+  conversationId = null,
+  messageId = null,
+  projectId = null,
+} = {}) {
+  for (const [kind, id] of [['conversation', conversationId], ['message', messageId], ['project', projectId]]) {
+    if (id && !UUID_RE.test(id)) {
+      res.status(400).json({ success: false, error: `${kind} id must be a UUID`, code: 'invalid_reference_id' });
+      return true;
+    }
+  }
+
+  if (conversationId) {
+    const owned = await req.db.query(
+      `SELECT 1 FROM chat_conversations
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+      [conversationId, req.user.id],
+    );
+    if (owned.rows.length === 0) {
+      res.status(404).json({ success: false, error: 'Referenced resource not found', code: 'referenced_resource_not_found' });
+      return true;
+    }
+  }
+
+  if (messageId) {
+    const owned = await req.db.query(
+      `SELECT 1 FROM chat_messages
+       WHERE id = $1 AND user_id = $2
+         AND ($3::uuid IS NULL OR conversation_id = $3)`,
+      [messageId, req.user.id, conversationId],
+    );
+    if (owned.rows.length === 0) {
+      res.status(404).json({ success: false, error: 'Referenced resource not found', code: 'referenced_resource_not_found' });
+      return true;
+    }
+  }
+
+  if (projectId) {
+    const owned = await req.db.query(
+      `SELECT 1 FROM chat_projects WHERE id = $1 AND user_id = $2 AND is_archived = FALSE`,
+      [projectId, req.user.id],
+    );
+    if (owned.rows.length === 0) {
+      res.status(404).json({ success: false, error: 'Referenced resource not found', code: 'referenced_resource_not_found' });
+      return true;
+    }
+  }
+
+  return false;
+}
+
 const router = express.Router();
 
 // ============================================
@@ -231,7 +287,9 @@ router.post('/conversations', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const { title = 'New Chat', model_id, system_prompt, persona_id, interface_id = 'playground' } = req.body;
+    const { title = 'New Chat', model_id, system_prompt, persona_id, interface_id = 'playground', project_id } = req.body;
+
+    if (await rejectUnownedChatReferences(req, res, { projectId: project_id })) return;
 
     // Workspace tenancy (Phase 5): stamp workspace_id + write the ReBAC parent tuple
     // when the request carries an x-xeno-workspace the caller belongs to.
@@ -239,10 +297,10 @@ router.post('/conversations', async (req, res) => {
     const wsId = (wsCtx && await isWorkspaceMember(req.db, wsCtx, userId)) ? wsCtx : null;
 
     const result = await req.db.query(
-      `INSERT INTO chat_conversations (user_id, title, model_id, system_prompt, persona_id, interface_id, workspace_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO chat_conversations (user_id, title, model_id, system_prompt, persona_id, interface_id, workspace_id, project_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [userId, title, model_id, system_prompt, persona_id, interface_id, wsId]
+      [userId, title, model_id, system_prompt, persona_id, interface_id, wsId, project_id || null]
     );
     if (wsId) {
       await linkResourceToWorkspace(req.db, { workspaceId: wsId, userId, objectType: 'conversation', objectId: result.rows[0].id });
@@ -1162,6 +1220,10 @@ router.post('/artifacts', async (req, res) => {
     if (!title || !kind || !content) {
       return res.status(400).json({ success: false, error: 'title, kind, and content are required' });
     }
+    if (await rejectUnownedChatReferences(req, res, {
+      conversationId: conversation_id,
+      messageId: message_id,
+    })) return;
 
     const preview = preview_text || content.slice(0, 160).replace(/[\r\n]+/g, ' ');
 
@@ -1247,6 +1309,10 @@ router.post('/scheduled', async (req, res) => {
     if (!title || !prompt) {
       return res.status(400).json({ success: false, error: 'title and prompt are required' });
     }
+    if (await rejectUnownedChatReferences(req, res, {
+      conversationId: conversation_id,
+      projectId: project_id,
+    })) return;
 
     const label = cadence_label || (cadence === 'daily' ? 'Every day' : cadence === 'weekly' ? 'Every week' : 'Once');
     const nextRun = computeNextRun(cadence, new Date());
@@ -1377,6 +1443,7 @@ router.post('/skills', async (req, res) => {
 
     const { name, summary, body, author = 'You', source = 'created', visibility = 'global', conversation_id, category = 'general' } = req.body;
     if (!name || !body) return res.status(400).json({ success: false, error: 'name and body are required' });
+    if (await rejectUnownedChatReferences(req, res, { conversationId: conversation_id })) return;
 
     const { rows } = await req.db.query(
       `INSERT INTO chat_skills (
@@ -1568,6 +1635,7 @@ router.post('/projects/:id/files', async (req, res) => {
     if (!name || !content_text) {
       return res.status(400).json({ success: false, error: 'File name and text content are required' });
     }
+    if (await rejectUnownedChatReferences(req, res, { projectId })) return;
 
     const { rows } = await req.db.query(
       `INSERT INTO chat_project_files (
@@ -1629,6 +1697,7 @@ router.post('/memories', async (req, res) => {
 
     const { content, source_conversation_id } = req.body;
     if (!content) return res.status(400).json({ success: false, error: 'Content is required' });
+    if (await rejectUnownedChatReferences(req, res, { conversationId: source_conversation_id })) return;
 
     const { rows } = await req.db.query(
       `INSERT INTO chat_user_memories (user_id, content, source_conversation_id)
