@@ -60,7 +60,7 @@ const PrivacyPricingSection: React.FC = () => {
   }), [billing]);
 
   return (
-    <section className="page-gutter border-t border-white/[0.06] bg-[#060606] py-[clamp(80px,11vh,150px)]">
+    <section id="pricing" className="page-gutter scroll-mt-14 border-t border-white/[0.06] bg-[#060606] py-[clamp(80px,11vh,150px)]">
       {/* ── Privacy card ─────────────────────────────────────────── */}
       <Reveal>
         <div className="relative mx-auto overflow-hidden rounded-[20px] border border-white/[0.05] bg-[#101010] px-[clamp(24px,2.6vw,56px)] py-[clamp(32px,4.4vh,60px)]">

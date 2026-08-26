@@ -12,7 +12,7 @@ const steps = [
 
 const FlowSection: React.FC = () => {
   return (
-    <section className="page-gutter relative border-t border-white/[0.06] bg-[#060606] py-[clamp(80px,11vh,150px)]">
+    <section id="create" className="page-gutter relative scroll-mt-14 border-t border-white/[0.06] bg-[#060606] py-[clamp(80px,11vh,150px)]">
       <SectionHeading
         eyebrow="From idea to production"
         title={<>One flow.<br className="sm:hidden" /> Infinite possibilities.</>}

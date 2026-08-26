@@ -71,7 +71,7 @@ const personas: Persona[] = [
 
 const UseCasesShowcase: React.FC = () => {
   return (
-    <section className="page-gutter border-t border-white/[0.06] bg-[#060606] py-[clamp(80px,11vh,150px)]">
+    <section id="innovate" className="page-gutter scroll-mt-14 border-t border-white/[0.06] bg-[#060606] py-[clamp(80px,11vh,150px)]">
       <SectionHeading
         eyebrow="Made for makers"
         title="Built for every kind of creator."

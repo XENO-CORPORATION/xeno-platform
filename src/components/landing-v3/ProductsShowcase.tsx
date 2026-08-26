@@ -286,7 +286,7 @@ const ProductsShowcase: React.FC = () => {
     setOpen((prev) => prev.map((v, i) => (i === ci ? name : v)));
 
   return (
-    <section className="page-gutter relative bg-[#060606] pt-[clamp(80px,11vh,150px)] pb-[clamp(64px,9vh,124px)]">
+    <section id="explore" className="page-gutter relative scroll-mt-14 bg-[#060606] pt-[clamp(80px,11vh,150px)] pb-[clamp(64px,9vh,124px)]">
       <SectionHeading
         eyebrow="The suite"
         title={<>Everything you need to create. Connected.</>}
