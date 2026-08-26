@@ -106,6 +106,30 @@ for d in src scripts nginx; do
 done
 log "normalized line endings (text only)"
 
+# The backend runs as appuser (uid/gid 1001), but these paths are bind-mounted
+# from the host. Image-layer chown in Dockerfile.backend cannot affect them.
+# `tar xf` also reapplies archive ownership to tracked directories on every
+# deploy, so ownership must be repaired after extraction and before the swap.
+# Keep the list identical to the writable backend bind mounts in compose; the
+# read-only backups mount and docker socket are deliberately excluded.
+if [ "$SERVICE" = "backend" ]; then
+  WRITABLE_MOUNTS=(
+    src/server/uploads
+    src/server/sam2-uploads
+    src/server/storage
+    conversions
+    storage/videos
+    storage/thumbnails
+    storage/assets
+  )
+  for mount_path in "${WRITABLE_MOUNTS[@]}"; do
+    install -d -m 2770 -o 1001 -g 1001 "$mount_path"
+    chown -R 1001:1001 "$mount_path"
+    chmod 2770 "$mount_path"
+  done
+  log "prepared ${#WRITABLE_MOUNTS[@]} writable backend bind mounts for uid/gid 1001"
+fi
+
 # --- 3. Tag current image as :rollback (last-good) -------------------------
 if docker image inspect "$IMAGE:latest" >/dev/null 2>&1; then
   PREV_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE:latest")"
