@@ -22,6 +22,7 @@ const page = read('src', 'components', 'playground', 'Chat', 'ChatLibraryPage.ts
 const chat = read('src', 'components', 'playground', 'Chat', 'ChatWithLLM.tsx');
 const image = read('src', 'components', 'library', 'LibraryAssetImage.tsx');
 const viewer = read('src', 'components', 'library', 'LibraryAssetViewer.tsx');
+const styles = read('src', 'index.css');
 const app = read('src', 'App.tsx');
 
 test('account Library aggregates every live account-owned chat/media store', () => {
@@ -123,6 +124,7 @@ test('Library viewer is a shell-isolated portal with bounded, honest preview sta
   assert.match(image, /data-library-image-state=\{state\}/);
   assert.match(image, /state !== 'ready' \|\| !url/);
   assert.doesNotMatch(image, /src=\{url \|\| undefined\}/);
+  assert.match(styles, /data-library-viewer-open[\s\S]*body > \*:not\(\[data-library-asset-viewer='true'\]\)/);
 });
 
 test('legacy artifacts paths remain a compatibility boundary', () => {
