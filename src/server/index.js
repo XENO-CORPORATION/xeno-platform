@@ -622,9 +622,13 @@ console.log('🎨 Image Studio routes integrated: /api/image/*');
 // Create a conditional auth middleware that skips auth for public paths
 const chatAuthMiddleware = (req, res, next) => {
   console.log('[ChatAuth] Path:', req.path, 'Original URL:', req.originalUrl);
-  // Skip auth for init endpoint only (generate requires auth to prevent abuse)
+  // Shared conversation reads are deliberately public: the 256-bit share token is
+  // the bearer capability. Accepting a share remains authenticated, as do all
+  // mutation routes. Keep this method + exact-path check narrow so
+  // /share/:token/accept never inherits the public exemption.
   const publicPaths = ['/init'];
-  if (publicPaths.some(path => req.path === path || req.path.startsWith(path))) {
+  const isPublicShareRead = req.method === 'GET' && /^\/share\/[^/]+$/.test(req.path);
+  if (publicPaths.some(path => req.path === path || req.path.startsWith(path)) || isPublicShareRead) {
     console.log('[ChatAuth] Skipping auth for public path:', req.path);
     return next();
   }

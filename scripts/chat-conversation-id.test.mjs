@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ROUTES = readFileSync(join(ROOT, 'src', 'server', 'routes', 'chatRoutes.js'), 'utf8');
+const SERVER = readFileSync(join(ROOT, 'src', 'server', 'index.js'), 'utf8');
 const SERVICE = readFileSync(join(ROOT, 'src', 'services', 'chatService.ts'), 'utf8');
 const CONTEXT = readFileSync(join(ROOT, 'src', 'server', 'utils', 'workspaceContext.js'), 'utf8');
 const codeOnly = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -161,6 +162,22 @@ test('public share lookup uses the production users.display_name column', () => 
     body,
     /u\.displayname\b/i,
     'users.displayname does not exist in the production schema and makes valid shares return 500',
+  );
+});
+
+test('chat auth exposes the exact shared-conversation GET but not share mutations', () => {
+  const middleware = extractFrom(SERVER, 'const chatAuthMiddleware');
+  assert.match(middleware, /req\.method\s*===\s*'GET'/, 'public share exemption must be GET-only');
+  assert.match(
+    middleware,
+    /\^\\\/share\\\/\[\^\/\]\+\$/,
+    'public share exemption must match exactly /share/:token',
+  );
+  assert.match(middleware, /\|\|\s*isPublicShareRead/, 'public share read must reach next()');
+  assert.doesNotMatch(
+    middleware,
+    /publicPaths\s*=\s*\[[^\]]*share/,
+    'share must not be a prefix exemption or /share/:token/accept would become public',
   );
 });
 
