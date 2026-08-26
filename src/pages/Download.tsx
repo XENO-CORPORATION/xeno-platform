@@ -214,7 +214,7 @@ function DownloadPage() {
   }, []);
 
   const latest = releases.find((r) => r.latest) || releases[0];
-  const handleGetStarted = () => navigate('/auth');
+  const handleGetStarted = () => navigate('/login');
 
   const scrollToVersions = () => {
     document.getElementById('versions')?.scrollIntoView({ behavior: 'smooth' });

@@ -101,7 +101,7 @@ export const SharedChatView: React.FC = () => {
     if (chatService.isAuthenticated()) {
       navigate('/overview/chat/llm');
     } else {
-      navigate(`/auth?redirect=${encodeURIComponent(window.location.pathname)}`);
+      navigate(`/login?returnUrl=${encodeURIComponent(window.location.pathname)}`);
     }
   };
 

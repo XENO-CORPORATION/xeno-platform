@@ -65,7 +65,7 @@ export default function BlogPost() {
 
   return (
     <div className="min-h-screen bg-[#08080a] text-white font-['Inter',sans-serif] antialiased">
-      <Header onGetStarted={() => navigate('/auth')} visible={true} />
+      <Header onGetStarted={() => navigate('/login')} visible={true} />
 
       <main className="pt-[46px]">
         <div className="max-w-3xl mx-auto px-6 pt-16 pb-24">

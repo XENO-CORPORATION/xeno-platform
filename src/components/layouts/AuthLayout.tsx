@@ -56,7 +56,7 @@ const AuthLayout = () => {
 
       <footer className="shrink-0 flex items-center justify-center gap-6 px-6 py-5 border-t border-white/[0.04]">
         <p className="text-xs text-white/25">© 2026 Xeno</p>
-        {[['/help', 'Help'], ['/contact', 'Contact'], ['/auth', 'Sign In']].map(([to, label]) => (
+        {[['/help', 'Help'], ['/contact', 'Contact'], ['/login', 'Sign In']].map(([to, label]) => (
           <Link
             key={to}
             to={to}

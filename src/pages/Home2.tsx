@@ -10,7 +10,7 @@ function Home2() {
   const navigate = useNavigate();
 
   const handleGetStarted = () => {
-    navigate('/auth');
+    navigate('/login');
   };
 
   return (

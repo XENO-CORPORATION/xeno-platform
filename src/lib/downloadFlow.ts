@@ -189,7 +189,7 @@ export async function beginDownload(slug: string, os: string, opts: {
     if (ok) { opts.onState?.('ready'); return 'ready'; }
     opts.onState?.('signin');
     window.location.assign(
-      `/auth?returnUrl=${encodeURIComponent(`/product/${slug}`)}`,
+      `/login?returnUrl=${encodeURIComponent(`/product/${slug}`)}`,
     );
     return 'signin';
   }

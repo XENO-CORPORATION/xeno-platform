@@ -114,7 +114,7 @@ const ApiReference: React.FC = () => (
     </Section>
 
     <CTA
-      href="/auth"
+      href="/signup"
       label="Get an API key"
       title="Ready to build?"
       desc="Create your account, grab a key from Settings, and make your first call in minutes."

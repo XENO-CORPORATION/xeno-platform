@@ -332,7 +332,7 @@ export default function ExtensionDownloadPage() {
     };
   }, []);
 
-  const handleGetStarted = () => navigate('/auth');
+  const handleGetStarted = () => navigate('/login');
   const stableTarget = getInstallTarget(data, selectedBrowser, 'stable');
   const stableRelease = data?.channels?.stable || null;
 

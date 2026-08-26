@@ -112,7 +112,7 @@ export const PRICING_TIERS: PricingTier[] = [
     ],
     note: 'No card. Includes the in-house API on a fair-use daily cap. Installing an app requires a plan.',
     cta: 'Create account',
-    href: '/auth',
+    href: '/signup',
   },
   {
     id: 'pro',
@@ -133,7 +133,7 @@ export const PRICING_TIERS: PricingTier[] = [
     ],
     note: 'Founding price €24/mo — locked for you as long as you stay. List price rises to €30. Annual billing = 2 months free.',
     cta: 'Go Pro',
-    href: '/auth',
+    href: '/signup',
     featured: true,
   },
   {
@@ -155,7 +155,7 @@ export const PRICING_TIERS: PricingTier[] = [
     ],
     note: 'Priced per seat, minimum 2 seats.',
     cta: 'Start a team',
-    href: '/auth',
+    href: '/signup',
   },
   {
     id: 'enterprise',

@@ -223,7 +223,7 @@ const DownloadResume: React.FC = () => {
 
         {state === 'plan' && (
           <p className="mt-4 text-center text-[12px] text-[#69635b]">
-            Already subscribed on another account? <Link to="/auth" className="text-[#ece7df] hover:underline">Switch account</Link>
+            Already subscribed on another account? <Link to="/login" className="text-[#ece7df] hover:underline">Switch account</Link>
           </p>
         )}
       </div>

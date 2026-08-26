@@ -54,6 +54,7 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 // Auth layout with shared video panel
 import AuthLayout from './components/layouts/AuthLayout';
 import AuthContent from './pages/AuthContent';
+import AuthRouteAlias from './pages/AuthRouteAlias';
 import ActivateAccount from './pages/ActivateAccount';
 import Onboarding from './pages/Onboarding';
 import DownloadResume from './pages/DownloadResume';
@@ -113,7 +114,9 @@ function App() {
 
           {/* Authentication Page */}
           <Route element={<AuthLayout />}>
-            <Route path="/auth" element={<AuthContent />} />
+            <Route path="/login" element={<AuthContent mode="signin" />} />
+            <Route path="/signup" element={<AuthContent mode="signup" />} />
+            <Route path="/auth" element={<AuthRouteAlias />} />
           </Route>
 
           {/* Catch-all: redirect to chat */}
@@ -196,11 +199,21 @@ function App() {
                 redirect away the one page that knows how to finish the job. */}
             <Route path="/download/resume" element={<DownloadResume />} />
 
+            {/* RFC 8628 verification URI. The provider emits /activate, so it
+                must be a real route rather than falling through to home. */}
             <Route element={<AuthLayout />}>
-              <Route path="/auth" element={<AuthContent />} />
-              {/* Unified branded sign-in per app (XENO UNIFIED AUTH spec) */}
-              <Route path="/auth/:app" element={<AuthContent />} />
-              <Route path="/auth/:app/device" element={<DeviceAuthContent />} />
+              <Route path="/activate" element={<DeviceAuthContent protocol="oidc" />} />
+            </Route>
+
+            <Route element={<AuthLayout />}>
+              <Route path="/login" element={<AuthContent mode="signin" />} />
+              <Route path="/signup" element={<AuthContent mode="signup" />} />
+              {/* Backward-compatible aliases. Canonical human routes are
+                  /login and /signup; protocol routes remain /api/oauth2/*. */}
+              <Route path="/auth" element={<AuthRouteAlias />} />
+              <Route path="/auth/:app" element={<AuthRouteAlias />} />
+              {/* Old CLI clients still use this custom device-code surface. */}
+              <Route path="/auth/:app/device" element={<DeviceAuthContent protocol="legacy" />} />
               {/* Password reset + email verification — public (the token is the credential) */}
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />

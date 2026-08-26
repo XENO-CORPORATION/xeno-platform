@@ -67,7 +67,7 @@ const CreateWithoutLimitsSection: React.FC = () => {
 
             <div className="mt-[clamp(28px,3.6vh,48px)] flex flex-col items-center gap-3 sm:flex-row">
               <a
-                href="/auth"
+                href="/signup"
                 className="group inline-flex h-[clamp(46px,4.6vh,54px)] items-center gap-2.5 rounded-[9px] bg-white px-[clamp(20px,1.8vw,30px)] text-[clamp(12.5px,0.9vw,14.5px)] font-semibold text-black transition-colors hover:bg-white/90"
               >
                 Get started free

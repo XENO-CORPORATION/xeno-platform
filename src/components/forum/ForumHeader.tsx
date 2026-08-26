@@ -129,7 +129,7 @@ const ForumHeader: React.FC<{ viewer?: Viewer | null }> = ({ viewer }) => {
             </Link>
           ) : (
             <Link
-              to="/auth"
+              to="/login"
               className="inline-flex h-9 cursor-pointer items-center rounded-md border border-white/[0.15] px-4 text-[13px] font-medium text-[#e5e5e9] transition-colors hover:border-white/30 hover:text-white"
             >
               Sign in

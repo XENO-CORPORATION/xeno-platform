@@ -94,10 +94,10 @@ export const PRODUCTS: Product[] = [
   { slug: 'hub', name: 'XENO Hub', tagline: 'The all-in-one launcher for every XENO app, agent and credit.', category: 'Platform', status: 'shipping', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-hub' },
 
   // ── Generate (web, in-app) ────────────────────────────────
-  { slug: 'image', name: 'XENO Image', tagline: 'Generate images from a prompt with 20+ frontier models.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/auth' },
-  { slug: 'video', name: 'XENO Video', tagline: 'Generate and edit video with AI pipelines.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/auth' },
-  { slug: 'audio', name: 'XENO Audio', tagline: 'Generate voice, music and sound effects.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/auth' },
-  { slug: '3d-gen', name: 'XENO 3D Gen', tagline: 'Generate 3D models and scenes from a prompt.', category: 'Generate', status: 'beta', delivery: 'web', launchPath: '/auth' },
+  { slug: 'image', name: 'XENO Image', tagline: 'Generate images from a prompt with 20+ frontier models.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/login' },
+  { slug: 'video', name: 'XENO Video', tagline: 'Generate and edit video with AI pipelines.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/login' },
+  { slug: 'audio', name: 'XENO Audio', tagline: 'Generate voice, music and sound effects.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/login' },
+  { slug: '3d-gen', name: 'XENO 3D Gen', tagline: 'Generate 3D models and scenes from a prompt.', category: 'Generate', status: 'beta', delivery: 'web', launchPath: '/login' },
 
   // ── Create ────────────────────────────────────────────────
   { slug: 'pixel', name: 'XENO Pixel', tagline: 'AI-native image editing, design and upscaling.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-pixel' },

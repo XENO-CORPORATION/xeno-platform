@@ -144,7 +144,7 @@ const ActivateAccount = () => {
           reading column. */}
       <header className="shrink-0 flex items-center justify-between gap-4 px-4 py-3 sm:px-5 sm:py-4">
         <Link
-          to="/auth"
+          to="/login"
           className="flex items-center gap-1.5 text-sm text-white/40 hover:text-white/70 transition-all duration-300 hover:gap-2"
         >
           <ArrowLeft size={14} />
@@ -289,7 +289,7 @@ const ActivateAccount = () => {
                   {/* A disabled button with no countdown reads as broken. */}
                   {cooldown > 0 ? `Resend in ${cooldown}s` : 'Send a new code'}
                 </button>
-                <Link to="/auth" className="text-sm text-white/30 hover:text-white/60 transition-colors">
+                <Link to="/login" className="text-sm text-white/30 hover:text-white/60 transition-colors">
                   Wrong address?
                 </Link>
               </div>

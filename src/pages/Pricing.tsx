@@ -49,7 +49,7 @@ function useCheckout() {
         const back = downloadIntent
           ? `/pricing?i=${encodeURIComponent(downloadIntent)}`
           : '/pricing';
-        navigate(`/auth?returnUrl=${encodeURIComponent(back)}`);
+        navigate(`/login?returnUrl=${encodeURIComponent(back)}`);
         return;
       }
       /* Stage it. The consent dialog calls back with a consent id. */
