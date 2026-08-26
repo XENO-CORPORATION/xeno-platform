@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CONTEXT = readFileSync(join(ROOT, 'src', 'contexts', 'WorkspaceContext.tsx'), 'utf8');
 const ACCOUNT = readFileSync(join(ROOT, 'src', 'services', 'accountService.ts'), 'utf8');
+const TEAM_PAGE = readFileSync(join(ROOT, 'src', 'components', 'account', 'TeamPage.tsx'), 'utf8');
 const codeOnly = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 function extractFrom(src, marker) {
@@ -100,6 +101,24 @@ test('refreshMembers production catch cannot load DEV_MEMBERS', () => {
     /DEV_MEMBERS/,
     'production members catch still invents DEV_MEMBERS.',
   );
+});
+
+test('TeamPage production catch cannot invent members or invites', () => {
+  const fn = extractFrom(codeOnly(TEAM_PAGE), 'const loadData = useCallback');
+  const catchAt = fn.indexOf('} catch');
+  assert.ok(catchAt !== -1, 'TeamPage.loadData has no catch');
+  const catchBody = fn.slice(catchAt);
+  assert.match(
+    catchBody,
+    /if\s*\(\s*import\.meta\.env\.DEV\s*\)/,
+    'TeamPage fallback data must be restricted to development.',
+  );
+  const productionCatch = elseBranch(catchBody);
+  assert.ok(productionCatch, 'TeamPage production catch has no else');
+  assert.doesNotMatch(productionCatch, /DEV_MEMBERS|DEV_INVITES/);
+  assert.match(productionCatch, /setMembers\(\s*\[\s*\]\s*\)/);
+  assert.match(productionCatch, /setInvites\(\s*\[\s*\]\s*\)/);
+  assert.match(productionCatch, /setError\(/, 'TeamPage must surface the API failure');
 });
 
 test('refreshMembers does not call the API for a non-UUID id', () => {

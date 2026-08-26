@@ -3,6 +3,7 @@ import { Button, MenuItem, TextInput, useGooPill, useMenu } from '@xenosystem/el
 import { Copy, File, FileImage, FileText, Shapes, SearchDecl, CheckDecl, ChevronDownDecl, CopyDecl } from '@/lib/icons';
 import {
   ARTIFACT_KIND_LABEL,
+  createArtifact,
   deleteArtifact,
   getArtifactShareUrl,
   listArtifacts,
@@ -78,6 +79,10 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftKind, setDraftKind] = useState<ArtifactKind>('document');
+  const [draftContent, setDraftContent] = useState('');
+  const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
@@ -106,6 +111,26 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
     () => rows.find((row) => row.id === selectedId) ?? null,
     [rows, selectedId],
   );
+
+  const handleCreate = async () => {
+    const title = draftTitle.trim();
+    const content = draftContent.trim();
+    if (!title || !content || creating) return;
+    setCreating(true);
+    try {
+      const created = await createArtifact({
+        title,
+        kind: draftKind,
+        content,
+      });
+      setDraftTitle('');
+      setDraftContent('');
+      setKind('all');
+      setRows((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     await deleteArtifact(id);
@@ -264,6 +289,47 @@ const ChatArtifactsPage: React.FC<ChatArtifactsPageProps> = ({ pageLeft, onClose
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search"
+          />
+        </div>
+
+        <div className="mb-3 flex flex-shrink-0 flex-col gap-2">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <TextInput
+              size="lg"
+              type="text"
+              className="min-w-0 flex-1"
+              value={draftTitle}
+              onChange={(event) => setDraftTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void handleCreate();
+                }
+              }}
+              placeholder="New artifact title…"
+              aria-label="New artifact title"
+            />
+            <Button
+              variant="secondary"
+              size="lg"
+              className="flex-shrink-0"
+              onClick={() => void handleCreate()}
+              disabled={!draftTitle.trim() || !draftContent.trim() || creating}
+            >
+              {creating ? 'Adding…' : 'Add'}
+            </Button>
+          </div>
+          <textarea
+            value={draftContent}
+            onChange={(event) => setDraftContent(event.target.value)}
+            rows={3}
+            placeholder="Artifact content…"
+            aria-label="New artifact content"
+            className="w-full resize-y border bg-transparent px-3 py-2.5 text-[13px] leading-relaxed text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)] rounded-[6px]"
+            style={{
+              borderColor: 'var(--chat-border)',
+              backgroundColor: 'var(--chat-surface)',
+            }}
           />
         </div>
 

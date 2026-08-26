@@ -52,6 +52,23 @@ const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
   if (!res.headersSent) res.status(500).json({ success: false, error: 'Internal error' });
 });
 
+function rejectIfNotWorkspaceId(res, id) {
+  if (UUID_RE.test(String(id || ''))) return false;
+  res.status(400).json({
+    success: false,
+    error: 'Invalid workspace id',
+    code: 'invalid_workspace_id',
+  });
+  return true;
+}
+
+// :id handlers must reject junk (ws-team) BEFORE can() — otherwise ReBAC 403s
+// a string that was never a workspace, and the client reports "forbidden".
+const wrapId = (fn) => wrap(async (req, res) => {
+  if (rejectIfNotWorkspaceId(res, req.params.id)) return;
+  return fn(req, res);
+});
+
 // ── data helpers ─────────────────────────────────────────────────────────────
 async function getWorkspace(db, id) {
   if (!UUID_RE.test(String(id || ''))) return null;
@@ -207,7 +224,7 @@ router.post('/', wrap(async (req, res) => {
 }));
 
 // POST /api/workspaces/:id/select — mark active (validated membership; persisted best-effort).
-router.post('/:id/select', wrap(async (req, res) => {
+router.post('/:id/select', wrapId(async (req, res) => {
   const wsId = req.params.id;
   if (!(await can(req.db, wsId, req.user.id, 'viewer'))) {
     return res.status(403).json({ success: false, error: 'Not a member of this workspace' });
@@ -222,7 +239,7 @@ router.post('/:id/select', wrap(async (req, res) => {
 }));
 
 // GET /api/workspaces/:id/members
-router.get('/:id/members', wrap(async (req, res) => {
+router.get('/:id/members', wrapId(async (req, res) => {
   const wsId = req.params.id;
   if (!(await can(req.db, wsId, req.user.id, 'viewer'))) {
     return res.status(403).json({ success: false, error: 'Not a member of this workspace' });
@@ -252,7 +269,7 @@ router.get('/:id/members', wrap(async (req, res) => {
 }));
 
 // PATCH /api/workspaces/:id/members/:memberId { member_role }
-router.patch('/:id/members/:memberId', wrap(async (req, res) => {
+router.patch('/:id/members/:memberId', wrapId(async (req, res) => {
   const { id: wsId, memberId } = req.params;
   const ws = await getWorkspace(req.db, wsId);
   if (!ws) return res.status(404).json({ success: false, error: 'Workspace not found' });
@@ -277,7 +294,7 @@ router.patch('/:id/members/:memberId', wrap(async (req, res) => {
 }));
 
 // DELETE /api/workspaces/:id/members/:memberId  (admin removes; or self-leave)
-router.delete('/:id/members/:memberId', wrap(async (req, res) => {
+router.delete('/:id/members/:memberId', wrapId(async (req, res) => {
   const { id: wsId, memberId } = req.params;
   const ws = await getWorkspace(req.db, wsId);
   if (!ws) return res.status(404).json({ success: false, error: 'Workspace not found' });
@@ -298,7 +315,7 @@ router.delete('/:id/members/:memberId', wrap(async (req, res) => {
 }));
 
 // POST /api/workspaces/:id/owner-transfer { new_owner_user_id }
-router.post('/:id/owner-transfer', wrap(async (req, res) => {
+router.post('/:id/owner-transfer', wrapId(async (req, res) => {
   const wsId = req.params.id;
   const newOwner = req.body?.new_owner_user_id;
   const ws = await getWorkspace(req.db, wsId);
@@ -328,7 +345,7 @@ router.post('/:id/owner-transfer', wrap(async (req, res) => {
 }));
 
 // GET /api/workspaces/:id/invites
-router.get('/:id/invites', wrap(async (req, res) => {
+router.get('/:id/invites', wrapId(async (req, res) => {
   const wsId = req.params.id;
   if (!(await can(req.db, wsId, req.user.id, 'admin'))) {
     return res.status(403).json({ success: false, error: 'Admin required' });
@@ -346,7 +363,7 @@ router.get('/:id/invites', wrap(async (req, res) => {
 }));
 
 // POST /api/workspaces/:id/invites { email, role }
-router.post('/:id/invites', wrap(async (req, res) => {
+router.post('/:id/invites', wrapId(async (req, res) => {
   const wsId = req.params.id;
   const ws = await getWorkspace(req.db, wsId);
   if (!ws) return res.status(404).json({ success: false, error: 'Workspace not found' });
@@ -396,7 +413,7 @@ router.post('/:id/invites', wrap(async (req, res) => {
 }));
 
 // DELETE /api/workspaces/:id/invites/:inviteId  (revoke)
-router.delete('/:id/invites/:inviteId', wrap(async (req, res) => {
+router.delete('/:id/invites/:inviteId', wrapId(async (req, res) => {
   const { id: wsId, inviteId } = req.params;
   if (!(await can(req.db, wsId, req.user.id, 'admin'))) {
     return res.status(403).json({ success: false, error: 'Admin required' });
@@ -411,7 +428,7 @@ router.delete('/:id/invites/:inviteId', wrap(async (req, res) => {
 }));
 
 // POST /api/workspaces/:id/invites/:inviteId/resend
-router.post('/:id/invites/:inviteId/resend', wrap(async (req, res) => {
+router.post('/:id/invites/:inviteId/resend', wrapId(async (req, res) => {
   const { id: wsId, inviteId } = req.params;
   if (!(await can(req.db, wsId, req.user.id, 'admin'))) {
     return res.status(403).json({ success: false, error: 'Admin required' });
@@ -429,7 +446,7 @@ router.post('/:id/invites/:inviteId/resend', wrap(async (req, res) => {
 }));
 
 // GET /api/workspaces/:id/billing — the workspace's OWN wallet (Phase 4).
-router.get('/:id/billing', wrap(async (req, res) => {
+router.get('/:id/billing', wrapId(async (req, res) => {
   const wsId = req.params.id;
   if (!(await can(req.db, wsId, req.user.id, 'viewer'))) {
     return res.status(403).json({ success: false, error: 'Not a member of this workspace' });
@@ -459,7 +476,7 @@ router.get('/:id/billing', wrap(async (req, res) => {
 
 // PATCH /api/workspaces/:id/budget — store the budget AND enforce it as a real
 // rolling spend cap on the workspace wallet (recordUsageV2 checks caps on every spend).
-router.patch('/:id/budget', wrap(async (req, res) => {
+router.patch('/:id/budget', wrapId(async (req, res) => {
   const wsId = req.params.id;
   if (!(await can(req.db, wsId, req.user.id, 'admin'))) {
     return res.status(403).json({ success: false, error: 'Admin required' });
@@ -479,7 +496,7 @@ router.patch('/:id/budget', wrap(async (req, res) => {
 
 // POST /api/workspaces/:id/billing/transfer { credits } — fund the workspace wallet
 // from the caller's personal wallet (admin+). Atomic saga (debit → grant → refund on fail).
-router.post('/:id/billing/transfer', wrap(async (req, res) => {
+router.post('/:id/billing/transfer', wrapId(async (req, res) => {
   const wsId = req.params.id;
   if (!(await can(req.db, wsId, req.user.id, 'admin'))) {
     return res.status(403).json({ success: false, error: 'Admin required' });
@@ -495,7 +512,7 @@ router.post('/:id/billing/transfer', wrap(async (req, res) => {
 
 // PATCH /api/workspaces/:id/billing/mode { mode: 'personal'|'pooled' } — owner sets
 // whether member spends bill the shared workspace wallet (see walletService.resolveBillingAccountId).
-router.patch('/:id/billing/mode', wrap(async (req, res) => {
+router.patch('/:id/billing/mode', wrapId(async (req, res) => {
   const wsId = req.params.id;
   const ws = await getWorkspace(req.db, wsId);
   if (!ws) return res.status(404).json({ success: false, error: 'Workspace not found' });
@@ -514,7 +531,7 @@ router.patch('/:id/billing/mode', wrap(async (req, res) => {
 
 // POST /api/workspaces/:id/billing/subscribe { seats } — owner starts the per-seat
 // Team subscription (Stripe Checkout). seats defaults to the current member count.
-router.post('/:id/billing/subscribe', wrap(async (req, res) => {
+router.post('/:id/billing/subscribe', wrapId(async (req, res) => {
   const wsId = req.params.id;
   const ws = await getWorkspace(req.db, wsId);
   if (!ws) return res.status(404).json({ success: false, error: 'Workspace not found' });
@@ -539,7 +556,7 @@ router.post('/:id/billing/subscribe', wrap(async (req, res) => {
 }));
 
 // GET /api/workspaces/:id/audit?limit=N
-router.get('/:id/audit', wrap(async (req, res) => {
+router.get('/:id/audit', wrapId(async (req, res) => {
   const wsId = req.params.id;
   if (!(await can(req.db, wsId, req.user.id, 'viewer'))) {
     return res.status(403).json({ success: false, error: 'Not a member of this workspace' });

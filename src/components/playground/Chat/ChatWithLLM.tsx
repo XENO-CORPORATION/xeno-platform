@@ -48,7 +48,7 @@ import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation'
 import ThinkingStatus from './ThinkingStatus';
 import { chatComplete } from '@/services/aiService';
 import { getGroupedModels, GroupedModels, Model } from '@/services/modelService';
-import { chatService } from '@/services/chatService';
+import { chatService, isPersistedConversationId } from '@/services/chatService';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
 import { userDataService } from '@/services/userDataService';
 import { xenoSearchService, type XenoSearchSource, type WebSocketProgress } from '@/services/xenoSearchService';
@@ -74,7 +74,7 @@ function withAuthHeaders(extra: Record<string, string> = {}): Record<string, str
   const h: Record<string, string> = { ...extra };
   if (token) h.Authorization = `Bearer ${token}`;
   // Phase 5: active workspace context → pooled billing + resource tenancy on the backend.
-  if (workspace) h['x-xeno-workspace'] = workspace;
+  if (workspace && isPersistedConversationId(workspace)) h['x-xeno-workspace'] = workspace;
   return h;
 }
 
@@ -3351,10 +3351,40 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       if (accepted.length === 0) return;
 
       const parsed = await Promise.all(accepted.map(readProjectFile));
+      const persisted = await Promise.all(
+        parsed.map(async (file) => {
+          try {
+            if (chatService.isAuthenticated()) {
+              const serverFile = await chatService.addProjectFile(projectId, {
+                name: file.name,
+                file_type: file.type,
+                file_size: file.size,
+                content_text: file.content,
+              });
+              if (serverFile) {
+                return {
+                  ...file,
+                  id: serverFile.id,
+                  name: serverFile.name ?? file.name,
+                  type: serverFile.file_type ?? file.type,
+                  size: Number(serverFile.file_size ?? file.size),
+                  addedAt: serverFile.created_at
+                    ? new Date(serverFile.created_at).getTime()
+                    : file.addedAt,
+                  content: serverFile.content_text ?? file.content,
+                };
+              }
+            }
+          } catch (err) {
+            console.warn('[ChatWithLLM] Failed to persist project file:', err);
+          }
+          return file;
+        }),
+      );
       setChatProjects((prev) =>
         prev.map((project) =>
           project.id === projectId
-            ? { ...project, files: [...parsed, ...(project.files ?? [])], updatedAt: Date.now() }
+            ? { ...project, files: [...persisted, ...(project.files ?? [])], updatedAt: Date.now() }
             : project,
         ),
       );
@@ -3873,18 +3903,42 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     closeProjectSettings,
   ]);
 
-  const createChatProject = useCallback((name?: string, description?: string) => {
+  const createChatProject = useCallback(async (name?: string, description?: string) => {
     const projectName =
       (name ?? newChatProjectName).trim().slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project';
     const projectDescription = (description ?? newChatProjectDescription).trim();
     const now = Date.now();
-    const project: ChatHistoryProject = {
+    let project: ChatHistoryProject = {
       id: `project-${now}`,
       name: projectName,
       description: projectDescription || undefined,
       createdAt: now,
       updatedAt: now,
     };
+    try {
+      if (chatService.isAuthenticated()) {
+        const server = await chatService.createProject({
+          name: projectName,
+          description: projectDescription || undefined,
+        });
+        if (server) {
+          project = {
+            ...project,
+            id: server.id,
+            name: server.name || projectName,
+            description: server.description || project.description,
+            createdAt: server.created_at
+              ? new Date(server.created_at).getTime()
+              : now,
+            updatedAt: server.updated_at
+              ? new Date(server.updated_at).getTime()
+              : now,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('[ChatWithLLM] Failed to create project on backend:', err);
+    }
     setChatProjects((prev) => [project, ...prev]);
     closeCreateProjectModal();
     return project;
@@ -7963,7 +8017,7 @@ Please provide a well-structured response using this search context and any mult
     } else {
       patchConversation(conversationId, { isArchived: false });
     }
-    if (isDbAuthenticated) {
+    if (isDbAuthenticated && isPersistedConversationId(conversationId)) {
       try {
         await chatService.updateConversation(conversationId, { is_archived: archived });
       } catch (error) {
@@ -7984,9 +8038,9 @@ Please provide a well-structured response using this search context and any mult
     }
   };
 
-  const submitCreateProjectModal = () => {
+  const submitCreateProjectModal = async () => {
     const assignId = pendingProjectAssignConversationId;
-    const project = createChatProject();
+    const project = await createChatProject();
     if (assignId) {
       handleAssignConversationToProject(assignId, project.id);
     }
@@ -8535,7 +8589,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && canCreate) {
                     event.preventDefault();
-                    submitCreateProjectModal();
+                    void submitCreateProjectModal();
                   }
                 }}
                 placeholder="Name your project"
@@ -9043,25 +9097,25 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
             : (msg.parsedAnswer || msg.text || '')
         }));
 
-        // First, get conversation-only token count (for compress threshold)
-        const conversationResult = await countMessageTokens(
-          normalizedMessages,
+        // One call. A second /messages hit after a 502 is what turned a
+        // dead origin into a 1 Hz storm (nginx 2026-08-25 15:39).
+        const includeInput = Boolean(inputValue.trim());
+        const result = await countMessageTokens(
+          includeInput
+            ? [...normalizedMessages, { role: 'user', content: inputValue }]
+            : normalizedMessages,
           selectedModel?.id || 'gpt-4',
           savedSystemPrompt
         );
-        setConversationTokenCount(conversationResult.total);
-
-        // Then get total including input
-        if (inputValue.trim()) {
-          const messagesWithInput = [...normalizedMessages, { role: 'user', content: inputValue }];
-          const totalResult = await countMessageTokens(
-            messagesWithInput,
-            selectedModel?.id || 'gpt-4',
-            savedSystemPrompt
+        setRealTokenCount(result.total);
+        if (includeInput && result.messageTokens.length > 0) {
+          const withoutInput = result.messageTokens.slice(0, -1);
+          const extraOverhead = 4;
+          setConversationTokenCount(
+            withoutInput.reduce((a, b) => a + b, 0) + result.systemTokens + Math.max(0, result.overhead - extraOverhead)
           );
-          setRealTokenCount(totalResult.total);
         } else {
-          setRealTokenCount(conversationResult.total);
+          setConversationTokenCount(result.total);
         }
       } catch (error) {
         console.warn('[TokenCount] Error fetching real token count:', error);
@@ -10721,7 +10775,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     // console.log("Attempting to delete conversation:", conversationIdToDelete);
 
     // Delete from database if authenticated
-    if (isDbAuthenticated) {
+    if (isDbAuthenticated && isPersistedConversationId(conversationIdToDelete)) {
       try {
         await chatService.deleteConversation(conversationIdToDelete);
         console.log("Deleted conversation from database:", conversationIdToDelete);
@@ -10760,7 +10814,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       // console.log("Saving title for:", editingConversationId, "New title:", editTitleText);
 
       // Update in database if authenticated
-      if (isDbAuthenticated) {
+      if (isDbAuthenticated && isPersistedConversationId(editingConversationId)) {
         try {
           await chatService.updateConversation(editingConversationId, {
             title: editTitleText.trim(),
