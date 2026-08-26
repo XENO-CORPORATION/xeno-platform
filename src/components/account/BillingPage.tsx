@@ -10,21 +10,23 @@ import {
   type BillingItem,
 } from '../../services/billingService';
 import { formatPrice } from '../../config/pricing';
+import CheckoutConsent from '../billing/CheckoutConsent';
 
 const ACCENT = '#e8e3dc';
 
 const PLAN_META: Record<string, { label: string; color: string; sub: string }> = {
-  free: { label: 'Free', color: 'rgba(255,255,255,0.65)', sub: 'The full local tool — clean, no watermark, local export' },
-  pro:  { label: 'Pro',  color: ACCENT,                   sub: 'The connected Platform — cloud, cross-app, agents' },
-  team: { label: 'Team', color: '#4ea1ff',               sub: 'Everything in Pro + collaboration' },
+  free: { label: 'Free', color: 'rgba(255,255,255,0.65)', sub: 'Your account and web workspace; new desktop installs require a plan' },
+  pro:  { label: 'Everything', color: ACCENT,             sub: 'Desktop apps plus paid platform entitlements' },
+  team: { label: 'Team', color: '#4ea1ff',                sub: 'Everything plus per-seat collaboration' },
+  studio: { label: 'Studio', color: '#a78bfa',            sub: 'The highest-capacity shipped plan' },
 };
 
 function features(e: Entitlements): { label: string; on: boolean }[] {
   return [
     { label: 'Commercial-use license', on: e.commercial },
     { label: 'Cloud sync & multi-device', on: e.cloudSync },
-    { label: 'Cross-app workflows', on: e.crossApp },
-    { label: 'Agents & automation', on: e.agents },
+    { label: 'Cross-app layer', on: e.crossApp },
+    { label: 'Agent identities', on: e.agents },
     { label: 'Priority managed inference', on: e.priority },
     { label: 'Private cloud projects', on: e.privateProjects },
     { label: 'Real-time collaboration', on: e.collaboration },
@@ -37,6 +39,8 @@ const BillingPage: React.FC = () => {
   const [busy, setBusy] = useState<null | 'upgrade' | 'manage'>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
   const [packs, setPacks] = useState<BillingItem[]>([]);
+  const [upgradeItem, setUpgradeItem] = useState<BillingItem | null>(null);
+  const [pendingItem, setPendingItem] = useState<BillingItem | null>(null);
   const [showPacks, setShowPacks] = useState(false);
   const [buyingPack, setBuyingPack] = useState<string | null>(null);
 
@@ -45,6 +49,7 @@ const BillingPage: React.FC = () => {
     const [s, cfg] = await Promise.all([getBillingSummary(), getBillingConfig()]);
     setSummary(s);
     setPacks((cfg.catalog || []).filter((i) => i.kind === 'credits'));
+    setUpgradeItem((cfg.catalog || []).find((i) => i.kind === 'subscription' && i.plan === 'pro' && i.interval === 'month') || null);
     setLoading(false);
   }, []);
 
@@ -63,10 +68,10 @@ const BillingPage: React.FC = () => {
     }
   }, [load]);
 
-  const onUpgrade = async () => {
-    setBusy('upgrade'); setNotice(null);
-    const r = await startCheckout('pro_monthly');
-    if (!r.ok) { setBusy(null); setNotice({ kind: 'err', msg: r.error || 'Could not start checkout.' }); }
+  const onUpgrade = () => {
+    setNotice(null);
+    if (upgradeItem) setPendingItem(upgradeItem);
+    else setNotice({ kind: 'err', msg: 'Everything is not currently available for purchase.' });
   };
   const onManage = async () => {
     setBusy('manage'); setNotice(null);
@@ -75,10 +80,22 @@ const BillingPage: React.FC = () => {
   };
 
   const availablePacks = packs.filter((p) => p.available);
-  const buyPack = async (id: string) => {
-    setBuyingPack(id); setNotice(null);
-    const r = await startCheckout(id);
-    if (!r.ok) { setBuyingPack(null); setNotice({ kind: 'err', msg: r.error || 'Could not start checkout.' }); }
+  const buyPack = (id: string) => {
+    setNotice(null);
+    const item = availablePacks.find((pack) => pack.id === id);
+    if (item) setPendingItem(item);
+  };
+
+  const proceedToCheckout = async (item: BillingItem, consentId: string) => {
+    setPendingItem(null);
+    if (item.kind === 'credits') setBuyingPack(item.id);
+    else setBusy('upgrade');
+    const r = await startCheckout(item.id, undefined, consentId);
+    if (!r.ok) {
+      setBusy(null);
+      setBuyingPack(null);
+      setNotice({ kind: 'err', msg: r.error || 'Could not start checkout.' });
+    }
   };
 
   if (loading) {
@@ -100,6 +117,16 @@ const BillingPage: React.FC = () => {
     : null;
 
   return (
+    <>
+    {pendingItem && (
+      <CheckoutConsent
+        itemId={pendingItem.id}
+        planLabel={pendingItem.label}
+        priceLabel={formatPrice(pendingItem.price, pendingItem.currency)}
+        onCancel={() => setPendingItem(null)}
+        onConsented={(consentId) => void proceedToCheckout(pendingItem, consentId)}
+      />
+    )}
     <div className="max-w-3xl mx-auto w-full px-4 py-8 text-white">
       <h1 className="text-2xl font-semibold mb-1">Billing &amp; Plan</h1>
       <p className="text-white/45 text-sm mb-6">Manage your subscription and credits.</p>
@@ -134,7 +161,7 @@ const BillingPage: React.FC = () => {
               <button onClick={onUpgrade} disabled={busy === 'upgrade'}
                 className="inline-flex items-center gap-2 rounded-lg bg-white text-black font-semibold text-sm px-4 py-2.5 transition-colors hover:bg-white/90 disabled:opacity-60">
                 {busy === 'upgrade' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                Upgrade to Pro — €24/mo
+                Upgrade to Everything — {upgradeItem ? `${formatPrice(upgradeItem.price, upgradeItem.currency)}/mo` : 'Unavailable'}
               </button>
             ) : (
               <button onClick={onManage} disabled={busy === 'manage'}
@@ -157,7 +184,7 @@ const BillingPage: React.FC = () => {
         </div>
 
         {isFree && (
-          <p className="text-white/35 text-xs mt-4">Pro unlocks the connected Platform — cloud sync, cross-app workflows, agents, commercial rights &amp; priority — for €24/mo.</p>
+          <p className="text-white/35 text-xs mt-4">Everything unlocks new desktop installers, paid platform entitlements, commercial rights and priority managed inference.</p>
         )}
       </div>
 
@@ -209,6 +236,7 @@ const BillingPage: React.FC = () => {
         </p>
       </div>
     </div>
+    </>
   );
 };
 

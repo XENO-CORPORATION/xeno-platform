@@ -150,10 +150,10 @@ test('the app count is MEASURED, not written or guessed', () => {
 });
 
 test('free and paid state the SAME count, to opposite ends', () => {
-  /* The symmetry is the argument: the apps are Layer 1 in the pricing standard
-   * and free on both sides, and what is bought is the connection between them.
-   * Two different counts would read as two different products — a smaller XENO
-   * and a bigger one — which is exactly the framing the standard rejects. */
+  /* The count is the same catalog on both sides; the account owner's 2026-08-24
+   * distribution override changes what a new Free account may DOWNLOAD, not
+   * which products exist. Free therefore says they are mapped and preserves
+   * existing installs; paid says they share one paid workspace. */
   const verdicts = [...page.matchAll(/verdict: `All \$\{workspaceApps\}([^`]*)`/g)].map((m) => m[1]);
   assert.equal(verdicts.length, 2, 'both tiers no longer state the measured count');
   assert.notEqual(verdicts[0], verdicts[1], 'the two tiers say the same thing, so the count argues nothing');

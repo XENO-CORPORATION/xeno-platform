@@ -14,6 +14,7 @@
 
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
+import { requireEntitlement } from '../utils/entitlementGate.js';
 import * as identity from '../services/agentIdentity.js';
 import { AgentIdentityError } from '../services/agentIdentity.js';
 
@@ -92,7 +93,7 @@ router.get('/whoami', authMiddleware, loadPrincipal, handled('whoami', async (re
  *
  * The API key is returned ONCE and never stored in plaintext.
  */
-router.post('/', authMiddleware, loadPrincipal, handled('create', async (req, res) => {
+router.post('/', authMiddleware, requireEntitlement('agents'), loadPrincipal, handled('create', async (req, res) => {
   const { name, displayName, agentRole, agentOrigin } = req.body || {};
   const result = await identity.createAgent(req.db, req.principal, {
     name, displayName, agentRole, agentOrigin,
@@ -106,7 +107,7 @@ router.post('/', authMiddleware, loadPrincipal, handled('create', async (req, re
 }));
 
 /** POST /api/v2/agents/:handle/keys — mint an additional key for an owned agent. */
-router.post('/:handle/keys', authMiddleware, loadPrincipal, handled('mintKey', async (req, res) => {
+router.post('/:handle/keys', authMiddleware, requireEntitlement('agents'), loadPrincipal, handled('mintKey', async (req, res) => {
   const agents = await identity.listAgentsFor(req.db, req.principal.id);
   const agent = agents.find((a) => a.handle === String(req.params.handle).toLowerCase());
   if (!agent) {

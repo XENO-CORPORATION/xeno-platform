@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Cloud, Laptop, ShieldCheck, UserCog, ArrowRight } from 'lucide-react';
 import { Eyebrow, Reveal, SectionHeading, cx } from './primitives';
 import { PRICING_TIERS, formatPrice } from '../../config/pricing';
+import { getBillingConfig, type BillingConfig } from '../../services/billingService';
 
 const privacyFeatures = [
   { icon: ShieldCheck, title: 'Never trained on your work', sub: 'Your data stays yours. Always.' },
@@ -22,27 +23,42 @@ interface Plan {
   highlight?: boolean;
 }
 
-// The three self-serve tiers, sourced from the single canonical pricing module
-// (src/config/pricing.ts → mirrors the server catalog → mirrors Stripe). Enterprise
-// lives on the full /pricing page. No hardcoded prices; no "pay-as-you-grow" (the
+// The self-serve tiers, sourced from the single canonical pricing module
+// (src/config/pricing.ts → mirrors the server catalog → mirrors Stripe). No hardcoded prices; no "pay-as-you-grow" (the
 // LOCKED model sells the subscription, not metered credits).
 const UNIT_FOR: Record<string, string> = {
   free: 'free — the whole suite',
   pro: 'per creator · monthly',
   team: 'per seat · monthly',
+  studio: 'monthly',
 };
-const plans: Plan[] = PRICING_TIERS.filter((t) => t.id !== 'enterprise').map((t) => ({
-  name: t.name,
-  price: formatPrice(t.price, t.currency),
-  unit: UNIT_FOR[t.id] || 'monthly',
-  tagline: t.line,
-  perks: t.features.slice(0, 5),
-  cta: t.cta,
-  href: t.href,
-  highlight: t.featured,
-}));
-
 const PrivacyPricingSection: React.FC = () => {
+  const [billing, setBilling] = useState<BillingConfig | null>(null);
+
+  useEffect(() => { getBillingConfig().then(setBilling).catch(() => {}); }, []);
+
+  const plans = useMemo<Plan[]>(() => PRICING_TIERS.map((t) => {
+    // Match by plan + cadence, rather than a founding SKU id: after founding
+    // closes the server offers a different item and the landing page must move
+    // to the charged list price without a deploy.
+    const live = billing?.catalog.find((item) =>
+      item.kind === 'subscription'
+      && item.available
+      && item.plan === t.id
+      && (!item.interval || item.interval === 'month'),
+    );
+    return {
+      name: t.name,
+      price: formatPrice(live?.price ?? t.price, live?.currency ?? t.currency),
+      unit: UNIT_FOR[t.id] || 'monthly',
+      tagline: t.line,
+      perks: t.features.slice(0, 5),
+      cta: t.cta,
+      href: t.href,
+      highlight: t.featured,
+    };
+  }), [billing]);
+
   return (
     <section className="page-gutter border-t border-white/[0.06] bg-[#060606] py-[clamp(80px,11vh,150px)]">
       {/* ── Privacy card ─────────────────────────────────────────── */}
@@ -85,7 +101,7 @@ const PrivacyPricingSection: React.FC = () => {
           sub="Every app on one plan, powered by one shared credit balance. Start free, upgrade when you're ready — no lock-in, no surprises."
         />
 
-        <div className="mx-auto mt-[clamp(40px,6vh,72px)] grid max-w-[1040px] grid-cols-1 items-stretch gap-[clamp(16px,1.2vw,24px)] md:grid-cols-3">
+        <div className="mx-auto mt-[clamp(40px,6vh,72px)] grid max-w-[1320px] grid-cols-1 items-stretch gap-[clamp(16px,1.2vw,24px)] md:grid-cols-2 xl:grid-cols-4">
           {plans.map((plan, i) => (
             <Reveal
               key={plan.name}
@@ -139,7 +155,7 @@ const PrivacyPricingSection: React.FC = () => {
 
         <Reveal className="mt-[clamp(20px,3vh,32px)] text-center">
           <Link to="/pricing" className="group inline-flex items-center gap-1.5 text-[clamp(12.5px,0.9vw,14px)] font-medium text-[#948d83] transition-colors hover:text-[#e3ded5]">
-            Compare all plans, including Enterprise
+            Compare every plan and billing cadence
             <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </Reveal>
