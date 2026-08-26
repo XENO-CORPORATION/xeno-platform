@@ -165,6 +165,13 @@ test('public share lookup uses the production users.display_name column', () => 
   );
 });
 
+test('share creation uses the ESM crypto import', () => {
+  const body = extractRoute(ROUTES, 'post', '/conversations/:id/share');
+  assert.match(ROUTES, /import crypto from 'crypto';/, 'chat routes must import crypto in ESM');
+  assert.match(body, /crypto\.randomBytes\(32\)/, 'share tokens must use the imported crypto module');
+  assert.doesNotMatch(body, /require\s*\(/, 'require is undefined in this ESM route');
+});
+
 test('chat auth exposes the exact shared-conversation GET but not share mutations', () => {
   const middleware = extractFrom(SERVER, 'const chatAuthMiddleware');
   assert.match(middleware, /req\.method\s*===\s*'GET'/, 'public share exemption must be GET-only');
