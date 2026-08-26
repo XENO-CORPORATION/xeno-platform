@@ -313,7 +313,7 @@ services:
       - LOGGING_LEVEL=INFO
       - LOGGING_FORMAT=json
       # Search configuration - Add your API keys here!
-      - SEARCH_ENGINES=duckduckgo,brave
+      - SEARCH_ENGINES=["duckduckgo","brave"]
       - BRAVE_SEARCH_API_KEY=${BRAVE_API_KEY:-}
       # Google Custom Search (get from https://developers.google.com/custom-search)
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
