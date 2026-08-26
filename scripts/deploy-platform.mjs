@@ -51,13 +51,13 @@ const REPO_ROOT = join(__dirname, '..');
 const REMOTE_TMP = '/tmp/xeno-deploy';
 
 // --- Path sets shipped per service ----------------------------------------
-// backend: Dockerfile.backend only COPYs src/server/** — so shipping that + the
-//   Dockerfile is a complete, correct backend build input (compose context is `.`
-//   but the image only reads these).
+// backend: ship the image inputs plus docker-compose.yml. Runtime wiring (service
+//   hostnames, feature flags, provider keys) is part of a correct backend release,
+//   not host-local state that may silently drift from the committed contract.
 // frontend: Dockerfile.frontend's builder copies configs + public/ + src/ + scripts/.
 //   We ship a superset of exactly those, existence-filtered against HEAD.
 const PATHS = {
-  backend: ['src/server', 'Dockerfile.backend'],
+  backend: ['src/server', 'Dockerfile.backend', 'docker-compose.yml'],
   frontend: [
     'src', 'public', 'scripts', 'index.html', 'Dockerfile.frontend', 'nginx',
     'package.json', 'package-lock.json',

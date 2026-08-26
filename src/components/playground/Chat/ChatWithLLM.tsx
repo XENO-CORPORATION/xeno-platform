@@ -43,6 +43,7 @@ import {
   getChatProfile,
 } from './chatSkillsLibrary';
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
+import { reasoningCapabilityForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
 import ThinkingAnimation, { ThinkingAnimationInline } from './ThinkingAnimation';
 import ThinkingStatus from './ThinkingStatus';
@@ -130,25 +131,7 @@ const modelHasReasoningCapability = (modelId: string, model?: Model): 'alwaysOn'
     return model.supportsReasoning;
   }
 
-  // Fallback to ID-based detection for models without metadata
-  const id = modelId.toLowerCase();
-
-  // Always-on reasoning models (can't be disabled)
-  if (id.includes('deepseek') && (id.includes('r1') || id.includes('v3'))) return 'alwaysOn';
-  if (id.includes('openai/o1') || id.includes('openai/o3') || id.includes('openai/o4')) return 'alwaysOn';
-  if (id.includes('qwen') && id.includes('thinking')) return 'alwaysOn';
-  if (id.includes(':thinking')) return 'alwaysOn'; // Any model with :thinking suffix
-
-  // Toggleable reasoning models (reasoning controlled via API parameters)
-  if (id.includes('gemini-2.5') || id.includes('gemini-3')) return 'toggleable';
-  if (id.includes('grok-3') || id.includes('grok-4')) return 'toggleable';
-  if (id.includes('claude-sonnet-4') || id.includes('claude-opus-4') || id.includes('claude-haiku-4')) return 'toggleable';
-  if (id.includes('claude-3.7-sonnet') && !id.includes(':thinking')) return 'toggleable';
-  if (id.includes('deepseek/')) return 'toggleable';
-  if (id.includes('qwen/')) return 'toggleable';
-
-  // All other models don't have explicit reasoning
-  return 'disabled';
+  return reasoningCapabilityForModel(modelId);
 };
 
 // Models that use :thinking suffix for reasoning (legacy approach)
@@ -5171,6 +5154,10 @@ interface QueueState {
           if (settings.chat.alignment) {
             setChatAlignment(settings.chat.alignment);
           }
+          if (settings.chat.fontSize) {
+            setChatFontSize(settings.chat.fontSize);
+            try { localStorage.setItem('xeno_chat_font_size', settings.chat.fontSize); } catch { /* storage optional */ }
+          }
         }
         console.log("User settings loaded from database.");
       } catch (error) {
@@ -5194,24 +5181,35 @@ interface QueueState {
   }, []);
 
   // Debounced setting save
-  const settingsSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const settingsSaveTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const debouncedSaveSetting = useCallback((path: string, value: unknown) => {
-    if (settingsSaveTimeoutRef.current) {
-      clearTimeout(settingsSaveTimeoutRef.current);
-    }
-    settingsSaveTimeoutRef.current = setTimeout(() => {
+    const pending = settingsSaveTimeoutsRef.current.get(path);
+    if (pending) clearTimeout(pending);
+    const timeout = setTimeout(() => {
+      settingsSaveTimeoutsRef.current.delete(path);
       saveSettingsToDb(path, value);
     }, 500);
+    settingsSaveTimeoutsRef.current.set(path, timeout);
   }, [saveSettingsToDb]);
+
+  useEffect(() => () => {
+    for (const timeout of settingsSaveTimeoutsRef.current.values()) clearTimeout(timeout);
+    settingsSaveTimeoutsRef.current.clear();
+  }, []);
 
   // Watch for settings changes and save to database
   useEffect(() => {
-    debouncedSaveSetting('chat,wideMode', isWideChatEnabled);
+    debouncedSaveSetting('chat.wideMode', isWideChatEnabled);
   }, [isWideChatEnabled, debouncedSaveSetting]);
 
   useEffect(() => {
-    debouncedSaveSetting('chat,alignment', chatAlignment);
+    debouncedSaveSetting('chat.alignment', chatAlignment);
   }, [chatAlignment, debouncedSaveSetting]);
+
+  useEffect(() => {
+    try { localStorage.setItem('xeno_chat_font_size', chatFontSize); } catch { /* storage optional */ }
+    debouncedSaveSetting('chat.fontSize', chatFontSize);
+  }, [chatFontSize, debouncedSaveSetting]);
   // --- END User Settings ---
 
   // --- NEW: Load/Save Recent Files from Database ---
