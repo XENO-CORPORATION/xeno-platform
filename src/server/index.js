@@ -94,6 +94,7 @@ import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { runMigrations } from './services/migrationService.js';
 import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
+import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chatModelCapabilities.js';
 
 // Round 8: Infrastructure imports
 import healthRoutes from './routes/healthRoutes.js';
@@ -802,13 +803,6 @@ let modelsCache = null;
 let modelsCacheTimestamp = 0;
 const MODELS_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
-// Reasoning-capable model detection — matches BOTH bare XENO-API ids ('gemini-3-flash',
-// 'deepseek-v3.2', 'o3') and legacy 'company/model' (OpenRouter-style) ids, so the
-// reasoning param is set correctly regardless of id shape.
-function isReasoningCapableModel(id = '') {
-  return /deepseek|qwen|grok-|gemini-2\.5|gemini-3|(^|\/)o[134](\b|-)|claude-(sonnet|opus|haiku)-4|claude-3\.7-sonnet/i.test(String(id));
-}
-
 // Companies to include and their prefixes
 const COMPANY_PREFIXES = {
   'OpenAI': 'openai/',
@@ -863,10 +857,7 @@ app.get('/api/models', databaseMiddleware, authMiddleware, async (req, res) => {
       const latestModels = models.slice(0, 40).map(model => {
         const id = String(model.id).toLowerCase();
 
-        let supportsReasoning = 'disabled';
-        if (/deepseek|gemini-3|gemini-2\.5|grok-3|grok-4|claude-(sonnet|opus|haiku)-4|(^|\/)o[134]\b|thinking|-r1\b/.test(id)) {
-          supportsReasoning = 'toggleable';
-        }
+        const supportsReasoning = reasoningCapabilityForModel(id);
         const supportsVision = /gemini|gpt-5|gpt-4o|claude|pixtral|vision|llama-4|grok-4/.test(id);
 
         return {
@@ -1606,7 +1597,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             console.log(`Effective Reasoning State is TRUE for ${selectedModelId}. Checking for marker instructions.`);
             // Add appropriate instructions based on model type
             // Models that use native API reasoning field - NO marker instructions needed
-            const usesNativeReasoningField = isReasoningCapableModel(selectedModelId);
+            const usesNativeReasoningField = reasoningCapabilityForModel(selectedModelId) !== 'disabled';
 
             // Legacy models that need marker instructions in prompt
             const isPotentiallyGeminiStyle = false; // Now handled by native reasoning
@@ -1908,25 +1899,12 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
         // Add reasoning parameter for reasoning-capable models when reasoning is enabled
         if (effectiveReasoningState) {
-            // Models that support OpenRouter's reasoning parameter
-            const reasoningModels = [
-                'anthropic/claude-3.7-sonnet:thinking',
-                'deepseek/deepseek-r1',
-                'google/gemini-2.5-flash-preview-05-20:thinking',
-                'google/gemini-2.5-pro-preview',
-                'x-ai/grok-3-beta',
-                'x-ai/grok-3-mini-beta'
-            ];
-
-            // Check if model needs reasoning parameter
-            const modelNeedsReasoning = reasoningModels.includes(selectedModelId) || isReasoningCapableModel(selectedModelId);
-
-            if (modelNeedsReasoning) {
-                // OpenRouter expects reasoning to be an object, not a boolean
-                bodyPayload.reasoning = {
-                    effort: "high" // Can be "high", "medium", or "low"
-                };
-                console.log(`   -> Added reasoning: {effort: "high"} parameter for model ${selectedModelId}`);
+            const reasoningEffort = reasoningEffortForModel(selectedModelId, true);
+            if (reasoningEffort) {
+                // XENO API's preferred OpenAI-compatible field. Fixed-effort aliases
+                // deliberately omit it because the model ID already selects effort.
+                bodyPayload.reasoning_effort = reasoningEffort;
+                console.log(`   -> Added reasoning_effort: "${reasoningEffort}" for model ${selectedModelId}`);
             }
         }
         bodyPayload.model = normalizeXenoModelId(bodyPayload.model);
@@ -2070,7 +2048,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
             // Reasoning was requested for this call.
             // Check for special fields first (Qwen/Deepseek R1/Gemini Pro/Grok/Claude 3.7)
             // Models that may return reasoning in a separate field
-            const modelProvidesSeparateReasoning = isReasoningCapableModel(selectedModelId);
+            const modelProvidesSeparateReasoning = reasoningCapabilityForModel(selectedModelId) !== 'disabled';
                 
             if (modelProvidesSeparateReasoning) {
                 const reasoningContent = data.choices?.[0]?.message?.reasoning;
@@ -2396,7 +2374,7 @@ app.post('/api/v2/engine/dynamic-search', databaseMiddleware, authMiddleware, as
   const { query, max_pages = 10, index_results = true } = req.body;
 
   const pythonServiceUrl = process.env.NODE_ENV === 'production'
-    ? 'http://xeno-search-service:8000/api/v2/engine/dynamic-search'
+    ? 'http://xeno-search:8000/api/v2/engine/dynamic-search'
     : 'http://localhost:8000/api/v2/engine/dynamic-search';
 
   if (!query) {

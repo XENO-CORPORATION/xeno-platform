@@ -313,8 +313,8 @@ services:
       - LOGGING_LEVEL=INFO
       - LOGGING_FORMAT=json
       # Search configuration - Add your API keys here!
-      - SEARXNG_INSTANCE_URL=https://searx.tiekoetter.com
-      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - SEARCH_ENGINES=duckduckgo,brave
+      - BRAVE_SEARCH_API_KEY=${BRAVE_API_KEY:-}
       # Google Custom Search (get from https://developers.google.com/custom-search)
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - GOOGLE_CX=${GOOGLE_CX:-}
@@ -322,7 +322,7 @@ services:
       - BING_API_KEY=${BING_API_KEY:-}
       # NLP/ML configuration
       - SUMMARIZATION_MODEL=sshleifer/distilbart-cnn-12-6
-      - ENABLE_SEMANTIC_SEARCH=true
+      - SEMANTIC_SEARCH_ENABLED=true
       # CORS - allow from frontend and backend (JSON format for pydantic-settings v2)
       - CORS_ORIGINS=["http://backend:8080","https://xenostudio.ai"]
       # Meilisearch configuration (for Xeno Search Engine)
