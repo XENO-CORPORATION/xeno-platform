@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { IconButton, Spinner } from '@xenosystem/elements-react';
 import { Brain, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight, ArrowRightDecl, Search, X } from '@/lib/icons';
 import type { GroupedModels, Model } from '@/services/modelService';
-import { chainDurationMs, MODEL_CHAIN } from './composerGooey';
 
 interface ChatModelSelectorProps {
   groupedModels: GroupedModels[];
@@ -17,9 +16,9 @@ interface ChatModelSelectorProps {
   selectedModel: Model;
 }
 
-// Closing replays the gooey chain backwards (driven from the reveal root off the
-// data-inline-model-actions-state flag), so the chips must stay mounted that long.
-const inlineTrayCloseDuration = (visibleItemCount: number) => chainDurationMs(visibleItemCount, MODEL_CHAIN);
+// The rail keeps its final geometry throughout the transition. A short whole-rail
+// fade is enough to preserve context without making labels and pills drift apart.
+const INLINE_TRAY_EXIT_MS = 140;
 
 const formatTokenCount = (tokens: number): string => {
   if (tokens >= 1_000_000) {
@@ -99,17 +98,12 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
 
     clearInlineTrayCloseTimer();
     setIsInlineTrayClosing(true);
-    // +1 for the Back arrow: inside a provider it is a chip in the chain too, and
-    // undercounting cut the last chip's retreat off.
-    const visibleItemCount = activeInlineProviderGroup ? activeInlineProviderGroup.models.length + 1 : inlineProviderGroups.length;
-    const closeDuration = inlineTrayCloseDuration(visibleItemCount);
-
     inlineTrayCloseTimerRef.current = window.setTimeout(() => {
       inlineTrayCloseTimerRef.current = null;
       setIsInlineTrayClosing(false);
       updateOpen(false);
       afterClose?.();
-    }, closeDuration);
+    }, INLINE_TRAY_EXIT_MS);
   };
 
   const transitionInlineProvider = (nextProvider: string | null) => {
@@ -122,16 +116,11 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
 
     clearInlineTrayCloseTimer();
     setIsInlineTrayClosing(true);
-    // +1 for the Back arrow: inside a provider it is a chip in the chain too, and
-    // undercounting cut the last chip's retreat off.
-    const visibleItemCount = activeInlineProviderGroup ? activeInlineProviderGroup.models.length + 1 : inlineProviderGroups.length;
-    const closeDuration = inlineTrayCloseDuration(visibleItemCount);
-
     inlineTrayCloseTimerRef.current = window.setTimeout(() => {
       inlineTrayCloseTimerRef.current = null;
       setActiveInlineProvider(nextProvider);
       setIsInlineTrayClosing(false);
-    }, closeDuration);
+    }, INLINE_TRAY_EXIT_MS);
   };
 
   useEffect(() => {
@@ -162,11 +151,8 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
   useEffect(() => () => clearInlineTrayCloseTimer(), []);
 
   const handleSelect = (model: Model) => {
-    // Tell the parent only once the tray has finished closing. Announcing it up front
-    // re-rendered these very chips mid-exit (a different one is "current" now), and React
-    // rewrites `className` on that pass — which wiped the runtime gooey classes off them.
-    // They snapped back to full size, then vanished again when the tray unmounted: the
-    // chips appeared to close, come back, and close a second time.
+    // Tell the parent only once the short exit has finished so the selected-state update
+    // cannot replace the rail in the middle of its transition.
     closeInlineTray(() => {
       void onSelect(model);
     });
@@ -226,7 +212,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
     group.models.some((model) => model.id === selectedModel.id),
   )?.companyName;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isInlineTray || !isOpen || isInlineTrayClosing) {
       setInlineRailScrollState({ canScrollLeft: false, canScrollRight: false });
       setIsInlineRailSettled(false);
@@ -236,17 +222,19 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
     const rail = inlineRailRef.current;
     if (!rail) return;
 
-    setInlineRailScrollState({ canScrollLeft: false, canScrollRight: false });
-    setIsInlineRailSettled(false);
-    const visibleItemCount = activeInlineProviderGroup?.models.length ?? inlineProviderGroups.length;
-    // The entrance is the gooey chain, so the rail is only settled once that has run.
-    const settleTimer = window.setTimeout(
-      () => {
-        updateInlineRailScrollState();
-        setIsInlineRailSettled(true);
-      },
-      MODEL_CHAIN.durationMs + Math.max(visibleItemCount - 1, 0) * MODEL_CHAIN.staggerMs + 60,
-    );
+    // Align before paint. Doing this in a passive effect exposed one frame with the
+    // opposite end of the rail visible, followed by a hard horizontal jump.
+    rail.scrollLeft = rail.scrollWidth;
+    updateInlineRailScrollState();
+    setIsInlineRailSettled(true);
+  }, [activeInlineProvider, groupedModels, isInlineTray, isInlineTrayClosing, isOpen]);
+
+  useEffect(() => {
+    if (!isInlineTray || !isOpen || isInlineTrayClosing) return;
+
+    const rail = inlineRailRef.current;
+    if (!rail) return;
+
     const resizeObserver = typeof ResizeObserver === 'undefined'
       ? null
       : new ResizeObserver(updateInlineRailScrollState);
@@ -255,28 +243,10 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
     resizeObserver?.observe(rail);
 
     return () => {
-      window.clearTimeout(settleTimer);
       rail.removeEventListener('scroll', updateInlineRailScrollState);
       resizeObserver?.disconnect();
     };
-  }, [activeInlineProvider, activeInlineProviderGroup, groupedModels, inlineProviderGroups.length, isInlineTray, isInlineTrayClosing, isOpen]);
-
-  useEffect(() => {
-    if (!isInlineTray || !isOpen || isInlineTrayClosing) return;
-
-    const rail = inlineRailRef.current;
-    if (!rail) return;
-
-    // Anchored right, not left: the chain is born in the model trigger and unfolds
-    // leftwards, so the chip nearest the trigger has to be the one on screen.
-    rail.scrollLeft = rail.scrollWidth;
-    updateInlineRailScrollState();
-  }, [activeInlineProvider, isInlineTray, isInlineTrayClosing, isOpen]);
-
-  // Both directions are the gooey chain now (see composerGooey.ts) — the entrance, and the
-  // exit as that same chain run backwards. No keyframe of its own, or the two fight.
-  const inlineItemAnimationClass = '';
-  const getInlineAnimationDelay = (_index: number) => undefined;
+  }, [activeInlineProvider, groupedModels, isInlineTray, isInlineTrayClosing, isOpen]);
 
   return (
     <div
@@ -292,18 +262,12 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
             role="toolbar"
             aria-label="Available models"
             data-inline-model-actions-state={isInlineTrayClosing ? 'closing' : 'open'}
-            data-gooey-clip
-            /* No vertical padding: the floating row is locked to the chip height, and any
-               padding here made the row taller, which shoved it (model trigger included)
-               upward — the row is anchored by its bottom edge. The gooey travel gets its
-               room from .chat-gooey-clip--open instead. */
-            className="flex min-w-0 items-center justify-start overflow-x-auto overscroll-contain scroll-smooth hide-scrollbar"
+            className="chat-inline-model-actions flex min-w-0 items-center justify-start overflow-x-auto overscroll-contain scroll-smooth hide-scrollbar"
           >
             <div
-              data-gooey-rail="model"
-              data-gooey-dir="rtl"
-              data-gooey-from="[data-chat-model-trigger]"
-              className="flex min-w-max items-center gap-1.5 px-0.5"
+              key={activeInlineProvider ?? 'providers'}
+              data-inline-model-rail
+              className="chat-inline-model-rail flex min-w-max items-center gap-1.5 px-0.5"
             >
               {inlineProviderGroups.length === 0 ? (
                 <span className="whitespace-nowrap px-1 text-xs text-[var(--chat-muted)]">
@@ -318,13 +282,12 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                   size="md"
                   iconSize={14}
                   data-inline-model-provider-back
-                  data-gooey-chip
+                  data-inline-model-chip
                   disabled={isInlineTrayClosing}
                   onClick={() => transitionInlineProvider(null)}
-                  style={{ animationDelay: getInlineAnimationDelay(0) }}
                   aria-label="Back to providers"
                 />
-                {activeInlineProviderGroup.models.map((model, index) => {
+                {activeInlineProviderGroup.models.map((model) => {
                   const isSelected = selectedModel.id === model.id;
 
                   return (
@@ -332,12 +295,11 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                       key={model.id}
                       type="button"
                       data-inline-model-action
-                      data-gooey-chip
+                      data-inline-model-chip
                       aria-current={isSelected ? 'true' : undefined}
                       disabled={isInlineTrayClosing}
                       onClick={() => handleSelect(model)}
-                      style={{ animationDelay: getInlineAnimationDelay(index + 1) }}
-                      className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border px-3 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${inlineItemAnimationClass} ${
+                      className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border px-3 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${
                         isSelected
                           ? 'border-[var(--chat-muted)] bg-[var(--chat-control)] text-[var(--chat-text)]'
                           : 'border-[var(--chat-border)] bg-[var(--chat-overlay)] text-[var(--chat-muted)]'
@@ -353,7 +315,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                 })}
                 </>
               ) : (
-                inlineProviderGroups.map((group, index) => {
+                inlineProviderGroups.map((group) => {
                 const isSelectedProvider = group.companyName === selectedProviderName;
 
                 return (
@@ -361,12 +323,11 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
                     key={group.companyName}
                     type="button"
                     data-inline-model-provider={group.companyName}
-                    data-gooey-chip
+                    data-inline-model-chip
                     aria-current={isSelectedProvider ? 'true' : undefined}
                     disabled={isInlineTrayClosing}
                     onClick={() => transitionInlineProvider(group.companyName)}
-                    style={{ animationDelay: getInlineAnimationDelay(index) }}
-                    className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border px-2 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${inlineItemAnimationClass} ${
+                    className={`chat-inline-model-action flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border px-2 text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 hover:border-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--chat-muted)] ${
                       isSelectedProvider
                         ? 'border-[var(--chat-muted)] bg-[var(--chat-control)] text-[var(--chat-text)]'
                         : 'border-[var(--chat-border)] bg-[var(--chat-overlay)] text-[var(--chat-muted)]'
@@ -388,7 +349,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
               type="button"
               data-inline-model-scroll="left"
               onClick={() => scrollInlineRail('left')}
-              className="group absolute inset-y-0 left-0 z-10 flex w-7 items-center justify-start bg-gradient-to-r from-[var(--chat-canvas,#0a0a0b)]/80 to-transparent pl-1 focus-visible:outline-none"
+              className="group absolute inset-y-0 left-0 z-10 flex w-9 items-center justify-start bg-gradient-to-r from-[var(--chat-canvas,#0a0a0b)] via-[var(--chat-canvas,#0a0a0b)]/85 to-transparent pl-1 focus-visible:outline-none"
               aria-label="Show previous models"
             >
               <ChevronLeft data-inline-model-scroll-hint size={14} className="text-[var(--chat-muted)]" />
@@ -400,7 +361,7 @@ const ChatModelSelector: React.FC<ChatModelSelectorProps> = ({
               type="button"
               data-inline-model-scroll="right"
               onClick={() => scrollInlineRail('right')}
-              className="group absolute inset-y-0 right-0 z-10 flex w-7 items-center justify-end bg-gradient-to-l from-[var(--chat-canvas,#0a0a0b)]/80 to-transparent pr-1 focus-visible:outline-none"
+              className="group absolute inset-y-0 right-0 z-10 flex w-9 items-center justify-end bg-gradient-to-l from-[var(--chat-canvas,#0a0a0b)] via-[var(--chat-canvas,#0a0a0b)]/85 to-transparent pr-1 focus-visible:outline-none"
               aria-label="Show more models"
             >
               <ChevronRight data-inline-model-scroll-hint size={14} className="text-[var(--chat-muted)]" />

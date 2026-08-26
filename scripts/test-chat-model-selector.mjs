@@ -66,9 +66,7 @@ try {
   let selectedModelId = null;
   const waitForInlineMotion = async () => {
     await act(async () => {
-            // The inline tray now closes by replaying the gooey chain backwards, which takes
-      // longer than the old slide-out keyframe it replaced.
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      await new Promise((resolve) => setTimeout(resolve, 180));
     });
   };
 
@@ -125,6 +123,12 @@ try {
   });
   assert.ok(document.querySelector('[data-inline-model-actions]'), 'The empty-chat selector should show provider choices inline instead of over the composer.');
   assert.equal(document.querySelectorAll('[data-inline-model-provider]').length, 1, 'The inline selector should start with providers, not a long model list.');
+  assert.ok(document.querySelector('[data-inline-model-rail]'), 'The inline selector should reveal its catalog as one stable rail.');
+  assert.equal(document.querySelector('[data-gooey-rail="model"]'), null, 'The overflowing model rail must not distort individual pill geometry through the gooey chain.');
+  assert.ok(
+    [...document.querySelectorAll('[data-inline-model-chip]')].every((button) => !('gooeyChip' in button.dataset)),
+    'Inline model pills must keep their own chrome and label geometry throughout the transition.',
+  );
   assert.deepEqual(inlineOpenStates, [true], 'Opening the inline selector should notify its composer parent.');
 
   const xenoProviderButton = document.querySelector('[data-inline-model-provider="XENO"]');
