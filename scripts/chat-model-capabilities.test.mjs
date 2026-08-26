@@ -50,5 +50,7 @@ test('the chat route sends the preferred field and catalog uses the shared contr
 
 test('the shared contract is present in the frontend Docker build context', () => {
   const dockerignore = readFileSync(new URL('../.dockerignore', import.meta.url), 'utf8');
+  const deployScript = readFileSync(new URL('./deploy-platform.mjs', import.meta.url), 'utf8');
   assert.match(dockerignore, /!src\/server\/lib\/chatModelCapabilities\.js/);
+  assert.match(deployScript, /frontend:\s*\[[\s\S]*?'\.dockerignore'/);
 });

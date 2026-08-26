@@ -59,7 +59,7 @@ const REMOTE_TMP = '/tmp/xeno-deploy';
 const PATHS = {
   backend: ['src/server', 'Dockerfile.backend', 'docker-compose.yml'],
   frontend: [
-    'src', 'public', 'scripts', 'index.html', 'Dockerfile.frontend', 'nginx',
+    'src', 'public', 'scripts', 'index.html', 'Dockerfile.frontend', '.dockerignore', 'nginx',
     'package.json', 'package-lock.json',
     'vite.config.ts', 'vite.config.js',
     'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json',
