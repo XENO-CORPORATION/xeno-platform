@@ -263,6 +263,17 @@ try {
   assert.ok(document.querySelector('.chat-gooey-body'), 'The skin needs a body standing in for the box itself.');
   assert.ok(document.querySelector('filter#chat-composer-gooey-filter'), 'The metaball filter should be defined once per composer.');
   assert.equal(revealRow?.dataset.revealState, 'closed', 'The mode row starts hidden.');
+  assert.equal(revealRow?.dataset.gooeyDir, 'ltr', 'The mode row should unfold left to right.');
+  assert.equal(
+    revealRow?.dataset.gooeyFrom,
+    '[data-composer-reveal-trigger]',
+    'The mode row should emerge from the bottom-left composer trigger.',
+  );
+  assert.equal(
+    revealRow?.dataset.gooeyPath,
+    'bottom-left-to-top-right',
+    'The opening choreography should retain its diagonal bottom-left to top-right contract.',
+  );
   assert.equal(revealRoot?.dataset.melting, 'false', 'Nothing is crossing the box edge at rest.');
 
   assert.ok(shell?.className.includes('border'), 'The shell carries the single stroke.');

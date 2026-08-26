@@ -226,7 +226,10 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     onModelSelectorOpenChange?.(isModelTrayOpen);
   }, [isModelTrayOpen, onModelSelectorOpenChange]);
 
-  // The mode tabs + model chip climb straight out of the box, staggered left → right.
+  // The row is one continuous liquid path: its first control pulls out of the bottom-left
+  // reveal trigger, then each control unfolds from the previous one toward the top-right.
+  // Closing reverses the CLOCK but preserves that topology, so every control melts back
+  // through the same neighbour and the final one returns to the trigger.
   // Layout effect, not a plain one: the row is already visible by the time effects run,
   // so anything deferred past paint shows the tabs at rest for a frame before they drop
   // back into the box to climb out again.
@@ -248,18 +251,23 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     }
 
     const direction = isRevealOpen ? 'in' : 'out';
-    const delays = items.map((_, index) => (
-      (direction === 'in' ? index : items.length - 1 - index) * TAB_REVEAL.staggerMs
-    ));
+    const entranceDelays = items.map((_, index) => index * TAB_REVEAL.staggerMs);
+    const delays = direction === 'in' ? entranceDelays : reverseDelays(entranceDelays);
+    const fromSelector = row.dataset.gooeyFrom;
+    const fromEl = fromSelector
+      ? revealRootRef.current?.querySelector<HTMLElement>(fromSelector) ?? null
+      : null;
 
     setIsMelting(true);
     const cancel = runGooey({
       skin,
       items,
       delays,
+      orderDelays: entranceDelays,
       durationMs: TAB_REVEAL.durationMs,
-      chain: false,
+      chain: true,
       direction,
+      fromEl,
       onSettled: () => {
         setIsMelting(false);
         if (direction !== 'out') return;
@@ -996,6 +1004,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         <div
           ref={revealRowRef}
           data-composer-reveal-row
+          data-gooey-dir="ltr"
+          data-gooey-from="[data-composer-reveal-trigger]"
+          data-gooey-path="bottom-left-to-top-right"
           data-reveal-state={isRevealRowVisible ? 'open' : 'closed'}
         >
           {modeControls}
