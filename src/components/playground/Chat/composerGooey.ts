@@ -401,7 +401,7 @@ export const runGooey = (options: GooeyRunOptions): (() => void) => {
   return cancel;
 };
 
-/** Mode tabs + model chip: a slow, tall climb straight out of the box. */
+/** Mode tabs + model chip: a deliberate diagonal chain from the bottom-left opener. */
 export const TAB_REVEAL = { durationMs: 600, staggerMs: 80 } as const;
 /**
  * The tabs coming BACK after a rail closes — they unfold one out of the next. Slower
