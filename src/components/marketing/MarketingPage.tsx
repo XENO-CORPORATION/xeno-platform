@@ -14,8 +14,12 @@ export const MarketingPage: React.FC<{
   title: string;
   subtitle?: string;
   updated?: string;
+  /** Most prose pages use a readable 880px measure. Decision grids such as
+   * pricing can opt into the wider onboarding measure without forking the
+   * marketing shell. */
+  contentMaxWidth?: number;
   children: React.ReactNode;
-}> = ({ eyebrow, title, subtitle, updated, children }) => {
+}> = ({ eyebrow, title, subtitle, updated, contentMaxWidth = 880, children }) => {
   const navigate = useNavigate();
   return (
     <div className="flex min-h-screen flex-col bg-[#060606] text-white font-['Inter',sans-serif] overflow-x-clip antialiased">
@@ -23,7 +27,7 @@ export const MarketingPage: React.FC<{
       <main className="flex-1">
         <section className="page-gutter relative overflow-hidden pt-[clamp(92px,12vh,140px)] pb-[clamp(24px,4vh,48px)]">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[360px] bg-[radial-gradient(ellipse_55%_75%_at_50%_-10%,rgba(255, 255, 255,0.10),transparent_70%)]" />
-          <div className="relative mx-auto max-w-[880px]">
+          <div className="relative mx-auto w-full" style={{ maxWidth: contentMaxWidth }}>
             <Reveal>
               <Link to="/" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#69635b] transition-colors hover:text-[#cdc7be]">
                 <ArrowLeft className="h-3.5 w-3.5" /> Home
@@ -50,7 +54,7 @@ export const MarketingPage: React.FC<{
           </div>
         </section>
         <section className="page-gutter pb-[clamp(56px,8vh,110px)]">
-          <div className="mx-auto max-w-[880px]">{children}</div>
+          <div className="mx-auto w-full" style={{ maxWidth: contentMaxWidth }}>{children}</div>
         </section>
       </main>
       <Footer />

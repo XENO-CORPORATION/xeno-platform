@@ -367,7 +367,8 @@ test('the footer promises nothing the product cannot do yet', () => {
   // "Cancel any time" under a button that cannot charge is the kind of small
   // lie that makes a reader distrust everything else on the page.
   const card = pieces.slice(pieces.indexOf('export const PlanCard'), pieces.indexOf('/* \u2500\u2500 Field'));
-  assert.match(card, /available \? 'Cancel any time/, 'the reassurance is not conditional on being sellable');
+  assert.match(card, /available\s*\?\s*\(footerNote \|\| 'Cancel any time/,
+    'the reassurance or its surface-specific equivalent is not conditional on being sellable');
   assert.match(card, /Payments open shortly/, 'an unsellable plan has no honest footer line');
 });
 

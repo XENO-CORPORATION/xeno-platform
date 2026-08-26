@@ -23,6 +23,19 @@ test('every interactive purchase producer records and forwards consent', () => {
   }
 });
 
+test('public pricing shares the onboarding decision-card design', () => {
+  assert.match(pricing, /import \{ PlanCard \} from '\.\.\/components\/onboarding\/OnboardingPieces'/,
+    'public pricing has drifted back to its own card implementation');
+  assert.match(pricing, /aria-label="Billing interval"/,
+    'public pricing is missing the onboarding monthly/yearly control');
+  assert.match(pricing, /contentMaxWidth=\{1240\}/,
+    'the public decision surface is still constrained to the prose measure');
+  assert.match(pricing, /primaryPlans[\s\S]*plan\.id !== 'studio'/,
+    'the onboarding-style three-plan decision row is not explicit');
+  assert.match(pricing, /studioPlan[\s\S]*highest shipped plan|studioPlan\.line/,
+    'Studio disappeared while matching the onboarding three-card row');
+});
+
 test('Team checkout is workspace-bound from UI through server authority', () => {
   assert.match(billingClient, /startTeamCheckout/, 'the client has no workspace Team purchase path');
   assert.match(billingClient, /\/billing\/subscribe/, 'Team does not use the workspace billing route');

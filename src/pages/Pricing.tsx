@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import MarketingPage, { Section, Prose, CheckList } from '../components/marketing/MarketingPage';
+import MarketingPage, { Section, Prose } from '../components/marketing/MarketingPage';
+import { PlanCard } from '../components/onboarding/OnboardingPieces';
 import { startCheckout, startTeamCheckout, isAuthed, getBillingConfig, getBillingAvailability, type BillingAvailability, type BillingItem } from '../services/billingService';
 import { useSearchParams } from 'react-router-dom';
 import CheckoutConsent from '../components/billing/CheckoutConsent';
@@ -15,6 +16,41 @@ import {
 } from '../config/pricing';
 
 type LivePrice = { price: number; currency: string };
+type BillingInterval = 'month' | 'year';
+
+const planKey = (plan: string, interval: string = 'month') => `${plan}:${interval}`;
+
+function billingNote(item: BillingItem, currency: string): string {
+  const parts = item.interval === 'year'
+    ? [`Billed annually at ${formatPrice(item.price, currency)}`]
+    : ['Billed monthly'];
+  if (item.perSeat) parts.push('per seat');
+  parts.push('cancel any time');
+  return `${parts.join(' · ')}.`;
+}
+
+function foundingPromise(item?: BillingItem, currency = 'eur'): string | undefined {
+  if (!item?.founding || !item.becomes) return undefined;
+  const then = item.becomes.perMonth ?? item.becomes.price;
+  const unit = item.becomes.perMonth != null || item.interval !== 'year' ? '/mo' : '';
+  return `${formatPrice(then, currency)}${unit} for everyone who joins later. You keep this price for as long as you stay.`;
+}
+
+/** The toggle changes every personal/team card, so its saving claim uses the
+ * smallest exact saving in the live catalog. */
+function annualSavingFrom(catalog: BillingItem[]): number | null {
+  const savings = catalog
+    .filter((item) => item.kind === 'subscription' && item.interval === 'year')
+    .map((yearly) => {
+      const monthly = catalog.find((item) =>
+        item.kind === 'subscription' && item.plan === yearly.plan && (item.interval || 'month') === 'month');
+      if (!monthly?.price || !yearly.price) return null;
+      const yearOfMonths = monthly.price * 12;
+      return ((yearOfMonths - yearly.price) * 100) / yearOfMonths;
+    })
+    .filter((saving): saving is number => typeof saving === 'number' && saving > 0);
+  return savings.length ? Math.floor(Math.min(...savings)) : null;
+}
 
 /** Shared Stripe Checkout starter: signed-out users go to /auth first, signed-in users
  *  are redirected to Stripe. Reuses the existing billing flow — no new billing surface. */
@@ -162,11 +198,14 @@ const CreditPackCard: React.FC<{
 
 const Pricing: React.FC = () => {
   const checkout = useCheckout();
+  const navigate = useNavigate();
+  const [billingInterval, setBillingInterval] = React.useState<BillingInterval>('month');
 
   // Prefer the LIVE catalog price (which mirrors the Stripe Price actually charged) so the
   // advertised price always equals the charged price; fall back to the static value.
   const [live, setLive] = React.useState<Record<string, LivePrice>>({});
   const [offered, setOffered] = React.useState<Record<string, BillingItem>>({});
+  const [catalog, setCatalog] = React.useState<BillingItem[]>([]);
   React.useEffect(() => {
     let on = true;
     getBillingConfig().then((cfg) => {
@@ -175,10 +214,11 @@ const Pricing: React.FC = () => {
       const plans: Record<string, BillingItem> = {};
       for (const item of cfg.catalog) {
         prices[item.id] = { price: item.price, currency: item.currency || cfg.currency };
-        if (item.kind === 'subscription' && item.plan && item.interval === 'month') plans[item.plan] = item;
+        if (item.kind === 'subscription' && item.plan) plans[planKey(item.plan, item.interval)] = item;
       }
       setLive(prices);
       setOffered(plans);
+      setCatalog(cfg.catalog);
     }).catch(() => {});
     return () => { on = false; };
   }, []);
@@ -187,80 +227,150 @@ const Pricing: React.FC = () => {
    * Replace the static fallback id and amount with that offered item together,
    * so the button can never advertise one price and submit another SKU. */
   const displayPlans = PRICING_TIERS.map((plan) => {
-    const livePlan = plan.id === 'pro' ? offered.pro : offered[plan.id];
+    const interval = plan.id === 'studio' ? 'month' : billingInterval;
+    const livePlan = plan.id === 'free' ? undefined : offered[planKey(plan.id, interval)];
     if (!livePlan) return plan;
     return {
       ...plan,
       itemId: livePlan.id,
-      price: livePlan.price,
+      price: livePlan.perMonth ?? livePlan.price,
       currency: livePlan.currency,
-      note: plan.id === 'pro'
-        ? (livePlan.founding
-          ? 'Founding price €24/mo or €228/year — locked while subscribed. List price is €39/mo or €348/year.'
-          : '€39/mo, or €348/year (€29/month).')
-        : plan.note,
+      cadence: plan.id === 'team' ? '/seat/mo' : '/mo',
+      note: billingNote(livePlan, livePlan.currency),
     } satisfies PricingTier;
   });
 
+  const primaryPlans = displayPlans.filter((plan) => plan.id !== 'studio');
+  const studioPlan = displayPlans.find((plan) => plan.id === 'studio')!;
+  const displayedItems = Object.fromEntries(displayPlans.map((plan) => [
+    plan.id,
+    plan.itemId ? catalog.find((item) => item.id === plan.itemId) : undefined,
+  ])) as Record<string, BillingItem | undefined>;
+  const hasAnnual = catalog.some((item) => item.kind === 'subscription' && item.interval === 'year');
+  const annualSaving = annualSavingFrom(catalog);
+
   const priceLabel = (plan: PricingTier): string => {
     if (plan.price === 'custom') return 'Custom';
-    const l = plan.itemId ? live[plan.itemId] : undefined;
-    return formatPrice(l ? l.price : plan.price, l ? l.currency : plan.currency);
+    return formatPrice(plan.price, plan.currency);
   };
+
+  const pendingPlan = checkout.pending
+    ? displayPlans.find((plan) => plan.itemId === checkout.pending!.itemId)
+    : undefined;
+  const pendingItem = checkout.pending
+    ? catalog.find((item) => item.id === checkout.pending!.itemId)
+    : undefined;
+  const consentPrice = pendingItem?.interval === 'year'
+    ? `${formatPrice(pendingItem.price, pendingItem.currency)}/year (${formatPrice(pendingItem.perMonth ?? pendingItem.price, pendingItem.currency)}/month)`
+    : priceLabel(pendingPlan || displayPlans[0]);
 
   return (
   <>
   {checkout.pending && (
     <CheckoutConsent
       itemId={checkout.pending.itemId}
-      planLabel={displayPlans.find((t) => t.itemId === checkout.pending!.itemId)?.name || 'XENO'}
-      priceLabel={priceLabel(displayPlans.find((t) => t.itemId === checkout.pending!.itemId) || displayPlans[0])}
+      planLabel={pendingPlan?.name || 'XENO'}
+      priceLabel={consentPrice}
       onCancel={() => checkout.setPending(null)}
       onConsented={(consentId) => void checkout.proceed(checkout.pending!.itemId, consentId)}
     />
   )}
   <MarketingPage
     eyebrow="PRICING"
-    title="One plan. Every app, and the platform they run on."
+    title="Choose how you run XENO."
     subtitle="A XENO account and web workspace are free. An active plan unlocks new desktop installers and the connected platform. Team adds collaboration per paid seat."
     updated="August 2026"
+    contentMaxWidth={1240}
   >
-    <Section>
-      <div className="mb-6 rounded-[12px] border border-white/[0.09] bg-[#0d0d0d] px-5 py-4 text-[13px] leading-[1.6] text-[#b6afa5]">
-        <span className="font-semibold text-[#ece7df]">A free account is real — but the apps need a plan.</span>{' '}
-        Free gives you the account and web workspace. Obtaining a new desktop installer requires a paid
-        plan; an app you already installed keeps working locally. Everything covers every currently
-        available app plus the paid platform entitlements. Team adds collaboration per paid seat.
+    <Section className="mx-auto max-w-[1040px]">
+      {hasAnnual && (
+        <div className="mb-10 flex justify-center">
+          <div
+            role="group"
+            aria-label="Billing interval"
+            className="inline-flex gap-[2px] rounded-[9px] border border-white/[0.08] bg-[#08080a] p-1"
+          >
+            {([
+              { id: 'month' as const, label: 'Monthly' },
+              { id: 'year' as const, label: 'Yearly', hint: annualSaving ? `save ${annualSaving}%` : undefined },
+            ]).map((option) => {
+              const selected = billingInterval === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setBillingInterval(option.id)}
+                  className={`rounded-[6px] px-4 py-2 text-[12.5px] font-medium transition-all duration-200 ${
+                    selected ? 'bg-[#242424] text-white' : 'text-white/40 hover:text-white/70'
+                  }`}
+                >
+                  {option.label}
+                  {option.hint && (
+                    <span className={`ml-2 text-[10.5px] ${selected ? 'text-white/45' : 'text-white/25'}`}>
+                      {option.hint}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+        {primaryPlans.map((plan) => {
+          const item = displayedItems[plan.id];
+          const isFree = plan.id === 'free';
+          const available = isFree || (checkout.availability !== 'disabled' && (item?.available ?? true));
+          return (
+            <PlanCard
+              key={plan.id}
+              label={plan.name}
+              price={priceLabel(plan)}
+              interval={isFree ? '' : 'month'}
+              note={isFree ? 'No card, no expiry.' : (item ? billingNote(item, item.currency) : plan.note)}
+              description={plan.line}
+              promise={foundingPromise(item, item?.currency)}
+              features={plan.features.slice(0, 6)}
+              locked={isFree ? PRICING_TIERS.find((tier) => tier.id === 'pro')!.features.slice(0, 6) : []}
+              highlighted={plan.featured}
+              badge={plan.featured ? 'Most popular' : undefined}
+              available={available}
+              busy={Boolean(plan.itemId && checkout.busyId === plan.itemId)}
+              ctaLabel={plan.cta}
+              footerNote={isFree ? 'No card · No expiry' : undefined}
+              onSelect={() => isFree ? navigate(plan.href) : checkout.start(plan.itemId!)}
+            />
+          );
+        })}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {displayPlans.map((plan) => (
-          <div
-            key={plan.name}
-            className={`flex flex-col rounded-[14px] border bg-[#0d0d0d] p-6 ${
-              plan.featured ? 'border-white/30' : 'border-white/[0.07]'
-            }`}
-          >
-            {plan.featured && (
-              <div className="mb-3 inline-flex w-fit rounded-full border border-white/25 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#ece7df]">
-                Most popular
+      <div className="mt-7 grid gap-[2px] rounded-[12px] border border-white/[0.08] bg-[#08080a] p-1.5 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
+        <div className="rounded-[8px] bg-[#161616] px-6 py-5 sm:px-7">
+          <div className="flex flex-wrap items-baseline justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">{studioPlan.name}</div>
+              <div className="mt-2 flex items-baseline gap-1.5">
+                <span className="text-[32px] font-semibold leading-none tracking-[-0.035em] text-white/85">{priceLabel(studioPlan)}</span>
+                <span className="text-[12px] text-white/35">/month</span>
               </div>
-            )}
-            <h3 className="text-[15px] font-semibold text-[#ece7df]">{plan.name}</h3>
-            <div className="mt-2 flex items-end gap-1">
-              <span className="text-[28px] font-semibold leading-none tracking-[-0.02em] text-[#ece7df]">{priceLabel(plan)}</span>
-              {plan.cadence && <span className="pb-1 text-[12.5px] text-[#69635b]">{plan.cadence}</span>}
             </div>
-            <p className="mt-2 text-[12.5px] leading-[1.5] text-[#948d83]">{plan.line}</p>
-            <div className="mt-5 flex-1">
-              <CheckList items={plan.features} />
-            </div>
-            <PlanCTA plan={plan} checkout={checkout} />
-            {plan.note && (
-              <p className="mt-3 text-[11px] leading-[1.5] text-[#69635b]">{plan.note}</p>
-            )}
+            <p className="max-w-[420px] text-[13px] leading-relaxed text-white/45">{studioPlan.line}</p>
           </div>
-        ))}
+          <p className="mt-4 text-[11.5px] leading-relaxed text-white/30">{studioPlan.note}</p>
+        </div>
+        <div className="rounded-[8px] bg-[#111111] px-6 py-5">
+          <div className="grid gap-x-5 gap-y-2 sm:grid-cols-2">
+            {studioPlan.features.map((feature) => (
+              <div key={feature} className="flex items-start gap-2 text-[12.5px] leading-snug text-white/60">
+                <span className="mt-[7px] h-1 w-1 shrink-0 bg-white/45" />
+                {feature}
+              </div>
+            ))}
+          </div>
+          <PlanCTA plan={studioPlan} checkout={checkout} />
+        </div>
       </div>
     </Section>
 
