@@ -192,6 +192,14 @@ test('a finding is REDACTED — the secret is never returned', async () => {
   }
 });
 
+test('the reserved ACP redaction sentinel is not treated as an OpenAI credential', () => {
+  const findings = scanBuffer(
+    Buffer.from('sk-XENOLOCALFAKEKEY0000000000000000'),
+    PATTERNS,
+  );
+  assert.equal(findings.some((finding) => finding.patternId === 'openai-key'), false);
+});
+
 test('a Resend-shaped token is detected while an exact audited binary-symbol fingerprint is ignored', () => {
   assert.ok(
     scanBuffer(Buffer.from(`token=${FAKE_RESEND}`), PATTERNS)
