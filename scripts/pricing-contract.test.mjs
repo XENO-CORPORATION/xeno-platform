@@ -15,6 +15,21 @@ const agentRoutes = read('src/server/routes/agentRoutes.js');
 const canvasRoutes = read('src/server/routes/officeCanvasRoutes.js');
 const publicDownload = read('public/download/index.html');
 const landingHeader = read('src/components/landing-v3/Header.tsx');
+const publicPlatformMarketing = [
+  'src/pages/Pricing.tsx',
+  'src/pages/Features.tsx',
+  'src/pages/About.tsx',
+  'src/pages/DocsHome.tsx',
+  'src/pages/Docs.tsx',
+  'src/pages/Press.tsx',
+  'src/pages/Partners.tsx',
+  'src/pages/Careers.tsx',
+  'src/pages/Roadmap.tsx',
+  'src/components/landing-v3/HeroSection.tsx',
+  'src/components/landing-v3/CreateWithoutLimitsSection.tsx',
+  'src/components/landing-v3/PrivacyPricingSection.tsx',
+  'src/components/landing-v3/Header.tsx',
+];
 
 test('every interactive purchase producer records and forwards consent', () => {
   for (const [name, source] of [['onboarding', onboarding], ['pricing', pricing], ['billing page', billingPage]]) {
@@ -34,6 +49,20 @@ test('public pricing shares the onboarding decision-card design', () => {
     'the onboarding-style three-plan decision row is not explicit');
   assert.match(pricing, /studioPlan[\s\S]*highest shipped plan|studioPlan\.line/,
     'Studio disappeared while matching the onboarding three-card row');
+});
+
+test('public platform marketing is subscription-led, never credit-led', () => {
+  const retiredCreditMarketing = /free credits|starter credit|buy credits|credits-based|shared credit balance|powered by credits|credit-based funnel|credit packs/i;
+  for (const path of publicPlatformMarketing) {
+    assert.doesNotMatch(read(path), retiredCreditMarketing,
+      `${path} markets the API usage currency as a main-platform product`);
+  }
+  assert.match(pricing, /Platform subscriptions and API usage are separate/,
+    'the public pricing page no longer states the platform/API commercial boundary');
+  assert.match(read('src/pages/ApiReference.tsx'), /Credits & rate limits/,
+    'usage billing disappeared instead of remaining on the dedicated developer surface');
+  assert.match(billingPage, /Buy credits/,
+    'point-of-use account billing disappeared instead of remaining available to signed-in users');
 });
 
 test('Team checkout is workspace-bound from UI through server authority', () => {

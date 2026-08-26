@@ -17,7 +17,7 @@ const Press: React.FC = () => (
                 XENO is an AI-native creative and productivity platform. It brings generative AI together
                 with a suite of professional creative apps — image, video, audio, and product design —
                 a desktop launcher, embeddable AI agents, and a marketplace, all running on one
-                credits-based ecosystem. The goal is to give individuals and small teams studio-grade
+                connected ecosystem. The goal is to give individuals and small teams studio-grade
                 leverage in a single, interoperable platform rather than a sprawl of disconnected
                 subscriptions.
               </>
@@ -58,7 +58,7 @@ const Press: React.FC = () => (
         items={[
           {
             title: 'What it is',
-            desc: 'An AI-native ecosystem of creative and productivity apps, a desktop launcher, AI agents, and a marketplace on one credits-based platform.',
+            desc: 'An AI-native ecosystem of creative and productivity apps, a desktop launcher, AI agents, and a marketplace on one connected platform.',
           },
           {
             title: "Who it's for",

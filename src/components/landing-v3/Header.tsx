@@ -201,7 +201,7 @@ const navItems: NavEntry[] = [
       {
         label: 'Create',
         items: [
-          { label: 'Become a creator', href: '/marketplace?tab=sell', subtitle: 'Publish & earn credits' },
+          { label: 'Become a creator', href: '/marketplace?tab=sell', subtitle: 'Publish & earn' },
           { label: 'Publish a panel', href: '/marketplace?tab=sell', subtitle: 'Ship with the Panel SDK' },
           { label: 'Sell a Mind', href: '/marketplace?tab=sell', subtitle: 'Monetize your agents' },
           { label: 'Developer docs', href: '/learn', subtitle: 'Build for the platform' },

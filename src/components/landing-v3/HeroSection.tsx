@@ -484,7 +484,7 @@ const dashboardFeatures = [
   { title: '20+ AI models',    sub: 'Leading frontier models in one workspace', icon: Layers },
   { title: 'Private by design', sub: 'Your data is encrypted and never used to train', icon: ShieldCheck },
   { title: 'Local + cloud',    sub: 'Run anywhere with complete flexibility', icon: Monitor },
-  { title: '1000 free credits', sub: 'Start building immediately, no payment required', icon: Sparkles },
+  { title: 'Free workspace',    sub: 'Start building immediately, no payment required', icon: Sparkles },
 ];
 
 /* ──────────────────────────────────────────────────────────────────────

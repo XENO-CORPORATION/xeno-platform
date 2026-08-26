@@ -27,15 +27,15 @@ const Docs: React.FC = () => (
           items={[
             {
               title: 'Create an account',
-              desc: 'Sign up at xenostudio.ai to get your workspace, a starter credit balance, and access to every app and API.',
+              desc: 'Sign up at xenostudio.ai to get your workspace and access to the XENO platform.',
             },
             {
               title: 'Install Hub',
               desc: 'Download the XENO Hub desktop launcher. It installs, updates, and opens every creative app and signs you in once.',
             },
             {
-              title: 'Buy credits',
-              desc: 'Generation and inference are metered in credits. Top up from Billing — the same balance powers apps, agents, and the API.',
+              title: 'Use the developer API',
+              desc: 'Create an API key, review usage-based inference billing, and call supported models from your own software.',
             },
             {
               title: 'Connect the CLI',
@@ -52,7 +52,7 @@ const Docs: React.FC = () => (
         items={[
           {
             title: 'Hub',
-            desc: 'Install, update, and launch every XENO app, manage your account and credits, and discover Marketplace add-ons. See /product/hub for the full guide.',
+            desc: 'Install, update, and launch every XENO app, manage your account, and discover Marketplace add-ons. See /product/hub for the full guide.',
           },
           {
             title: 'Pixel',
@@ -101,7 +101,7 @@ const Docs: React.FC = () => (
           'Sign in once with Hub and keep every app authenticated automatically',
           'Generate your first image from a text prompt and refine it in Pixel',
           'Move a generated clip into Motion and add transitions and effects',
-          'Understand credits: how generation, inference, and exports are metered',
+          'Understand managed API usage: how hosted generation and inference are metered',
           'Create and rotate API keys, then call generation from the CLI',
           'Build a multi-step agent workflow with the Agent CLI and tool registry',
           'Install a Marketplace plugin and manage its capability permissions',

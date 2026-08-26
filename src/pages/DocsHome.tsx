@@ -82,9 +82,9 @@ const DocsHome: React.FC = () => {
       <Section title="Get started">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {[
-            { title: 'Create an account', desc: 'Sign up at xenostudio.ai for a workspace, a starter credit balance, and access to every app and API.' },
+            { title: 'Create an account', desc: 'Sign up at xenostudio.ai for your workspace and access to the XENO platform.' },
             { title: 'Install Hub', desc: 'The desktop launcher installs, updates, and opens every creative app and signs you in once.' },
-            { title: 'Buy credits', desc: 'Generation and inference are metered in credits — one balance powers apps, agents, and the API.' },
+            { title: 'Use the developer API', desc: 'Create an API key, review usage-based inference billing, and call supported models from your own software.' },
             { title: 'Connect the CLI', desc: 'Install the Agent CLI, add an API key, and drive generation and agents from your terminal.' },
           ].map((s) => (
             <div key={s.title} className="rounded-[12px] border border-white/[0.07] bg-[#0d0d0d] p-4">
