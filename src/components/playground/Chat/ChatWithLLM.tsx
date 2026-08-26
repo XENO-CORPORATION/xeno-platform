@@ -267,6 +267,7 @@ interface ChatMessage {
     isDotPlaceholder?: boolean; // Flag for temporary pulsing dot placeholder
     thinkingDuration?: number; // Added thinking duration in seconds
     modelIdUsed?: string; // Added ID of model that generated the message (if thinking)
+    modelId?: string; // Legacy persisted-message field.
     searchInfo?: {
         queries: string[];
         sources: { uri: string; title: string }[]; // Full source list from API
@@ -1578,7 +1579,7 @@ interface XenoSearchResultsData {
     query: string;
     search_type: 'normal' | 'deep'; // More specific typing
     summary?: string; // AI-generated overall summary
-    sources?: XenoSource[];
+    sources: XenoSource[];
     error?: string;
     processing_time?: number; // Enhanced: Track performance
     num_results?: number; // Enhanced: Track requested vs actual results
@@ -2667,6 +2668,25 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [selectedModel, setSelectedModel] = useState<Model>(DEFAULT_MODEL);
   const [groupedModels, setGroupedModels] = useState<GroupedModels[]>([]);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
+  const [modelSelectorOpenRequestKey, setModelSelectorOpenRequestKey] = useState<number | null>(null);
+  const [isComposerModelSelectorOpen, setIsComposerModelSelectorOpen] = useState(false);
+  const modelSelectorOpenCounterRef = useRef(0);
+  const modelSelectorControlId = React.useId();
+  const selectedModelProviderName = useMemo(() => {
+    const groupedProvider = groupedModels.find((group) =>
+      group.models.some((model) => model.id === selectedModel.id)
+    )?.companyName;
+    const inferredProvider = getCompanyNameFromModelId(selectedModel.id);
+
+    return groupedProvider ?? (inferredProvider === 'Other' ? 'Model' : inferredProvider);
+  }, [groupedModels, selectedModel.id]);
+  const requestComposerModelSelector = useCallback(() => {
+    modelSelectorOpenCounterRef.current += 1;
+    setModelSelectorOpenRequestKey(modelSelectorOpenCounterRef.current);
+  }, []);
+  const acknowledgeComposerModelSelectorRequest = useCallback(() => {
+    setModelSelectorOpenRequestKey(null);
+  }, []);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSettingsModalMounted, setIsSettingsModalMounted] = useState(false);
   const [isSettingsModalShown, setIsSettingsModalShown] = useState(false);
@@ -3192,6 +3212,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
           description: p.description || '',
           instructions: p.custom_instructions || '',
           files: [],
+          createdAt: p.created_at ? new Date(p.created_at).getTime() : Date.now(),
           updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : Date.now(),
         }));
         const merged = [...prev];
@@ -6817,12 +6838,7 @@ interface QueueState {
     let extractedDirectPrompt: string | null = null;
     let isPotentialImageRefinement: boolean = false;
 
-    // 1. Direct mode check: if user is in image mode, prompt is directly an image prompt
-    if (emptyStateMode === 'image') {
-        extractedDirectPrompt = userTextToSend;
-    }
-
-    // 2. Direct visual / image generation intent check (e.g. "Create a cozy rainy-night café in a watercolor style", "draw a cat", "generate an image of a sunset")
+    // Direct visual / image generation intent check (e.g. "Create a cozy rainy-night café in a watercolor style", "draw a cat", "generate an image of a sunset")
     if (!extractedDirectPrompt && !isLikelyCodeOrLongText) {
         const isImageAction = /^(create|generate|draw|paint|sketch|render|make|illustrate|design)\b/i.test(userTextForProcessing);
         const hasVisualTerm = /\b(image|photo|picture|drawing|illustration|art|portrait|painting|sketch|graphic|wallpaper|watercolor|cafe|cyberpunk|anime|scenery|landscape|scene|avatar|logo|render|3d)\b/i.test(userTextForProcessing);
@@ -7280,12 +7296,7 @@ Please provide a comprehensive, well-structured response using this deep search 
                         Math.min(Math.max(XENO_SEARCH_CONFIG.defaultNumResults, 1), XENO_SEARCH_CONFIG.maxNumResults)
                     );
 
-                    // Create a compatible data structure
-                    const xenoData = {
-                        sources: searchResult.sources,
-                        summary: searchResult.summary,
-                        error: searchResult.error
-                    };
+                    const xenoData = searchResult;
 
                     if (xenoData.error) {
                         console.error("Xeno Search Error:", xenoData.error);
@@ -7428,7 +7439,7 @@ Please provide a well-structured response using this search context and any mult
                         } else {
                             // No sources - don't augment prompt, let AI answer naturally
                             console.log('[Xeno Search] No sources found, AI will answer without search context');
-                            xenoContextForLLM = null;
+                            xenoContextForLLM = undefined;
                         }
 
                         // console.log('[ChatWithLLM HandleGenerate] Xeno Search successful, transformed searchInfo prepared.');
@@ -8902,7 +8913,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
                     handleDeleteProject(project.id);
                     closeProjectSettings();
                   }}
-                  style={{ borderColor: 'var(--chat-danger)' }}
+                  emphasis="outline"
                 >
                   Delete project
                 </Button>
@@ -9818,7 +9829,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     // Toggle like status
     setFeedbackStatusMap(prev => {
       const currentStatus = prev[messageId];
-      const newStatus = currentStatus === 'liked' ? null : 'liked';
+      const newStatus: 'liked' | null = currentStatus === 'liked' ? null : 'liked';
       const newMap = { ...prev, [messageId]: newStatus };
       // Persist to localStorage
       try {
@@ -9834,7 +9845,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
     // Toggle dislike status
     setFeedbackStatusMap(prev => {
       const currentStatus = prev[messageId];
-      const newStatus = currentStatus === 'disliked' ? null : 'disliked';
+      const newStatus: 'disliked' | null = currentStatus === 'disliked' ? null : 'disliked';
       const newMap = { ...prev, [messageId]: newStatus };
       // Persist to localStorage
       try {
@@ -11574,7 +11585,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   const performXenoSearch = async (
     query: string,
     numResults: number = 10
-  ): Promise<{ sources: XenoSource[]; summary?: string; error?: string }> => {
+  ): Promise<XenoSearchResultsData> => {
     try {
       console.log(`[Search] Performing XENO Search for: "${query}"`);
       const response = await fetch('/api/xeno-search', {
@@ -11599,12 +11610,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
       }));
 
       console.log(`[XENO Search] Found ${sources.length} results`);
-      return { sources, summary: data.summary };
+      return {
+        query: typeof data.query === 'string' ? data.query : query,
+        search_type: data.search_type === 'deep' ? 'deep' : 'normal',
+        sources,
+        summary: data.summary,
+        processing_time: data.processing_time ?? data.processing_time_ms,
+        num_results: numResults,
+      };
     } catch (error) {
       console.error('[XENO Search] Error:', error);
       return {
+        query,
+        search_type: 'normal',
         sources: [],
-        error: error instanceof Error ? error.message : 'Search failed'
+        error: error instanceof Error ? error.message : 'Search failed',
+        num_results: numResults,
       };
     }
   };
@@ -11894,6 +11915,14 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     !isCustomizePageOpen &&
     !activeProjectId &&
     !isChatsCatalogOpen;
+  const showCurrentModelInTopBar =
+    !isMultiInterface &&
+    !isProjectsPageOpen &&
+    !isArtifactsPageOpen &&
+    !isGlobalSettingsPageOpen &&
+    !isScheduledPageOpen &&
+    !isCustomizePageOpen &&
+    !isChatsCatalogOpen;
 
   /**
    * The scroll-to-bottom pill, for the composer to host inside its floating mode row.
@@ -11934,6 +11963,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             hideToolRail={options?.forceCompact}
             activeMode={emptyStateMode}
             canAnalyzeDocument={modelSupportsFileUpload(selectedModel)}
+            modelSelectorOpenRequestKey={modelSelectorOpenRequestKey}
             modelSelector={({ isInlineTray, onOpenChange }) => (
               <ChatModelSelector
                 groupedModels={groupedModels}
@@ -11942,11 +11972,15 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 isMinimal
                 isLoading={isModelsLoading}
                 isReasoningActive={modelHasReasoningCapability(selectedModel.id, selectedModel) !== 'disabled' && isReasonToggled}
+                openRequestKey={modelSelectorOpenRequestKey}
+                onOpenRequestHandled={acknowledgeComposerModelSelectorRequest}
                 onOpenChange={onOpenChange}
                 onSelect={handleModelSelect}
                 selectedModel={selectedModel}
+                triggerId={modelSelectorControlId}
               />
             )}
+            onModelSelectorOpenChange={setIsComposerModelSelectorOpen}
             onAgentActionSelect={handleEmptyStateAgentAction}
             onModeChange={handleEmptyStateModeChange}
             onUploadFile={handleUploadFile}
@@ -14821,6 +14855,39 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   aria-hidden="true"
                 />
               )}
+              {showCurrentModelInTopBar && (
+                <button
+                  type="button"
+                  data-chat-current-model
+                  data-selection={isComposerModelSelectorOpen ? 'on' : 'off'}
+                  className={topBarBtnClass(
+                    isComposerModelSelectorOpen,
+                    'hidden min-w-0 max-w-[15rem] gap-2 px-3 text-xs sm:flex',
+                  )}
+                  aria-expanded={isComposerModelSelectorOpen}
+                  aria-controls={modelSelectorControlId}
+                  aria-label={`Open model selector. Current model: ${selectedModel.name}`}
+                  title={`Current model: ${selectedModel.name}`}
+                  onClick={() => {
+                    requestComposerModelSelector();
+                    setIsChatMoreMenuOpen(false);
+                    setIsSharePreviewOpen(false);
+                    setIsThemeMenuOpen(false);
+                  }}
+                >
+                  <Brain size={15} className="flex-shrink-0" />
+                  <span className="hidden flex-shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--chat-muted)] lg:inline">
+                    {selectedModelProviderName}
+                  </span>
+                  <span className="min-w-0 truncate font-medium text-[var(--chat-text)]">
+                    {selectedModel.name}
+                  </span>
+                  <ChevronDown
+                    size={12}
+                    className={`flex-shrink-0 transition-transform duration-150 ${isComposerModelSelectorOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+              )}
               {/* System Prompt — multi-interface only; main chat opens it from ⋯ */}
               {isMultiInterface && (
               <div className={`relative ${messages.length === 0 ? 'hidden' : ''}`}>
@@ -15617,7 +15684,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   <div className="my-1 border-t border-[var(--chat-border)]" />
 
                   <MenuItem
-                    onSelect={(event) => {
+                    onClick={(event) => {
                       openCustomizePage(event.currentTarget);
                       setIsChatMoreMenuOpen(false);
                     }}

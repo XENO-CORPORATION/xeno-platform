@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, it, expect } from 'vitest'
 import Search from '../../../elements/src/elements/search'
 import Plus from '../../../elements/src/elements/plus'
+import Bookmark from '../../../elements/src/elements/bookmark'
 import { Button } from './Button.js'
 import { IconButton } from './IconButton.js'
 import { ToggleButton } from './ToggleButton.js'
@@ -42,6 +43,14 @@ describe('Button', () => {
   it('carries the quiet variant through to the axis', () => {
     expect(html(<Button variant="quiet">Share</Button>)).toContain('data-variant="quiet"')
   })
+
+  it('carries icon sizing, reveal direction, and destructive emphasis as component state', () => {
+    const reveal = html(<Button leadingIcon={Search} iconSize={13} iconReveal>Find</Button>)
+    expect(reveal).toContain('data-icon-reveal="leading"')
+    expect(reveal).toContain('width="13"')
+    expect(reveal).toContain('class="xeno-btn-label"')
+    expect(html(<Button variant="danger" emphasis="solid">Delete</Button>)).toContain('data-emphasis="solid"')
+  })
 })
 
 describe('IconButton', () => {
@@ -51,6 +60,12 @@ describe('IconButton', () => {
     expect(out).toContain('data-variant="ghost"')
     expect(out).toContain('aria-label="Add"')
     expect(out).toContain('<svg')
+  })
+
+  it('passes discrete state to a morphing glyph instead of leaking the prop to the DOM', () => {
+    const out = html(<IconButton icon={Bookmark} iconState={{ selection: 'on' }} aria-label="Unpin" />)
+    expect(out).toContain('data-selection="on"')
+    expect(out).not.toContain('iconState')
   })
 })
 
@@ -85,19 +100,23 @@ describe('Switch', () => {
 
 describe('TextInput', () => {
   it('renders a field; a leading icon makes it a search input', () => {
-    const out = html(<TextInput leadingIcon={Search} placeholder="Search" />)
+    const out = html(<TextInput leadingIcon={Search} iconSize={14} fontSize={13} placeholder="Search" />)
     expect(out).toContain('class="xeno-input"')
     expect(out).toContain('class="xeno-input-field"')
     expect(out).toContain('placeholder="Search"')
     expect(out).toContain('<svg')
+    expect(out).toContain('width="14"')
+    expect(out).toContain('--xeno-font:13px')
   })
 })
 
 describe('Textarea', () => {
   it('renders a card-radius multiline field with availability', () => {
-    const out = html(<Textarea placeholder="Message" />)
+    const out = html(<Textarea placeholder="Message" mono fontSize={14} />)
     expect(out).toContain('class="xeno-textarea"')
     expect(out).toContain('data-availability="enabled"')
+    expect(out).toContain('data-mono=""')
+    expect(out).toContain('--xeno-font:14px')
     expect(html(<Textarea disabled />)).toContain('data-availability="disabled"')
   })
 })

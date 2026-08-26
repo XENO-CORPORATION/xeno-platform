@@ -52,8 +52,8 @@ const ROOT = path.join(HERE, '..');
  *   as a JSX component". Pinning `react` / `react-dom` in `paths` is the type-level twin of the
  *   `dedupe` that `vite.config.ts` already does at runtime, and it collapses all 244.
  */
-const BASELINE = 456;
-const CHAT_BASELINE = 20;
+const BASELINE = 413;
+const CHAT_BASELINE = 0;
 
 /* The compiler's own entry point, run by node — not `npx tsc` through a shell. `npx` is exactly how
    this repo ended up believing it had zero type errors: with `typescript` absent it fetched a joke

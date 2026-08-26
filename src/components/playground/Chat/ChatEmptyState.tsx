@@ -39,7 +39,9 @@ interface ChatEmptyStateProps {
   hideToolRail?: boolean;
   activeMode: ChatMode;
   canAnalyzeDocument: boolean;
+  modelSelectorOpenRequestKey?: number | null;
   modelSelector?: (options: { isInlineTray: boolean; onOpenChange: (isOpen: boolean) => void }) => React.ReactNode;
+  onModelSelectorOpenChange?: (isOpen: boolean) => void;
   onAgentActionSelect: (actionId: AgentHubMockActionId) => void;
   onModeChange: (mode: ChatMode) => void;
   onUploadFile: () => void;
@@ -153,7 +155,9 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   hideToolRail = false,
   activeMode,
   canAnalyzeDocument,
+  modelSelectorOpenRequestKey = null,
   modelSelector,
+  onModelSelectorOpenChange,
   onAgentActionSelect,
   onModeChange,
   onUploadFile,
@@ -206,6 +210,21 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   useEffect(() => {
     if (isRevealOpen) setIsRevealRowVisible(true);
   }, [isRevealOpen]);
+
+  // The top-bar model chip is only a remote opener for the selector that lives here.
+  // Bring its floating row into view first; if Agents currently owns the row, return to
+  // Chat so the canonical model selector can mount and consume the same request.
+  useEffect(() => {
+    if (modelSelectorOpenRequestKey === null) return;
+
+    setIsRevealOpen(true);
+    setIsRevealRowVisible(true);
+    if (activeMode === 'agents') onModeChange('chat');
+  }, [activeMode, modelSelectorOpenRequestKey, onModeChange]);
+
+  useEffect(() => {
+    onModelSelectorOpenChange?.(isModelTrayOpen);
+  }, [isModelTrayOpen, onModelSelectorOpenChange]);
 
   // The mode tabs + model chip climb straight out of the box, staggered left → right.
   // Layout effect, not a plain one: the row is already visible by the time effects run,

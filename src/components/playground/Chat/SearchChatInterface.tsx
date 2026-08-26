@@ -111,12 +111,14 @@ interface PageContent {
 }
 
 interface BrowserAction {
-  type: 'click' | 'type' | 'scroll' | 'navigate' | 'screenshot' | 'wait' | 'extract';
+  type: 'click' | 'type' | 'scroll' | 'submit' | 'navigate' | 'screenshot' | 'wait' | 'extract';
   selector?: string;
   text?: string;
   url?: string;
   direction?: 'up' | 'down';
   amount?: number;
+  x?: number;
+  y?: number;
 }
 
 interface AgentStep {
