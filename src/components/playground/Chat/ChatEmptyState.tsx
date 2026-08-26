@@ -21,6 +21,7 @@ import {
 import {
   AGENT_CHAIN,
   chainDurationMs,
+  MODEL_CHAIN,
   reverseDelays,
   GOOEY_FILTER_ID,
   TAB_CHAIN,
@@ -258,7 +259,8 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   }, [isRevealOpen, isRevealRowVisible]);
 
   // The rails (agent actions, model chips) render themselves; watch for the DOM landing
-  // and chain them out of whatever control opened them.
+  // and chain their filtered skin out of whatever control opened them. Model controls
+  // keep their real geometry fixed because their rail can overflow horizontally.
   useLayoutEffect(() => {
     if (!isRevealOpen) return;
 
@@ -289,7 +291,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         cancels.delete(rail);
         lastChips.delete(rail);
 
-        const config = AGENT_CHAIN;
+        const config = rail.dataset.gooeyRail === 'model' ? MODEL_CHAIN : AGENT_CHAIN;
         const entrance = entranceDelays(rail, chips.length, config.staggerMs);
         const fromSelector = rail.dataset.gooeyFrom;
 
@@ -300,6 +302,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
           orderDelays: entrance,
           durationMs: config.durationMs,
           chain: true,
+          preserveItemGeometry: rail.dataset.gooeyPreserveGeometry === 'true',
           direction: 'out',
           fromEl: fromSelector ? row.querySelector<HTMLElement>(fromSelector) : null,
           clip: rail.closest<HTMLElement>('[data-gooey-clip]'),
@@ -320,7 +323,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       cancels.get(rail)?.();
       cancels.delete(rail);
 
-      const config = AGENT_CHAIN;
+      const config = rail.dataset.gooeyRail === 'model' ? MODEL_CHAIN : AGENT_CHAIN;
       const delays = entranceDelays(rail, chips.length, config.staggerMs);
       const fromSelector = rail.dataset.gooeyFrom;
       const fromEl = fromSelector ? row.querySelector<HTMLElement>(fromSelector) : null;
@@ -331,6 +334,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
         delays,
         durationMs: config.durationMs,
         chain: true,
+        preserveItemGeometry: rail.dataset.gooeyPreserveGeometry === 'true',
         fromEl,
         // The Agents tab is replaced by the rail it opens, so by now it is gone —
         // fall back to the rect captured just before the swap.
@@ -344,9 +348,11 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
     /** A rail marks itself `closing` before it unmounts; that is the cue to play it out. */
     const closingRailFrom = (node: Node): HTMLElement | null => {
       if (!(node instanceof HTMLElement)) return null;
-      const state = node.dataset.agentActionsState;
+      const state = node.dataset.agentActionsState ?? node.dataset.inlineModelActionsState;
       if (state !== 'closing') return null;
-      return node.matches('[data-gooey-rail]') ? node : null;
+      return node.matches('[data-gooey-rail]')
+        ? node
+        : node.querySelector<HTMLElement>('[data-gooey-rail]');
     };
 
     const observer = new window.MutationObserver((records) => {
@@ -382,7 +388,7 @@ const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['data-agent-actions-state'],
+      attributeFilter: ['data-agent-actions-state', 'data-inline-model-actions-state'],
     });
     row.querySelectorAll<HTMLElement>('[data-gooey-rail]').forEach((rail) => runRail(rail));
 
