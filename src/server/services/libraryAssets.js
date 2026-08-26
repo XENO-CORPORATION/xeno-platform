@@ -7,6 +7,28 @@ const SIGNATURE_VERSION = 'v1';
 const DEFAULT_LINK_TTL_SECONDS = 24 * 60 * 60;
 const MAX_LINK_TTL_SECONDS = 7 * 24 * 60 * 60;
 
+export function decodeLegacyLibraryImageDataUrl(value) {
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\r\n]+)$/i.exec(String(value || ''));
+  if (!match) throw new Error('Legacy generation entry is not an image data URL');
+  const buffer = Buffer.from(match[2].replace(/[\r\n]/g, ''), 'base64');
+  if (!buffer.length) throw new Error('Legacy generation entry decoded to zero bytes');
+
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) {
+    return { buffer, declaredMime: match[1].toLowerCase(), mimeType: 'image/png', extension: 'png' };
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return { buffer, declaredMime: match[1].toLowerCase(), mimeType: 'image/jpeg', extension: 'jpg' };
+  }
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF'
+    && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
+    return { buffer, declaredMime: match[1].toLowerCase(), mimeType: 'image/webp', extension: 'webp' };
+  }
+  if (buffer.length >= 6 && ['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'))) {
+    return { buffer, declaredMime: match[1].toLowerCase(), mimeType: 'image/gif', extension: 'gif' };
+  }
+  throw new Error(`Unsupported legacy image bytes (declared ${match[1].toLowerCase()})`);
+}
+
 const signingSecret = () => {
   const secret = process.env.LIBRARY_CONTENT_SECRET || process.env.JWT_SECRET;
   if (!secret) throw new Error('LIBRARY_CONTENT_SECRET or JWT_SECRET is required for signed Library links');
@@ -136,6 +158,7 @@ export async function listLibraryItems(db, userId, params = {}) {
           WHEN 'document' THEN 'text/plain' ELSE 'image/*' END AS mime_type,
         octet_length(a.content)::bigint AS size_bytes, a.preview_text AS description,
         CASE WHEN a.kind = 'image' AND (a.content LIKE 'https://%' OR a.content LIKE 'http://%' OR a.content LIKE '/%') THEN a.content ELSE NULL END AS preview_url,
+        NULL::uuid AS asset_id,
         a.conversation_id, c.title AS conversation_title, a.created_at, a.updated_at
       FROM chat_artifacts a LEFT JOIN chat_conversations c ON c.id = a.conversation_id
       WHERE a.user_id = $1 AND a.is_archived = FALSE
@@ -149,21 +172,38 @@ export async function listLibraryItems(db, userId, params = {}) {
         COALESCE(f.metadata->>'description', f.metadata->>'prompt', ''),
         CASE WHEN f.storage_type = 'platform-upload' AND COALESCE(f.mime_type, f.file_type, '') LIKE 'image/%'
           THEN '/api/library/assets/' || f.id::text || '/content' ELSE NULL END,
+        f.id,
         NULL::uuid, NULL::text, f.created_at AT TIME ZONE 'UTC', COALESCE(f.last_used_at, f.created_at) AT TIME ZONE 'UTC'
       FROM user_files f WHERE f.user_id = $1 AND f.deleted_at IS NULL
+        AND COALESCE(f.metadata->>'source', '') <> 'legacy-image-generation'
       UNION ALL
       SELECT 'generation:' || g.id::text || ':' || generated.ordinality::text, 'generation'::text, g.id,
-        COALESCE(NULLIF(left(g.prompt, 96), ''), 'Generated image'), 'images'::text, 'image'::text, 'image/*'::text,
-        NULL::bigint, g.prompt, CASE WHEN generated.url LIKE 'https://%' OR generated.url LIKE 'http://%' OR generated.url LIKE '/%' THEN generated.url ELSE NULL END,
+        COALESCE(NULLIF(left(g.prompt, 96), ''), 'Generated image'), 'images'::text, 'image'::text,
+        COALESCE(migrated.mime_type, 'image/*')::text,
+        migrated.file_size::bigint, g.prompt,
+        CASE WHEN migrated.id IS NOT NULL THEN '/api/library/assets/' || migrated.id::text || '/content'
+          WHEN generated.url LIKE 'https://%' OR generated.url LIKE 'http://%' OR generated.url LIKE '/%' THEN generated.url ELSE NULL END,
+        migrated.id,
         NULL::uuid, NULL::text, g.created_at AT TIME ZONE 'UTC', g.created_at AT TIME ZONE 'UTC'
       FROM image_generations g CROSS JOIN LATERAL jsonb_array_elements_text(
         CASE WHEN jsonb_typeof(g.image_urls) = 'array' THEN g.image_urls ELSE '[]'::jsonb END
-      ) WITH ORDINALITY AS generated(url, ordinality) WHERE g.user_id = $1
+      ) WITH ORDINALITY AS generated(url, ordinality)
+      LEFT JOIN LATERAL (
+        SELECT f.id, f.file_size, f.mime_type
+        FROM user_files f
+        WHERE f.user_id = g.user_id AND f.deleted_at IS NULL AND f.storage_type = 'platform-upload'
+          AND f.metadata->>'source' = 'legacy-image-generation'
+          AND f.metadata->>'legacy_generation_id' = g.id::text
+          AND f.metadata->>'legacy_ordinal' = generated.ordinality::text
+        ORDER BY f.created_at ASC LIMIT 1
+      ) migrated ON TRUE
+      WHERE g.user_id = $1
       UNION ALL
       SELECT 'image_asset:' || ia.id::text, 'image_asset'::text, ia.id, ia.name, 'images'::text, 'image'::text,
         COALESCE(NULLIF(ia.format, ''), 'image/*'), ia.file_size::bigint, COALESCE(ia.prompt, ''),
         CASE WHEN COALESCE(ia.thumbnail_url, ia.file_url) LIKE 'https://%' OR COALESCE(ia.thumbnail_url, ia.file_url) LIKE 'http://%'
           OR COALESCE(ia.thumbnail_url, ia.file_url) LIKE '/%' THEN COALESCE(ia.thumbnail_url, ia.file_url) ELSE NULL END,
+        NULL::uuid,
         NULL::uuid, NULL::text, ia.created_at AT TIME ZONE 'UTC', ia.created_at AT TIME ZONE 'UTC'
       FROM image_assets ia WHERE ia.user_id = $1
     )

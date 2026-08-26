@@ -13,6 +13,7 @@ export interface LibraryItemRecord {
   size_bytes?: number | string | null;
   description?: string;
   preview_url?: string | null;
+  asset_id?: string | null;
   conversation_id?: string | null;
   conversation_title?: string | null;
   created_at: string;
@@ -94,12 +95,14 @@ export const libraryService = {
 };
 
 export function libraryItemToAssetRef(item: LibraryItemRecord): LibraryAssetRef | null {
-  if (item.source !== 'file' || item.category !== 'images') return null;
+  if (item.category !== 'images') return null;
+  const assetId = item.asset_id || (item.source === 'file' ? item.source_id : null);
+  if (!assetId) return null;
   return {
-    assetId: item.source_id,
+    assetId,
     name: item.name,
     mimeType: item.mime_type || 'image/*',
     size: Number(item.size_bytes || 0) || undefined,
-    contentUrl: item.preview_url || `/api/library/assets/${item.source_id}/content`,
+    contentUrl: item.preview_url || `/api/library/assets/${assetId}/content`,
   };
 }

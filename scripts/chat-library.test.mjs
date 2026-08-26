@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import {
   assertOwnedLibraryAttachments,
   createSignedLibraryContentPath,
+  decodeLegacyLibraryImageDataUrl,
+  listLibraryItems,
   verifySignedLibraryContentRequest,
 } from '../src/server/services/libraryAssets.js';
 
@@ -24,6 +26,7 @@ const image = read('src', 'components', 'library', 'LibraryAssetImage.tsx');
 const viewer = read('src', 'components', 'library', 'LibraryAssetViewer.tsx');
 const styles = read('src', 'index.css');
 const app = read('src', 'App.tsx');
+const legacyMigration = read('src', 'server', 'migrate-legacy-library-images.js');
 
 test('account Library aggregates every live account-owned chat/media store', () => {
   assert.match(libraryRoutes, /router\.get\('\/assets'/);
@@ -36,6 +39,28 @@ test('account Library aggregates every live account-owned chat/media store', () 
   assert.match(libraryAssets, /ia\.user_id = \$1/);
   assert.match(libraryAssets, /\['all', 'images', 'files'\]/);
   assert.match(server, /app\.use\('\/api\/library', databaseMiddleware, libraryRoutes\)/);
+});
+
+test('legacy generation bytes map to managed assets without duplicate Library rows', async () => {
+  const png = Buffer.from('89504e470d0a1a0a00000000', 'hex');
+  const decoded = decodeLegacyLibraryImageDataUrl(`data:image/jpeg;base64,${png.toString('base64')}`);
+  assert.equal(decoded.declaredMime, 'image/jpeg');
+  assert.equal(decoded.mimeType, 'image/png');
+  assert.equal(decoded.extension, 'png');
+
+  let capturedSql = '';
+  await listLibraryItems({ query: async (sql) => { capturedSql = sql; return { rows: [] }; } }, '20000000-0000-4000-8000-000000000002');
+  assert.match(capturedSql, /AS asset_id/);
+  assert.match(capturedSql, /legacy-image-generation/);
+  assert.match(capturedSql, /legacy_generation_id/);
+  assert.match(capturedSql, /migrated\.id/);
+  assert.match(legacyMigration, /DRY RUN/);
+  assert.match(legacyMigration, /pg_advisory_lock/);
+  assert.match(legacyMigration, /registerManagedLibraryFile/);
+  assert.match(legacyMigration, /if \(confirm\) await fs\.promises\.mkdir/);
+  assert.match(legacyMigration, /if \(createdStorageFile\) await fs\.promises\.unlink/);
+  assert.match(routes, /listLibraryItems\(req\.db, userId, req\.query\)/);
+  assert.match(libraryClient, /item\.asset_id/);
 });
 
 test('Library blob reads require ownership and a server-managed upload record', () => {
