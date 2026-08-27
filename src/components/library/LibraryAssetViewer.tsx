@@ -116,7 +116,7 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
       data-library-asset-viewer="true"
       data-library-viewer-left={Math.max(0, leftInset)}
     >
-      <header className="grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-white/10 bg-[#080808] px-3">
+      <header className="grid h-[50px] shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-white/10 bg-[#080808] px-3">
         <div className="flex min-w-0 items-center gap-2 overflow-hidden text-[12px] text-white/65">
           <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-white/10" aria-label="Close preview"><X size={16} /></button>
           <span className="shrink-0 text-[13px] font-semibold tracking-tight text-white">XENO</span>
