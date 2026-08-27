@@ -16,3 +16,11 @@ test('the canonical nested route mounts the chat surface with a conversation id'
   const overviewSource = await readFile(new URL('../src/pages/Overview.tsx', import.meta.url), 'utf8');
   assert.match(overviewSource, /path="chat\/llm\/:conversationId" element=\{<MultiChatContainer \/>\}/);
 });
+
+test('compact project URLs survive a hard reload through the canonical Overview route', async () => {
+  assert.match(appSource, /path="\/projects\/:projectId" element=\{<ProjectRouteRedirect \/>\}/);
+  assert.match(appSource, /`\/overview\/chat\/projects\/\$\{encodeURIComponent\(projectId\)\}`/);
+
+  const overviewSource = await readFile(new URL('../src/pages/Overview.tsx', import.meta.url), 'utf8');
+  assert.match(overviewSource, /path="chat\/projects\/:projectId" element=\{<MultiChatContainer \/>\}/);
+});
