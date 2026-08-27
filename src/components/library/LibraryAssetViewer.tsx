@@ -131,15 +131,6 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
-        {visibleImageItems.length > 1 && (
-          <aside className="flex w-[76px] shrink-0 flex-col items-center gap-2 overflow-y-auto border-r border-white/10 py-3">
-            {visibleImageItems.map(({ item: entry, index: entryIndex }) => (
-              <button key={entry.id} type="button" onClick={() => setIndex(entryIndex)} className={`h-14 w-14 overflow-hidden rounded-lg border bg-white/[0.03] ${entryIndex === index ? 'border-white/80' : 'border-white/15 opacity-70 hover:opacity-100'}`} aria-label={`Preview ${entry.name}`}>
-                <LibraryAssetImage asset={entry.asset} sourceUrl={entry.sourceUrl} alt={entry.name} className="flex h-full w-full items-center justify-center object-cover text-white/35" draggable={false} />
-              </button>
-            ))}
-          </aside>
-        )}
         <main className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-5" data-library-preview-state={imageState}>
           <LibraryAssetImage
             key={item.id}
@@ -159,6 +150,19 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
             )}
           />
         </main>
+        {visibleImageItems.length > 1 && (
+          <aside
+            className="flex w-[76px] shrink-0 flex-col items-center gap-2 overflow-y-auto border-l border-white/10 py-3"
+            aria-label="Image history"
+            data-library-preview-rail="right"
+          >
+            {visibleImageItems.map(({ item: entry, index: entryIndex }) => (
+              <button key={entry.id} type="button" onClick={() => setIndex(entryIndex)} className={`h-14 w-14 overflow-hidden rounded-lg border bg-white/[0.03] ${entryIndex === index ? 'border-white/80' : 'border-white/15 opacity-70 hover:opacity-100'}`} aria-label={`Preview ${entry.name}`}>
+                <LibraryAssetImage asset={entry.asset} sourceUrl={entry.sourceUrl} alt={entry.name} className="flex h-full w-full items-center justify-center object-cover text-white/35" draggable={false} />
+              </button>
+            ))}
+          </aside>
+        )}
       </div>
     </div>
   );
