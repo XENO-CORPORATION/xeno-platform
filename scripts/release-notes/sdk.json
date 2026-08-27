@@ -5,8 +5,17 @@
     "packages": [
       "@xenosystem/agent-sdk"
     ],
-    "derivedFrom": "xeno-agent-sdk @ d0ccc39b0b77d0d551ff9b165b4f6e73b23ee96e, CHANGELOG.md sections 0.9.15 and 0.9.16",
+    "derivedFrom": "xeno-agent-sdk @ c1d61ec43ffe4f22e6654634ff9239cdd9965292, CHANGELOG.md sections 0.9.15 through 0.9.17",
     "why": "The SDK keeps public release notes in CHANGELOG.md rather than a RELEASE_NOTES module, so this file is the structured notes source consumed by publish-cli-releases.mjs."
+  },
+  "0.9.17": {
+    "title": "No-op forgetting and artifact-complete compliance",
+    "type": "patch",
+    "notes": [
+      "Forgetting a workspace that was never recorded is now a true filesystem no-op: it creates neither the recent-session index nor a tombstone shard.",
+      "The standard compliance gate now audits built artifacts as well as source, preventing a successful gate from replacing the artifact ownership inventory with an empty report.",
+      "The installed Windows contention probe retained 360 concurrent recent-session updates across 12 processes with no lock or temporary-file debris."
+    ]
   },
   "0.9.16": {
     "title": "Lossless Windows continuation state",

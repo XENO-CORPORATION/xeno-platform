@@ -229,7 +229,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'agent', name: 'XENO Agent', tagline: 'The agent-native workspace for building software.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-agent-interface' },
   // Migrated 2026-08-09, in ONE pass as the previous note here required: this
   // install command, every sample in src/content/docs/sdk.ts, and the product
-  // page all name @xenosystem/agent-sdk together. npm `latest` is 0.9.16;
+  // page all name @xenosystem/agent-sdk together. npm `latest` is 0.9.17;
   // @xeno-corporation/xeno-agent-sdk is frozen at 0.7.0.
   // The /ui samples were REWRITTEN, not renamed — that subpath no longer ships
   // React (`AgentChatPanel`/`AgentStatusBar`/`useAgent` exist nowhere in the
