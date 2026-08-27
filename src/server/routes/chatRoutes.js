@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { workspaceFromReq, isWorkspaceMember, linkResourceToWorkspace, UUID_RE } from '../utils/workspaceContext.js';
 import { computeNextRun, executeScheduledTask } from '../workers/chatScheduledWorker.js';
-import { assertOwnedLibraryAttachments, listLibraryItems } from '../services/libraryAssets.js';
+import { assertOwnedLibraryAttachments, getManagedLibraryFile, listLibraryItems } from '../services/libraryAssets.js';
 
 /** Local `convo-<timestamp>` ids are UI-only. Sending one to Postgres is a 500. */
 function rejectIfNotPersistedConversationId(res, conversationId) {
@@ -1796,11 +1796,8 @@ router.post('/projects/:id/files', async (req, res) => {
       if (!UUID_RE.test(storage_key)) {
         return res.status(400).json({ success: false, error: 'Stored asset id must be a UUID' });
       }
-      const ownedAsset = await req.db.query(
-        `SELECT id FROM files WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
-        [storage_key, userId]
-      );
-      if (ownedAsset.rows.length === 0) {
+      const ownedAsset = await getManagedLibraryFile(req.db, storage_key, userId);
+      if (!ownedAsset) {
         return res.status(400).json({ success: false, error: 'Stored asset is not owned by this account' });
       }
     }

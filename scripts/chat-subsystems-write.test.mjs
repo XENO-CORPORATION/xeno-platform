@@ -216,9 +216,10 @@ test('project files are account Library assets, not browser-only placeholders', 
   assert.match(upload, /storage_key:\s*asset\.assetId/, 'project file membership does not retain the Library asset id.');
   assert.match(
     ROUTES,
-    /FROM files[\s\S]*user_id = \$2[\s\S]*deleted_at IS NULL/,
+    /getManagedLibraryFile\(req\.db, storage_key, userId\)/,
     'project files can link an unowned or deleted Library asset.',
   );
+  assert.doesNotMatch(ROUTES, /SELECT id FROM files\b/, 'project file ownership checks query a table that does not exist.');
 });
 
 test('scheduled: the page calls createScheduledTask, and that body hits the service', () => {
