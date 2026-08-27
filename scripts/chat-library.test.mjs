@@ -153,14 +153,19 @@ test('shared image component exports draggable signed URLs and chat persists ref
 test('Library viewer is a shell-isolated portal with bounded, honest preview states', () => {
   assert.match(page, /createPortal\(/);
   assert.match(page, /document\.body/);
+  assert.match(page, /leftInset=\{viewerLeft\}/);
+  assert.match(chat, /const TASKBAR_WIDTH_PX = 52/);
+  assert.match(chat, /viewerLeft=\{\(isTaskbarHidden \? 0 : TASKBAR_WIDTH_PX\) \+ historyWorkspaceInsetPx\}/);
+  assert.match(chat, /leftInset=\{\(isTaskbarHidden \? 0 : TASKBAR_WIDTH_PX\) \+ historyWorkspaceInsetPx\}/);
   assert.match(viewer, /data-library-asset-viewer="true"/);
+  assert.match(viewer, /style=\{\{ left: Math\.max\(0, leftInset\) \}\}/);
   assert.match(viewer, /MAX_VISIBLE_THUMBNAILS = 9/);
   assert.match(viewer, /Preview unavailable/);
   assert.match(viewer, /disabled=\{!canExport\}/);
   assert.match(image, /data-library-image-state=\{state\}/);
   assert.match(image, /state !== 'ready' \|\| !url/);
   assert.doesNotMatch(image, /src=\{url \|\| undefined\}/);
-  assert.match(styles, /data-library-viewer-open[\s\S]*body > \*:not\(\[data-library-asset-viewer='true'\]\)/);
+  assert.doesNotMatch(styles, /body > \*:not\(\[data-library-asset-viewer='true'\]\)/);
 });
 
 test('legacy artifacts paths remain a compatibility boundary', () => {
