@@ -32,6 +32,7 @@ type LibraryView = 'list' | 'grid';
 
 export type ChatLibraryPageProps = {
   pageLeft?: number;
+  viewerLeft?: number;
   onClose?: () => void;
 };
 
@@ -166,7 +167,7 @@ const LibraryThumbnail: React.FC<{ item: LibraryItemRecord; className?: string }
   );
 };
 
-const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose = () => undefined }) => {
+const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerLeft = pageLeft, onClose = () => undefined }) => {
   const [items, setItems] = useState<LibraryItemRecord[]>([]);
   const [tab, setTab] = useState<LibraryTab>(readTabFromUrl);
   const [query, setQuery] = useState('');
@@ -538,6 +539,7 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose
             context: item.conversation_title || 'Account',
           }))}
           activeId={selected.id}
+          leftInset={viewerLeft}
           onClose={() => setSelected(null)}
         />,
         document.body,

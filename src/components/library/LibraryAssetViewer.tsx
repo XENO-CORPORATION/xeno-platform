@@ -15,6 +15,7 @@ export type LibraryAssetViewerProps = {
   items: LibraryViewerItem[];
   activeId: string;
   onClose: () => void;
+  leftInset?: number;
 };
 
 const MAX_VISIBLE_THUMBNAILS = 9;
@@ -40,7 +41,7 @@ export const getVisibleLibraryViewerItems = (items: LibraryViewerItem[], activeI
   return previewable.slice(start, start + MAX_VISIBLE_THUMBNAILS);
 };
 
-export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, activeId, onClose }) => {
+export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, activeId, onClose, leftInset = 0 }) => {
   const initialIndex = Math.max(items.findIndex((item) => item.id === activeId), 0);
   const [index, setIndex] = useState(initialIndex);
   const [resolvedUrl, setResolvedUrl] = useState('');
@@ -107,7 +108,14 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
   const canExport = hasPreviewSource(item) && imageState !== 'unavailable';
 
   return (
-    <div className="fixed inset-0 z-[11000] isolate flex flex-col overflow-hidden bg-[#050505] text-white" role="dialog" aria-modal="true" aria-label={`Library preview: ${item.name}`} data-library-asset-viewer="true">
+    <div
+      className="fixed inset-y-0 right-0 z-[11000] isolate flex flex-col overflow-hidden bg-[#050505] text-white"
+      style={{ left: Math.max(0, leftInset) }}
+      role="dialog"
+      aria-label={`Library preview: ${item.name}`}
+      data-library-asset-viewer="true"
+      data-library-viewer-left={Math.max(0, leftInset)}
+    >
       <header className="grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-white/10 bg-[#080808] px-3">
         <div className="flex min-w-0 items-center gap-2 overflow-hidden text-[12px] text-white/65">
           <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-white/10" aria-label="Close preview"><X size={16} /></button>

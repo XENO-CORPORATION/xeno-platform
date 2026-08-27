@@ -1543,10 +1543,6 @@ html[data-library-viewer-open='true'] body {
   overflow: hidden !important;
 }
 
-html[data-library-viewer-open='true'] body > *:not([data-library-asset-viewer='true']) {
-  visibility: hidden !important;
-}
-
 .chat-top-bar {
   container: chat-topbar / inline-size;
   min-width: 0;

@@ -88,6 +88,8 @@ function withAuthHeaders(extra: Record<string, string> = {}): Record<string, str
 const HISTORY_SIDEBAR_CLOSE_MS = 300;
 /** One width owner for every surface that yields to the conversation history. */
 const HISTORY_SIDEBAR_WIDTH_PX = 260;
+/** One width owner for body-portaled workspaces that must preserve the XENO rail. */
+const TASKBAR_WIDTH_PX = 52;
 
 const DEFAULT_MODEL: Model = {
   id: "gpt-5.6-terra",
@@ -8670,7 +8672,7 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         data-create-project-dialog=""
         style={{
           left:
-            (isTaskbarHidden ? 0 : 52) +
+            (isTaskbarHidden ? 0 : TASKBAR_WIDTH_PX) +
             historyWorkspaceInsetPx,
           backgroundColor: isCreateProjectModalShown
             ? 'color-mix(in srgb, var(--chat-text) 28%, transparent)'
@@ -14486,6 +14488,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         {isArtifactsPageOpen && (
           <ChatLibraryPage
             pageLeft={historyWorkspaceInsetPx}
+            viewerLeft={(isTaskbarHidden ? 0 : TASKBAR_WIDTH_PX) + historyWorkspaceInsetPx}
             onClose={() => {
               setIsArtifactsPageOpen(false);
               setHistoryNavView('chats');
@@ -18434,6 +18437,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           <LibraryAssetViewer
             items={libraryViewerSelection.items}
             activeId={libraryViewerSelection.activeId}
+            leftInset={(isTaskbarHidden ? 0 : TASKBAR_WIDTH_PX) + historyWorkspaceInsetPx}
             onClose={() => setLibraryViewerSelection(null)}
           />,
           document.body,
@@ -18448,7 +18452,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           // Desktop clip: animate with translateX inside a viewport that starts at the taskbar edge,
           // so the panel never paints under the left navigation during open/close.
           // Taskbar is w-13 (52px). Sit flush against it — no floating 12px frame.
-          const historyLeftInset = isTaskbarHidden ? 0 : 52;
+          const historyLeftInset = isTaskbarHidden ? 0 : TASKBAR_WIDTH_PX;
           const historySurfaceStyle: React.CSSProperties = {
             backgroundColor: 'var(--chat-surface)',
             color: 'var(--chat-text)',
