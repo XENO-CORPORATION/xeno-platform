@@ -587,7 +587,12 @@ const OverviewTaskbar: React.FC<OverviewTaskbarProps> = ({
 
       {/* Desktop Sidebar */}
       <div className="hidden md:flex z-[200] h-screen relative">
-        <div ref={taskbarRef} className={`${sidebarWidth} h-screen bg-black/90 backdrop-blur-md border-r border-white/10 flex flex-col items-center transition-all duration-300`}>
+        <div ref={taskbarRef} className={`${sidebarWidth} relative box-border h-screen bg-black/90 backdrop-blur-md flex flex-col items-center transition-all duration-300`}>
+          <div
+            aria-hidden="true"
+            data-overview-taskbar-divider="right"
+            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-px bg-white/10"
+          />
           {/* Version marker for deployment verification */}
           <div className="absolute -top-10 left-0 opacity-0 pointer-events-none">v2.1.0</div>
       {/* Main Navigation */}
