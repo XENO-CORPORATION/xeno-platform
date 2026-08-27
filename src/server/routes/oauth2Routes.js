@@ -114,6 +114,10 @@ router.get('/authorize', async (req, res) => {
     // Never redirect an invalid request: redirect_uri has not been trusted.
     return sendOauthError(res, e);
   }
+  const requestedPrompt = String(req.query.prompt || '');
+  if (requestedPrompt && requestedPrompt !== 'login') {
+    return sendOauthError(res, Object.assign(new Error('unsupported prompt'), { oauthError: 'invalid_request' }));
+  }
   res.set('content-type', 'text/html; charset=utf-8');
   const appName = client.name || 'an application';
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -174,7 +178,11 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   var $=function(id){return document.getElementById(id)};
   // Hand unauthenticated users to the canonical human login route. The login
   // UI derives its consent label from this validated authorize transaction.
-  function toAuth(){ location.href='/login?returnUrl='+encodeURIComponent(location.pathname+location.search); }
+  function toAuth(){
+    var resume=new URL(location.href);
+    if(p.get('prompt')==='login') resume.searchParams.set('stepup_complete','1');
+    location.href='/login?returnUrl='+encodeURIComponent(resume.pathname+resume.search);
+  }
   var mode='signin';
   function show(el,on){el.classList[on?'remove':'add']('hide')}
   function setStatus(t){show($('loader'),true);show($('cardWrap'),false);$('status').textContent=t}
@@ -184,7 +192,7 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   function continueWith(tok){
     setStatus('Signing you in…');
     fetch('/api/oauth2/authorize',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+tok},
-      body:JSON.stringify({client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce')})})
+      body:JSON.stringify({client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce'),prompt:p.get('prompt'),max_age:p.get('max_age'),acr_values:p.get('acr_values')})})
     .then(function(r){ if(r.status===401){ localStorage.removeItem('xenoos_auth_token'); toAuth(); throw 0;} return r.json(); })
     .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
     .catch(function(e){ if(e!==0) showForm('Error: '+(e&&e.message||e)); });
@@ -228,7 +236,8 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
     continueWith(urlTok);
   } else {
     var tok=localStorage.getItem('xenoos_auth_token');
-    if(tok){ continueWith(tok); } else { toAuth(); }
+    if(p.get('prompt')==='login'&&p.get('stepup_complete')!=='1'){ toAuth(); }
+    else if(tok){ continueWith(tok); } else { toAuth(); }
   }
 })();
 </script></body></html>`);
@@ -248,6 +257,10 @@ router.post('/authorize', authMiddleware, async (req, res) => {
       codeChallenge: b.code_challenge,
       codeChallengeMethod: b.code_challenge_method,
       nonce: b.nonce,
+      authTime: req.auth?.authTime ? new Date(Number(req.auth.authTime) * 1000) : new Date(0),
+      prompt: b.prompt || null,
+      maxAge: b.max_age,
+      acr: b.acr_values || null,
     });
     const sep = String(b.redirect_uri).includes('?') ? '&' : '?';
     const redirect = `${b.redirect_uri}${sep}code=${encodeURIComponent(code)}${b.state ? `&state=${encodeURIComponent(b.state)}` : ''}`;

@@ -69,6 +69,14 @@ CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
 );
 CREATE INDEX IF NOT EXISTS idx_oauth_codes_expiry ON oauth_authorization_codes (expires_at);
 
+CREATE TABLE IF NOT EXISTS oauth_authorization_context (
+  code       text PRIMARY KEY,
+  auth_time  timestamptz NOT NULL,
+  prompt     varchar(32),
+  acr        text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   token_hash  text NOT NULL UNIQUE,          -- sha256 of the opaque token

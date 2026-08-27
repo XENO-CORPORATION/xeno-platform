@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assertAuthorityPolicy, CLIENT_AUTHORITY, OIDC_SCOPES } from '../config/oidcAuthorityPolicy.js';
+import { discovery } from '../utils/oidcProvider.js';
 
 test('first-party authority matrix is closed over the advertised scope registry', () => {
   assert.equal(assertAuthorityPolicy(), true);
@@ -24,4 +25,12 @@ test('only the web payout surface can request marketplace payout authority', () 
     .filter(([, scopes]) => scopes.includes('marketplace:payout'))
     .map(([clientId]) => clientId);
   assert.deepEqual(holders, ['xeno-web']);
+});
+
+test('discovery advertises the fresh-auth ACR and security-critical token claims', () => {
+  const metadata = discovery();
+  assert.deepEqual(metadata.acr_values_supported, ['urn:xeno:acr:fresh']);
+  for (const claim of ['auth_time', 'sid', 'cnf', 'act', 'auth_epoch']) {
+    assert.equal(metadata.claims_supported.includes(claim), true, `missing discovery claim ${claim}`);
+  }
 });

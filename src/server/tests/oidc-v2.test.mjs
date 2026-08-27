@@ -73,6 +73,30 @@ async function main() {
   try { await exchangeAuthorizationCode(pool, { code: code2, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: 'wrong-verifier' }); } catch (e) { pkceErr = e.message; }
   ok(/PKCE/.test(pkceErr || ''), 'wrong PKCE verifier rejected');
 
+  // 4b. Step-up transactions carry the verified authentication time and reject
+  // a stale session instead of silently satisfying prompt=login.
+  const step = pkce();
+  const steppedAt = new Date(Date.now() - 10_000);
+  const stepCode = await createAuthorizationCode(pool, {
+    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+    scope: 'openid', codeChallenge: step.c, authTime: steppedAt,
+    prompt: 'login', maxAge: 60, acr: 'urn:xeno:acr:fresh',
+  });
+  const stepTokens = await exchangeAuthorizationCode(pool, {
+    code: stepCode, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: step.v,
+  });
+  const steppedId = jwt.verify(stepTokens.id_token, pub, { algorithms: ['ES256'] });
+  ok(Math.abs(steppedId.auth_time - Math.floor(steppedAt.getTime() / 1000)) <= 1, 'step-up auth_time is preserved in issued tokens');
+  let staleStep = null;
+  try {
+    await createAuthorizationCode(pool, {
+      clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+      scope: 'openid', codeChallenge: step.c, authTime: new Date(Date.now() - 10 * 60_000),
+      prompt: 'login', maxAge: 60, acr: 'urn:xeno:acr:fresh',
+    });
+  } catch (e) { staleStep = e.oauthError; }
+  ok(staleStep === 'login_required', 'stale session cannot silently satisfy prompt=login step-up');
+
   // 5. refresh rotation + reuse detection
   const r1 = await refreshTokenGrant(pool, { refreshToken: tokens.refresh_token, clientId: 'xeno-post' });
   ok(r1.access_token && r1.refresh_token && r1.refresh_token !== tokens.refresh_token, 'refresh rotates the token');

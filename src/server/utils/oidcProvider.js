@@ -2,7 +2,7 @@
  * OIDC Provider v2 — the identity (login) half of the XENO unified account.
  *
  * ADDITIVE + flag-gated (OIDC_ENABLED). Implements the relying-party surface the
- * @xeno/account-client SDK expects (see XENO ACCOUNT - ARCHITECTURE.md §2):
+ * @xeno/account SDK expects (see XENO ACCOUNT - ARCHITECTURE.md §2):
  *  - Authorization Code + PKCE (S256) — web/native (RFC 8252)
  *  - Device Authorization Grant (RFC 8628) — CLI / headless
  *  - RS256 signing + JWKS (RFC 7517), key material in oidc_signing_keys
@@ -133,6 +133,11 @@ export function discovery() {
       'urn:ietf:params:oauth:grant-type:token-exchange',
     ],
     code_challenge_methods_supported: ['S256'],
+    acr_values_supported: ['urn:xeno:acr:fresh'],
+    claims_supported: [
+      'iss', 'sub', 'aud', 'exp', 'iat', 'auth_time', 'nonce', 'sid',
+      'client_id', 'azp', 'scope', 'cnf', 'act', 'auth_epoch',
+    ],
     token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
     // We sign ES256 (getSigningKey prefers/generates ES256); any legacy RS256 keys
     // stay in JWKS so older tokens keep verifying. Advertise honestly (XENO AUTH §3.2).
@@ -354,6 +359,10 @@ export async function createAuthorizationCode(db, {
   codeChallenge,
   codeChallengeMethod = 'S256',
   nonce,
+  authTime = new Date(),
+  prompt = null,
+  maxAge = null,
+  acr = null,
 }) {
   const client = await validateAuthorizationRequest(db, {
     clientId,
@@ -362,11 +371,33 @@ export async function createAuthorizationCode(db, {
     codeChallengeMethod,
   });
   const grantedScope = downscope(scope || 'openid profile email', client.allowed_scopes);
+  if (prompt !== null && prompt !== '' && prompt !== 'login') {
+    throw oauthError('invalid_request', 'unsupported prompt');
+  }
+  const normalizedMaxAge = maxAge === null || maxAge === '' ? null : Number(maxAge);
+  if (normalizedMaxAge !== null && (!Number.isInteger(normalizedMaxAge) || normalizedMaxAge < 0 || normalizedMaxAge > 30 * 24 * 60 * 60)) {
+    throw oauthError('invalid_request', 'invalid max_age');
+  }
+  if (acr && acr !== 'urn:xeno:acr:fresh') throw oauthError('invalid_request', 'unsupported acr_values');
+  const authenticatedAt = new Date(authTime);
+  if (!Number.isFinite(authenticatedAt.getTime())) throw oauthError('login_required', 'fresh authentication required');
+  const ageSec = Math.max(0, (Date.now() - authenticatedAt.getTime()) / 1000);
+  const requiredMaxAge = prompt === 'login' ? Math.min(normalizedMaxAge ?? 60, 60) : normalizedMaxAge;
+  if (requiredMaxAge !== null && ageSec > requiredMaxAge + 60) {
+    throw oauthError('login_required', 'fresh authentication required');
+  }
   const code = crypto.randomBytes(32).toString('base64url');
   await db.query(
-    `INSERT INTO oauth_authorization_codes (code, client_id, user_id, redirect_uri, scope, code_challenge, nonce, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7, now() + interval '${CODE_TTL_SEC} seconds')`,
-    [code, clientId, userId, redirectUri, grantedScope, codeChallenge, nonce || null],
+    `WITH inserted AS (
+       INSERT INTO oauth_authorization_codes
+         (code, client_id, user_id, redirect_uri, scope, code_challenge, nonce, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7, now() + interval '${CODE_TTL_SEC} seconds')
+       RETURNING code
+     )
+     INSERT INTO oauth_authorization_context (code, auth_time, prompt, acr)
+     SELECT code, $8, $9, $10 FROM inserted`,
+    [code, clientId, userId, redirectUri, grantedScope, codeChallenge, nonce || null,
+      authenticatedAt, prompt || null, acr || null],
   );
   return code;
 }
@@ -375,7 +406,13 @@ export async function exchangeAuthorizationCode(db, { code, clientId, redirectUr
   const tx = await db.connect();
   try {
     await tx.query('BEGIN');
-    const r = await tx.query('SELECT * FROM oauth_authorization_codes WHERE code = $1 FOR UPDATE', [code]);
+    const r = await tx.query(
+      `SELECT c.*, x.auth_time, x.prompt, x.acr
+         FROM oauth_authorization_codes c
+         JOIN oauth_authorization_context x ON x.code = c.code
+        WHERE c.code = $1 FOR UPDATE OF c`,
+      [code],
+    );
     const row = r.rows[0];
     if (!row || row.consumed) throw oauthError('invalid_grant', 'code invalid or already used');
     if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('invalid_grant', 'code expired');
@@ -388,6 +425,7 @@ export async function exchangeAuthorizationCode(db, { code, clientId, redirectUr
     if (!user) throw oauthError('invalid_grant', 'user not found');
     const tokens = await mintTokens(tx, {
       user, clientId, scope: row.scope, sid: crypto.randomUUID(), nonce: row.nonce, dpopJkt,
+      authTime: row.auth_time,
     });
     await tx.query('COMMIT');
     return tokens;
