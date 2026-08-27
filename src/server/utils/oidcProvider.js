@@ -269,7 +269,7 @@ async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = ne
     auth_time: Math.floor(session.authTime.getTime() / 1000),
   };
   const accessToken = jwt.sign(
-    { ...base, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, scope, typ: ACCESS_TOKEN_TYP,
+    { ...base, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, azp: clientId, scope, typ: ACCESS_TOKEN_TYP,
       ...(dpopJkt ? { cnf: { jkt: dpopJkt } } : {}) },
     key.privatePem,
     { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },

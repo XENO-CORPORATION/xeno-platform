@@ -46,6 +46,7 @@ async function main() {
   const pub = crypto.createPublicKey(key.privatePem);
   const at = jwt.verify(tokens.access_token, pub, { algorithms: ['ES256'] });
   ok(at.sub === userId && at.typ === 'at+jwt' && at.aud === 'xeno-api', 'access token is ES256, sub=user, typ=at+jwt');
+  ok(at.client_id === 'xeno-post' && at.azp === 'xeno-post', 'access token binds client_id and azp');
   const idt = jwt.verify(tokens.id_token, pub, { algorithms: ['ES256'] });
   ok(idt.aud === 'xeno-post' && idt.email === 'a@b.co', 'id_token aud=client, carries email');
 
