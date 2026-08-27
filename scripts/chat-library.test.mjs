@@ -173,6 +173,14 @@ test('Library viewer header shares the permanent taskbar top-row height', () => 
   assert.doesNotMatch(viewer, /<header className="grid h-14/);
 });
 
+test('Library image history is a semantic right-side rail', () => {
+  assert.ok(viewer.indexOf('<main className=') < viewer.indexOf('<aside'));
+  assert.match(viewer, /aria-label="Image history"/);
+  assert.match(viewer, /data-library-preview-rail="right"/);
+  assert.match(viewer, /overflow-y-auto border-l border-white\/10/);
+  assert.doesNotMatch(viewer, /overflow-y-auto border-r border-white\/10/);
+});
+
 test('legacy artifacts paths remain a compatibility boundary', () => {
   assert.match(app, /path="\/artifacts" element=\{<LibraryRouteRedirect/);
   assert.match(chat, /path\.startsWith\('\/artifacts'\)/);
