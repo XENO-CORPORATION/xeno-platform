@@ -11,6 +11,8 @@
  */
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
+import { issuer } from '../config/hosts.js';
+import { verifyDpopProof } from '../utils/dpop.js';
 import {
   jwks,
   discovery,
@@ -24,7 +26,12 @@ import {
   approveDevice,
   deviceTokenGrant,
   revokeToken,
+  endSession,
+  logoutEverywhere,
   introspectToken,
+  verifyAccessToken,
+  enrollBrokerInstallation,
+  tokenExchangeGrant,
 } from '../utils/oidcProvider.js';
 
 const router = express.Router();
@@ -32,6 +39,35 @@ const router = express.Router();
 function sendOauthError(res, err) {
   const status = err.statusCode || 400;
   res.status(status).json({ error: err.oauthError || 'invalid_request', error_description: err.message });
+}
+
+function requireRecentOidcAuth({ scope, clients }) {
+  return (req, res, next) => {
+    const authTime = Number(req.auth?.authTime);
+    const now = Math.floor(Date.now() / 1000);
+    const scopes = new Set(String(req.auth?.scope || '').split(/\s+/).filter(Boolean));
+    if (req.auth?.kind !== 'oidc' || !clients.includes(req.auth?.clientId) || !scopes.has(scope)
+        || !Number.isFinite(authTime) || authTime > now + 60 || now - authTime > 5 * 60) {
+      res.set('WWW-Authenticate', 'DPoP error="insufficient_user_authentication", max_age="300"');
+      return res.status(401).json({ error: 'insufficient_user_authentication', max_age: 300 });
+    }
+    return next();
+  };
+}
+
+async function requireDpopIfBound(req, res, next) {
+  if (!req.auth?.dpopJkt) return next();
+  const match = /^DPoP\s+(.+)$/i.exec(String(req.headers.authorization || ''));
+  if (!match) return sendOauthError(res, Object.assign(new Error('DPoP authorization required'), { oauthError: 'invalid_dpop_proof', statusCode: 401 }));
+  try {
+    await verifyDpopProof(req.db, {
+      proof: String(req.headers.dpop || ''), method: req.method,
+      url: `${issuer()}${req.baseUrl}${req.path}`, accessToken: match[1], requiredJkt: req.auth.dpopJkt,
+    });
+    return next();
+  } catch (error) {
+    return sendOauthError(res, error);
+  }
 }
 
 // GET /oauth2/jwks — public keys
@@ -77,6 +113,10 @@ router.get('/authorize', async (req, res) => {
   } catch (e) {
     // Never redirect an invalid request: redirect_uri has not been trusted.
     return sendOauthError(res, e);
+  }
+  const requestedPrompt = String(req.query.prompt || '');
+  if (requestedPrompt && requestedPrompt !== 'login') {
+    return sendOauthError(res, Object.assign(new Error('unsupported prompt'), { oauthError: 'invalid_request' }));
   }
   res.set('content-type', 'text/html; charset=utf-8');
   const appName = client.name || 'an application';
@@ -138,7 +178,11 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   var $=function(id){return document.getElementById(id)};
   // Hand unauthenticated users to the canonical human login route. The login
   // UI derives its consent label from this validated authorize transaction.
-  function toAuth(){ location.href='/login?returnUrl='+encodeURIComponent(location.pathname+location.search); }
+  function toAuth(){
+    var resume=new URL(location.href);
+    if(p.get('prompt')==='login') resume.searchParams.set('stepup_complete','1');
+    location.href='/login?returnUrl='+encodeURIComponent(resume.pathname+resume.search);
+  }
   var mode='signin';
   function show(el,on){el.classList[on?'remove':'add']('hide')}
   function setStatus(t){show($('loader'),true);show($('cardWrap'),false);$('status').textContent=t}
@@ -148,7 +192,7 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   function continueWith(tok){
     setStatus('Signing you in…');
     fetch('/api/oauth2/authorize',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+tok},
-      body:JSON.stringify({client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce')})})
+      body:JSON.stringify({client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce'),prompt:p.get('prompt'),max_age:p.get('max_age'),acr_values:p.get('acr_values')})})
     .then(function(r){ if(r.status===401){ localStorage.removeItem('xenoos_auth_token'); toAuth(); throw 0;} return r.json(); })
     .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
     .catch(function(e){ if(e!==0) showForm('Error: '+(e&&e.message||e)); });
@@ -192,7 +236,8 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
     continueWith(urlTok);
   } else {
     var tok=localStorage.getItem('xenoos_auth_token');
-    if(tok){ continueWith(tok); } else { toAuth(); }
+    if(p.get('prompt')==='login'&&p.get('stepup_complete')!=='1'){ toAuth(); }
+    else if(tok){ continueWith(tok); } else { toAuth(); }
   }
 })();
 </script></body></html>`);
@@ -212,6 +257,10 @@ router.post('/authorize', authMiddleware, async (req, res) => {
       codeChallenge: b.code_challenge,
       codeChallengeMethod: b.code_challenge_method,
       nonce: b.nonce,
+      authTime: req.auth?.authTime ? new Date(Number(req.auth.authTime) * 1000) : new Date(0),
+      prompt: b.prompt || null,
+      maxAge: b.max_age,
+      acr: b.acr_values || null,
     });
     const sep = String(b.redirect_uri).includes('?') ? '&' : '?';
     const redirect = `${b.redirect_uri}${sep}code=${encodeURIComponent(code)}${b.state ? `&state=${encodeURIComponent(b.state)}` : ''}`;
@@ -223,16 +272,44 @@ router.post('/authorize', authMiddleware, async (req, res) => {
 router.post('/token', async (req, res) => {
   const b = req.body || {};
   try {
+    if (b.grant_type === 'urn:ietf:params:oauth:grant-type:token-exchange') {
+      const auth = /^DPoP\s+(.+)$/i.exec(String(req.headers.authorization || ''));
+      if (!auth || auth[1] !== b.subject_token) {
+        throw Object.assign(new Error('subject token must match DPoP authorization'), { oauthError: 'invalid_grant', statusCode: 400 });
+      }
+      const subjectPayload = await verifyAccessToken(req.db, b.subject_token);
+      const hubProof = await verifyDpopProof(req.db, {
+        proof: String(req.headers.dpop || ''), method: 'POST', url: `${issuer()}/api/oauth2/token`,
+        accessToken: b.subject_token, requiredJkt: subjectPayload.cnf?.jkt,
+      });
+      return res.json(await tokenExchangeGrant(req.db, {
+        subjectToken: b.subject_token, subjectPayload, hubDpopJkt: hubProof.jkt,
+        subjectTokenType: b.subject_token_type, requestedTokenType: b.requested_token_type,
+        resource: b.resource, audience: b.audience, scope: b.scope,
+        childClientId: b.child_client_id, childPublicJwk: b.child_jwk,
+        brokerAssertion: b.broker_assertion,
+      }));
+    }
+    const dpop = req.headers.dpop
+      ? await verifyDpopProof(req.db, {
+        proof: String(req.headers.dpop), method: 'POST', url: `${issuer()}/api/oauth2/token`,
+      })
+      : null;
     if (b.grant_type === 'authorization_code') {
       return res.json(await exchangeAuthorizationCode(req.db, {
         code: b.code, clientId: b.client_id, redirectUri: b.redirect_uri, codeVerifier: b.code_verifier,
+        dpopJkt: dpop?.jkt || null,
       }));
     }
     if (b.grant_type === 'refresh_token') {
-      return res.json(await refreshTokenGrant(req.db, { refreshToken: b.refresh_token, clientId: b.client_id }));
+      return res.json(await refreshTokenGrant(req.db, {
+        refreshToken: b.refresh_token, clientId: b.client_id, dpopJkt: dpop?.jkt || null,
+      }));
     }
     if (b.grant_type === 'urn:ietf:params:oauth:grant-type:device_code') {
-      return res.json(await deviceTokenGrant(req.db, { deviceCode: b.device_code, clientId: b.client_id }));
+      return res.json(await deviceTokenGrant(req.db, {
+        deviceCode: b.device_code, clientId: b.client_id, dpopJkt: dpop?.jkt || null,
+      }));
     }
     return res.status(400).json({ error: 'unsupported_grant_type' });
   } catch (e) { sendOauthError(res, e); }
@@ -262,14 +339,42 @@ router.post('/introspect', async (req, res) => {
   } catch (e) { res.json({ active: false }); }
 });
 
-// POST /oauth2/end_session — RP-initiated / global logout (Arch §2.5): kill every
-// refresh token for the session (sid), so no branch can mint new tokens.
-router.post('/end_session', authMiddleware, async (req, res) => {
+// POST /oauth2/end_session — revoke the authenticated token's OWN session. The
+// SID comes from the verified token, never the body (foreign-SID revocation bug).
+router.post('/end_session', authMiddleware, requireDpopIfBound, async (req, res) => {
   try {
-    await revokeToken(req.db, { sid: (req.body || {}).sid });
-    res.status(200).json({ ended: true });
+    res.status(200).json(await endSession(req.db, { sid: req.auth?.sid, userId: req.user.id }));
   } catch (e) { sendOauthError(res, e); }
 });
+
+// POST /oauth2/logout_everywhere — subject-keyed global revocation. Until the
+// interactive step-up transaction lands, a freshly authenticated OIDC session
+// (auth_time <= 5m) is the fail-closed step-up proof accepted here.
+router.post(
+  '/logout_everywhere',
+  authMiddleware,
+  requireDpopIfBound,
+  requireRecentOidcAuth({ scope: 'account:logout', clients: ['xeno-hub', 'xeno-web'] }),
+  async (req, res) => {
+  try {
+    res.status(200).json(await logoutEverywhere(req.db, { userId: req.user.id }));
+  } catch (e) { sendOauthError(res, e); }
+  },
+);
+
+router.post(
+  '/broker/installations',
+  authMiddleware,
+  requireDpopIfBound,
+  requireRecentOidcAuth({ scope: 'broker:enroll', clients: ['xeno-hub'] }),
+  async (req, res) => {
+    try {
+      res.status(201).json(await enrollBrokerInstallation(req.db, {
+        userId: req.user.id, publicKeyJwk: (req.body || {}).public_jwk,
+      }));
+    } catch (e) { sendOauthError(res, e); }
+  },
+);
 
 // POST /oauth2/device/approve — authenticated; the activate UI calls this.
 router.post('/device/inspect', authMiddleware, async (req, res) => {

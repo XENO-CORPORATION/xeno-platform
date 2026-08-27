@@ -16,15 +16,14 @@
  */
 import pg from 'pg';
 import { siteUrlVariants } from '../config/hosts.js';
+import { assertAuthorityPolicy, scopesForClient } from '../config/oidcAuthorityPolicy.js';
 
 const { Pool } = pg;
 
 // slug → { name, loopback, redirects, scopes, surface }. Redirects for loopback
 // clients register the canonical 127.0.0.1 / [::1] callback PATH (any port matches).
 const LOOPBACK_CB = ['http://127.0.0.1/callback', 'http://[::1]/callback'];
-const DEFAULT_SCOPES = ['openid', 'profile', 'email', 'ledger'];
-
-const CLIENTS = [
+export const FIRST_PARTY_CLIENTS = [
   // Desktop / Electron (loopback PKCE)
   { id: 'xeno-hub', name: 'XENO Hub', loopback: true },
   { id: 'xeno-pixel', name: 'XENO Pixel', loopback: true },
@@ -32,9 +31,20 @@ const CLIENTS = [
   { id: 'xeno-sound', name: 'XENO Sound', loopback: true },
   { id: 'xeno-canvas', name: 'XENO Canvas', loopback: true },
   { id: 'xeno-browser', name: 'XENO Browser', loopback: true },
+  { id: 'xeno-docs', name: 'XENO Docs', loopback: true },
+  { id: 'xeno-sheets', name: 'XENO Sheets', loopback: true },
+  { id: 'xeno-slides', name: 'XENO Slides', loopback: true },
+  { id: 'xeno-notes', name: 'XENO Notes', loopback: true },
+  { id: 'xeno-architect', name: 'XENO Architect', loopback: true },
+  { id: 'xeno-3d', name: 'XENO 3D', loopback: true },
+  { id: 'xeno-engine', name: 'XENO Engine', loopback: true },
+  { id: 'xeno-workflow', name: 'XENO Workflow', loopback: true },
+  { id: 'xeno-comms', name: 'XENO Comms', loopback: true },
+  { id: 'xeno-shell', name: 'XENO Shell', loopback: true },
   { id: 'xeno-rt', name: 'XENO RT', loopback: true },
   // CLI (device grant + loopback PKCE)
   { id: 'xeno-agent-cli', name: 'XENO Agent CLI', loopback: true },
+  { id: 'xeno-anima', name: 'XENO Anima', loopback: true },
   // Web (exact-match redirect; the SPA handles OIDC in-browser)
   // DUAL-HOME: siteUrlVariants() returns the callback on the canonical site
   // origin AND on every host in XENO_ALIAS_SITE_ORIGINS. Accepting both is the
@@ -42,6 +52,7 @@ const CLIENTS = [
   // (ON CONFLICT DO UPDATE below), so a host omitted here is a host that stops
   // working the moment this migration re-runs.
   { id: 'xeno-web', name: 'XENO Web', loopback: false, redirects: siteUrlVariants('/auth/callback') },
+  { id: 'xeno-post', name: 'XENO Post', loopback: false, redirects: ['https://post.xenostudio.ai/auth/callback'] },
   // XENO Mail — web relying party; mail-core (backend) handles the code exchange.
   { id: 'xeno-mail', name: 'XENO Mail', loopback: false, redirects: ['https://mail-api.xenostudio.ai/api/auth/xeno/callback'] },
   // Mobile (registered ahead of build; app-scheme redirect)
@@ -54,9 +65,12 @@ ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS loopback boolean NOT NULL DEF
 `;
 
 export async function migrateOidcClients(pool) {
+  assertAuthorityPolicy();
   await pool.query(SQL);
-  for (const c of CLIENTS) {
+  for (const c of FIRST_PARTY_CLIENTS) {
     const redirects = c.loopback ? LOOPBACK_CB : c.redirects || [];
+    const scopes = scopesForClient(c.id);
+    if (!scopes) throw new Error(`missing checked-in authority policy for ${c.id}`);
     await pool.query(
       `INSERT INTO oauth_clients (client_id, client_secret, name, redirect_uris, allowed_scopes, surface, is_first_party, loopback)
        VALUES ($1, NULL, $2, $3, $4, $5, true, $6)
@@ -67,9 +81,17 @@ export async function migrateOidcClients(pool) {
          surface = EXCLUDED.surface,
          is_first_party = true,
          loopback = EXCLUDED.loopback`,
-      [c.id, c.name, redirects, DEFAULT_SCOPES, c.id, c.loopback],
+      [c.id, c.name, redirects, scopes, c.id, c.loopback],
     );
   }
+  // The API portal predates this migration and its exact production redirect
+  // is deployment-owned. Tighten its authority if present without replacing
+  // that registered redirect set or inventing a new one.
+  await pool.query(
+    `UPDATE oauth_clients SET allowed_scopes = $2, is_first_party = true
+      WHERE client_id = $1`,
+    ['xeno-api-portal', scopesForClient('xeno-api-portal')],
+  );
 }
 
 // Allow running standalone.
@@ -84,7 +106,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
   migrateOidcClients(pool)
     .then(() => {
-      console.log(`✅ OIDC first-party clients seeded (${CLIENTS.length}), loopback column added`);
+      console.log(`✅ OIDC first-party clients seeded (${FIRST_PARTY_CLIENTS.length}), loopback column added`);
       return pool.end();
     })
     .catch((err) => {
