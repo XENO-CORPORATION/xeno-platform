@@ -17,7 +17,7 @@ const motion: ProductContent = {
   },
   trust: [
     'Part of the XENO platform — one sign-in',
-    'Hardware decode and encode: WebCodecs · NVENC / QSV',
+    'Hardware decode and encode through WebCodecs',
     'Reads H.264, H.265, VP9 and AV1',
   ],
   highlights: [
@@ -87,7 +87,7 @@ const motion: ProductContent = {
       desc: 'Hardware decode via WebCodecs, hardware encode on export, and MP4 written by our own muxer — no FFmpeg in the app, and every build is checked by decoding its own output.',
       bullets: [
         'WebCodecs decode: H.264 / H.265 / VP9 / AV1',
-        'Direct NVENC / QSV / VideoToolbox encode',
+        'Hardware-accelerated encode, using whatever the OS provides',
         'MP4 out (H.264, H.265, AV1) with AAC audio',
         'Background render queue — keep editing while it runs',
       ],
@@ -127,7 +127,7 @@ const motion: ProductContent = {
       { feature: 'Hardware decode + GPU colour', xeno: 'WebCodecs + WebGPU', them: 'Partial' },
       { feature: 'Agent can drive the app directly', xeno: '19 capabilities', them: false },
       { feature: 'AI: scene cuts · reframe · auto color', xeno: 'Built in', them: 'Add-ons' },
-      { feature: 'Direct hardware encode (NVENC / QSV)', xeno: true, them: 'Via encoder' },
+      { feature: 'Hardware-accelerated encode', xeno: true, them: true },
       { feature: 'Cold-start time', xeno: '< 2s', them: '8–15s' },
       { feature: 'Mature plugin & format ecosystem', xeno: 'Growing', them: true },
       { feature: 'Price', xeno: 'Free tier + credits', them: 'Subscription' },
@@ -142,9 +142,9 @@ const motion: ProductContent = {
   faq: [
     { q: 'Is XENO Motion ready for production work?', a: 'It’s a public test build. The core editor — multi-track timeline, compositing, color, effects, audio and export — works today, and it’s honest beta: expect rough edges and missing polish next to a decade-old suite. Bring feedback.' },
     { q: 'Do I really not need a separate motion-graphics app?', a: 'That’s the core idea. Editing and motion graphics share one project and one timeline, so you keyframe, mask and composite without exporting to a second program.' },
-    { q: 'What formats and codecs can it handle?', a: 'Hardware decode via WebCodecs for H.264, H.265, VP9 and AV1. Export is direct hardware encode (NVENC / QSV / VideoToolbox) to MP4, with AAC audio. Professional codecs such as ProRes and DNxHR are not supported yet, and MP4 is the only container written today.' },
+    { q: 'What formats and codecs can it handle?', a: 'Hardware decode via WebCodecs for H.264, H.265, VP9 and AV1. Export is hardware-accelerated through WebCodecs to MP4, with AAC audio — Chromium hands the frames to whatever the OS provides, so on a capable Windows machine that is your GPU's encoder. Professional codecs such as ProRes and DNxHR are not supported yet, and MP4 is the only container written today.' },
     { q: 'What can the AI actually do?', a: 'Three one-click operations on a selected clip: scene-cut detection, auto-reframe to your sequence’s aspect ratio, and auto color (a histogram-based starting grade you then refine by hand). A built-in agent can drive the timeline for you — importing, cutting, arranging, applying effects and opening the export flow. Speech-to-text and stem separation are in development and not yet available.' },
-    { q: 'Do I need a powerful computer?', a: 'Not especially. A WebGPU-capable GPU makes colour effects faster, but there is a bit-exact CPU fallback, so results are identical either way. Hardware encoders (NVENC / QSV) speed up export a lot; without one, export falls back to software and is slower.' },
+    { q: 'Do I need a powerful computer?', a: 'Not especially. A WebGPU-capable GPU makes colour effects faster, but there is a bit-exact CPU fallback, so results are identical either way. A hardware encoder speeds up export a lot; without one it falls back to software and is slower.' },
     { q: 'How much does it cost?', a: 'There’s a free tier; heavier AI and cloud features draw on XENO platform credits. Full pricing is announced separately as it leaves beta.' },
   ],
   seo: {
