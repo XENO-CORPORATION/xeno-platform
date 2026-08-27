@@ -470,7 +470,7 @@ export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = 
       const now = Math.floor(Date.now() / 1000);
       const authTime = Math.floor(new Date(session.auth_time).getTime() / 1000);
       const access = jwt.sign(
-        { iss: issuer(), iat: now, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId,
+        { iss: issuer(), iat: now, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, azp: clientId,
           scope: row.scope, sid: row.sid, auth_epoch: Number(session.auth_epoch), auth_time: authTime,
           typ: ACCESS_TOKEN_TYP, ...(session.dpop_jkt ? { cnf: { jkt: session.dpop_jkt } } : {}) },
         key.privatePem,

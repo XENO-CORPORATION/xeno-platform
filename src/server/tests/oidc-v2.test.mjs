@@ -101,6 +101,8 @@ async function main() {
   // 5. refresh rotation + reuse detection
   const r1 = await refreshTokenGrant(pool, { refreshToken: tokens.refresh_token, clientId: 'xeno-post' });
   ok(r1.access_token && r1.refresh_token && r1.refresh_token !== tokens.refresh_token, 'refresh rotates the token');
+  const refreshedAt = jwt.verify(r1.access_token, pub, { algorithms: ['ES256'] });
+  ok(refreshedAt.client_id === 'xeno-post' && refreshedAt.azp === 'xeno-post', 'refreshed access token preserves client_id and azp');
   let reuse = null;
   try { await refreshTokenGrant(pool, { refreshToken: tokens.refresh_token, clientId: 'xeno-post' }); } catch (e) { reuse = e.message; }
   ok(/reuse/.test(reuse || ''), 'replaying the rotated refresh token is detected');
