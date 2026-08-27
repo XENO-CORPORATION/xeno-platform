@@ -60,13 +60,15 @@ test('build-only preserves the candidate by SHA and restores latest to last-good
   assert.match(branch, /Candidate remains tagged :\$SHA/);
 });
 
-test('backend bind mounts are writable by the hardened uid before any swap', () => {
+test('every service extraction preserves hardened backend bind-mount ownership before any swap', () => {
   const ownershipGate = remote.indexOf('WRITABLE_MOUNTS=(');
   const build = remote.indexOf('dc build $NOCACHE "$SERVICE"');
   const swap = remote.indexOf('dc up -d --no-deps --force-recreate "$SERVICE"');
   assert.ok(ownershipGate >= 0, 'expected an explicit writable-mount ownership gate');
   assert.ok(ownershipGate < build, 'bind mounts must be repaired before the candidate build completes');
   assert.ok(ownershipGate < swap, 'bind mounts must be repaired before the backend swap');
+  const ownershipBlock = remote.slice(ownershipGate, remote.indexOf('# --- 3. Tag current image'));
+  assert.doesNotMatch(ownershipBlock, /if \[ "\$SERVICE" = "backend" \]/);
   assert.match(remote, /install -d -m 2770 -o 1001 -g 1001 "\$mount_path"/);
   assert.match(remote, /chown -R 1001:1001 "\$mount_path"/);
   for (const mount of [
