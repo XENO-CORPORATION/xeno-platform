@@ -168,6 +168,11 @@ test('Library viewer is a shell-isolated portal with bounded, honest preview sta
   assert.doesNotMatch(styles, /body > \*:not\(\[data-library-asset-viewer='true'\]\)/);
 });
 
+test('Library viewer header shares the permanent taskbar top-row height', () => {
+  assert.match(viewer, /<header className="grid h-\[50px\]/);
+  assert.doesNotMatch(viewer, /<header className="grid h-14/);
+});
+
 test('legacy artifacts paths remain a compatibility boundary', () => {
   assert.match(app, /path="\/artifacts" element=\{<LibraryRouteRedirect/);
   assert.match(chat, /path\.startsWith\('\/artifacts'\)/);
