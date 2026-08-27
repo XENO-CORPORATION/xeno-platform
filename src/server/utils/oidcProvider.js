@@ -556,16 +556,30 @@ export async function approveDevice(db, { userCode, userId }) {
 }
 
 export async function deviceTokenGrant(db, { deviceCode, clientId, dpopJkt = null }) {
-  const r = await db.query('SELECT * FROM oauth_device_codes WHERE device_code = $1 AND client_id = $2', [deviceCode, clientId]);
-  const row = r.rows[0];
-  if (!row) throw oauthError('invalid_grant', 'unknown device_code');
-  if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('expired_token', 'device code expired');
-  if (row.denied) throw oauthError('access_denied', 'user denied');
-  if (!row.approved) throw oauthError('authorization_pending', 'pending user approval');
-  const user = await userClaims(db, row.user_id);
-  if (!user) throw oauthError('invalid_grant', 'user not found');
-  await db.query('DELETE FROM oauth_device_codes WHERE device_code = $1', [deviceCode]);
-  return mintTokens(db, { user, clientId, scope: row.scope, sid: crypto.randomUUID(), dpopJkt });
+  const tx = await db.connect();
+  try {
+    await tx.query('BEGIN');
+    const r = await tx.query(
+      'SELECT * FROM oauth_device_codes WHERE device_code = $1 AND client_id = $2 FOR UPDATE',
+      [deviceCode, clientId],
+    );
+    const row = r.rows[0];
+    if (!row) throw oauthError('invalid_grant', 'unknown device_code');
+    if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('expired_token', 'device code expired');
+    if (row.denied) throw oauthError('access_denied', 'user denied');
+    if (!row.approved) throw oauthError('authorization_pending', 'pending user approval');
+    const user = await userClaims(tx, row.user_id);
+    if (!user) throw oauthError('invalid_grant', 'user not found');
+    await tx.query('DELETE FROM oauth_device_codes WHERE device_code = $1', [deviceCode]);
+    const tokens = await mintTokens(tx, { user, clientId, scope: row.scope, sid: crypto.randomUUID(), dpopJkt });
+    await tx.query('COMMIT');
+    return tokens;
+  } catch (error) {
+    await tx.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    tx.release();
+  }
 }
 
 // ── Revocation (RFC 7009) + Introspection (RFC 7662) ────────────────────────

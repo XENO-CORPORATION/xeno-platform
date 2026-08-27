@@ -145,6 +145,14 @@ async function main() {
   await approveDevice(pool, { userCode: dev.user_code, userId });
   const devTokens = await deviceTokenGrant(pool, { deviceCode: dev.device_code, clientId: 'xeno-post' });
   ok(devTokens.access_token && devTokens.refresh_token, 'approved device grant issues tokens');
+  const devRace = await startDeviceAuthorization(pool, { clientId: 'xeno-post', scope: 'openid ledger' });
+  await approveDevice(pool, { userCode: devRace.user_code, userId });
+  const devRaceResults = await Promise.allSettled([
+    deviceTokenGrant(pool, { deviceCode: devRace.device_code, clientId: 'xeno-post' }),
+    deviceTokenGrant(pool, { deviceCode: devRace.device_code, clientId: 'xeno-post' }),
+  ]);
+  ok(devRaceResults.filter((x) => x.status === 'fulfilled').length === 1,
+    'concurrent device polling mints exactly one token set');
 
   // 7. introspection (RFC 7662): active access + active refresh
   const ia = await introspectToken(pool, { token: devTokens.access_token });
