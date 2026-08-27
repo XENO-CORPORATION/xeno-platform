@@ -106,7 +106,7 @@ export const PRODUCTS: Product[] = [
   // "nothing here ships yet". coming-soon/soon is correct — but do not let the
   // page copy imply a designed product. See src/content/products/photo.ts.
   { slug: 'photo', name: 'XENO Photo', tagline: 'RAW import, organize, retouch and cloud sync.', category: 'Create', status: 'coming-soon', delivery: 'soon', repo: 'xeno-photo' },
-  { slug: 'motion', name: 'XENO Motion', tagline: 'Video editing, motion graphics and AI pipelines.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-motion' },
+  { slug: 'motion', name: 'XENO Motion', tagline: 'Video editing, motion graphics and AI pipelines.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-motion' },
   { slug: 'sound', name: 'XENO Sound', tagline: 'Audio editing, music and voice production.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-sound' },
 
   // ── Design ────────────────────────────────────────────────
