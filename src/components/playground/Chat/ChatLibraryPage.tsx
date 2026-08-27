@@ -102,9 +102,29 @@ const authHeaders = (): HeadersInit => {
 };
 
 const LibraryThumbnail: React.FC<{ item: LibraryItemRecord; className?: string }> = ({ item, className = '' }) => {
+  const containerRef = useRef<HTMLSpanElement | null>(null);
+  const [visible, setVisible] = useState(false);
   const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
+    const element = containerRef.current;
+    if (!element || visible) return undefined;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return;
+      setVisible(true);
+      observer.disconnect();
+    }, { rootMargin: '160px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    const controller = new AbortController();
     let objectUrl: string | null = null;
     let cancelled = false;
     const preview = item.preview_url;
@@ -116,7 +136,8 @@ const LibraryThumbnail: React.FC<{ item: LibraryItemRecord; className?: string }
       setSrc(preview);
       return undefined;
     }
-    void fetch(preview, { headers: authHeaders() })
+    const separator = preview.includes('?') ? '&' : '?';
+    void fetch(`${preview}${separator}variant=thumbnail`, { headers: authHeaders(), signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error('Preview unavailable');
         return response.blob();
@@ -126,21 +147,23 @@ const LibraryThumbnail: React.FC<{ item: LibraryItemRecord; className?: string }
         objectUrl = URL.createObjectURL(blob);
         setSrc(objectUrl);
       })
-      .catch(() => setSrc(null));
+      .catch((error) => {
+        if (error?.name !== 'AbortError') setSrc(null);
+      });
     return () => {
       cancelled = true;
+      controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [item.id, item.preview_url]);
+  }, [item.id, item.preview_url, visible]);
 
-  if (!src) {
-    return (
-      <span className={`flex items-center justify-center bg-[var(--chat-control)] text-[var(--chat-muted)] ${className}`}>
-        <FileImage size={22} aria-hidden="true" />
-      </span>
-    );
-  }
-  return <img src={src} alt="" className={`object-cover ${className}`} />;
+  return (
+    <span ref={containerRef} className={`flex items-center justify-center overflow-hidden bg-[var(--chat-control)] text-[var(--chat-muted)] ${className}`}>
+      {src
+        ? <img src={src} alt="" className="h-full w-full object-cover" decoding="async" />
+        : <FileImage size={22} aria-hidden="true" />}
+    </span>
+  );
 };
 
 const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose = () => undefined }) => {
@@ -458,7 +481,7 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, onClose
                         onClick={() => void openItem(item)}
                       >
                         <span className="flex min-w-0 items-center gap-3">
-                          {item.category === 'images' ? <LibraryThumbnail item={item} className="h-8 w-8 flex-shrink-0 rounded-lg" /> : <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border text-[var(--chat-muted)]" style={{ borderColor: 'var(--chat-border)', background: 'var(--chat-surface)' }}><Icon size={15} /></span>}
+                          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border text-[var(--chat-muted)]" style={{ borderColor: 'var(--chat-border)', background: 'var(--chat-surface)' }}><Icon size={15} /></span>
                           <span className="min-w-0">
                             <span className="block truncate text-[12.75px] font-medium">{item.name}</span>
                             <span className="mt-0.5 block truncate text-[10.5px] text-[var(--chat-muted)]">{item.conversation_title ? `From ${item.conversation_title}` : item.mime_type || item.item_type}</span>

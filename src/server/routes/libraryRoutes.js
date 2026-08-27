@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import sharp from 'sharp';
 import { authMiddleware } from '../middleware/auth.js';
 import { siteOrigin } from '../config/hosts.js';
 import {
@@ -23,11 +24,12 @@ const streamAsset = async (req, res, userId, signed = false) => {
     const name = String(file.original_name || file.filename || 'download').replace(/[\r\n"]/g, '_');
     const inlineMime = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
     const download = req.query.download === '1';
+    const thumbnail = req.query.variant === 'thumbnail' && !download && inlineMime.has(file.mime_type);
     const disposition = download || !inlineMime.has(file.mime_type) ? 'attachment' : 'inline';
     const stat = fs.statSync(resolved);
-    res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Type', thumbnail ? 'image/webp' : file.mime_type || 'application/octet-stream');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Length', String(file.file_size || stat.size));
+    if (!thumbnail) res.setHeader('Content-Length', String(file.file_size || stat.size));
     res.setHeader('Content-Disposition', `${disposition}; filename="${name}"; filename*=UTF-8''${encodeURIComponent(name)}`);
     if (signed) {
       const remaining = Math.max(Number(req.query.expires) - Math.floor(Date.now() / 1000), 0);
@@ -37,7 +39,19 @@ const streamAsset = async (req, res, userId, signed = false) => {
     } else {
       res.setHeader('Cache-Control', 'private, max-age=300');
     }
-    fs.createReadStream(resolved).pipe(res);
+    const input = fs.createReadStream(resolved);
+    if (thumbnail) {
+      input
+        .pipe(sharp().rotate().resize(384, 384, { fit: 'cover', withoutEnlargement: true }).webp({ quality: 78 }))
+        .on('error', (error) => {
+          console.error('Failed to create Library thumbnail:', error);
+          if (!res.headersSent) res.status(500).end();
+          else res.destroy(error);
+        })
+        .pipe(res);
+      return;
+    }
+    input.pipe(res);
   } catch (error) {
     console.error('Failed to stream Library asset:', error);
     if (!res.headersSent) res.status(500).json({ success: false, error: 'Internal server error' });

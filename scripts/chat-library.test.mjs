@@ -94,6 +94,17 @@ test('Library UI owns canonical URL tabs and real list/grid controls', () => {
   assert.match(chat, /<span>Library<\/span>/);
 });
 
+test('Library list is metadata-only and grid thumbnails load only near the viewport', () => {
+  assert.match(page, /new IntersectionObserver/);
+  assert.match(page, /rootMargin: '160px'/);
+  assert.match(page, /variant=thumbnail/);
+  const listBranch = page.slice(page.indexOf("view === 'list'"), page.indexOf("<ul className=\"grid grid-cols-2"));
+  assert.doesNotMatch(listBranch, /<LibraryThumbnail/);
+  assert.match(libraryRoutes, /req\.query\.variant === 'thumbnail'/);
+  assert.match(libraryRoutes, /resize\(384, 384/);
+  assert.match(libraryRoutes, /webp\(\{ quality: 78 \}\)/);
+});
+
 test('signed Library links are short-lived account-bound capabilities', () => {
   process.env.LIBRARY_CONTENT_SECRET = 'test-only-library-secret-with-enough-entropy';
   const assetId = '10000000-0000-4000-8000-000000000001';
