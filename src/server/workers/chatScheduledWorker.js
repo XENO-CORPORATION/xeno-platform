@@ -13,7 +13,11 @@ export function computeNextRun(cadence, fromDate = new Date()) {
     case 'weekly':
       return new Date(fromTime + 7 * ONE_DAY);
     case 'monthly':
-      return new Date(fromTime + 30 * ONE_DAY);
+      {
+        const next = new Date(fromDate);
+        next.setMonth(next.getMonth() + 1);
+        return next;
+      }
     case 'once':
     default:
       return new Date(fromTime);
@@ -26,6 +30,10 @@ export function computeNextRun(cadence, fromDate = new Date()) {
 export async function executeScheduledTask(clientOrPool, task) {
   const now = new Date();
   let conversationId = task.conversation_id;
+
+  if (!xenoApiConfigured()) {
+    throw new Error('XENO inference gateway is not configured');
+  }
 
   // 1. Ensure target conversation exists
   if (!conversationId) {
@@ -58,22 +66,19 @@ export async function executeScheduledTask(clientOrPool, task) {
 
   // 3. Execute inference with timeout protection (60s max)
   let aiText = '';
-  if (xenoApiConfigured()) {
-    try {
-      const response = await Promise.race([
-        xenoChatCompletion({
-          model: task.model_id || 'google/gemini-2.5-flash-preview-05-20',
-          messages: [{ role: 'user', content: task.prompt }],
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Inference gateway timeout after 60s')), 60000))
-      ]);
-      aiText = response?.choices?.[0]?.message?.content || response?.text || '';
-    } catch (inferErr) {
-      console.error(`[ScheduledTaskWorker] Inference failed for task ${task.id}:`, inferErr.message);
-      throw inferErr;
-    }
-  } else {
-    aiText = `[Automated Response for task "${task.title}"] Scheduled run executed at ${now.toISOString()}.`;
+  try {
+    const response = await Promise.race([
+      xenoChatCompletion({
+        model: task.model_id || 'google/gemini-2.5-flash-preview-05-20',
+        messages: [{ role: 'user', content: task.prompt }],
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Inference gateway timeout after 60s')), 60000))
+    ]);
+    aiText = response?.choices?.[0]?.message?.content || response?.text || '';
+    if (!aiText.trim()) throw new Error('Inference gateway returned an empty response');
+  } catch (inferErr) {
+    console.error(`[ScheduledTaskWorker] Inference failed for task ${task.id}:`, inferErr.message);
+    throw inferErr;
   }
 
   // 4. Save AI response message
@@ -91,7 +96,10 @@ export async function executeScheduledTask(clientOrPool, task) {
   );
 
   // 6. Roll cadence schedule or mark paused
-  const nextRun = computeNextRun(task.cadence, now);
+  let nextRun = computeNextRun(task.cadence, new Date(task.next_run_at || now));
+  while (task.cadence !== 'once' && nextRun <= now) {
+    nextRun = computeNextRun(task.cadence, nextRun);
+  }
   const nextStatus = task.cadence === 'once' ? 'paused' : 'active';
 
   await clientOrPool.query(

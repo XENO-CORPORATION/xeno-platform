@@ -88,15 +88,25 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
   const [draft, setDraft] = useState('');
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const reduceMotion = useReducedMotion() ?? false;
   const staggerItemVariants = buildSettingsStaggerItemVariants(reduceMotion);
 
   const refresh = async () => {
-    // Swap key + rows together after fetch so exit/enter stagger matches the new filter.
-    const next = await listScheduledTasks({ query, status, sort });
-    setRows(next);
-    setListKey(status);
-    setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      // Swap key + rows together after fetch so exit/enter stagger matches the new filter.
+      const next = await listScheduledTasks({ query, status, sort });
+      setRows(next);
+      setListKey(status);
+    } catch (cause) {
+      console.error('[ChatScheduledPage] Failed to load scheduled tasks:', cause);
+      setRows([]);
+      setError('Scheduled tasks could not be loaded. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -142,21 +152,34 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
       setDraft('');
       setStatus('all');
       await refresh();
+    } catch (cause) {
+      console.error('[ChatScheduledPage] Failed to create scheduled task:', cause);
+      setError('The scheduled task could not be saved.');
     } finally {
       setCreating(false);
     }
   };
 
   const handleToggleStatus = async (task: ChatScheduledTask) => {
-    const next: ScheduledStatus = task.status === 'active' ? 'paused' : 'active';
-    await setScheduledTaskStatus(task.id, next);
-    await refresh();
+    try {
+      const next: ScheduledStatus = task.status === 'active' ? 'paused' : 'active';
+      await setScheduledTaskStatus(task.id, next);
+      await refresh();
+    } catch (cause) {
+      console.error('[ChatScheduledPage] Failed to update scheduled task:', cause);
+      setError('The scheduled task could not be updated.');
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await deleteScheduledTask(id);
-    if (selectedId === id) setSelectedId(null);
-    await refresh();
+    try {
+      await deleteScheduledTask(id);
+      if (selectedId === id) setSelectedId(null);
+      await refresh();
+    } catch (cause) {
+      console.error('[ChatScheduledPage] Failed to delete scheduled task:', cause);
+      setError('The scheduled task could not be deleted.');
+    }
   };
 
   const toggleSelected = (id: string) => {
@@ -333,6 +356,16 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
             })}
           </div>
         </div>
+
+        {error && (
+          <div
+            className="mb-3 rounded-[6px] border px-3 py-2 text-[12px]"
+            style={{ borderColor: 'var(--chat-danger)', color: 'var(--chat-danger)' }}
+            role="alert"
+          >
+            {error}
+          </div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-auto pb-8 hide-scrollbar">
           <AnimatePresence mode="wait" initial={false}>

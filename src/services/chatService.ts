@@ -223,6 +223,7 @@ export const chatService = {
       system_prompt?: string;
       persona_id?: string;
       is_archived?: boolean;
+      project_id?: string | null;
     }
   ): Promise<Conversation | null> {
     if (!isPersistedConversationId(id)) {
@@ -762,12 +763,13 @@ export const chatService = {
   // SCHEDULED AUTOMATION TASKS API
   // ============================================
 
-  async getScheduledTasks(params?: { status?: string; sort?: string; query?: string }): Promise<any[]> {
+  async getScheduledTasks(params?: { status?: string; sort?: string; query?: string; project_id?: string }): Promise<any[]> {
     try {
       const qs = new URLSearchParams();
       if (params?.status) qs.set('status', params.status);
       if (params?.sort) qs.set('sort', params.sort);
       if (params?.query) qs.set('query', params.query);
+      if (params?.project_id) qs.set('project_id', params.project_id);
 
       const response = await fetch(`${API_BASE}/scheduled?${qs.toString()}`, {
         headers: getAuthHeaders(),
@@ -776,7 +778,7 @@ export const chatService = {
       return result.tasks || [];
     } catch (error) {
       console.error('Failed to get scheduled tasks:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -788,6 +790,7 @@ export const chatService = {
     model_id?: string;
     conversation_id?: string;
     project_id?: string;
+    next_run_at?: string;
   }): Promise<any | null> {
     try {
       const response = await fetch(`${API_BASE}/scheduled`, {
@@ -799,7 +802,7 @@ export const chatService = {
       return result.task || null;
     } catch (error) {
       console.error('Failed to create scheduled task:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -821,7 +824,7 @@ export const chatService = {
       return result.task || null;
     } catch (error) {
       console.error('Failed to update scheduled task:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -835,7 +838,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete scheduled task:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -936,16 +939,18 @@ export const chatService = {
   // PROJECTS & FILES API
   // ============================================
 
-  async getProjects(): Promise<any[]> {
+  async getProjects(params?: { include_archived?: boolean }): Promise<any[]> {
     try {
-      const response = await fetch(`${API_BASE}/projects`, {
+      const query = new URLSearchParams();
+      if (params?.include_archived) query.set('include_archived', 'true');
+      const response = await fetch(`${API_BASE}/projects?${query.toString()}`, {
         headers: getAuthHeaders(),
       });
       const result = await handleResponse<{ projects: any[] }>(response);
       return result.projects || [];
     } catch (error) {
       console.error('Failed to get projects:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -965,7 +970,7 @@ export const chatService = {
       return result.project || null;
     } catch (error) {
       console.error('Failed to create project:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -986,7 +991,7 @@ export const chatService = {
       return result.project || null;
     } catch (error) {
       console.error('Failed to update project:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -1000,7 +1005,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete project:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -1013,7 +1018,7 @@ export const chatService = {
       return result.files || [];
     } catch (error) {
       console.error('Failed to get project files:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -1021,7 +1026,8 @@ export const chatService = {
     name: string;
     file_type?: string;
     file_size?: number;
-    content_text: string;
+    storage_key?: string;
+    content_text?: string;
   }): Promise<any | null> {
     try {
       const response = await fetch(`${API_BASE}/projects/${projectId}/files`, {
@@ -1033,7 +1039,7 @@ export const chatService = {
       return result.file || null;
     } catch (error) {
       console.error('Failed to add project file:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -1047,7 +1053,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete project file:', error);
-      return false;
+      throw error;
     }
   },
 

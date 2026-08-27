@@ -209,7 +209,7 @@ router.get('/conversations', async (req, res) => {
       SELECT
         c.id, c.title, c.model_id, c.system_prompt, c.persona_id,
         c.interface_id, c.created_at, c.updated_at, c.last_message_at,
-        c.is_archived,
+        c.is_archived, c.project_id,
         (SELECT COUNT(*) FROM chat_messages WHERE conversation_id = c.id) as message_count
       FROM chat_conversations c
       WHERE c.user_id = $1
@@ -329,7 +329,9 @@ router.put('/conversations/:id', async (req, res) => {
 
     const { id } = req.params;
     if (rejectIfNotPersistedConversationId(res, id)) return;
-    const { title, model_id, system_prompt, persona_id, is_archived } = req.body;
+    const { title, model_id, system_prompt, persona_id, is_archived, project_id } = req.body;
+
+    if (project_id !== undefined && await rejectUnownedChatReferences(req, res, { projectId: project_id })) return;
 
     // Build dynamic update query
     const updates = [];
@@ -355,6 +357,10 @@ router.put('/conversations/:id', async (req, res) => {
     if (is_archived !== undefined) {
       updates.push(`is_archived = $${paramCount++}`);
       values.push(is_archived);
+    }
+    if (project_id !== undefined) {
+      updates.push(`project_id = $${paramCount++}`);
+      values.push(project_id || null);
     }
 
     updates.push(`updated_at = NOW()`);
@@ -1396,7 +1402,8 @@ router.get('/scheduled', async (req, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
-    const { status, sort = 'next', query } = req.query;
+    const { status, sort = 'next', query, project_id } = req.query;
+    if (project_id && await rejectUnownedChatReferences(req, res, { projectId: project_id })) return;
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
@@ -1411,6 +1418,11 @@ router.get('/scheduled', async (req, res) => {
     if (query && query.trim()) {
       params.push(`%${query.trim()}%`);
       sql += ` AND (title ILIKE $${params.length} OR prompt ILIKE $${params.length} OR cadence_label ILIKE $${params.length})`;
+    }
+
+    if (project_id) {
+      params.push(project_id);
+      sql += ` AND project_id = $${params.length}`;
     }
 
     if (sort === 'name') sql += ` ORDER BY title ASC`;
@@ -1434,7 +1446,7 @@ router.post('/scheduled', async (req, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
-    const { title, prompt, cadence = 'daily', cadence_label, model_id = 'google/gemini-2.5-flash-preview-05-20', conversation_id, project_id } = req.body;
+    const { title, prompt, cadence = 'daily', cadence_label, model_id = 'google/gemini-2.5-flash-preview-05-20', conversation_id, project_id, next_run_at } = req.body;
     if (!title || !prompt) {
       return res.status(400).json({ success: false, error: 'title and prompt are required' });
     }
@@ -1444,7 +1456,14 @@ router.post('/scheduled', async (req, res) => {
     })) return;
 
     const label = cadence_label || (cadence === 'daily' ? 'Every day' : cadence === 'weekly' ? 'Every week' : 'Once');
-    const nextRun = computeNextRun(cadence, new Date());
+    const requestedNextRun = next_run_at ? new Date(next_run_at) : null;
+    if (requestedNextRun && Number.isNaN(requestedNextRun.getTime())) {
+      return res.status(400).json({ success: false, error: 'next_run_at must be a valid ISO timestamp' });
+    }
+    if (requestedNextRun && requestedNextRun.getTime() <= Date.now()) {
+      return res.status(400).json({ success: false, error: 'next_run_at must be in the future' });
+    }
+    const nextRun = requestedNextRun || computeNextRun(cadence, new Date());
 
     const { rows } = await req.db.query(
       `INSERT INTO chat_scheduled_tasks (
@@ -1645,16 +1664,17 @@ router.get('/projects', async (req, res) => {
 
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const includeArchived = req.query.include_archived === 'true';
 
     const { rows } = await req.db.query(
       `SELECT p.*, 
               (SELECT COUNT(*) FROM chat_project_files WHERE project_id = p.id) AS file_count,
               (SELECT COUNT(*) FROM chat_conversations WHERE project_id = p.id) AS chat_count
        FROM chat_projects p
-       WHERE p.user_id = $1 AND p.is_archived = FALSE
+       WHERE p.user_id = $1 AND ($4::boolean OR p.is_archived = FALSE)
        ORDER BY p.updated_at DESC
        LIMIT $2 OFFSET $3`,
-      [userId, limit, offset]
+      [userId, limit, offset, includeArchived]
     );
 
     res.json({ success: true, projects: rows, limit, offset });
@@ -1702,7 +1722,7 @@ router.put('/projects/:id', async (req, res) => {
         name = COALESCE($1, name),
         description = COALESCE($2, description),
         custom_instructions = COALESCE($3, custom_instructions),
-        settings = COALESCE($4, settings),
+        settings = CASE WHEN $4::jsonb IS NULL THEN settings ELSE settings || $4::jsonb END,
         is_archived = COALESCE($5, is_archived),
         updated_at = NOW()
        WHERE id = $6 AND user_id = $7
@@ -1741,7 +1761,14 @@ router.get('/projects/:id/files', async (req, res) => {
 
     const { id: projectId } = req.params;
     const { rows } = await req.db.query(
-      `SELECT * FROM chat_project_files WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC`,
+      `SELECT pf.*,
+              CASE WHEN pf.storage_key IS NOT NULL
+                THEN '/api/library/assets/' || pf.storage_key || '/content'
+                ELSE NULL
+              END AS content_url
+       FROM chat_project_files pf
+       WHERE pf.project_id = $1 AND pf.user_id = $2
+       ORDER BY pf.created_at DESC`,
       [projectId, userId]
     );
 
@@ -1759,22 +1786,40 @@ router.post('/projects/:id/files', async (req, res) => {
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
     const { id: projectId } = req.params;
-    const { name, file_type, file_size, content_text } = req.body;
+    const { name, file_type, file_size, storage_key, content_text } = req.body;
 
-    if (!name || !content_text) {
-      return res.status(400).json({ success: false, error: 'File name and text content are required' });
+    if (!name || (!content_text && !storage_key)) {
+      return res.status(400).json({ success: false, error: 'File name and stored asset or text content are required' });
     }
     if (await rejectUnownedChatReferences(req, res, { projectId })) return;
+    if (storage_key) {
+      if (!UUID_RE.test(storage_key)) {
+        return res.status(400).json({ success: false, error: 'Stored asset id must be a UUID' });
+      }
+      const ownedAsset = await req.db.query(
+        `SELECT id FROM files WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+        [storage_key, userId]
+      );
+      if (ownedAsset.rows.length === 0) {
+        return res.status(400).json({ success: false, error: 'Stored asset is not owned by this account' });
+      }
+    }
 
     const { rows } = await req.db.query(
       `INSERT INTO chat_project_files (
-        project_id, user_id, name, file_type, file_size, content_text
-      ) VALUES ($1, $2, $3, $4, $5, $6)
+        project_id, user_id, name, file_type, file_size, storage_key, content_text
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *`,
-      [projectId, userId, name, file_type || 'text/plain', file_size || content_text.length, content_text]
+      [projectId, userId, name, file_type || 'application/octet-stream', file_size || content_text?.length || 0, storage_key || null, content_text || null]
     );
 
-    res.json({ success: true, file: rows[0] });
+    res.json({
+      success: true,
+      file: {
+        ...rows[0],
+        content_url: rows[0].storage_key ? `/api/library/assets/${rows[0].storage_key}/content` : null,
+      },
+    });
   } catch (error) {
     console.error('Failed to add project file:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });

@@ -26,6 +26,7 @@ import ChatShareModal from './ChatShareModal';
 import { isOutlineDebugOn, OUTLINE_DEBUG_CSS } from './outlineDebug';
   import ChatLibraryPage from './ChatLibraryPage';
 import ChatScheduledPage from './ChatScheduledPage';
+import { createScheduledTask, deleteScheduledTask, listScheduledTasks, setScheduledTaskStatus } from './chatScheduled';
 import ChatGlobalSettingsPage from './ChatGlobalSettingsPage';
 import ChatCustomizePage from './ChatCustomizePage';
 import ChatSettingsModal from './ChatSettingsModal';
@@ -1716,151 +1717,8 @@ type VoiceInputMode = 'tap' | 'hold';
 const VOICE_INPUT_MODE_STORAGE_KEY = 'xeno-chat-voice-input-mode';
 const PROJECTS_PAGE_OPEN_STORAGE_KEY = 'xeno-chat-projects-page-open';
 const ACTIVE_PROJECT_ID_STORAGE_KEY = 'xeno-chat-active-project-id';
-// v1 prototype limit: project files are stored in localStorage, so keep them small.
-const PROJECT_FILE_MAX_BYTES = 1024 * 1024; // 1 MB per file
 /** How many project files show in the rail before expanding via the "8/20" control. */
 const PROJECT_FILES_PREVIEW_LIMIT = 8;
-/** Demo files for empty projects — 20 total so the header count can read 8/20. */
-const MOCK_PROJECT_FILES = [
-  {
-    id: 'mock-file-1',
-    name: 'project-brief.md',
-    type: 'text/markdown',
-    size: 4200,
-    addedAt: Date.UTC(2026, 6, 20),
-    encoding: 'text' as const,
-    content:
-      'Prefer concise answers. Document pigments and binders carefully. Ask before recommending any irreversible treatment.',
-  },
-  {
-    id: 'mock-file-2',
-    name: 'palette.tokens.json',
-    type: 'application/json',
-    size: 1800,
-    addedAt: Date.UTC(2026, 6, 18),
-    encoding: 'text' as const,
-    content: '{ "canvas": "#121212", "ink": "#e7e7e2", "muted": "#8a8a86" }',
-  },
-  {
-    id: 'mock-file-3',
-    name: 'restoration-notes.txt',
-    type: 'text/plain',
-    size: 9600,
-    addedAt: Date.UTC(2026, 6, 14),
-    encoding: 'text' as const,
-    content:
-      'Surface cleaning test on lower-right corner looked stable. No bloom after 48h. Next: varnish solubility check.',
-  },
-  {
-    id: 'mock-file-4',
-    name: 'client-feedback.md',
-    type: 'text/markdown',
-    size: 3100,
-    addedAt: Date.UTC(2026, 6, 12),
-    encoding: 'text' as const,
-    content: 'Client wants a calmer tone in written updates. Avoid jargon unless they ask for technical detail.',
-  },
-  {
-    id: 'mock-file-5',
-    name: 'reference-scan.png',
-    type: 'image/png',
-    size: 240000,
-    addedAt: Date.UTC(2026, 6, 10),
-    encoding: 'base64' as const,
-    content: 'Image attachment — open for preview.',
-  },
-  {
-    id: 'mock-file-6',
-    name: 'condition-report.pdf',
-    type: 'application/pdf',
-    size: 512000,
-    addedAt: Date.UTC(2026, 6, 8),
-    encoding: 'base64' as const,
-    content: 'PDF condition report — open for details.',
-  },
-  {
-    id: 'mock-file-7',
-    name: 'materials-list.csv',
-    type: 'text/csv',
-    size: 2200,
-    addedAt: Date.UTC(2026, 6, 5),
-    encoding: 'text' as const,
-    content: 'item,qty\nCotton swabs,120\nIsopropanol,2L\nJapanese tissue,1 pack',
-  },
-  {
-    id: 'mock-file-8',
-    name: 'timeline.md',
-    type: 'text/markdown',
-    size: 1500,
-    addedAt: Date.UTC(2026, 6, 2),
-    encoding: 'text' as const,
-    content: 'Week 1 documentation · Week 2 cleaning tests · Week 3 client review.',
-  },
-  ...Array.from({ length: 12 }, (_, index) => {
-    const n = index + 9;
-    return {
-      id: `mock-file-${n}`,
-      name: `context-note-${n}.md`,
-      type: 'text/markdown',
-      size: 900 + n * 80,
-      addedAt: Date.UTC(2026, 5, Math.max(1, 28 - index)),
-      encoding: 'text' as const,
-      content: `Sample context file ${n} — open for details.`,
-    };
-  }),
-];
-/** Demo files for View files in chat when the conversation has no attachments yet. */
-const MOCK_CHAT_FILES: {
-  key: string;
-  name: string;
-  kind: 'file' | 'image';
-  content: string;
-}[] = [
-  {
-    key: 'mock-chat-file-1',
-    name: 'condition-notes.md',
-    kind: 'file',
-    content:
-      '# Condition notes\n\nSurface cleaning test on the lower-right looked stable.\nNo bloom after 48h.\n\nNext: varnish solubility check before any consolidant.',
-  },
-  {
-    key: 'mock-chat-file-2',
-    name: 'palette-swatch.png',
-    kind: 'image',
-    content:
-      '[Image: palette-swatch.png]\n\nPreview is available in the message bubble.',
-  },
-  {
-    key: 'mock-chat-file-3',
-    name: 'client-brief.txt',
-    kind: 'file',
-    content:
-      'Client wants a calmer tone in written updates.\nAvoid jargon unless they ask for technical detail.\nPrefer short paragraphs and clear next steps.',
-  },
-  {
-    key: 'mock-chat-file-4',
-    name: 'materials.csv',
-    kind: 'file',
-    content: 'item,qty\nCotton swabs,120\nIsopropanol,2L\nJapanese tissue,1 pack\nGellan gum,50g',
-  },
-  {
-    key: 'mock-chat-file-5',
-    name: 'reference-detail.jpg',
-    kind: 'image',
-    content:
-      '[Image: reference-detail.jpg]\n\nPreview is available in the message bubble.',
-  },
-];
-
-/** Demo instructions when a project has none saved yet. */
-const MOCK_PROJECT_INSTRUCTIONS =
-  'Prefer concise answers. Use conservation vocabulary carefully. When unsure about materials, ask before recommending treatments. Keep tone calm and professional for client-facing drafts.';
-/** Demo scheduled tasks — click opens a themed preview modal until scheduling is wired. */
-const MOCK_PROJECT_SCHEDULED = [
-  { id: 'mock-sched-1', title: 'Weekly condition check-in', cadence: 'Every Monday · 09:00', mark: 'Mon' },
-  { id: 'mock-sched-2', title: 'Draft client progress note', cadence: 'Every Friday · 16:00', mark: 'Fri' },
-  { id: 'mock-sched-3', title: 'Refresh materials inventory', cadence: '1st of month · 10:00', mark: '1st' },
-];
 
 type ProjectScheduleKind = 'once' | 'daily' | 'weekly' | 'monthly';
 
@@ -1904,6 +1762,38 @@ const markFromScheduleDraft = (draft: ProjectScheduleDraft): string => {
   if (draft.kind === 'daily') return 'Day';
   const day = draft.date.split('-')[2];
   return day ?? 'New';
+};
+
+const firstRunFromScheduleDraft = (draft: ProjectScheduleDraft, now = new Date()): Date => {
+  const [hour = 9, minute = 0] = draft.time.split(':').map(Number);
+  const atSelectedTime = (date: Date) => {
+    date.setHours(hour, minute, 0, 0);
+    return date;
+  };
+
+  if (draft.kind === 'once') {
+    const [year, month, day] = draft.date.split('-').map(Number);
+    return atSelectedTime(new Date(year, month - 1, day));
+  }
+
+  if (draft.kind === 'daily') {
+    const next = atSelectedTime(new Date(now));
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next;
+  }
+
+  if (draft.kind === 'weekly') {
+    const next = atSelectedTime(new Date(now));
+    const currentMondayIndex = next.getDay() === 0 ? 6 : next.getDay() - 1;
+    let daysUntil = draft.weekday - currentMondayIndex;
+    if (daysUntil < 0 || (daysUntil === 0 && next <= now)) daysUntil += 7;
+    next.setDate(next.getDate() + daysUntil);
+    return next;
+  }
+
+  const next = atSelectedTime(new Date(now.getFullYear(), now.getMonth(), 1));
+  if (next <= now) next.setMonth(next.getMonth() + 1);
+  return next;
 };
 
 const SCHEDULE_CAL_WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
@@ -3132,13 +3022,18 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     addedAt: number;
     encoding: 'text' | 'base64';
     content: string; // extracted text ('text') or metadata note ('base64')
+    assetId?: string;
+    contentUrl?: string;
   };
-  // TEMPORARY chat-history Projects entry (local only — full project model later)
+  // Project rail projection of the account-owned scheduled task record.
   type ProjectScheduledTask = {
     id: string;
     title: string;
     cadence: string;
     mark: string;
+    prompt?: string;
+    status?: 'active' | 'paused';
+    nextRunAt?: number;
   };
   type ChatHistoryProject = {
     id: string;
@@ -3154,6 +3049,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   };
   const chatProjectsStorageKey = 'chatProjects_playground';
   const [chatProjects, setChatProjects] = useState<ChatHistoryProject[]>(() => {
+    if (chatService.isAuthenticated()) return [];
     try {
       const saved = localStorage.getItem(chatProjectsStorageKey);
       if (!saved) return [];
@@ -3220,6 +3116,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     useState(false);
   const [projectScheduledCreateTitle, setProjectScheduledCreateTitle] =
     useState('');
+  const [projectScheduledCreatePrompt, setProjectScheduledCreatePrompt] =
+    useState('');
+  const [isProjectScheduledCreating, setIsProjectScheduledCreating] = useState(false);
   const [projectScheduledCreateSchedule, setProjectScheduledCreateSchedule] =
     useState<ProjectScheduleDraft>(() => createDefaultScheduleDraft());
   const [isProjectScheduledWhenOpen, setIsProjectScheduledWhenOpen] =
@@ -3298,6 +3197,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [pendingProjectAssignConversationId, setPendingProjectAssignConversationId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (chatService.isAuthenticated()) return;
     localStorage.setItem(chatProjectsStorageKey, JSON.stringify(chatProjects));
   }, [chatProjects, chatProjectsStorageKey]);
 
@@ -3306,32 +3206,55 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     if (!chatService.isAuthenticated()) return;
     let isSubscribed = true;
 
-    chatService.getProjects().then((serverProjects) => {
-      if (!isSubscribed || !Array.isArray(serverProjects) || serverProjects.length === 0) return;
-      setChatProjects((prev) => {
-        const newProjects: ChatHistoryProject[] = serverProjects.map((p) => ({
-          id: p.id,
-          name: (p.name ?? '').slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project',
-          description: p.description || '',
-          instructions: p.custom_instructions || '',
-          files: [],
-          createdAt: p.created_at ? new Date(p.created_at).getTime() : Date.now(),
-          updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : Date.now(),
+    void (async () => {
+      try {
+        const serverProjects = await chatService.getProjects({ include_archived: true });
+        const projects = await Promise.all(serverProjects.map(async (p) => {
+          const [serverFiles, serverTasks] = await Promise.all([
+            chatService.getProjectFiles(p.id),
+            listScheduledTasks({ projectId: p.id }),
+          ]);
+          const settings = p.settings && typeof p.settings === 'object' ? p.settings : {};
+          return {
+            id: p.id,
+            name: (p.name ?? '').slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project',
+            description: p.description || '',
+            instructions: p.custom_instructions || '',
+            isStarred: Boolean(settings.isStarred),
+            isArchived: Boolean(p.is_archived),
+            files: serverFiles.map((file) => ({
+              id: file.id,
+              name: file.name,
+              type: file.file_type || 'application/octet-stream',
+              size: Number(file.file_size || 0),
+              addedAt: file.created_at ? new Date(file.created_at).getTime() : Date.now(),
+              encoding: file.content_text ? 'text' as const : 'base64' as const,
+              content: file.content_text || '',
+              assetId: file.storage_key || undefined,
+              contentUrl: file.content_url || undefined,
+            })),
+            scheduledTasks: serverTasks.map((task) => ({
+              id: task.id,
+              title: task.title,
+              cadence: task.cadenceLabel,
+              mark: task.cadence === 'weekly' ? 'Wk' : task.cadence === 'monthly' ? 'Mo' : task.cadence === 'daily' ? 'Day' : '1x',
+              prompt: task.prompt,
+              status: task.status,
+              nextRunAt: task.nextRunAt,
+            })),
+            createdAt: p.created_at ? new Date(p.created_at).getTime() : Date.now(),
+            updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : Date.now(),
+          } satisfies ChatHistoryProject;
         }));
-        const merged = [...prev];
-        for (const np of newProjects) {
-          const idx = merged.findIndex((p) => p.id === np.id);
-          if (idx >= 0) {
-            merged[idx] = { ...merged[idx], name: np.name, description: np.description, instructions: np.instructions };
-          } else {
-            merged.push(np);
-          }
+        if (isSubscribed) setChatProjects(projects);
+      } catch (err) {
+        console.error('[ChatWithLLM] Failed to load projects from backend:', err);
+        if (isSubscribed) {
+          setChatProjects([]);
+          setProjectFileNotice('Projects could not be loaded. Refresh to try again.');
         }
-        return merged;
-      });
-    }).catch((err) => {
-      console.warn('[ChatWithLLM] Failed to sync projects from backend:', err);
-    });
+      }
+    })();
 
     return () => {
       isSubscribed = false;
@@ -3378,29 +3301,47 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     return () => window.clearTimeout(timer);
   }, [isCreateProjectModalOpen, isCreateProjectModalMounted]);
 
-  const handleToggleProjectStar = useCallback((projectId: string) => {
-    setChatProjects((prev) =>
-      prev.map((project) =>
-        project.id === projectId
-          ? { ...project, isStarred: !project.isStarred }
-          : project,
-      ),
-    );
+  const handleToggleProjectStar = useCallback(async (projectId: string) => {
+    const project = chatProjects.find((item) => item.id === projectId);
+    if (!project) return;
+    const isStarred = !project.isStarred;
+    try {
+      const updated = await chatService.updateProject(projectId, { settings: { isStarred } });
+      if (!updated) throw new Error('Project update was not saved.');
+      setChatProjects((prev) => prev.map((item) => item.id === projectId ? { ...item, isStarred } : item));
+      setProjectFileNotice(null);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to star project:', error);
+      setProjectFileNotice('The project could not be updated. Try again.');
+    }
     setOpenProjectMenuId(null);
-  }, []);
+  }, [chatProjects]);
 
-  const handleToggleProjectArchive = useCallback((projectId: string) => {
-    setChatProjects((prev) =>
-      prev.map((project) =>
-        project.id === projectId
-          ? { ...project, isArchived: !project.isArchived }
-          : project,
-      ),
-    );
+  const handleToggleProjectArchive = useCallback(async (projectId: string) => {
+    const project = chatProjects.find((item) => item.id === projectId);
+    if (!project) return;
+    const isArchived = !project.isArchived;
+    try {
+      const updated = await chatService.updateProject(projectId, { is_archived: isArchived });
+      if (!updated) throw new Error('Project archive state was not saved.');
+      setChatProjects((prev) => prev.map((item) => item.id === projectId ? { ...item, isArchived } : item));
+      setProjectFileNotice(null);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to archive project:', error);
+      setProjectFileNotice('The project could not be archived. Try again.');
+    }
     setOpenProjectMenuId(null);
-  }, []);
+  }, [chatProjects]);
 
-  const handleDeleteProject = useCallback((projectId: string) => {
+  const handleDeleteProject = useCallback(async (projectId: string) => {
+    try {
+      const deleted = await chatService.deleteProject(projectId);
+      if (!deleted) throw new Error('Project was not deleted.');
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to delete project:', error);
+      setProjectFileNotice('The project could not be deleted. Try again.');
+      return;
+    }
     setChatProjects((prev) => prev.filter((project) => project.id !== projectId));
     setOpenProjectMenuId(null);
     setActiveProjectId((current) => {
@@ -3414,8 +3355,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     });
   }, []);
 
-  // Read one File into a serializable ProjectFile. Text files keep their content
-  // (viewable); anything else is stored as metadata only (no preview in v1).
+  // Read text for project context. Every file itself is stored once in the account Library.
   const readProjectFile = useCallback((file: File): Promise<ProjectFile> => {
     const base: Omit<ProjectFile, 'encoding' | 'content'> = {
       id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -3431,7 +3371,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       return Promise.resolve({
         ...base,
         encoding: 'base64',
-        content: 'Preview unavailable in this prototype (non-text file).',
+        content: '',
       });
     }
     return file.text().then((text) => ({ ...base, encoding: 'text', content: text }));
@@ -3441,63 +3381,57 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     async (projectId: string, fileList: FileList | null) => {
       if (!fileList || fileList.length === 0) return;
       const files = Array.from(fileList);
-      const tooBig = files.filter((f) => f.size > PROJECT_FILE_MAX_BYTES);
-      const accepted = files.filter((f) => f.size <= PROJECT_FILE_MAX_BYTES);
-
-      if (tooBig.length > 0) {
-        setProjectFileNotice(
-          `Skipped ${tooBig.length} file(s) over 1 MB (${tooBig
-            .map((f) => f.name)
-            .join(', ')}). This prototype stores files in the browser, so keep them small.`,
-        );
-      } else {
-        setProjectFileNotice(null);
+      if (!chatService.isAuthenticated()) {
+        setProjectFileNotice('Sign in to add files to a project.');
+        return;
       }
-      if (accepted.length === 0) return;
-
-      const parsed = await Promise.all(accepted.map(readProjectFile));
-      const persisted = await Promise.all(
-        parsed.map(async (file) => {
-          try {
-            if (chatService.isAuthenticated()) {
-              const serverFile = await chatService.addProjectFile(projectId, {
-                name: file.name,
-                file_type: file.type,
-                file_size: file.size,
-                content_text: file.content,
-              });
-              if (serverFile) {
-                return {
-                  ...file,
-                  id: serverFile.id,
-                  name: serverFile.name ?? file.name,
-                  type: serverFile.file_type ?? file.type,
-                  size: Number(serverFile.file_size ?? file.size),
-                  addedAt: serverFile.created_at
-                    ? new Date(serverFile.created_at).getTime()
-                    : file.addedAt,
-                  content: serverFile.content_text ?? file.content,
-                };
-              }
-            }
-          } catch (err) {
-            console.warn('[ChatWithLLM] Failed to persist project file:', err);
-          }
-          return file;
-        }),
-      );
-      setChatProjects((prev) =>
-        prev.map((project) =>
-          project.id === projectId
+      try {
+        const parsed = await Promise.all(files.map(readProjectFile));
+        const persisted = await Promise.all(parsed.map(async (file, index) => {
+          const asset = await libraryService.upload(files[index], 'project');
+          const serverFile = await chatService.addProjectFile(projectId, {
+            name: asset.name || file.name,
+            file_type: asset.mimeType || file.type,
+            file_size: asset.size ?? file.size,
+            storage_key: asset.assetId,
+            content_text: file.content || undefined,
+          });
+          if (!serverFile) throw new Error(`Project file ${file.name} was not linked.`);
+          return {
+            ...file,
+            id: serverFile.id,
+            name: serverFile.name ?? file.name,
+            type: serverFile.file_type ?? file.type,
+            size: Number(serverFile.file_size ?? file.size),
+            addedAt: serverFile.created_at ? new Date(serverFile.created_at).getTime() : file.addedAt,
+            content: serverFile.content_text ?? file.content,
+            assetId: serverFile.storage_key ?? asset.assetId,
+            contentUrl: serverFile.content_url ?? asset.contentUrl,
+          };
+        }));
+        setProjectFileNotice(null);
+        setChatProjects((prev) =>
+          prev.map((project) => project.id === projectId
             ? { ...project, files: [...persisted, ...(project.files ?? [])], updatedAt: Date.now() }
-            : project,
-        ),
-      );
+            : project),
+        );
+      } catch (error) {
+        console.error('[ChatWithLLM] Failed to add project files:', error);
+        setProjectFileNotice('One or more files could not be uploaded. Nothing local was substituted.');
+      }
     },
     [readProjectFile],
   );
 
-  const handleRemoveProjectFile = useCallback((projectId: string, fileId: string) => {
+  const handleRemoveProjectFile = useCallback(async (projectId: string, fileId: string) => {
+    try {
+      const deleted = await chatService.deleteProjectFile(projectId, fileId);
+      if (!deleted) throw new Error('Project file was not removed.');
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to remove project file:', error);
+      setProjectFileNotice('The file could not be removed from this project.');
+      return;
+    }
     setChatProjects((prev) =>
       prev.map((project) =>
         project.id === projectId
@@ -3513,16 +3447,34 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       content?: string;
       encoding?: 'text' | 'base64';
       type?: string;
+      size?: number;
+      assetId?: string;
+      contentUrl?: string;
     }) => {
       setIsContextPanelOpen(false);
       setIsEditingContextPanel(false);
       setIsProjectScheduledPreviewOpen(false);
+      if (file.type?.startsWith('image/') && file.assetId && file.contentUrl) {
+        const item: LibraryViewerItem = {
+          id: `project:${file.assetId}`,
+          name: file.name,
+          asset: {
+            assetId: file.assetId,
+            name: file.name,
+            mimeType: file.type,
+            size: file.size,
+            contentUrl: file.contentUrl,
+          },
+        };
+        setLibraryViewerSelection({ items: [item], activeId: item.id });
+        return;
+      }
       const raw = file.content?.trim() ?? '';
       let content = raw;
       if (!content) {
-        content = 'No preview available for this file.';
+        content = 'Preview unavailable. This file remains available from your Library.';
       } else if (file.encoding === 'base64' && file.type?.startsWith('image/')) {
-        content = raw || 'Image attachment — binary preview not shown in this mock.';
+        content = raw;
       } else if (file.encoding === 'base64') {
         content = raw || 'Binary file — text preview not available.';
       }
@@ -3640,6 +3592,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     const draft = createDefaultScheduleDraft();
     setIsProjectScheduledPreviewOpen(false);
     setProjectScheduledCreateTitle('');
+    setProjectScheduledCreatePrompt('');
     setProjectScheduledCreateSchedule(draft);
     resetProjectScheduledWhenPanel();
     resetProjectScheduleDatePanel();
@@ -3684,6 +3637,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     const timer = window.setTimeout(() => {
       setIsProjectScheduledCreateMounted(false);
       setProjectScheduledCreateTitle('');
+      setProjectScheduledCreatePrompt('');
+      setIsProjectScheduledCreating(false);
       setProjectScheduledCreateSchedule(createDefaultScheduleDraft());
     }, SCHEDULE_CREATE_MODAL_MS);
     return () => window.clearTimeout(timer);
@@ -3893,27 +3848,38 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     [],
   );
 
-  const submitProjectScheduledCreate = useCallback(() => {
+  const submitProjectScheduledCreate = useCallback(async () => {
     const title = projectScheduledCreateTitle.trim();
-    if (!title || !activeProjectId) return;
+    const prompt = projectScheduledCreatePrompt.trim();
+    if (!title || !prompt || !activeProjectId || isProjectScheduledCreating) return;
     const cadence = formatProjectScheduleLabel(projectScheduledCreateSchedule);
     const mark = markFromScheduleDraft(projectScheduledCreateSchedule);
-    const task: ProjectScheduledTask = {
-      id: `sched-${Date.now().toString(36)}`,
-      title,
-      cadence,
-      mark,
-    };
+    setIsProjectScheduledCreating(true);
+    try {
+      const created = await createScheduledTask({
+        title,
+        prompt,
+        cadence: projectScheduledCreateSchedule.kind,
+        cadenceLabel: cadence,
+        projectId: activeProjectId,
+        nextRunAt: firstRunFromScheduleDraft(projectScheduledCreateSchedule).toISOString(),
+        modelId: selectedModel.id,
+      });
+      const task: ProjectScheduledTask = {
+        id: created.id,
+        title: created.title,
+        cadence,
+        mark,
+        prompt: created.prompt,
+        status: created.status,
+        nextRunAt: created.nextRunAt,
+      };
     setChatProjects((prev) =>
       prev.map((project) => {
         if (project.id !== activeProjectId) return project;
-        const existing =
-          (project.scheduledTasks?.length ?? 0) > 0
-            ? (project.scheduledTasks ?? [])
-            : [...MOCK_PROJECT_SCHEDULED];
         return {
           ...project,
-          scheduledTasks: [task, ...existing],
+          scheduledTasks: [task, ...(project.scheduledTasks ?? [])],
           updatedAt: Date.now(),
         };
       }),
@@ -3921,20 +3887,62 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     closeProjectScheduledCreate();
     setProjectScheduledPreview(task);
     setIsProjectScheduledPreviewOpen(true);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to create scheduled project task:', error);
+      setProjectFileNotice('The scheduled task could not be saved.');
+    } finally {
+      setIsProjectScheduledCreating(false);
+    }
   }, [
     activeProjectId,
     closeProjectScheduledCreate,
     projectScheduledCreateSchedule,
     projectScheduledCreateTitle,
+    projectScheduledCreatePrompt,
+    isProjectScheduledCreating,
+    selectedModel.id,
   ]);
+
+  const toggleProjectScheduledStatus = useCallback(async (task: ProjectScheduledTask) => {
+    const nextStatus = task.status === 'paused' ? 'active' : 'paused';
+    try {
+      await setScheduledTaskStatus(task.id, nextStatus);
+      setChatProjects((prev) => prev.map((project) => ({
+        ...project,
+        scheduledTasks: project.scheduledTasks?.map((item) =>
+          item.id === task.id ? { ...item, status: nextStatus } : item,
+        ),
+      })));
+      setProjectScheduledPreview((current) =>
+        current?.id === task.id ? { ...current, status: nextStatus } : current,
+      );
+      setProjectFileNotice(null);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to update scheduled project task:', error);
+      setProjectFileNotice('The scheduled task could not be updated.');
+    }
+  }, []);
+
+  const removeProjectScheduledTask = useCallback(async (taskId: string) => {
+    try {
+      await deleteScheduledTask(taskId);
+      setChatProjects((prev) => prev.map((project) => ({
+        ...project,
+        scheduledTasks: project.scheduledTasks?.filter((item) => item.id !== taskId),
+      })));
+      closeProjectScheduledPreview();
+      setProjectFileNotice(null);
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to delete scheduled project task:', error);
+      setProjectFileNotice('The scheduled task could not be deleted.');
+    }
+  }, [closeProjectScheduledPreview]);
 
   const openProjectSettings = useCallback(
     (project: ChatHistoryProject, section: ProjectSettingsSection = 'general') => {
       setSettingsNameDraft(project.name.slice(0, PROJECT_NAME_MAX_CHARS));
       setSettingsDescriptionDraft(project.description ?? '');
-      // The rail shows demo instructions when none are saved, so the editor opens on the same
-      // text the user is looking at rather than on an empty box.
-      setInstructionsDraft(project.instructions ?? MOCK_PROJECT_INSTRUCTIONS);
+      setInstructionsDraft(project.instructions ?? '');
       setOpenProjectMenuId(null);
       setIsProjectsSortOpen(false);
       setProjectSettings({ projectId: project.id, section });
@@ -3980,28 +3988,42 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
    * Name, description and instructions are drafts committed together. File and schedule changes
    * are immediate actions, so they are deliberately not part of this save.
    */
-  const saveProjectSettings = useCallback(() => {
+  const saveProjectSettings = useCallback(async () => {
     if (!projectSettings) return;
     const { projectId } = projectSettings;
     const name = settingsNameDraft.trim().slice(0, PROJECT_NAME_MAX_CHARS);
     const description = settingsDescriptionDraft.trim();
     const instructions = instructionsDraft.trim();
+    const currentProject = chatProjects.find((project) => project.id === projectId);
+    if (!currentProject) return;
+    try {
+      const updated = await chatService.updateProject(projectId, {
+        name: name || currentProject.name,
+        description,
+        custom_instructions: instructions,
+      });
+      if (!updated) throw new Error('Project settings were not saved.');
     setChatProjects((prev) =>
       prev.map((project) =>
         project.id === projectId
           ? {
               ...project,
-              name: name || project.name,
-              description: description || undefined,
-              instructions: instructions || undefined,
-              updatedAt: Date.now(),
+              name: updated.name,
+              description: updated.description || undefined,
+              instructions: updated.custom_instructions || undefined,
+              updatedAt: updated.updated_at ? new Date(updated.updated_at).getTime() : Date.now(),
             }
           : project,
       ),
     );
     closeProjectSettings();
+    } catch (error) {
+      console.error('[ChatWithLLM] Failed to save project settings:', error);
+      setProjectFileNotice('Project settings could not be saved.');
+    }
   }, [
     projectSettings,
+    chatProjects,
     settingsNameDraft,
     settingsDescriptionDraft,
     instructionsDraft,
@@ -4012,41 +4034,35 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     const projectName =
       (name ?? newChatProjectName).trim().slice(0, PROJECT_NAME_MAX_CHARS) || 'Untitled project';
     const projectDescription = (description ?? newChatProjectDescription).trim();
-    const now = Date.now();
-    let project: ChatHistoryProject = {
-      id: `project-${now}`,
-      name: projectName,
-      description: projectDescription || undefined,
-      createdAt: now,
-      updatedAt: now,
-    };
-    try {
-      if (chatService.isAuthenticated()) {
-        const server = await chatService.createProject({
-          name: projectName,
-          description: projectDescription || undefined,
-        });
-        if (server) {
-          project = {
-            ...project,
-            id: server.id,
-            name: server.name || projectName,
-            description: server.description || project.description,
-            createdAt: server.created_at
-              ? new Date(server.created_at).getTime()
-              : now,
-            updatedAt: server.updated_at
-              ? new Date(server.updated_at).getTime()
-              : now,
-          };
-        }
-      }
-    } catch (err) {
-      console.warn('[ChatWithLLM] Failed to create project on backend:', err);
+    if (!chatService.isAuthenticated()) {
+      setProjectFileNotice('Sign in to create a project.');
+      return null;
     }
-    setChatProjects((prev) => [project, ...prev]);
-    closeCreateProjectModal();
-    return project;
+    try {
+      const server = await chatService.createProject({
+        name: projectName,
+        description: projectDescription || undefined,
+      });
+      if (!server) throw new Error('Project was not created.');
+      const now = Date.now();
+      const project: ChatHistoryProject = {
+        id: server.id,
+        name: server.name || projectName,
+        description: server.description || undefined,
+        instructions: server.custom_instructions || undefined,
+        createdAt: server.created_at ? new Date(server.created_at).getTime() : now,
+        updatedAt: server.updated_at ? new Date(server.updated_at).getTime() : now,
+        files: [],
+        scheduledTasks: [],
+      };
+      setChatProjects((prev) => [project, ...prev]);
+      closeCreateProjectModal();
+      return project;
+    } catch (err) {
+      console.error('[ChatWithLLM] Failed to create project on backend:', err);
+      setProjectFileNotice('The project could not be created.');
+      return null;
+    }
   }, [closeCreateProjectModal, newChatProjectDescription, newChatProjectName]);
 
   const openProjectsPage = useCallback(() => {
@@ -5191,47 +5207,20 @@ interface QueueState {
             include_archived: true,
           });
 
-          if (conversations && conversations.length > 0) {
-            // Convert database format to local format
-            const localFormat: Conversation[] = conversations.map(conv => ({
+          const localFormat: Conversation[] = (conversations ?? []).map(conv => ({
               id: conv.id,
               title: conv.title,
               timestamp: conv.created_at ? new Date(conv.created_at).getTime() : Date.now(),
               messages: [], // Messages loaded on demand
               systemPrompt: conv.system_prompt,
               isArchived: Boolean(conv.is_archived),
+              projectId: conv.project_id ?? null,
             }));
-            setConversationHistory(localFormat);
-            console.log("Chat history loaded from database.");
-          } else {
-            // No database history, check localStorage for migration
-            const savedHistory = localStorage.getItem(storageKey);
-            if (savedHistory) {
-              try {
-                const parsedHistory: Conversation[] = JSON.parse(savedHistory);
-                if (Array.isArray(parsedHistory) && parsedHistory.length > 0) {
-                  setConversationHistory(parsedHistory);
-                  console.log("Chat history loaded from localStorage (ready for sync).");
-                }
-              } catch (error) {
-                console.error("Error parsing localStorage history:", error);
-              }
-            }
-          }
+          setConversationHistory(localFormat);
+          console.log("Chat history loaded from database.");
         } catch (error) {
-          console.error("Error loading from database, falling back to localStorage:", error);
-          // Fallback to localStorage
-          const savedHistory = localStorage.getItem(storageKey);
-          if (savedHistory) {
-            try {
-              const parsedHistory: Conversation[] = JSON.parse(savedHistory);
-              if (Array.isArray(parsedHistory)) {
-                setConversationHistory(parsedHistory);
-              }
-            } catch (parseError) {
-              console.error("Error parsing localStorage history:", parseError);
-            }
-          }
+          console.error("Error loading chat history from database:", error);
+          setConversationHistory([]);
         }
       } else {
         // Not authenticated, use localStorage
@@ -5924,6 +5913,7 @@ interface QueueState {
             model_id: selectedModel.id,
             system_prompt: savedSystemPrompt || undefined,
             interface_id: sharedInterfaceId,
+            project_id: projectId,
           });
           if (dbConversation) {
             // For AI messages, save parsedAnswer (what is displayed) rather than the raw text.
@@ -7767,8 +7757,9 @@ Please provide a well-structured response using this search context and any mult
                   title: fullConversation.title || 'Conversation',
                   timestamp: fullConversation.created_at ? new Date(fullConversation.created_at).getTime() : Date.now(),
                   messages: localMessages,
-                  systemPrompt: fullConversation.system_prompt,
-                  isArchived: Boolean(fullConversation.is_archived),
+                   systemPrompt: fullConversation.system_prompt,
+                   isArchived: Boolean(fullConversation.is_archived),
+                   projectId: fullConversation.project_id ?? null,
                 },
                 ...prevHistory
               ];
@@ -7869,6 +7860,7 @@ Please provide a well-structured response using this search context and any mult
           timestamp: conv.created_at ? new Date(conv.created_at).getTime() : Date.now(),
           messages: [],
           systemPrompt: conv.system_prompt,
+          projectId: conv.project_id ?? null,
         }));
         setSelectorConversations(localFormat);
       } else {
@@ -8204,7 +8196,17 @@ Please provide a well-structured response using this search context and any mult
     }
   };
 
-  const handleAssignConversationToProject = (conversationId: string, projectId: string | null) => {
+  const handleAssignConversationToProject = async (conversationId: string, projectId: string | null) => {
+    if (isDbAuthenticated && isPersistedConversationId(conversationId)) {
+      try {
+        const updated = await chatService.updateConversation(conversationId, { project_id: projectId });
+        if (!updated) throw new Error('Conversation project was not saved.');
+      } catch (error) {
+        console.error('[ChatWithLLM] Failed to assign conversation to project:', error);
+        setProjectFileNotice('The chat could not be moved to that project.');
+        return;
+      }
+    }
     patchConversation(conversationId, { projectId });
     if (projectId) {
       const now = Date.now();
@@ -8219,8 +8221,8 @@ Please provide a well-structured response using this search context and any mult
   const submitCreateProjectModal = async () => {
     const assignId = pendingProjectAssignConversationId;
     const project = await createChatProject();
-    if (assignId) {
-      handleAssignConversationToProject(assignId, project.id);
+    if (assignId && project) {
+      await handleAssignConversationToProject(assignId, project.id);
     }
   };
 
@@ -11896,8 +11898,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
         });
       });
     }
-    // Empty chats show mock files so the list + preview can be judged visually.
-    return items.length > 0 ? items : MOCK_CHAT_FILES;
+    return items;
   }, [messages]);
 
   const chatFilesSelected = useMemo(
@@ -14615,17 +14616,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
           const projectChats = conversationHistory
             .filter((convo) => convo.projectId === project.id)
             .sort((a, b) => b.timestamp - a.timestamp);
-          const realProjectFiles = project.files ?? [];
-          // Empty projects show mock files so the grid + "See all" can be judged visually.
-          const projectFiles =
-            realProjectFiles.length > 0 ? realProjectFiles : MOCK_PROJECT_FILES;
+          const projectFiles = project.files ?? [];
           const visibleProjectFiles = isProjectFilesExpanded
             ? projectFiles
             : projectFiles.slice(0, PROJECT_FILES_PREVIEW_LIMIT);
           const hasHiddenProjectFiles = projectFiles.length > PROJECT_FILES_PREVIEW_LIMIT;
-          const realScheduled = project.scheduledTasks ?? [];
-          const projectScheduled =
-            realScheduled.length > 0 ? realScheduled : MOCK_PROJECT_SCHEDULED;
+          const projectScheduled = project.scheduledTasks ?? [];
           return (
             <div
               className="absolute inset-0 z-[46] main-content-transition overflow-hidden"
@@ -14774,7 +14770,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                 <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 hide-scrollbar">
                   {(() => {
                     const displayInstructions =
-                      project.instructions?.trim() || MOCK_PROJECT_INSTRUCTIONS;
+                      project.instructions?.trim() || 'No project instructions yet.';
                     const railShellStyle: React.CSSProperties = {
                       backgroundColor:
                         'color-mix(in srgb, var(--chat-canvas) 88%, var(--chat-muted))',
@@ -14940,7 +14936,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             <div className="px-1 pb-1.5 pt-0.5">
                               <div className="grid grid-cols-2 gap-1.5">
                                 {visibleProjectFiles.map((file) => {
-                                  const isMockFile = file.id.startsWith('mock-file-');
                                   const baseName = file.name.includes('.')
                                     ? file.name.slice(0, file.name.lastIndexOf('.'))
                                     : file.name;
@@ -14963,6 +14958,9 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                             type: file.type,
                                             content: file.content,
                                             encoding: file.encoding,
+                                            size: file.size,
+                                            assetId: file.assetId,
+                                            contentUrl: file.contentUrl,
                                           })
                                         }
                                         className="flex h-[3.35rem] w-full flex-col overflow-hidden rounded-lg border px-2 py-1.5 text-left transition-[transform,opacity] duration-150 ease-out hover:opacity-90 active:scale-[0.98]"
@@ -14976,8 +14974,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           {previewText}
                                         </span>
                                       </button>
-                                      {!isMockFile && (
-                                        <IconButton
+                                      <IconButton
                                           icon={XDecl}
                                           variant="ghost"
                                           size="xs"
@@ -14986,8 +14983,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           onClick={() => handleRemoveProjectFile(project.id, file.id)}
                                           aria-label={`Remove ${file.name}`}
                                           title="Remove"
-                                        />
-                                      )}
+                                      />
                                     </div>
                                   );
                                 })}
@@ -15016,6 +15012,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                             />
                           </div>
                           <div className="flex flex-col gap-1.5 px-1 pb-1.5 pt-0.5">
+                            {projectScheduled.length === 0 && (
+                              <div className="rounded-lg border px-2.5 py-3 text-center text-[10.5px] leading-relaxed text-[var(--chat-muted)]" style={railChipStyle}>
+                                No scheduled tasks yet.
+                              </div>
+                            )}
                             {projectScheduled.map((task) => (
                               /* Stays hand-written — the project sidebar's card shape, the fourth of
                                  them: a bordered tile stacking a title over a cadence line, sized by
@@ -17160,15 +17161,38 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                   </div>
                   <div>
                     <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
-                      Mark
+                      Instructions
                     </p>
-                    <p className="mt-1 font-mono text-[12px] uppercase tracking-[0.12em] text-[var(--chat-muted)]">
-                      {projectScheduledPreview.mark}
+                    <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-[var(--chat-text)]">
+                      {projectScheduledPreview.prompt || projectScheduledPreview.title}
                     </p>
                   </div>
-                  <p className="text-[11.5px] leading-relaxed text-[var(--chat-muted)]">
-                    Preview only — edit and run land when the scheduler is live.
-                  </p>
+                  <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style={{ borderColor: 'var(--chat-border)' }}>
+                    <div>
+                      <span className="block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">Status</span>
+                      <span className="mt-0.5 block text-[12px] font-medium capitalize text-[var(--chat-text)]">
+                        {projectScheduledPreview.status || 'active'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void toggleProjectScheduledStatus(projectScheduledPreview)}
+                      >
+                        {projectScheduledPreview.status === 'paused' ? 'Resume' : 'Pause'}
+                      </Button>
+                      <IconButton
+                        icon={TrashDecl}
+                        variant="ghost"
+                        size="sm"
+                        iconSize={14}
+                        onClick={() => void removeProjectScheduledTask(projectScheduledPreview.id)}
+                        aria-label="Delete scheduled task"
+                        title="Delete scheduled task"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>,
@@ -17261,6 +17285,22 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                           event.preventDefault();
                           submitProjectScheduledCreate();
                         }
+                      }}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--chat-muted)]">
+                      Instructions
+                    </span>
+                    <textarea
+                      value={projectScheduledCreatePrompt}
+                      onChange={(event) => setProjectScheduledCreatePrompt(event.target.value)}
+                      placeholder="What should XENO do when this task runs?"
+                      rows={3}
+                      className="w-full resize-none rounded-lg border bg-transparent px-3 py-2 text-[13px] leading-relaxed text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-muted)]"
+                      style={{
+                        borderColor: 'var(--chat-border)',
+                        backgroundColor: 'var(--chat-surface)',
                       }}
                     />
                   </label>
@@ -17919,9 +17959,13 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                       variant="primary"
                       size="md"
                       onClick={submitProjectScheduledCreate}
-                      disabled={!projectScheduledCreateTitle.trim()}
+                      disabled={
+                        !projectScheduledCreateTitle.trim() ||
+                        !projectScheduledCreatePrompt.trim() ||
+                        isProjectScheduledCreating
+                      }
                     >
-                      Add
+                      {isProjectScheduledCreating ? 'Adding…' : 'Add'}
                     </Button>
                   </div>
                 </div>
