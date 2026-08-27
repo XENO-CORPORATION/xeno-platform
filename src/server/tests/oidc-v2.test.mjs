@@ -9,7 +9,7 @@ import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import {
   getSigningKey, jwks, createAuthorizationCode, exchangeAuthorizationCode,
   refreshTokenGrant, startDeviceAuthorization, approveDevice, deviceTokenGrant,
-  revokeToken, introspectToken,
+  revokeToken, endSession, logoutEverywhere, introspectToken,
 } from '../utils/oidcProvider.js';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -28,6 +28,8 @@ async function main() {
   await pool.query(`CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text, username text, display_name text, avatar_url text, email_verified boolean DEFAULT true, is_active boolean DEFAULT true)`);
   const u = await pool.query("INSERT INTO users (email, username, display_name) VALUES ('a@b.co','alice','Alice') RETURNING id");
   const userId = u.rows[0].id;
+  const other = await pool.query("INSERT INTO users (email, username, display_name) VALUES ('other@b.co','other','Other') RETURNING id");
+  const otherUserId = other.rows[0].id;
   await pool.query(`INSERT INTO oauth_clients (client_id, name, redirect_uris, surface) VALUES ('xeno-post','XENO Post', ARRAY['https://post.xenostudio.ai/auth/callback'], 'xeno_post') ON CONFLICT DO NOTHING`);
 
   // 1. signing key (ES256 default) + JWKS
@@ -52,6 +54,18 @@ async function main() {
   try { await exchangeAuthorizationCode(pool, { code, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: v }); } catch (e) { reused = e.oauthError; }
   ok(reused === 'invalid_grant', 'consumed code cannot be reused');
 
+  // 3b. Concurrent code exchange is atomic: exactly one request can consume it.
+  const codeRacePkce = pkce();
+  const codeRace = await createAuthorizationCode(pool, {
+    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+    scope: 'openid ledger', codeChallenge: codeRacePkce.c,
+  });
+  const codeRaceResults = await Promise.allSettled([
+    exchangeAuthorizationCode(pool, { code: codeRace, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: codeRacePkce.v }),
+    exchangeAuthorizationCode(pool, { code: codeRace, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: codeRacePkce.v }),
+  ]);
+  ok(codeRaceResults.filter((x) => x.status === 'fulfilled').length === 1, 'concurrent code exchange mints exactly one token set');
+
   // 4. PKCE failure
   const { c: c2 } = pkce();
   const code2 = await createAuthorizationCode(pool, { clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback', scope: 'openid', codeChallenge: c2 });
@@ -68,6 +82,32 @@ async function main() {
   let familyDead = null;
   try { await refreshTokenGrant(pool, { refreshToken: r1.refresh_token, clientId: 'xeno-post' }); } catch (e) { familyDead = e.message; }
   ok(/revoked/.test(familyDead || ''), 'reuse revoked the WHOLE family (the good token too)');
+
+  // 5b. Concurrent refresh consumes one row atomically. One successor is minted;
+  // the racing reuse then revokes the family/session, so that successor is dead.
+  const refreshRacePkce = pkce();
+  const refreshRaceCode = await createAuthorizationCode(pool, {
+    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+    scope: 'openid ledger', codeChallenge: refreshRacePkce.c,
+  });
+  const refreshRaceSeed = await exchangeAuthorizationCode(pool, {
+    code: refreshRaceCode, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: refreshRacePkce.v,
+  });
+  const refreshRaceResults = await Promise.allSettled([
+    refreshTokenGrant(pool, { refreshToken: refreshRaceSeed.refresh_token, clientId: 'xeno-post' }),
+    refreshTokenGrant(pool, { refreshToken: refreshRaceSeed.refresh_token, clientId: 'xeno-post' }),
+  ]);
+  const refreshRaceWins = refreshRaceResults.filter((x) => x.status === 'fulfilled');
+  ok(refreshRaceWins.length === 1, 'concurrent refresh mints exactly one successor');
+  const refreshRaceHash = crypto.createHash('sha256').update(refreshRaceSeed.refresh_token).digest('hex');
+  const refreshRaceFamily = await pool.query(
+    `SELECT count(*)::int AS count FROM oauth_refresh_tokens
+      WHERE family_id = (SELECT family_id FROM oauth_refresh_tokens WHERE token_hash = $1)`,
+    [refreshRaceHash],
+  );
+  ok(refreshRaceFamily.rows[0].count === 2, 'concurrent refresh creates no duplicate successor rows');
+  ok((await introspectToken(pool, { token: refreshRaceWins[0].value.access_token })).active === false,
+    'reuse race revokes the access session before the returned successor can be used');
 
   // 6. device grant
   const dev = await startDeviceAuthorization(pool, { clientId: 'xeno-post', scope: 'openid ledger' });
@@ -92,6 +132,48 @@ async function main() {
   let revoked = null;
   try { await refreshTokenGrant(pool, { refreshToken: devTokens.refresh_token, clientId: 'xeno-post' }); } catch (e) { revoked = e.message; }
   ok(/revoked/.test(revoked || ''), 'revoke: refresh grant rejected after revocation');
+
+  // 9. Session logout derives ownership from the authenticated subject.
+  const ownedPkce = pkce();
+  const ownedCode = await createAuthorizationCode(pool, {
+    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+    scope: 'openid ledger', codeChallenge: ownedPkce.c,
+  });
+  const owned = await exchangeAuthorizationCode(pool, {
+    code: ownedCode, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: ownedPkce.v,
+  });
+  const ownedClaims = jwt.decode(owned.access_token);
+  let foreignEnd = null;
+  try { await endSession(pool, { sid: ownedClaims.sid, userId: otherUserId }); } catch (e) { foreignEnd = e.oauthError; }
+  ok(foreignEnd === 'invalid_request', 'another subject cannot revoke a foreign SID');
+  ok((await introspectToken(pool, { token: owned.access_token })).active === true, 'foreign logout attempt leaves the owner session active');
+  await endSession(pool, { sid: ownedClaims.sid, userId });
+  ok((await introspectToken(pool, { token: owned.access_token })).active === false, 'owner session logout immediately revokes access');
+
+  // 10. Global logout advances one durable subject epoch and kills every old
+  // session, while a session created after the commit uses the new epoch.
+  async function issueSession() {
+    const p = pkce();
+    const c = await createAuthorizationCode(pool, {
+      clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+      scope: 'openid ledger', codeChallenge: p.c,
+    });
+    return exchangeAuthorizationCode(pool, {
+      code: c, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: p.v,
+    });
+  }
+  const globalA = await issueSession();
+  const globalB = await issueSession();
+  const globalResult = await logoutEverywhere(pool, { userId });
+  ok(globalResult.epoch >= 1, 'global logout advances the subject revocation epoch');
+  ok((await introspectToken(pool, { token: globalA.access_token })).active === false
+    && (await introspectToken(pool, { token: globalB.access_token })).active === false,
+  'global logout immediately revokes every prior access session');
+  let globalRefresh = null;
+  try { await refreshTokenGrant(pool, { refreshToken: globalA.refresh_token, clientId: 'xeno-post' }); } catch (e) { globalRefresh = e.message; }
+  ok(/revoked|session/.test(globalRefresh || ''), 'global logout prevents every prior refresh family from minting');
+  const afterGlobal = await issueSession();
+  ok((await introspectToken(pool, { token: afterGlobal.access_token })).active === true, 'a session created after global logout uses the new epoch');
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} oidc-v2: ${pass} passed, ${fail} failed`);
   await pool.end();

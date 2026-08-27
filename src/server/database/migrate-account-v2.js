@@ -84,6 +84,27 @@ CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_oauth_rt_family ON oauth_refresh_tokens (family_id);
 
+-- OIDC access-token revocation without changing the live users/refresh tables.
+-- Every minted SID is registered here with the user's revocation epoch. Access
+-- validation requires an unrevoked row whose epoch still matches the user row.
+CREATE TABLE IF NOT EXISTS oauth_user_auth_epochs (
+  user_id     uuid PRIMARY KEY,
+  epoch       bigint NOT NULL DEFAULT 0,
+  changed_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS oauth_session_state (
+  sid         uuid PRIMARY KEY,
+  user_id     uuid NOT NULL,
+  auth_epoch  bigint NOT NULL,
+  auth_time   timestamptz NOT NULL,
+  expires_at  timestamptz NOT NULL,
+  revoked_at  timestamptz,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_session_user
+  ON oauth_session_state (user_id, revoked_at, expires_at);
+
 CREATE TABLE IF NOT EXISTS oauth_device_codes (
   device_code   text PRIMARY KEY,
   user_code     varchar(16) NOT NULL UNIQUE,

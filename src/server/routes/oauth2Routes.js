@@ -24,6 +24,8 @@ import {
   approveDevice,
   deviceTokenGrant,
   revokeToken,
+  endSession,
+  logoutEverywhere,
   introspectToken,
 } from '../utils/oidcProvider.js';
 
@@ -32,6 +34,19 @@ const router = express.Router();
 function sendOauthError(res, err) {
   const status = err.statusCode || 400;
   res.status(status).json({ error: err.oauthError || 'invalid_request', error_description: err.message });
+}
+
+function requireRecentOidcAuth(req, res, next) {
+  const authTime = Number(req.auth?.authTime);
+  const now = Math.floor(Date.now() / 1000);
+  const scopes = new Set(String(req.auth?.scope || '').split(/\s+/).filter(Boolean));
+  const trustedSurface = req.auth?.clientId === 'xeno-hub' || req.auth?.clientId === 'xeno-web';
+  if (req.auth?.kind !== 'oidc' || !trustedSurface || !scopes.has('account:logout')
+      || !Number.isFinite(authTime) || authTime > now + 60 || now - authTime > 5 * 60) {
+    res.set('WWW-Authenticate', 'Bearer error="insufficient_user_authentication", max_age="300"');
+    return res.status(401).json({ error: 'insufficient_user_authentication', max_age: 300 });
+  }
+  return next();
 }
 
 // GET /oauth2/jwks — public keys
@@ -262,12 +277,20 @@ router.post('/introspect', async (req, res) => {
   } catch (e) { res.json({ active: false }); }
 });
 
-// POST /oauth2/end_session — RP-initiated / global logout (Arch §2.5): kill every
-// refresh token for the session (sid), so no branch can mint new tokens.
+// POST /oauth2/end_session — revoke the authenticated token's OWN session. The
+// SID comes from the verified token, never the body (foreign-SID revocation bug).
 router.post('/end_session', authMiddleware, async (req, res) => {
   try {
-    await revokeToken(req.db, { sid: (req.body || {}).sid });
-    res.status(200).json({ ended: true });
+    res.status(200).json(await endSession(req.db, { sid: req.auth?.sid, userId: req.user.id }));
+  } catch (e) { sendOauthError(res, e); }
+});
+
+// POST /oauth2/logout_everywhere — subject-keyed global revocation. Until the
+// interactive step-up transaction lands, a freshly authenticated OIDC session
+// (auth_time <= 5m) is the fail-closed step-up proof accepted here.
+router.post('/logout_everywhere', authMiddleware, requireRecentOidcAuth, async (req, res) => {
+  try {
+    res.status(200).json(await logoutEverywhere(req.db, { userId: req.user.id }));
   } catch (e) { sendOauthError(res, e); }
 });
 

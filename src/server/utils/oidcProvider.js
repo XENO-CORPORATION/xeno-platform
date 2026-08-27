@@ -16,6 +16,7 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { issuer, mailDomain } from '../config/hosts.js';
+import { OIDC_SCOPES } from '../config/oidcAuthorityPolicy.js';
 import { recordSecurityEventAsync, EVENTS } from '../services/securityEvents.js';
 
 const ACCESS_TTL_SEC = 10 * 60; // 10 min
@@ -122,6 +123,7 @@ export function discovery() {
     revocation_endpoint: `${iss}/api/oauth2/revoke`,
     introspection_endpoint: `${iss}/api/oauth2/introspect`,
     end_session_endpoint: `${iss}/api/oauth2/end_session`,
+    xeno_logout_everywhere_endpoint: `${iss}/api/oauth2/logout_everywhere`,
     jwks_uri: `${iss}/api/oauth2/jwks`,
     userinfo_endpoint: `${iss}/api/v2/me`,
     response_types_supported: ['code'],
@@ -131,7 +133,7 @@ export function discovery() {
     // We sign ES256 (getSigningKey prefers/generates ES256); any legacy RS256 keys
     // stay in JWKS so older tokens keep verifying. Advertise honestly (XENO AUTH §3.2).
     id_token_signing_alg_values_supported: ['ES256', 'RS256'],
-    scopes_supported: ['openid', 'profile', 'email', 'ledger'],
+    scopes_supported: [...OIDC_SCOPES],
   };
 }
 
@@ -199,10 +201,64 @@ async function userClaims(db, userId) {
   return r.rows[0] || null;
 }
 
-async function mintTokens(db, { user, clientId, scope, sid, nonce }) {
+async function currentAuthEpoch(db, userId, { forUpdate = false } = {}) {
+  await db.query(
+    `INSERT INTO oauth_user_auth_epochs (user_id, epoch)
+     VALUES ($1, 0) ON CONFLICT (user_id) DO NOTHING`,
+    [userId],
+  );
+  const r = await db.query(
+    `SELECT epoch, changed_at FROM oauth_user_auth_epochs WHERE user_id = $1${forUpdate ? ' FOR UPDATE' : ''}`,
+    [userId],
+  );
+  return r.rows[0];
+}
+
+async function registerSession(db, { sid, userId, authTime = new Date() }) {
+  const epoch = await currentAuthEpoch(db, userId);
+  await db.query(
+    `INSERT INTO oauth_session_state (sid, user_id, auth_epoch, auth_time, expires_at)
+     VALUES ($1,$2,$3,$4, now() + interval '${REFRESH_TTL_SEC} seconds')
+     ON CONFLICT (sid) DO NOTHING`,
+    [sid, userId, epoch.epoch, authTime],
+  );
+  return { epoch: Number(epoch.epoch), authTime: new Date(authTime) };
+}
+
+async function ensureRefreshSession(db, row) {
+  const epoch = await currentAuthEpoch(db, row.user_id, { forUpdate: true });
+  let state = await db.query('SELECT * FROM oauth_session_state WHERE sid = $1 FOR UPDATE', [row.sid]);
+  if (state.rows.length === 0) {
+    // Compatibility for refresh tokens minted before the session-state migration.
+    // A token older than a completed global revocation is never blessed into the
+    // new epoch merely because this is its first post-migration refresh.
+    if (Number(epoch.epoch) > 0 && new Date(row.created_at) < new Date(epoch.changed_at)) {
+      throw oauthError('invalid_grant', 'session revoked');
+    }
+    await db.query(
+      `INSERT INTO oauth_session_state (sid, user_id, auth_epoch, auth_time, expires_at)
+       VALUES ($1,$2,$3,$4,$5) ON CONFLICT (sid) DO NOTHING`,
+      [row.sid, row.user_id, epoch.epoch, row.created_at, row.expires_at],
+    );
+    state = await db.query('SELECT * FROM oauth_session_state WHERE sid = $1 FOR UPDATE', [row.sid]);
+  }
+  const session = state.rows[0];
+  if (!session || session.user_id !== row.user_id || session.revoked_at
+      || new Date(session.expires_at).getTime() <= Date.now()
+      || Number(session.auth_epoch) !== Number(epoch.epoch)) {
+    throw oauthError('invalid_grant', 'session revoked');
+  }
+  return session;
+}
+
+async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = new Date() }) {
   const key = await getSigningKey(db);
   const now = Math.floor(Date.now() / 1000);
-  const base = { iss: issuer(), iat: now, sid };
+  const session = await registerSession(db, { sid, userId: user.id, authTime });
+  const base = {
+    iss: issuer(), iat: now, sid, auth_epoch: session.epoch,
+    auth_time: Math.floor(session.authTime.getTime() / 1000),
+  };
   const accessToken = jwt.sign(
     { ...base, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, scope, typ: ACCESS_TOKEN_TYP },
     key.privatePem,
@@ -213,10 +269,11 @@ async function mintTokens(db, { user, clientId, scope, sid, nonce }) {
   const lowHandle = String(user.username || '').toLowerCase();
   let xenoAddress = null;
   if (/^[a-z0-9](?:[a-z0-9]|[._-](?![._-])){1,30}[a-z0-9]$/.test(lowHandle)) {
-    try {
+    const registry = await db.query("SELECT to_regclass('public.reserved_handles') AS rel");
+    if (registry.rows[0]?.rel) {
       const rsv = await db.query('SELECT 1 FROM reserved_handles WHERE handle = $1', [lowHandle]);
       if (rsv.rows.length === 0) xenoAddress = `${lowHandle}@${handleDomain}`;
-    } catch { /* registry not migrated yet → omit the claim */ }
+    }
   }
   const idToken = jwt.sign(
     { ...base, sub: user.id, aud: clientId, email: user.email, email_verified: user.email_verified ?? false,
@@ -310,58 +367,94 @@ export async function createAuthorizationCode(db, {
 }
 
 export async function exchangeAuthorizationCode(db, { code, clientId, redirectUri, codeVerifier }) {
-  const r = await db.query('SELECT * FROM oauth_authorization_codes WHERE code = $1', [code]);
-  const row = r.rows[0];
-  if (!row || row.consumed) throw oauthError('invalid_grant', 'code invalid or already used');
-  if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('invalid_grant', 'code expired');
-  if (row.client_id !== clientId) throw oauthError('invalid_grant', 'client mismatch');
-  if (row.redirect_uri !== redirectUri) throw oauthError('invalid_grant', 'redirect_uri mismatch');
-  // PKCE S256 verification.
-  const challenge = crypto.createHash('sha256').update(codeVerifier || '').digest('base64url');
-  if (challenge !== row.code_challenge) throw oauthError('invalid_grant', 'PKCE verification failed');
-  await db.query('UPDATE oauth_authorization_codes SET consumed = true WHERE code = $1', [code]);
-  const user = await userClaims(db, row.user_id);
-  if (!user) throw oauthError('invalid_grant', 'user not found');
-  return mintTokens(db, { user, clientId, scope: row.scope, sid: crypto.randomUUID(), nonce: row.nonce });
+  const tx = await db.connect();
+  try {
+    await tx.query('BEGIN');
+    const r = await tx.query('SELECT * FROM oauth_authorization_codes WHERE code = $1 FOR UPDATE', [code]);
+    const row = r.rows[0];
+    if (!row || row.consumed) throw oauthError('invalid_grant', 'code invalid or already used');
+    if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('invalid_grant', 'code expired');
+    if (row.client_id !== clientId) throw oauthError('invalid_grant', 'client mismatch');
+    if (row.redirect_uri !== redirectUri) throw oauthError('invalid_grant', 'redirect_uri mismatch');
+    const challenge = crypto.createHash('sha256').update(codeVerifier || '').digest('base64url');
+    if (challenge !== row.code_challenge) throw oauthError('invalid_grant', 'PKCE verification failed');
+    await tx.query('UPDATE oauth_authorization_codes SET consumed = true WHERE code = $1', [code]);
+    const user = await userClaims(tx, row.user_id);
+    if (!user) throw oauthError('invalid_grant', 'user not found');
+    const tokens = await mintTokens(tx, {
+      user, clientId, scope: row.scope, sid: crypto.randomUUID(), nonce: row.nonce,
+    });
+    await tx.query('COMMIT');
+    return tokens;
+  } catch (error) {
+    await tx.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    tx.release();
+  }
 }
 
 // ── Refresh rotation + reuse detection ──────────────────────────────────────
 
 export async function refreshTokenGrant(db, { refreshToken, clientId }) {
   const hash = sha256(refreshToken);
-  const r = await db.query('SELECT * FROM oauth_refresh_tokens WHERE token_hash = $1', [hash]);
-  const row = r.rows[0];
-  if (!row) throw oauthError('invalid_grant', 'unknown refresh token');
-  if (row.client_id !== clientId) throw oauthError('invalid_grant', 'client mismatch');
-  if (row.revoked) throw oauthError('invalid_grant', 'refresh token revoked');
-  if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('invalid_grant', 'refresh token expired');
-  if (row.rotated) {
-    // REUSE DETECTED → revoke the whole family (RFC 9700 §2.2.2).
-    await db.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE family_id = $1', [row.family_id]);
-    // This is the single most important event this provider can emit: a replayed
-    // refresh token means a token leaked, and it is the only signal that says so.
-    // It fires as the family is revoked so the record exists even though the caller
-    // is about to receive an error and may never report it.
+  const tx = await db.connect();
+  let reuse = null;
+  let refreshed = null;
+  let refreshEvent = null;
+  try {
+    await tx.query('BEGIN');
+    const r = await tx.query('SELECT * FROM oauth_refresh_tokens WHERE token_hash = $1 FOR UPDATE', [hash]);
+    const row = r.rows[0];
+    if (!row) throw oauthError('invalid_grant', 'unknown refresh token');
+    if (row.client_id !== clientId) throw oauthError('invalid_grant', 'client mismatch');
+    if (row.revoked) throw oauthError('invalid_grant', 'refresh token revoked');
+    if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('invalid_grant', 'refresh token expired');
+    if (row.rotated) {
+      await tx.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE family_id = $1', [row.family_id]);
+      await tx.query('UPDATE oauth_session_state SET revoked_at = COALESCE(revoked_at, now()) WHERE sid = $1', [row.sid]);
+      reuse = row;
+      await tx.query('COMMIT');
+    } else {
+      const session = await ensureRefreshSession(tx, row);
+      await tx.query('UPDATE oauth_refresh_tokens SET rotated = true WHERE id = $1', [row.id]);
+      const user = await userClaims(tx, row.user_id);
+      if (!user) throw oauthError('invalid_grant', 'user not found');
+      const key = await getSigningKey(tx);
+      const now = Math.floor(Date.now() / 1000);
+      const authTime = Math.floor(new Date(session.auth_time).getTime() / 1000);
+      const access = jwt.sign(
+        { iss: issuer(), iat: now, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId,
+          scope: row.scope, sid: row.sid, auth_epoch: Number(session.auth_epoch), auth_time: authTime,
+          typ: ACCESS_TOKEN_TYP },
+        key.privatePem,
+        { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
+      );
+      const newRefresh = await issueRefreshToken(tx, {
+        userId: user.id, clientId, scope: row.scope, sid: row.sid, familyId: row.family_id,
+      });
+      refreshed = { access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL_SEC, refresh_token: newRefresh, scope: row.scope };
+      refreshEvent = { userId: row.user_id, familyId: row.family_id };
+      await tx.query('COMMIT');
+    }
+  } catch (error) {
+    await tx.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    tx.release();
+  }
+  if (reuse) {
     recordSecurityEventAsync(db, EVENTS.TOKEN_REUSE_DETECTED, {
-      userId: row.user_id,
-      metadata: { clientId, familyId: row.family_id, sid: row.sid },
+      userId: reuse.user_id,
+      metadata: { clientId, familyId: reuse.family_id, sid: reuse.sid },
     });
     throw oauthError('invalid_grant', 'refresh token reuse detected — family revoked');
   }
-  await db.query('UPDATE oauth_refresh_tokens SET rotated = true WHERE id = $1', [row.id]);
   recordSecurityEventAsync(db, EVENTS.TOKEN_REFRESHED, {
-    userId: row.user_id, metadata: { clientId, familyId: row.family_id },
+    userId: refreshEvent.userId,
+    metadata: { clientId, familyId: refreshEvent.familyId },
   });
-  const user = await userClaims(db, row.user_id);
-  if (!user) throw oauthError('invalid_grant', 'user not found');
-  const key = await getSigningKey(db);
-  const now = Math.floor(Date.now() / 1000);
-  const access = jwt.sign(
-    { iss: issuer(), iat: now, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, scope: row.scope, sid: row.sid, typ: ACCESS_TOKEN_TYP },
-    key.privatePem, { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
-  );
-  const newRefresh = await issueRefreshToken(db, { userId: user.id, clientId, scope: row.scope, sid: row.sid, familyId: row.family_id });
-  return { access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL_SEC, refresh_token: newRefresh, scope: row.scope };
+  return refreshed;
 }
 
 // ── Device Authorization Grant (RFC 8628) ───────────────────────────────────
@@ -476,21 +569,99 @@ export async function emitBackchannelLogout(db, sid) {
   }));
 }
 
-export async function revokeToken(db, { token, sid }) {
-  if (sid) {
-    await emitBackchannelLogout(db, sid).catch(() => {});
-    await db.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE sid = $1', [sid]);
-    return { revoked: true };
-  }
+export async function revokeToken(db, { token }) {
   if (!token) return { revoked: true };
-  const r = await db.query('SELECT family_id, user_id FROM oauth_refresh_tokens WHERE token_hash = $1', [sha256(token)]);
+  const r = await db.query('SELECT family_id, user_id, sid FROM oauth_refresh_tokens WHERE token_hash = $1', [sha256(token)]);
   if (r.rows[0]) {
     await db.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE family_id = $1', [r.rows[0].family_id]);
+    await db.query(
+      'UPDATE oauth_session_state SET revoked_at = COALESCE(revoked_at, now()) WHERE sid = $1 AND user_id = $2',
+      [r.rows[0].sid, r.rows[0].user_id],
+    );
     recordSecurityEventAsync(db, EVENTS.TOKEN_REVOKED, {
       userId: r.rows[0].user_id, metadata: { familyId: r.rows[0].family_id, by: 'token' },
     });
+    await emitBackchannelLogout(db, r.rows[0].sid).catch(() => {});
   }
   return { revoked: true };
+}
+
+/** Revoke exactly the authenticated subject's current OIDC session. */
+export async function endSession(db, { sid, userId }) {
+  if (!sid || !userId) throw oauthError('invalid_request', 'session unavailable');
+  const tx = await db.connect();
+  let found = false;
+  try {
+    await tx.query('BEGIN');
+    const state = await tx.query('SELECT user_id FROM oauth_session_state WHERE sid = $1 FOR UPDATE', [sid]);
+    // Same response for missing and foreign SIDs: never reveal another user's session.
+    if (state.rows.length === 1 && state.rows[0].user_id === userId) {
+      found = true;
+      await tx.query('UPDATE oauth_session_state SET revoked_at = COALESCE(revoked_at, now()) WHERE sid = $1', [sid]);
+      await tx.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE sid = $1 AND user_id = $2', [sid, userId]);
+    }
+    await tx.query('COMMIT');
+  } catch (error) {
+    await tx.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    tx.release();
+  }
+  if (!found) throw oauthError('invalid_request', 'session unavailable');
+  recordSecurityEventAsync(db, EVENTS.TOKEN_REVOKED, { userId, metadata: { sid, by: 'session_owner' } });
+  await emitBackchannelLogout(db, sid).catch(() => {});
+  return { ended: true };
+}
+
+/**
+ * Subject-keyed global revocation. The epoch advances in the same transaction
+ * that revokes every known session/family, so an access JWT from any older epoch
+ * becomes inactive before this operation reports success.
+ */
+export async function logoutEverywhere(db, { userId }) {
+  if (!userId) throw oauthError('invalid_request', 'authenticated subject required');
+  const tx = await db.connect();
+  let sids = [];
+  let epoch;
+  try {
+    await tx.query('BEGIN');
+    const current = await currentAuthEpoch(tx, userId, { forUpdate: true });
+    epoch = Number(current.epoch) + 1;
+    sids = (await tx.query('SELECT sid FROM oauth_session_state WHERE user_id = $1', [userId])).rows.map((r) => r.sid);
+    await tx.query(
+      'UPDATE oauth_user_auth_epochs SET epoch = $2, changed_at = now() WHERE user_id = $1',
+      [userId, epoch],
+    );
+    await tx.query(
+      'UPDATE oauth_session_state SET revoked_at = COALESCE(revoked_at, now()) WHERE user_id = $1',
+      [userId],
+    );
+    await tx.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE user_id = $1', [userId]);
+    await tx.query('COMMIT');
+  } catch (error) {
+    await tx.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    tx.release();
+  }
+  recordSecurityEventAsync(db, EVENTS.TOKEN_REVOKED, {
+    userId, metadata: { by: 'global_subject_epoch', epoch, sessionCount: sids.length },
+  });
+  await Promise.all(sids.map((sid) => emitBackchannelLogout(db, sid).catch(() => {})));
+  return { ended: true, epoch };
+}
+
+export async function isOidcSessionActive(db, { sid, userId, authEpoch }) {
+  if (!sid || !userId || !Number.isInteger(Number(authEpoch))) return false;
+  const r = await db.query(
+    `SELECT 1
+       FROM oauth_session_state s
+       JOIN oauth_user_auth_epochs e ON e.user_id = s.user_id
+      WHERE s.sid = $1 AND s.user_id = $2 AND s.revoked_at IS NULL
+        AND s.expires_at > now() AND s.auth_epoch = $3 AND e.epoch = $3`,
+    [sid, userId, Number(authEpoch)],
+  );
+  return r.rows.length === 1;
 }
 
 /**
@@ -509,15 +680,29 @@ export async function introspectToken(db, { token }) {
     if (key) {
       const p = jwt.verify(token, key.publicKey, { algorithms: [key.alg] });
       if (isAccessToken(header, p)) {
+        if (!await isOidcSessionActive(db, { sid: p.sid, userId: p.sub, authEpoch: p.auth_epoch })) {
+          return { active: false };
+        }
         return { active: true, token_type: 'access_token', sub: p.sub, scope: p.scope, client_id: p.client_id, aud: p.aud, sid: p.sid, exp: p.exp, iss: p.iss };
       }
       return { active: false };
     }
   } catch { /* not a valid access JWT — fall through */ }
   // Else try as an opaque refresh token.
-  const r = await db.query('SELECT * FROM oauth_refresh_tokens WHERE token_hash = $1', [sha256(token)]);
+  const r = await db.query(
+    `SELECT rt.*, s.auth_epoch, s.revoked_at AS session_revoked_at, s.expires_at AS session_expires_at,
+            e.epoch AS current_auth_epoch
+       FROM oauth_refresh_tokens rt
+       LEFT JOIN oauth_session_state s ON s.sid = rt.sid AND s.user_id = rt.user_id
+       LEFT JOIN oauth_user_auth_epochs e ON e.user_id = rt.user_id
+      WHERE rt.token_hash = $1`,
+    [sha256(token)],
+  );
   const row = r.rows[0];
-  if (!row || row.revoked || new Date(row.expires_at).getTime() < Date.now()) return { active: false };
+  if (!row || row.revoked || row.rotated || row.session_revoked_at
+      || new Date(row.expires_at).getTime() < Date.now()
+      || !row.session_expires_at || new Date(row.session_expires_at).getTime() < Date.now()
+      || Number(row.auth_epoch) !== Number(row.current_auth_epoch)) return { active: false };
   return { active: true, token_type: 'refresh_token', sub: row.user_id, scope: row.scope, client_id: row.client_id, sid: row.sid };
 }
 

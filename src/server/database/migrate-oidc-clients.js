@@ -16,14 +16,13 @@
  */
 import pg from 'pg';
 import { siteUrlVariants } from '../config/hosts.js';
+import { assertAuthorityPolicy, scopesForClient } from '../config/oidcAuthorityPolicy.js';
 
 const { Pool } = pg;
 
 // slug → { name, loopback, redirects, scopes, surface }. Redirects for loopback
 // clients register the canonical 127.0.0.1 / [::1] callback PATH (any port matches).
 const LOOPBACK_CB = ['http://127.0.0.1/callback', 'http://[::1]/callback'];
-const DEFAULT_SCOPES = ['openid', 'profile', 'email', 'ledger'];
-
 const CLIENTS = [
   // Desktop / Electron (loopback PKCE)
   { id: 'xeno-hub', name: 'XENO Hub', loopback: true },
@@ -54,9 +53,12 @@ ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS loopback boolean NOT NULL DEF
 `;
 
 export async function migrateOidcClients(pool) {
+  assertAuthorityPolicy();
   await pool.query(SQL);
   for (const c of CLIENTS) {
     const redirects = c.loopback ? LOOPBACK_CB : c.redirects || [];
+    const scopes = scopesForClient(c.id);
+    if (!scopes) throw new Error(`missing checked-in authority policy for ${c.id}`);
     await pool.query(
       `INSERT INTO oauth_clients (client_id, client_secret, name, redirect_uris, allowed_scopes, surface, is_first_party, loopback)
        VALUES ($1, NULL, $2, $3, $4, $5, true, $6)
@@ -67,7 +69,7 @@ export async function migrateOidcClients(pool) {
          surface = EXCLUDED.surface,
          is_first_party = true,
          loopback = EXCLUDED.loopback`,
-      [c.id, c.name, redirects, DEFAULT_SCOPES, c.id, c.loopback],
+      [c.id, c.name, redirects, scopes, c.id, c.loopback],
     );
   }
 }
