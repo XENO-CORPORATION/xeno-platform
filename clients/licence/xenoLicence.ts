@@ -87,7 +87,19 @@ const TIMEOUT_MS = 10_000;
 export async function checkLicence(opts: LicenceOptions): Promise<Licence> {
   const base = opts.apiBase || 'https://api.xenostudio.ai';
   const grace = opts.graceMs ?? DEFAULT_GRACE;
-  const cached = (await opts.readCache()) || null;
+
+  /* This function promises never to throw (see the header), and reading the cache is the FIRST
+   * thing it does — so a readCache that rejects escaped the promise entirely. That is not a
+   * hypothetical: a product's cache callback touches the disk, and a full volume, a locked file
+   * or a permissions change all reject. The caller is `startLicence`, which does
+   * `void checkLicence(opts)`, so the failure surfaces as an unhandled rejection rather than
+   * anything actionable.
+   *
+   * A cache we cannot read is "we know nothing", which is exactly what `null` already means. */
+  let cached: Licence | null = null;
+  try {
+    cached = (await opts.readCache()) || null;
+  } catch { cached = null; }
 
   const withinGrace = (c: Licence | null) =>
     Boolean(c && c.state === 'licensed' && Date.now() - c.checkedAt < grace);
@@ -141,7 +153,10 @@ export async function checkLicence(opts: LicenceOptions): Promise<Licence> {
       /* 🔴 An EXPLICIT refusal. Fail closed — no grace, because grace exists for
        * uncertainty and there is none here. The server was reached and answered. */
       const l: Licence = { state: 'unlicensed', plan: null, source: null, checkedAt: Date.now() };
-      await opts.writeCache(l);
+      /* Persisting is best-effort. A failed write must not turn an explicit refusal into the
+       * outer catch's network-error path, which would hand back 'licensed' from grace — the
+       * exact inversion this function exists to prevent. */
+      try { await opts.writeCache(l); } catch { /* best-effort */ }
       opts.onChange?.(l);
       return l;
     }
@@ -162,7 +177,7 @@ export async function checkLicence(opts: LicenceOptions): Promise<Licence> {
       source: data?.source ?? null,
       checkedAt: Date.now(),
     };
-    await opts.writeCache(l);
+    try { await opts.writeCache(l); } catch { /* best-effort; grace simply will not apply */ }
     opts.onChange?.(l);
     return l;
   } catch {
