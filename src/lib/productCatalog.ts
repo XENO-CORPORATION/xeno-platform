@@ -229,7 +229,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'agent', name: 'XENO Agent', tagline: 'The agent-native workspace for building software.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-agent-interface' },
   // Migrated 2026-08-09, in ONE pass as the previous note here required: this
   // install command, every sample in src/content/docs/sdk.ts, and the product
-  // page all name @xenosystem/agent-sdk together. npm `latest` is 0.9.0;
+  // page all name @xenosystem/agent-sdk together. npm `latest` is 0.9.16;
   // @xeno-corporation/xeno-agent-sdk is frozen at 0.7.0.
   // The /ui samples were REWRITTEN, not renamed — that subpath no longer ships
   // React (`AgentChatPanel`/`AgentStatusBar`/`useAgent` exist nowhere in the
@@ -237,7 +237,7 @@ export const PRODUCTS: Product[] = [
   // mountAgentUi, createAgentUiView, dispatchAgentUiAction. The SDK declares
   // NO peer dependencies, so any "React is an optional peer" claim is false.
   { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xenosystem/agent-sdk', repo: 'xeno-agent-sdk' },
-  // ACP moved to the @xenosystem npm scope. npm `latest` is @xenosystem/acp@0.1.1;
+  // ACP moved to the @xenosystem npm scope. npm `latest` is @xenosystem/acp@0.2.5;
   // @xeno-corporation/xeno-acp is frozen at 0.1.0. The page, this install command
   // and the R2 feed must all name the SAME identity — @xenosystem — or a visitor
   // installs the older scope by following our own instructions.

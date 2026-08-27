@@ -1,0 +1,32 @@
+{
+  "_source": {
+    "product": "XENO SDK",
+    "slug": "sdk",
+    "packages": [
+      "@xenosystem/agent-sdk"
+    ],
+    "derivedFrom": "xeno-agent-sdk @ d0ccc39b0b77d0d551ff9b165b4f6e73b23ee96e, CHANGELOG.md sections 0.9.15 and 0.9.16",
+    "why": "The SDK keeps public release notes in CHANGELOG.md rather than a RELEASE_NOTES module, so this file is the structured notes source consumed by publish-cli-releases.mjs."
+  },
+  "0.9.16": {
+    "title": "Lossless Windows continuation state",
+    "type": "patch",
+    "notes": [
+      "Unqualified recent-session reads now honor XENO_AGENT_HOME, so isolated runs cannot import entries from the operator's default state directory.",
+      "Recent-session updates persist one atomic shard per normalized workspace and merge those shards over the compact index.",
+      "Concurrent Windows processes no longer lose completed session updates on mapped or filtered filesystems where exclusive lock creation is not reliably exclusive.",
+      "PowerShell sideband completion drains the final stdout before settling."
+    ]
+  },
+  "0.9.15": {
+    "title": "Durable sessions and unbounded managed continuation",
+    "type": "patch",
+    "notes": [
+      "Managed continuation is event-driven and unbounded by default; the historical three-turn default is removed while explicit bounded policies remain supported.",
+      "Active legacy checkpoints migrate to the new continuation contract.",
+      "Finite background operations remain attached to their original objective across repeated completion and resume cycles.",
+      "Recent-session index updates are serialized across processes with bounded Windows atomic-replace retries, eliminating rename-warning floods under ordinary contention.",
+      "Background tasks receive semantic sanitized labels without exposing raw command arguments."
+    ]
+  }
+}
