@@ -198,7 +198,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'beta', delivery: 'soon', operatingSystem: 'Chrome, Edge, Brave (Chromium)', r2: 'extension', repo: 'xeno-extension', signing: 'none', externalUrl: 'https://updates.xenostudio.ai/apps/extension/extension-stable-v1.2.0/xeno-browser-agent-stable-1.2.0.zip', externalLabel: 'Download 1.2.0 — load unpacked' },
 
   // ── Build ─────────────────────────────────────────────────
-  { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-engine' },
+  { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-engine' },
   { slug: 'workflow', name: 'XENO Workflow', tagline: 'Visual node-based automation pipelines.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-workflow' },
   { slug: 'use', name: 'XENO Use', tagline: "The agent's hands across every device.", category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-use' },
   { slug: 'apps', name: 'XENO Apps', tagline: 'No-code custom apps and internal tools.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-apps' },
