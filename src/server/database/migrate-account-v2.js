@@ -98,12 +98,41 @@ CREATE TABLE IF NOT EXISTS oauth_session_state (
   user_id     uuid NOT NULL,
   auth_epoch  bigint NOT NULL,
   auth_time   timestamptz NOT NULL,
+  dpop_jkt    text,
   expires_at  timestamptz NOT NULL,
   revoked_at  timestamptz,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_oauth_session_user
   ON oauth_session_state (user_id, revoked_at, expires_at);
+
+CREATE TABLE IF NOT EXISTS oauth_dpop_replays (
+  jkt         text NOT NULL,
+  jti         text NOT NULL,
+  htm         varchar(16) NOT NULL,
+  htu         text NOT NULL,
+  expires_at  timestamptz NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (jkt, jti)
+);
+
+CREATE TABLE IF NOT EXISTS oauth_broker_installations (
+  installation_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          uuid NOT NULL,
+  public_jwk       jsonb NOT NULL,
+  jkt              text NOT NULL,
+  revoked_at       timestamptz,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, jkt)
+);
+
+CREATE TABLE IF NOT EXISTS oauth_broker_assertion_replays (
+  installation_id uuid NOT NULL,
+  jti              text NOT NULL,
+  expires_at       timestamptz NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (installation_id, jti)
+);
 
 CREATE TABLE IF NOT EXISTS oauth_device_codes (
   device_code   text PRIMARY KEY,

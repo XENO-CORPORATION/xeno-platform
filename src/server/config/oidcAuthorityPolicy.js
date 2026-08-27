@@ -9,11 +9,12 @@ export const OIDC_SCOPES = Object.freeze([
   'projects:read', 'projects:write', 'sync:use',
   'agent-identity:use', 'team:read', 'team:manage', 'collaboration:use',
   'billing:read', 'billing:manage', 'marketplace:payout', 'account:logout',
+  'broker:enroll', 'broker:exchange',
 ]);
 
 const IDENTITY = ['openid', 'profile', 'email'];
 const PRODUCT = [...IDENTITY, 'ledger', 'inference:run', 'ledger:read', 'ledger:spend', 'projects:read', 'projects:write', 'sync:use'];
-const HUB = [...PRODUCT, 'agent-identity:use', 'team:read', 'team:manage', 'collaboration:use', 'billing:read', 'billing:manage', 'account:logout'];
+const HUB = [...PRODUCT, 'agent-identity:use', 'team:read', 'team:manage', 'collaboration:use', 'billing:read', 'billing:manage', 'account:logout', 'broker:enroll', 'broker:exchange'];
 const WEB = [...HUB, 'marketplace:payout'];
 
 export const CLIENT_AUTHORITY = Object.freeze({

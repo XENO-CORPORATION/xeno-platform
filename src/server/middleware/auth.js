@@ -116,7 +116,7 @@ async function resolveApiKeyUser(req, rawKey) {
  * @returns {{ user: object } | { status: number, error: string }}
  */
 export async function resolveAuthedUser(req) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
+  const token = req.headers.authorization?.replace(/^(?:Bearer|DPoP)\s+/i, '');
   if (!token) return { status: 401, error: 'Authentication token required' };
 
   // ADDITIVE branch: a token that is NOT JWT-shaped can only be an API key.
@@ -150,7 +150,7 @@ export async function resolveAuthedUser(req) {
     sid = payload.sid || null;
     authContext = {
       kind: 'oidc', sid, authEpoch: payload.auth_epoch, authTime: payload.auth_time,
-      clientId: payload.client_id, scope: payload.scope || '',
+      clientId: payload.client_id, scope: payload.scope || '', dpopJkt: payload.cnf?.jkt || null,
     };
   } else {
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
@@ -270,7 +270,7 @@ export const authMiddleware = async (req, res, next) => {
  */
 export const optionalAuthMiddleware = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const token = req.headers.authorization?.replace(/^(?:Bearer|DPoP)\s+/i, '');
 
     if (token) {
       // Unified resolution (incl. the sid session-revocation check) so a

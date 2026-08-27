@@ -16,7 +16,8 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { issuer, mailDomain } from '../config/hosts.js';
-import { OIDC_SCOPES } from '../config/oidcAuthorityPolicy.js';
+import { OIDC_SCOPES, scopesForClient } from '../config/oidcAuthorityPolicy.js';
+import { jwkThumbprint, publicJwk } from './dpop.js';
 import { recordSecurityEventAsync, EVENTS } from '../services/securityEvents.js';
 
 const ACCESS_TTL_SEC = 10 * 60; // 10 min
@@ -127,7 +128,10 @@ export function discovery() {
     jwks_uri: `${iss}/api/oauth2/jwks`,
     userinfo_endpoint: `${iss}/api/v2/me`,
     response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],
+    grant_types_supported: [
+      'authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code',
+      'urn:ietf:params:oauth:grant-type:token-exchange',
+    ],
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
     // We sign ES256 (getSigningKey prefers/generates ES256); any legacy RS256 keys
@@ -214,13 +218,13 @@ async function currentAuthEpoch(db, userId, { forUpdate = false } = {}) {
   return r.rows[0];
 }
 
-async function registerSession(db, { sid, userId, authTime = new Date() }) {
+async function registerSession(db, { sid, userId, authTime = new Date(), dpopJkt = null }) {
   const epoch = await currentAuthEpoch(db, userId);
   await db.query(
-    `INSERT INTO oauth_session_state (sid, user_id, auth_epoch, auth_time, expires_at)
-     VALUES ($1,$2,$3,$4, now() + interval '${REFRESH_TTL_SEC} seconds')
+    `INSERT INTO oauth_session_state (sid, user_id, auth_epoch, auth_time, dpop_jkt, expires_at)
+     VALUES ($1,$2,$3,$4,$5, now() + interval '${REFRESH_TTL_SEC} seconds')
      ON CONFLICT (sid) DO NOTHING`,
-    [sid, userId, epoch.epoch, authTime],
+    [sid, userId, epoch.epoch, authTime, dpopJkt],
   );
   return { epoch: Number(epoch.epoch), authTime: new Date(authTime) };
 }
@@ -236,8 +240,8 @@ async function ensureRefreshSession(db, row) {
       throw oauthError('invalid_grant', 'session revoked');
     }
     await db.query(
-      `INSERT INTO oauth_session_state (sid, user_id, auth_epoch, auth_time, expires_at)
-       VALUES ($1,$2,$3,$4,$5) ON CONFLICT (sid) DO NOTHING`,
+      `INSERT INTO oauth_session_state (sid, user_id, auth_epoch, auth_time, dpop_jkt, expires_at)
+       VALUES ($1,$2,$3,$4,NULL,$5) ON CONFLICT (sid) DO NOTHING`,
       [row.sid, row.user_id, epoch.epoch, row.created_at, row.expires_at],
     );
     state = await db.query('SELECT * FROM oauth_session_state WHERE sid = $1 FOR UPDATE', [row.sid]);
@@ -251,16 +255,17 @@ async function ensureRefreshSession(db, row) {
   return session;
 }
 
-async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = new Date() }) {
+async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = new Date(), dpopJkt = null }) {
   const key = await getSigningKey(db);
   const now = Math.floor(Date.now() / 1000);
-  const session = await registerSession(db, { sid, userId: user.id, authTime });
+  const session = await registerSession(db, { sid, userId: user.id, authTime, dpopJkt });
   const base = {
     iss: issuer(), iat: now, sid, auth_epoch: session.epoch,
     auth_time: Math.floor(session.authTime.getTime() / 1000),
   };
   const accessToken = jwt.sign(
-    { ...base, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, scope, typ: ACCESS_TOKEN_TYP },
+    { ...base, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId, scope, typ: ACCESS_TOKEN_TYP,
+      ...(dpopJkt ? { cnf: { jkt: dpopJkt } } : {}) },
     key.privatePem,
     { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
   );
@@ -294,7 +299,7 @@ async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = ne
   const refreshToken = await issueRefreshToken(db, { userId: user.id, clientId, scope, sid, familyId });
   return {
     access_token: accessToken,
-    token_type: 'Bearer',
+    token_type: dpopJkt ? 'DPoP' : 'Bearer',
     expires_in: ACCESS_TTL_SEC,
     refresh_token: refreshToken,
     id_token: idToken,
@@ -366,7 +371,7 @@ export async function createAuthorizationCode(db, {
   return code;
 }
 
-export async function exchangeAuthorizationCode(db, { code, clientId, redirectUri, codeVerifier }) {
+export async function exchangeAuthorizationCode(db, { code, clientId, redirectUri, codeVerifier, dpopJkt = null }) {
   const tx = await db.connect();
   try {
     await tx.query('BEGIN');
@@ -382,7 +387,7 @@ export async function exchangeAuthorizationCode(db, { code, clientId, redirectUr
     const user = await userClaims(tx, row.user_id);
     if (!user) throw oauthError('invalid_grant', 'user not found');
     const tokens = await mintTokens(tx, {
-      user, clientId, scope: row.scope, sid: crypto.randomUUID(), nonce: row.nonce,
+      user, clientId, scope: row.scope, sid: crypto.randomUUID(), nonce: row.nonce, dpopJkt,
     });
     await tx.query('COMMIT');
     return tokens;
@@ -396,7 +401,7 @@ export async function exchangeAuthorizationCode(db, { code, clientId, redirectUr
 
 // ── Refresh rotation + reuse detection ──────────────────────────────────────
 
-export async function refreshTokenGrant(db, { refreshToken, clientId }) {
+export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = null }) {
   const hash = sha256(refreshToken);
   const tx = await db.connect();
   let reuse = null;
@@ -417,6 +422,9 @@ export async function refreshTokenGrant(db, { refreshToken, clientId }) {
       await tx.query('COMMIT');
     } else {
       const session = await ensureRefreshSession(tx, row);
+      if (session.dpop_jkt && session.dpop_jkt !== dpopJkt) {
+        throw oauthError('invalid_dpop_proof', 'refresh token sender constraint mismatch');
+      }
       await tx.query('UPDATE oauth_refresh_tokens SET rotated = true WHERE id = $1', [row.id]);
       const user = await userClaims(tx, row.user_id);
       if (!user) throw oauthError('invalid_grant', 'user not found');
@@ -426,14 +434,14 @@ export async function refreshTokenGrant(db, { refreshToken, clientId }) {
       const access = jwt.sign(
         { iss: issuer(), iat: now, sub: user.id, aud: ACCESS_TOKEN_AUDIENCE, client_id: clientId,
           scope: row.scope, sid: row.sid, auth_epoch: Number(session.auth_epoch), auth_time: authTime,
-          typ: ACCESS_TOKEN_TYP },
+          typ: ACCESS_TOKEN_TYP, ...(session.dpop_jkt ? { cnf: { jkt: session.dpop_jkt } } : {}) },
         key.privatePem,
         { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
       );
       const newRefresh = await issueRefreshToken(tx, {
         userId: user.id, clientId, scope: row.scope, sid: row.sid, familyId: row.family_id,
       });
-      refreshed = { access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL_SEC, refresh_token: newRefresh, scope: row.scope };
+      refreshed = { access_token: access, token_type: session.dpop_jkt ? 'DPoP' : 'Bearer', expires_in: ACCESS_TTL_SEC, refresh_token: newRefresh, scope: row.scope };
       refreshEvent = { userId: row.user_id, familyId: row.family_id };
       await tx.query('COMMIT');
     }
@@ -509,7 +517,7 @@ export async function approveDevice(db, { userCode, userId }) {
   return { ok: true };
 }
 
-export async function deviceTokenGrant(db, { deviceCode, clientId }) {
+export async function deviceTokenGrant(db, { deviceCode, clientId, dpopJkt = null }) {
   const r = await db.query('SELECT * FROM oauth_device_codes WHERE device_code = $1 AND client_id = $2', [deviceCode, clientId]);
   const row = r.rows[0];
   if (!row) throw oauthError('invalid_grant', 'unknown device_code');
@@ -519,7 +527,7 @@ export async function deviceTokenGrant(db, { deviceCode, clientId }) {
   const user = await userClaims(db, row.user_id);
   if (!user) throw oauthError('invalid_grant', 'user not found');
   await db.query('DELETE FROM oauth_device_codes WHERE device_code = $1', [deviceCode]);
-  return mintTokens(db, { user, clientId, scope: row.scope, sid: crypto.randomUUID() });
+  return mintTokens(db, { user, clientId, scope: row.scope, sid: crypto.randomUUID(), dpopJkt });
 }
 
 // ── Revocation (RFC 7009) + Introspection (RFC 7662) ────────────────────────
@@ -662,6 +670,190 @@ export async function isOidcSessionActive(db, { sid, userId, authEpoch }) {
     [sid, userId, Number(authEpoch)],
   );
   return r.rows.length === 1;
+}
+
+export async function verifyAccessToken(db, token) {
+  if (!token) throw oauthError('invalid_token', 'access token required');
+  const decoded = jwt.decode(token, { complete: true });
+  const header = decoded?.header;
+  const key = header?.kid ? await getKeyByKid(db, header.kid) : null;
+  if (!key) throw oauthError('invalid_token', 'unknown signing key');
+  let payload;
+  try {
+    payload = jwt.verify(token, key.publicKey, {
+      algorithms: [key.alg], audience: ACCESS_TOKEN_AUDIENCE, issuer: issuer(),
+    });
+  } catch {
+    throw oauthError('invalid_token', 'invalid access token');
+  }
+  if (!isAccessToken(header, payload)) throw oauthError('invalid_token', 'invalid access token type');
+  if (!await isOidcSessionActive(db, {
+    sid: payload.sid, userId: payload.sub, authEpoch: payload.auth_epoch,
+  })) throw oauthError('invalid_token', 'session expired or revoked');
+  return payload;
+}
+
+function scopeSet(value) {
+  return new Set(String(value || '').split(/\s+/).filter(Boolean));
+}
+
+export function brokerExchangeRequestHash({
+  subjectToken, childClientId, childJkt, resource, audience, scope,
+}) {
+  const canonical = JSON.stringify({
+    subject_token_hash: sha256(subjectToken),
+    child_client_id: childClientId,
+    child_jkt: childJkt,
+    resource,
+    audience,
+    scope: [...scopeSet(scope)].sort(),
+  });
+  return crypto.createHash('sha256').update(canonical).digest('base64url');
+}
+
+export async function enrollBrokerInstallation(db, { userId, publicKeyJwk }) {
+  const jwk = publicJwk(publicKeyJwk);
+  const jkt = jwkThumbprint(jwk);
+  const r = await db.query(
+    `INSERT INTO oauth_broker_installations (user_id, public_jwk, jkt)
+     VALUES ($1,$2::jsonb,$3)
+     ON CONFLICT (user_id, jkt) DO UPDATE SET revoked_at = NULL
+     RETURNING installation_id, jkt`,
+    [userId, JSON.stringify(jwk), jkt],
+  );
+  return r.rows[0];
+}
+
+async function verifyBrokerAssertion(db, {
+  assertion,
+  userId,
+  subjectSid,
+  requestHash,
+  childClientId,
+  childJkt,
+  resource,
+  scope,
+}) {
+  const decoded = jwt.decode(assertion, { complete: true });
+  const installationId = decoded?.header?.kid;
+  if (!installationId || decoded.header.alg !== 'ES256' || decoded.header.typ !== 'xeno-broker+jwt') {
+    throw oauthError('invalid_grant', 'invalid broker assertion header');
+  }
+  const r = await db.query(
+    `SELECT installation_id, user_id, public_jwk, jkt
+       FROM oauth_broker_installations
+      WHERE installation_id = $1 AND user_id = $2 AND revoked_at IS NULL`,
+    [installationId, userId],
+  );
+  const installation = r.rows[0];
+  if (!installation) throw oauthError('invalid_grant', 'unknown broker installation');
+  let claims;
+  try {
+    claims = jwt.verify(
+      assertion,
+      crypto.createPublicKey({ key: installation.public_jwk, format: 'jwk' }),
+      { algorithms: ['ES256'], audience: `${issuer()}/api/oauth2/token`, issuer: 'xeno-hub-broker', maxAge: '30s' },
+    );
+  } catch {
+    throw oauthError('invalid_grant', 'invalid broker assertion');
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const expectedScope = [...scopeSet(scope)].sort().join(' ');
+  if (!Number.isInteger(claims.iat) || !Number.isInteger(claims.exp)
+      || claims.iat > now + 60 || claims.exp <= now || claims.exp - claims.iat > 30
+      || claims.sub !== userId || claims.subject_sid !== subjectSid
+      || claims.installation_id !== installationId || claims.request_hash !== requestHash
+      || claims.child_client_id !== childClientId || claims.package_identity !== childClientId
+      || claims.child_jkt !== childJkt || claims.resource !== resource
+      || [...scopeSet(claims.scope)].sort().join(' ') !== expectedScope
+      || !claims.jti) {
+    throw oauthError('invalid_grant', 'broker assertion binding mismatch');
+  }
+  try {
+    await db.query('DELETE FROM oauth_broker_assertion_replays WHERE expires_at <= now()');
+    await db.query(
+      `INSERT INTO oauth_broker_assertion_replays (installation_id, jti, expires_at)
+       VALUES ($1,$2, to_timestamp($3))`,
+      [installationId, claims.jti, claims.exp],
+    );
+  } catch (error) {
+    if (error?.code === '23505') throw oauthError('invalid_grant', 'broker assertion replayed');
+    throw error;
+  }
+  return installation;
+}
+
+export async function tokenExchangeGrant(db, {
+  subjectToken,
+  subjectPayload,
+  hubDpopJkt,
+  subjectTokenType,
+  requestedTokenType,
+  resource,
+  audience,
+  scope,
+  childClientId,
+  childPublicJwk,
+  brokerAssertion,
+}) {
+  if (subjectTokenType !== 'urn:ietf:params:oauth:token-type:access_token'
+      || requestedTokenType !== 'urn:ietf:params:oauth:token-type:access_token') {
+    throw oauthError('invalid_request', 'unsupported token type');
+  }
+  if (resource !== 'https://api.xenostudio.ai' || audience !== ACCESS_TOKEN_AUDIENCE) {
+    throw oauthError('invalid_target', 'unsupported resource or audience');
+  }
+  if (subjectPayload.client_id !== 'xeno-hub' || subjectPayload.cnf?.jkt !== hubDpopJkt
+      || !scopeSet(subjectPayload.scope).has('broker:exchange')) {
+    throw oauthError('unauthorized_client', 'Hub broker exchange authority required');
+  }
+  const childJwk = publicJwk(childPublicJwk);
+  const childJkt = jwkThumbprint(childJwk);
+  const policyScopes = scopesForClient(childClientId);
+  const child = await getClient(db, childClientId);
+  if (!child || !policyScopes) throw oauthError('invalid_target', 'unknown child client');
+  const permitted = new Set(policyScopes.filter((s) => (child.allowed_scopes || []).includes(s)));
+  const requested = [...scopeSet(scope)];
+  if (requested.length === 0 || requested.some((s) => !permitted.has(s))) {
+    throw oauthError('invalid_scope', 'requested child scope exceeds policy');
+  }
+  const normalizedScope = [...requested].sort().join(' ');
+  const requestHash = brokerExchangeRequestHash({
+    subjectToken, childClientId, childJkt, resource, audience, scope: normalizedScope,
+  });
+  const installation = await verifyBrokerAssertion(db, {
+    assertion: brokerAssertion,
+    userId: subjectPayload.sub,
+    subjectSid: subjectPayload.sid,
+    requestHash,
+    childClientId,
+    childJkt,
+    resource,
+    scope: normalizedScope,
+  });
+  const key = await getSigningKey(db);
+  const now = Math.floor(Date.now() / 1000);
+  const expiresIn = Math.min(120, Number(subjectPayload.exp) - now);
+  if (!Number.isInteger(expiresIn) || expiresIn <= 0) throw oauthError('invalid_grant', 'subject token expired');
+  const installationHash = crypto.createHash('sha256').update(String(installation.installation_id)).digest('base64url');
+  const access = jwt.sign(
+    {
+      iss: issuer(), iat: now, sub: subjectPayload.sub, aud: ACCESS_TOKEN_AUDIENCE,
+      client_id: childClientId, azp: childClientId,
+      act: { sub: 'xeno-hub', client_id: 'xeno-hub', installation_id_hash: installationHash },
+      scope: normalizedScope, sid: subjectPayload.sid, auth_epoch: subjectPayload.auth_epoch,
+      auth_time: subjectPayload.auth_time, typ: ACCESS_TOKEN_TYP, cnf: { jkt: childJkt },
+    },
+    key.privatePem,
+    { algorithm: key.alg, keyid: key.kid, expiresIn, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
+  );
+  return {
+    access_token: access,
+    issued_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+    token_type: 'DPoP',
+    expires_in: expiresIn,
+    scope: normalizedScope,
+  };
 }
 
 /**
