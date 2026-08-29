@@ -3,6 +3,7 @@ import {
   FolderOpen, Save, Upload, Undo2, Redo2, Plus, Layout, Type, Square,
   Circle, Table2, BarChart3, Code, Play, Monitor, Sparkles, ChevronRight,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 /* High-fidelity XENO Slides mockup — the hero's "representative content" (NN/g:
  * the hero visual must show the real product). Recreates the real Electron app
@@ -19,7 +20,7 @@ import {
  * reserved for the AI-native layer and the live selection, so the theme switch
  * recolors exactly what makes Slides different. */
 
-function TBtn({ icon: Icon, active }: { icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; active?: boolean }) {
+function TBtn({ icon: Icon, active }: { icon: LucideIcon; active?: boolean }) {
   return (
     <span className={`grid h-6 w-6 place-items-center rounded ${active ? 'bg-white/[0.1] text-[#d8d2ca]' : 'text-[#5d5850]'}`}>
       <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />

@@ -131,7 +131,6 @@ const EmbeddedCanvasViewer: React.FC<EmbeddedCanvasViewerProps> = ({
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={() => setIsPlaying(false)}
         muted={isMuted}
-        volume={volume}
       />
 
       {/* Canvas */}

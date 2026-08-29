@@ -19,7 +19,7 @@
  * the box, and `sudo bash remote-deploy.sh` does the on-box work. Windows-friendly.
  *
  * Usage:
- *   node scripts/deploy-platform.mjs <backend|frontend|both> [options]
+ *   node scripts/deploy-platform.mjs <backend|chat-workers|frontend|both|all> [options]
  *
  * Options:
  *   --execute            Actually deploy (swap). Without it: dry-run (prints the plan).
@@ -34,8 +34,10 @@
  * Examples:
  *   node scripts/deploy-platform.mjs backend                 # dry-run plan
  *   node scripts/deploy-platform.mjs backend --build-only --execute   # validate build, no swap
+ *   node scripts/deploy-platform.mjs chat-workers --execute # semantic-gated worker deploy
  *   node scripts/deploy-platform.mjs frontend --execute      # real frontend deploy
  *   node scripts/deploy-platform.mjs both --execute          # backend then frontend
+ *   node scripts/deploy-platform.mjs all --execute           # backend, workers, frontend
  *   node scripts/deploy-platform.mjs backend --rollback --execute     # emergency rollback
  */
 
@@ -58,6 +60,7 @@ const REMOTE_TMP = '/tmp/xeno-deploy';
 //   We ship a superset of exactly those, existence-filtered against HEAD.
 const PATHS = {
   backend: ['src/server', 'Dockerfile.backend', '.dockerignore', 'docker-compose.yml'],
+  'chat-workers': ['src/server', 'Dockerfile.backend', '.dockerignore', 'docker-compose.yml'],
   frontend: [
     'src', 'packages', 'public', 'scripts', 'index.html', 'Dockerfile.frontend', '.dockerignore', 'nginx',
     'package.json', 'package-lock.json',
@@ -74,8 +77,9 @@ const opts = { execute: false, buildOnly: false, noCache: false, allowDirty: fal
                host: 'xeno-platform-001', root: '/mnt/projects/xeno-platform' };
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
-  if (a === 'backend' || a === 'frontend') services.push(a);
+  if (a === 'backend' || a === 'chat-workers' || a === 'frontend') services.push(a);
   else if (a === 'both') { services.push('backend', 'frontend'); }
+  else if (a === 'all') { services.push('backend', 'chat-workers', 'frontend'); }
   else if (a === '--execute' || a === '-y') opts.execute = true;
   else if (a === '--build-only') opts.buildOnly = true;
   else if (a === '--no-cache') opts.noCache = true;
@@ -86,7 +90,7 @@ for (let i = 0; i < argv.length; i++) {
   else { console.error(`deploy: unknown arg: ${a}`); process.exit(2); }
 }
 if (services.length === 0) {
-  console.error('deploy: specify a service — backend | frontend | both');
+  console.error('deploy: specify a service — backend | chat-workers | frontend | both | all');
   console.error('       run with no --execute for a dry-run plan.');
   process.exit(2);
 }
@@ -171,7 +175,10 @@ if (!opts.execute) {
   log(`  2. scp tar + scripts/remote-deploy.sh -> ${opts.host}:${REMOTE_TMP}/`);
   for (const s of services) {
     log(`  3.${s}. ssh ${opts.host}: sudo bash remote-deploy.sh --service ${s} --sha ${sha} --mode ${opts.buildOnly ? 'build-only' : 'swap'}${opts.noCache ? ' --no-cache' : ''}`);
-    log(`        -> tag :latest->:rollback, compose build ${s}, tag :${sha}${opts.buildOnly ? '' : `, up -d, gate on ${s === 'backend' ? '/api/ready' : '/health'}, auto-rollback on fail`}`);
+    const gate = s === 'backend' ? '/api/ready'
+      : s === 'chat-workers' ? 'internal /ready/semantic'
+        : '/health';
+    log(`        -> tag :latest->:rollback, compose build ${s}, tag :${sha}${opts.buildOnly ? '' : `, up -d, gate on ${gate}, auto-rollback on fail`}`);
   }
   warn('DRY-RUN — pass --execute to run it for real.');
   process.exit(0);

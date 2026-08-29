@@ -30,6 +30,7 @@ export interface DeepLabConfig {
   threshold: number;
   enableDebugLogs: boolean;
   fallbackToSimpleSegmentation: boolean;
+  modelSize?: string;
 }
 
 // Enhanced Simple segmentation with edge detection for when TensorFlow.js fails
@@ -484,4 +485,4 @@ export class TensorFlowSegmentationEngine {
 } 
 
 // Export the new engine with the same interface as before
-export { TensorFlowSegmentationEngine as SAM2SegmentationEngine }; 
+export { TensorFlowSegmentationEngine as SAM2SegmentationEngine };

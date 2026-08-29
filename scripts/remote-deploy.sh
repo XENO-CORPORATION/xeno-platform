@@ -22,7 +22,7 @@
 # and it never touches the untracked box state (.env, backups/, volumes).
 #
 # Usage:
-#   sudo bash remote-deploy.sh --service backend|frontend --sha <sha> \
+#   sudo bash remote-deploy.sh --service backend|chat-workers|frontend --sha <sha> \
 #        --tar /tmp/xeno-deploy/deploy-<sha>.tar --mode swap|build-only \
 #        [--root /mnt/projects/xeno-platform] [--no-cache]
 #
@@ -50,7 +50,7 @@ done
 [ -n "$SERVICE" ] || { echo "remote-deploy: --service required" >&2; exit 2; }
 [ -n "$SHA" ]     || { echo "remote-deploy: --sha required" >&2; exit 2; }
 [ -n "$TAR" ]     || { echo "remote-deploy: --tar required" >&2; exit 2; }
-case "$SERVICE" in backend|frontend) ;; *) echo "remote-deploy: --service must be backend|frontend" >&2; exit 2 ;; esac
+case "$SERVICE" in backend|chat-workers|frontend) ;; *) echo "remote-deploy: --service must be backend|chat-workers|frontend" >&2; exit 2 ;; esac
 case "$MODE" in swap|build-only) ;; *) echo "remote-deploy: --mode must be swap|build-only" >&2; exit 2 ;; esac
 [ -f "$TAR" ] || { echo "remote-deploy: tar not found: $TAR" >&2; exit 2; }
 
@@ -66,21 +66,37 @@ dc() { docker compose "$@"; }
 
 # Health endpoints, curled from the box loopback (the true readiness signal).
 #  backend : /api/ready returns 200 only AFTER startup migrations succeed (503 until).
+#  chat-workers: internal /ready/semantic proves the locked runtime + DB contract
+#                for a release; rollback checks base /ready so a last-good
+#                lexical-only worker can still be restored.
 #  frontend: nginx /health returns 200 when the SPA is served.
 health_url() {
+  local check_mode="${1:-release}"
   case "$SERVICE" in
     backend)  echo "http://127.0.0.1:8080/api/ready" ;;
+    chat-workers)
+      if [ "$check_mode" = "rollback" ]; then echo "chat-workers internal /ready"
+      else echo "chat-workers internal /ready/semantic"; fi ;;
     frontend) echo "http://127.0.0.1:4040/health" ;;
   esac
 }
 
 poll_health() {
-  local url tries code
-  url="$(health_url)"
+  local url tries code check_mode worker_path
   tries="$1"
+  check_mode="${2:-release}"
+  url="$(health_url "$check_mode")"
   for _ in $(seq 1 "$tries"); do
-    code="$(curl -fsS -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo 000)"
-    if [ "$code" = "200" ]; then return 0; fi
+    if [ "$SERVICE" = "chat-workers" ]; then
+      if [ "$check_mode" = "rollback" ]; then worker_path="/ready"; else worker_path="/ready/semantic"; fi
+      if dc exec -T chat-workers node -e "require('http').get('http://127.0.0.1:8081${worker_path}',r=>{r.resume();process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))" >/dev/null 2>&1; then
+        return 0
+      fi
+      code="not-ready"
+    else
+      code="$(curl -fsS -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo 000)"
+      if [ "$code" = "200" ]; then return 0; fi
+    fi
     sleep 2
   done
   echo "remote-deploy: health poll timed out ($url last=$code)" >&2
@@ -151,7 +167,7 @@ log "built $SERVICE -> $IMAGE:latest ($NEW_ID), also tagged :$SHA"
 # A Docker build can succeed while a stale on-box node_modules tree copied late
 # in the Dockerfile silently replaces the graph installed by `npm ci`. Prove the
 # production graph inside the actual image before it is ever swapped into service.
-if [ "$SERVICE" = "backend" ]; then
+if [ "$SERVICE" = "backend" ] || [ "$SERVICE" = "chat-workers" ]; then
   DEPENDENCY_LOG="$(mktemp)"
   if ! docker run --rm --entrypoint npm "$IMAGE:latest" ls --omit=dev >"$DEPENDENCY_LOG" 2>&1; then
     cat "$DEPENDENCY_LOG" >&2
@@ -187,7 +203,7 @@ dc up -d --no-deps --force-recreate "$SERVICE"
 # --- 6. Healthcheck gate ---------------------------------------------------
 # backend waits through migrations, so give it longer.
 if [ "$SERVICE" = "backend" ]; then TRIES=90; else TRIES=30; fi
-if poll_health "$TRIES"; then
+if poll_health "$TRIES" release; then
   log "healthcheck PASSED ($(health_url))"
   log "=== deploy end service=$SERVICE sha=$SHA OK ==="
   exit 0
@@ -198,7 +214,7 @@ log "healthcheck FAILED — auto-rolling back $SERVICE"
 if docker image inspect "$IMAGE:rollback" >/dev/null 2>&1; then
   docker tag "$IMAGE:rollback" "$IMAGE:latest"
   dc up -d --no-deps --force-recreate "$SERVICE"
-  if poll_health "$TRIES"; then
+  if poll_health "$TRIES" rollback; then
     log "ROLLED BACK to :rollback and healthy again. Deploy of $SHA FAILED."
   else
     log "ROLLBACK also unhealthy — MANUAL INTERVENTION NEEDED. service=$SERVICE"

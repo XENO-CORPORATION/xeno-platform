@@ -88,6 +88,19 @@ try {
       [row.user_id, marker],
     );
     if (existing.rows.length) {
+      if (confirm) {
+        await client.query(
+          `INSERT INTO image_generation_assets(generation_id,ordinal,asset_id)
+           VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+          [row.generation_id, Number(row.ordinality), existing.rows[0].id],
+        );
+        await client.query(
+          `UPDATE chat_migration_exceptions SET resolved_at=NOW()
+           WHERE exception_type='unresolved_generated_output' AND source_table='image_generations'
+             AND source_id=$1`,
+          [`${row.generation_id}:${row.ordinality}`],
+        );
+      }
       skipped += 1;
       continue;
     }
@@ -113,7 +126,7 @@ try {
       }
 
       try {
-        await registerManagedLibraryFile(client, {
+        const asset = await registerManagedLibraryFile(client, {
           userId: row.user_id,
           filename,
           originalName: safeOriginalName(row.prompt, row.created_at, extension),
@@ -128,6 +141,17 @@ try {
             sha256,
           },
         });
+        await client.query(
+          `INSERT INTO image_generation_assets(generation_id,ordinal,asset_id)
+           VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+          [row.generation_id, Number(row.ordinality), asset.id],
+        );
+        await client.query(
+          `UPDATE chat_migration_exceptions SET resolved_at=NOW()
+           WHERE exception_type='unresolved_generated_output' AND source_table='image_generations'
+             AND source_id=$1`,
+          [`${row.generation_id}:${row.ordinality}`],
+        );
         migrated += 1;
       } catch (error) {
         if (createdStorageFile) await fs.promises.unlink(storagePath).catch(() => {});

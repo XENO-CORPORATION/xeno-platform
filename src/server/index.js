@@ -28,6 +28,7 @@ import * as cheerio from 'cheerio';
 import FormData from 'form-data';
 import pg from 'pg';
 import { createHash, randomBytes, randomUUID } from 'crypto';
+import { buildUntrustedProjectDataMessage, inertProviderMessageText } from './services/chatProjectPrompt.js';
 import jwt from 'jsonwebtoken';
 import { WebSocketServer as WebSocket } from 'ws';
 import chokidar from 'chokidar';
@@ -95,8 +96,10 @@ import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { runMigrations } from './services/migrationService.js';
 import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
+import { startLibraryIngestionWorker } from './workers/libraryIngestionWorker.js';
 import { reasoningCapabilityForModel, reasoningEffortForModel } from './lib/chatModelCapabilities.js';
 import { registerManagedLibraryFile } from './services/libraryAssets.js';
+import { assembleProjectContext } from './services/chatProjectContext.js';
 
 // Round 8: Infrastructure imports
 import healthRoutes from './routes/healthRoutes.js';
@@ -631,7 +634,10 @@ const chatAuthMiddleware = (req, res, next) => {
   // /share/:token/accept never inherits the public exemption.
   const publicPaths = ['/init'];
   const isPublicShareRead = req.method === 'GET' && /^\/share\/[^/]+$/.test(req.path);
-  if (publicPaths.some(path => req.path === path || req.path.startsWith(path)) || isPublicShareRead) {
+  if (isPublicShareRead) {
+    return optionalAuthMiddleware(req, res, next);
+  }
+  if (publicPaths.some(path => req.path === path || req.path.startsWith(path))) {
     console.log('[ChatAuth] Skipping auth for public path:', req.path);
     return next();
   }
@@ -1627,7 +1633,7 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
     try {
         // <<< RECEIVE effectiveReasoningState >>>
-        const { messages, systemPrompt, selectedModelId, effectiveReasoningState } = req.body; 
+        const { messages, systemPrompt, selectedModelId, effectiveReasoningState, conversationId, projectId } = req.body;
 
         // Basic validation
         if (messages === undefined || !Array.isArray(messages) || selectedModelId === undefined || effectiveReasoningState === undefined) {
@@ -1642,9 +1648,59 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
 
         // 1. Format messages for OpenRouter (similar to OpenAI standard)
         let apiMessages = [];
+        let projectContext = null;
+        let projectContextRecordId = null;
+        let projectContextRequestHash = null;
         
         // Handle System Prompt (potentially add reasoning/table instructions if needed)
         let finalSystemPromptContent = systemPrompt ? systemPrompt.trim() : null;
+        if (projectId || conversationId) {
+            if (!projectId || !conversationId) {
+                return res.status(400).json({ error: 'Project generation requires projectId and conversationId.' });
+            }
+            const lastUser = [...messages].reverse().find((message) => message.role === 'user');
+            const query = Array.isArray(lastUser?.parts)
+                ? (lastUser.parts.find((part) => part.type === 'text')?.text || '')
+                : (typeof lastUser?.content === 'string' ? lastUser.content : '');
+            try {
+                projectContext = await assembleProjectContext({
+                    db: req.db,
+                    principal: { type: 'user', id: req.user.id },
+                    projectId,
+                    conversationId,
+                    query,
+                    modelId: selectedModelId,
+                    maxInputTokens: 16_000,
+                    requiredRelation: 'reviewer',
+                });
+                projectContextRecordId = randomUUID();
+                projectContextRequestHash = createHash('sha256').update(JSON.stringify({
+                    conversationId,
+                    projectId,
+                    modelId: selectedModelId,
+                    query,
+                    messages,
+                })).digest('hex');
+                await req.db.query(
+                    `INSERT INTO chat_generation_contexts(
+                       id, conversation_id, project_id, user_id, request_hash, context_manifest, safe_sources
+                     ) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)`,
+                    [
+                        projectContextRecordId,
+                        conversationId,
+                        projectId,
+                        req.user.id,
+                        projectContextRequestHash,
+                        JSON.stringify(projectContext.manifest),
+                        JSON.stringify(projectContext.manifest.sources),
+                    ],
+                );
+            } catch (contextError) {
+                const status = contextError.status || (contextError.code === 'invalid_id' ? 400 : 404);
+                return res.status(status).json({ error: contextError.message, code: contextError.code || 'project_context_failed' });
+            }
+            finalSystemPromptContent = [finalSystemPromptContent, projectContext.instructions].filter(Boolean).join('\n\n');
+        }
         // const useReasoning = req.body.useReasoning === true; // <<< REMOVE old flag check >>>
         
         // <<< USE effectiveReasoningState for prompt instructions >>>
@@ -1702,6 +1758,9 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         // Add the final system prompt if it exists
         if (finalSystemPromptContent) {
              apiMessages.push({ role: "system", content: finalSystemPromptContent });
+        }
+        if (projectContext?.contentBlocks?.length) {
+             apiMessages.push(buildUntrustedProjectDataMessage(projectContext.contentBlocks));
         }
         
         // <<< NEW: Intelligent Image Referral Logic >>>
@@ -2019,30 +2078,8 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         console.log('OpenRouter API Response (content truncated if long):', JSON.stringify(dataForLogging));
 
         // Extract text - structure follows OpenAI standard
-        let outputText = data.choices?.[0]?.message?.content;
+        let outputText = inertProviderMessageText(data.choices?.[0]?.message);
         let returnedImageData = null;
-
-        if (Array.isArray(outputText)) {
-            outputText = outputText
-                .map(part => (typeof part === 'string' ? part : part?.text || (part?.type === 'text' ? part.text : '')))
-                .filter(Boolean)
-                .join('\n');
-        }
-
-        if (outputText === null || outputText === undefined || outputText === '') {
-            const rawMsg = data.choices?.[0]?.message;
-            if (rawMsg) {
-                if (typeof rawMsg.reasoning_content === 'string' && rawMsg.reasoning_content.trim()) {
-                    outputText = rawMsg.reasoning_content;
-                } else if (typeof rawMsg.reasoning === 'string' && rawMsg.reasoning.trim()) {
-                    outputText = rawMsg.reasoning;
-                } else if (typeof rawMsg.refusal === 'string' && rawMsg.refusal.trim()) {
-                    outputText = rawMsg.refusal;
-                } else if (Array.isArray(rawMsg.tool_calls) && rawMsg.tool_calls.length > 0) {
-                    outputText = rawMsg.tool_calls.map(tc => tc.function?.arguments || tc.function?.name || 'tool_call').join('\n');
-                }
-            }
-        }
 
         // If the model did not return text content (or tried tool calling), check if the prompt is an image request and auto-generate via gpt-image-2
         if ((!outputText || outputText.trim() === '') && xenoImageClient) {
@@ -2337,6 +2374,16 @@ app.post('/api/chat/generate', databaseMiddleware, authMiddleware, async (req, r
         if (returnedImageData) {
             finalResponse.imageData = returnedImageData;
             finalResponse.modelIdUsed = 'gpt-image-2';
+        }
+        if (projectContext) {
+            const responseHash = createHash('sha256').update(String(finalResponse.text || '')).digest('hex');
+            await req.db.query(
+                `UPDATE chat_generation_contexts SET response_hash=$2
+                 WHERE id=$1 AND request_hash=$3 AND response_hash IS NULL`,
+                [projectContextRecordId, responseHash, projectContextRequestHash],
+            );
+            finalResponse.projectContextId = projectContextRecordId;
+            finalResponse.projectSources = projectContext.manifest.sources;
         }
 
         // Return the final response object
@@ -4062,8 +4109,13 @@ startNotificationEmailSweep(pool);
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
 startWebhookPushSweep(pool);
-// Start chat scheduled automation background worker
-startScheduledTasksWorker(pool);
+// Development can embed these loops for convenience. Production runs them in
+// the explicit chat-workers service so an API restart cannot silently own or
+// erase correctness-critical worker health.
+if (process.env.NODE_ENV !== 'production' || process.env.CHAT_EMBEDDED_WORKERS === 'true') {
+  startScheduledTasksWorker(pool);
+  startLibraryIngestionWorker(pool);
+}
 
 // Start main server
 server.listen(PORT, () => {

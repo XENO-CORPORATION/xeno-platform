@@ -11,10 +11,14 @@
  */
 
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import requireEntitlement from '../middleware/requireEntitlement.js';
 import { v4 as uuidv4 } from 'uuid';
 import fetch from 'node-fetch';
-import { tagResourceWorkspace } from '../utils/workspaceContext.js';
+import { tagResourceWorkspace, workspaceFromReq } from '../utils/workspaceContext.js';
+import { decodeLegacyLibraryImageDataUrl, registerManagedLibraryFile } from '../services/libraryAssets.js';
+import { withTransaction } from '../services/chatProjectAuthority.js';
 
 const router = express.Router();
 
@@ -853,41 +857,90 @@ router.post('/generations', requireEntitlement('canUse'), async (req, res) => {
       reference_images = []
     } = req.body;
 
-    if (!prompt || !image_urls || !model) {
+    if (!prompt || !Array.isArray(image_urls) || image_urls.length === 0 || image_urls.length > 16 || !model) {
       return res.status(400).json({
         success: false,
-        error: 'prompt, image_urls, and model are required'
+        error: 'prompt, one to sixteen image_urls, and model are required'
       });
     }
 
     const generationId = uuidv4();
+    const workspaceId = workspaceFromReq(req);
+    const generatedDirectory = path.resolve(process.cwd(), 'src/server/uploads/generated');
+    await fs.promises.mkdir(generatedDirectory, { recursive: true });
+    let decodedOutputs;
+    try {
+      decodedOutputs = image_urls.map((value) => decodeLegacyLibraryImageDataUrl(value));
+    } catch {
+      return res.status(400).json({
+        success: false,
+        error: 'Generated outputs must be submitted as image data URLs so Library can own immutable bytes.',
+        code: 'generated_output_not_canonical',
+      });
+    }
+    const libraryAssets = [];
+    for (let index = 0; index < decodedOutputs.length; index += 1) {
+      const decoded = decodedOutputs[index];
+      const ordinal = index + 1;
+      const filename = `${generationId}-${ordinal}.${decoded.extension}`;
+      const storagePath = path.join(generatedDirectory, filename);
+      await fs.promises.writeFile(storagePath, decoded.buffer, { flag: 'wx' });
+      const asset = await registerManagedLibraryFile(req.db, {
+        userId,
+        workspaceId,
+        filename,
+        originalName: `Generated image ${ordinal}.${decoded.extension}`,
+        mimeType: decoded.mimeType,
+        fileSize: decoded.buffer.length,
+        storagePath,
+        metadata: {
+          source: 'image-generation',
+          generation_id: generationId,
+          generation_ordinal: ordinal,
+          model,
+          provider: provider || null,
+        },
+      });
+      libraryAssets.push({ ...asset, ordinal, content_url: `/api/library/assets/${asset.id}/content` });
+    }
 
-    const result = await req.db.query(`
-      INSERT INTO image_generations (
-        id, user_id, prompt, image_urls, model,
-        aspect_ratio, resolution, count, provider, generation_time_ms, reference_images
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING *
-    `, [
-      generationId,
-      userId,
-      prompt,
-      JSON.stringify(image_urls),
-      model,
-      aspect_ratio,
-      resolution,
-      count,
-      provider,
-      generation_time_ms,
-      JSON.stringify(reference_images)
-    ]);
+    const generation = await withTransaction(req.db, async (tx) => {
+      const result = await tx.query(`
+        INSERT INTO image_generations (
+          id, user_id, prompt, image_urls, model,
+          aspect_ratio, resolution, count, provider, generation_time_ms, reference_images
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *
+      `, [
+        generationId,
+        userId,
+        prompt,
+        JSON.stringify(libraryAssets.map((entry) => entry.content_url)),
+        model,
+        aspect_ratio,
+        resolution,
+        count,
+        provider,
+        generation_time_ms,
+        JSON.stringify(reference_images),
+      ]);
+      for (const entry of libraryAssets) {
+        await tx.query(
+          `INSERT INTO image_generation_assets(generation_id,ordinal,asset_id)
+           VALUES($1,$2,$3)`,
+          [generationId, entry.ordinal, entry.id],
+        );
+      }
+      return result.rows[0];
+    });
 
     console.log(`🎨 Saved generation: ${generationId} for user: ${userId}`);
 
     res.json({
       success: true,
-      generation: result.rows[0]
+      generation,
+      library_assets: libraryAssets,
     });
 
   } catch (error) {

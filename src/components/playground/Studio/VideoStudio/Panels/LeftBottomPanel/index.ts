@@ -1,2 +1,2 @@
-export { default } from './SidePanel';
-export { default as SidePanel } from './SidePanel';
+export { default } from './LeftBottomPanelTabs';
+export { default as LeftBottomPanelTabs } from './LeftBottomPanelTabs';

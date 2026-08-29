@@ -15,7 +15,7 @@
 // Toggle:
 //   • ON by default while Vite runs in dev (`npm run start`).
 //   • Force OFF (use the real backend):  localStorage.setItem('xeno_chat_mock', 'off')
-//   • Force ON in a prod-like build:     localStorage.setItem('xeno_chat_mock', 'on')
+//   • Production bundles can never enable this fixture.
 // ---------------------------------------------------------------------------
 
 import type { ModelsResponse } from '@/services/modelService';
@@ -28,8 +28,9 @@ const readFlag = (): string | null => {
   }
 };
 
-const MOCK_ENABLED =
-  (import.meta.env.DEV && readFlag() !== 'off') || readFlag() === 'on';
+const MOCK_ENABLED = import.meta.env.DEV
+  && import.meta.env.VITE_ENABLE_CHAT_FIXTURES === 'true'
+  && readFlag() !== 'off';
 
 /** Build a JSON Response after an optional delay (so the "Thinking" UI shows). */
 const jsonResponse = (data: unknown, delayMs = 0): Promise<Response> =>

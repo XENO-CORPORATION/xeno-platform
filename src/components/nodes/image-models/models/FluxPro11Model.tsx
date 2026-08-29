@@ -51,7 +51,7 @@ export class FluxPro11Model extends BaseImageModel {
       console.log("Flux Pro 1.1 settings:", replicateSettings);
       console.log("Model:", XenoModels.FLUX_PRO.model);
       console.log("Version:", XenoModels.FLUX_PRO.version);
-      console.log("API Endpoint:", API_ENDPOINTS.REPLICATE_API);
+      console.log("API Endpoint:", API_ENDPOINTS.XENO_API);
       
       // Call Replicate API using the official Flux 1.1 Pro model
       return await generateImage(
@@ -240,4 +240,4 @@ export class FluxPro11Model extends BaseImageModel {
       </>
     );
   }
-} 
+}

@@ -38,6 +38,7 @@ export interface XenoSearchResponse {
     pe_ratio?: number;
   };
   products?: {
+    title?: string;
     price: number;
     originalPrice?: number;
     rating?: number;
@@ -47,6 +48,9 @@ export interface XenoSearchResponse {
     brand?: string;
     category?: string;
     url?: string;
+    imageUrl?: string;
+    source?: string;
+    availability?: string;
   }[];
   error?: string | null;
 }
@@ -400,22 +404,12 @@ class XenoSearchService {
     } catch (error) {
       console.error('Xeno Shopping Search API error:', error);
       
-      // Generate realistic mock shopping data
-      const mockProducts = this.generateMockProducts(options.query);
-      
       return {
         query: options.query,
         search_type: 'shopping',
-        summary: `Top-rated products for "${options.query}". Compare prices, reviews, and features from trusted retailers with real-time price comparison and availability status.`,
-        sources: [
-          {
-            url: 'https://xenostudio.ai/shopping-results',
-            title: `Shopping Results for "${options.query}"`,
-            snippet: `Best deals and products for "${options.query}" with verified reviews and competitive pricing.`,
-            relevance_score: 0.92
-          }
-        ],
-        products: mockProducts,
+        summary: 'Shopping search service unavailable.',
+        sources: [],
+        products: [],
         error: error instanceof Error ? error.message : 'Shopping search service unavailable'
       };
     }
@@ -836,4 +830,4 @@ class XenoSearchService {
 }
 
 // Export singleton instance
-export const xenoSearchService = new XenoSearchService(); 
+export const xenoSearchService = new XenoSearchService();

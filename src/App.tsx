@@ -100,6 +100,19 @@ const LibraryRouteRedirect: React.FC = () => {
   return <Navigate to={`/overview/chat/library${location.search}`} replace />;
 };
 
+/**
+ * Project workspaces use a compact URL while navigating inside chat. A hard
+ * reload must enter Overview's nested router so the same workspace component
+ * mounts, reloads the account-owned project, and restores its backend data.
+ */
+const ProjectRouteRedirect: React.FC = () => {
+  const { projectId } = useParams<{ projectId?: string }>();
+  const target = projectId
+    ? `/overview/chat/projects/${encodeURIComponent(projectId)}`
+    : '/overview/chat/projects';
+  return <Navigate to={target} replace />;
+};
+
 function App() {
   // Fix iOS Safari 100vh issue
   useEffect(() => {
@@ -280,7 +293,8 @@ function App() {
             {/* Direct Conversation and Sub-surface Routes */}
             <Route path="/c/:conversationId" element={<ConversationRouteRedirect />} />
             <Route path="/c" element={<ConversationRouteRedirect />} />
-            <Route path="/projects" element={<Navigate to="/overview/chat/projects" replace />} />
+            <Route path="/projects/:projectId" element={<ProjectRouteRedirect />} />
+            <Route path="/projects" element={<ProjectRouteRedirect />} />
             <Route path="/scheduled" element={<Navigate to="/overview/chat/scheduled" replace />} />
             <Route path="/library" element={<LibraryRouteRedirect />} />
             <Route path="/artifacts" element={<LibraryRouteRedirect />} />

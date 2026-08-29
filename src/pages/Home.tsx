@@ -19,7 +19,7 @@ function Home() {
 
       <main className="pt-[58px]">
         <HeroSection />
-        <UseCasesShowcase />
+        <UseCasesShowcase onGetStarted={handleGetStarted} />
       </main>
 
       <Footer />

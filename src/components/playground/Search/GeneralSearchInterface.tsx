@@ -255,7 +255,7 @@ const GeneralSearchInterface: React.FC = () => {
     try {
       const response = await xenoSearchService.searchGeneral({
         query: searchQuery,
-        search_type: searchType,
+        search_type: searchType === 'research' ? 'deep' : searchType,
         num_results: 10
       });
       
@@ -266,14 +266,13 @@ const GeneralSearchInterface: React.FC = () => {
         url: source.url,
         timestamp: new Date().toLocaleString(),
         relevanceScore: source.relevance_score || 0.5,
-        source: source.source || 'Web'
+        source: source.url.replace(/^https?:\/\//, '').split('/')[0] || 'Web'
       }));
       
       setSearchResults(convertedResults);
     } catch (error) {
       console.error('General search failed:', error);
-      const mockResults = generateMockResults(searchQuery);
-      setSearchResults(mockResults);
+      setSearchResults([]);
     } finally {
       setIsSearching(false);
     }
@@ -893,4 +892,4 @@ const GeneralSearchInterface: React.FC = () => {
   );
 };
 
-export default GeneralSearchInterface; 
+export default GeneralSearchInterface;

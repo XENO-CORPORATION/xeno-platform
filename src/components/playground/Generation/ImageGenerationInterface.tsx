@@ -540,18 +540,18 @@ const CleanInterface: React.FC = () => {
   useEffect(() => {
     const loadModels = () => {
       const registry = imageGenerationService.modelRegistry;
-      const falModels: SubModel[] = []; // Use shared SubModel interface
+      const xenoModels: SubModel[] = [];
 
       Object.keys(registry).forEach(modelId => {
         const modelDef = registry[modelId];
-        if (modelDef.provider === 'fal') {
+        if (modelDef.provider === 'xeno') {
           let simpleName = modelId.split('/').pop() || modelId;
           simpleName = simpleName.replace('stable-diffusion-', '').replace('-', ' ');
 
-          falModels.push({
+          xenoModels.push({
             id: modelId,
             name: simpleName,
-            description: modelDef.schema?.info?.description || modelDef.schema?.description || 'Fal.ai Model',
+            description: modelDef.schema?.info?.description || modelDef.schema?.description || 'XENO image model',
             supportsImageUpload: modelDef.isImageToImage || false,
             // Assume isNew/isBeta are defined in the registry or omit them
           });
@@ -560,19 +560,15 @@ const CleanInterface: React.FC = () => {
       });
 
       const families: ModelFamily[] = []; // Use shared ModelFamily interface
-      if (falModels.length > 0) {
-        falModels.sort((a, b) => {
-          if (a.id === 'fal-ai/stable-diffusion-v35-large') return -1;
-          if (b.id === 'fal-ai/stable-diffusion-v35-large') return 1;
-          return a.name.localeCompare(b.name);
-        });
+      if (xenoModels.length > 0) {
+        xenoModels.sort((a, b) => a.name.localeCompare(b.name));
 
         families.push({
-          id: 'fal-stable-diffusion',
-          name: 'Stable Diffusion (Fal.ai)',
+          id: 'xeno-image',
+          name: 'XENO Image',
           icon: <div className="mr-2 rounded-full bg-white/10 p-1"><Image size={16} className="text-sky-400" /></div>,
-          description: 'Fal.ai hosted Stable Diffusion models',
-          submodels: falModels
+          description: 'Image models served through the XENO generation gateway',
+          submodels: xenoModels
         });
       }
       // Add other families

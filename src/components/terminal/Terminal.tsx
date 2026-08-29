@@ -8,7 +8,6 @@ import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import { SearchAddon } from 'xterm-addon-search';
-import { ClipboardAddon } from 'xterm-addon-clipboard';
 import 'xterm/css/xterm.css';
 
 interface TerminalProps {
@@ -118,12 +117,10 @@ export const Terminal: React.FC<TerminalProps> = ({
     const fitAddon = new FitAddon();
     const webLinksAddon = new WebLinksAddon();
     const searchAddon = new SearchAddon();
-    const clipboardAddon = new ClipboardAddon();
 
     xterm.loadAddon(fitAddon);
     xterm.loadAddon(webLinksAddon);
     xterm.loadAddon(searchAddon);
-    xterm.loadAddon(clipboardAddon);
 
     // Open terminal
     xterm.open(terminalRef.current);

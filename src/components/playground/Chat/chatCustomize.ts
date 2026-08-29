@@ -1,8 +1,8 @@
 /**
  * Chat Customize contract.
  *
- * UI calls these functions only. Today they are in-memory mocks; a real backend
- * replaces the bodies without changing ChatCustomizePage / ChatWithLLM.
+ * Authenticated state is server-authoritative. The small stores below exist only
+ * for unauthenticated development drafts and as read-through display caches.
  */
 
 import {
@@ -10,6 +10,7 @@ import {
   setChatSkillEnabled,
 } from './chatSkillsLibrary';
 import { chatService } from '@/services/chatService';
+import { userDataService } from '@/services/userDataService';
 
 export type ChatPersona = {
   id: string;
@@ -127,13 +128,13 @@ export const listPersonas = async (
           prompt: p.prompt,
           updatedAt: p.updated_at ? new Date(p.updated_at).getTime() : Date.now(),
         }));
-        // Merge into store
-        const existingIds = new Set(mapped.map((p) => p.id));
-        personasStore = [...mapped, ...personasStore.filter((p) => !existingIds.has(p.id))];
+        // An authenticated empty response is authoritative; never retain local rows.
+        personasStore = mapped;
       }
     }
   } catch (err) {
-    console.warn('[chatCustomize] Failed to fetch personas from backend:', err);
+    console.error('[chatCustomize] Failed to fetch personas from backend:', err);
+    if (chatService.isAuthenticated()) throw err;
   }
 
   const q = (input.query ?? '').trim().toLowerCase();
@@ -152,15 +153,26 @@ export const listPersonas = async (
 export const getPersona = async (id: string): Promise<ChatPersona | null> =>
   personasStore.find((persona) => persona.id === id) ?? null;
 
-/** Mock profile — UI can call this; wire to GET later. */
-export const getCustomizeProfile = async (): Promise<CustomizeProfile> => ({
-  ...profileStore,
-});
+/** Account customization profile. */
+export const getCustomizeProfile = async (): Promise<CustomizeProfile> => {
+  if (!chatService.isAuthenticated()) return { ...profileStore };
+  const settings = await userDataService.getSettings();
+  const chat = settings.chat as any;
+  profileStore = {
+    instructions: typeof chat?.accountInstructions === 'string' ? chat.accountInstructions : '',
+    activePersonaId: typeof chat?.activePersonaId === 'string' ? chat.activePersonaId : null,
+    updatedAt: Date.now(),
+  };
+  return { ...profileStore };
+};
 
-/** Mock save instructions — wire to PUT later. */
+/** Persist account instructions before updating the display cache. */
 export const saveCustomizeInstructions = async (
   instructions: string,
 ): Promise<CustomizeProfile> => {
+  if (chatService.isAuthenticated()) {
+    await userDataService.updateSetting('chat.accountInstructions', instructions.trim());
+  }
   profileStore = {
     ...profileStore,
     instructions: instructions.trim(),
@@ -169,10 +181,13 @@ export const saveCustomizeInstructions = async (
   return { ...profileStore };
 };
 
-/** Mock set active persona — wire to PUT later. */
+/** Persist active persona before updating the display cache. */
 export const setActivePersona = async (
   personaId: string | null,
 ): Promise<CustomizeProfile> => {
+  if (chatService.isAuthenticated()) {
+    await userDataService.updateSetting('chat.activePersonaId', personaId);
+  }
   profileStore = {
     ...profileStore,
     activePersonaId: personaId,
@@ -194,6 +209,10 @@ let chatPersonaByScope: Record<string, string | null> = {};
 export const getChatPersonaId = async (
   conversationId: string | null | undefined,
 ): Promise<string | null> => {
+  if (chatService.isAuthenticated() && conversationId?.trim()) {
+    const conversation = await chatService.getConversation(conversationId);
+    return conversation?.persona_id ?? null;
+  }
   const scope = resolvePersonaScope(conversationId);
   return scope in chatPersonaByScope ? chatPersonaByScope[scope] : null;
 };
@@ -203,6 +222,11 @@ export const setChatPersonaId = async (
   conversationId: string | null | undefined,
   personaId: string | null,
 ): Promise<string | null> => {
+  if (chatService.isAuthenticated() && conversationId?.trim()) {
+    const updated = await chatService.updateConversation(conversationId, { persona_id: personaId });
+    if (!updated) throw new Error('Persona selection was not saved.');
+    return updated.persona_id ?? null;
+  }
   const scope = resolvePersonaScope(conversationId);
   chatPersonaByScope = {
     ...chatPersonaByScope,
@@ -275,6 +299,15 @@ export const setSkillEnabled = async (
 export const listConnectors = async (
   input: ListConnectorsInput = {},
 ): Promise<ChatConnector[]> => {
+  if (chatService.isAuthenticated()) {
+    connectorsStore = (await chatService.getConnectors()).map((row) => ({
+      id: row.connector_key || row.id,
+      name: row.name || row.connector_key,
+      type: row.type || 'Connector',
+      status: row.status === 'connected' ? 'connected' : 'not_connected',
+      updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+    }));
+  }
   const status = input.status ?? 'all';
   const q = input.query ?? '';
   let rows = connectorsStore.filter((row) =>
@@ -288,11 +321,15 @@ export const listConnectors = async (
   return rows.sort((a, b) => a.name.localeCompare(b.name));
 };
 
-/** Backend: POST/DELETE connect — mock toggles status. */
+/** Backend-qualified connector transition; unqualified catalogs fail closed. */
 export const setConnectorStatus = async (
   id: string,
   status: ConnectorStatus,
 ): Promise<ChatConnector | null> => {
+  if (chatService.isAuthenticated()) {
+    const row = await chatService.setConnectorStatus(id, status);
+    if (!row) throw new Error('Connector status was not saved.');
+  }
   const stamp = Date.now();
   let updated: ChatConnector | null = null;
   connectorsStore = connectorsStore.map((row) => {
@@ -307,6 +344,16 @@ export const setConnectorStatus = async (
 export const listPlugins = async (
   input: ListQueryInput = {},
 ): Promise<ChatPlugin[]> => {
+  if (chatService.isAuthenticated()) {
+    pluginsStore = (await chatService.getPlugins()).map((row) => ({
+      id: row.listing_id || row.id,
+      name: row.name || row.listing_id,
+      summary: row.summary || '',
+      author: row.author || 'Marketplace',
+      installed: row.enabled !== false,
+      updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+    }));
+  }
   const q = input.query ?? '';
   let rows = [...pluginsStore];
   if (q.trim()) {
@@ -320,11 +367,15 @@ export const listPlugins = async (
   return rows.sort((a, b) => a.name.localeCompare(b.name));
 };
 
-/** Backend: POST install / DELETE uninstall — mock toggles installed. */
+/** Backend-qualified Marketplace transition; unqualified catalogs fail closed. */
 export const setPluginInstalled = async (
   id: string,
   installed: boolean,
 ): Promise<ChatPlugin | null> => {
+  if (chatService.isAuthenticated()) {
+    const row = await chatService.setPluginInstalled(id, installed);
+    if (!row) throw new Error('Plugin installation was not saved.');
+  }
   const stamp = Date.now();
   let updated: ChatPlugin | null = null;
   pluginsStore = pluginsStore.map((plugin) => {
@@ -339,7 +390,10 @@ export const setPluginInstalled = async (
 export const getMemorySettings = async (): Promise<MemorySettings> => {
   try {
     if (chatService.isAuthenticated()) {
-      const serverMemories = await chatService.getMemories();
+      const [serverMemories, settings] = await Promise.all([
+        chatService.getMemories(),
+        userDataService.getSettings(),
+      ]);
       if (Array.isArray(serverMemories)) {
         const mappedEntries: MemoryEntry[] = serverMemories.map((m) => ({
           id: m.id,
@@ -348,13 +402,15 @@ export const getMemorySettings = async (): Promise<MemorySettings> => {
         }));
         memoryStore = {
           ...memoryStore,
+          generateFromChats: Boolean((settings.chat as any)?.memoryGenerateFromChats),
           entries: mappedEntries,
           updatedAt: Date.now(),
         };
       }
     }
   } catch (err) {
-    console.warn('[chatCustomize] Failed to get memories from backend:', err);
+    console.error('[chatCustomize] Failed to get memories from backend:', err);
+    if (chatService.isAuthenticated()) throw err;
   }
 
   return {
@@ -368,6 +424,9 @@ export const getMemorySettings = async (): Promise<MemorySettings> => {
 export const setMemoryGenerateFromChats = async (
   enabled: boolean,
 ): Promise<MemorySettings> => {
+  if (chatService.isAuthenticated()) {
+    await userDataService.updateSetting('chat.memoryGenerateFromChats', enabled);
+  }
   memoryStore = {
     ...memoryStore,
     generateFromChats: enabled,
@@ -411,9 +470,11 @@ export const addMemoryEntry = async (text: string): Promise<MemorySettings> => {
           updatedAt: memoryStore.updatedAt,
         };
       }
+      throw new Error('Memory creation returned no durable record.');
     }
   } catch (err) {
-    console.warn('[chatCustomize] Failed to add memory on backend:', err);
+    console.error('[chatCustomize] Failed to add memory on backend:', err);
+    if (chatService.isAuthenticated()) throw err;
   }
 
   const entry: MemoryEntry = {
@@ -437,10 +498,12 @@ export const addMemoryEntry = async (text: string): Promise<MemorySettings> => {
 export const deleteMemoryEntry = async (id: string): Promise<MemorySettings> => {
   try {
     if (chatService.isAuthenticated()) {
-      await chatService.deleteMemory(id);
+      const deleted = await chatService.deleteMemory(id);
+      if (!deleted) throw new Error('Memory deletion was not saved.');
     }
   } catch (err) {
-    console.warn('[chatCustomize] Failed to delete memory from backend:', err);
+    console.error('[chatCustomize] Failed to delete memory from backend:', err);
+    if (chatService.isAuthenticated()) throw err;
   }
 
   memoryStore = {

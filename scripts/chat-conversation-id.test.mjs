@@ -192,7 +192,7 @@ test('chat auth exposes the exact shared-conversation GET but not share mutation
     /\^\\\/share\\\/\[\^\/\]\+\$/,
     'public share exemption must match exactly /share/:token',
   );
-  assert.match(middleware, /\|\|\s*isPublicShareRead/, 'public share read must reach next()');
+  assert.match(middleware, /if \(isPublicShareRead\)[\s\S]*optionalAuthMiddleware\(req, res, next\)/, 'public share read must reach optional auth');
   assert.doesNotMatch(
     middleware,
     /publicPaths\s*=\s*\[[^\]]*share/,
@@ -200,20 +200,16 @@ test('chat auth exposes the exact shared-conversation GET but not share mutation
   );
 });
 
-test('full-scale writes authorize every supplied foreign id before inserting', () => {
+test('full-scale writes authorize every supplied foreign id through ReBAC before inserting', () => {
   const helperStart = ROUTES.indexOf('async function rejectUnownedChatReferences');
   const helperEnd = ROUTES.indexOf('const router = express.Router()', helperStart);
   const helper = ROUTES.slice(helperStart, helperEnd);
-  assert.match(helper, /chat_conversations[\s\S]*user_id\s*=\s*\$2/, 'conversation references need ownership');
-  assert.match(helper, /chat_messages[\s\S]*user_id\s*=\s*\$2/, 'message references need ownership');
-  assert.match(helper, /chat_projects[\s\S]*user_id\s*=\s*\$2/, 'project references need ownership');
+  assert.match(helper, /object: `conversation:\$\{conversationId\}`[\s\S]*relation: 'viewer'/, 'conversation references need inherited viewer authority');
+  assert.match(helper, /SELECT conversation_id FROM chat_messages[\s\S]*relation: 'reviewer'/, 'message references need parent-conversation authority');
+  assert.match(helper, /object: `project:\$\{projectId\}`[\s\S]*relation: 'viewer'/, 'project references need inherited viewer authority');
 
   for (const pathLit of [
-    '/conversations',
     '/artifacts',
-    '/scheduled',
-    '/skills',
-    '/projects/:id/files',
     '/memories',
   ]) {
     const body = extractRoute(ROUTES, 'post', pathLit);
@@ -223,6 +219,10 @@ test('full-scale writes authorize every supplied foreign id before inserting', (
     assert.ok(guardAt !== -1, `POST ${pathLit} does not authorize its foreign references`);
     assert.ok(insertAt === -1 || guardAt < insertAt, `POST ${pathLit} authorizes after inserting`);
   }
+  assert.match(extractRoute(ROUTES, 'post', '/conversations'), /requireResourceRelation[\s\S]*'project'/);
+  assert.match(extractRoute(ROUTES, 'post', '/scheduled'), /requireResourceRelation[\s\S]*'conversation'[\s\S]*requireResourceRelation[\s\S]*'project'/);
+  assert.match(extractRoute(ROUTES, 'post', '/skills'), /requireResourceRelation[\s\S]*'conversation'[\s\S]*'editor'/);
+  assert.match(extractRoute(ROUTES, 'post', '/projects/:id/files'), /linkAssetToProject\(/);
 });
 
 test('project conversations cross the client and server persistence boundary', () => {

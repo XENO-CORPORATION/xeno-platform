@@ -83,6 +83,15 @@ export const libraryService = {
     return response.blob();
   },
 
+  async retryIngestion(assetId: string): Promise<void> {
+    const response = await fetch(`/api/library/assets/${encodeURIComponent(assetId)}/ingestions/retry`, {
+      method: 'POST',
+      headers: authHeaders(true),
+      body: '{}',
+    });
+    await readJson<{ success: boolean }>(response);
+  },
+
   async delete(source: LibrarySource, id: string): Promise<boolean> {
     const response = await fetch(`/api/library/assets/${source}/${encodeURIComponent(id)}`, {
       method: 'DELETE',

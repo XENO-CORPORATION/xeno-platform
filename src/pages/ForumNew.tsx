@@ -100,6 +100,7 @@ interface Space {
   kind: string;
   description: string;
   postPolicy: string;
+  threadCount: number;
 }
 
 const ForumNew: React.FC = () => {

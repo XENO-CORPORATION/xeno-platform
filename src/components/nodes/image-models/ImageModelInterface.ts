@@ -50,9 +50,13 @@ export interface GeneratedImage {
 }
 
 export interface ImageGenerationResponse {
-  success: boolean;
+  /** Present on the batch-oriented generation API. Legacy single-image adapters
+   * omit it and expose `imageUrl`; callers must accept both during migration. */
+  success?: boolean;
   error?: string; // Error message if success is false
-  images: GeneratedImage[]; // Array of generated images
+  images?: GeneratedImage[]; // Array of generated images
+  /** Compatibility field for the single-image model adapters. */
+  imageUrl?: string;
   metadata?: { // Overall metadata for the generation batch
     generationTime?: number;
     promptTokens?: number;

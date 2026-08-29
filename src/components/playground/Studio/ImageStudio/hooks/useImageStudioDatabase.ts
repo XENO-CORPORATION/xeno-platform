@@ -188,7 +188,10 @@ export const useImageStudioDatabase = (
     setIsSaving(true);
 
     try {
-      const result = await imageStudioService.updateProject(currentProject.id, updates);
+      const result = await imageStudioService.updateProject(currentProject.id, {
+        ...updates,
+        style_type: updates.style_type ?? undefined,
+      });
 
       if (result.success && result.project) {
         setCurrentProject(result.project);
@@ -263,7 +266,7 @@ export const useImageStudioDatabase = (
           role: msg.sender === 'user' ? 'user' : 'assistant',
           content: msg.text,
           images: msg.imageData ? [msg.imageData] : [],
-          timestamp: msg.timestamp || Date.now()
+          timestamp: msg.timestamp instanceof Date ? msg.timestamp.getTime() : Date.now()
         })),
         settings_snapshot: generationSettings
       });

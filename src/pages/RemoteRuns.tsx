@@ -16,7 +16,7 @@ type RemoteEvent = {
   status?: string;
 };
 
-const authHeaders = () => {
+const authHeaders = (): Record<string, string> => {
   const token = localStorage.getItem('xenoos_auth_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
@@ -39,7 +39,7 @@ export default function RemoteRuns() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const requestHeaders = (json = false) => {
+  const requestHeaders = (json = false): Record<string, string> => {
     const scoped = workspace.trim();
     return {
       ...authHeaders(),

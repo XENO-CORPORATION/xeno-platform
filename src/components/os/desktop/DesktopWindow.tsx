@@ -197,8 +197,8 @@ const DesktopWindow: React.FC<DesktopWindowProps> = ({
     const newY = event.clientY - dragStartRef.current.y;
 
     // Keep window within viewport bounds
-    const maxX = window.innerWidth - window.size.width;
-    const maxY = window.innerHeight - window.size.height;
+    const maxX = globalThis.window.innerWidth - window.size.width;
+    const maxY = globalThis.window.innerHeight - window.size.height;
 
     // Add NaN checks for safety
     const safeMaxX = isNaN(maxX) ? 800 : maxX;

@@ -131,7 +131,7 @@ export const userDataService = {
       return data.settings || {};
     } catch (error) {
       console.error('Failed to get user settings:', error);
-      return {};
+      throw error;
     }
   },
 

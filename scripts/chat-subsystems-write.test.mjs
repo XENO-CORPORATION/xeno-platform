@@ -36,6 +36,9 @@ const WITH_LLM = codeOnly(readFileSync(chat('ChatWithLLM.tsx'), 'utf8'));
 const ROUTES = codeOnly(
   readFileSync(join(ROOT, 'src', 'server', 'routes', 'chatRoutes.js'), 'utf8'),
 );
+const SCHEDULED_WORKER = codeOnly(
+  readFileSync(join(ROOT, 'src', 'server', 'workers', 'chatScheduledWorker.js'), 'utf8'),
+);
 
 function extractFrom(src, marker) {
   const start = src.indexOf(marker);
@@ -142,7 +145,7 @@ test('projects: createChatProject awaits the service and uses the server id', ()
     'the UI must keep the server id. A local `project-${now}` id cannot join project files.',
   );
   const route = extractRoute(ROUTES, '/projects');
-  assert.match(route, /INSERT INTO chat_projects/, 'POST /projects never INSERTs.');
+  assert.match(route, /createAuthorizedProject\(/, 'POST /projects never reaches transactional project creation.');
 });
 
 test('project files: handleAddProjectFiles writes through addProjectFile', () => {
@@ -155,9 +158,68 @@ test('project files: handleAddProjectFiles writes through addProjectFile', () =>
   const route = extractRoute(ROUTES, '/projects/:id/files');
   assert.match(
     route,
-    /INSERT INTO chat_project_files/,
-    'POST /projects/:id/files never INSERTs.',
+    /linkAssetToProject\(/,
+    'POST /projects/:id/files never reaches normalized Library membership.',
   );
+});
+
+test('authenticated project surfaces never substitute prototype rows', () => {
+  assert.doesNotMatch(
+    WITH_LLM,
+    /MOCK_(?:PROJECT|CHAT_FILES)/,
+    'authenticated project/chat surfaces still contain a mock-data fallback.',
+  );
+  assert.doesNotMatch(
+    SCHEDULED,
+    /scheduledStore|sessionStorage/,
+    'scheduled writes still fail open to browser-only storage.',
+  );
+});
+
+test('project chat membership persists on create, move, list, and direct load', () => {
+  const create = extractFrom(WITH_LLM, 'const createConversationForMessages = async');
+  assert.match(create, /project_id:\s*projectId/, 'new project chats omit project_id.');
+
+  const assign = extractFrom(WITH_LLM, 'const handleAssignConversationToProject = async');
+  assert.match(
+    assign,
+    /chatService\.updateConversation\(conversationId, \{ project_id: projectId \}\)/,
+    'moving an existing chat between projects is still local-only.',
+  );
+
+  assert.match(
+    WITH_LLM,
+    /projectId:\s*conv\.project_id \?\? null/,
+    'conversation lists discard persisted project_id.',
+  );
+  assert.match(
+    WITH_LLM,
+    /projectId:\s*fullConversation\.project_id \?\? null/,
+    'direct conversation loads discard persisted project_id.',
+  );
+
+  assert.match(
+    ROUTES,
+    /updates\.push\(`project_id =/,
+    'the conversation update route cannot persist project_id.',
+  );
+  assert.match(
+    ROUTES,
+    /c\.is_archived, c\.project_id/,
+    'conversation lists do not return project_id.',
+  );
+});
+
+test('project files are account Library assets, not browser-only placeholders', () => {
+  const upload = extractFrom(WITH_LLM, 'const handleAddProjectFiles = useCallback');
+  assert.match(upload, /libraryService\.upload\(/, 'project files do not enter the account Library.');
+  assert.match(upload, /storage_key:\s*asset\.assetId/, 'project file membership does not retain the Library asset id.');
+  assert.match(
+    ROUTES,
+    /getAuthorizedLibraryFile\(req\.db, userPrincipal\(userId\), storage_key\)/,
+    'project files can link an unowned or deleted Library asset.',
+  );
+  assert.doesNotMatch(ROUTES, /SELECT id FROM files\b/, 'project file ownership checks query a table that does not exist.');
 });
 
 test('scheduled: the page calls createScheduledTask, and that body hits the service', () => {
@@ -179,6 +241,23 @@ test('scheduled: the page calls createScheduledTask, and that body hits the serv
     route,
     /INSERT INTO chat_scheduled_tasks/,
     'POST /scheduled never INSERTs.',
+  );
+});
+
+test('project schedules are server-owned and the worker never fabricates an answer', () => {
+  const projectCreate = extractFrom(WITH_LLM, 'const submitProjectScheduledCreate = useCallback');
+  assert.match(projectCreate, /await createScheduledTask\(/, 'project schedules are still local-only.');
+  assert.match(projectCreate, /projectId:\s*activeProjectId/, 'project schedules omit their project id.');
+  assert.match(projectCreate, /nextRunAt:/, 'the selected project schedule time is discarded.');
+  assert.doesNotMatch(
+    SCHEDULED_WORKER,
+    /Automated Response for task/,
+    'the worker fabricates success when inference is unavailable.',
+  );
+  assert.match(
+    SCHEDULED_WORKER,
+    /XENO inference gateway is not configured/,
+    'the worker does not fail closed when inference is unavailable.',
   );
 });
 

@@ -22,10 +22,6 @@ import VideoUpscaleInterface from '../components/playground/Enhance/VideoEnhance
 import MultiChatContainer from '../components/playground/Chat/MultiChatContainer';
 import ChatWithVoice from '../components/playground/Chat/ChatWithVoice';
 import SearchChatInterface from '../components/playground/Chat/SearchChatInterface';
-import ChatCustomizePage from '../components/playground/Chat/ChatCustomizePage';
-import ChatScheduledPage from '../components/playground/Chat/ChatScheduledPage';
-import ChatGlobalSettingsPage from '../components/playground/Chat/ChatGlobalSettingsPage';
-import ChatSkillsWorkspace from '../components/playground/Chat/ChatSkillsWorkspace';
 const ThreeDGenerationInterface = React.lazy(() => import('../components/playground/Generation/ThreeDGenerationInterface'));
 import AudioGenerationInterface from '../components/playground/Generation/AudioGenerationInterface';
 import VideoGenerationInterface from '../components/playground/Generation/VideoGenerationInterface';
@@ -316,12 +312,12 @@ const OverviewContent: React.FC = () => {
             <Route path="chat/artifacts/:artifactId" element={<MultiChatContainer />} />
             <Route path="artifacts" element={<MultiChatContainer />} />
             <Route path="artifacts/:artifactId" element={<MultiChatContainer />} />
-            <Route path="chat/customize" element={<ChatCustomizePage />} />
-            <Route path="customize" element={<ChatCustomizePage />} />
-            <Route path="chat/scheduled" element={<ChatScheduledPage />} />
-            <Route path="scheduled" element={<ChatScheduledPage />} />
-            <Route path="chat/settings" element={<ChatGlobalSettingsPage />} />
-            <Route path="chat/skills" element={<ChatSkillsWorkspace />} />
+            <Route path="chat/customize" element={<MultiChatContainer />} />
+            <Route path="customize" element={<MultiChatContainer />} />
+            <Route path="chat/scheduled" element={<MultiChatContainer />} />
+            <Route path="scheduled" element={<MultiChatContainer />} />
+            <Route path="chat/settings" element={<MultiChatContainer />} />
+            <Route path="chat/skills" element={<MultiChatContainer />} />
             <Route path="chat/multi" element={<MultiChatContainer />} />
             {/* XENO: voice mode route disabled — voice de-scoped (no direct provider calls) */}
             {/* <Route path="chat/voice" element={<ChatWithVoice />} /> */}

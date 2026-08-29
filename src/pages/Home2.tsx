@@ -19,7 +19,7 @@ function Home2() {
 
       <main>
         <HeroSection />
-        <UseCasesShowcase />
+        <UseCasesShowcase onGetStarted={handleGetStarted} />
       </main>
 
       <Footer />
