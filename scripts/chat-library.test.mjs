@@ -58,6 +58,8 @@ test('legacy generation bytes map to managed assets without duplicate Library ro
   assert.match(legacyMigration, /DRY RUN/);
   assert.match(legacyMigration, /pg_advisory_lock/);
   assert.match(legacyMigration, /registerManagedLibraryFile/);
+  assert.match(legacyMigration, /registerManagedLibraryFile\(pool/);
+  assert.doesNotMatch(legacyMigration, /registerManagedLibraryFile\(client/);
   assert.match(legacyMigration, /if \(confirm\) await fs\.promises\.mkdir/);
   assert.match(legacyMigration, /if \(createdStorageFile\) await fs\.promises\.unlink/);
   assert.match(routes, /listLibraryItems\(req\.db, userId, req\.query\)/);
