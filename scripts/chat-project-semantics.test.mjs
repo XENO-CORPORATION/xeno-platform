@@ -11,6 +11,7 @@ import {
   CHAT_PROJECT_CONTRACTS,
 } from '../src/server/config/chatProjectContracts.js';
 import {
+  ENSURE_SCHEDULED_CONVERSATION_SQL,
   planDueOccurrences,
   sanitizeScheduledRunError,
 } from '../src/server/workers/chatScheduledWorker.js';
@@ -40,6 +41,19 @@ test('scheduled run errors expose stable messages without leaking provider detai
   assert.equal(
     sanitizeScheduledRunError('provider said sk-live-secret for asset 6ba7b810-cafe-4bad-a11e-123456789abc'),
     'Scheduled execution failed.',
+  );
+});
+
+test('scheduled conversation insert assigns one explicit UUID type to the repeated principal parameter', () => {
+  assert.match(ENSURE_SCHEDULED_CONVERSATION_SQL, /\$1::uuid/);
+  assert.match(
+    ENSURE_SCHEDULED_CONVERSATION_SQL,
+    /CASE WHEN \$4::uuid IS NULL THEN \$1::uuid ELSE NULL::uuid END/,
+  );
+  assert.doesNotMatch(
+    ENSURE_SCHEDULED_CONVERSATION_SQL,
+    /THEN \$1 ELSE NULL/,
+    'an untyped repeated parameter makes PostgreSQL infer text and uuid for $1 (42P08)',
   );
 });
 

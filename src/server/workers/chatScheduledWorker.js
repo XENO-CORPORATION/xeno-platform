@@ -200,16 +200,25 @@ export async function claimScheduledRun(pool, workerId, leaseSeconds = 120) {
   });
 }
 
+export const ENSURE_SCHEDULED_CONVERSATION_SQL = `INSERT INTO chat_conversations(
+  user_id, owner_user_id, created_by_user_id, title, model_id, project_id, workspace_id
+) VALUES (
+  $1::uuid,
+  CASE WHEN $4::uuid IS NULL THEN $1::uuid ELSE NULL::uuid END,
+  $1::uuid,
+  $2::text,
+  $3::text,
+  $4::uuid,
+  NULL::uuid
+) RETURNING id`;
+
 async function ensureConversation(pool, task, run) {
   if (task.conversation_id) return task.conversation_id;
   return withTransaction(pool, async (tx) => {
     const locked = (await tx.query('SELECT conversation_id FROM chat_scheduled_tasks WHERE id = $1 FOR UPDATE', [task.id])).rows[0];
     if (locked.conversation_id) return locked.conversation_id;
     const { rows } = await tx.query(
-      `INSERT INTO chat_conversations(
-         user_id, owner_user_id, created_by_user_id, title, model_id, project_id, workspace_id
-       ) VALUES ($1, CASE WHEN $4::uuid IS NULL THEN $1 ELSE NULL END, $1, $2, $3, $4, NULL)
-       RETURNING id`,
+      ENSURE_SCHEDULED_CONVERSATION_SQL,
       [task.run_as_user_id, `[Automated] ${task.title}`, task.model_id, task.project_id],
     );
     await writeTuples(tx, { writes: [{
