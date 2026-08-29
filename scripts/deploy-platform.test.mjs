@@ -5,6 +5,7 @@ import test from 'node:test';
 const deploy = readFileSync(new URL('./deploy-platform.mjs', import.meta.url), 'utf8');
 const remote = readFileSync(new URL('./remote-deploy.sh', import.meta.url), 'utf8');
 const dockerignore = readFileSync(new URL('../.dockerignore', import.meta.url), 'utf8');
+const compose = readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
 const backendDockerfile = readFileSync(new URL('../Dockerfile.backend', import.meta.url), 'utf8');
 const frontendDockerfile = readFileSync(new URL('../Dockerfile.frontend', import.meta.url), 'utf8');
 
@@ -72,6 +73,12 @@ test('build-only preserves the candidate by SHA and restores latest to last-good
   );
   assert.match(branch, /docker tag "\$IMAGE:rollback" "\$IMAGE:latest"/);
   assert.match(branch, /Candidate remains tagged :\$SHA/);
+});
+
+test('extractor service and deploy PID limits remain consistent for production Compose', () => {
+  const extractor = compose.slice(compose.indexOf('  chat-extractor:'), compose.indexOf('  chat-workers:'));
+  assert.match(extractor, /pids_limit:\s*128/);
+  assert.match(extractor, /deploy:[\s\S]*resources:[\s\S]*limits:[\s\S]*pids:\s*128/);
 });
 
 test('every service extraction preserves hardened backend bind-mount ownership before any swap', () => {
