@@ -54,12 +54,30 @@ export async function processLibraryIngestions(pool, { maxItems = 4 } = {}) {
   return outcomes;
 }
 
-export function startLibraryIngestionWorker(pool, intervalMs = 15_000) {
+export function startLibraryIngestionWorker(pool, intervalMs = 15_000, {
+  processor = processLibraryIngestions,
+} = {}) {
   console.log('Library ingestion worker initialized');
-  processLibraryIngestions(pool).catch((error) => console.error('[LibraryIngestionWorker] initial sweep:', error.message));
+  let stopped = false;
+  let sweepInFlight = false;
+  const runSweep = async () => {
+    if (stopped || sweepInFlight) return;
+    sweepInFlight = true;
+    try {
+      await processor(pool);
+    } catch (error) {
+      console.error('[LibraryIngestionWorker] sweep:', error.message);
+    } finally {
+      sweepInFlight = false;
+    }
+  };
+  void runSweep();
   const intervalId = setInterval(() => {
-    processLibraryIngestions(pool).catch((error) => console.error('[LibraryIngestionWorker] sweep:', error.message));
+    void runSweep();
   }, intervalMs);
   intervalId.unref?.();
-  return () => clearInterval(intervalId);
+  return () => {
+    stopped = true;
+    clearInterval(intervalId);
+  };
 }
