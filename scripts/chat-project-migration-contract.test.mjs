@@ -22,6 +22,14 @@ const onceRunAuthorizationSql = readFileSync(join(
   'migrations',
   '20260829134500-chat-once-run-gateway-authorization.sql',
 ), 'utf8');
+const uniqueIndexRepairSql = readFileSync(join(
+  ROOT,
+  'src',
+  'server',
+  'database',
+  'migrations',
+  '20260829134400-repair-live-unique-index-drift.sql',
+), 'utf8');
 
 test('core migration is additive, discoverable, and vector-free', () => {
   assert.match(migrationPath, /database[\\/]migrations[\\/]\d{14}[-_].+\.sql$/);
@@ -67,6 +75,16 @@ test('a dispatched one-time occurrence stays gateway-authorized without weakenin
   );
   assert.doesNotMatch(onceRunAuthorizationSql, /paused_by_user|cancelled_by_user|project_archived/i);
   assert.match(onceRunAuthorizationSql, /REVOKE ALL ON chat_gateway_dispatch_authorizations FROM PUBLIC/i);
+});
+
+test('live unique-index drift repair archives every removed physical row before reindexing', () => {
+  assert.match(uniqueIndexRepairSql, /CREATE TABLE IF NOT EXISTS chat_data_repair_archive/i);
+  assert.match(uniqueIndexRepairSql, /ROW_NUMBER\(\)[\s\S]*PARTITION BY object_type, object_id, relation, subject_type, subject_id/i);
+  assert.match(uniqueIndexRepairSql, /ROW_NUMBER\(\)[\s\S]*PARTITION BY source_system, platform_user_id/i);
+  assert.match(uniqueIndexRepairSql, /INSERT INTO chat_data_repair_archive[\s\S]*RETURNING source_row_id[\s\S]*DELETE FROM relationship_tuples/i);
+  assert.match(uniqueIndexRepairSql, /INSERT INTO chat_data_repair_archive[\s\S]*RETURNING source_row_id[\s\S]*DELETE FROM external_identity_links/i);
+  assert.match(uniqueIndexRepairSql, /REINDEX INDEX relationship_tuples_object_type_object_id_relation_subject__key/i);
+  assert.match(uniqueIndexRepairSql, /REINDEX INDEX uq_eil_source_platform/i);
 });
 
 test('every backfilled resource receives its concrete ReBAC relationship', () => {

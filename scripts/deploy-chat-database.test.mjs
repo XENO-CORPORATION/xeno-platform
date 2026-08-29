@@ -19,6 +19,8 @@ test('cutover uses the pinned pgvector and rollback Postgres images', () => {
   assert.match(remote, /pgvector\/pgvector:0\.8\.6-pg15-bookworm@sha256:a947c45c/);
   assert.match(remote, /postgres:15-alpine@sha256:a2c20749/);
   assert.match(remote, /live DB image drift/);
+  assert.match(remote, /EXPECTED_MIGRATIONS=.*find src\/server\/database\/migrations/);
+  assert.doesNotMatch(remote, /schema_migrations;" \| grep -qx '42'/);
 });
 
 test('production-shaped restore precedes quiesced production cutover', () => {

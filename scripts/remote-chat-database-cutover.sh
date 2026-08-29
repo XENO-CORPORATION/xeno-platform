@@ -37,6 +37,8 @@ LIVE_IMAGE="$(docker inspect xenostudio-postgres --format '{{.Image}}')"
 SHORT="${SHA:0:7}"
 BACKEND_IMAGE="xeno-platform-backend:$SHORT"
 docker image inspect "$BACKEND_IMAGE" >/dev/null || { echo "remote-chat-database-cutover: missing build-only backend image $BACKEND_IMAGE" >&2; exit 1; }
+EXPECTED_MIGRATIONS="$(find src/server/database/migrations -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
+[[ "$EXPECTED_MIGRATIONS" =~ ^[1-9][0-9]*$ ]] || { echo "remote-chat-database-cutover: invalid migration inventory" >&2; exit 1; }
 
 PGVECTOR_IMAGE="pgvector/pgvector:0.8.6-pg15-bookworm@sha256:a947c45cdc5906a1bc951f20a8709e321256343ee0f251e4ae00b5e7def4e6da"
 PLAIN_IMAGE="postgres:15-alpine@sha256:a2c20749c564b4eb73a77bfda626f8a3cde1bbfae020fb97c616a00cdc1a2181"
@@ -113,7 +115,7 @@ run_migrations "$QUAL_NETWORK" 'postgresql://postgres@postgres:5432/xenostudio'
 docker exec "$QUAL_CONTAINER" psql -U postgres -d xenostudio -Atc \
   "SELECT extversion FROM pg_extension WHERE extname='vector';" | grep -qx '0.8.6'
 docker exec "$QUAL_CONTAINER" psql -U postgres -d xenostudio -Atc \
-  "SELECT count(*) FROM schema_migrations;" | grep -qx '42'
+  "SELECT count(*) FROM schema_migrations;" | grep -qx "$EXPECTED_MIGRATIONS"
 docker stop "$QUAL_CONTAINER" >/dev/null
 log "production-shaped restore qualification passed; retained volume=$QUAL_VOLUME"
 
@@ -152,7 +154,7 @@ if docker compose up -d --no-deps --force-recreate postgres && wait_postgres xen
   DATABASE_URL="postgresql://postgres@postgres:5432/xenostudio"
   if PGPASSWORD="$POSTGRES_PASSWORD" run_migrations xeno-platform_xenostudio-network "$DATABASE_URL" \
       && docker exec xenostudio-postgres psql -U postgres -d xenostudio -Atc "SELECT extversion FROM pg_extension WHERE extname='vector';" | grep -qx '0.8.6' \
-      && docker exec xenostudio-postgres psql -U postgres -d xenostudio -Atc "SELECT count(*) FROM schema_migrations;" | grep -qx '42'; then
+      && docker exec xenostudio-postgres psql -U postgres -d xenostudio -Atc "SELECT count(*) FROM schema_migrations;" | grep -qx "$EXPECTED_MIGRATIONS"; then
     cutover_ok=1
   fi
 fi
