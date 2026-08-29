@@ -87,7 +87,6 @@ export const useImageStudio = () => {
       if (!segmenterRef.current) {
         segmenterRef.current = new SAM2SegmentationEngine({
           modelSize: 'tiny',
-          useGPU: true,
           threshold: 0.5
         });
         
@@ -299,7 +298,6 @@ export const useImageStudio = () => {
     if (!segmenterRef.current) {
       segmenterRef.current = new SAM2SegmentationEngine({
         modelSize: 'tiny',
-        useGPU: true,
         threshold: 0.5
       });
       const success = await segmenterRef.current.initialize();
@@ -462,4 +460,4 @@ export const useImageStudio = () => {
     abortControllerRef,
     segmenterRef
   };
-}; 
+};

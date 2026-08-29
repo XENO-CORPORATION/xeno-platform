@@ -1,8 +1,8 @@
 /**
  * Chat Artifacts contract.
  *
- * UI calls these functions only. Today they are in-memory mocks; a real backend
- * replaces the bodies without changing ChatArtifactsPage / ChatWithLLM.
+ * UI calls these functions only. Authenticated state is server-authoritative;
+ * the in-memory collection only caches successful server responses.
  */
 
 export type ArtifactKind = 'document' | 'code' | 'image' | 'html';
@@ -34,46 +34,25 @@ export type CreateArtifactInput = {
   conversationTitle?: string;
 };
 
-const day = 24 * 60 * 60 * 1000;
-const now = Date.now();
-
 import { chatService } from '@/services/chatService';
 
-/** Seed store — session-level fallback until backend responds. */
+/** Session projection of successfully persisted artifacts; never an authority. */
 let artifactsStore: ChatArtifact[] = [];
-
-const randomId = (): string => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return `art-${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`;
-  }
-  return `art-${Date.now().toString(36)}`;
-};
-
-const matchesQuery = (artifact: ChatArtifact, query: string): boolean => {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return (
-    artifact.title.toLowerCase().includes(q) ||
-    artifact.conversationTitle.toLowerCase().includes(q) ||
-    artifact.previewText.toLowerCase().includes(q) ||
-    artifact.kind.toLowerCase().includes(q)
-  );
-};
 
 /**
  * Lists artifacts for the library page.
- * Fetches from backend GET /api/chat/artifacts when authenticated, with local cache fallback.
+ * Fetches from the authoritative backend.
  */
 export const listArtifacts = async (
   input: ListArtifactsInput = {},
 ): Promise<ChatArtifact[]> => {
+  if (!chatService.isAuthenticated()) return [];
   try {
-    if (chatService.isAuthenticated()) {
-      const serverArtifacts = await chatService.getArtifacts({
-        kind: input.kind,
-        sort: input.sort,
-        query: input.query,
-      });
+    const serverArtifacts = await chatService.getArtifacts({
+      kind: input.kind,
+      sort: input.sort,
+      query: input.query,
+    });
 
       if (Array.isArray(serverArtifacts)) {
         const mapped: ChatArtifact[] = serverArtifacts.map((row) => ({
@@ -86,38 +65,20 @@ export const listArtifacts = async (
           createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
           updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
         }));
-        // Merge into store
-        const existingIds = new Set(mapped.map((a) => a.id));
-        artifactsStore = [...mapped, ...artifactsStore.filter((a) => !existingIds.has(a.id))];
-        return mapped;
-      }
+      artifactsStore = mapped;
+      return mapped;
     }
   } catch (err) {
-    console.warn('[chatArtifacts] Failed to list artifacts from backend, using local store:', err);
+    console.error('[chatArtifacts] Failed to list artifacts from backend:', err);
+    throw err;
   }
-
-  const kind = input.kind ?? 'all';
-  const sort = input.sort ?? 'updated';
-  const query = input.query ?? '';
-
-  let rows = artifactsStore.filter((artifact) => {
-    if (kind !== 'all' && artifact.kind !== kind) return false;
-    return matchesQuery(artifact, query);
-  });
-
-  rows = [...rows].sort((a, b) => {
-    if (sort === 'name') return a.title.localeCompare(b.title);
-    if (sort === 'created') return b.createdAt - a.createdAt;
-    return b.updatedAt - a.updatedAt;
-  });
-
-  return rows;
+  return [];
 };
 
 export const getArtifact = async (id: string): Promise<ChatArtifact | null> => {
+  if (!chatService.isAuthenticated()) return null;
   try {
-    if (chatService.isAuthenticated()) {
-      const row = await chatService.getArtifact(id);
+    const row = await chatService.getArtifact(id);
       if (row) {
         return {
           id: row.id,
@@ -129,12 +90,12 @@ export const getArtifact = async (id: string): Promise<ChatArtifact | null> => {
           createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
           updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
         };
-      }
     }
   } catch (err) {
-    console.warn('[chatArtifacts] Failed to get artifact from backend:', err);
+    console.error('[chatArtifacts] Failed to get artifact from backend:', err);
+    throw err;
   }
-  return artifactsStore.find((artifact) => artifact.id === id) ?? null;
+  return null;
 };
 
 /**
@@ -153,10 +114,10 @@ export const createArtifact = async (
   const previewText = content.trim().slice(0, 160);
   const conversationId = input.conversationId ?? '';
   const conversationTitle = input.conversationTitle ?? 'Untitled Chat';
+  if (!chatService.isAuthenticated()) throw new Error('Sign in to create an artifact.');
 
   try {
-    if (chatService.isAuthenticated()) {
-      const serverRow = await chatService.createArtifact({
+    const serverRow = await chatService.createArtifact({
         title,
         kind: input.kind,
         content,
@@ -181,34 +142,23 @@ export const createArtifact = async (
         };
         artifactsStore = [artifact, ...artifactsStore];
         return artifact;
-      }
     }
   } catch (err) {
-    console.warn('[chatArtifacts] Failed to create artifact on backend:', err);
+    console.error('[chatArtifacts] Failed to create artifact on backend:', err);
+    throw err;
   }
-
-  const artifact: ChatArtifact = {
-    id: randomId(),
-    title,
-    kind: input.kind,
-    conversationId,
-    conversationTitle,
-    previewText,
-    createdAt: stamp,
-    updatedAt: stamp,
-  };
-  artifactsStore = [artifact, ...artifactsStore];
-  return artifact;
+  throw new Error('The artifact was not created.');
 };
 
 /** Delete artifact from database and local store. */
 export const deleteArtifact = async (id: string): Promise<void> => {
+  if (!chatService.isAuthenticated()) throw new Error('Sign in to delete an artifact.');
   try {
-    if (chatService.isAuthenticated()) {
-      await chatService.deleteArtifact(id);
-    }
+    const deleted = await chatService.deleteArtifact(id);
+    if (!deleted) throw new Error('Artifact deletion was not saved.');
   } catch (err) {
-    console.warn('[chatArtifacts] Failed to delete artifact on backend:', err);
+    console.error('[chatArtifacts] Failed to delete artifact on backend:', err);
+    throw err;
   }
   artifactsStore = artifactsStore.filter((artifact) => artifact.id !== id);
 };

@@ -320,7 +320,7 @@ const DownloadToolsInterface: React.FC<DownloadToolsInterfaceProps> = ({ default
             if (item) {
               setDownloadHistory(prev => [{
                 ...item,
-                status: 'completed',
+                status: 'completed' as const,
                 fileSize: status.filesize,
                 downloadUrl: `/api/download/file/${backendId}`,
               }, ...prev].slice(0, 20));

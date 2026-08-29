@@ -1,6 +1,6 @@
 import React from 'react';
 import { EnhancedUpscaleVideoNode } from './video-upscale-models';
-import { BaseNodeProps } from './Node';
+import { BaseNodeProps } from './BaseNode';
 
 const UpscaleVideoNode: React.FC<BaseNodeProps> = (props) => {
   return <EnhancedUpscaleVideoNode {...props} initialModel="Topaz Video AI" />;

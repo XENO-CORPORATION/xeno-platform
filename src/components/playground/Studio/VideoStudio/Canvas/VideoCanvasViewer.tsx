@@ -27,6 +27,11 @@ interface VideoCanvasViewerProps {
   // Inform parent of play/time changes
   onPlayStateChange?: (isPlaying: boolean) => void;
   onTimeChange?: (currentTime: number, duration: number) => void;
+  previewPosition?: { x: number; y: number };
+  setPreviewPosition?: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
+  previewRef?: React.RefObject<HTMLDivElement>;
+  previewWidth?: number;
+  setPreviewWidth?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 const VideoCanvasViewer: React.FC<VideoCanvasViewerProps> = ({
@@ -470,7 +475,6 @@ const VideoCanvasViewer: React.FC<VideoCanvasViewerProps> = ({
         }}
         onEnded={() => setIsPlaying(false)}
         muted={isMuted}
-        volume={volume}
       />
       
       {/* Main Canvas Container with backdrop - Fixed to cover full viewport but behind Taskbar (z-9999) */}

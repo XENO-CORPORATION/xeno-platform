@@ -105,7 +105,7 @@ const turndownService = new TurndownService({
 
 // Add custom rules for better markdown output
 turndownService.addRule('strikethrough', {
-  filter: ['del', 's', 'strike'],
+  filter: (node) => ['DEL', 'S', 'STRIKE'].includes(node.nodeName),
   replacement: function (content: string) {
     return '~~' + content + '~~';
   }
@@ -184,10 +184,6 @@ const PaginatedTipTapEditor = forwardRef<PaginatedTipTapEditorRef, PaginatedTipT
             bottom: 25.4,
             left: 25.4,
             right: 25.4,
-          },
-          pageAmendmentOptions: {
-            enableHeader: false,
-            enableFooter: true,
           },
         }),
       ],

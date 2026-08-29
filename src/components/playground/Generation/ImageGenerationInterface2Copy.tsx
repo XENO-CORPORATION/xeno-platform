@@ -629,13 +629,13 @@ class GalleryErrorBoundary extends React.Component<
 }
 
 // --- DraggableTile ---
-function DraggableTile({ id, children }: { id: string; children: (props: { dragAttributes: Record<string, any>; dragListeners: Record<string, any> | undefined; dragNodeRef: React.Ref<any>; isDragging: boolean }) => React.ReactNode }) {
+function DraggableTile({ id, children }: { id: string; children: (props: { dragAttributes: Record<string, any>; dragListeners: Record<string, any> | undefined; dragNodeRef: (node: HTMLElement | null) => void; isDragging: boolean }) => React.ReactNode }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
   return <>{children({ dragAttributes: attributes, dragListeners: listeners, dragNodeRef: setNodeRef, isDragging })}</>;
 }
 
 // --- DroppableTile ---
-function DroppableTile({ id, children }: { id: string; children: (props: { dropNodeRef: React.Ref<any>; isOver: boolean }) => React.ReactNode }) {
+function DroppableTile({ id, children }: { id: string; children: (props: { dropNodeRef: (node: HTMLElement | null) => void; isOver: boolean }) => React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return <>{children({ dropNodeRef: setNodeRef, isOver })}</>;
 }
@@ -1948,7 +1948,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
   type GalleryGridItem =
     | { key: string; kind: 'loading' }
     | { key: string; kind: 'image'; asset: (typeof libraryImages)[number] }
-    | { key: string; kind: 'collage'; collage: Collage };
+    | { key: string; kind: 'collage'; collage: Collage; assets: (typeof libraryImages)[number][] };
   const gridItems: GalleryGridItem[] = useMemo(() => {
     const loadingItems: GalleryGridItem[] = isGenerating && generatingSettings
       ? Array.from({ length: generatingSettings.count }, (_, index) => ({
@@ -2572,7 +2572,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
       const restoredImages: UploadedImage[] = gen.reference_images.map((refImg, idx) => ({
         id: `rerun-${Date.now()}-${idx}`,
         url: refImg.url,
-        refTypes: [refImg.refType as 'style' | 'character' | 'image'] || ['image'],
+        refTypes: [refImg.refType as 'style' | 'character' | 'image'],
       }));
       setUploadedImages(restoredImages);
     }
@@ -5970,7 +5970,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
         {/* Model Picker — vertical stack above model button, same animation as desktop */}
         {false && (showAiCompanies || desktopAiCompaniesClosing) && (() => {
           const visibleCompanies = desktopAiCompaniesMode === 'selected' && selectedModelCompany
-            ? [selectedModelCompany]
+            ? [selectedModelCompany!]
             : aiCompanies;
           const isClosingMobile = desktopAiCompaniesClosing;
           return (
@@ -6059,7 +6059,7 @@ const [mobileViewerPromptExpanded, setMobileViewerPromptExpanded] = useState(fal
           <div className="relative shrink-0 self-end">
             {(showAiCompanies || desktopAiCompaniesClosing) && (() => {
               const visibleCompanies = desktopAiCompaniesMode === 'selected' && selectedModelCompany
-                ? [selectedModelCompany]
+                ? [selectedModelCompany!]
                 : aiCompanies;
               const isClosingMobile = desktopAiCompaniesClosing;
               return (

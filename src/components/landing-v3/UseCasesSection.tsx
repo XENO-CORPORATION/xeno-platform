@@ -1,11 +1,12 @@
 import React from 'react';
 import { ArrowUpRight, Megaphone, PenTool, Clapperboard, Gamepad2, Building2, Users } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Reveal, SectionHeading, cx } from './primitives';
 
 interface Persona {
   title: string;
   subtitle: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   apps: string[];
   image: string;
   fallback: string;

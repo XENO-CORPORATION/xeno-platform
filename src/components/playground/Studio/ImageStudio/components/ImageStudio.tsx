@@ -2185,7 +2185,7 @@ const ImageStudio: React.FC = () => {
 
   const handleCanvasViewerImageUpdate = async (newImageUrl: string) => {
     // Keep track of updated messages to update history
-    let updatedMessagesForHistory: ChatMessage[] | null = null;
+    let updatedMessagesForHistory: ChatMessage[] = [];
 
     // Update the message with the new edited image
     setMessages(prevMessages => {
@@ -3903,4 +3903,4 @@ const ImageStudio: React.FC = () => {
   );
 };
 
-export default ImageStudio; 
+export default ImageStudio;

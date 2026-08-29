@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  assertOwnedLibraryAttachments,
   createSignedLibraryContentPath,
   decodeLegacyLibraryImageDataUrl,
   listLibraryItems,
@@ -34,8 +33,9 @@ test('account Library aggregates every live account-owned chat/media store', () 
   for (const table of ['chat_artifacts', 'user_files', 'image_generations', 'image_assets']) {
     assert.match(libraryAssets, new RegExp(`FROM ${table.replace('_', '\\_')}`));
   }
-  assert.match(libraryAssets, /a\.user_id = \$1/);
-  assert.match(libraryAssets, /f\.user_id = \$1/);
+  assert.match(libraryAssets, /object_type='artifact'/);
+  assert.match(libraryAssets, /object_type='library_asset'/);
+  assert.match(libraryAssets, /subject_id=\$1::text/);
   assert.match(libraryAssets, /g\.user_id = \$1/);
   assert.match(libraryAssets, /ia\.user_id = \$1/);
   assert.match(libraryAssets, /\['all', 'images', 'files'\]/);
@@ -66,7 +66,9 @@ test('legacy generation bytes map to managed assets without duplicate Library ro
 
 test('Library blob reads require ownership and a server-managed upload record', () => {
   assert.match(libraryRoutes, /router\.get\('\/assets\/:id\/content'/);
-  assert.match(libraryAssets, /id = \$1 AND user_id = \$2 AND deleted_at IS NULL/);
+  assert.match(libraryRoutes, /getAuthorizedLibraryFile/);
+  assert.match(libraryAssets, /object: `library_asset:\$\{assetId\}`/);
+  assert.match(libraryAssets, /WHERE f\.id = \$1 AND f\.deleted_at IS NULL/);
   assert.match(libraryAssets, /storage_type = 'platform-upload'/);
   assert.match(libraryAssets, /allowedRoots\.some/);
   assert.match(libraryRoutes, /X-Content-Type-Options/);
@@ -130,13 +132,11 @@ test('signed Library links are short-lived account-bound capabilities', () => {
   assert.doesNotMatch(libraryRoutes, /url: `\$\{req\.protocol\}:\/\//);
 });
 
-test('message asset references are ownership checked before SQL persistence', async () => {
-  const userId = '20000000-0000-4000-8000-000000000002';
-  const owned = '10000000-0000-4000-8000-000000000001';
-  const db = { query: async (_sql, values) => ({ rows: values[1].includes(owned) ? [{ id: owned }] : [] }) };
-  await assert.doesNotReject(() => assertOwnedLibraryAttachments(db, userId, [{ asset_id: owned }]));
-  await assert.rejects(() => assertOwnedLibraryAttachments(db, userId, [{ asset_id: '30000000-0000-4000-8000-000000000003' }]), /unavailable/);
-  assert.match(routes, /assertOwnedLibraryAttachments/);
+test('message asset references are ReBAC-authorized before SQL persistence', () => {
+  assert.match(routes, /assertAuthorizedLibraryAttachments/);
+  assert.match(routes, /await assertAuthorizedLibraryAttachments[\s\S]*?INSERT INTO chat_messages/);
+  assert.match(libraryAssets, /for \(const id of ids\)[\s\S]*?getAuthorizedLibraryFile/);
+  assert.match(libraryAssets, /!file \|\| !file\.ingestion_safe/);
   assert.match(service, /asset_id\?: string/);
 });
 

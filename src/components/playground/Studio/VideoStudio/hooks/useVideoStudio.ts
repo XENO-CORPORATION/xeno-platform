@@ -106,6 +106,8 @@ export const useVideoStudio = (): UseVideoStudioReturn => {
         url: URL.createObjectURL(file),
         size: file.size,
         type: file.type,
+        format: file.name.split('.').pop()?.toLowerCase() || 'mp4',
+        resolution: { width: 0, height: 0 },
         duration: 0, // Will be updated after loading
         width: 0,
         height: 0,
@@ -113,13 +115,14 @@ export const useVideoStudio = (): UseVideoStudioReturn => {
       };
       
       // Load video to get metadata
-      await engine.loadVideo(videoFile.url);
+      await engine.loadVideo(videoFile);
       const metadata = engine.getVideoMetadata();
       
       if (metadata) {
         videoFile.duration = metadata.duration;
         videoFile.width = metadata.width;
         videoFile.height = metadata.height;
+        videoFile.resolution = { width: metadata.width, height: metadata.height };
       }
       
       setVideos(prev => [...prev, videoFile]);
@@ -151,7 +154,7 @@ export const useVideoStudio = (): UseVideoStudioReturn => {
       const engine = getVideoEngine();
       
       // Load video if not already loaded
-      await engine.loadVideo(selectedVideo.url);
+      await engine.loadVideo(selectedVideo);
       
       // Apply operation based on type
       switch (operation) {
@@ -166,7 +169,8 @@ export const useVideoStudio = (): UseVideoStudioReturn => {
           break;
         case 'crop':
           if (params?.cropArea) {
-            await engine.cropFrame(params.cropArea);
+            const { x, y, width, height } = params.cropArea;
+            engine.cropFrame(x, y, width, height);
           }
           break;
         default:

@@ -1,7 +1,7 @@
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:0.8.6-pg15-bookworm@sha256:a947c45cdc5906a1bc951f20a8709e321256343ee0f251e4ae00b5e7def4e6da
     container_name: xenostudio-postgres
     environment:
       - POSTGRES_DB=xenostudio
@@ -229,6 +229,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./src/server/uploads:/app/uploads
+      - ./src/server/uploads:/app/src/server/uploads
       - ./src/server/sam2-uploads:/app/sam2-uploads
       - ./src/server/storage:/app/storage
       - ./conversions:/app/conversions
@@ -272,6 +273,105 @@ services:
       options:
         max-size: "100m"
         max-file: "10"
+
+  # Untrusted document extraction has no network namespace. Requests and
+  # bounded results cross a filesystem queue; source bytes are mounted read-only.
+  chat-extractor:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["npm", "run", "start:chat-extractor"]
+    environment:
+      - NODE_ENV=production
+      - CHAT_EXTRACTOR_QUEUE_DIR=/app/extractor-jobs
+      - CHAT_EXTRACTOR_INPUT_ROOTS=/app/uploads,/app/src/server/uploads,/app/storage
+    network_mode: "none"
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    volumes:
+      - ./src/server/uploads:/app/uploads:ro
+      - ./src/server/uploads:/app/src/server/uploads:ro
+      - ./src/server/storage:/app/storage:ro
+      - chat_extractor_jobs:/app/extractor-jobs
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "node", "-e", "const f=require('fs');const s=f.statSync('/app/extractor-jobs/heartbeat');process.exit(Date.now()-s.mtimeMs<30000?0:1)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25m"
+        max-file: "3"
+
+  # Durable Chat project workers. These are deliberately a separate process
+  # from the API so scheduler/ingestion health and restarts are observable.
+  chat-workers:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["npm", "run", "start:chat-workers"]
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=xenostudio
+      - DB_USER=postgres
+      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/xenostudio
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD required}@redis:6379
+      - XENO_API_KEY=${XENO_API_KEY}
+      - LEDGER_V2_ENABLED=true
+      - LEDGER_SERVICE_TOKEN=${LEDGER_SERVICE_TOKEN}
+      - JWT_SECRET=${JWT_SECRET}
+      - LIBRARY_CONTENT_SECRET=${LIBRARY_CONTENT_SECRET:-}
+      - CHAT_WORKER_HEALTH_PORT=8081
+      - CHAT_EXTRACTOR_MODE=filesystem-queue
+      - CHAT_EXTRACTOR_QUEUE_DIR=/app/extractor-jobs
+    volumes:
+      - ./src/server/uploads:/app/uploads
+      - ./src/server/uploads:/app/src/server/uploads
+      - ./src/server/storage:/app/storage
+      - chat_extractor_jobs:/app/extractor-jobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      chat-extractor:
+        condition: service_healthy
+    networks:
+      - xenostudio-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8081/ready',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Proxy Server for external APIs (commented out - no Dockerfile)
   # proxy:
@@ -540,6 +640,8 @@ volumes:
   xeno_search_logs:
     driver: local
   meilisearch_data:
+    driver: local
+  chat_extractor_jobs:
     driver: local
 
 networks:

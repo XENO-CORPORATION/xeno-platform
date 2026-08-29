@@ -6,8 +6,10 @@ import {
   SCHEDULED_STATUS_LABEL,
   createScheduledTask,
   deleteScheduledTask,
+  listScheduledRuns,
   listScheduledTasks,
   setScheduledTaskStatus,
+  type ChatScheduledRun,
   type ChatScheduledTask,
   type ScheduledStatus,
 } from './chatScheduled';
@@ -59,6 +61,25 @@ const formatNextRun = (ts: number): string => {
   });
 };
 
+const formatRunTimestamp = (value: number | null): string =>
+  value ? new Date(value).toLocaleString() : '—';
+
+const detectedTimezone = (): string => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; }
+  catch { return 'UTC'; }
+};
+
+const nextDailyNine = () => {
+  const next = new Date();
+  next.setHours(9, 0, 0, 0);
+  if (next.getTime() <= Date.now()) next.setDate(next.getDate() + 1);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return {
+    timestamp: next.getTime(),
+    local: `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T09:00:00`,
+  };
+};
+
 /**
  * Full-page Scheduled hub — dense table (not Artifacts cards, not ChatGPT suggestions).
  * Data only through chatScheduled.ts so the backend can swap in later.
@@ -85,7 +106,11 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
     menuRef: sortMenuRef,
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedRuns, setSelectedRuns] = useState<ChatScheduledRun[]>([]);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [runsError, setRunsError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [timezone, setTimezone] = useState(() => detectedTimezone());
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,18 +161,50 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
     }
   }, [rows, selectedId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedId) {
+      setSelectedRuns([]);
+      setRunsError(null);
+      return;
+    }
+    setRunsLoading(true);
+    setRunsError(null);
+    void listScheduledRuns(selectedId)
+      .then((runs) => {
+        if (!cancelled) setSelectedRuns(runs);
+      })
+      .catch((cause) => {
+        console.error('[ChatScheduledPage] Failed to load run history:', cause);
+        if (!cancelled) {
+          setSelectedRuns([]);
+          setRunsError('Run history could not be loaded.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRunsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedId]);
+
   const handleCreate = async () => {
     const text = draft.trim();
-    if (!text || creating) return;
+    if (!text || !timezone.trim() || creating) return;
     setCreating(true);
     try {
       const title =
         text.length > 48 ? `${text.slice(0, 45).trimEnd()}…` : text;
+      const firstRun = nextDailyNine();
       await createScheduledTask({
         title,
         prompt: text,
         cadence: 'daily',
         cadenceLabel: 'Daily · 09:00',
+        nextRunAt: firstRun.timestamp,
+        scheduleKind: 'recurring',
+        timezone: timezone.trim(),
+        dtstartLocal: firstRun.local,
+        rrule: 'FREQ=DAILY',
       });
       setDraft('');
       setStatus('all');
@@ -321,6 +378,16 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
               placeholder="New task…"
               aria-label="New scheduled task"
             />
+            <TextInput
+              size="lg"
+              type="text"
+              className="w-full sm:w-[10rem]"
+              value={timezone}
+              onChange={(event) => setTimezone(event.target.value)}
+              placeholder="Europe/Berlin"
+              aria-label="Schedule timezone"
+              title="Daily at 09:00 in this IANA timezone"
+            />
             {/* The global settings page's Save, down to the class string: a `--chat-control` fill
                 with full text ink is `secondary` minus its hairline, and `h-9` is `lg`. It gains the
                 hairline, which is what gives its edge something to hold against the field beside it.
@@ -330,7 +397,7 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
               size="lg"
               className="flex-shrink-0"
               onClick={() => void handleCreate()}
-              disabled={!draft.trim() || creating}
+              disabled={!draft.trim() || !timezone.trim() || creating}
             >
               {creating ? 'Adding…' : 'Add'}
             </Button>
@@ -524,6 +591,53 @@ const ChatScheduledPage: React.FC<ChatScheduledPageProps> = ({ pageLeft, onClose
                       >
                         Delete
                       </Button>
+                    </div>
+                    <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--chat-border)' }}>
+                      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--chat-muted)]">
+                        Run history
+                      </h3>
+                      {runsLoading ? (
+                        <p className="mt-2 text-[12px] text-[var(--chat-muted)]">Loading runs…</p>
+                      ) : runsError ? (
+                        <p className="mt-2 text-[12px] text-[var(--chat-danger)]" role="alert">{runsError}</p>
+                      ) : selectedRuns.length === 0 ? (
+                        <p className="mt-2 text-[12px] text-[var(--chat-muted)]">No runs yet.</p>
+                      ) : (
+                        <div className="mt-2 overflow-x-auto rounded-[6px] border" style={{ borderColor: 'var(--chat-border)' }}>
+                          <table className="w-full min-w-[46rem] border-collapse text-left text-[11.5px]">
+                            <thead className="text-[10px] uppercase tracking-wide text-[var(--chat-muted)]">
+                              <tr>
+                                {['Scheduled', 'State', 'Attempts', 'Model', 'Started', 'Completed', 'Result / error'].map((label) => (
+                                  <th key={label} className="border-b px-2 py-2 font-medium" style={{ borderColor: 'var(--chat-border)' }}>{label}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedRuns.map((run) => (
+                                <tr key={run.id} className="align-top text-[var(--chat-text)]">
+                                  <td className="px-2 py-2 whitespace-nowrap">{formatRunTimestamp(run.scheduledFor)}</td>
+                                  <td className="px-2 py-2 font-medium">{run.status}</td>
+                                  <td className="px-2 py-2">{run.attemptCount}</td>
+                                  <td className="px-2 py-2 font-mono">{run.modelId || '—'}</td>
+                                  <td className="px-2 py-2 whitespace-nowrap">{formatRunTimestamp(run.startedAt)}</td>
+                                  <td className="px-2 py-2 whitespace-nowrap">{formatRunTimestamp(run.completedAt)}</td>
+                                  <td className="max-w-[18rem] px-2 py-2">
+                                    {run.conversationId ? (
+                                      <span className="font-mono">conversation:{run.conversationId}</span>
+                                    ) : run.errorCode || run.errorMessage ? (
+                                      <span title={run.errorMessage || undefined} className="text-[var(--chat-danger)]">
+                                        {[run.errorCode, run.errorMessage].filter(Boolean).join(' — ')}
+                                      </span>
+                                    ) : run.providerRequestId ? (
+                                      <span className="font-mono">provider:{run.providerRequestId}</span>
+                                    ) : '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 )}

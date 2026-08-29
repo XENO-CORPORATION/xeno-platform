@@ -145,7 +145,7 @@ test('projects: createChatProject awaits the service and uses the server id', ()
     'the UI must keep the server id. A local `project-${now}` id cannot join project files.',
   );
   const route = extractRoute(ROUTES, '/projects');
-  assert.match(route, /INSERT INTO chat_projects/, 'POST /projects never INSERTs.');
+  assert.match(route, /createAuthorizedProject\(/, 'POST /projects never reaches transactional project creation.');
 });
 
 test('project files: handleAddProjectFiles writes through addProjectFile', () => {
@@ -158,8 +158,8 @@ test('project files: handleAddProjectFiles writes through addProjectFile', () =>
   const route = extractRoute(ROUTES, '/projects/:id/files');
   assert.match(
     route,
-    /INSERT INTO chat_project_files/,
-    'POST /projects/:id/files never INSERTs.',
+    /linkAssetToProject\(/,
+    'POST /projects/:id/files never reaches normalized Library membership.',
   );
 });
 
@@ -216,7 +216,7 @@ test('project files are account Library assets, not browser-only placeholders', 
   assert.match(upload, /storage_key:\s*asset\.assetId/, 'project file membership does not retain the Library asset id.');
   assert.match(
     ROUTES,
-    /getManagedLibraryFile\(req\.db, storage_key, userId\)/,
+    /getAuthorizedLibraryFile\(req\.db, userPrincipal\(userId\), storage_key\)/,
     'project files can link an unowned or deleted Library asset.',
   );
   assert.doesNotMatch(ROUTES, /SELECT id FROM files\b/, 'project file ownership checks query a table that does not exist.');

@@ -53,7 +53,7 @@ const LeftBottomPanelTabs: React.FC<LeftBottomPanelTabsProps> = ({
     videos: assets.filter(a => a.type === 'video'),
     images: assets.filter(a => a.type === 'image'),
     audio: assets.filter(a => a.type === 'audio'),
-    other: assets.filter(a => !['video', 'image', 'audio'].includes(a.type))
+    other: assets.filter(a => !['video', 'image', 'audio'].includes(a.type ?? ''))
   };
 
   // Filter assets by search query
@@ -159,7 +159,7 @@ const LeftBottomPanelTabs: React.FC<LeftBottomPanelTabsProps> = ({
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-white/20">
-                      {getFileIcon(asset.type)}
+                      {getFileIcon(asset.type ?? 'file')}
                     </div>
                   )}
                 </div>
@@ -174,7 +174,7 @@ const LeftBottomPanelTabs: React.FC<LeftBottomPanelTabsProps> = ({
                       <span>{formatDuration(asset.duration)}</span>
                     )}
                     {asset.resolution && (
-                      <span>{asset.resolution}</span>
+                      <span>{asset.resolution.width}×{asset.resolution.height}</span>
                     )}
                     {asset.size && (
                       <span>{formatFileSize(asset.size)}</span>
@@ -447,16 +447,16 @@ const LeftBottomPanelTabs: React.FC<LeftBottomPanelTabsProps> = ({
             onLibrarySelect={(libraryId) => {
               console.log('Library selected:', libraryId);
             }}
-            onLibraryCreate={(name, type) => {
-              console.log('Library created:', name, type);
+            onLibraryCreate={() => {
+              console.log('Library creation requested');
             }}
             onLibraryDelete={(libraryId) => {
               console.log('Library deleted:', libraryId);
             }}
-            onImport={() => {
+            onLibraryImport={() => {
               console.log('Import initiated');
             }}
-            onExport={(libraryId) => {
+            onLibraryExport={(libraryId: string) => {
               console.log('Export initiated:', libraryId);
             }}
           />
@@ -468,8 +468,8 @@ const LeftBottomPanelTabs: React.FC<LeftBottomPanelTabsProps> = ({
             onPresetSelect={(presetId) => {
               console.log('Preset selected:', presetId);
             }}
-            onPresetSave={(name, category) => {
-              console.log('Preset saved:', name, category);
+            onPresetSave={() => {
+              console.log('Preset save requested');
             }}
             onPresetDelete={(presetId) => {
               console.log('Preset deleted:', presetId);

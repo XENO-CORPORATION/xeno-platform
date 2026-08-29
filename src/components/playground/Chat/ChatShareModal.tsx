@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button, IconButton, useDialog } from '@xenosystem/elements-react';
-import { Building, CheckDecl, CopyDecl, Globe, Lock, XDecl } from '@/lib/icons';
+import { Building, CheckDecl, CopyDecl, Globe, XDecl } from '@/lib/icons';
 import {
   VISIBILITY_OPTIONS,
   buildSocialShareUrl,
@@ -37,7 +37,6 @@ const CHECK_EASE = [0.22, 0.7, 0.2, 1] as const;
  * motion without news.
  */
 const VISIBILITY_GLYPH = {
-  private: Lock,
   team: Building,
   public: Globe,
 } as const;
@@ -130,7 +129,7 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
   const existing = getActiveShareLink(conversationId);
   const [step, setStep] = useState<ShareStep>(existing ? 'ready' : 'configure');
   const [visibility, setVisibility] = useState<ShareVisibility>(
-    existing?.visibility ?? 'private',
+    existing?.visibility ?? 'public',
   );
   const [link, setLink] = useState<ShareLink | null>(existing);
   const [isCreating, setIsCreating] = useState(false);
@@ -432,13 +431,11 @@ const ChatShareModal: React.FC<ChatShareModalProps> = ({
               <p className="text-[12px] leading-5 text-[var(--chat-muted)]">
                 Visibility:{' '}
                 <span className="text-[var(--chat-text)]">
-                  {link?.visibility === 'private'
-                    ? 'Private'
-                    : link?.visibility === 'team'
+                  {link?.visibility === 'team'
                       ? 'Team'
                       : 'Public'}
                 </span>
-                . Snapshot of {link?.messageCount ?? 0} messages. Mock link — not stored on a server yet.
+                . Snapshot of {link?.messageCount ?? 0} messages. Revoking the link invalidates server access.
               </p>
 
               <div>

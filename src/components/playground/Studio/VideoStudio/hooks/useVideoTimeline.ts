@@ -284,3 +284,5 @@ export const useVideoTimeline = () => {
     }
   };
 };
+
+export type UseVideoTimelineReturn = ReturnType<typeof useVideoTimeline>;

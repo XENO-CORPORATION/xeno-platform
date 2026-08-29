@@ -294,7 +294,7 @@ const BrushModal: React.FC<BrushModalProps> = ({
       </div>
 
       {/* Custom Slider Styles */}
-      <style jsx>{`
+      <style>{`
         .slider::-webkit-slider-thumb {
           appearance: none;
           width: 16px;
@@ -614,7 +614,7 @@ const BrushSettingModal: React.FC<BrushSettingModalProps> = ({
                   <label key={option.key} className="flex items-center gap-2 text-xs text-white/70">
                     <input
                       type="checkbox"
-                      checked={brushSettings.dynamics?.[option.key as keyof typeof brushSettings.dynamics] || false}
+                      checked={Boolean(brushSettings.dynamics?.[option.key as keyof typeof brushSettings.dynamics])}
                       onChange={(e) => onBrushSettingsChange({
                         ...brushSettings,
                         dynamics: {
@@ -766,7 +766,7 @@ const BrushSettingModal: React.FC<BrushSettingModalProps> = ({
         {renderContent()}
       </div>
 
-      <style jsx>{`
+      <style>{`
         .slider::-webkit-slider-thumb {
           appearance: none;
           width: 12px;

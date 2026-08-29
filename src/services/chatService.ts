@@ -36,6 +36,8 @@ export interface ChatMessage {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
+  context_record_id?: string;
+  project_sources?: ProjectSourceReference[];
   created_at?: string;
   message_index?: number;
   // Legacy fields for compatibility
@@ -55,6 +57,17 @@ export interface ChatAttachment {
   asset_id?: string;
   content_url?: string;
   size_bytes?: number;
+}
+
+export interface ProjectSourceReference {
+  asset_id: string;
+  chunk_id: string;
+  ordinal: number;
+  locator: Record<string, unknown>;
+  display_name: string;
+  mime_type?: string;
+  digest?: string;
+  token_count?: number;
 }
 
 export interface Conversation {
@@ -221,7 +234,7 @@ export const chatService = {
       title?: string;
       model_id?: string;
       system_prompt?: string;
-      persona_id?: string;
+      persona_id?: string | null;
       is_archived?: boolean;
       project_id?: string | null;
     }
@@ -280,6 +293,7 @@ export const chatService = {
       prompt_tokens?: number;
       completion_tokens?: number;
       total_tokens?: number;
+      context_record_id?: string;
     }
   ): Promise<ChatMessage | null> {
     if (!isPersistedConversationId(conversationId)) {
@@ -536,30 +550,29 @@ export const chatService = {
   // ============================================
 
   // Create a share link for a conversation
-  async createShareLink(conversationId: string, expiresInDays = 7): Promise<{
+  async createShareLink(
+    conversationId: string,
+    expiresInDays = 7,
+    visibility: 'public' | 'workspace' = 'public',
+  ): Promise<{
     share_token: string;
     share_url: string;
     expires_at: string;
     conversation_title: string;
   } | null> {
-    try {
-      const response = await fetch(`${API_BASE}/conversations/${conversationId}/share`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ expires_in_days: expiresInDays }),
-      });
+    const response = await fetch(`${API_BASE}/conversations/${conversationId}/share`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ expires_in_days: expiresInDays, visibility }),
+    });
 
-      const result = await handleResponse<{ share: {
-        share_token: string;
-        share_url: string;
-        expires_at: string;
-        conversation_title: string;
-      } }>(response);
-      return result.share || null;
-    } catch (error) {
-      console.error('Failed to create share link:', error);
-      return null;
-    }
+    const result = await handleResponse<{ share: {
+      share_token: string;
+      share_url: string;
+      expires_at: string;
+      conversation_title: string;
+    } }>(response);
+    return result.share || null;
   },
 
   // Get shared conversation details (no auth required)
@@ -607,18 +620,13 @@ export const chatService = {
 
   // Revoke all share links for a conversation
   async revokeShareLinks(conversationId: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${API_BASE}/conversations/${conversationId}/share`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
+    const response = await fetch(`${API_BASE}/conversations/${conversationId}/share`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
 
-      await handleResponse<{ success: boolean }>(response);
-      return true;
-    } catch (error) {
-      console.error('Failed to revoke share links:', error);
-      return false;
-    }
+    await handleResponse<{ success: boolean }>(response);
+    return true;
   },
 
   // List all share links for a conversation
@@ -666,7 +674,7 @@ export const chatService = {
       return await libraryService.delete(source, id);
     } catch (error) {
       console.error('Failed to delete library item:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -705,7 +713,7 @@ export const chatService = {
       return result.artifacts || [];
     } catch (error) {
       console.error('Failed to get artifacts:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -718,7 +726,7 @@ export const chatService = {
       return result.artifact || null;
     } catch (error) {
       console.error('Failed to get artifact:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -741,7 +749,7 @@ export const chatService = {
       return result.artifact || null;
     } catch (error) {
       console.error('Failed to create artifact:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -755,7 +763,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete artifact:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -791,6 +799,10 @@ export const chatService = {
     conversation_id?: string;
     project_id?: string;
     next_run_at?: string;
+    schedule_kind?: 'once' | 'recurring';
+    timezone?: string;
+    dtstart_local?: string;
+    rrule?: string;
   }): Promise<any | null> {
     try {
       const response = await fetch(`${API_BASE}/scheduled`, {
@@ -852,8 +864,37 @@ export const chatService = {
       return result.result || null;
     } catch (error) {
       console.error('Failed to run scheduled task:', error);
-      return null;
+      throw error;
     }
+  },
+
+  async previewScheduledTask(data: {
+    schedule_kind: 'once' | 'recurring';
+    timezone: string;
+    dtstart_local: string;
+    rrule?: string;
+    limit?: number;
+  }): Promise<string[]> {
+    const response = await fetch(`${API_BASE}/scheduled/preview`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    const result = await handleResponse<{ occurrences: string[] }>(response);
+    return Array.isArray(result.occurrences) ? result.occurrences : [];
+  },
+
+  async getScheduledRuns(id: string): Promise<any[]> {
+    const response = await fetch(`${API_BASE}/scheduled/${id}/runs`, { headers: getAuthHeaders() });
+    return (await handleResponse<{ runs: any[] }>(response)).runs || [];
+  },
+
+  async retryScheduledRun(id: string, acknowledgeDuplicateCharge = false): Promise<any> {
+    const response = await fetch(`${API_BASE}/scheduled-runs/${id}/retry`, {
+      method: 'POST', headers: getAuthHeaders(),
+      body: JSON.stringify({ acknowledge_duplicate_charge: acknowledgeDuplicateCharge }),
+    });
+    return (await handleResponse<{ run: any }>(response)).run;
   },
 
   // ============================================
@@ -873,7 +914,7 @@ export const chatService = {
       return result.skills || [];
     } catch (error) {
       console.error('Failed to get skills:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -897,7 +938,7 @@ export const chatService = {
       return result.skill || null;
     } catch (error) {
       console.error('Failed to create skill:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -917,7 +958,7 @@ export const chatService = {
       return result.skill || null;
     } catch (error) {
       console.error('Failed to update skill:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -931,7 +972,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete skill:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -1027,7 +1068,6 @@ export const chatService = {
     file_type?: string;
     file_size?: number;
     storage_key?: string;
-    content_text?: string;
   }): Promise<any | null> {
     try {
       const response = await fetch(`${API_BASE}/projects/${projectId}/files`, {
@@ -1057,6 +1097,56 @@ export const chatService = {
     }
   },
 
+  async getProjectAccess(id: string): Promise<any[]> {
+    const response = await fetch(`${API_BASE}/projects/${id}/access`, { headers: getAuthHeaders() });
+    return (await handleResponse<{ grants: any[] }>(response)).grants || [];
+  },
+
+  async grantProjectAccessByEmail(id: string, email: string, relation: 'viewer' | 'reviewer' | 'editor' | 'admin'): Promise<any> {
+    const response = await fetch(`${API_BASE}/projects/${id}/access/user/by-email`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ email, relation }),
+    });
+    return (await handleResponse<{ grant: any }>(response)).grant;
+  },
+
+  async revokeProjectAccess(id: string, subject: string): Promise<void> {
+    const separator = subject.indexOf(':');
+    if (separator < 1) throw new Error('Invalid project access subject.');
+    const subjectType = subject.slice(0, separator);
+    const subjectId = subject.slice(separator + 1);
+    const response = await fetch(`${API_BASE}/projects/${id}/access/${encodeURIComponent(subjectType)}/${encodeURIComponent(subjectId)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    await handleResponse<{ success: boolean }>(response);
+  },
+
+  async getConnectors(): Promise<any[]> {
+    const response = await fetch(`${API_BASE}/customize/connectors`, { headers: getAuthHeaders() });
+    return (await handleResponse<{ connectors: any[] }>(response)).connectors || [];
+  },
+
+  async setConnectorStatus(key: string, status: string): Promise<any> {
+    const response = await fetch(`${API_BASE}/customize/connectors/${encodeURIComponent(key)}`, {
+      method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify({ status }),
+    });
+    return (await handleResponse<{ connector: any }>(response)).connector;
+  },
+
+  async getPlugins(): Promise<any[]> {
+    const response = await fetch(`${API_BASE}/customize/plugins`, { headers: getAuthHeaders() });
+    return (await handleResponse<{ plugins: any[] }>(response)).plugins || [];
+  },
+
+  async setPluginInstalled(listingId: string, installed: boolean): Promise<any> {
+    const response = await fetch(`${API_BASE}/customize/plugins/${encodeURIComponent(listingId)}`, {
+      method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify({ installed }),
+    });
+    return (await handleResponse<{ plugin: any }>(response)).plugin;
+  },
+
   // ============================================
   // MEMORIES API
   // ============================================
@@ -1070,7 +1160,7 @@ export const chatService = {
       return result.memories || [];
     } catch (error) {
       console.error('Failed to get memories:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -1085,7 +1175,7 @@ export const chatService = {
       return result.memory || null;
     } catch (error) {
       console.error('Failed to add memory:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -1099,7 +1189,7 @@ export const chatService = {
       return true;
     } catch (error) {
       console.error('Failed to delete memory:', error);
-      return false;
+      throw error;
     }
   },
 };

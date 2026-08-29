@@ -1,10 +1,18 @@
 # Backend Dockerfile — Hardened for Production
-FROM node:22-alpine
+FROM node:22-alpine3.22@sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8
 
 # Install FFmpeg, ImageMagick, Python3, and yt-dlp for media downloads
 # Also install dumb-init for proper signal handling
 RUN apk add --no-cache ffmpeg imagemagick python3 py3-pip dumb-init \
-    && pip3 install --break-system-packages yt-dlp
+      clamav=1.4.3-r0 poppler-utils=25.04.0-r0 \
+      tesseract-ocr=5.5.0-r2 tesseract-ocr-data-eng=5.5.0-r2 font-dejavu=2.37-r6 \
+    && pip3 install --break-system-packages yt-dlp \
+    && freshclam --datadir=/var/lib/clamav \
+    && printf '%s  %s\n' \
+      '6d4aa01f219e988060fc419f495d07f27e0cdf1a2cccc065971da922c76f7ffb' '/var/lib/clamav/bytecode.cvd' \
+      'bb5864ec0b86e0c5f11658f410b43ade45ce5c38086a21278a1c7671da386f22' '/var/lib/clamav/daily.cvd' \
+      '0b2182d229f46981ec8f535382222f7c9dfdd656b250ad47988b910a8d302365' '/var/lib/clamav/main.cvd' \
+      | sha256sum -c -
 
 # SECURITY: Create non-root user early (before COPY --chown)
 RUN addgroup -g 1001 -S appgroup && \
@@ -32,8 +40,8 @@ RUN rm -rf node_modules && \
 # `process.cwd()/src/server/uploads` → /app/src/server/uploads. The previously
 # deployed image had this baked from an older Dockerfile; recreate it so boot
 # doesn't EACCES on the first mkdir. (Additive parity fix.)
-RUN mkdir -p uploads sam2-uploads storage conversions downloads src/server/uploads && \
-    chown -R appuser:appgroup uploads sam2-uploads storage conversions downloads src/server
+RUN mkdir -p uploads sam2-uploads storage conversions downloads src/server/uploads extractor-jobs && \
+    chown -R appuser:appgroup uploads sam2-uploads storage conversions downloads src/server extractor-jobs
 
 # SECURITY: Switch to non-root user
 USER appuser

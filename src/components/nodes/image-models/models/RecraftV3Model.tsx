@@ -42,7 +42,7 @@ export class RecraftV3Model extends BaseImageModel {
       console.log("Recraft V3 settings:", replicateSettings);
       console.log("Model:", XenoModels.RECRAFT_V3.model);
       console.log("Version:", XenoModels.RECRAFT_V3.version);
-      console.log("API Endpoint:", API_ENDPOINTS.REPLICATE_API);
+      console.log("API Endpoint:", API_ENDPOINTS.XENO_API);
       
       // Call Replicate API
       const result = await generateImage(
@@ -182,4 +182,4 @@ export class RecraftV3Model extends BaseImageModel {
       </>
     );
   }
-} 
+}

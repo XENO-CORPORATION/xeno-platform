@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Download, FileImage, X } from '@/lib/icons';
+import { Copy, Download, File, FileImage, X } from '@/lib/icons';
 import { libraryService, type LibraryAssetRef } from '@/services/libraryService';
 import LibraryAssetImage, { type LibraryAssetImageState } from './LibraryAssetImage';
 
@@ -47,6 +47,8 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
   const [resolvedUrl, setResolvedUrl] = useState('');
   const [imageState, setImageState] = useState<LibraryAssetImageState>('resolving');
   const item = items[index] || items[0];
+  const mimeType = item?.asset?.mimeType || '';
+  const isImage = mimeType.startsWith('image/') || (!mimeType && Boolean(item?.sourceUrl?.startsWith('data:image/')));
   const visibleImageItems = useMemo(() => getVisibleLibraryViewerItems(items, index), [index, items]);
 
   useEffect(() => {
@@ -57,6 +59,23 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
     setResolvedUrl('');
     setImageState(hasPreviewSource(item) ? 'resolving' : 'unavailable');
   }, [item]);
+
+  useEffect(() => {
+    if (!item || isImage || !hasPreviewSource(item)) return undefined;
+    let cancelled = false;
+    setImageState('resolving');
+    const resolve = item.asset?.assetId
+      ? libraryService.createSignedLink(item.asset.assetId)
+      : Promise.resolve(item.sourceUrl || item.asset?.contentUrl || '');
+    void resolve.then((url) => {
+      if (cancelled) return;
+      setResolvedUrl(url);
+      setImageState(url ? 'ready' : 'unavailable');
+    }).catch(() => {
+      if (!cancelled) setImageState('unavailable');
+    });
+    return () => { cancelled = true; };
+  }, [isImage, item]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -132,23 +151,46 @@ export const LibraryAssetViewer: React.FC<LibraryAssetViewerProps> = ({ items, a
       </header>
       <div className="flex min-h-0 flex-1">
         <main className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-5" data-library-preview-state={imageState}>
-          <LibraryAssetImage
-            key={item.id}
-            asset={item.asset}
-            sourceUrl={item.sourceUrl}
-            onResolvedUrl={setResolvedUrl}
-            onStateChange={handleImageStateChange}
-            alt={item.name}
-            className="flex max-h-full max-w-full cursor-grab select-none flex-col items-center justify-center object-contain text-white/45 active:cursor-grabbing"
-            loadingFallback={<span className="text-[12px] text-white/45">Loading preview…</span>}
-            fallback={(
-              <span className="flex max-w-sm flex-col items-center gap-3 text-center">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]"><FileImage size={22} aria-hidden="true" /></span>
-                <span className="text-[14px] font-medium text-white/80">Preview unavailable</span>
-                <span className="text-[12px] leading-relaxed text-white/45">This legacy Library record has no retrievable image attached. The record is preserved, but it cannot be previewed, copied, downloaded, or dragged.</span>
-              </span>
-            )}
-          />
+          {isImage ? (
+            <LibraryAssetImage
+              key={item.id}
+              asset={item.asset}
+              sourceUrl={item.sourceUrl}
+              onResolvedUrl={setResolvedUrl}
+              onStateChange={handleImageStateChange}
+              alt={item.name}
+              className="flex max-h-full max-w-full cursor-grab select-none flex-col items-center justify-center object-contain text-white/45 active:cursor-grabbing"
+              loadingFallback={<span className="text-[12px] text-white/45">Loading preview…</span>}
+              fallback={(
+                <span className="flex max-w-sm flex-col items-center gap-3 text-center">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]"><FileImage size={22} aria-hidden="true" /></span>
+                  <span className="text-[14px] font-medium text-white/80">Preview unavailable</span>
+                  <span className="text-[12px] leading-relaxed text-white/45">This Library image is unavailable or no longer authorized.</span>
+                </span>
+              )}
+            />
+          ) : imageState === 'resolving' ? (
+            <span className="text-[12px] text-white/45">Loading preview…</span>
+          ) : imageState === 'ready' && resolvedUrl ? (
+            mimeType.startsWith('video/') ? (
+              <video src={resolvedUrl} controls className="max-h-full max-w-full" aria-label={item.name} />
+            ) : mimeType.startsWith('audio/') ? (
+              <audio src={resolvedUrl} controls className="w-full max-w-xl" aria-label={item.name} />
+            ) : (
+              <iframe
+                src={resolvedUrl}
+                title={item.name}
+                sandbox={mimeType === 'text/html' ? '' : undefined}
+                className="h-full w-full rounded-lg border border-white/10 bg-white"
+              />
+            )
+          ) : (
+            <span className="flex max-w-sm flex-col items-center gap-3 text-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]"><File size={22} aria-hidden="true" /></span>
+              <span className="text-[14px] font-medium text-white/80">Preview unavailable</span>
+              <span className="text-[12px] leading-relaxed text-white/45">This Library file is unavailable or no longer authorized.</span>
+            </span>
+          )}
         </main>
         {visibleImageItems.length > 1 && (
           <aside

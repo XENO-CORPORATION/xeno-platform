@@ -1514,8 +1514,8 @@ const YouTubeChannelManager: React.FC = () => {
                     <div className="p-3">
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
                         {dashboard?.geography?.countries?.slice(0, 6).map((c, i) => (
-                          <div key={c.country} className="flex items-center gap-2">
-                            <span className="text-[10px] text-white/60 flex-1 truncate">{c.country}</span>
+                          <div key={c.country_code} className="flex items-center gap-2">
+                            <span className="text-[10px] text-white/60 flex-1 truncate">{c.country_name}</span>
                             <span className="text-[10px] font-medium text-white">{c.percentage.toFixed(1)}%</span>
                           </div>
                         )) || <div className="col-span-2 text-center py-2 text-white/20 text-[10px]">No data</div>}

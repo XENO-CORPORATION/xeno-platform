@@ -28,6 +28,7 @@
  * imports stop being `any`. That is an owner's call, not a sweep.
  */
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -52,7 +53,7 @@ const ROOT = path.join(HERE, '..');
  *   as a JSX component". Pinning `react` / `react-dom` in `paths` is the type-level twin of the
  *   `dedupe` that `vite.config.ts` already does at runtime, and it collapses all 244.
  */
-const BASELINE = 409;
+const BASELINE = 0;
 const CHAT_BASELINE = 0;
 
 /* The compiler's own entry point, run by node — not `npx tsc` through a shell. `npx` is exactly how
@@ -60,6 +61,10 @@ const CHAT_BASELINE = 0;
    package of that name, printed a banner, and exited 0. Naming the file removes the guess, and drops
    the `shell: true` that came with it. */
 const TSC = path.join(ROOT, 'node_modules/typescript/bin/tsc');
+if (!existsSync(TSC)) {
+  console.error('check-types: the real TypeScript compiler is not installed.');
+  process.exit(1);
+}
 let out = '';
 try {
   out = execFileSync(process.execPath, [TSC, '--noEmit', '-p', 'tsconfig.json'], {
@@ -74,12 +79,6 @@ try {
 const lines = out.split('\n').filter((l) => l.includes('error TS'));
 const total = lines.length;
 const chat = lines.filter((l) => l.includes('playground/Chat')).length;
-
-if (!total && !/\n/.test(out)) {
-  console.error('check-types: tsc produced no output at all. Is `typescript` installed?');
-  console.error('A `npx tsc` that prints a banner and exits 0 is the JOKE package, not the compiler.');
-  process.exit(1);
-}
 
 const byFolder = new Map();
 for (const l of lines) {

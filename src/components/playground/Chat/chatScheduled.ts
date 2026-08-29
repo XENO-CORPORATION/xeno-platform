@@ -25,6 +25,20 @@ export type ChatScheduledTask = {
   projectId?: string | null;
 };
 
+export type ChatScheduledRun = {
+  id: string;
+  scheduledFor: number;
+  status: string;
+  attemptCount: number;
+  modelId: string | null;
+  conversationId: string | null;
+  providerRequestId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: number | null;
+  completedAt: number | null;
+};
+
 export type ListScheduledInput = {
   query?: string;
   status?: ScheduledStatus | 'all';
@@ -39,6 +53,10 @@ export type CreateScheduledInput = {
   cadenceLabel?: string;
   projectId?: string;
   nextRunAt?: number;
+  scheduleKind?: 'once' | 'recurring';
+  timezone?: string;
+  dtstartLocal?: string;
+  rrule?: string;
   modelId?: string;
 };
 
@@ -98,6 +116,10 @@ export const createScheduledTask = async (
     cadence_label: input.cadenceLabel ?? 'Daily · 09:00',
     project_id: input.projectId,
     next_run_at: input.nextRunAt ? new Date(input.nextRunAt).toISOString() : undefined,
+    schedule_kind: input.scheduleKind,
+    timezone: input.timezone,
+    dtstart_local: input.dtstartLocal,
+    rrule: input.rrule,
     model_id: input.modelId,
   });
   if (!serverTask) throw new Error('The scheduled task was not created.');
@@ -117,6 +139,40 @@ export const deleteScheduledTask = async (id: string): Promise<void> => {
   requireScheduledAuth();
   const deleted = await chatService.deleteScheduledTask(id);
   if (!deleted) throw new Error('The scheduled task was not deleted.');
+};
+
+export const previewScheduledOccurrences = async (input: {
+  scheduleKind: 'once' | 'recurring';
+  timezone: string;
+  dtstartLocal: string;
+  rrule?: string;
+}): Promise<string[]> => {
+  requireScheduledAuth();
+  return chatService.previewScheduledTask({
+    schedule_kind: input.scheduleKind,
+    timezone: input.timezone,
+    dtstart_local: input.dtstartLocal,
+    rrule: input.rrule,
+    limit: 5,
+  });
+};
+
+export const listScheduledRuns = async (taskId: string): Promise<ChatScheduledRun[]> => {
+  requireScheduledAuth();
+  const rows = await chatService.getScheduledRuns(taskId);
+  return rows.map((row) => ({
+    id: row.id,
+    scheduledFor: new Date(row.scheduled_for).getTime(),
+    status: row.status,
+    attemptCount: Number(row.attempt_count || 0),
+    modelId: row.model_id ?? null,
+    conversationId: row.conversation_id ?? null,
+    providerRequestId: row.provider_request_id ?? null,
+    errorCode: row.error_code ?? null,
+    errorMessage: row.error_message ?? null,
+    startedAt: row.started_at ? new Date(row.started_at).getTime() : null,
+    completedAt: row.completed_at ? new Date(row.completed_at).getTime() : null,
+  }));
 };
 
 export const SCHEDULED_STATUS_LABEL: Record<ScheduledStatus, string> = {

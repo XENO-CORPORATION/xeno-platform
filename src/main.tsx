@@ -20,6 +20,13 @@ import { installActivationInterceptor } from './lib/activationInterceptor';
 // Installed before the first render so no early request can slip past it.
 installActivationInterceptor();
 
+// Development fixtures are an explicit bootstrap-only adapter. Vite erases this
+// branch from production, and the production build verifier rejects any emitted
+// fixture signature so authenticated code can never silently route to mock data.
+if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_CHAT_FIXTURES === 'true') {
+  void import('./components/playground/Chat/chatMock.ts');
+}
+
 const STRICT_MODE_ENABLED = import.meta.env.VITE_ENABLE_STRICT_MODE === 'true';
 
 /**

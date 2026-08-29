@@ -629,7 +629,7 @@ const ChatGlobalSettingsPage: React.FC<ChatGlobalSettingsPageProps> = ({
                         className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <p className="text-[12.5px] text-[var(--chat-muted)]">
-                          Link external services (mock connect/disconnect).
+                          Link qualified external services.
                         </p>
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="flex gap-0.5">

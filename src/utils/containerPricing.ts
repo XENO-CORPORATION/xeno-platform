@@ -367,7 +367,7 @@ export function formatPricingBreakdown(breakdown: PricingBreakdown): {
   summary: string;
   details: Array<{ label: string; value: string; included?: boolean }>;
 } {
-  const details = [
+  const details: Array<{ label: string; value: string; included?: boolean }> = [
     { label: 'Storage', value: formatPrice(breakdown.breakdown.storage) },
     { label: 'CPU', value: formatPrice(breakdown.breakdown.cpu) },
     { label: 'Memory', value: formatPrice(breakdown.breakdown.memory) },
