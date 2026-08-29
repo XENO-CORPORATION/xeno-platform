@@ -6,6 +6,7 @@ import { buildUntrustedProjectDataMessage, inertProviderMessageText } from '../s
 import { requireResourceRelation, userPrincipal, withTransaction } from '../services/chatProjectAuthority.js';
 import { writeTuples } from '../utils/authzReBAC.js';
 import { meterPremiumChat } from '../utils/inferenceMeter.js';
+import { mintScheduledRunToken, scheduledRunTokenConfigured } from '../services/chatScheduledRunToken.js';
 
 export function computeNextRun(cadence, fromDate = new Date()) {
   if (cadence === 'once') return new Date(fromDate);
@@ -24,6 +25,8 @@ const SAFE_SCHEDULE_ERRORS = new Map([
   ['INSUFFICIENT_CREDITS', 'The account has insufficient credits.'],
   ['ACCOUNT_FROZEN', 'The account is currently unavailable.'],
   ['gateway_unavailable', 'The inference service is unavailable.'],
+  ['scheduled_run_identity_unavailable', 'Scheduled execution identity is unavailable.'],
+  ['scheduled_run_identity_invalid', 'Scheduled execution identity is invalid.'],
   ['ambiguous_gateway_outcome', 'The provider outcome is unknown and requires reconciliation.'],
   ['empty_gateway_result', 'The inference service returned an empty response.'],
 ]);
@@ -177,13 +180,13 @@ export async function claimScheduledRun(pool, workerId, leaseSeconds = 120) {
        SET status='failed', error_code='max_attempts_exhausted', error_message='Maximum run attempts exhausted',
            completed_at=NOW(), lease_owner=NULL, lease_expires_at=NULL, updated_at=NOW()
        FROM chat_scheduled_tasks t
-       WHERE r.task_id=t.id AND r.attempt_count >= t.max_attempts
+        WHERE r.task_id=t.id AND r.attempt_count >= t.max_attempts AND r.manual_retry_authorized=FALSE
          AND (r.status='pending' OR (r.status='leased' AND r.lease_expires_at < NOW()))`,
     );
     const { rows } = await tx.query(
       `SELECT r.id FROM chat_scheduled_runs r
        JOIN chat_scheduled_tasks t ON t.id=r.task_id
-       WHERE r.attempt_count < t.max_attempts AND (
+       WHERE (r.attempt_count < t.max_attempts OR r.manual_retry_authorized=TRUE) AND (
          r.status = 'pending'
          OR (r.status = 'leased' AND r.lease_expires_at < NOW())
          OR (r.status = 'running' AND r.lease_expires_at < NOW() AND r.result_staging IS NOT NULL)
@@ -193,7 +196,8 @@ export async function claimScheduledRun(pool, workerId, leaseSeconds = 120) {
     if (!rows[0]) return null;
     return (await tx.query(
       `UPDATE chat_scheduled_runs SET status = 'leased', lease_owner = $2,
-         lease_expires_at = NOW() + ($3 * INTERVAL '1 second'), attempt_count = attempt_count + 1,
+          lease_expires_at = NOW() + ($3 * INTERVAL '1 second'), attempt_count = attempt_count + 1,
+          manual_retry_authorized = FALSE,
          updated_at = NOW() WHERE id = $1 RETURNING *`,
       [rows[0].id, workerId, leaseSeconds],
     )).rows[0];
@@ -328,6 +332,7 @@ export async function executeScheduledRun(pool, run) {
   let staging = run.result_staging;
   if (!staging) {
     if (!xenoApiConfigured()) throw Object.assign(new Error('XENO inference gateway is not configured'), { code: 'gateway_unavailable' });
+    if (!scheduledRunTokenConfigured()) throw Object.assign(new Error('Scheduled run identity is unavailable'), { code: 'scheduled_run_identity_unavailable' });
     const messages = [];
     if (context?.instructions) messages.push({ role: 'system', content: context.instructions });
     if (context?.contentBlocks?.length) messages.push(buildUntrustedProjectDataMessage(context.contentBlocks));
@@ -346,6 +351,7 @@ export async function executeScheduledRun(pool, run) {
             messages,
             max_tokens: 4096,
             headers: {
+              Authorization: `Bearer ${mintScheduledRunToken({ runId: run.id, userId: task.run_as_user_id })}`,
               'x-xeno-run-key': run.id,
               ...(run.gateway_retry_authorized ? { 'x-xeno-run-retry': 'acknowledged' } : {}),
             },
