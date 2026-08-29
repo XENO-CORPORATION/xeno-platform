@@ -65,9 +65,10 @@ backup_database() {
   local output="$1"
   docker exec xenostudio-postgres pg_dump -U postgres -d xenostudio --format=custom --no-owner --no-acl > "$output"
   test -s "$output"
-  docker cp "$output" xenostudio-postgres:/tmp/xeno-chat-cutover-verify.dump
-  docker exec xenostudio-postgres pg_restore --list /tmp/xeno-chat-cutover-verify.dump > "$output.list"
-  docker exec xenostudio-postgres rm -f /tmp/xeno-chat-cutover-verify.dump
+  # Validate the archive without copying a second full dump into the database
+  # container's small writable overlay. pg_restore accepts a custom archive on
+  # stdin, so the retained host backup remains the only stored copy here.
+  docker exec -i xenostudio-postgres pg_restore --list - < "$output" > "$output.list"
   test -s "$output.list"
   sha256sum "$output" > "$output.sha256"
 }
