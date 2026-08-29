@@ -27,6 +27,10 @@ test('production-shaped restore precedes quiesced production cutover', () => {
   const remote = read('scripts/remote-chat-database-cutover.sh');
   assert.match(remote, /docker exec -i xenostudio-postgres pg_restore --list < "\$output"/);
   assert.doesNotMatch(remote, /docker cp "\$output" xenostudio-postgres:/);
+  assert.match(remote, /docker exec -i "\$QUAL_CONTAINER" pg_restore[\s\S]*< "\$BASELINE_BACKUP"/);
+  assert.match(remote, /docker exec -i "\$rollback_container" pg_restore[\s\S]*< "\$backup"/);
+  assert.doesNotMatch(remote, /docker cp "\$BASELINE_BACKUP"/);
+  assert.doesNotMatch(remote, /docker cp "\$backup"/);
   assert.match(remote, /QUAL_VOLUME="xeno-chat-pgvector-qual-\$SHA-\$STAMP"/);
   assert.match(remote, /QUAL_CONTAINER="xeno-chat-pgvector-qual-\$SHORT-\$STAMP"/);
   const restore = remote.indexOf('production-shaped restore qualification passed');

@@ -109,8 +109,7 @@ docker run -d --name "$QUAL_CONTAINER" --network "$QUAL_NETWORK" --network-alias
   --env POSTGRES_DB=xenostudio --env POSTGRES_USER=postgres --env POSTGRES_HOST_AUTH_METHOD=trust \
   "$PGVECTOR_IMAGE" >/dev/null
 wait_postgres "$QUAL_CONTAINER"
-docker cp "$BASELINE_BACKUP" "$QUAL_CONTAINER:/tmp/production.dump"
-docker exec "$QUAL_CONTAINER" pg_restore -U postgres -d xenostudio --no-owner --no-acl /tmp/production.dump
+docker exec -i "$QUAL_CONTAINER" pg_restore -U postgres -d xenostudio --no-owner --no-acl < "$BASELINE_BACKUP"
 run_migrations "$QUAL_NETWORK" 'postgresql://postgres@postgres:5432/xenostudio'
 docker exec "$QUAL_CONTAINER" psql -U postgres -d xenostudio -Atc \
   "SELECT extversion FROM pg_extension WHERE extname='vector';" | grep -qx '0.8.6'
@@ -135,8 +134,7 @@ restore_quiesced_backup() {
     --env POSTGRES_DB=xenostudio --env POSTGRES_USER=postgres --env POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
     "$PLAIN_IMAGE" >/dev/null
   wait_postgres "$rollback_container"
-  docker cp "$backup" "$rollback_container:/tmp/quiesced.dump"
-  docker exec "$rollback_container" pg_restore -U postgres -d xenostudio --clean --if-exists --no-owner --no-acl /tmp/quiesced.dump
+  docker exec -i "$rollback_container" pg_restore -U postgres -d xenostudio --clean --if-exists --no-owner --no-acl < "$backup"
   docker compose up -d --no-deps backend
   BACKEND_STOPPED=0
   log "emergency restore is serving from retained rollback volume=$rollback_volume; compose DB is intentionally not reconciled"
