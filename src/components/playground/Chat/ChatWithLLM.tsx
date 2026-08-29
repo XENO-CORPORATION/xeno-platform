@@ -6488,13 +6488,23 @@ interface QueueState {
     // *** DIAGNOSTIC LOGGING: Track task value before payload construction ***
     console.log(`>>> [FETCHAIRESPONSE INTERNAL] taskArg value being used for payload:`, taskArg);
     
+    // A project conversation becomes a normal `/c/:conversationId` route when it is opened.
+    // `activeProjectId` controls the project workspace overlay, so dismissing that overlay must
+    // not erase the persisted conversation's project authority/context. Resolve the generation
+    // pair from the canonical conversation record first; use the open workspace only for a new
+    // project draft that has not received its conversation row yet.
+    const generationConversationId = activeConversationIdRef.current ?? activeConversationId;
+    const generationProjectId = activeProjectId
+        || conversationHistoryRef.current.find((conversation) => conversation.id === generationConversationId)?.projectId
+        || undefined;
+
     const payload = {
         messages: resolvedApiMessages,
         systemPrompt: finalSystemPrompt || undefined,
         selectedModelId: actualModelIdForApi,
         effectiveReasoningState: effectiveReasoningState,
-        conversationId: isPersistedConversationId(activeConversationId) ? activeConversationId : undefined,
-        projectId: activeProjectId || undefined,
+        conversationId: isPersistedConversationId(generationConversationId) ? generationConversationId : undefined,
+        projectId: generationProjectId,
         useSearchTool: undefined as (boolean | undefined),
         task: taskArg // Ensure taskArg is used here
     };
@@ -8047,7 +8057,12 @@ Please provide a well-structured response using this search context and any mult
             if (exists) {
               return prevHistory.map(convo =>
                 convo.id === conversationId
-                  ? { ...convo, messages: localMessages, isUnread: false }
+                  ? {
+                      ...convo,
+                      messages: localMessages,
+                      isUnread: false,
+                      projectId: fullConversation.project_id ?? convo.projectId ?? null,
+                    }
                   : convo
               );
             } else {
