@@ -37,6 +37,16 @@ test('every released interactive surface in the retained inventory has a checked
   for (const clientId of released) assert.ok(seeded.has(clientId), `missing registration migration for ${clientId}`);
 });
 
+test('XENO Post is registered against its reachable API callback', () => {
+  const client = FIRST_PARTY_CLIENTS.find(({ id }) => id === 'xeno-post');
+  assert.deepEqual(client, {
+    id: 'xeno-post',
+    name: 'XENO Post',
+    loopback: false,
+    redirects: ['https://post.xenostudio.ai/api/v1/platform/xeno/callback'],
+  });
+});
+
 test('only the web payout surface can request marketplace payout authority', () => {
   const holders = Object.entries(CLIENT_AUTHORITY)
     .filter(([, scopes]) => scopes.includes('marketplace:payout'))
