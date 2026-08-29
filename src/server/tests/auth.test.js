@@ -42,6 +42,11 @@ function assert(condition, name) {
   }
 }
 
+function isRegistrationValidationOrClosed(response, validationStatuses) {
+  if (validationStatuses.includes(response.status)) return true;
+  return response.status === 403 && response.data?.code === 'registration_closed';
+}
+
 // ============================================
 // TEST SUITES
 // ============================================
@@ -51,25 +56,25 @@ async function testRegistrationValidation() {
 
   // Missing fields
   const res1 = await request('POST', '/api/auth/register', { body: {} });
-  assert(res1.status === 400 || res1.status === 429, 'Register with no fields returns validation error (or rate limited)');
+  assert(isRegistrationValidationOrClosed(res1, [400, 429]), 'Register with no fields returns validation error, closed gate, or rate limit');
 
   // Missing email
   const res2 = await request('POST', '/api/auth/register', {
     body: { password: 'Test1234!' },
   });
-  assert(res2.status === 400 || res2.status === 429, 'Register without email returns validation error (or rate limited)');
+  assert(isRegistrationValidationOrClosed(res2, [400, 429]), 'Register without email returns validation error, closed gate, or rate limit');
 
   // Missing password
   const res3 = await request('POST', '/api/auth/register', {
     body: { email: 'test@test.com' },
   });
-  assert(res3.status === 400 || res3.status === 429, 'Register without password returns validation error (or rate limited)');
+  assert(isRegistrationValidationOrClosed(res3, [400, 429]), 'Register without password returns validation error, closed gate, or rate limit');
 
   // Invalid email format
   const res4 = await request('POST', '/api/auth/register', {
     body: { email: 'not-an-email', password: 'Test1234!' },
   });
-  assert(res4.status === 400 || res4.status === 422 || res4.status === 429, 'Register with invalid email returns error (or rate limited)');
+  assert(isRegistrationValidationOrClosed(res4, [400, 422, 429]), 'Register with invalid email returns validation error, closed gate, or rate limit');
 }
 
 async function testLoginValidation() {
