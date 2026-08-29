@@ -52,7 +52,7 @@ export const FIRST_PARTY_CLIENTS = [
   // (ON CONFLICT DO UPDATE below), so a host omitted here is a host that stops
   // working the moment this migration re-runs.
   { id: 'xeno-web', name: 'XENO Web', loopback: false, redirects: siteUrlVariants('/auth/callback') },
-  { id: 'xeno-post', name: 'XENO Post', loopback: false, redirects: ['https://post.xenostudio.ai/auth/callback'] },
+  { id: 'xeno-post', name: 'XENO Post', loopback: false, redirects: ['https://post.xenostudio.ai/api/v1/platform/xeno/callback'] },
   // XENO Mail — web relying party; mail-core (backend) handles the code exchange.
   { id: 'xeno-mail', name: 'XENO Mail', loopback: false, redirects: ['https://mail-api.xenostudio.ai/api/auth/xeno/callback'] },
   // Mobile (registered ahead of build; app-scheme redirect)

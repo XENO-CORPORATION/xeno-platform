@@ -30,7 +30,7 @@ async function main() {
   const userId = u.rows[0].id;
   const other = await pool.query("INSERT INTO users (email, username, display_name) VALUES ('other@b.co','other','Other') RETURNING id");
   const otherUserId = other.rows[0].id;
-  await pool.query(`INSERT INTO oauth_clients (client_id, name, redirect_uris, surface) VALUES ('xeno-post','XENO Post', ARRAY['https://post.xenostudio.ai/auth/callback'], 'xeno_post') ON CONFLICT DO NOTHING`);
+  await pool.query(`INSERT INTO oauth_clients (client_id, name, redirect_uris, surface) VALUES ('xeno-post','XENO Post', ARRAY['https://post.xenostudio.ai/api/v1/platform/xeno/callback'], 'xeno_post') ON CONFLICT DO NOTHING`);
 
   // 1. signing key (ES256 default) + JWKS
   const key = await getSigningKey(pool);
@@ -40,8 +40,8 @@ async function main() {
 
   // 2. auth-code + PKCE → tokens (signed ES256, verified by kid)
   const { v, c } = pkce();
-  const code = await createAuthorizationCode(pool, { clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback', scope: 'openid email ledger', codeChallenge: c });
-  const tokens = await exchangeAuthorizationCode(pool, { code, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: v });
+  const code = await createAuthorizationCode(pool, { clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', scope: 'openid email ledger', codeChallenge: c });
+  const tokens = await exchangeAuthorizationCode(pool, { code, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', codeVerifier: v });
   ok(tokens.access_token && tokens.id_token && tokens.refresh_token, 'code exchange returns access+id+refresh');
   const pub = crypto.createPublicKey(key.privatePem);
   const at = jwt.verify(tokens.access_token, pub, { algorithms: ['ES256'] });
@@ -52,26 +52,26 @@ async function main() {
 
   // 3. replay the code → rejected
   let reused = null;
-  try { await exchangeAuthorizationCode(pool, { code, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: v }); } catch (e) { reused = e.oauthError; }
+  try { await exchangeAuthorizationCode(pool, { code, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', codeVerifier: v }); } catch (e) { reused = e.oauthError; }
   ok(reused === 'invalid_grant', 'consumed code cannot be reused');
 
   // 3b. Concurrent code exchange is atomic: exactly one request can consume it.
   const codeRacePkce = pkce();
   const codeRace = await createAuthorizationCode(pool, {
-    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback',
     scope: 'openid ledger', codeChallenge: codeRacePkce.c,
   });
   const codeRaceResults = await Promise.allSettled([
-    exchangeAuthorizationCode(pool, { code: codeRace, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: codeRacePkce.v }),
-    exchangeAuthorizationCode(pool, { code: codeRace, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: codeRacePkce.v }),
+    exchangeAuthorizationCode(pool, { code: codeRace, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', codeVerifier: codeRacePkce.v }),
+    exchangeAuthorizationCode(pool, { code: codeRace, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', codeVerifier: codeRacePkce.v }),
   ]);
   ok(codeRaceResults.filter((x) => x.status === 'fulfilled').length === 1, 'concurrent code exchange mints exactly one token set');
 
   // 4. PKCE failure
   const { c: c2 } = pkce();
-  const code2 = await createAuthorizationCode(pool, { clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback', scope: 'openid', codeChallenge: c2 });
+  const code2 = await createAuthorizationCode(pool, { clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', scope: 'openid', codeChallenge: c2 });
   let pkceErr = null;
-  try { await exchangeAuthorizationCode(pool, { code: code2, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: 'wrong-verifier' }); } catch (e) { pkceErr = e.message; }
+  try { await exchangeAuthorizationCode(pool, { code: code2, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', codeVerifier: 'wrong-verifier' }); } catch (e) { pkceErr = e.message; }
   ok(/PKCE/.test(pkceErr || ''), 'wrong PKCE verifier rejected');
 
   // 4b. Step-up transactions carry the verified authentication time and reject
@@ -79,19 +79,19 @@ async function main() {
   const step = pkce();
   const steppedAt = new Date(Date.now() - 10_000);
   const stepCode = await createAuthorizationCode(pool, {
-    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback',
     scope: 'openid', codeChallenge: step.c, authTime: steppedAt,
     prompt: 'login', maxAge: 60, acr: 'urn:xeno:acr:fresh',
   });
   const stepTokens = await exchangeAuthorizationCode(pool, {
-    code: stepCode, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: step.v,
+    code: stepCode, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', codeVerifier: step.v,
   });
   const steppedId = jwt.verify(stepTokens.id_token, pub, { algorithms: ['ES256'] });
   ok(Math.abs(steppedId.auth_time - Math.floor(steppedAt.getTime() / 1000)) <= 1, 'step-up auth_time is preserved in issued tokens');
   let staleStep = null;
   try {
     await createAuthorizationCode(pool, {
-      clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+      clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback',
       scope: 'openid', codeChallenge: step.c, authTime: new Date(Date.now() - 10 * 60_000),
       prompt: 'login', maxAge: 60, acr: 'urn:xeno:acr:fresh',
     });
@@ -114,11 +114,11 @@ async function main() {
   // the racing reuse then revokes the family/session, so that successor is dead.
   const refreshRacePkce = pkce();
   const refreshRaceCode = await createAuthorizationCode(pool, {
-    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback',
     scope: 'openid ledger', codeChallenge: refreshRacePkce.c,
   });
   const refreshRaceSeed = await exchangeAuthorizationCode(pool, {
-    code: refreshRaceCode, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: refreshRacePkce.v,
+    code: refreshRaceCode, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', codeVerifier: refreshRacePkce.v,
   });
   const refreshRaceResults = await Promise.allSettled([
     refreshTokenGrant(pool, { refreshToken: refreshRaceSeed.refresh_token, clientId: 'xeno-post' }),
@@ -171,11 +171,11 @@ async function main() {
   // 9. Session logout derives ownership from the authenticated subject.
   const ownedPkce = pkce();
   const ownedCode = await createAuthorizationCode(pool, {
-    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+    clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback',
     scope: 'openid ledger', codeChallenge: ownedPkce.c,
   });
   const owned = await exchangeAuthorizationCode(pool, {
-    code: ownedCode, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: ownedPkce.v,
+    code: ownedCode, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', codeVerifier: ownedPkce.v,
   });
   const ownedClaims = jwt.decode(owned.access_token);
   let foreignEnd = null;
@@ -190,11 +190,11 @@ async function main() {
   async function issueSession() {
     const p = pkce();
     const c = await createAuthorizationCode(pool, {
-      clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/auth/callback',
+      clientId: 'xeno-post', userId, redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback',
       scope: 'openid ledger', codeChallenge: p.c,
     });
     return exchangeAuthorizationCode(pool, {
-      code: c, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/auth/callback', codeVerifier: p.v,
+      code: c, clientId: 'xeno-post', redirectUri: 'https://post.xenostudio.ai/api/v1/platform/xeno/callback', codeVerifier: p.v,
     });
   }
   const globalA = await issueSession();
