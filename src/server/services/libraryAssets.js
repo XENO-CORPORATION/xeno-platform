@@ -11,7 +11,7 @@ const GRANT_SIGNATURE_VERSION = 'v2';
 const DEFAULT_LINK_TTL_SECONDS = 24 * 60 * 60;
 const MAX_LINK_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-function sniffMime(buffer, declaredMime) {
+export function sniffMime(buffer, declaredMime) {
   if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
   if (buffer.length >= 6 && ['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'))) return 'image/gif';
