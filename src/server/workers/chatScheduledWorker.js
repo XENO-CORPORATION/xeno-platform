@@ -345,6 +345,7 @@ export async function executeScheduledRun(pool, run) {
         estInputTokens: Math.ceil(messages.reduce((sum, message) => sum + String(message.content || '').length, 0) / 4),
         maxTokens: 4096,
         surface: 'scheduled_chat',
+        reopenVoidedHold: true,
         run: () => Promise.race([
           xenoChatCompletion({
             model: task.model_id,

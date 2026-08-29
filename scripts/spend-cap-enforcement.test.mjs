@@ -35,13 +35,13 @@ const { holdV2 } = await import('../src/server/utils/creditLedgerV2.js');
  * @param {Array}  o.caps                 [{window_sec, limit_micro}]
  * @param {bigint|number} o.spentInWindow settled debits inside the cap window
  */
-function fakePool({ balance = 1_000_000_000n, held = 0n, caps = [], spentInWindow = 0n } = {}) {
+function fakePool({ balance = 1_000_000_000n, held = 0n, caps = [], spentInWindow = 0n, existingHold = null } = {}) {
   const seen = [];
   const client = {
     query: async (sql, params = []) => {
       seen.push(sql.replace(/\s+/g, ' ').trim().slice(0, 60));
       if (/^(BEGIN|COMMIT|ROLLBACK)/i.test(sql.trim())) return { rows: [] };
-      if (/FROM credit_holds WHERE user_id = \$1 AND hold_id/i.test(sql)) return { rows: [] };
+      if (/FROM credit_holds WHERE user_id = \$1 AND hold_id/i.test(sql)) return { rows: existingHold ? [existingHold] : [] };
       if (/SELECT id, balance, is_frozen FROM credit_accounts/i.test(sql)) {
         return { rows: [{ id: 'acct-1', balance: String(balance), is_frozen: false }] };
       }
@@ -50,6 +50,9 @@ function fakePool({ balance = 1_000_000_000n, held = 0n, caps = [], spentInWindo
       if (/FROM credit_transactions/i.test(sql)) return { rows: [{ s: String(spentInWindow) }] };
       if (/INSERT INTO credit_holds/i.test(sql)) {
         return { rows: [{ id: 'h1', hold_id: params[2], amount_micro: params[5], state: 'held', settled_micro: '0' }] };
+      }
+      if (/UPDATE credit_holds[\s\S]*SET state='held'/i.test(sql)) {
+        return { rows: [{ ...existingHold, amount_micro: params[1], state: 'held', settled_micro: '0', expires_at: params[2] }] };
       }
       return { rows: [] };
     },
@@ -82,6 +85,17 @@ test('a hold WITHIN the cap succeeds', async () => {
   const pool = fakePool({ caps: [{ window_sec: 86400, limit_micro: '100000000' }] }); // 100 credits
   const r = await holdV2(pool, 'u1', REQ); // asks for 60
   assert.ok(r, 'a hold inside the cap must go through');
+});
+
+test('an explicitly retryable operation reopens a voided hold after rechecking balance and caps', async () => {
+  const pool = fakePool({
+    caps: [{ window_sec: 86400, limit_micro: '100000000' }],
+    existingHold: { id: 'h1', hold_id: REQ.holdId, amount_micro: String(REQ.amountMicro), state: 'voided', settled_micro: '0' },
+  });
+  const result = await holdV2(pool, 'u1', { ...REQ, reopenVoided: true });
+  assert.equal(result.state, 'held');
+  assert.ok(pool.seen.some((sql) => /UPDATE credit_holds SET state='held'/i.test(sql)));
+  assert.ok(pool.seen.some((sql) => /FROM spend_caps/i.test(sql)), 'reopening must not bypass spend caps');
 });
 
 // ── Reserved money counts as spent ──────────────────────────────────────────
