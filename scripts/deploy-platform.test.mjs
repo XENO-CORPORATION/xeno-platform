@@ -7,6 +7,7 @@ const remote = readFileSync(new URL('./remote-deploy.sh', import.meta.url), 'utf
 const dockerignore = readFileSync(new URL('../.dockerignore', import.meta.url), 'utf8');
 const compose = readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
 const backendDockerfile = readFileSync(new URL('../Dockerfile.backend', import.meta.url), 'utf8');
+const backendDockerignore = readFileSync(new URL('../Dockerfile.backend.dockerignore', import.meta.url), 'utf8');
 const frontendDockerfile = readFileSync(new URL('../Dockerfile.frontend', import.meta.url), 'utf8');
 
 test('backend deploy ships the Docker context policy with every source archive', () => {
@@ -19,6 +20,11 @@ test('backend deploy ships the Docker context policy with every source archive',
 
 test('worker deploy ships backend inputs and gates the semantic component without coupling Docker health to it', () => {
   assert.match(deploy, /['"]chat-workers['"]:\s*\[[^\]]*['"]Dockerfile\.backend['"]/);
+  assert.match(deploy, /['"]chat-workers['"]:\s*\[[^\]]*['"]Dockerfile\.backend\.dockerignore['"]/);
+  assert.match(deploy, /backend:\s*\[[^\]]*['"]Dockerfile\.backend\.dockerignore['"]/);
+  assert.match(backendDockerignore, /^src\/server\/uploads$/m);
+  assert.match(backendDockerignore, /^src\/server\/node_modules$/m);
+  assert.match(backendDockerignore, /^src\/server\/extractor-jobs$/m);
   assert.match(deploy, /internal \/ready\/semantic/);
   assert.match(remote, /chat-workers internal \/ready\/semantic/);
   assert.match(remote, /worker_path="\/ready\/semantic"/);

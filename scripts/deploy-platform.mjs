@@ -59,8 +59,8 @@ const REMOTE_TMP = '/tmp/xeno-deploy';
 // frontend: Dockerfile.frontend's builder copies configs + public/ + src/ + packages/ + scripts/.
 //   We ship a superset of exactly those, existence-filtered against HEAD.
 const PATHS = {
-  backend: ['src/server', 'Dockerfile.backend', '.dockerignore', 'docker-compose.yml'],
-  'chat-workers': ['src/server', 'Dockerfile.backend', '.dockerignore', 'docker-compose.yml'],
+  backend: ['src/server', 'Dockerfile.backend', 'Dockerfile.backend.dockerignore', '.dockerignore', 'docker-compose.yml'],
+  'chat-workers': ['src/server', 'Dockerfile.backend', 'Dockerfile.backend.dockerignore', '.dockerignore', 'docker-compose.yml'],
   frontend: [
     'src', 'packages', 'public', 'scripts', 'index.html', 'Dockerfile.frontend', '.dockerignore', 'nginx',
     'package.json', 'package-lock.json',
