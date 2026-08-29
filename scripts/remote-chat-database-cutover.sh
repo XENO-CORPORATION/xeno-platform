@@ -68,7 +68,7 @@ backup_database() {
   # Validate the archive without copying a second full dump into the database
   # container's small writable overlay. pg_restore accepts a custom archive on
   # stdin, so the retained host backup remains the only stored copy here.
-  docker exec -i xenostudio-postgres pg_restore --list - < "$output" > "$output.list"
+  docker exec -i xenostudio-postgres pg_restore --list < "$output" > "$output.list"
   test -s "$output.list"
   sha256sum "$output" > "$output.sha256"
 }
