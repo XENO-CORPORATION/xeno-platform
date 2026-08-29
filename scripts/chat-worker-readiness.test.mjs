@@ -8,9 +8,27 @@ import {
   checkChatProjectWorkerDependencies,
   chatProjectWorkerProbeStatus,
 } from '../src/server/workers/chatProjectWorkerReadiness.js';
+import {
+  activeChatWorkerNames,
+  resolveChatWorkerActivation,
+} from '../src/server/workers/chatWorkerActivation.js';
 
 const db = { query: async () => ({ rows: [{ '?column?': 1 }] }) };
 const retrieval = CHAT_PROJECT_CONTRACTS.retrieval;
+
+test('scheduler and ingestion are explicit opt-ins for staged production enablement', () => {
+  assert.deepEqual(resolveChatWorkerActivation({}), { scheduler: false, ingestion: false });
+  assert.deepEqual(
+    resolveChatWorkerActivation({ CHAT_INGESTION_ENABLED: 'true' }),
+    { scheduler: false, ingestion: true },
+  );
+  const enabled = resolveChatWorkerActivation({
+    CHAT_SCHEDULER_ENABLED: '1',
+    CHAT_INGESTION_ENABLED: 'yes',
+  });
+  assert.deepEqual(enabled, { scheduler: true, ingestion: true });
+  assert.deepEqual(activeChatWorkerNames(enabled), ['scheduled-chat', 'library-ingestion']);
+});
 
 async function withEmbeddingProbe({ apiKey = 'worker-secret', response }, assertion) {
   const originalFetch = globalThis.fetch;
@@ -156,4 +174,6 @@ test('deployment passes embedding URL, credential, and both timeouts to backend 
   ]) {
     assert.equal((compose.match(new RegExp(`- ${variable}=`, 'g')) || []).length, 2, `${variable} must reach backend and chat-workers`);
   }
+  assert.match(compose, /CHAT_SCHEDULER_ENABLED=\$\{CHAT_SCHEDULER_ENABLED:-0\}/);
+  assert.match(compose, /CHAT_INGESTION_ENABLED=\$\{CHAT_INGESTION_ENABLED:-0\}/);
 });

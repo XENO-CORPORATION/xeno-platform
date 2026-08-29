@@ -3,6 +3,7 @@ import http from 'http';
 import { pool } from '../middleware/database.js';
 import { startScheduledTasksWorker } from './chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './libraryIngestionWorker.js';
+import { activeChatWorkerNames, resolveChatWorkerActivation } from './chatWorkerActivation.js';
 import {
   checkChatProjectWorkerDependencies,
   chatProjectWorkerProbeStatus,
@@ -23,8 +24,11 @@ await pool.query('SELECT 1 FROM chat_scheduled_runs LIMIT 0');
 await pool.query('SELECT 1 FROM library_asset_ingestions LIMIT 0');
 await checkDependencies();
 
-const stopSchedule = startScheduledTasksWorker(pool);
-const stopIngestion = startLibraryIngestionWorker(pool);
+const activation = resolveChatWorkerActivation();
+const workers = activeChatWorkerNames(activation);
+const stopSchedule = activation.scheduler ? startScheduledTasksWorker(pool) : () => {};
+const stopIngestion = activation.ingestion ? startLibraryIngestionWorker(pool) : () => {};
+console.log(`[ChatProjectWorkers] activation scheduler=${activation.scheduler} ingestion=${activation.ingestion}`);
 ready = true;
 
 const healthPort = Number(process.env.CHAT_WORKER_HEALTH_PORT || 8081);
@@ -44,7 +48,8 @@ const server = http.createServer(async (req, res) => {
       startedAt,
       lastDatabaseCheck,
       components: dependencies.components,
-      workers: ['scheduled-chat', 'library-ingestion'],
+      workers,
+      activation,
     }));
   } catch (error) {
     res.writeHead(503, { 'Content-Type': 'application/json' });

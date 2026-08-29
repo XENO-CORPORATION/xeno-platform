@@ -11,6 +11,14 @@ auto-rolling-back, SHA-tagged, and covers the backend**.
 
 ## One command
 
+Chat worker activation is fail-closed during the first deployment. Keep both
+`CHAT_INGESTION_ENABLED=0` and `CHAT_SCHEDULER_ENABLED=0` until the database,
+embedding runtime, gateway run-key ledger, and `/ready/semantic` probe pass.
+Enable ingestion first and recreate `chat-workers`; after the backfill is
+healthy, enable scheduling and recreate it again. The health response exposes
+the active worker set and both activation booleans, so an unset variable cannot
+silently begin claiming durable work.
+
 ```bash
 node scripts/deploy-platform.mjs <backend|frontend|both> [options]
 ```
