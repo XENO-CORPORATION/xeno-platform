@@ -62,6 +62,26 @@ Paths shipped per service:
 
 ## Important semantics
 
+### Chat pgvector database cutover
+
+The Chat semantic schema changes the PostgreSQL image and therefore is not a
+normal backend-container swap. Build the exact backend candidate first, then use
+the separate dry-run-first database gate:
+
+```powershell
+node scripts/deploy-platform.mjs backend --build-only
+node scripts/deploy-chat-database.mjs --expected-db-image <observed-sha256>
+```
+
+Execution requires the same commands with `--execute` after release approval.
+The database gate validates the observed live image, takes and lists a custom
+format backup, restores it into an isolated pinned pgvector/PostgreSQL 15
+volume, runs the exact candidate migration runner, and verifies pgvector 0.8.6
+plus every migration. Production cutover stops the API writer, takes a second
+quiesced backup, recreates PostgreSQL, migrates, and only then starts the API.
+On failure it restores the quiesced backup into a separate retained old-image
+volume. Qualification volumes and backups are not deleted by the script.
+
 - **Image rollback ≠ schema rollback.** Auto-rollback restores the previous *image*, not the database.
   Startup migrations are **forward-only, additive, and idempotent** by design (`runStartupMigrations`
   in `src/server/index.js`; the versioned runner in `services/migrationRunner.js`), so the previous

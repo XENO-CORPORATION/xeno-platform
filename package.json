@@ -38,7 +38,7 @@
     "test:forum-throttle": "node --test scripts/forum-throttle.test.mjs",
     "test:forum-moderation": "node --test scripts/forum-moderation.test.mjs scripts/forum-moderation-ui.test.mjs",
     "test:forum-notify": "node --test scripts/forum-notify.test.mjs scripts/forum-notify-email.test.mjs scripts/forum-notification-ui.test.mjs",
-    "test:release-guard": "node --test scripts/secret-box.test.mjs scripts/xeno-release.latest-yml.test.mjs scripts/release-guard.test.mjs scripts/publish-cli-releases.test.mjs scripts/publish-tool-packages-cli.test.mjs scripts/amend-release-entry.test.mjs scripts/deploy-platform.test.mjs",
+    "test:release-guard": "node --test scripts/secret-box.test.mjs scripts/xeno-release.latest-yml.test.mjs scripts/release-guard.test.mjs scripts/publish-cli-releases.test.mjs scripts/publish-tool-packages-cli.test.mjs scripts/amend-release-entry.test.mjs scripts/deploy-platform.test.mjs scripts/deploy-chat-database.test.mjs",
     "test:product-pages": "node --test scripts/experimental-notice.test.mjs scripts/product-privacy.test.mjs",
     "test:chat-empty-state": "node scripts/test-chat-empty-state.mjs",
     "test:chat-starting-experience": "node scripts/test-chat-model-selector.mjs && node scripts/test-chat-update-carousel.mjs && node scripts/test-chat-theme-selector.mjs && node scripts/test-chat-composer-shadow.mjs && npm run test:chat-workspace-equilibrium",
