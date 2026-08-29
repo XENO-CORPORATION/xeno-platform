@@ -1748,6 +1748,11 @@ router.put('/scheduled/:id', async (req, res) => {
         cadence = COALESCE($3, cadence),
         cadence_label = COALESCE($4, cadence_label),
         status = COALESCE($5, status),
+        paused_reason = CASE
+          WHEN $5::text = 'paused' THEN 'paused_by_user'
+          WHEN $5::text = 'active' THEN NULL
+          ELSE paused_reason
+        END,
         model_id = COALESCE($6, model_id),
         next_run_at = $7,
         schedule_kind = $9,
