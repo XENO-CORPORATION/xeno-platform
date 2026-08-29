@@ -300,11 +300,29 @@ CREATE TABLE IF NOT EXISTS chat_scheduled_runs (
 CREATE INDEX IF NOT EXISTS idx_chat_scheduled_runs_claim
   ON chat_scheduled_runs(status, lease_expires_at, scheduled_for);
 
+-- This is the gateway's complete scheduling authorization surface. It exposes
+-- neither prompts nor captured context and only admits a run while both the
+-- authoritative run and its current execution principal are eligible.
+CREATE OR REPLACE VIEW chat_gateway_dispatch_authorizations
+WITH (security_barrier = true)
+AS
+SELECT r.id AS run_key, t.run_as_user_id AS user_id
+FROM chat_scheduled_runs r
+JOIN chat_scheduled_tasks t ON t.id = r.task_id
+WHERE r.status = 'running'
+  AND t.status = 'active'
+  AND t.run_as_user_id IS NOT NULL;
+REVOKE ALL ON chat_gateway_dispatch_authorizations FROM PUBLIC;
+COMMENT ON VIEW chat_gateway_dispatch_authorizations IS
+  'Least-privilege current run-key/principal authorization surface for the inference gateway.';
+
 -- Gateway-owned run-key cache. The inference gateway uses this table through
 -- its canonical platform DB connection; Chat never writes cached responses.
 CREATE TABLE IF NOT EXISTS chat_gateway_run_requests (
-  run_key UUID PRIMARY KEY,
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  run_key UUID PRIMARY KEY REFERENCES chat_scheduled_runs(id) ON DELETE CASCADE,
+  -- Retain the principal UUID as audit evidence even if that user is deleted.
+  -- Current authorization always comes from the narrow view above.
+  user_id UUID NOT NULL,
   request_hash TEXT NOT NULL CHECK (request_hash ~ '^[a-f0-9]{64}$'),
   attempt INTEGER NOT NULL DEFAULT 1 CHECK (attempt > 0),
   status TEXT NOT NULL CHECK (status IN ('pending','completed','retryable_failed','reconciliation_required','expired')),
@@ -325,6 +343,21 @@ CREATE TABLE IF NOT EXISTS chat_gateway_run_requests (
   CHECK (status <> 'retryable_failed' OR NOT downstream_dispatch_started),
   CHECK ((status = 'expired') = (tombstoned_at IS NOT NULL))
 );
+ALTER TABLE chat_gateway_run_requests
+  DROP CONSTRAINT IF EXISTS chat_gateway_run_requests_user_id_fkey;
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'chat_gateway_run_requests_run_key_fkey'
+      AND conrelid = 'chat_gateway_run_requests'::regclass
+  ) THEN
+    ALTER TABLE chat_gateway_run_requests
+      ADD CONSTRAINT chat_gateway_run_requests_run_key_fkey
+      FOREIGN KEY (run_key) REFERENCES chat_scheduled_runs(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+COMMENT ON COLUMN chat_gateway_run_requests.user_id IS
+  'Immutable dispatch principal audit UUID; intentionally not user-FK-cascaded.';
 CREATE INDEX IF NOT EXISTS idx_chat_gateway_run_requests_expiry
   ON chat_gateway_run_requests(expires_at)
   WHERE status IN ('completed','retryable_failed','reconciliation_required');

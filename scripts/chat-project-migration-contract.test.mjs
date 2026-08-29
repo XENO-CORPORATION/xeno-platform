@@ -41,6 +41,13 @@ test('ingestion and scheduler invariants are database-enforced', () => {
   assert.match(sql, /uq_chat_messages_scheduled_run_role/i);
   assert.match(sql, /uq_chat_messages_conversation_index/i);
   assert.match(sql, /reconciliation_required/i);
+  assert.match(sql, /CREATE OR REPLACE VIEW chat_gateway_dispatch_authorizations/i);
+  assert.match(sql, /security_barrier\s*=\s*true/i);
+  assert.match(sql, /r\.status = 'running'[\s\S]*t\.status = 'active'[\s\S]*t\.run_as_user_id IS NOT NULL/i);
+  assert.match(sql, /run_key UUID PRIMARY KEY REFERENCES chat_scheduled_runs\(id\) ON DELETE CASCADE/i);
+  assert.match(sql, /user_id UUID NOT NULL,\s*\n\s*request_hash/i);
+  assert.doesNotMatch(sql, /chat_gateway_run_requests[\s\S]{0,300}user_id UUID NOT NULL REFERENCES users/i);
+  assert.match(sql, /REVOKE ALL ON chat_gateway_dispatch_authorizations FROM PUBLIC/i);
 });
 
 test('every backfilled resource receives its concrete ReBAC relationship', () => {

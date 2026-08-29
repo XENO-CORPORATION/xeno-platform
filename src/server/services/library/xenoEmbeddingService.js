@@ -12,6 +12,16 @@ function embeddingEndpoint() {
   return `${base.replace(/\/+$/, '')}/v1/embeddings`;
 }
 
+function embeddingBaseUrl() {
+  const base = String(process.env.XENO_EMBEDDING_BASE_URL || process.env.XENO_RT_BASE_URL || '').trim();
+  if (!base) {
+    throw Object.assign(new Error('XENO embedding runtime is not configured'), {
+      code: 'embedding_runtime_unavailable',
+    });
+  }
+  return base.replace(/\/+$/, '');
+}
+
 function assertResponseContract(payload) {
   const observed = payload?.xeno_contract;
   if (payload?.model !== contract.embeddingModelId
@@ -78,6 +88,45 @@ export async function embedDocuments(documents) {
     result.push(...await requestEmbeddings(batch, 'document'));
   }
   return result;
+}
+
+export async function probeEmbeddingRuntime() {
+  const response = await fetch(`${embeddingBaseUrl()}/v1/runtime/status`, {
+    headers: process.env.XENO_EMBEDDING_API_KEY
+      ? { Authorization: `Bearer ${process.env.XENO_EMBEDDING_API_KEY}` }
+      : {},
+    signal: AbortSignal.timeout(Number(process.env.XENO_EMBEDDING_HEALTH_TIMEOUT_MS || 2_000)),
+  }).catch((cause) => {
+    throw Object.assign(new Error('XENO embedding runtime readiness request failed'), {
+      code: 'embedding_runtime_unavailable',
+      cause,
+    });
+  });
+  if (!response.ok) {
+    throw Object.assign(new Error(`XENO embedding runtime readiness returned HTTP ${response.status}`), {
+      code: 'embedding_runtime_unavailable',
+    });
+  }
+  const payload = await response.json();
+  if (payload?.ready !== true
+      || payload?.embedding_auth_required !== true
+      || payload?.embedding_model !== contract.embeddingModelId
+      || payload?.embedding_dimensions !== contract.embeddingDimensions) {
+    throw Object.assign(new Error('XENO embedding runtime readiness does not match the locked service boundary'), {
+      code: 'embedding_contract_mismatch',
+    });
+  }
+  assertResponseContract({
+    model: payload.embedding_model,
+    xeno_contract: payload.embedding_contract,
+  });
+  return {
+    ready: true,
+    model: payload.embedding_model,
+    revision: payload.embedding_contract.revision,
+    dimensions: payload.embedding_dimensions,
+    authRequired: payload.embedding_auth_required,
+  };
 }
 
 export function toPgVector(vector) {

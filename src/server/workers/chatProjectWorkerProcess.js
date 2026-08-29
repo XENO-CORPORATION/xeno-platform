@@ -3,14 +3,25 @@ import http from 'http';
 import { pool } from '../middleware/database.js';
 import { startScheduledTasksWorker } from './chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './libraryIngestionWorker.js';
+import {
+  checkChatProjectWorkerDependencies,
+  chatProjectWorkerProbeStatus,
+} from './chatProjectWorkerReadiness.js';
 
 const startedAt = new Date().toISOString();
 let ready = false;
 let lastDatabaseCheck = null;
+let dependencies = null;
+
+const checkDependencies = async () => {
+  dependencies = await checkChatProjectWorkerDependencies(pool);
+  lastDatabaseCheck = dependencies.checkedAt;
+  return dependencies;
+};
 
 await pool.query('SELECT 1 FROM chat_scheduled_runs LIMIT 0');
 await pool.query('SELECT 1 FROM library_asset_ingestions LIMIT 0');
-lastDatabaseCheck = new Date().toISOString();
+await checkDependencies();
 
 const stopSchedule = startScheduledTasksWorker(pool);
 const stopIngestion = startLibraryIngestionWorker(pool);
@@ -18,18 +29,31 @@ ready = true;
 
 const healthPort = Number(process.env.CHAT_WORKER_HEALTH_PORT || 8081);
 const server = http.createServer(async (req, res) => {
-  if (req.url !== '/health' && req.url !== '/ready') {
+  const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
+  if (!['/health', '/ready', '/ready/semantic'].includes(pathname)) {
     res.writeHead(404).end();
     return;
   }
   try {
-    await pool.query('SELECT 1');
-    lastDatabaseCheck = new Date().toISOString();
-    res.writeHead(ready ? 200 : 503, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ready, startedAt, lastDatabaseCheck, workers: ['scheduled-chat', 'library-ingestion'] }));
+    await checkDependencies();
+    const status = chatProjectWorkerProbeStatus(pathname, { processReady: ready, dependencies });
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      ready: status === 200,
+      processReady: ready,
+      startedAt,
+      lastDatabaseCheck,
+      components: dependencies.components,
+      workers: ['scheduled-chat', 'library-ingestion'],
+    }));
   } catch (error) {
     res.writeHead(503, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ready: false, error: 'database_unavailable' }));
+    res.end(JSON.stringify({
+      ready: false,
+      error: error?.code || 'worker_dependency_unavailable',
+      lastDatabaseCheck,
+      components: dependencies?.components || null,
+    }));
   }
 });
 server.listen(healthPort, '0.0.0.0', () => console.log(`[ChatProjectWorkers] health listening on ${healthPort}`));

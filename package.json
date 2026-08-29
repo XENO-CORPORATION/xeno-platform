@@ -81,7 +81,7 @@
     "test:keyboard-dom": "node --test scripts/keyboard-dom.test.mjs",
     "test:inert-escapes": "node --test scripts/inert-escapes.test.mjs",
     "test:chat-migrations": "node --test scripts/chat-migrations-reachable.test.mjs",
-    "test:chat-project-semantics": "node --test --test-force-exit scripts/chat-project-semantics.test.mjs scripts/chat-project-migration-contract.test.mjs scripts/chat-project-ingestion.test.mjs",
+    "test:chat-project-semantics": "node --test --test-force-exit scripts/chat-project-semantics.test.mjs scripts/chat-project-migration-contract.test.mjs scripts/chat-project-ingestion.test.mjs scripts/chat-worker-readiness.test.mjs",
     "test:chat-project-ingestion": "node --test --test-force-exit scripts/chat-project-ingestion.test.mjs",
     "test:chat-project-db": "node --test --test-force-exit scripts/chat-project-database-integration.test.mjs",
     "test:chat-project-semantic": "node --test --test-force-exit scripts/chat-project-semantic-integration.test.mjs",

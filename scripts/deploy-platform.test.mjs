@@ -16,6 +16,20 @@ test('backend deploy ships the Docker context policy with every source archive',
   );
 });
 
+test('worker deploy ships backend inputs and gates the semantic component without coupling Docker health to it', () => {
+  assert.match(deploy, /['"]chat-workers['"]:\s*\[[^\]]*['"]Dockerfile\.backend['"]/);
+  assert.match(deploy, /internal \/ready\/semantic/);
+  assert.match(remote, /chat-workers internal \/ready\/semantic/);
+  assert.match(remote, /worker_path="\/ready\/semantic"/);
+  assert.match(remote, /poll_health "\$TRIES" release/);
+  assert.match(remote, /poll_health "\$TRIES" rollback/);
+  assert.match(remote, /worker_path="\/ready"/);
+  assert.match(
+    readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8'),
+    /chat-workers:[\s\S]*healthcheck:[\s\S]*127\.0\.0\.1:8081\/ready/,
+  );
+});
+
 test('frontend deploy ships every first-party source tree copied by its Dockerfile', () => {
   assert.match(frontendDockerfile, /COPY packages\/ \.\/packages\//, 'expected the frontend image to consume packages/');
   assert.match(
