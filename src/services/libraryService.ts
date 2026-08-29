@@ -43,12 +43,13 @@ const readJson = async <T>(response: Response): Promise<T> => {
 };
 
 export const libraryService = {
-  async list(params: { tab?: LibraryTab; sort?: LibrarySort; query?: string; limit?: number } = {}): Promise<LibraryItemRecord[]> {
+  async list(params: { tab?: LibraryTab; sort?: LibrarySort; query?: string; limit?: number; offset?: number } = {}): Promise<LibraryItemRecord[]> {
     const query = new URLSearchParams();
     if (params.tab) query.set('tab', params.tab);
     if (params.sort) query.set('sort', params.sort);
     if (params.query) query.set('query', params.query);
     if (params.limit) query.set('limit', String(params.limit));
+    if (params.offset) query.set('offset', String(params.offset));
     const response = await fetch(`/api/library/assets?${query}`, { headers: authHeaders() });
     return (await readJson<{ items: LibraryItemRecord[] }>(response)).items || [];
   },

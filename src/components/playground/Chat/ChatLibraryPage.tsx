@@ -167,6 +167,8 @@ const LibraryThumbnail: React.FC<{ item: LibraryItemRecord; className?: string }
   );
 };
 
+const PAGE_SIZE = 200;
+
 const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerLeft = pageLeft, onClose = () => undefined }) => {
   const [items, setItems] = useState<LibraryItemRecord[]>([]);
   const [tab, setTab] = useState<LibraryTab>(readTabFromUrl);
@@ -176,6 +178,9 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerL
     typeof window !== 'undefined' && localStorage.getItem('xeno_library_view') === 'grid' ? 'grid' : 'list'
   ));
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextOffset, setNextOffset] = useState(0);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
@@ -187,9 +192,16 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerL
   const [selectedBody, setSelectedBody] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const newMenuRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreInFlightRef = useRef(false);
+  const requestGenerationRef = useRef(0);
 
   const refresh = async () => {
+    const requestGeneration = ++requestGenerationRef.current;
     setLoading(true);
+    setHasMore(false);
+    setNextOffset(0);
     setError('');
     if (!chatService.isAuthenticated()) {
       setItems([]);
@@ -197,13 +209,38 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerL
       return;
     }
     try {
-      const next = await libraryService.list({ tab, query, sort, limit: 200 });
+      const next = await libraryService.list({ tab, query, sort, limit: PAGE_SIZE, offset: 0 });
+      if (requestGeneration !== requestGenerationRef.current) return;
       setItems(next);
+      setNextOffset(next.length);
+      setHasMore(next.length === PAGE_SIZE);
     } catch (reason) {
+      if (requestGeneration !== requestGenerationRef.current) return;
       setItems([]);
       setError(reason instanceof Error ? reason.message : 'Library unavailable');
     } finally {
-      setLoading(false);
+      if (requestGeneration === requestGenerationRef.current) setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (loading || loadingMore || loadMoreInFlightRef.current || !hasMore) return;
+    const requestGeneration = requestGenerationRef.current;
+    loadMoreInFlightRef.current = true;
+    setLoadingMore(true);
+    try {
+      const next = await libraryService.list({ tab, query, sort, limit: PAGE_SIZE, offset: nextOffset });
+      if (requestGeneration !== requestGenerationRef.current) return;
+      setItems((current) => [...current, ...next]);
+      setNextOffset((current) => current + next.length);
+      setHasMore(next.length === PAGE_SIZE);
+    } catch (reason) {
+      if (requestGeneration === requestGenerationRef.current) {
+        setError(reason instanceof Error ? reason.message : 'Could not load more Library items');
+      }
+    } finally {
+      loadMoreInFlightRef.current = false;
+      if (requestGeneration === requestGenerationRef.current) setLoadingMore(false);
     }
   };
 
@@ -221,6 +258,16 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerL
   useEffect(() => {
     if (typeof window !== 'undefined') localStorage.setItem('xeno_library_view', view);
   }, [view]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore || loadingMore || typeof IntersectionObserver === 'undefined') return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) void loadMore();
+    }, { root: scrollContainerRef.current, rootMargin: '480px' });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, nextOffset, tab, query, sort]);
 
   useEffect(() => {
     if (!newMenuOpen) return;
@@ -415,7 +462,7 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerL
           </div>
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11.5px] text-[var(--chat-muted)]">
-              {loading ? 'Loading…' : `${items.length} ${items.length === 1 ? 'item' : 'items'}${tab === 'all' ? ` · ${counts.images} images · ${counts.files} files` : ''}`}
+              {loading ? 'Loading…' : `${items.length}${hasMore ? '+' : ''} ${items.length === 1 ? 'item' : 'items'}${tab === 'all' ? ` · ${counts.images} images · ${counts.files} files` : ''}`}
             </p>
             <div className="flex items-center gap-1.5">
               <select
@@ -454,7 +501,7 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerL
           </div>
         )}
 
-        <main className="min-h-0 flex-1 overflow-y-auto pb-10 pt-4 hide-scrollbar">
+        <main ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto pb-10 pt-4 hide-scrollbar">
           {!loading && items.length === 0 ? (
             <div className="flex min-h-[18rem] flex-col items-center justify-center text-center">
               <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border bg-[var(--chat-surface)] text-[var(--chat-muted)]" style={{ borderColor: 'var(--chat-border)' }}>
@@ -515,6 +562,13 @@ const ChatLibraryPage: React.FC<ChatLibraryPageProps> = ({ pageLeft = 0, viewerL
               })}
             </ul>
           )}
+          <div ref={loadMoreRef} className="flex min-h-12 items-center justify-center pt-3">
+            {hasMore && (
+              <Button variant="ghost" size="sm" disabled={loadingMore} onClick={() => void loadMore()}>
+                {loadingMore ? 'Loading more…' : 'Load more'}
+              </Button>
+            )}
+          </div>
         </main>
       </div>
 

@@ -352,10 +352,10 @@ export async function listLibraryItems(db, userId, params = {}) {
   const limit = Math.min(Math.max(parseInt(params.limit, 10) || 100, 1), 200);
   const offset = Math.max(parseInt(params.offset, 10) || 0, 0);
   const orderBy = {
-    updated: 'updated_at DESC NULLS LAST, created_at DESC',
-    created: 'created_at DESC NULLS LAST',
-    name: 'name ASC, updated_at DESC NULLS LAST',
-    size: 'size_bytes DESC NULLS LAST, updated_at DESC NULLS LAST',
+    updated: 'updated_at DESC NULLS LAST, created_at DESC, id ASC',
+    created: 'created_at DESC NULLS LAST, id ASC',
+    name: 'name ASC, updated_at DESC NULLS LAST, id ASC',
+    size: 'size_bytes DESC NULLS LAST, updated_at DESC NULLS LAST, id ASC',
   }[sort];
   const sql = `
     WITH library_items AS (
