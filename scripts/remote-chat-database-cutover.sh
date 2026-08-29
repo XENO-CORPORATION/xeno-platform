@@ -95,9 +95,9 @@ BASELINE_BACKUP="$EVIDENCE_DIR/production-baseline.dump"
 backup_database "$BASELINE_BACKUP"
 log "baseline backup captured and listed: $BASELINE_BACKUP"
 
-QUAL_NETWORK="xeno-chat-pgvector-qual-$SHORT"
-QUAL_CONTAINER="xeno-chat-pgvector-qual-$SHORT"
-QUAL_VOLUME="xeno-chat-pgvector-qual-$SHA"
+QUAL_NETWORK="xeno-chat-pgvector-qual-$SHORT-$STAMP"
+QUAL_CONTAINER="xeno-chat-pgvector-qual-$SHORT-$STAMP"
+QUAL_VOLUME="xeno-chat-pgvector-qual-$SHA-$STAMP"
 docker network inspect "$QUAL_NETWORK" >/dev/null 2>&1 || docker network create "$QUAL_NETWORK" >/dev/null
 docker volume inspect "$QUAL_VOLUME" >/dev/null 2>&1 || docker volume create --label xeno.verification=chat-pgvector "$QUAL_VOLUME" >/dev/null
 docker rm -f "$QUAL_CONTAINER" >/dev/null 2>&1 || true

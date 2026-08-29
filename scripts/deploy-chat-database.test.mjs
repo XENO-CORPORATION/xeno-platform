@@ -23,6 +23,8 @@ test('cutover uses the pinned pgvector and rollback Postgres images', () => {
 
 test('production-shaped restore precedes quiesced production cutover', () => {
   const remote = read('scripts/remote-chat-database-cutover.sh');
+  assert.match(remote, /QUAL_VOLUME="xeno-chat-pgvector-qual-\$SHA-\$STAMP"/);
+  assert.match(remote, /QUAL_CONTAINER="xeno-chat-pgvector-qual-\$SHORT-\$STAMP"/);
   const restore = remote.indexOf('production-shaped restore qualification passed');
   const stop = remote.indexOf('docker compose stop backend');
   const quiesced = remote.indexOf('quiesced backup captured');
