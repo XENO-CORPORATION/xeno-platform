@@ -4,9 +4,9 @@
 |---|---|
 | Captured | 2026-08-29 |
 | Host | `DESKTOP-9LJ2CLU` |
-| Platform implementation head | `c5c239724ca6a48523ccc23a4defdc39cc9c66ef` on `codex/overview-taskbar-edge-divider` |
-| Gateway head | `069477ad540262257a0cca9dc9195dd57838343c` on `codex/chat-durable-run-authorization` |
-| Runtime head | `14197d6362f534abbc0b5fd0b398f973898b1f3d` on `codex/chat-embedding-main-port` |
+| Platform implementation head | `d318843844ca2adc3a75970b150d9a37edf4c30e` on `codex/overview-taskbar-edge-divider` |
+| Gateway head | `7786cf50fd13a615370d2c67ab689256237c7376` on `codex/chat-durable-run-authorization` |
+| Runtime head | `0f35bcb971a814ea996d7fc831cbc454e90bb838` on `codex/chat-embedding-main-port` |
 | Runtime release base | `65ebc127a61baf2f5ff17e3f3450b1014fa60c06` (`origin/main`) |
 | Embedding bundle digest | `2dc870de10066111e27bc6c25375d27f455e1de8a277b9bc5623f473ac9d2121` |
 | ONNX Runtime DLL | 11,567,648 bytes; SHA-256 `52f8ebe8f08f369a44fed6d1cb680c7c89169795e1c2949ee25b88b538ef0948`; file version `1.20.20241030.2.c4fb724` |
@@ -22,12 +22,17 @@ XENO product release procedure.
   was checked out detached at `.worktrees/qual-platform-chat-2bab579`. The only
   later source change before this record was the live auth-smoke correction in
   `82d75eb`; `c5c2397` updates specification evidence only.
-- Gateway candidate `069477ad540262257a0cca9dc9195dd57838343c` was
-  checked out detached at `.worktrees/qual-api-proxy-069477a`.
+- Gateway behavior candidate `069477ad540262257a0cca9dc9195dd57838343c`
+  was checked out detached at `.worktrees/qual-api-proxy-069477a`; final
+  `7786cf5` adds the dry-run-first exact-checkout deployment path and a
+  loopback-only candidate bind without changing durable-run semantics.
 - Runtime parent candidate `c2e015c0baa609499f626931e26e89ee607e1d84`
   was checked out detached at `.worktrees/qual-xrt-c2e015c`. The final runtime
   commit `14197d6` changes only the provisioning script whose default-manifest
   path was then executed successfully into an independent destination.
+- Runtime `0f35bcb` adds the private-network Docker deployment, pinned Linux
+  ONNX Runtime archive, isolated target-host candidate proof, and image rollback
+  after the qualified runtime commit `14197d6`.
 - The excluded `origin/main..39f1049` runtime range remains 48 commits, 727
   files, 633,684 insertions, and 3,022 deletions. It is not part of this release.
 
@@ -83,15 +88,43 @@ XENO product release procedure.
   `4.470348358154297e-08` for document; cosine parity was 1.0 within float32
   rounding and query/document cosine was `0.8852699398994446`.
 
+## Deployment-path gates and live preflight
+
+- Platform `d318843` adds a dry-run-first pgvector cutover that validates the
+  observed live database image, takes and lists a production backup, restores
+  it into an isolated retained pgvector volume, runs the exact backend migration
+  image, quiesces the API for the production backup/cutover, and restores into a
+  separate retained PostgreSQL 15 volume on failure.
+- Gateway `7786cf5` refuses a dirty or drifted live checkout, builds a release
+  directory, binds its candidate only to loopback, snapshots tracked bytes,
+  and health-gates the PM2 swap with automatic rollback.
+- Runtime `0f35bcb` pins the Rust builder, Debian runtime, ONNX Runtime Linux
+  archive, and Nomic bundle identities; publishes no host port; and tests an
+  authenticated candidate on the target Docker network before swapping.
+- Local deployment tests passed 4/4 for the database cutover, 4/4 for the
+  gateway, and 4/4 for the runtime. All three operator entry points completed
+  their default dry runs without external mutation.
+- Read-only production inspection found `xeno-platform-001` still using
+  `postgres:15-alpine` image ID
+  `sha256:cd848ee12e8efaf62a09b7e7290a287c21f332a32779048afb970d497374bb04`,
+  with no `chat-workers` or embedding service yet. `xeno-private-api-001` runs
+  `xeno-api-proxy` under PM2 from `/home/bunker/apps/xeno-api-proxy`, but that
+  checkout contains substantial uncommitted production work and therefore must
+  be captured, reviewed, and merged before the exact gateway candidate can be
+  deployed. No live state was mutated during this inspection.
+
 ## Release sequence still required
 
-1. Push/merge the exact three reviewed branches after explicit approval.
-2. Apply/confirm the additive schema and pgvector contract.
+1. After explicit approval, capture the current gateway production worktree on
+   a preservation branch, review it against remote `main`, merge the Chat
+   candidate without dropping live capabilities, and push/merge all three exact
+   release branches.
+2. Build the exact platform backend image without swapping, then apply/confirm
+   the additive schema and qualified pgvector cutover.
 3. Deploy the exact runtime plus bundle and prove component readiness.
-4. Deploy the exact gateway and prove run-ledger health before provider/credit dispatch.
+4. Deploy the reconciled exact gateway and prove run-ledger health before provider/credit dispatch.
 5. Deploy platform web and workers with semantic backfill and scheduler claims disabled.
 6. Enable semantic backfill, then scheduler claims, after all component probes pass.
 7. Prove lexical-only behavior during semantic outage, a real worker recovery path,
    exactly-once committed conversation effects, live HTTP surfaces, and authenticated
    browser hard reloads.
-
