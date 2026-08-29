@@ -16,6 +16,39 @@ adoption per product**.
 | **In-app licence check** | running a *copied* installer | 🔴 **per product** |
 | **Version floor** | running an *old* build that predates enforcement | ✅ live |
 
+### Adoption — 1 of 17, measured 2026-08-27
+
+The row above says "per product" and does not say *which*, so nobody could tell whether
+adoption was nearly done or had not started. It had not started.
+
+| | products |
+|---|---|
+| ✅ **adopted** | `motion` (0.8.0) |
+| 🔴 **not adopted** | `hub` · `canvas` · `pixel` · `sound` · `shell` · `browser` · `workflow` · `docs` · `sheets` · `slides` · `notes` · `comms` · `agent` · `architect` · `3d` · `engine` |
+
+Every product in that second row **publishes a Windows installer today**. Re-derive both halves
+rather than trusting this table:
+
+```bash
+node scripts/shipped-versions.mjs                       # from the xeno-corporation workspace root
+for r in xeno-*/; do ls "$r"src/main/licence/xenoLicence.ts 2>/dev/null; done
+```
+
+⚠️ **This is a measurement, not a verdict on anyone.** The contract is young, the server half
+carries layers 1 and 3 on its own, and a product that has not adopted is not therefore
+unprotected — it is protected by the download gate and the version floor, which is precisely why
+those two exist. What is missing is the layer that stops a *copied installer already on disk*.
+
+🔴 **A fix to `clients/licence/xenoLicence.ts` does NOT reach any product by merging.** The file
+is COPIED, deliberately (see its header), so every fix is one deliberate port per adopter. That
+is the cost of the named interim, and it is the reason the EXIT below matters more than it looks:
+today the cost is one port; at seventeen adopters it is seventeen, and the ones nobody ports are
+the ones running the version with the bug.
+
+**EXIT:** publish `@xenosystem/licence` and replace the copies. Until then, `motion`'s
+`scripts/licence-check.mjs` is the pattern worth copying alongside the client — it pins the
+copy's digest, so a local edit is visible and a stale copy is at least identifiable.
+
 🔴 **The third layer is the one that answers "what about builds already out
 there?"** An installer shipped before any of this existed has no check compiled
 into it, and nothing we deploy can make that binary refuse itself. But it is only

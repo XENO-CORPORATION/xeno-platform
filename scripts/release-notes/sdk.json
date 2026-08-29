@@ -1,0 +1,41 @@
+{
+  "_source": {
+    "product": "XENO SDK",
+    "slug": "sdk",
+    "packages": [
+      "@xenosystem/agent-sdk"
+    ],
+    "derivedFrom": "xeno-agent-sdk @ c1d61ec43ffe4f22e6654634ff9239cdd9965292, CHANGELOG.md sections 0.9.15 through 0.9.17",
+    "why": "The SDK keeps public release notes in CHANGELOG.md rather than a RELEASE_NOTES module, so this file is the structured notes source consumed by publish-cli-releases.mjs."
+  },
+  "0.9.17": {
+    "title": "No-op forgetting and artifact-complete compliance",
+    "type": "patch",
+    "notes": [
+      "Forgetting a workspace that was never recorded is now a true filesystem no-op: it creates neither the recent-session index nor a tombstone shard.",
+      "The standard compliance gate now audits built artifacts as well as source, preventing a successful gate from replacing the artifact ownership inventory with an empty report.",
+      "The installed Windows contention probe retained 360 concurrent recent-session updates across 12 processes with no lock or temporary-file debris."
+    ]
+  },
+  "0.9.16": {
+    "title": "Lossless Windows continuation state",
+    "type": "patch",
+    "notes": [
+      "Unqualified recent-session reads now honor XENO_AGENT_HOME, so isolated runs cannot import entries from the operator's default state directory.",
+      "Recent-session updates persist one atomic shard per normalized workspace and merge those shards over the compact index.",
+      "Concurrent Windows processes no longer lose completed session updates on mapped or filtered filesystems where exclusive lock creation is not reliably exclusive.",
+      "PowerShell sideband completion drains the final stdout before settling."
+    ]
+  },
+  "0.9.15": {
+    "title": "Durable sessions and unbounded managed continuation",
+    "type": "patch",
+    "notes": [
+      "Managed continuation is event-driven and unbounded by default; the historical three-turn default is removed while explicit bounded policies remain supported.",
+      "Active legacy checkpoints migrate to the new continuation contract.",
+      "Finite background operations remain attached to their original objective across repeated completion and resume cycles.",
+      "Recent-session index updates are serialized across processes with bounded Windows atomic-replace retries, eliminating rename-warning floods under ordinary contention.",
+      "Background tasks receive semantic sanitized labels without exposing raw command arguments."
+    ]
+  }
+}

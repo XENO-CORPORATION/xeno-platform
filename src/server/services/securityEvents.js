@@ -47,6 +47,7 @@ export const EVENTS = Object.freeze({
   TOKEN_REFRESHED: 'token_refreshed',
   TOKEN_REVOKED: 'token_revoked',
   TOKEN_REUSE_DETECTED: 'token_reuse_detected', // RFC 9700 family revocation fired
+  OIDC_CLIENT_REGISTERED: 'oidc_client_registered',
 });
 
 const KNOWN = new Set(Object.values(EVENTS));

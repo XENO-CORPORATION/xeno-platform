@@ -84,6 +84,16 @@ test('registered client metadata, validated authorize preflight, and RFC 8628 ac
   assert.match(devicePage, /Approve only if you started/);
 });
 
+test('prompt=login leaves the cached session path and returns only after fresh authentication', () => {
+  const routes = read('src/server/routes/oauth2Routes.js');
+  assert.match(routes, /p\.get\('prompt'\)===\'login\'/);
+  assert.match(routes, /resume\.searchParams\.set\('stepup_complete','1'\)/);
+  assert.match(routes, /authTime: req\.auth\?\.authTime/);
+  assert.match(routes, /prompt: b\.prompt/);
+  assert.match(routes, /maxAge: b\.max_age/);
+  assert.match(routes, /acr: b\.acr_values/);
+});
+
 test('authorization preflight trusts only a registered client, redirect, and S256 transaction', async () => {
   const client = {
     client_id: 'xeno-agent-cli',
