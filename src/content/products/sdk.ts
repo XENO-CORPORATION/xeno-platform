@@ -50,13 +50,13 @@ const sdk: ProductContent = {
     {
       eyebrow: 'Delegation', icon: 'GitBranch',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(150,200,200,0.14), transparent 60%), linear-gradient(165deg,#10171a,#070707 74%)',
-      title: 'A team of sub-agents, not one prompt',
-      desc: 'Hand a task to a built-in planner → executor → reviewer workflow; a deterministic reducer merges the results by role precedence for reproducible runs.',
+      title: 'One durable coordination model for every surface',
+      desc: 'Persist evidence-gated Goals, unbounded-by-default development Loops, fenced execution Handoffs, and nested agent work in the runtime shared by CLI, ACP, and Agent Interface.',
       bullets: [
-        'planner / executor / reviewer sub-agents',
-        'Deterministic reducer for reproducible merges',
-        'dispatch-agent tool for in-loop delegation',
-        'Per-agent budgets keep long runs bounded',
+        'Goals with criteria, milestones, tasks, steering, and evidence',
+        'Scheduled, development, and goal-continuation Loops',
+        'Heartbeat leases and monotonic fencing for live Handoff',
+        'Structured nested-agent tasks and results',
       ],
     },
     {

@@ -8,12 +8,12 @@ import type { ProductContent } from './_types';
  *
  * CORRECTED 2026-07-27, verified against the npm registry:
  *  · SCOPE. The CLI moved to @xenosystem. npm `latest`:
- *      @xenosystem/agent-cli            0.5.17   ← the live product
+ *      @xenosystem/agent-cli            0.5.41   ← the live product
  *      @xeno-corporation/xeno-agent-cli 0.4.45   ← frozen, 13 patches behind
  *    Both still resolve, so this was not a dead command — it was a command that
  *    silently installed an older build. Same defect class as XENO ACP. The
- *    binaries are unchanged (`xeno`, `xeno-agent`, `xeno-code`), and 0.5.17
- *    depends on @xenosystem/agent-sdk@0.8.12.
+ *    binaries are unchanged (`xeno`, `xeno-agent`, `xeno-code`), and 0.5.41
+ *    depends on @xenosystem/agent-sdk@0.9.24.
  *  · THE curl / PowerShell ONE-LINER DOES NOT WORK. This page and the docs
  *    advertised `curl -fsSL https://xenostudio.ai/install.sh | sh` and
  *    `irm https://xenostudio.ai/install.ps1 | iex`. Neither file exists: there
@@ -54,9 +54,9 @@ const agentCli: ProductContent = {
     {
       eyebrow: 'Delegation', icon: 'GitBranch',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(150,200,200,0.14), transparent 60%), linear-gradient(165deg,#10171a,#070707 74%)',
-      title: 'A team of agents, not one',
-      desc: 'Hand a task to a built-in Planner → Executor → Reviewer; a deterministic reducer merges the results by role precedence.',
-      bullets: ['planner / executor / reviewer sub-agents', 'Per-branch token budgets & timeouts', 'xeno run --delegate "…"', 'Deterministic, reproducible merges'],
+      title: 'Goals, durable loops, and real execution handoff',
+      desc: 'Set an evidence-gated Goal, let an unbounded-by-default development Loop recover and continue, and hand the same live session to another terminal with writer fencing.',
+      bullets: ['Persistent Goal criteria, milestones, tasks, steering, and evidence', 'Scheduled, development, and goal-continuation Loops', 'Live A-to-B-to-C execution Handoff with fencing', 'Planner / explorer / executor / reviewer sub-agents'],
     },
     {
       eyebrow: 'Memory & identity', icon: 'Layers',

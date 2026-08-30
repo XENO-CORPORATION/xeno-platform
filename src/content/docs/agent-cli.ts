@@ -520,6 +520,9 @@ Run \`xeno --help\` for the full, version-accurate list. The most common command
 | \`xeno remote\` | Remote execution |
 | \`xeno app-server\` | JSON-RPC / HTTP bridge |
 | \`xeno sessions\` | Session management |
+| \`xeno goal\` | Manage persistent evidence-gated goals |
+| \`xeno loop\` | Manage durable scheduled, development, and goal-continuation loops |
+| \`xeno handoff\` | Inspect or administer durable execution handoffs |
 | \`xeno doctor\` / \`bug-report\` | Diagnostics |
 | \`xeno config\` | Edit configuration |
 | \`xeno usage\` / \`cost\` | Usage and cost |
@@ -533,7 +536,7 @@ Run \`xeno --help\` for the full, version-accurate list. The most common command
 | \`-k, --api-key\` | \`$XENO_API_KEY\` | API key |
 | \`--base-url\` | XENO API | OpenAI-compatible endpoint |
 | \`--max-tokens\` | 8192 | Max output tokens |
-| \`--max-iterations\` | 50 | Loop cap |
+| \`--max-iterations\` | unbounded | Optional explicit loop cap |
 | \`--mode\` | agent | \`agent\` or \`chat\` |
 | \`--permission-mode\` | default | \`default\` / \`acceptEdits\` / \`bypassPermissions\` |
 | \`--delegate\` | off | Delegate to planner/executor/reviewer |
@@ -581,7 +584,7 @@ Slash commands work inside an interactive \`xeno chat\` session. Type \`/help\` 
 \`/audit\` · \`/approvals\` · \`/approved-tools\` · \`/permissions\`
 
 ## Extensibility
-\`/mcp\` · \`/skills\` · \`/plugins\` · \`/agents\` · \`/delegate\` · \`/goal\` · \`/workflow\`
+\`/mcp\` · \`/skills\` · \`/plugins\` · \`/agents\` · \`/delegate\` · \`/goal\` · \`/handoff\` · \`/workflow\`
 
 ## Utilities
 \`/doctor\` · \`/bug-report\` · \`/config\` · \`/init\` · \`/review\` · \`/release-notes\` · \`/terminal-setup\` · \`/login\` · \`/logout\`

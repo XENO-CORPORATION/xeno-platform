@@ -70,7 +70,7 @@ const agent: ProductContent = {
   highlights: [
     { value: 'Any provider', label: 'ACP · SDK-native · XENO Cloud' },
     { value: 'Diffs you approve', label: 'Nothing lands unreviewed' },
-    { value: 'Durable sessions', label: 'Survive restarts' },
+    { value: 'Goal · Loop · Handoff', label: 'Survive restarts and surface changes' },
     { value: 'One authority', label: 'No competing writers' },
   ],
   features: [
@@ -106,7 +106,7 @@ const agent: ProductContent = {
       bullets: [
         'Ctrl+T · Ctrl+W · Ctrl+Tab · Ctrl+1–9',
         'Reorder, restore, and close without deleting',
-        'Runtime status projected per tab',
+        'Durable Goal, Loop, Handoff, and nested-agent state projected per tab',
         'Workspace and conversation records in transactional SQLite',
       ],
     },
