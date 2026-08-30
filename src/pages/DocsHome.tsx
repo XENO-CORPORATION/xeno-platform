@@ -32,7 +32,7 @@ const DocsHome: React.FC = () => {
       eyebrow="DOCUMENTATION"
       title="XENO Studio docs"
       subtitle="Guides and reference for every XENO app, agent, and API — from your first render to a production agent workflow."
-      updated="July 2026"
+      updated="August 2026"
     >
       <DocsSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
 
@@ -57,6 +57,11 @@ const DocsHome: React.FC = () => {
                 <span className="text-[15px] font-semibold text-[#ece7df]">{p.productName}</span>
               </div>
               <p className="mt-2 flex-1 text-[13px] leading-[1.6] text-[#948d83]">{p.tagline}</p>
+              {(p.version || p.updated) && (
+                <span className="mt-2 text-[11px] text-[#69635b]">
+                  {p.version ? `v${p.version}` : ''}{p.version && p.updated ? ' · ' : ''}{p.updated ? `Updated ${p.updated}` : ''}
+                </span>
+              )}
               <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-[#e8e3dc] transition-colors group-hover:text-white">
                 Read the docs <ArrowRight className="h-3.5 w-3.5" />
               </span>

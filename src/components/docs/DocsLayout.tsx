@@ -77,6 +77,13 @@ const DocsLayout: React.FC<{ product: ProductDocs; page: DocPage; sectionTitle: 
               <span className="text-[#948d83]">{sectionTitle}</span>
             </nav>
 
+            {(product.version || product.updated) && (
+              <div className="mb-5 flex flex-wrap items-center gap-2 text-[11px] text-[#827b71]">
+                {product.version && <span className="rounded-full border border-white/[0.10] bg-white/[0.04] px-2.5 py-1 font-mono">v{product.version}</span>}
+                {product.updated && <span>Documentation updated {product.updated}</span>}
+              </div>
+            )}
+
             {page.description && <p className="mb-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[#e8e3dc]">{sectionTitle}</p>}
 
             <article>

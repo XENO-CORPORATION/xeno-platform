@@ -11,6 +11,8 @@ const agentCli: ProductDocs = {
   slug: 'agent-cli',
   productName: 'XENO Agent CLI',
   tagline: 'The terminal AI coding agent — read, edit, and run with your permission, any model, fully auditable.',
+  version: '0.5.41',
+  updated: '2026-08-30',
   seo: {
     title: 'XENO Agent CLI documentation',
     description:
@@ -212,6 +214,63 @@ Configuration resolves in this order (highest wins): **CLI flags → environment
     {
       title: 'Core concepts',
       pages: [
+        {
+          slug: 'chat-and-agent-modes',
+          title: 'Chat and Agent modes',
+          description: 'One terminal interface with different workspace authority and matching graphical handoff.',
+          body: `# Chat and Agent modes
+
+XENO Agent CLI exposes the same canonical modes as the graphical XENO Agent surface.
+
+| Command | Workspace authority | Intended use |
+|---|---|---|
+| \`xeno chat\` | Private Host-managed workspace; no project grant | Conversation, research, writing, and non-project tools |
+| \`xeno agent\` | Exact current or explicitly supplied project folder | Files, commands, Git, review, testing, and project-aware agents |
+
+Both commands open the same XENO terminal interface. Chat is branded **XENO CHAT** and cannot be promoted to project authority by saved settings or a legacy \`--mode\` value. Agent mode requires a real project root and persists that grant with the session.
+
+Resume preserves the original mode. A Chat command refuses a project-bound Agent session; resume that session with \`xeno agent --resume <id>\`. The current shell directory alone never changes persisted authority.
+
+Open the matching graphical surface with \`xeno chat --interface\` or \`xeno agent --interface\`. The desktop must acknowledge the exact nonce-bound resume request; merely starting an incompatible older app is not reported as success.
+
+Related: [Sessions, checkpoints & resume](/docs/agent-cli/sessions) · [XENO Agent modes](/docs/agent/chat-and-agent-modes).`,
+        },
+        {
+          slug: 'goal-loop-handoff',
+          title: 'Goal, Loop, and Handoff',
+          description: 'Durable objectives, unbounded continuation, verification, and single-writer execution transfer.',
+          body: `# Goal, Loop, and Handoff
+
+The CLI is a client of the Agent SDK coordination store. It does not own a second Goal, Loop, or Handoff format.
+
+## Goals
+
+\`\`\`powershell
+xeno goal set --session session-123 "Ship only when every release gate passes"
+xeno goal status --session session-123 --json
+xeno run --goal "Ship only when every release gate passes" "Implement and verify the change"
+\`\`\`
+
+Goal execution is unbounded by default. Use \`--goal-max-turns\` or \`goal set --max-turns\` only for a deliberate operator limit. Exhaustion is not success: completion requires verifier evidence for the declared criteria.
+
+## Loops
+
+\`\`\`powershell
+xeno loop start --session session-123 --kind agentic-development --json
+xeno loop status --session session-123 --json
+xeno loop pause --session session-123 <loop-id>
+xeno loop resume --session session-123 <loop-id>
+xeno loop stop --session session-123 <loop-id>
+\`\`\`
+
+Kinds are \`scheduled\`, \`agentic-development\`, and \`goal-continuation\`. Development and continuation loops have no implicit iteration ceiling. Failed iterations remain durable evidence for the next inspect-repair-retest pass.
+
+## Live handoff
+
+Inside the TUI, run \`/handoff status\` or \`/handoff prepare terminal-b\`. Preparation flushes the transcript, relinquishes its writer lock, and prints the exact target resume command. The target claims a live lease, advances the fencing epoch, and prevents the source from appending or executing further work.
+
+Read-only \`xeno handoff status <session-id> --json\` is safe. Stateless commands cannot impersonate a live owner or mint execution authority.`,
+        },
         {
           slug: 'agent-loop',
           title: 'The agent loop & tools',
