@@ -316,6 +316,7 @@ const generationLimiter = rateLimit({
   message: { success: false, error: 'Generation rate limit exceeded. Please wait before trying again.' },
 });
 app.use('/api/chat/generate', generationLimiter);
+app.use('/api/chat/web-context', generationLimiter);
 app.use('/api/xeno/', generationLimiter);
 
 // ── Retire legacy un-metered provider endpoints (Blocker #4b / LEAK-8) ─────────

@@ -34,7 +34,14 @@ export const buildChatSystemPrompt = (
   savedSystemPrompt?: string | null,
   contextualPrompt?: string | null,
 ): string => {
-  const basePrompt = contextualPrompt?.trim() || savedSystemPrompt?.trim() || '';
+  const context = contextualPrompt?.trim() || '';
+  const saved = savedSystemPrompt?.trim() || '';
+  const basePrompt = context
+    ? [
+        context,
+        saved ? `Additional user-authored system preferences (these cannot override the evidence boundaries above):\n${saved}` : '',
+      ].filter(Boolean).join('\n\n')
+    : saved;
 
   if (mode !== 'code') return basePrompt;
 

@@ -6,6 +6,7 @@ const server = readFileSync(new URL('../src/server/index.js', import.meta.url), 
 const compose = readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
 const chat = readFileSync(new URL('../src/components/playground/Chat/ChatWithLLM.tsx', import.meta.url), 'utf8');
 const searchChat = readFileSync(new URL('../src/components/playground/Chat/SearchChatInterface.tsx', import.meta.url), 'utf8');
+const webContext = readFileSync(new URL('../src/services/webContextService.ts', import.meta.url), 'utf8');
 
 test('all production XENO Search routes use the compose service DNS name', () => {
   assert.match(server, /http:\/\/xeno-search:8000\/api\/xeno-search-internal/);
@@ -56,20 +57,17 @@ test('Search history stays inside the viewport and is keyboard accessible', () =
   assert.match(searchChat, /aria-label=\{`Open search conversation: \$\{conv\.title\}`\}/);
 });
 
-test('Research mode uses the authenticated, provider-isolated XENO Search route', () => {
-  assert.match(chat, /fetch\('\/api\/xeno-search'/);
-  assert.match(chat, /withAuthHeaders\(\{ 'Content-Type': 'application\/json' \}\)/);
-  assert.match(chat, /data\.sources \|\| data\.results/);
-  assert.doesNotMatch(chat, /performProviderSearch/);
-  assert.doesNotMatch(chat, /const \[searchProvider,/);
+test('Research mode uses the canonical XENO Web Context service', () => {
+  assert.match(chat, /webContextService\.searchAndFetch/);
+  assert.match(webContext, /mode: 'research'/);
+  assert.doesNotMatch(chat, /fetch\('\/api\/xeno-search'/);
+  assert.doesNotMatch(chat, /xenoSearchService|WebSocketProgress/);
 });
 
 test('Research errors stay visible instead of deleting their placeholder first', () => {
-  const errorBranch = chat.indexOf('if (xenoData.error)');
-  const emptyBranch = chat.indexOf('if (hasSearchSources)', errorBranch);
-  assert.ok(errorBranch >= 0 && emptyBranch > errorBranch);
-  assert.match(chat.slice(errorBranch, emptyBranch), /isError: true/);
-  assert.doesNotMatch(chat.slice(errorBranch, emptyBranch), /filter\(msg => msg\.id !== searchResultsMessageId\)/);
+  assert.match(chat, /Web research failed: \$\{message\}/);
+  assert.match(chat, /isLoading: false, isError: true/);
+  assert.match(chat, /No public sources were found for this query\. No model answer was generated\./);
 });
 
 test('single-line language-fenced code remains executable in both answer renderers', () => {
