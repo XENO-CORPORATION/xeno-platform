@@ -214,7 +214,9 @@ test('public share serialization is an allowlist and strips embedded private cap
     {
       id: 'a1', role: 'assistant',
       content: 'asset_id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 data:image/png;base64,QUJDRA==',
-      model_id: 'xeno', thinking: 'hidden chain', context_manifest: { secret: true }, message_index: 1,
+      model_id: 'xeno', thinking: 'hidden chain', context_manifest: { secret: true },
+      search_context: { requestId: 'private-web-request', sources: [{ evidenceId: 'private-web-evidence' }] },
+      message_index: 1,
     },
     { id: 's1', role: 'system', content: 'hidden system policy', message_index: 2 },
   ]);
@@ -223,7 +225,7 @@ test('public share serialization is an allowlist and strips embedded private cap
     'content', 'created_at', 'id', 'message_index', 'model_id', 'role',
   ]);
   const serialized = JSON.stringify(messages);
-  assert.doesNotMatch(serialized, /secret|6ba7b810|QUJDRA|hidden|attachments|context_manifest|thinking/);
+  assert.doesNotMatch(serialized, /secret|6ba7b810|QUJDRA|hidden|attachments|context_manifest|thinking|private-web|search_context/);
   assert.match(serialized, /private Library reference removed/);
   assert.match(serialized, /private embedded bytes removed/);
 });

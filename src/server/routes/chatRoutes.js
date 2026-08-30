@@ -16,6 +16,8 @@ import {
 } from '../services/chatProjectAuthority.js';
 import { calculateNextScheduleOccurrence, calculateScheduleOccurrences } from '../services/chatScheduleRecurrence.js';
 import { CHAT_PROJECT_CONTRACTS } from '../config/chatProjectContracts.js';
+import { requireActivated } from '../services/accountActivation.js';
+import { chatWebContextService, ChatWebContextError } from '../services/chatWebContext.js';
 
 /** Local `convo-<timestamp>` ids are UI-only. Sending one to Postgres is a 500. */
 function rejectIfNotPersistedConversationId(res, conversationId) {
@@ -112,6 +114,134 @@ async function rejectUnownedChatReferences(req, res, {
 }
 
 const router = express.Router();
+
+// POST /api/chat/web-context/search - canonical public-web research seam.
+// The browser supplies intent only. Tenant, actor, budgets, provider authority,
+// and persisted evidence are all owned by the server.
+router.post('/web-context/search', requireActivated, async (req, res) => {
+  const startedAt = Date.now();
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({
+    ok: false,
+    error: { code: 'unauthorized', message: 'Authentication required.', retryable: false },
+  });
+
+  const { query, count, mode, conversationId } = req.body || {};
+  if (mode !== 'research') return res.status(400).json({
+    ok: false,
+    error: { code: 'invalid_web_context_mode', message: 'Research mode is required.', retryable: false },
+  });
+  if (!UUID_RE.test(String(conversationId || ''))) return res.status(400).json({
+    ok: false,
+    error: { code: 'invalid_conversation_id', message: 'A persisted conversation is required.', retryable: false },
+  });
+
+  const controller = new AbortController();
+  const abort = () => controller.abort(new DOMException('Client disconnected', 'AbortError'));
+  req.once('aborted', abort);
+  res.once('close', () => { if (!res.writableEnded) abort(); });
+
+  try {
+    await requireResourceRelation(req.db, userPrincipal(userId), 'conversation', conversationId, 'reviewer');
+    const latestUserMessage = (await req.db.query(
+      `SELECT id FROM chat_messages
+       WHERE conversation_id=$1 AND user_id=$2 AND role='user'
+       ORDER BY message_index DESC LIMIT 1`,
+      [conversationId, userId],
+    )).rows[0];
+    if (!latestUserMessage) return res.status(409).json({
+      ok: false,
+      error: {
+        code: 'web_context_user_turn_missing',
+        message: 'Save the user turn before starting web research.',
+        retryable: true,
+      },
+    });
+
+    const result = await chatWebContextService.searchAndFetch({
+      actorId: userId,
+      conversationId,
+      userMessageId: latestUserMessage.id,
+      query,
+      count,
+      signal: controller.signal,
+    });
+
+    let webContextReceiptId = null;
+    if (result.sources.length > 0) {
+      const serializedContext = JSON.stringify(result.searchContext);
+      if (Buffer.byteLength(serializedContext, 'utf8') > 64 * 1024) {
+        throw new ChatWebContextError('web_context_evidence_too_large', 'Web research evidence exceeded its safe bound.', {
+          status: 502,
+          requestId: result.requestId,
+        });
+      }
+      const requestHash = crypto.createHash('sha256')
+        .update(`${userId}\0${conversationId}\0${latestUserMessage.id}\0${result.requestId}`)
+        .digest('hex');
+      const queryHash = crypto.createHash('sha256').update(String(result.searchContext.query)).digest('hex');
+      const receipt = (await req.db.query(
+        `INSERT INTO chat_web_context_receipts(
+           user_id,conversation_id,user_message_id,request_id,request_hash,query_hash,search_context
+         ) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)
+         RETURNING id`,
+        [userId, conversationId, latestUserMessage.id, result.requestId, requestHash, queryHash, serializedContext],
+      )).rows[0];
+      webContextReceiptId = receipt.id;
+    }
+
+    console.log('[ChatWebContext] completed', {
+      requestId: result.requestId,
+      userId,
+      sourceCount: result.sources.length,
+      terminalReason: result.terminalReason,
+      durationMs: Date.now() - startedAt,
+    });
+    return res.json({
+      ok: true,
+      provenance: {
+        kind: 'xeno-web-context',
+        contractVersion: '1.0.0',
+        requestId: result.requestId,
+        evidenceId: result.searchEvidence?.evidenceId || null,
+        retrievedAt: result.searchEvidence?.retrievedAt || null,
+        terminalReason: result.terminalReason,
+      },
+      data: {
+        operation: 'search-and-fetch',
+        query: result.searchContext.query,
+        sources: result.sources,
+        job: result.job || null,
+        webContextReceiptId,
+        searchContext: result.searchContext,
+      },
+    });
+  } catch (error) {
+    if (sendChatAuthorityError(res, error)) return;
+    const shaped = error instanceof ChatWebContextError
+      ? error
+      : new ChatWebContextError('web_context_unavailable', 'Web research is temporarily unavailable.', {
+          retryable: true,
+          cause: error,
+        });
+    console.warn('[ChatWebContext] failed', {
+      requestId: shaped.requestId,
+      userId,
+      code: shaped.code,
+      durationMs: Date.now() - startedAt,
+    });
+    if (res.headersSent || controller.signal.aborted) return;
+    return res.status(shaped.status || 503).json({
+      ok: false,
+      error: {
+        code: shaped.code,
+        message: shaped.message,
+        retryable: Boolean(shaped.retryable),
+        ...(shaped.requestId ? { requestId: shaped.requestId } : {}),
+      },
+    });
+  }
+});
 
 // ============================================
 // DATABASE INITIALIZATION
@@ -547,11 +677,28 @@ router.post('/conversations/:id/messages', async (req, res) => {
       has_thinking = false,
       attachments,
       search_context,
+      web_context_receipt_id,
       prompt_tokens,
       completion_tokens,
       total_tokens,
       context_record_id
     } = req.body;
+
+    if (search_context !== undefined && search_context !== null) {
+      return res.status(400).json({
+        success: false,
+        error: 'Web Context provenance is server-owned. Persist it with a valid receipt.',
+        code: 'client_search_context_forbidden',
+      });
+    }
+
+    if (web_context_receipt_id && (!UUID_RE.test(web_context_receipt_id) || role !== 'assistant')) {
+      return res.status(400).json({
+        success: false,
+        error: 'A valid Web Context receipt may only be attached to an assistant message.',
+        code: 'invalid_web_context_receipt',
+      });
+    }
 
     if (context_record_id && (!UUID_RE.test(context_record_id) || role !== 'assistant')) {
       return res.status(400).json({
@@ -577,6 +724,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
     const savedMessage = await withTransaction(req.db, async (tx) => {
       await tx.query('SELECT id FROM chat_conversations WHERE id = $1 FOR UPDATE', [conversationId]);
       let generationContext = null;
+      let webContextReceipt = null;
       if (context_record_id) {
         generationContext = (await tx.query(
           `SELECT id, project_id, response_hash, context_manifest, safe_sources
@@ -598,6 +746,26 @@ router.post('/conversations/:id/messages', async (req, res) => {
           });
         }
       }
+      if (web_context_receipt_id) {
+        webContextReceipt = (await tx.query(
+          `SELECT id, search_context
+           FROM chat_web_context_receipts
+           WHERE id=$1 AND conversation_id=$2 AND user_id=$3
+             AND consumed_message_id IS NULL AND expires_at > NOW()
+             AND user_message_id = (
+               SELECT id FROM chat_messages
+               WHERE conversation_id=$2 AND user_id=$3 AND role='user'
+               ORDER BY message_index DESC LIMIT 1
+             )
+           FOR UPDATE`,
+          [web_context_receipt_id, conversationId, userId],
+        )).rows[0];
+        if (!webContextReceipt) {
+          throw Object.assign(new Error('Web Context receipt is invalid, expired, or already consumed.'), {
+            code: 'invalid_web_context_receipt', status: 409,
+          });
+        }
+      }
       const messageIndex = Number((await tx.query(
         `SELECT COALESCE(MAX(message_index), -1) + 1 as next_index
          FROM chat_messages WHERE conversation_id = $1`,
@@ -612,7 +780,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
         RETURNING *`,
         [conversationId, userId, role, content, model_id, thinking, has_thinking,
           attachments ? JSON.stringify(attachments) : null,
-          search_context ? JSON.stringify(search_context) : null,
+          webContextReceipt ? JSON.stringify(webContextReceipt.search_context) : null,
           prompt_tokens, completion_tokens, total_tokens, messageIndex],
       )).rows[0];
       if (generationContext) {
@@ -629,6 +797,12 @@ router.post('/conversations/:id/messages', async (req, res) => {
       } else {
         inserted.project_sources = [];
       }
+      if (webContextReceipt) {
+        await tx.query(
+          'UPDATE chat_web_context_receipts SET consumed_message_id=$2 WHERE id=$1',
+          [webContextReceipt.id, inserted.id],
+        );
+      }
       await tx.query(
         `UPDATE chat_conversations SET last_message_at=NOW(),updated_at=NOW(),
            title=CASE WHEN $2='user' AND $3=0 AND title='New Chat' THEN $4 ELSE title END
@@ -644,7 +818,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
     });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
-    if (error.code === 'invalid_context_record') {
+    if (error.code === 'invalid_context_record' || error.code === 'invalid_web_context_receipt') {
       return res.status(error.status || 409).json({ success: false, error: error.message, code: error.code });
     }
     console.error('Failed to add message:', error);
@@ -666,6 +840,14 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ success: false, error: 'Messages array required' });
+    }
+
+    if (messages.some((message) => message?.search_context != null || message?.web_context_receipt_id != null)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Authoritative Web Context evidence cannot be persisted through the batch endpoint.',
+        code: 'client_search_context_forbidden',
+      });
     }
 
     await requireResourceRelation(req.db, userPrincipal(userId), 'conversation', conversationId, 'reviewer');
@@ -704,7 +886,7 @@ router.post('/conversations/:id/messages/batch', async (req, res) => {
           conversationId, userId, msg.role, msg.content, msg.model_id,
           msg.thinking, msg.has_thinking || false,
           msg.attachments ? JSON.stringify(msg.attachments) : null,
-          msg.search_context ? JSON.stringify(msg.search_context) : null,
+          null,
           msg.prompt_tokens, msg.completion_tokens, msg.total_tokens, messageIndex++
         ]
       );
@@ -763,6 +945,7 @@ router.put('/messages/:id', async (req, res) => {
     if (content !== undefined) {
       updates.push(`content = $${paramIndex++}`);
       values.push(content);
+      updates.push('search_context = NULL');
     }
     if (thinking !== undefined) {
       updates.push(`thinking = $${paramIndex++}`);

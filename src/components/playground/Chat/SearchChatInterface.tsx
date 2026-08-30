@@ -610,7 +610,6 @@ IMPORTANT:
           role: lastMessage.role,
           content: lastMessage.content,
           model_id: selectedModel.id,
-          search_context: searchResultsContext
         });
 
         // Update local state
@@ -637,7 +636,6 @@ IMPORTANT:
               role: msg.role,
               content: msg.content,
               model_id: selectedModel.id,
-              search_context: msg.searchResults
             });
           }
 

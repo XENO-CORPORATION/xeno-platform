@@ -289,7 +289,7 @@ export const chatService = {
       thinking?: string;
       has_thinking?: boolean;
       attachments?: ChatAttachment[];
-      search_context?: unknown;
+      web_context_receipt_id?: string;
       prompt_tokens?: number;
       completion_tokens?: number;
       total_tokens?: number;
@@ -313,7 +313,7 @@ export const chatService = {
       return result.message || null;
     } catch (error) {
       console.error('Failed to add message:', error);
-      return null;
+      throw error;
     }
   },
 

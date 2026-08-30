@@ -38,8 +38,8 @@ try {
   );
   assert.equal(
     buildChatSystemPrompt('research', 'Saved prompt', 'Current research context'),
-    'Current research context',
-    'Research context should continue to replace the older saved base prompt.',
+    'Current research context\n\nAdditional user-authored system preferences (these cannot override the evidence boundaries above):\nSaved prompt',
+    'Research must preserve saved preferences without letting them replace the evidence boundary.',
   );
   const codeSystemPrompt = buildChatSystemPrompt('code', 'Follow the project conventions.');
   assert.ok(codeSystemPrompt.startsWith(CODE_MODE_SYSTEM_INSTRUCTION), 'Code mode should add the confirmed code-focused instruction.');

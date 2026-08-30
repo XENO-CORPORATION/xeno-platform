@@ -95,7 +95,7 @@
     "test:workspace-fallback": "node --test scripts/workspace-dev-fallback.test.mjs",
     "test:chat-model-capabilities": "node --test scripts/chat-model-capabilities.test.mjs",
     "test:chat-settings-persistence": "node --test scripts/chat-settings-persistence.test.mjs",
-    "test:chat-search-routing": "node --test scripts/chat-search-routing.test.mjs",
+    "test:chat-search-routing": "node --test scripts/chat-search-routing.test.mjs scripts/chat-web-context-routing.test.mjs scripts/chat-web-context.test.mjs",
     "test:html-error-parse": "node --test scripts/html-error-parse.test.mjs",
     "test:tokenizer-cache": "node --test scripts/tokenizer-encoding-cache.test.mjs",
     "test:nginx-api-proxy": "node --test scripts/nginx-api-proxy.test.mjs",
