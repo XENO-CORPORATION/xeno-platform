@@ -8,12 +8,12 @@ import type { ProductContent } from './_types';
  *
  * CORRECTED 2026-07-27, verified against the npm registry:
  *  · SCOPE. The CLI moved to @xenosystem. npm `latest`:
- *      @xenosystem/agent-cli            0.5.41   ← the live product
+ *      @xenosystem/agent-cli            0.5.42   ← this release candidate
  *      @xeno-corporation/xeno-agent-cli 0.4.45   ← frozen, 13 patches behind
  *    Both still resolve, so this was not a dead command — it was a command that
  *    silently installed an older build. Same defect class as XENO ACP. The
- *    binaries are unchanged (`xeno`, `xeno-agent`, `xeno-code`), and 0.5.41
- *    depends on @xenosystem/agent-sdk@0.9.24.
+ *    binaries are unchanged (`xeno`, `xeno-agent`, `xeno-code`), and 0.5.42
+ *    depends on @xenosystem/agent-sdk@0.9.25.
  *  · THE curl / PowerShell ONE-LINER DOES NOT WORK. This page and the docs
  *    advertised `curl -fsSL https://xenostudio.ai/install.sh | sh` and
  *    `irm https://xenostudio.ai/install.ps1 | iex`. Neither file exists: there

@@ -11,8 +11,8 @@ const agentCli: ProductDocs = {
   slug: 'agent-cli',
   productName: 'XENO Agent CLI',
   tagline: 'The terminal AI coding agent — read, edit, and run with your permission, any model, fully auditable.',
-  version: '0.5.41',
-  updated: '2026-08-30',
+  version: '0.5.42',
+  updated: '2026-08-31',
   seo: {
     title: 'XENO Agent CLI documentation',
     description:
@@ -232,6 +232,14 @@ Both commands open the same XENO terminal interface. Chat is branded **XENO CHAT
 Resume preserves the original mode. A Chat command refuses a project-bound Agent session; resume that session with \`xeno agent --resume <id>\`. The current shell directory alone never changes persisted authority.
 
 Open the matching graphical surface with \`xeno chat --interface\` or \`xeno agent --interface\`. The desktop must acknowledge the exact nonce-bound resume request; merely starting an incompatible older app is not reported as success.
+
+## Provider cockpit and native terminal
+
+The XENO TUI remains the session cockpit. Use \`/provider\` to select a discovered execution lane and provider, then choose a model from that provider's live catalog. Fixture definitions are test-only and are not production model choices.
+
+An attach action opens the selected provider's own native TUI—Codex, Claude Code, or another provider that advertises a native launcher—in the exact session workspace. Detach returns terminal ownership to XENO without terminating the provider. Reattach follows the same provider continuation; Stop is the explicit termination action. A provider with no valid native launcher fails visibly and never falls back to PowerShell or a different CLI.
+
+User messages entered in an attached native provider TUI are mirrored into the owning graphical conversation when that provider exposes a durable transcript. GUI turns routed through the same ACP lane continue the same provider session. Provider-native structured reasoning and tool rendering may remain visible only in the provider terminal when the normalized ACP stream cannot represent it exactly.
 
 Related: [Sessions, checkpoints & resume](/docs/agent-cli/sessions) · [XENO Agent modes](/docs/agent/chat-and-agent-modes).`,
         },
@@ -633,6 +641,8 @@ Slash commands work inside an interactive \`xeno chat\` session. Type \`/help\` 
 ## Model & mode
 \`/model\` · \`/effort\` · \`/fast\` · \`/mode\` · \`/provider\` · \`/color\` (alias \`/theme\`) · \`/vim\`
 
+\`/provider\` opens the live provider cockpit. It reports the selected lane, provider availability, provider models, attached native-session identity, and attach/detach/stop/reconcile actions; it does not replace the surrounding XENO TUI with a reduced transcript renderer.
+
 ## Memory
 \`/memory\` · \`/memory context\` · \`/remember\`
 
@@ -909,6 +919,12 @@ In a session, \`/doctor\` and \`/bug-report\` do the same, and \`/ctx-viz\` visu
 **The agent won't run a command.** Check your [permission mode](/docs/agent-cli/permissions) — writes and shell commands ask by default, and in non-interactive contexts prompts auto-deny unless you opt in.
 
 **It picked the wrong model.** The catalog is dynamic; run \`xeno models\` and set \`--model\` or \`XENO_MODEL\`. See [Models](/docs/agent-cli/models).
+
+**A native provider TUI will not attach.** Run \`xeno doctor\` and inspect the provider cockpit. The provider must be installed, authenticated, approved by policy, expose a resolvable native launcher, and support the selected workspace/model. XENO does not substitute a generic shell when that contract fails.
+
+**The provider asks to trust the workspace again.** Agent mode already carries an explicit workspace grant. XENO maps it into provider-supported trust/permission flags; a repeated prompt means the installed provider launcher no longer matches the qualified contract. Record its version and diagnostic instead of granting a broader directory.
+
+**Native terminal messages are absent from the GUI.** Check that both views name the same durable XENO conversation and provider session. Reattach that exact session; synchronization follows persisted provider user-message events and does not scrape terminal pixels.
 
 **I want it fully offline.** Point it at Ollama or xeno-rt — see [Local & offline models](/docs/agent-cli/local-models).
 
