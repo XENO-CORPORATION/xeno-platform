@@ -37,8 +37,9 @@ LIVE_IMAGE="$(docker inspect xenostudio-postgres --format '{{.Image}}')"
 SHORT="${SHA:0:7}"
 BACKEND_IMAGE="xeno-platform-backend:$SHORT"
 docker image inspect "$BACKEND_IMAGE" >/dev/null || { echo "remote-chat-database-cutover: missing build-only backend image $BACKEND_IMAGE" >&2; exit 1; }
-EXPECTED_MIGRATION_COUNT="$(docker run --rm --entrypoint sh "$BACKEND_IMAGE" -c \
-  "find /app/database/migrations -maxdepth 1 -type f | sed 's#.*/##' | grep -Ec '^[0-9]{14}[-_].+\\.sql$'")"
+EXPECTED_MIGRATION_VERSIONS="$(docker run --rm --entrypoint sh "$BACKEND_IMAGE" -c \
+  "find /app/database/migrations -maxdepth 1 -type f | sed 's#.*/##' | sed -nE 's/^([0-9]{14})[-_].+\\.sql$/\\1/p' | sort -u")"
+EXPECTED_MIGRATION_COUNT="$(printf '%s\n' "$EXPECTED_MIGRATION_VERSIONS" | grep -Ec '^[0-9]{14}$')"
 [[ "$EXPECTED_MIGRATION_COUNT" =~ ^[1-9][0-9]*$ ]] || {
   echo "remote-chat-database-cutover: candidate image has no discoverable timestamped migrations" >&2
   exit 1
@@ -71,11 +72,28 @@ backup_database() {
   local output="$1"
   docker exec xenostudio-postgres pg_dump -U postgres -d xenostudio --format=custom --no-owner --no-acl > "$output"
   test -s "$output"
-  docker cp "$output" xenostudio-postgres:/tmp/xeno-chat-cutover-verify.dump
-  docker exec xenostudio-postgres pg_restore --list /tmp/xeno-chat-cutover-verify.dump > "$output.list"
-  docker exec xenostudio-postgres rm -f /tmp/xeno-chat-cutover-verify.dump
+  docker exec -i xenostudio-postgres pg_restore --list < "$output" > "$output.list"
   test -s "$output.list"
   sha256sum "$output" > "$output.sha256"
+}
+
+verify_migrations() {
+  local container="$1" actual_versions actual_count missing
+  actual_versions="$(docker exec "$container" psql -U postgres -d xenostudio -Atc \
+    "SELECT version FROM schema_migrations ORDER BY version;")"
+  actual_count="$(printf '%s\n' "$actual_versions" | grep -Ec '^[0-9]{14}$')"
+  missing="$(comm -23 \
+    <(printf '%s\n' "$EXPECTED_MIGRATION_VERSIONS") \
+    <(printf '%s\n' "$actual_versions"))"
+  if [ -n "$missing" ]; then
+    echo "remote-chat-database-cutover: candidate migrations missing from $container" >&2
+    printf '%s\n' "$missing" >&2
+    return 1
+  fi
+  [ "$actual_count" -ge "$EXPECTED_MIGRATION_COUNT" ] || {
+    echo "remote-chat-database-cutover: migration inventory shrank in $container" >&2
+    return 1
+  }
 }
 
 run_migrations() {
@@ -101,9 +119,9 @@ BASELINE_BACKUP="$EVIDENCE_DIR/production-baseline.dump"
 backup_database "$BASELINE_BACKUP"
 log "baseline backup captured and listed: $BASELINE_BACKUP"
 
-QUAL_NETWORK="xeno-chat-pgvector-qual-$SHORT"
-QUAL_CONTAINER="xeno-chat-pgvector-qual-$SHORT"
-QUAL_VOLUME="xeno-chat-pgvector-qual-$SHA"
+QUAL_NETWORK="xeno-chat-pgvector-qual-$SHORT-$STAMP"
+QUAL_CONTAINER="xeno-chat-pgvector-qual-$SHORT-$STAMP"
+QUAL_VOLUME="xeno-chat-pgvector-qual-$SHA-$STAMP"
 docker network inspect "$QUAL_NETWORK" >/dev/null 2>&1 || docker network create "$QUAL_NETWORK" >/dev/null
 docker volume inspect "$QUAL_VOLUME" >/dev/null 2>&1 || docker volume create --label xeno.verification=chat-pgvector "$QUAL_VOLUME" >/dev/null
 docker rm -f "$QUAL_CONTAINER" >/dev/null 2>&1 || true
@@ -112,13 +130,11 @@ docker run -d --name "$QUAL_CONTAINER" --network "$QUAL_NETWORK" --network-alias
   --env POSTGRES_DB=xenostudio --env POSTGRES_USER=postgres --env POSTGRES_HOST_AUTH_METHOD=trust \
   "$PGVECTOR_IMAGE" >/dev/null
 wait_postgres "$QUAL_CONTAINER"
-docker cp "$BASELINE_BACKUP" "$QUAL_CONTAINER:/tmp/production.dump"
-docker exec "$QUAL_CONTAINER" pg_restore -U postgres -d xenostudio --no-owner --no-acl /tmp/production.dump
+docker exec -i "$QUAL_CONTAINER" pg_restore -U postgres -d xenostudio --no-owner --no-acl < "$BASELINE_BACKUP"
 run_migrations "$QUAL_NETWORK" 'postgresql://postgres@postgres:5432/xenostudio'
 docker exec "$QUAL_CONTAINER" psql -U postgres -d xenostudio -Atc \
   "SELECT extversion FROM pg_extension WHERE extname='vector';" | grep -qx '0.8.6'
-docker exec "$QUAL_CONTAINER" psql -U postgres -d xenostudio -Atc \
-  "SELECT count(*) FROM schema_migrations;" | grep -qx "$EXPECTED_MIGRATION_COUNT"
+verify_migrations "$QUAL_CONTAINER"
 docker stop "$QUAL_CONTAINER" >/dev/null
 log "production-shaped restore qualification passed; migrations=$EXPECTED_MIGRATION_COUNT retained volume=$QUAL_VOLUME"
 
@@ -138,8 +154,7 @@ restore_quiesced_backup() {
     --env POSTGRES_DB=xenostudio --env POSTGRES_USER=postgres --env POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
     "$PLAIN_IMAGE" >/dev/null
   wait_postgres "$rollback_container"
-  docker cp "$backup" "$rollback_container:/tmp/quiesced.dump"
-  docker exec "$rollback_container" pg_restore -U postgres -d xenostudio --clean --if-exists --no-owner --no-acl /tmp/quiesced.dump
+  docker exec -i "$rollback_container" pg_restore -U postgres -d xenostudio --clean --if-exists --no-owner --no-acl < "$backup"
   docker compose up -d --no-deps backend
   BACKEND_STOPPED=0
   log "emergency restore is serving from retained rollback volume=$rollback_volume; compose DB is intentionally not reconciled"
@@ -157,7 +172,7 @@ if docker compose up -d --no-deps --force-recreate postgres && wait_postgres xen
   DATABASE_URL="postgresql://postgres@postgres:5432/xenostudio"
   if PGPASSWORD="$POSTGRES_PASSWORD" run_migrations xeno-platform_xenostudio-network "$DATABASE_URL" \
       && docker exec xenostudio-postgres psql -U postgres -d xenostudio -Atc "SELECT extversion FROM pg_extension WHERE extname='vector';" | grep -qx '0.8.6' \
-      && docker exec xenostudio-postgres psql -U postgres -d xenostudio -Atc "SELECT count(*) FROM schema_migrations;" | grep -qx "$EXPECTED_MIGRATION_COUNT"; then
+      && verify_migrations xenostudio-postgres; then
     cutover_ok=1
   fi
 fi

@@ -539,8 +539,30 @@ export async function holdV2(pool, userId, req) {
   let outcome; // { existingRow } | { row, balance, held, isFrozen }
   try {
     await client.query('BEGIN');
-    const existing = await client.query('SELECT * FROM credit_holds WHERE user_id = $1 AND hold_id = $2', [userId, req.holdId]);
-    if (existing.rows.length > 0) {
+    const existing = await client.query('SELECT * FROM credit_holds WHERE user_id = $1 AND hold_id = $2 FOR UPDATE', [userId, req.holdId]);
+    if (existing.rows.length > 0 && req.reopenVoided === true && existing.rows[0].state === 'voided') {
+      const acct = await ensureAccount(client, userId);
+      const balance = BigInt(acct.balance);
+      const held = await activeHoldsMicro(client, userId);
+      if (acct.is_frozen || balance - held < amountMicro) {
+        await client.query('ROLLBACK');
+        const err = new Error('insufficient credits');
+        err.code = acct.is_frozen ? 'ACCOUNT_FROZEN' : 'INSUFFICIENT_CREDITS';
+        throw err;
+      }
+      await assertWithinCaps(client, userId, amountMicro);
+      const expiresAt = new Date(Date.now() + (req.expiresInSeconds ?? 900) * 1000);
+      const reopened = await client.query(
+        `UPDATE credit_holds
+         SET state='held', amount_micro=$2, settled_micro=0, expires_at=$3, updated_at=now()
+         WHERE id=$1 AND state='voided'
+         RETURNING *`,
+        [existing.rows[0].id, amountMicro.toString(), expiresAt.toISOString()],
+      );
+      if (!reopened.rows[0]) throw Object.assign(new Error('voided hold could not be reopened'), { code: 'HOLD_REOPEN_CONFLICT' });
+      await client.query('COMMIT');
+      outcome = { row: reopened.rows[0], balance, held, isFrozen: Boolean(acct.is_frozen) };
+    } else if (existing.rows.length > 0) {
       await client.query('COMMIT');
       outcome = { existingRow: existing.rows[0] };
     } else {

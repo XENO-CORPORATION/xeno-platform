@@ -9,6 +9,7 @@ import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { CHAT_PROJECT_CONTRACTS } from '../src/server/config/chatProjectContracts.js';
 import { extractAsset, UnsupportedAssetError } from '../src/server/services/library/assetExtractors.js';
 import { scanFile } from '../src/server/services/library/assetIngestionService.js';
+import { startLibraryIngestionWorker } from '../src/server/workers/libraryIngestionWorker.js';
 
 const roots = [];
 
@@ -148,4 +149,23 @@ test('mandatory scanner fails closed for absence, outage, and malware', async ()
   let invocation = null;
   await scanFile('fixture', { execFileFn: async (...args) => { invocation = args; } });
   assert.deepEqual(invocation[1], ['--no-summary', '--infected', 'fixture']);
+});
+
+test('library ingestion timer never overlaps a slow mandatory scan sweep', async () => {
+  let calls = 0;
+  let releaseSweep;
+  const sweep = new Promise((resolve) => { releaseSweep = resolve; });
+  const stop = startLibraryIngestionWorker({}, 5, {
+    processor: async () => {
+      calls += 1;
+      await sweep;
+    },
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(calls, 1, 'timer ticks must not start another scanner sweep while one is active');
+  stop();
+  releaseSweep();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(calls, 1);
 });

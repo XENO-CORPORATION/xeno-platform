@@ -198,6 +198,30 @@ test('project chat membership persists on create, move, list, and direct load', 
     'direct conversation loads discard persisted project_id.',
   );
 
+  const generationStart = WITH_LLM.indexOf('const generationConversationId');
+  assert.notEqual(generationStart, -1, 'the generation ownership resolver is missing.');
+  const generation = WITH_LLM.slice(generationStart, generationStart + 2200);
+  assert.match(
+    generation,
+    /generationConversationId\s*=\s*activeConversationIdRef\.current \?\? activeConversationId/,
+    'generation can close over the pre-navigation conversation id.',
+  );
+  assert.match(
+    generation,
+    /conversationHistoryRef\.current\.find\(\(conversation\) => conversation\.id === generationConversationId\)\?\.projectId/,
+    'a project conversation opened on /c/:id loses its persisted project context.',
+  );
+  assert.match(
+    generation,
+    /conversationId:\s*isPersistedConversationId\(generationConversationId\)/,
+    'the generation payload does not carry the current persisted conversation id.',
+  );
+  assert.match(
+    generation,
+    /projectId:\s*generationProjectId/,
+    'the generation payload does not carry the project id resolved from the conversation row.',
+  );
+
   assert.match(
     ROUTES,
     /updates\.push\(`project_id =/,

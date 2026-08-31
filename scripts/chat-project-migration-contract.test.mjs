@@ -14,6 +14,30 @@ const migrationPath = join(
   '20260829120000-chat-projects-core.sql',
 );
 const sql = readFileSync(migrationPath, 'utf8');
+const onceRunAuthorizationSql = readFileSync(join(
+  ROOT,
+  'src',
+  'server',
+  'database',
+  'migrations',
+  '20260829134500-chat-once-run-gateway-authorization.sql',
+), 'utf8');
+const uniqueIndexRepairSql = readFileSync(join(
+  ROOT,
+  'src',
+  'server',
+  'database',
+  'migrations',
+  '20260829134400-repair-live-unique-index-drift.sql',
+), 'utf8');
+const manualRetrySql = readFileSync(join(
+  ROOT,
+  'src',
+  'server',
+  'database',
+  'migrations',
+  '20260829150000-chat-manual-run-retry.sql',
+), 'utf8');
 
 test('core migration is additive, discoverable, and vector-free', () => {
   assert.match(migrationPath, /database[\\/]migrations[\\/]\d{14}[-_].+\.sql$/);
@@ -48,6 +72,38 @@ test('ingestion and scheduler invariants are database-enforced', () => {
   assert.match(sql, /user_id UUID NOT NULL,\s*\n\s*request_hash/i);
   assert.doesNotMatch(sql, /chat_gateway_run_requests[\s\S]{0,300}user_id UUID NOT NULL REFERENCES users/i);
   assert.match(sql, /REVOKE ALL ON chat_gateway_dispatch_authorizations FROM PUBLIC/i);
+});
+
+test('a dispatched one-time occurrence stays gateway-authorized without weakening manual pause', () => {
+  assert.match(onceRunAuthorizationSql, /^--\s*UP\b/m);
+  assert.match(onceRunAuthorizationSql, /security_barrier\s*=\s*true/i);
+  assert.match(
+    onceRunAuthorizationSql,
+    /r\.status\s*=\s*'running'[\s\S]*t\.status\s*=\s*'active'[\s\S]*t\.status\s*=\s*'paused'[\s\S]*t\.paused_reason\s*=\s*'completed_once'/i,
+  );
+  assert.doesNotMatch(onceRunAuthorizationSql, /paused_by_user|cancelled_by_user|project_archived/i);
+  assert.match(onceRunAuthorizationSql, /REVOKE ALL ON chat_gateway_dispatch_authorizations FROM PUBLIC/i);
+});
+
+test('live unique-index drift repair archives every removed physical row before reindexing', () => {
+  assert.match(uniqueIndexRepairSql, /CREATE TABLE IF NOT EXISTS chat_data_repair_archive/i);
+  assert.match(uniqueIndexRepairSql, /ROW_NUMBER\(\)[\s\S]*PARTITION BY object_type, object_id, relation, subject_type, subject_id/i);
+  assert.match(uniqueIndexRepairSql, /ROW_NUMBER\(\)[\s\S]*PARTITION BY source_system, platform_user_id/i);
+  assert.match(uniqueIndexRepairSql, /INSERT INTO chat_data_repair_archive[\s\S]*RETURNING source_row_id[\s\S]*DELETE FROM relationship_tuples/i);
+  assert.match(uniqueIndexRepairSql, /INSERT INTO chat_data_repair_archive[\s\S]*RETURNING source_row_id[\s\S]*DELETE FROM external_identity_links/i);
+  assert.match(uniqueIndexRepairSql, /REINDEX INDEX relationship_tuples_object_type_object_id_relation_subject__key/i);
+  assert.match(uniqueIndexRepairSql, /REINDEX INDEX uq_eil_source_platform/i);
+});
+
+test('manual retries use a one-shot database authorization without resetting attempt history', () => {
+  assert.match(manualRetrySql, /^--\s*UP\b/m);
+  assert.match(manualRetrySql, /manual_retry_authorized BOOLEAN NOT NULL DEFAULT FALSE/i);
+  const workerSource = readFileSync(join(ROOT, 'src', 'server', 'workers', 'chatScheduledWorker.js'), 'utf8');
+  const routeSource = readFileSync(join(ROOT, 'src', 'server', 'routes', 'chatRoutes.js'), 'utf8');
+  assert.match(workerSource, /attempt_count < t\.max_attempts OR r\.manual_retry_authorized=TRUE/i);
+  assert.match(workerSource, /attempt_count = attempt_count \+ 1,[\s\S]*manual_retry_authorized = FALSE/i);
+  assert.match(routeSource, /manual_retry_authorized=TRUE/i);
+  assert.doesNotMatch(routeSource, /attempt_count\s*=\s*0/i);
 });
 
 test('every backfilled resource receives its concrete ReBAC relationship', () => {

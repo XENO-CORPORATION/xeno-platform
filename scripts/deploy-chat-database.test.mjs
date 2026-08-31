@@ -19,10 +19,20 @@ test('cutover uses the pinned pgvector and rollback Postgres images', () => {
   assert.match(remote, /pgvector\/pgvector:0\.8\.6-pg15-bookworm@sha256:a947c45c/);
   assert.match(remote, /postgres:15-alpine@sha256:a2c20749/);
   assert.match(remote, /live DB image drift/);
+  assert.match(remote, /EXPECTED_MIGRATION_VERSIONS=.*docker run --rm --entrypoint sh "\$BACKEND_IMAGE"/);
+  assert.doesNotMatch(remote, /schema_migrations;" \| grep -qx '42'/);
 });
 
 test('production-shaped restore precedes quiesced production cutover', () => {
   const remote = read('scripts/remote-chat-database-cutover.sh');
+  assert.match(remote, /docker exec -i xenostudio-postgres pg_restore --list < "\$output"/);
+  assert.doesNotMatch(remote, /docker cp "\$output" xenostudio-postgres:/);
+  assert.match(remote, /docker exec -i "\$QUAL_CONTAINER" pg_restore[\s\S]*< "\$BASELINE_BACKUP"/);
+  assert.match(remote, /docker exec -i "\$rollback_container" pg_restore[\s\S]*< "\$backup"/);
+  assert.doesNotMatch(remote, /docker cp "\$BASELINE_BACKUP"/);
+  assert.doesNotMatch(remote, /docker cp "\$backup"/);
+  assert.match(remote, /QUAL_VOLUME="xeno-chat-pgvector-qual-\$SHA-\$STAMP"/);
+  assert.match(remote, /QUAL_CONTAINER="xeno-chat-pgvector-qual-\$SHORT-\$STAMP"/);
   const restore = remote.indexOf('production-shaped restore qualification passed');
   const stop = remote.indexOf('docker compose stop backend');
   const quiesced = remote.indexOf('quiesced backup captured');
@@ -33,11 +43,13 @@ test('production-shaped restore precedes quiesced production cutover', () => {
   assert.ok(recreate > quiesced);
 });
 
-test('migration verification derives its count from the exact candidate image', () => {
+test('migration verification requires the exact candidate set without rejecting forward-only history', () => {
   const remote = read('scripts/remote-chat-database-cutover.sh');
-  assert.match(remote, /EXPECTED_MIGRATION_COUNT="\$\(docker run --rm --entrypoint sh "\$BACKEND_IMAGE"/);
+  assert.match(remote, /EXPECTED_MIGRATION_VERSIONS="\$\(docker run --rm --entrypoint sh "\$BACKEND_IMAGE"/);
   assert.match(remote, /find \/app\/database\/migrations/);
-  assert.equal((remote.match(/grep -qx "\$EXPECTED_MIGRATION_COUNT"/g) || []).length, 2);
+  assert.match(remote, /comm -23/);
+  assert.match(remote, /actual_count" -ge "\$EXPECTED_MIGRATION_COUNT"/);
+  assert.equal((remote.match(/verify_migrations/g) || []).length, 3);
   assert.doesNotMatch(remote, /schema_migrations;" \| grep -qx '[0-9]+'/);
 });
 

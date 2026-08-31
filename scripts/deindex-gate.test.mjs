@@ -84,6 +84,8 @@ test('no sitemap is generated, and a stale one is removed', () => {
     'a sitemap.xml left in dist/ by an earlier build must be REMOVED, or a stale one ships forever');
   assert.doesNotMatch(ROBOTS.replace(/^#.*$/gm, ''), /Sitemap:/,
     'robots.txt must not advertise a sitemap that does not exist');
+  assert.match(NGINX, /location\s*=\s*\/sitemap\.xml\s*{\s*return\s+404;/s,
+    'the SPA catch-all must not answer the disabled sitemap route with index.html and HTTP 200');
 });
 
 test('the legal pages are prerendered — metadata only, and that is stated', () => {

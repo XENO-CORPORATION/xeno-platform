@@ -6543,13 +6543,21 @@ interface QueueState {
     // *** DIAGNOSTIC LOGGING: Track task value before payload construction ***
     console.log(`>>> [FETCHAIRESPONSE INTERNAL] taskArg value being used for payload:`, taskArg);
     
+    // Navigation and direct-load flows may open a persisted project conversation without
+    // leaving its project selected in the sidebar. Resolve generation ownership from the
+    // canonical conversation record before falling back to a new unsaved project draft.
+    const generationConversationId = activeConversationIdRef.current ?? activeConversationId;
+    const generationProjectId = activeProjectId
+        || conversationHistoryRef.current.find((conversation) => conversation.id === generationConversationId)?.projectId
+        || undefined;
+
     const payload = {
         messages: resolvedApiMessages,
         systemPrompt: finalSystemPrompt || undefined,
         selectedModelId: actualModelIdForApi,
         effectiveReasoningState: effectiveReasoningState,
-        conversationId: isPersistedConversationId(activeConversationId) ? activeConversationId : undefined,
-        projectId: activeProjectId || undefined,
+        conversationId: isPersistedConversationId(generationConversationId) ? generationConversationId : undefined,
+        projectId: generationProjectId,
         useSearchTool: undefined as (boolean | undefined),
         task: taskArg // Ensure taskArg is used here
     };

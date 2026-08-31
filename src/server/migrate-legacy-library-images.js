@@ -126,7 +126,10 @@ try {
       }
 
       try {
-        const asset = await registerManagedLibraryFile(client, {
+        // registerManagedLibraryFile owns its transaction. Pass the pool, not
+        // this already-connected advisory-lock client; pg.Client also exposes
+        // connect(), so transaction helpers would otherwise try to reconnect it.
+        const asset = await registerManagedLibraryFile(pool, {
           userId: row.user_id,
           filename,
           originalName: safeOriginalName(row.prompt, row.created_at, extension),

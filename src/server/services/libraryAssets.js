@@ -11,7 +11,7 @@ const GRANT_SIGNATURE_VERSION = 'v2';
 const DEFAULT_LINK_TTL_SECONDS = 24 * 60 * 60;
 const MAX_LINK_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-function sniffMime(buffer, declaredMime) {
+export function sniffMime(buffer, declaredMime) {
   if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
   if (buffer.length >= 6 && ['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'))) return 'image/gif';
@@ -352,10 +352,10 @@ export async function listLibraryItems(db, userId, params = {}) {
   const limit = Math.min(Math.max(parseInt(params.limit, 10) || 100, 1), 200);
   const offset = Math.max(parseInt(params.offset, 10) || 0, 0);
   const orderBy = {
-    updated: 'updated_at DESC NULLS LAST, created_at DESC',
-    created: 'created_at DESC NULLS LAST',
-    name: 'name ASC, updated_at DESC NULLS LAST',
-    size: 'size_bytes DESC NULLS LAST, updated_at DESC NULLS LAST',
+    updated: 'updated_at DESC NULLS LAST, created_at DESC, id ASC',
+    created: 'created_at DESC NULLS LAST, id ASC',
+    name: 'name ASC, updated_at DESC NULLS LAST, id ASC',
+    size: 'size_bytes DESC NULLS LAST, updated_at DESC NULLS LAST, id ASC',
   }[sort];
   const sql = `
     WITH library_items AS (

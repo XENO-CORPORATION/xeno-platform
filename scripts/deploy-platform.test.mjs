@@ -7,6 +7,7 @@ const remote = readFileSync(new URL('./remote-deploy.sh', import.meta.url), 'utf
 const dockerignore = readFileSync(new URL('../.dockerignore', import.meta.url), 'utf8');
 const compose = readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
 const backendDockerfile = readFileSync(new URL('../Dockerfile.backend', import.meta.url), 'utf8');
+const backendDockerignore = readFileSync(new URL('../Dockerfile.backend.dockerignore', import.meta.url), 'utf8');
 const frontendDockerfile = readFileSync(new URL('../Dockerfile.frontend', import.meta.url), 'utf8');
 
 test('backend deploy ships the Docker context policy with every source archive', () => {
@@ -20,16 +21,34 @@ test('backend deploy ships the Docker context policy with every source archive',
 
 test('worker deploy ships backend inputs and gates the semantic component without coupling Docker health to it', () => {
   assert.match(deploy, /['"]chat-workers['"]:\s*\[[^\]]*['"]Dockerfile\.backend['"]/);
+  assert.match(deploy, /['"]chat-workers['"]:\s*\[[^\]]*['"]Dockerfile\.backend\.dockerignore['"]/);
+  assert.match(deploy, /backend:\s*\[[^\]]*['"]Dockerfile\.backend\.dockerignore['"]/);
+  assert.match(backendDockerignore, /^src\/server\/uploads$/m);
+  assert.match(backendDockerignore, /^src\/server\/node_modules$/m);
+  assert.match(backendDockerignore, /^src\/server\/extractor-jobs$/m);
   assert.match(deploy, /internal \/ready\/semantic/);
   assert.match(remote, /chat-workers internal \/ready\/semantic/);
   assert.match(remote, /worker_path="\/ready\/semantic"/);
   assert.match(remote, /poll_health "\$TRIES" release/);
   assert.match(remote, /poll_health "\$TRIES" rollback/);
   assert.match(remote, /worker_path="\/ready"/);
+  assert.match(remote, /docker tag "\$IMAGE:latest" xeno-platform-chat-extractor:latest/);
+  assert.match(remote, /dc up -d --no-deps --no-build --force-recreate chat-extractor/);
+  assert.match(remote, /poll_extractor_health 30/);
+  assert.match(remote, /matched chat-extractor healthcheck PASSED/);
+  assert.match(remote, /xeno-platform-chat-extractor:rollback/);
   assert.match(
     readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8'),
     /chat-workers:[\s\S]*healthcheck:[\s\S]*127\.0\.0\.1:8081\/ready/,
   );
+});
+
+test('worker deploy proves the matched extractor before swapping the worker', () => {
+  const extractorGate = remote.indexOf('matched chat-extractor healthcheck PASSED');
+  const workerSwap = remote.indexOf('dc up -d --no-deps --force-recreate "$SERVICE"');
+  assert.ok(extractorGate >= 0, 'expected a matched extractor gate');
+  assert.ok(extractorGate < workerSwap, 'extractor must be healthy before workers are swapped');
+  assert.match(remote, /FAILED \(extractor gate\)/);
 });
 
 test('frontend deploy ships every first-party source tree copied by its Dockerfile', () => {

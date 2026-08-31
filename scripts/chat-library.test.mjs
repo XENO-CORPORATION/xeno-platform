@@ -58,6 +58,8 @@ test('legacy generation bytes map to managed assets without duplicate Library ro
   assert.match(legacyMigration, /DRY RUN/);
   assert.match(legacyMigration, /pg_advisory_lock/);
   assert.match(legacyMigration, /registerManagedLibraryFile/);
+  assert.match(legacyMigration, /registerManagedLibraryFile\(pool/);
+  assert.doesNotMatch(legacyMigration, /registerManagedLibraryFile\(client/);
   assert.match(legacyMigration, /if \(confirm\) await fs\.promises\.mkdir/);
   assert.match(legacyMigration, /if \(createdStorageFile\) await fs\.promises\.unlink/);
   assert.match(routes, /listLibraryItems\(req\.db, userId, req\.query\)/);
@@ -93,6 +95,13 @@ test('Library UI owns canonical URL tabs and real list/grid controls', () => {
   assert.match(page, /libraryService\.upload/);
   assert.match(page, /aria-label="List view"/);
   assert.match(page, /aria-label="Grid view"/);
+  assert.match(page, /const PAGE_SIZE = 200/);
+  assert.match(page, /offset: nextOffset/);
+  assert.match(page, /ref=\{loadMoreRef\}/);
+  assert.match(page, /root: scrollContainerRef\.current/);
+  assert.match(libraryClient, /offset\?: number/);
+  assert.match(libraryClient, /query\.set\('offset'/);
+  assert.match(libraryAssets, /created_at DESC, id ASC/);
   assert.match(page, /<LibraryAssetViewer/);
   assert.match(chat, /<span>Library<\/span>/);
 });

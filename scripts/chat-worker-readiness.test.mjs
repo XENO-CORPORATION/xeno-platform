@@ -176,4 +176,9 @@ test('deployment passes embedding URL, credential, and both timeouts to backend 
   }
   assert.match(compose, /CHAT_SCHEDULER_ENABLED=\$\{CHAT_SCHEDULER_ENABLED:-0\}/);
   assert.match(compose, /CHAT_INGESTION_ENABLED=\$\{CHAT_INGESTION_ENABLED:-0\}/);
+  assert.equal(
+    (compose.match(/- SCHEDULED_RUN_TOKEN_SECRET=\$\{SCHEDULED_RUN_TOKEN_SECRET:\?SCHEDULED_RUN_TOKEN_SECRET required\}/g) || []).length,
+    1,
+    'only the scheduled worker receives the scheduled-run signing authority',
+  );
 });

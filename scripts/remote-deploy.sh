@@ -108,6 +108,23 @@ poll_health() {
   return 1
 }
 
+poll_extractor_health() {
+  local tries cid state
+  tries="$1"
+  for _ in $(seq 1 "$tries"); do
+    cid="$(dc ps -q chat-extractor 2>/dev/null || true)"
+    if [ -n "$cid" ]; then
+      state="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || echo missing)"
+      if [ "$state" = "healthy" ]; then return 0; fi
+    else
+      state="missing"
+    fi
+    sleep 2
+  done
+  echo "remote-deploy: extractor health poll timed out (last=$state)" >&2
+  return 1
+}
+
 log "=== deploy start service=$SERVICE sha=$SHA mode=$MODE nocache=${NOCACHE:-no} ==="
 
 # --- 1. Extract HEAD tar into an isolated candidate ------------------------
@@ -164,6 +181,10 @@ else
   PREV_ID=""
   log "no existing $IMAGE:latest to snapshot (first build?)"
 fi
+if [ "$SERVICE" = "chat-workers" ] && docker image inspect xeno-platform-chat-extractor:latest >/dev/null 2>&1; then
+  docker tag xeno-platform-chat-extractor:latest xeno-platform-chat-extractor:rollback
+  log "tagged current xeno-platform-chat-extractor -> :rollback"
+fi
 
 # --- 4. Build (build-before-swap — old container keeps serving) ------------
 log "building $SERVICE ..."
@@ -212,6 +233,32 @@ if [ "$MODE" = "build-only" ]; then
 fi
 
 # --- 5. Swap ---------------------------------------------------------------
+# The workers and their networkless extractor are one release unit. Compose's
+# dependency declaration protects ordinary starts, but the deploy intentionally
+# uses --no-deps so an API/frontend rollout cannot restart shared infrastructure.
+# Install and prove the extractor explicitly before exposing new workers. Reuse
+# the already-qualified worker image so both processes run the exact same bytes.
+if [ "$SERVICE" = "chat-workers" ]; then
+  docker tag "$IMAGE:latest" xeno-platform-chat-extractor:latest
+  docker tag "$IMAGE:latest" "xeno-platform-chat-extractor:$SHA" || true
+  log "starting matched chat-extractor from worker image $SHA"
+  dc up -d --no-deps --no-build --force-recreate chat-extractor
+  if ! poll_extractor_health 30; then
+    log "chat-extractor failed before worker swap — restoring last-good extractor"
+    if docker image inspect xeno-platform-chat-extractor:rollback >/dev/null 2>&1; then
+      docker tag xeno-platform-chat-extractor:rollback xeno-platform-chat-extractor:latest
+      dc up -d --no-deps --no-build --force-recreate chat-extractor
+      poll_extractor_health 30 || log "extractor rollback also unhealthy — MANUAL INTERVENTION NEEDED"
+    fi
+    if docker image inspect "$IMAGE:rollback" >/dev/null 2>&1; then
+      docker tag "$IMAGE:rollback" "$IMAGE:latest"
+    fi
+    log "=== deploy end service=$SERVICE sha=$SHA FAILED (extractor gate) ==="
+    exit 1
+  fi
+  log "matched chat-extractor healthcheck PASSED"
+fi
+
 log "swapping in new $SERVICE container ..."
 dc up -d --no-deps --force-recreate "$SERVICE"
 
@@ -228,6 +275,11 @@ fi
 log "healthcheck FAILED — auto-rolling back $SERVICE"
 if docker image inspect "$IMAGE:rollback" >/dev/null 2>&1; then
   docker tag "$IMAGE:rollback" "$IMAGE:latest"
+  if [ "$SERVICE" = "chat-workers" ] && docker image inspect xeno-platform-chat-extractor:rollback >/dev/null 2>&1; then
+    docker tag xeno-platform-chat-extractor:rollback xeno-platform-chat-extractor:latest
+    dc up -d --no-deps --no-build --force-recreate chat-extractor
+    poll_extractor_health "$TRIES" || log "extractor rollback unhealthy — MANUAL INTERVENTION NEEDED"
+  fi
   dc up -d --no-deps --force-recreate "$SERVICE"
   if poll_health "$TRIES" rollback; then
     log "ROLLED BACK to :rollback and healthy again. Deploy of $SHA FAILED."

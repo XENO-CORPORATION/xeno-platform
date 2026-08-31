@@ -88,7 +88,7 @@
     "test:chat-project-semantic": "node --test --test-force-exit scripts/chat-project-semantic-integration.test.mjs",
     "test:chat-project-semantic-scale": "node --test --test-force-exit scripts/chat-project-semantic-scale-qualification.test.mjs",
     "test:chat-production-fixtures": "node --test scripts/chat-production-fixture-boundary.test.mjs",
-    "test:chat-writes": "node --test scripts/chat-subsystems-write.test.mjs scripts/chat-library.test.mjs",
+    "test:chat-writes": "node --test scripts/chat-subsystems-write.test.mjs scripts/chat-library.test.mjs scripts/chat-library-asset-backfill.test.mjs",
     "test:chat-library": "node --test scripts/chat-library.test.mjs",
     "test:download-cleanup": "node --test scripts/download-cleanup.test.mjs",
     "test:chat-conversation-id": "node --test scripts/chat-conversation-id.test.mjs",

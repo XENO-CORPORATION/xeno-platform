@@ -2141,7 +2141,7 @@ router.post('/scheduled-runs/:id/retry', async (req, res) => {
     const run = (await req.db.query(
       `UPDATE chat_scheduled_runs SET status='pending',error_code=NULL,error_message=NULL,
        lease_owner=NULL,lease_expires_at=NULL,completed_at=NULL,
-       gateway_retry_authorized=($2::boolean),updated_at=NOW()
+       gateway_retry_authorized=($2::boolean),manual_retry_authorized=TRUE,updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       [req.params.id, current.status === 'reconciliation_required'],
     )).rows[0];

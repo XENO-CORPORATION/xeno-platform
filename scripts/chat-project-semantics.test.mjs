@@ -11,6 +11,7 @@ import {
   CHAT_PROJECT_CONTRACTS,
 } from '../src/server/config/chatProjectContracts.js';
 import {
+  ENSURE_SCHEDULED_CONVERSATION_SQL,
   planDueOccurrences,
   sanitizeScheduledRunError,
 } from '../src/server/workers/chatScheduledWorker.js';
@@ -19,6 +20,7 @@ import {
   buildUntrustedProjectDataMessage,
   inertProviderMessageText,
 } from '../src/server/services/chatProjectPrompt.js';
+import { mintScheduledRunToken } from '../src/server/services/chatScheduledRunToken.js';
 
 test('Phase 0 contracts are fail-closed', () => {
   assert.equal(assertChatProjectContracts(), CHAT_PROJECT_CONTRACTS);
@@ -40,6 +42,44 @@ test('scheduled run errors expose stable messages without leaking provider detai
   assert.equal(
     sanitizeScheduledRunError('provider said sk-live-secret for asset 6ba7b810-cafe-4bad-a11e-123456789abc'),
     'Scheduled execution failed.',
+  );
+});
+
+test('scheduled run identity is short-lived, scoped, and contains no platform API key', () => {
+  const previous = process.env.SCHEDULED_RUN_TOKEN_SECRET;
+  process.env.SCHEDULED_RUN_TOKEN_SECRET = 'scheduled-run-unit-secret';
+  try {
+    const token = mintScheduledRunToken({
+      runId: 'fccfef74-ddf1-430b-960d-9d12e58b4c50',
+      userId: 'd68d647b-f973-4f84-9533-88c240547510',
+      now: 1_000,
+      ttlMs: 60_000,
+    });
+    assert.match(token, /^xsched_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    const payload = JSON.parse(Buffer.from(token.slice('xsched_'.length).split('.')[0], 'base64url').toString('utf8'));
+    assert.deepEqual(payload, {
+      runId: 'fccfef74-ddf1-430b-960d-9d12e58b4c50',
+      userId: 'd68d647b-f973-4f84-9533-88c240547510',
+      maxCredits: 0,
+      exp: 61_000,
+    });
+    assert.equal(token.includes(process.env.XENO_API_KEY || 'never-a-real-key'), false);
+  } finally {
+    if (previous === undefined) delete process.env.SCHEDULED_RUN_TOKEN_SECRET;
+    else process.env.SCHEDULED_RUN_TOKEN_SECRET = previous;
+  }
+});
+
+test('scheduled conversation insert assigns one explicit UUID type to the repeated principal parameter', () => {
+  assert.match(ENSURE_SCHEDULED_CONVERSATION_SQL, /\$1::uuid/);
+  assert.match(
+    ENSURE_SCHEDULED_CONVERSATION_SQL,
+    /CASE WHEN \$4::uuid IS NULL THEN \$1::uuid ELSE NULL::uuid END/,
+  );
+  assert.doesNotMatch(
+    ENSURE_SCHEDULED_CONVERSATION_SQL,
+    /THEN \$1 ELSE NULL/,
+    'an untyped repeated parameter makes PostgreSQL infer text and uuid for $1 (42P08)',
   );
 });
 

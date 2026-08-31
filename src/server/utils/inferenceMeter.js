@@ -81,6 +81,7 @@ export async function meterPremiumChat(db, userId, opts) {
     model, provider, requestId,
     estInputTokens = 0, maxTokens = 1024, run,
     surface = 'ai_chat',
+    reopenVoidedHold = false,
   } = opts;
 
   const holdId = deterministicTxnId(userId, requestId, model).slice(0, 64);
@@ -98,6 +99,7 @@ export async function meterPremiumChat(db, userId, opts) {
       surface,
       operation: 'chat.completion',
       expiresInSeconds: 900,
+      reopenVoided: reopenVoidedHold,
     });
   } catch (e) {
     throw meteringError(e.code);
