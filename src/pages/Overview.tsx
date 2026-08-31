@@ -297,6 +297,7 @@ const OverviewContent: React.FC = () => {
             <Route path="train/llm" element={<TextLLMTrainComponent />} />
             <Route path="c/:conversationId" element={<MultiChatContainer />} />
             <Route path="c" element={<MultiChatContainer />} />
+            <Route path="chat" element={<Navigate to="/overview/chat/llm" replace />} />
             <Route path="chat/llm" element={<MultiChatContainer />} />
             <Route path="chat/llm/:conversationId" element={<MultiChatContainer />} />
             <Route path="chat/c/:conversationId" element={<MultiChatContainer />} />

@@ -14,6 +14,7 @@ test('compact conversation URLs redirect to the canonical reloadable chat route'
 
 test('the canonical nested route mounts the chat surface with a conversation id', async () => {
   const overviewSource = await readFile(new URL('../src/pages/Overview.tsx', import.meta.url), 'utf8');
+  assert.match(overviewSource, /path="chat" element=\{<Navigate to="\/overview\/chat\/llm" replace \/>\}/);
   assert.match(overviewSource, /path="chat\/llm\/:conversationId" element=\{<MultiChatContainer \/>\}/);
 });
 
