@@ -237,7 +237,7 @@ export const PRODUCTS: Product[] = [
   // mountAgentUi, createAgentUiView, dispatchAgentUiAction. The SDK declares
   // NO peer dependencies, so any "React is an optional peer" claim is false.
   { slug: 'sdk', name: 'XENO SDK', tagline: 'Embed XENO agents into any app.', category: 'Develop', status: 'beta', delivery: 'cli', install: 'npm install @xenosystem/agent-sdk', repo: 'xeno-agent-sdk' },
-  // ACP moved to the @xenosystem npm scope. The coordinated candidate is @xenosystem/acp@0.2.12;
+  // ACP moved to the @xenosystem npm scope. The coordinated candidate is @xenosystem/acp@0.2.13;
   // @xeno-corporation/xeno-acp is frozen at 0.1.0. The page, this install command
   // and the R2 feed must all name the SAME identity — @xenosystem — or a visitor
   // installs the older scope by following our own instructions.

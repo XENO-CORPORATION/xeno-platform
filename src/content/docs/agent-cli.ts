@@ -11,7 +11,7 @@ const agentCli: ProductDocs = {
   slug: 'agent-cli',
   productName: 'XENO Agent CLI',
   tagline: 'The terminal AI coding agent — read, edit, and run with your permission, any model, fully auditable.',
-  version: '0.5.42',
+  version: '0.5.43',
   updated: '2026-08-31',
   seo: {
     title: 'XENO Agent CLI documentation',
