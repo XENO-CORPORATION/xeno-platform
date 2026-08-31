@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import { WebContextClient } from '@xenosystem/web-context-client';
 
 const CONTRACT_VERSION = '1.0.0';
 const REQUIRED_SCOPES = Object.freeze([
@@ -10,15 +11,15 @@ const REQUIRED_SCOPES = Object.freeze([
   'jobs:control',
   'artifacts:read',
 ]);
-const TERMINAL_JOB_STATES = new Set(['completed', 'partial', 'failed', 'cancelled']);
 const MAX_QUERY_CHARS = 500;
 const DEFAULT_COUNT = 6;
 const MAX_COUNT = 8;
-const OPERATION_TIMEOUT_MS = 25_000;
-const UPSTREAM_TIMEOUT_MS = 20_000;
-const MAX_POLL_CALLS = 12;
 const MAX_PAGE_TEXT_BYTES = 12 * 1024;
 const MAX_TOTAL_TEXT_BYTES = 48 * 1024;
+const RESEARCH_BUDGETS = Object.freeze({
+  quick: Object.freeze({ operationMs: 25_000, upstreamMs: 20_000, maxAttempts: 2, maxConcurrency: 3 }),
+  deep: Object.freeze({ operationMs: 90_000, upstreamMs: 85_000, maxAttempts: 3, maxConcurrency: 4 }),
+});
 
 export class ChatWebContextError extends Error {
   constructor(code, message, { status = 503, retryable = false, requestId, cause } = {}) {
@@ -149,44 +150,22 @@ function projectEvidence(evidence) {
   };
 }
 
-async function readTextBounded(response, limit) {
-  if (!response.body) return '';
-  const reader = response.body.getReader();
-  const chunks = [];
-  let bytes = 0;
-  try {
-    while (bytes < limit) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const remaining = limit - bytes;
-      const chunk = value.byteLength > remaining ? value.subarray(0, remaining) : value;
-      chunks.push(chunk);
-      bytes += chunk.byteLength;
-      if (value.byteLength > remaining) break;
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-  }
-  const merged = new Uint8Array(bytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder('utf-8', { fatal: false }).decode(merged);
-}
-
-function upstreamError(status, body, requestId) {
-  const code = String(body?.error?.code || 'WEB_CONTEXT_UPSTREAM_ERROR');
+function upstreamError(error, requestId) {
+  const status = Number(error?.status || 0);
+  const code = String(error?.code || 'WEB_CONTEXT_UPSTREAM_ERROR');
   const retryable = status === 429 || status >= 500;
-  const publicCode = status === 429 ? 'web_context_rate_limited' : 'web_context_unavailable';
+  const publicCode = code === 'PROVIDER_STORAGE_NOT_APPROVED'
+    ? 'web_context_storage_not_approved'
+    : status === 429 ? 'web_context_rate_limited' : 'web_context_unavailable';
   return new ChatWebContextError(publicCode, retryable
     ? 'Web research is temporarily unavailable. Please try again.'
-    : 'Web research is not available for this request.', {
-    status: status === 429 ? 429 : 503,
+    : code === 'PROVIDER_STORAGE_NOT_APPROVED'
+      ? 'Durable web citations are unavailable until provider storage rights are approved.'
+      : 'Web research is not available for this request.', {
+    status: code === 'PROVIDER_STORAGE_NOT_APPROVED' ? 403 : status === 429 ? 429 : 503,
     retryable,
-    requestId: body?.error?.requestId || requestId,
-    cause: new Error(`Web Context ${status} ${code}`),
+    requestId,
+    cause: error,
   });
 }
 
@@ -195,13 +174,7 @@ export function createChatWebContextService({
   fetchImpl = globalThis.fetch,
   readFileSync = fs.readFileSync,
   now = () => Date.now(),
-  sleep = (ms, signal) => new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => {
-      clearTimeout(timer);
-      reject(signal.reason || new DOMException('Aborted', 'AbortError'));
-    }, { once: true });
-  }),
+  researchBudgets = RESEARCH_BUDGETS,
 } = {}) {
   let accountCache = null;
 
@@ -212,42 +185,9 @@ export function createChatWebContextService({
     return { baseUrl, token, tokenDigest: digest(token) };
   }
 
-  async function request(config, path, { method = 'GET', body, signal } = {}) {
-    const target = new URL(path, config.baseUrl);
-    if (target.origin !== config.baseUrl.origin) {
-      throw new ChatWebContextError('web_context_unavailable', 'Web Context target escaped the configured origin.');
-    }
-    let response;
-    try {
-      response = await fetchImpl(target, {
-        method,
-        redirect: 'error',
-        headers: {
-          authorization: `Bearer ${config.token}`,
-          ...(body ? { 'content-type': 'application/json' } : {}),
-        },
-        ...(body ? { body: JSON.stringify(body) } : {}),
-        signal,
-      });
-    } catch (cause) {
-      if (signal?.aborted) throw signal.reason || cause;
-      throw new ChatWebContextError('web_context_unavailable', 'Web research is temporarily unavailable.', {
-        retryable: true,
-        cause,
-      });
-    }
-    if (!response.ok) {
-      let payload = {};
-      try { payload = await response.json(); } catch { /* intentionally redacted */ }
-      throw upstreamError(response.status, payload);
-    }
-    return response;
-  }
-
-  async function account(config, signal) {
+  async function account(client, config, signal) {
     if (accountCache?.tokenDigest === config.tokenDigest) return accountCache.value;
-    const response = await request(config, '/v1/account', { signal });
-    const value = await response.json();
+    const value = await client.account({ signal });
     const scopes = Array.isArray(value.scopes) ? value.scopes : [];
     const missing = REQUIRED_SCOPES.filter((scope) => !scopes.includes('*') && !scopes.includes(scope));
     if (!value.tenantId || missing.length) {
@@ -257,29 +197,20 @@ export function createChatWebContextService({
     return value;
   }
 
-  async function cancelJob(config, jobId) {
-    try { await request(config, `/v1/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }); } catch { /* best effort */ }
-  }
-
-  async function searchAndFetch({ actorId, conversationId, userMessageId, query: rawQuery, count: rawCount, signal }) {
+  async function searchAndFetch({ actorId, conversationId, userMessageId, query: rawQuery, count: rawCount, depth = 'quick', signal, onProgress }) {
     const query = normalizeQuery(rawQuery);
     const count = normalizeCount(rawCount);
+    if (!Object.hasOwn(researchBudgets, depth)) {
+      throw new ChatWebContextError('invalid_web_context_depth', 'Research depth must be quick or deep.', { status: 400 });
+    }
+    const budget = researchBudgets[depth];
     const config = configuration();
+    const client = new WebContextClient({ baseUrl: config.baseUrl.href, token: config.token, fetchImpl });
     const requestId = crypto.randomUUID();
-    const deadline = now() + OPERATION_TIMEOUT_MS;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(new ChatWebContextError(
-      'web_context_timeout',
-      'Web research timed out before it could finish.',
-      { status: 504, retryable: true, requestId },
-    )), OPERATION_TIMEOUT_MS);
-    const abortFromCaller = () => controller.abort(signal.reason || new DOMException('Aborted', 'AbortError'));
-    signal?.addEventListener('abort', abortFromCaller, { once: true });
-    let jobId = null;
     try {
-      const principal = await account(config, controller.signal);
+      const principal = await account(client, config, signal);
       const idempotencyKey = `chat:${digest(`${actorId}\0${conversationId}\0${userMessageId}\0${query}`).slice(0, 48)}`;
-      const upstreamDeadline = new Date(Math.min(deadline - 5_000, now() + UPSTREAM_TIMEOUT_MS)).toISOString();
+      const upstreamDeadline = new Date(now() + budget.upstreamMs).toISOString();
       const searchRequest = {
         contractVersion: CONTRACT_VERSION,
         requestId,
@@ -289,11 +220,11 @@ export function createChatWebContextService({
         scope: { kind: 'tenant', tenantId: principal.tenantId },
         budget: {
           deadline: upstreamDeadline,
-          maxAttempts: 2,
-          maxConcurrency: 3,
+          maxAttempts: budget.maxAttempts,
+          maxConcurrency: budget.maxConcurrency,
           maxBytes: 1024 * 1024,
           maxPages: count,
-          maxDurationMs: UPSTREAM_TIMEOUT_MS,
+          maxDurationMs: budget.upstreamMs,
           maxRedirects: 5,
           maxProviderCostUsd: normalizeMaxProviderCost(env.XENO_CHAT_WEB_CONTEXT_MAX_COST_USD),
         },
@@ -303,10 +234,7 @@ export function createChatWebContextService({
         resultHandling: 'persist',
         count,
       };
-      const startResponse = await request(config, '/v1/search-and-scrape', {
-        method: 'POST', body: searchRequest, signal: controller.signal,
-      });
-      const started = await startResponse.json();
+      const started = await client.searchAndScrape(searchRequest, { signal });
       const search = started.search;
       const searchEvidence = projectEvidence(search?.evidence);
       const searchItems = Array.isArray(search?.items)
@@ -335,29 +263,22 @@ export function createChatWebContextService({
           },
         };
       }
-      jobId = String(started.job.jobId);
-      let job = started.job;
-      let delay = 350;
-      for (let polls = 0; !TERMINAL_JOB_STATES.has(job.state) && polls < MAX_POLL_CALLS; polls += 1) {
-        await sleep(Math.min(delay, Math.max(1, deadline - now())), controller.signal);
-        const response = await request(config, `/v1/jobs/${encodeURIComponent(jobId)}`, { signal: controller.signal });
-        job = (await response.json()).job;
-        delay = Math.min(2_000, Math.ceil(delay * 1.65));
-      }
-      if (!TERMINAL_JOB_STATES.has(job.state)) {
-        throw new ChatWebContextError('web_context_timeout', 'Web research timed out before it could finish.', {
-          status: 504, retryable: true, requestId,
-        });
-      }
+      const jobId = String(started.job.jobId);
+      const job = await client.waitForJob(jobId, {
+        timeoutMs: budget.operationMs,
+        pollMs: 350,
+        signal,
+        onProgress,
+        cancelOnAbort: true,
+        cancelOnTimeout: true,
+        cancelConfirmationMs: 2_000,
+      });
       if (job.state === 'failed' || job.state === 'cancelled') {
         throw new ChatWebContextError('web_context_failed', 'Web research could not retrieve public sources.', {
           status: 502, retryable: job.state === 'failed', requestId,
         });
       }
-      const resultsResponse = await request(config, `/v1/jobs/${encodeURIComponent(jobId)}/results?limit=${count}`, {
-        signal: controller.signal,
-      });
-      const results = await resultsResponse.json();
+      const results = await client.results(jobId, { limit: count, signal });
       const byUrl = new Map((Array.isArray(results.items) ? results.items : []).map((item) => [safeHttpsUrl(item?.url), item]));
       let totalTextBytes = 0;
       const sources = [];
@@ -365,13 +286,15 @@ export function createChatWebContextService({
         const page = byUrl.get(item.url);
         const evidence = projectEvidence(page?.result?.evidence);
         let content = '';
-        const artifactUrl = typeof page?.artifactUrl === 'string' ? page.artifactUrl : '';
-        const expectedPrefix = `/v1/jobs/${jobId}/artifacts/artifact:`;
-        if (page?.state === 'completed' && artifactUrl.startsWith(expectedPrefix) && totalTextBytes < MAX_TOTAL_TEXT_BYTES) {
+        const artifactId = typeof page?.artifactId === 'string'
+          ? page.artifactId
+          : typeof page?.artifactUrl === 'string' ? page.artifactUrl.split('/').at(-1) : '';
+        if (page?.state === 'completed' && /^artifact:[a-f0-9]{64}$/i.test(artifactId) && totalTextBytes < MAX_TOTAL_TEXT_BYTES) {
           const limit = Math.min(MAX_PAGE_TEXT_BYTES, MAX_TOTAL_TEXT_BYTES - totalTextBytes);
-          const artifactResponse = await request(config, artifactUrl, { signal: controller.signal });
-          content = await readTextBounded(artifactResponse, limit);
-          totalTextBytes += new TextEncoder().encode(content).byteLength;
+          const artifact = await client.artifact(jobId, artifactId, { signal });
+          const bytes = artifact.bytes.subarray(0, limit);
+          content = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+          totalTextBytes += bytes.byteLength;
         }
         sources.push({
           ...item,
@@ -409,14 +332,21 @@ export function createChatWebContextService({
         },
       };
     } catch (error) {
-      if (jobId && (controller.signal.aborted || error?.code === 'web_context_timeout')) await cancelJob(config, jobId);
       if (error instanceof ChatWebContextError) throw error;
+      if (signal?.aborted || error?.name === 'AbortError') {
+        throw new ChatWebContextError('web_context_cancelled', 'Web research was cancelled.', {
+          status: 499, retryable: false, requestId, cause: error,
+        });
+      }
+      if (error?.code === 'WAIT_TIMEOUT') {
+        throw new ChatWebContextError('web_context_timeout', 'Web research timed out before it could finish.', {
+          status: 504, retryable: true, requestId, cause: error,
+        });
+      }
+      if (Number.isFinite(error?.status) || typeof error?.code === 'string') throw upstreamError(error, requestId);
       throw new ChatWebContextError('web_context_unavailable', 'Web research is temporarily unavailable.', {
         retryable: true, requestId, cause: error,
       });
-    } finally {
-      clearTimeout(timeout);
-      signal?.removeEventListener('abort', abortFromCaller);
     }
   }
 

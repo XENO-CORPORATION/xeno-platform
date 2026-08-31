@@ -14,7 +14,10 @@ test('Research and retry use only the canonical Web Context Chat seam', () => {
   assert.match(chat, /BEGIN_UNTRUSTED_WEB_EVIDENCE bytes=/);
   assert.match(chat, /webContextReceiptId/);
   assert.doesNotMatch(chat, /\/api\/xeno-search|xenoSearchService|\/ws\/deep-search|\/api\/v2\/engine\/topic-search/);
-  assert.match(chat, /Deep research is temporarily unavailable while its canonical Web Context progress stream is connected/);
+  assert.match(chat, /depth: isXenoDeepMode \? 'deep' : 'quick'/);
+  assert.match(chat, /applyWebContextProgress/);
+  assert.match(chat, /researchController\.abort|setAbortController\(researchController\)/);
+  assert.match(route, /router\.post\('\/web-context\/stream', requireActivated/);
 });
 
 test('user persistence is awaited before Web Context starts and assistant persistence is acknowledged', () => {
@@ -41,4 +44,18 @@ test('Web Context endpoint has the generation limiter and never logs the query',
   assert.match(index, /app\.use\('\/api\/chat\/web-context', generationLimiter\)/);
   const routeBlock = route.slice(route.indexOf("router.post('/web-context/search'"), route.indexOf('// DATABASE INITIALIZATION'));
   assert.doesNotMatch(routeBlock, /console\.(?:log|warn)[\s\S]{0,200}\bquery\b/);
+});
+
+test('Research streaming validates first, forwards canonical progress, and aborts upstream on disconnect', () => {
+  const stream = route.slice(route.indexOf("router.post('/web-context/stream'"), route.indexOf('// DATABASE INITIALIZATION'));
+  assert.match(stream, /resolveWebContextTurn\(req, res\)[\s\S]*Content-Type', 'text\/event-stream/);
+  assert.match(stream, /onProgress: \(progress\) => \{ writeEvent\('progress', progress\); \}/);
+  assert.match(stream, /writeEvent\('result'/);
+  assert.match(stream, /writeEvent\('error'/);
+  assert.match(stream, /req\.once\('aborted', abort\)/);
+  assert.match(stream, /res\.once\('close'/);
+  const adapter = read('../src/server/services/chatWebContext.js');
+  assert.match(adapter, /cancelOnAbort: true/);
+  assert.match(adapter, /cancelOnTimeout: true/);
+  assert.match(adapter, /new WebContextClient/);
 });

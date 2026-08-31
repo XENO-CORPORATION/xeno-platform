@@ -1,6 +1,6 @@
 # XENO Chat Web Context integration
 
-Status: locally implemented and source-qualified; live Web Context runtime proof pending  
+Status: implemented on the release worktree; full local gates and live rollout proof pending
 Owner: xeno-platform, consuming xeno-web-context  
 Scope: the authenticated Research-mode path in XENO Chat
 
@@ -28,9 +28,8 @@ provider selection.
 | Chat already has a `search_context` JSONB destination but no server-owned provenance authority | `src/server/routes/chatRoutes.js`; `src/services/chatService.ts` | Add a receipt migration so the browser can never forge the authoritative JSON copied into a message. |
 | Reload currently drops `search_context` and assistant writes omit it | `src/components/playground/Chat/ChatWithLLM.tsx:350-405`, `:6860-6877` | Both serialization directions are acceptance requirements. |
 | Current prompt construction treats retrieved text as authoritative instructions | `src/components/playground/Chat/ChatWithLLM.tsx:7881-7934` | Retrieved content must be delimited as untrusted evidence and must never override system/user instructions. |
-| SDK WebSearch/WebFetch still contain direct engines | sibling `xeno-agent-sdk`: `src/tools/web-search.ts`; `src/tools/web-fetch.ts` (observed in the 2026-08-31 workspace audit; dirty checkout, not pinned) | SDK cutover is a separate consumer lane; this platform change must not copy that code. |
-| ACP adapter event v1 is frozen and has no typed evidence member | sibling `xeno-acp`: `packages/agent/src/adapters/adapterEventProtocol.ts:1-45` (observed in the 2026-08-31 workspace audit; dirty checkout, not pinned) | ACP needs a negotiated v2 adapter later; mutating v1 is outside this slice. |
-| Agent Interface parses search cards from tool text | sibling `xeno-agent-interface`: `packages/ui/src/components/agent/AgentView.tsx:1638-1685`, `:4361-4383` (observed in the 2026-08-31 workspace audit; dirty checkout, not pinned) | ADE should later consume typed Web Evidence rather than parse display strings. |
+| The shared client owns progress and cancellation semantics | sibling `xeno-web-context@0.1.1`: `src/client.ts`; `src/client-progress.ts` | Platform uses the same exact progress projection and exactly-once cancellation path as SDK, ACP, CLI, and ADE. |
+| ACP v1 is frozen while v2 carries typed Web Context progress | sibling `xeno-acp@0.2.12` release worktree | Negotiation preserves v1 final-only compatibility and makes v2 progress typed rather than display-text parsing. |
 
 ## 3. User-visible contract
 
@@ -47,6 +46,10 @@ provider selection.
    unavailable, the Research turn stops with a visible error. It does not answer
    as though online research succeeded and does not silently call legacy search.
 6. Ordinary non-Research chat remains available and unchanged.
+7. Quick and Deep Research use the same canonical stream. Deep changes only the
+   bounded server budget; it does not select a legacy engine.
+8. Stop aborts the browser stream, which triggers exactly one upstream durable
+   job cancellation attempt and a bounded confirmation read.
 
 ## 4. Platform adapter contract
 
@@ -61,7 +64,8 @@ provider selection.
 
 ### Endpoint
 
-`POST /api/chat/web-context/search`
+`POST /api/chat/web-context/stream` is the browser path. The compatibility
+`POST /api/chat/web-context/search` endpoint returns the same final object as JSON.
 
 Authentication uses the existing Chat auth middleware and the account activation
 gate. Request:
@@ -71,7 +75,8 @@ gate. Request:
   "query": "current subject",
   "count": 6,
   "mode": "research",
-  "conversationId": "persisted conversation UUID"
+  "conversationId": "persisted conversation UUID",
+  "depth": "quick"
 }
 ```
 
@@ -79,7 +84,15 @@ The client cannot supply actor, tenant, deadline, budget, provider, token, or
 policy authority. The adapter constructs those fields from the authenticated
 principal and locked server bounds.
 
-Successful response follows the XENO result envelope:
+The streaming response is `text/event-stream`, `no-store`, and unbuffered. It
+emits only these events:
+
+- `progress`: exact `xeno.web-context.job-progress@1.0.0` projection;
+- `result`: the final Chat evidence object below;
+- `error`: stable redacted `{code,message,retryable,requestId?}`;
+- `done`: terminal stream acknowledgement.
+
+The compatibility JSON response follows the XENO result envelope:
 
 ```json
 {
@@ -113,14 +126,15 @@ envelopes. Upstream HTTP bodies and secrets are not relayed.
 
 - query: 1-500 characters
 - result count: 1-8, default 6
-- complete platform operation deadline: 25 seconds
-- upstream search-and-scrape deadline: 20 seconds, leaving five seconds for
-  account discovery, polling, result reads, cleanup, and the response
-- durable page job: at most the requested count, two attempts, concurrency 3,
+- quick operation: 25 seconds total, 20-second upstream deadline, two attempts,
+  concurrency 3
+- deep operation: 90 seconds total, 85-second upstream deadline, three attempts,
+  concurrency 4
+- durable page job: at most the requested count,
   1 MiB total requested bytes, five redirects, and a small configured provider
   cost ceiling
-- polling: initial delay 350 ms, exponential backoff capped at 2 seconds, at
-  most 12 status calls
+- polling and canonical progress: shared `@xenosystem/web-context-client@0.1.1`
+  wait helper at 350 ms, duplicate observations suppressed, terminal emitted once
 - artifact text returned to the model: at most 12 KiB per page and 48 KiB total
 
 The adapter first calls `/v1/account` to derive and cache the authenticated
@@ -135,9 +149,9 @@ user, conversation, user-message ID, and normalized query. It then calls
 - job state `partial`: normalize as Chat `partial` while preserving upstream
   counters (this is a WebJob state, not a `WebTerminalReason`);
 - `failed` or `cancelled`: visible failure, no model call;
-- platform deadline/client disconnect: call job cancellation when the token has
-  `jobs:control`; otherwise return the opaque job ID in server logs only and let
-  the bounded upstream deadline terminate it.
+- platform deadline/client disconnect: the shared client attempts cancellation
+  exactly once, preserves the original abort/timeout as the primary failure,
+  and spends at most two seconds confirming the real terminal state.
 
 The adapter reads tenant-bound results and artifacts. Empty search results are a
 terminal no-sources result, not a successful researched answer.
@@ -231,17 +245,20 @@ The instructions say:
   or upstream bodies.
 - Persisted context contains no bearer token, artifact access URL, raw fetched
   page text, or provider secret.
+- Provider search output is persisted only when the configured provider exposes
+  explicit `allowsResultPersistence: true` authority. Brave transient approval
+  deliberately produces `web_context_storage_not_approved` before provider
+  spend or job creation; a user spend decision is not a storage-rights grant.
 
 ## 7. Implementation plan
 
-1. Add a dependency-free server adapter for account discovery,
-   search-and-scrape, bounded job polling, result/artifact collection, error
-   normalization, redaction, and injectable transport tests.
+1. Consume the shared dependency-free client for account discovery,
+   search-and-scrape, bounded job polling, canonical progress, cancellation,
+   result/artifact collection, error normalization, and redaction.
 2. Add the receipt migration, authenticated/activation-gated Chat route, and
    mount-level limiter.
-3. Replace the normal Research-mode legacy call with the new route. Preserve the
-   current deep-search UI as disabled/unavailable until it is rebuilt on the
-   canonical durable job stream; do not route it to the legacy engine.
+3. Replace both quick and deep Research legacy calls with the authenticated SSE
+   route; do not route either mode to the legacy engine.
 4. Extend the Chat source model with structured Web Context provenance and build
    the untrusted evidence prompt in one helper.
 5. Persist a server-owned receipt on assistant messages and restore its context
@@ -278,10 +295,10 @@ The instructions say:
 - conversation reload recreates the source disclosure and metadata
 - ordinary chat path makes no Web Context request
 - initial, retry, regenerate, and deep-mode interactions make no request to
-  `/api/xeno-search`, `/api/v2/engine/*`, or `/ws/deep-search/*`; deep mode is
-  visibly unavailable until its canonical stream exists
+  `/api/xeno-search`, `/api/v2/engine/*`, or `/ws/deep-search/*`
 - zero results makes zero model calls and fabricates no citations
-- polling stays within 12 status calls and the 25-second total deadline
+- quick and deep operations stay inside their declared 25/90-second budgets;
+  cancellation is attempted once on disconnect/timeout
 - editing a researched answer detaches its evidence disclosure (and clears
   persisted `search_context`) before saving the edited content
 - public/workspace/accepted-share payloads never expose `search_context`,
@@ -310,11 +327,9 @@ Rollback is one flag: disable `XENO_CHAT_WEB_CONTEXT_ENABLED`. This removes the
 Research operation while preserving ordinary chat and already-persisted source
 context. It never re-enables legacy search.
 
-## 10. Deliberate follow-on lanes
+## 10. Ecosystem release lanes
 
-These are required for ecosystem parity but are not edited in this slice because
-their current worktrees contain unrelated active work and their contracts need
-independent release gates:
+These are part of this coordinated release and retain independent package gates:
 
 - xeno-agent-sdk: make legacy `WebSearch`/`WebFetch` compatibility facades over
   `@xenosystem/web-context/client`; remove direct provider/fetch authority.
@@ -331,20 +346,20 @@ be observed through Chat, CLI, ACP, and ADE without parallel web engines.
 
 ## 11. Local implementation record — 2026-08-31
 
-Implemented in `codex/chat-web-context`:
+Implemented in `codex/full-web-context-platform`:
 
 - provider-neutral server adapter, activation-gated Chat route, generation
   limiter, server-owned receipt migration, single-use turn-bound consumption,
   edit-time evidence detachment, and safe error/log boundaries;
-- typed SPA client, canonical Research and retry paths, explicit deep-mode
-  unavailability, untrusted evidence prompt, acknowledged persistence, reload
-  restoration, and provider/status/evidence disclosure;
+- typed SPA SSE client, canonical quick/deep Research and retry paths, exact
+  progress rendering, Stop-to-upstream cancellation, untrusted evidence prompt,
+  acknowledged persistence, reload restoration, and evidence disclosure;
 - legacy Research calls to `/api/xeno-search`, `/api/v2/engine/*`, and
   `/ws/deep-search/*` removed from the Chat component;
 - configuration documentation plus focused routing, authority, idempotency,
   partial-job, timeout/cancellation, truncation, token-file, and redaction tests.
 
-Measured locally:
+Previous focused baseline before the canonical stream change:
 
 - `npm run test:chat-search-routing`: 21/21 passed;
 - `npm run test:chat-migrations`: 5/5 passed;
@@ -356,10 +371,9 @@ Measured locally:
 - `npm run build`: passed, including the production Chat fixture boundary and
   271 prerendered product pages.
 
-Browser qualification reached the local XENO shell at
-`http://127.0.0.1:5183/overview/chat`; the authenticated Chat surface was not
-available in that signed-out local origin. No live Web Context search claim is
-made. The exit condition is a running hosted/local Web Context stack with an
-approved Brave provider configuration, a scoped tenant token file, the receipt
-migration applied to a test database, and an authenticated Research/reload
-browser pass.
+The current stream change must replace those numbers with a fresh full gate and
+authenticated browser record before release. No live Web Context search claim is
+made here. Brave's current approved configuration is transient-only, so the
+durable citation success path cannot be enabled until a provider plan explicitly
+grants result persistence; the required live behavior meanwhile is a tested,
+visible fail-closed storage-authority error with zero hidden fallback.

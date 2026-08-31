@@ -50,6 +50,7 @@ backups/
 *.htpasswd
 nginx-private.conf
 .bunker-secrets/
+secrets/
 
 # Deploy archives — `git archive HEAD` output from scripts/deploy-platform.mjs and
 # hand-rolled equivalents. Large, regenerated every deploy, and never source.

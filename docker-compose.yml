@@ -169,6 +169,12 @@ services:
       - AUTH_FRONTEND_URL=${AUTH_FRONTEND_URL}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN}
       - XENO_FLOW_URL=http://host.docker.internal:8090
+      # Authenticated Research runs only through the canonical Web Context service.
+      # Credentials are file-mounted; production code rejects plaintext token envs.
+      - XENO_CHAT_WEB_CONTEXT_ENABLED=${XENO_CHAT_WEB_CONTEXT_ENABLED:-false}
+      - XENO_WEB_CONTEXT_URL=${XENO_WEB_CONTEXT_URL:-https://web-context.xenostudio.ai}
+      - XENO_WEB_CONTEXT_TOKEN_FILE=/run/secrets/xeno_web_context_token
+      - XENO_CHAT_WEB_CONTEXT_MAX_COST_USD=${XENO_CHAT_WEB_CONTEXT_MAX_COST_USD:-0.02}
       # ── Settings that fail SILENTLY when absent ──────────────────────
       # 🔴 Every one of these was set in the box's .env on 2026-08-24 and reached
       # NO container, because the `${VAR}` line that reads it was never restored
@@ -243,6 +249,7 @@ services:
       # it; this is the observation path. `:ro` because the API has no business
       # being able to modify or delete a backup.
       - ./backups:/app/backups:ro
+      - ./secrets:/run/secrets:ro
       - /var/run/docker.sock:/var/run/docker.sock
       # Video Studio storage
       - ./storage/videos:/app/storage/videos

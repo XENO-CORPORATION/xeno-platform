@@ -54,6 +54,7 @@
     "tiktoken": "^1.0.18",
     "uuid": "^14.0.2",
     "ws": "^8.14.0",
+    "@xenosystem/web-context-client": "0.1.1",
     "xeno-ai": "^0.1.1"
   },
   "devDependencies": {

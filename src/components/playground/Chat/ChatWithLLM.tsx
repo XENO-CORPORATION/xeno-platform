@@ -55,7 +55,7 @@ import LibraryAssetImage from '@/components/library/LibraryAssetImage';
 import LibraryAssetViewer, { type LibraryViewerItem } from '@/components/library/LibraryAssetViewer';
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
 import { userDataService } from '@/services/userDataService';
-import { webContextService, type WebContextSearchResult, type WebContextSource } from '@/services/webContextService';
+import { webContextService, type WebContextProgress, type WebContextSearchResult, type WebContextSource } from '@/services/webContextService';
 import type { Conversation as DBConversation, ChatAttachment as DBChatAttachment, ChatMessage as DBChatMessage, ProjectSourceReference } from '@/services/chatService';
 import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Library, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, MenuDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
@@ -7535,20 +7535,15 @@ interface QueueState {
 
         // Check if Xeno Search is enabled AND we have searchable content
         if (isXenoSearchEnabled && (userTextToSend || userImageAttachmentPayload || userFileAttachmentPayload)) {
-            if (isXenoDeepMode) {
-                const unavailableMessage: ChatMessage = {
-                    id: `deep-search-unavailable-${Date.now()}`,
-                    sender: 'ai',
-                    text: 'Deep research is temporarily unavailable while its canonical Web Context progress stream is connected.',
-                    isError: true,
-                    isXenoDeepSearchContainer: true,
-                };
-                setMessages((previous) => [...previous, unavailableMessage]);
-                setIsXenoSearching(false);
-                return;
-            }
-
             setIsXenoSearching(true);
+            const researchController = new AbortController();
+            setAbortController(researchController);
+            if (isXenoDeepMode) {
+                setDeepSearchState({
+                    phase: 'initializing', progress: 0,
+                    message: 'Initializing deep research with XENO Web Context...', data: null, isActive: true,
+                });
+            }
             const enhancedQuery = await generateEnhancedSearchQuery(
                 userTextToSend,
                 userImageAttachmentPayload?.file,
@@ -7566,6 +7561,7 @@ interface QueueState {
                 text: '',
                 searchInfo: { queries: [enhancedQuery.query], sources: [], supports: [] },
                 isLoading: true,
+                isXenoDeepSearchContainer: isXenoDeepMode,
             }]);
 
             try {
@@ -7573,6 +7569,11 @@ interface QueueState {
                 const result = await performXenoSearch(
                     enhancedQuery.query.trim(),
                     Math.min(Math.max(XENO_SEARCH_CONFIG.defaultNumResults, 1), 8),
+                    {
+                        depth: isXenoDeepMode ? 'deep' : 'quick',
+                        signal: researchController.signal,
+                        onProgress: (progress) => applyWebContextProgress(progress, isXenoDeepMode),
+                    },
                 );
 
                 if (!result.sources.length) {
@@ -7621,16 +7622,22 @@ interface QueueState {
                     transformedSearchInfo,
                 );
             } catch (error) {
-                const message = error instanceof Error ? error.message : 'Web research is temporarily unavailable.';
+                const cancelled = (error instanceof DOMException && error.name === 'AbortError')
+                    || (error instanceof Error && 'code' in error && error.code === 'web_context_cancelled');
+                const message = cancelled
+                    ? 'Research cancelled.'
+                    : error instanceof Error ? error.message : 'Web research is temporarily unavailable.';
                 setMessages((previous) => previous.map((item) => (
                     item.id === searchResultsMessageId
-                        ? { ...item, isLoading: false, isError: true, text: `Web research failed: ${message}` }
+                        ? { ...item, isLoading: false, isError: !cancelled, isCancelled: cancelled, text: cancelled ? message : `Web research failed: ${message}` }
                         : item
                 )));
                 setPendingXenoSearchInfo(null);
                 return;
             } finally {
                 setIsXenoSearching(false);
+                setDeepSearchState((previous) => ({ ...previous, isActive: false }));
+                setAbortController((current) => current === researchController ? null : current);
             }
         } else {
             // Standard LLM call without Xeno Search
@@ -9621,19 +9628,17 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       console.error('Cannot retry Web Context research: preceding user turn is missing.');
       return;
     }
-    if (isXenoDeepMode) {
-      setMessages([...historyForRegeneration, {
-        id: `deep-search-unavailable-${Date.now()}`,
-        sender: 'ai',
-        text: 'Deep research is temporarily unavailable while its canonical Web Context progress stream is connected.',
-        isError: true,
-      }]);
-      return;
-    }
-
     setMessages(historyForRegeneration);
     setXenoSearchResults(null);
     setIsXenoSearching(true);
+    const researchController = new AbortController();
+    setAbortController(researchController);
+    if (isXenoDeepMode) {
+      setDeepSearchState({
+        phase: 'initializing', progress: 0,
+        message: 'Initializing deep research with XENO Web Context...', data: null, isActive: true,
+      });
+    }
     const placeholderId = `search-results-${Date.now()}`;
     setMessages((previous) => [...previous, {
       id: placeholderId,
@@ -9641,10 +9646,15 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
       text: '',
       searchInfo: { queries: [lastUserMessage.text], sources: [], supports: [] },
       isLoading: true,
+      isXenoDeepSearchContainer: isXenoDeepMode,
     }]);
 
     try {
-      const result = await performXenoSearch(lastUserMessage.text.trim(), XENO_SEARCH_CONFIG.defaultNumResults);
+      const result = await performXenoSearch(lastUserMessage.text.trim(), XENO_SEARCH_CONFIG.defaultNumResults, {
+        depth: isXenoDeepMode ? 'deep' : 'quick',
+        signal: researchController.signal,
+        onProgress: (progress) => applyWebContextProgress(progress, isXenoDeepMode),
+      });
       if (!result.sources.length) {
         setMessages((previous) => previous.map((message) => (
           message.id === placeholderId
@@ -9679,15 +9689,19 @@ Keep the summary under 500 words. Preserve essential context needed to continue 
         searchInfo,
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Web research is temporarily unavailable.';
+      const cancelled = (error instanceof DOMException && error.name === 'AbortError')
+        || (error instanceof Error && 'code' in error && error.code === 'web_context_cancelled');
+      const message = cancelled ? 'Research cancelled.' : error instanceof Error ? error.message : 'Web research is temporarily unavailable.';
       setMessages((previous) => previous.map((item) => (
         item.id === placeholderId
-          ? { ...item, isLoading: false, isError: true, text: `Web research failed: ${message}` }
+          ? { ...item, isLoading: false, isError: !cancelled, isCancelled: cancelled, text: cancelled ? message : `Web research failed: ${message}` }
           : item
       )));
     } finally {
       setPendingXenoSearchInfo(null);
       setIsXenoSearching(false);
+      setDeepSearchState((previous) => ({ ...previous, isActive: false }));
+      setAbortController((current) => current === researchController ? null : current);
     }
   };
   const handleTryWithoutSearch = async (messageIdToRegenerate: string) => {
@@ -11776,6 +11790,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
   const performXenoSearch = async (
     query: string,
     numResults: number = XENO_SEARCH_CONFIG.defaultNumResults,
+    options: {
+      depth?: 'quick' | 'deep';
+      signal?: AbortSignal;
+      onProgress?: (progress: WebContextProgress) => void | Promise<void>;
+    } = {},
   ): Promise<WebContextSearchResult> => {
     const conversationId = activeConversationIdRef.current ?? activeConversationId;
     if (!isPersistedConversationId(conversationId)) {
@@ -11785,7 +11804,34 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
       conversationId,
       query,
       count: Math.min(Math.max(numResults, 1), 8),
+      depth: options.depth ?? 'quick',
+      signal: options.signal,
+      onProgress: options.onProgress,
     });
+  };
+
+  const applyWebContextProgress = (progress: WebContextProgress, deep: boolean) => {
+    const settled = progress.counters.completedPages + progress.counters.failedPages + progress.counters.excludedPages;
+    const percent = progress.terminal
+      ? 100
+      : progress.counters.knownPages > 0
+        ? Math.max(5, Math.min(95, Math.round((settled / progress.counters.knownPages) * 100)))
+        : progress.state === 'queued' ? 5 : 20;
+    const message = progress.terminal
+      ? `Research ${progress.state}`
+      : progress.state === 'queued'
+        ? 'Research queued in XENO Web Context...'
+        : `Reading public sources (${progress.counters.completedPages} complete)...`;
+    setSearchProgress({ message, progress: percent });
+    if (deep) {
+      setDeepSearchState({
+        phase: progress.state,
+        progress: percent,
+        message,
+        data: { ...progress.counters, jobId: progress.jobId },
+        isActive: true,
+      });
+    }
   };
   // Compact action buttons — conversation needs vertical room for the message exchange.
   const composerActionButtonSizeClass = 'h-7 w-7 rounded-lg';

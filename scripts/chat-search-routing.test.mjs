@@ -60,13 +60,16 @@ test('Search history stays inside the viewport and is keyboard accessible', () =
 test('Research mode uses the canonical XENO Web Context service', () => {
   assert.match(chat, /webContextService\.searchAndFetch/);
   assert.match(webContext, /mode: 'research'/);
+  assert.match(webContext, /\/api\/chat\/web-context\/stream/);
+  assert.match(webContext, /parseWebJobProgress/);
   assert.doesNotMatch(chat, /fetch\('\/api\/xeno-search'/);
   assert.doesNotMatch(chat, /xenoSearchService|WebSocketProgress/);
 });
 
 test('Research errors stay visible instead of deleting their placeholder first', () => {
   assert.match(chat, /Web research failed: \$\{message\}/);
-  assert.match(chat, /isLoading: false, isError: true/);
+  assert.match(chat, /isLoading: false, isError: !cancelled/);
+  assert.match(chat, /Research cancelled\./);
   assert.match(chat, /No public sources were found for this query\. No model answer was generated\./);
 });
 
