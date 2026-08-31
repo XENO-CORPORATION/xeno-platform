@@ -138,6 +138,10 @@ test('every service extraction preserves hardened backend bind-mount ownership b
   }
 });
 
+test('frontend exact-build archive includes the Compose definition used to build it', () => {
+  assert.match(deploy, /frontend:\s*\[[\s\S]*'docker-compose\.yml'/);
+});
+
 test('the scoped Web Context token is readable only by root and the backend runtime group', () => {
   assert.match(remote, /install -d -m 0750 -o root -g 1001 "\$ROOT\/secrets"/);
   assert.match(remote, /refusing symlinked Web Context token file/);

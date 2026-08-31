@@ -62,7 +62,7 @@ const PATHS = {
   backend: ['src/server', 'Dockerfile.backend', 'Dockerfile.backend.dockerignore', '.dockerignore', 'docker-compose.yml'],
   'chat-workers': ['src/server', 'Dockerfile.backend', 'Dockerfile.backend.dockerignore', '.dockerignore', 'docker-compose.yml'],
   frontend: [
-    'src', 'packages', 'public', 'scripts', 'index.html', 'Dockerfile.frontend', '.dockerignore', 'nginx',
+    'src', 'packages', 'public', 'scripts', 'index.html', 'Dockerfile.frontend', '.dockerignore', 'docker-compose.yml', 'nginx',
     'package.json', 'package-lock.json',
     'vite.config.ts', 'vite.config.js',
     'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json',
