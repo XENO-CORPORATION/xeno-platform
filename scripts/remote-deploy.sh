@@ -9,7 +9,7 @@
 #
 # Responsibilities (build-BEFORE-swap; the running container keeps serving until a
 # new image is proven built):
-#   1. Extract the git-archive tar of HEAD into the box worktree.
+#   1. Extract the git-archive tar of HEAD into an isolated candidate directory.
 #   2. Normalize CRLF on text sources only (never binaries).
 #   3. Tag the current :latest image as :rollback (last-good) before building.
 #   4. `docker compose build <service>` — old container still serving.
@@ -55,14 +55,19 @@ case "$MODE" in swap|build-only) ;; *) echo "remote-deploy: --mode must be swap|
 [ -f "$TAR" ] || { echo "remote-deploy: tar not found: $TAR" >&2; exit 2; }
 
 cd "$ROOT"
-mkdir -p .deploy
+mkdir -p .deploy/candidates
 LOG="$ROOT/.deploy/deploy.log"
 IMAGE="xeno-platform-$SERVICE"
+CANDIDATE_ROOT="$(mktemp -d "$ROOT/.deploy/candidates/$SHA-$SERVICE-XXXXXX")"
+chmod 700 "$CANDIDATE_ROOT"
 
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$LOG"; }
 
-# docker compose v2 (plugin) vs v1 — prefer the plugin form used on this box.
-dc() { docker compose "$@"; }
+# Runtime operations always use the live Compose file and production-owned env.
+dc() { docker compose --project-name xeno-platform --env-file "$ROOT/.env" -f "$ROOT/docker-compose.yml" "$@"; }
+# Candidate builds use only the exact git archive. The project name stays stable so
+# Compose produces the same xeno-platform-<service> image names as the runtime.
+build_dc() { docker compose --project-name xeno-platform --env-file "$ROOT/.env" --project-directory "$CANDIDATE_ROOT" -f "$CANDIDATE_ROOT/docker-compose.yml" "$@"; }
 
 # Health endpoints, curled from the box loopback (the true readiness signal).
 #  backend : /api/ready returns 200 only AFTER startup migrations succeed (503 until).
@@ -105,14 +110,17 @@ poll_health() {
 
 log "=== deploy start service=$SERVICE sha=$SHA mode=$MODE nocache=${NOCACHE:-no} ==="
 
-# --- 1. Extract HEAD tar into the worktree ---------------------------------
-tar xf "$TAR" --overwrite
-log "extracted $TAR into $ROOT"
+# --- 1. Extract HEAD tar into an isolated candidate ------------------------
+# The production checkout deliberately retains runtime-owned and operator-owned
+# state. It is not a build context: stale untracked source there must never enter
+# a candidate image.
+tar xf "$TAR" -C "$CANDIDATE_ROOT"
+log "extracted exact candidate $TAR into $CANDIDATE_ROOT"
 
 # --- 2. CRLF normalize text sources only (NEVER binaries) ------------------
 # git archive on this repo emits LF blobs (core.autocrlf=true), so this is a
 # no-op safety net; scoped to code dirs + text extensions, public/ binaries excluded.
-for d in src scripts nginx; do
+for d in "$CANDIDATE_ROOT/src" "$CANDIDATE_ROOT/scripts" "$CANDIDATE_ROOT/nginx"; do
   [ -d "$d" ] || continue
   find "$d" -type f \
     \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' \
@@ -120,7 +128,7 @@ for d in src scripts nginx; do
        -o -name '*.sql' -o -name '*.sh' -o -name '*.conf' -o -name '*.yml' -o -name '*.yaml' \) \
     -exec sed -i 's/\r$//' {} +
 done
-log "normalized line endings (text only)"
+log "normalized candidate line endings (text only)"
 
 # The backend runs as appuser (uid/gid 1001), but these paths are bind-mounted
 # from the host. Image-layer chown in Dockerfile.backend cannot affect them.
@@ -159,7 +167,7 @@ fi
 
 # --- 4. Build (build-before-swap — old container keeps serving) ------------
 log "building $SERVICE ..."
-dc build $NOCACHE "$SERVICE"
+build_dc build $NOCACHE "$SERVICE"
 docker tag "$IMAGE:latest" "$IMAGE:$SHA" || true
 NEW_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE:latest" 2>/dev/null || echo unknown)"
 log "built $SERVICE -> $IMAGE:latest ($NEW_ID), also tagged :$SHA"
@@ -182,6 +190,13 @@ if [ "$SERVICE" = "backend" ] || [ "$SERVICE" = "chat-workers" ]; then
   rm -f "$DEPENDENCY_LOG"
   log "production dependency graph PASSED inside $IMAGE:latest"
 fi
+
+# Publish only the runtime definition after the exact candidate image passes its
+# pre-swap gates. Source remains isolated; application code is already in the image,
+# while production data bind mounts remain under the live root.
+cp "$ROOT/docker-compose.yml" "$ROOT/.deploy/docker-compose.pre-$SHA-$SERVICE.yml"
+install -o root -g root -m 0644 "$CANDIDATE_ROOT/docker-compose.yml" "$ROOT/docker-compose.yml"
+log "installed candidate Compose definition after image qualification"
 
 if [ "$MODE" = "build-only" ]; then
   # Preserve the candidate under :$SHA, but put :latest back on the last-good

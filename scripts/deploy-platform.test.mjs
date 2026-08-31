@@ -57,6 +57,19 @@ test('backend image dependency graph is proven before build-only or swap can pas
   assert.match(remote, /restored \$IMAGE:latest to :rollback after pre-swap gate failure/);
 });
 
+test('candidate images build only from the isolated git archive, never the mutable host checkout', () => {
+  assert.match(remote, /CANDIDATE_ROOT="\$\(mktemp -d "\$ROOT\/\.deploy\/candidates\/\$SHA-\$SERVICE-/);
+  assert.match(remote, /tar xf "\$TAR" -C "\$CANDIDATE_ROOT"/);
+  assert.doesNotMatch(remote, /tar xf "\$TAR" --overwrite/);
+  assert.match(remote, /build_dc\(\).*--project-name xeno-platform.*--project-directory "\$CANDIDATE_ROOT".*"\$CANDIDATE_ROOT\/docker-compose\.yml"/);
+  assert.match(remote, /build_dc build \$NOCACHE "\$SERVICE"/);
+  const installCompose = remote.indexOf('installed candidate Compose definition after image qualification');
+  const dependencyGate = remote.indexOf('production dependency graph PASSED inside');
+  const swap = remote.indexOf('dc up -d --no-deps --force-recreate "$SERVICE"');
+  assert.ok(installCompose > dependencyGate, 'live Compose must not change before candidate qualification');
+  assert.ok(installCompose < swap, 'the qualified runtime definition must be installed before swap');
+});
+
 test('backend install runs after source COPY and removes any host dependency tree first', () => {
   const sourceCopy = backendDockerfile.indexOf('COPY --chown=appuser:appgroup src/server/ ./');
   const removeDependencies = backendDockerfile.indexOf('RUN rm -rf node_modules');
