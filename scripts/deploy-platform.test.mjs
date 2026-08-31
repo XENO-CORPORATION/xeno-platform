@@ -12,9 +12,10 @@ const frontendDockerfile = readFileSync(new URL('../Dockerfile.frontend', import
 test('backend deploy ships the Docker context policy with every source archive', () => {
   assert.match(
     deploy,
-    /backend:\s*\[[^\]]*['"]\.dockerignore['"]/,
-    'backend PATHS must include .dockerignore so the host cannot retain a stale context policy',
+    /backend:\s*\[[^\]]*['"]Dockerfile\.backend\.dockerignore['"]/,
+    'backend PATHS must include the Dockerfile-specific context policy',
   );
+  assert.match(deploy, /['"]chat-workers['"]:\s*\[[^\]]*['"]Dockerfile\.backend\.dockerignore['"]/);
 });
 
 test('worker deploy ships backend inputs and gates the semantic component without coupling Docker health to it', () => {
