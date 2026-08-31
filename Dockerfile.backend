@@ -10,7 +10,7 @@ RUN apk add --no-cache ffmpeg imagemagick python3 py3-pip dumb-init \
     && freshclam --datadir=/var/lib/clamav \
     && printf '%s  %s\n' \
       '6d4aa01f219e988060fc419f495d07f27e0cdf1a2cccc065971da922c76f7ffb' '/var/lib/clamav/bytecode.cvd' \
-      'c719ff2e485b4895abba9ae7eafd35e2168796135fe803485edf29d21e53b98e' '/var/lib/clamav/daily.cvd' \
+      'a32c46bdc47b84932cabcc7687bc8d6624cee7acb0c1990041c771adb07a60b5' '/var/lib/clamav/daily.cvd' \
       '0b2182d229f46981ec8f535382222f7c9dfdd656b250ad47988b910a8d302365' '/var/lib/clamav/main.cvd' \
       | sha256sum -c -
 
