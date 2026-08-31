@@ -172,6 +172,21 @@ for mount_path in "${WRITABLE_MOUNTS[@]}"; do
 done
 log "prepared ${#WRITABLE_MOUNTS[@]} writable backend bind mounts for uid/gid 1001"
 
+# Read-only runtime credentials need a different ownership contract from writable
+# application storage. The host operator must not make these world-readable, while
+# the non-root container uid still needs directory traversal and file read access.
+install -d -m 0750 -o root -g 1001 "$ROOT/secrets"
+WEB_CONTEXT_TOKEN="$ROOT/secrets/xeno_web_context_token"
+if [ -L "$WEB_CONTEXT_TOKEN" ]; then
+  log "refusing symlinked Web Context token file"
+  exit 1
+fi
+if [ -f "$WEB_CONTEXT_TOKEN" ]; then
+  chown root:1001 "$WEB_CONTEXT_TOKEN"
+  chmod 0440 "$WEB_CONTEXT_TOKEN"
+  log "prepared read-only Web Context token for container uid/gid 1001"
+fi
+
 # --- 3. Tag current image as :rollback (last-good) -------------------------
 if docker image inspect "$IMAGE:latest" >/dev/null 2>&1; then
   PREV_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE:latest")"

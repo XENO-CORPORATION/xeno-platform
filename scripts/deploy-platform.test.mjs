@@ -137,3 +137,11 @@ test('every service extraction preserves hardened backend bind-mount ownership b
     assert.match(remote, new RegExp(`\\n\\s+${mount.replaceAll('/', '\\/')}\\n`));
   }
 });
+
+test('the scoped Web Context token is readable only by root and the backend runtime group', () => {
+  assert.match(remote, /install -d -m 0750 -o root -g 1001 "\$ROOT\/secrets"/);
+  assert.match(remote, /refusing symlinked Web Context token file/);
+  assert.match(remote, /chown root:1001 "\$WEB_CONTEXT_TOKEN"/);
+  assert.match(remote, /chmod 0440 "\$WEB_CONTEXT_TOKEN"/);
+  assert.doesNotMatch(remote, /chmod 0?44[4-7] "\$WEB_CONTEXT_TOKEN"/);
+});
