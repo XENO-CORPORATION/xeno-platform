@@ -33,6 +33,14 @@ test('production-shaped restore precedes quiesced production cutover', () => {
   assert.ok(recreate > quiesced);
 });
 
+test('migration verification derives its count from the exact candidate image', () => {
+  const remote = read('scripts/remote-chat-database-cutover.sh');
+  assert.match(remote, /EXPECTED_MIGRATION_COUNT="\$\(docker run --rm --entrypoint sh "\$BACKEND_IMAGE"/);
+  assert.match(remote, /find \/app\/database\/migrations/);
+  assert.equal((remote.match(/grep -qx "\$EXPECTED_MIGRATION_COUNT"/g) || []).length, 2);
+  assert.doesNotMatch(remote, /schema_migrations;" \| grep -qx '[0-9]+'/);
+});
+
 test('API stays stopped on migration failure and rollback restores a separate volume', () => {
   const remote = read('scripts/remote-chat-database-cutover.sh');
   assert.match(remote, /cutover failed before API restart; restoring quiesced backup/);
