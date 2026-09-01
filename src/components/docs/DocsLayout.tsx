@@ -50,7 +50,7 @@ const DocsLayout: React.FC<{ product: ProductDocs; page: DocPage; sectionTitle: 
       <DocsSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       {/* Mobile docs bar */}
-      <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-white/[0.06] bg-[#060606]/90 px-4 py-3 backdrop-blur lg:hidden">
+      <div className="sticky top-[56px] z-30 mt-[56px] flex items-center gap-3 border-b border-white/[0.06] bg-[#060606]/90 px-4 py-3 backdrop-blur lg:hidden">
         <button onClick={() => setMobileNav(true)} className="inline-flex items-center gap-2 text-[13px] text-[#cdc7be]">
           <Menu className="h-4 w-4" /> Menu
         </button>
@@ -58,7 +58,7 @@ const DocsLayout: React.FC<{ product: ProductDocs; page: DocPage; sectionTitle: 
         <span className="truncate text-[13px] text-[#948d83]">{product.productName}</span>
       </div>
 
-      <div className="mx-auto flex w-full max-w-[1400px] flex-1 gap-8 px-[max(16px,2vw)] pt-[76px] lg:pt-[92px]">
+      <div className="mx-auto flex w-full max-w-[1400px] flex-1 gap-8 px-[max(16px,2vw)] pt-6 lg:pt-[92px]">
         {/* Left sidebar */}
         <aside className="hidden w-[250px] shrink-0 lg:block">
           <div className="sticky top-[92px] max-h-[calc(100vh-92px)] overflow-y-auto pb-16 pr-2">

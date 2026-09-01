@@ -68,3 +68,9 @@ test('docs UI exposes product version and update metadata', () => {
   assert.match(layoutSource, /Documentation updated/);
   assert.match(homeSource, /Updated \$\{p\.updated\}/);
 });
+
+test('mobile docs navigation clears the fixed site header', () => {
+  const layoutSource = readFileSync(join(root, 'src', 'components', 'docs', 'DocsLayout.tsx'), 'utf8');
+  assert.match(layoutSource, /sticky top-\[56px\].*mt-\[56px\].*lg:hidden/);
+  assert.match(layoutSource, /pt-6 lg:pt-\[92px\]/);
+});
