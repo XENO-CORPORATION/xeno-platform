@@ -7,7 +7,7 @@ const agent: ProductDocs = {
   productName: 'XENO Agent',
   tagline: 'The canonical graphical agent workspace — Chat, project-aware Agent mode, durable sessions, tools, terminals, coordination, and nested agents.',
   version: '0.3.16',
-  updated: '2026-08-31',
+  updated: '2026-09-02',
   seo: {
     title: 'XENO Agent 0.3.16 documentation',
     description: 'Install and use XENO Agent: Chat, cited public-web Research, project-aware Agent mode, durable sessions, tools, coordination, ACP providers, and the ADE workbench.',
@@ -38,7 +38,7 @@ const agent: ProductDocs = {
             '',
             '## Release boundary',
             '',
-            'Version 0.3.16 is the standalone product release and 0.1.23 is the matching public Agent Interface package/runtime set. Hosted XENO Chat uses that shared interface contract. The desktop is an experimental Windows and Linux release: real distributable software, but not GA. Signing/notarization, macOS distribution, and portions of the cross-platform containment and deep-harness certification matrix remain separate admission gates. The interface reports actual capabilities instead of silently simulating unsupported ones.',
+            'Version 0.3.16 is the standalone product release and 0.1.24 is the matching public Agent Interface package/runtime set. The 0.1.24 runtime fixes published Monaco worker resolution in Hub and other Vite consumers while retaining the `agent@1` contract. Hosted XENO Chat uses that shared interface contract. The desktop is an experimental Windows and Linux release: real distributable software, but not GA. Signing/notarization, macOS distribution, and portions of the cross-platform containment and deep-harness certification matrix remain separate admission gates. The interface reports actual capabilities instead of silently simulating unsupported ones.',
             '',
             'Next: [Install XENO Agent](/docs/agent/installation) or learn [Chat and Agent modes](/docs/agent/chat-and-agent-modes).',
           ),
