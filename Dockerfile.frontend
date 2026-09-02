@@ -39,7 +39,13 @@ COPY package*.json ./
 # ⚠️ Requires BuildKit, which `docker compose build` already uses here. On a
 # builder without it this line is a syntax error rather than a silent no-op,
 # which is the failure mode you want.
-RUN --mount=type=cache,target=/root/.npm npm ci --legacy-peer-deps
+# Vulnerability qualification is an explicit release gate (`npm audit`) before
+# deployment. Running npm's implicit audit inside this resource-constrained
+# BuildKit layer duplicates that work and can saturate the deployment host long
+# after the locked dependency graph has been resolved. Keep image construction
+# deterministic and bounded to installation; never turn the image build into a
+# second registry-wide audit/funding query.
+RUN --mount=type=cache,target=/root/.npm npm ci --legacy-peer-deps --no-audit --no-fund
 
 # Copy configuration files (these rarely change, so cache them before src/)
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./

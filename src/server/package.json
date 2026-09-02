@@ -28,7 +28,7 @@
     "dockerode": "^5.0.1",
     "docx": "^8.5.0",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "express": "^5.2.1",
     "express-rate-limit": "^8.3.1",
     "fluent-ffmpeg": "^2.1.2",
     "form-data": "^4.0.2",
