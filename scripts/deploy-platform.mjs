@@ -187,6 +187,7 @@ if (!opts.execute) {
 // --- execute --------------------------------------------------------------
 const stage = mkdtempSync(join(tmpdir(), 'xeno-deploy-'));
 const tarLocal = join(stage, `deploy-${sha}.tar`);
+let remoteStageProvisioned = false;
 try {
   step(`Packing git archive HEAD (${sha}) -> tar`);
   // git archive writes committed bytes only (LF; core.autocrlf=true).
@@ -195,6 +196,7 @@ try {
 
   step(`Provisioning ${opts.host}:${REMOTE_TMP}`);
   run('ssh', [opts.host, `mkdir -p ${REMOTE_TMP}`]);
+  remoteStageProvisioned = true;
 
   step('Shipping tar + remote-deploy.sh');
   run('scp', ['-q', tarLocal, `${opts.host}:${REMOTE_TMP}/deploy-${sha}.tar`]);
@@ -221,6 +223,16 @@ try {
   console.error(`  container should still be serving. Check: ssh ${opts.host} 'tail -30 ${opts.root}/.deploy/deploy.log'${C.rst}`);
   process.exitCode = 1;
 } finally {
+  if (remoteStageProvisioned) {
+    const remoteTar = `${REMOTE_TMP}/deploy-${sha}.tar`;
+    const cleanup = spawnSync('ssh', [opts.host, `rm -f -- ${remoteTar}`], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
+    if (cleanup.status === 0) ok(`removed remote staging archive ${remoteTar}`);
+    else warn(`could not remove remote staging archive ${remoteTar}; reclaim it before the next deploy`);
+  }
   try { rmSync(stage, { recursive: true, force: true }); } catch { /* noop */ }
 }
 

@@ -142,6 +142,13 @@ test('frontend exact-build archive includes the Compose definition used to build
   assert.match(deploy, /frontend:\s*\[[\s\S]*'docker-compose\.yml'/);
 });
 
+test('remote source archives are reclaimed after successful and failed deploys', () => {
+  const cleanup = deploy.slice(deploy.indexOf('} finally {'));
+  assert.match(cleanup, /remoteStageProvisioned/);
+  assert.match(cleanup, /rm -f -- \$\{remoteTar\}/);
+  assert.match(cleanup, /could not remove remote staging archive/);
+});
+
 test('the scoped Web Context token is readable only by root and the backend runtime group', () => {
   assert.match(remote, /install -d -m 0750 -o root -g 1001 "\$ROOT\/secrets"/);
   assert.match(remote, /refusing symlinked Web Context token file/);
