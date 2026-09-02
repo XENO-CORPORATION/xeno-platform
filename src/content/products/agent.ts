@@ -94,6 +94,7 @@ const agent: ProductContent = {
       bullets: [
         'ACP providers · SDK-native · XENO Cloud hosted runs',
         'Model and reasoning catalogs discovered dynamically',
+        'Provider-native TUI tool activity mirrors into compact GUI cards',
         'No model family hardcoded in the interface',
         'A text-only path fails closed instead of pretending',
       ],

@@ -8,11 +8,20 @@
       "@xenosystem/acp-agent",
       "@xenosystem/acp-provider-manager"
     ],
-    "derivedFrom": "xeno-acp @ 854da71e789bc4bf4eb597045f671772f69f4fd5, docs/CHANGELOG-XACP.md plus RELEASE_NOTES-0.2.4.md and RELEASE_NOTES-0.2.5.md",
+    "derivedFrom": "xeno-acp @ 1660ef9, docs/CHANGELOG-XACP.md plus docs/RELEASE_NOTES-0.2.14.md",
     "why": "xeno-acp keeps its release notes in docs/CHANGELOG-XACP.md, not in a RELEASE_NOTES module, so this file is the notes source publish-cli-releases.mjs reads for the acp slug. Update it from the product CHANGELOG when a new version is published.",
     "note": "0.1.0 is deliberately absent. It is already live in apps/acp/releases.json and is preserved by the publisher's merge; re-deriving it here would overwrite the authored launch entry with a weaker one."
   },
 
+  "0.2.14": {
+    "title": "Native provider tool-event mirroring",
+    "type": "patch",
+    "notes": [
+      "Follows persisted Codex and Claude provider transcripts and emits structured native tool-start, completion, and failure events to the owning Host conversation.",
+      "Correlates tool calls with their results, bounds and redacts previews, suppresses replayed history, and never scrapes terminal pixels.",
+      "Preserves provider-native session identity so the native TUI and graphical Agent surface remain two live views of the same execution."
+    ]
+  },
   "0.2.5": {
     "title": "Lossless continuation state and secret-safe packaging",
     "type": "patch",
