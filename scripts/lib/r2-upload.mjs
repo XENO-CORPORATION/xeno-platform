@@ -270,6 +270,30 @@ export class R2Publisher {
     }
   }
 
+  /**
+   * Retire a MOVING POINTER (version.json / latest*.yml / releases.json): snapshot it to
+   * `_snapshots/`, then delete it. Refuses anything that is not a pointer — installers under
+   * `v<version>/` are immutable by convention and this must never be the tool that removes one.
+   * Added 2026-09-03 to retire apps/3d/version.json when the modeler became XENO Form.
+   */
+  async retirePointer(key, { label } = {}) {
+    if (!/\.(json|yml|yaml)$/.test(key) || /\/v\d+\.\d+\.\d+[^/]*\//.test(key)) {
+      throw new GateError(`retirePointer refuses ${key}: only a top-level pointer file may be retired`);
+    }
+    const probe = statRemote(`${this.remote}/${key}`);
+    if (probe.status === 'absent') { console.log(`  retire: ${key} is already absent`); return null; }
+    if (probe.status === 'unknown') {
+      throw new GateError(`retirePointer: cannot probe ${key} (${probe.reason}); refusing to delete blind`);
+    }
+    const snap = await this.snapshotPointer(key, { label: label ? `${label} (pre-retire)` : undefined });
+    if (!snap && !this.dryRun) {
+      throw new GateError(`retirePointer: snapshot of ${key} failed; a delete without a backup is not undoable`);
+    }
+    runRclone(['deletefile', `${this.remote}/${key}`], { dryRun: this.dryRun, label: label ?? `retire ${key}` });
+    this.uploads.push({ key, kind: 'retired', snapshot: snap });
+    return snap;
+  }
+
   async putPointer(contents, key, { label } = {}) {
     const tmp = mkdtempSync(join(tmpdir(), 'xeno-r2-'));
     const file = join(tmp, basename(key));

@@ -36,7 +36,7 @@ export const FIRST_PARTY_CLIENTS = [
   { id: 'xeno-slides', name: 'XENO Slides', loopback: true },
   { id: 'xeno-notes', name: 'XENO Notes', loopback: true },
   { id: 'xeno-architect', name: 'XENO Architect', loopback: true },
-  { id: 'xeno-3d', name: 'XENO 3D', loopback: true },
+  { id: 'xeno-form', name: 'XENO Form', loopback: true }, // renamed from xeno-3d 2026-09-03; the old row, if present, is inert
   { id: 'xeno-engine', name: 'XENO Engine', loopback: true },
   { id: 'xeno-workflow', name: 'XENO Workflow', loopback: true },
   { id: 'xeno-comms', name: 'XENO Comms', loopback: true },

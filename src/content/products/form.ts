@@ -1,16 +1,16 @@
 import type { ProductContent } from './_types';
 
-/* XENO 3D — sourced from ../xeno-3d (README.md + the renderer UI in
+/* XENO Form — sourced from ../xeno-form (README.md + the renderer UI in
  * src/renderer/src/components). A full 3D DCC (Blender / Maya / C4D / ZBrush /
  * Houdini class) with a native Rust + wgpu engine. Status is honest: it is
  * in active development (early v0.x builds), NOT released — coming-soon /
  * waitlist framing throughout. Claims are drawn only from the real repo. */
-const threeD: ProductContent = {
-  slug: '3d',
+const form: ProductContent = {
+  slug: 'form',
   hero: {
     headline: 'The whole 3D pipeline, in one native app.',
     sub: 'Modeling, sculpting, UV, materials, procedural nodes, animation, simulation and rendering — unified in a single tool, driven by a native Rust + wgpu engine. AI-native, USD-first, and free to start. In active development.',
-    media: { type: 'mockup', src: '3d-hero', alt: 'XENO 3D — the viewport with a selected mesh, transform gizmo, scene outliner, properties, timeline and status bar' },
+    media: { type: 'mockup', src: '3d-hero', alt: 'XENO Form — the viewport with a selected mesh, transform gizmo, scene outliner, properties, timeline and status bar' },
     badges: ['Windows · macOS · Linux', 'Rust + wgpu engine', 'USD-first', 'AI text-to-3D', 'In development'],
     note: 'In active development — not yet released. Early builds already run modeling, sculpting, UV, materials, animation and a path tracer. Join the waitlist for the first public build.',
   },
@@ -125,7 +125,7 @@ const threeD: ProductContent = {
     { label: 'Status', value: 'In development (pre-release)' },
   ],
   faq: [
-    { q: 'Is XENO 3D available yet?', a: 'No — there is no public build to download. It’s in active development (early v0.x): modeling, sculpting, UV, materials, a node-based material editor, animation timeline and a path tracer run in our development builds. Get notified and we’ll tell you when the first public build is ready.' },
+    { q: 'Is XENO Form available yet?', a: 'No — there is no public build to download. It’s in active development (early v0.x): modeling, sculpting, UV, materials, a node-based material editor, animation timeline and a path tracer run in our development builds. Get notified and we’ll tell you when the first public build is ready.' },
     { q: 'What does it replace?', a: 'It aims to unify what you’d normally split across a modeling/sculpt/animation suite and a separate renderer — polygon modeling, sculpting, UV, procedural nodes, animation, simulation and rendering, all in one app.' },
     { q: 'Is it really native, or just web tech?', a: 'The 3D engine is Rust compiled to a native N-API module and renders through wgpu (Vulkan / Metal / DX12). Electron only draws the UI panels — it never touches render frames.' },
     { q: 'Which file formats does it support?', a: 'USD is the primary format, with glTF/GLB, OBJ and STL supported today. FBX and Alembic are planned.' },
@@ -133,9 +133,9 @@ const threeD: ProductContent = {
     { q: 'How much will it cost?', a: 'A free tier plus credits for heavy AI and cloud work — no multi-thousand-dollar yearly subscription. Final pricing will be announced at launch.' },
   ],
   seo: {
-    title: 'XENO 3D — modeling, sculpting, animation & rendering',
+    title: 'XENO Form — modeling, sculpting, animation & rendering',
     description: 'A full 3D app — polygon modeling, GPU sculpting, procedural nodes, animation, simulation and PBR + path-traced rendering — on a native Rust + wgpu engine. AI-native, USD-first, free to start. In development; join the waitlist.',
   },
 };
 
-export default threeD;
+export default form;

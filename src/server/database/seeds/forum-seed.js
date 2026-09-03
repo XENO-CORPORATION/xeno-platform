@@ -98,6 +98,7 @@ const TAGS = [
   { namespace: 'product', value: 'sound' },
   { namespace: 'product', value: 'hub' },
   { namespace: 'product', value: 'workflow' },
+  { namespace: 'product', value: 'form' },
   { namespace: 'product', value: '3d' },
   { namespace: 'product', value: 'engine' },
   { namespace: 'product', value: 'architect' },

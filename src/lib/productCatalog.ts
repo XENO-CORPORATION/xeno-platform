@@ -80,7 +80,7 @@ export interface Product {
   signing?: Signing;
 }
 
-/** XENO X → 'pixel', 'XENO 3D Gen' → '3d-gen', 'XENO Agent CLI' → 'agent-cli' */
+/** XENO X → 'pixel', 'XENO Form' → 'form', 'XENO Agent CLI' → 'agent-cli' */
 export function slugify(label: string): string {
   return label
     .replace(/^XENO\s+/i, '')
@@ -97,7 +97,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'image', name: 'XENO Image', tagline: 'Generate images from a prompt with 20+ frontier models.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/login' },
   { slug: 'video', name: 'XENO Video', tagline: 'Generate and edit video with AI pipelines.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/login' },
   { slug: 'audio', name: 'XENO Audio', tagline: 'Generate voice, music and sound effects.', category: 'Generate', status: 'shipping', delivery: 'web', launchPath: '/login' },
-  { slug: '3d-gen', name: 'XENO 3D Gen', tagline: 'Generate 3D models and scenes from a prompt.', category: 'Generate', status: 'beta', delivery: 'web', launchPath: '/login' },
+  { slug: '3d', name: 'XENO 3D', tagline: 'Generate 3D models and scenes from a prompt.', category: 'Generate', status: 'beta', delivery: 'web', launchPath: '/login' },
 
   // ── Create ────────────────────────────────────────────────
   { slug: 'pixel', name: 'XENO Pixel', tagline: 'AI-native image editing, design and upscaling.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-pixel' },
@@ -112,7 +112,7 @@ export const PRODUCTS: Product[] = [
   // ── Design ────────────────────────────────────────────────
   { slug: 'canvas', name: 'XENO Canvas', tagline: 'Multiplayer UI & product design with components.', category: 'Design', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-canvas' },
   { slug: 'layout', name: 'XENO Layout', tagline: 'Multi-page layouts for print and digital.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-layout' },
-  { slug: '3d', name: 'XENO 3D', tagline: '3D modeling, rendering and asset creation.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-3d' },
+  { slug: 'form', name: 'XENO Form', tagline: '3D modeling, sculpting, animation and rendering.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-form' },
   { slug: 'architect', name: 'XENO Architect', tagline: 'Architecture, CAD, BIM and interior design.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-architect' },
 
   // ── Office ────────────────────────────────────────────────

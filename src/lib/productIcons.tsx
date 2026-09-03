@@ -38,14 +38,14 @@ export const PRODUCT_ICON: Record<string, React.ReactNode> = {
   image:     <Image className={I} />,
   video:     <Video className={I} />,
   audio:     <Music className={I} />,
-  '3d-gen':  <Box className={I} />,
+  '3d':      <Box className={I} />,
   canvas:    <Frame className={I} />,
   motion:    <Film className={I} />,
   pixel:     <Brush className={I} />,
   sound:     <AudioWaveform className={I} />,
   photo:     <Camera className={I} />,
   layout:    <BookOpen className={I} />,
-  '3d':      <Rotate3d className={I} />,
+  'form':    <Rotate3d className={I} />,
   architect: <Ruler className={I} />,
 
   // Office
