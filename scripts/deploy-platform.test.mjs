@@ -60,6 +60,13 @@ test('frontend deploy ships every first-party source tree copied by its Dockerfi
   );
 });
 
+test('frontend image installation skips the unused Puppeteer browser payload', () => {
+  const skip = frontendDockerfile.indexOf('ENV PUPPETEER_SKIP_DOWNLOAD=true');
+  const install = frontendDockerfile.indexOf('npm ci --legacy-peer-deps');
+  assert.ok(skip >= 0, 'expected the frontend builder to disable Puppeteer downloads');
+  assert.ok(skip < install, 'the skip flag must be set before npm lifecycle scripts run');
+});
+
 test('Docker context excludes nested dependency trees after server exceptions', () => {
   const exception = dockerignore.lastIndexOf('!src/server/lib/chatModelCapabilities.js');
   const exclusion = dockerignore.lastIndexOf('**/node_modules/**');

@@ -21,6 +21,11 @@ WORKDIR /app
 # Copy package files first to leverage Docker cache
 COPY package*.json ./
 
+# Puppeteer is retained in the shared root graph for server-side tooling. This
+# static frontend build never launches a browser, so its install lifecycle must
+# not download and unpack Chromium into the disposable builder.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 # Clean install for reproducible builds (uses package-lock.json).
 #
 # ── THE CACHE MOUNT IS THE POINT, AND IT IS NOT THE LAYER CACHE ─────────────
