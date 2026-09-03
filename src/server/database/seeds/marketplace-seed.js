@@ -31,7 +31,7 @@ const CREATIVE_APPS = [
   { id: 'motion',    name: 'XENO Motion',    category: 'studio',     version: '0.2.0', description: 'Video editor and motion graphics — timeline, compositing, effects, and AI assistance' },
   { id: 'sound',     name: 'XENO Sound',     category: 'studio',     version: '0.2.0', description: 'Digital audio workstation — multitrack recording, mixing, mastering, and AI enhancement' },
   { id: 'architect', name: 'XENO Architect', category: 'studio',     version: '0.2.0', description: 'Architecture & CAD — BIM, parametric design, 2D drafting, and AI-powered architecture tools' },
-  { id: '3d',        name: 'XENO 3D',        category: 'studio',     version: '0.2.0', description: '3D modeling, sculpting, animation & rendering — polygon editing, path tracing, and procedural tools' },
+  { id: 'form',      name: 'XENO Form',      category: 'studio',     version: '0.2.0', description: '3D modeling, sculpting, animation & rendering — polygon editing, path tracing, and procedural tools' },
   { id: 'engine',    name: 'XENO Engine',    category: 'studio',     version: '0.2.0', description: 'Game engine — ECS, real-time rendering, physics, scripting, and cross-platform export' },
   { id: 'workflow',  name: 'XENO Workflow',  category: 'automation', version: '0.2.0', description: 'Visual workflow automation — AI-native pipelines connecting all XENO apps and external services' },
   { id: 'docs',      name: 'XENO Docs',      category: 'office',     version: '0.2.0', description: 'Document editor — rich text, DOCX import/export, collaboration, templates, and AI writing assistance' },

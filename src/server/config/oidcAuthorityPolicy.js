@@ -31,7 +31,7 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-slides': PRODUCT,
   'xeno-notes': PRODUCT,
   'xeno-architect': PRODUCT,
-  'xeno-3d': PRODUCT,
+  'xeno-form': PRODUCT, // renamed from xeno-3d 2026-09-03 (the modeler is XENO Form; xeno-3d is now the generator and has no OIDC client yet)
   'xeno-engine': PRODUCT,
   'xeno-workflow': PRODUCT,
   'xeno-comms': COLLAB_PRODUCT,

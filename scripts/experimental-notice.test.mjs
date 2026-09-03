@@ -96,7 +96,7 @@ test('npm packages are never told Windows will warn them', () => {
 });
 
 test('hosted web products get no download notice at all', () => {
-  for (const slug of ['image', 'video', 'audio', '3d-gen', 'post']) {
+  for (const slug of ['image', 'video', 'audio', '3d', 'post']) {
     const p = bySlug(slug);
     assert.equal(installChannel(p), 'hosted', `${slug}: expected a hosted web product`);
     assert.equal(noticeFor(slug), null, `${slug}: a hosted app installs nothing — there is nothing to warn about`);

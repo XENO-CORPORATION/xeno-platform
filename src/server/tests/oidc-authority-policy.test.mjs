@@ -16,7 +16,7 @@ test('drawing and media apps cannot receive billing, payout, team-admin, or glob
   for (const clientId of [
     'xeno-pixel', 'xeno-motion', 'xeno-sound', 'xeno-canvas', 'xeno-browser',
     'xeno-docs', 'xeno-sheets', 'xeno-slides', 'xeno-notes', 'xeno-architect',
-    'xeno-3d', 'xeno-engine', 'xeno-workflow',
+    'xeno-form', 'xeno-engine', 'xeno-workflow',
   ]) {
     const scopes = new Set(CLIENT_AUTHORITY[clientId]);
     for (const forbidden of ['billing:manage', 'marketplace:payout', 'team:manage', 'account:logout']) {
@@ -29,7 +29,7 @@ test('every released interactive surface in the retained inventory has a checked
   const released = [
     'xeno-hub', 'xeno-pixel', 'xeno-motion', 'xeno-sound', 'xeno-canvas',
     'xeno-browser', 'xeno-docs', 'xeno-sheets', 'xeno-slides', 'xeno-notes',
-    'xeno-architect', 'xeno-3d', 'xeno-engine', 'xeno-workflow', 'xeno-comms',
+    'xeno-architect', 'xeno-form', 'xeno-engine', 'xeno-workflow', 'xeno-comms',
     'xeno-shell', 'xeno-agent-cli', 'xeno-anima', 'xeno-web', 'xeno-post',
   ];
   for (const clientId of released) assert.ok(CLIENT_AUTHORITY[clientId], `missing authority for ${clientId}`);

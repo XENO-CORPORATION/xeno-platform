@@ -21,7 +21,7 @@ import engine from './engine';
 import architect from './architect';
 import sound from './sound';
 import browser from './browser';
-import threeD from './3d';
+import form from './form';
 import photo from './photo';
 import anima from './anima';
 import shell from './shell';
@@ -30,7 +30,7 @@ import shell from './shell';
  * the full ProductLanding; any product NOT here falls back to the lean
  * ProductPage (PRODUCT-LANDING-SPEC L3). Add a product = author its module and
  * import it here. */
-const MODULES: ProductContent[] = [comms, agent, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk, docs, sheets, notes, slides, use, engine, rt, architect, sound, browser, threeD, photo, anima, shell];
+const MODULES: ProductContent[] = [comms, agent, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk, docs, sheets, notes, slides, use, engine, rt, architect, sound, browser, form, photo, anima, shell];
 
 const BY_SLUG = new Map(MODULES.map((m) => [m.slug, m]));
 

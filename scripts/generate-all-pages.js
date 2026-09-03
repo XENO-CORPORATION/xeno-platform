@@ -70,7 +70,7 @@ const products = [
     ],
   },
   {
-    slug: '3d', name: 'XENO 3D', category: 'Creative Suite',
+    slug: 'form', name: 'XENO Form', category: 'Creative Suite',
     desc: 'AI-native 3D modeling, animation, and rendering',
     sections: ['getting-started','modeling','sculpting','uv-mapping','materials','animation','rendering','export'],
     shortcuts: [

@@ -27,7 +27,7 @@
       "catalogStatus": "shipping",
       "delivery": "web"
     },
-    "3d-gen": {
+    "3d": {
       "released": true,
       "source": "web",
       "catalogStatus": "beta",
@@ -73,12 +73,12 @@
       "catalogStatus": "coming-soon",
       "delivery": "soon"
     },
-    "3d": {
-      "released": true,
-      "version": "0.1.0",
+    "form": {
+      "released": false,
       "source": "r2:version.json",
       "catalogStatus": "coming-soon",
-      "delivery": "soon"
+      "delivery": "soon",
+      "note": "Renamed from 3d on 2026-09-03. The old apps/3d/version.json (a 0.1.0 UI scaffold from 2026-03-17, per releaseExceptions) was RETIRED with a snapshot; the installer under apps/3d/v0.1.0/ is left in place. The next Form release publishes fresh under apps/form/."
     },
     "architect": {
       "released": true,

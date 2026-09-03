@@ -13,13 +13,13 @@ import acp from './acp';
 import sound from './sound';
 import workflow from './workflow';
 import architect from './architect';
-import threeD from './3d';
+import form from './form';
 import engine from './engine';
 
 /* Registry of product documentation. A product listed here gets a full docs
  * section at /docs/<slug>; products NOT here show "coming soon" on the hub.
  * Add a product = author src/content/docs/<slug>.ts and import it here. */
-const MODULES: ProductDocs[] = [agent, agentCli, hub, sdk, acp, pixel, motion, comms, canvas, rt, post, sound, workflow, architect, threeD, engine];
+const MODULES: ProductDocs[] = [agent, agentCli, hub, sdk, acp, pixel, motion, comms, canvas, rt, post, sound, workflow, architect, form, engine];
 
 const BY_SLUG = new Map(MODULES.map((m) => [m.slug, m]));
 

@@ -1,11 +1,6 @@
 {
   "note": "Declared, reasoned exceptions where productCatalog.status deliberately disagrees with the measured release. NOT a way to silence the gate — each entry states why and what would retire it.",
   "acknowledged": {
-    "3d": {
-      "measured": "0.1.0 published 2026-03-17",
-      "reason": "The published build is a UI scaffold — its own release notes say '3D viewport placeholder'. An installable artifact exists, but advertising it as a product would oversell a shell.",
-      "retireWhen": "3D ships a build that renders real geometry; then set status/delivery to match and drop this entry."
-    },
     "architect": {
       "measured": "0.1.0 published 2026-03-17",
       "reason": "Same shape — release notes describe a 'workspace UI' with a '3D viewport placeholder'. Scaffold, not product.",

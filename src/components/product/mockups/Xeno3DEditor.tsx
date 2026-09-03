@@ -8,7 +8,7 @@ import {
 
 /* Hero mockup — a faithful XENO 3D window, recreated in the landing-v3 language
  * (near-black panels, hairline borders, off-white text). Mirrors the real app in
- * ../xeno-3d/src/renderer/src: TitleBar (File/Edit/View/Add/Object/Render menus),
+ * ../xeno-form/src/renderer/src: TitleBar (File/Edit/View/Add/Object/Render menus),
  * ModeSelector (Object/Edit/Sculpt tabs + shading + stats), the 36px Blender-style
  * ToolsSidebar, the wgpu Viewport3D with a selected primitive + transform gizmo,
  * the SceneOutliner + Properties panel, the Timeline transport, and the StatusBar.
