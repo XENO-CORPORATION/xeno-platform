@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "status": "user-confirmation-recorded-not-independent-legal-verification",
+  "date": "2026-09-05",
+  "basis": "Explicit project-owner statement in this conversation following enumeration of all remaining 23 files.",
+  "verbatim": "all of hte ogos icons are ok t boe used andal the media fiels as well are ok ours, so close this now",
+  "scope": "Exactly the 23 byte-hashed files below. No statement about dependencies, contributors, future assets or exclusive rights to third-party brands.",
+  "assets": [
+    {
+      "path": "icons/menu-icon.svg",
+      "sha256": "b9f659ddca9a9d4e02b135e8168cd858f66e20bbfc12f5e69860f032f21fa18c",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "icons/more-icon.svg",
+      "sha256": "4d141bbfdafdf1e7496bbb31728b1e97d43d0a0f3eeb223aa492fb9f1397e9dd",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "icons/search-icon.svg",
+      "sha256": "d890fd508453f65a8d97ec0f384f9985e66b8927e202039fcddee9749da58530",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/canvas-workspace-demo.jpg",
+      "sha256": "3bfb40023069cbe776b63f017566ad011f622fcf5fc89451866b8c7e089f7580",
+      "category": "media"
+    },
+    {
+      "path": "public/favicon-v2.svg",
+      "sha256": "4da493e8e97e3764032d8b196587043303d71dc8869015821c3d34d0e4b0a526",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/favicon.svg",
+      "sha256": "4da493e8e97e3764032d8b196587043303d71dc8869015821c3d34d0e4b0a526",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/flux-logo.svg",
+      "sha256": "6f2f0a00949a2111e163a51c1fef11d9478cc957b4e2cd4a507bafec1d96928d",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/hero-assets/hero-abstract.webp",
+      "sha256": "eb2b4d34ffd1b4e454ef8bca2710501d0ea0ad4db72757d9ca9277d6b597ba46",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-architecture.jpg",
+      "sha256": "aee4aeb9dddf093bc32cb0e1780dd94eb0a5af5038b95b01089dcc1b1370c927",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-city.webp",
+      "sha256": "d03d38b978c478d233ff5b77b7ffbea26e23e63863eac564442e77d19194c880",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-fluid.jpg",
+      "sha256": "7967ae220dae4c764bcda66a6c9448eed44cdae784a93f591f79bbbffca69d1f",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-nature.webp",
+      "sha256": "b4bffe82ade0a6b038d6e2e5177594eaa362b08c79d068af66404ea4475add38",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-neural.jpg",
+      "sha256": "cc1e31bf274ff609c76c11fb22ca5557712edfe7d0c82317175b2c2f9b20ed51",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-portrait.jpg",
+      "sha256": "0caff5e6bd08ed42cb5200c17c805ac8f77bf1e80d2aa0c3dc1cd87ec4edf120",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-portrait.webp",
+      "sha256": "bebe902e516210be472ed8131ff1a02a61565029306aac411e56e15da722e9eb",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-ui.webp",
+      "sha256": "aa46bc9a8bd1f7ebd36171ef41a412bd3c0772e8458175f928f97bfd0a522833",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-assets/hero-workspace.jpg",
+      "sha256": "9bd240165e00b157f25516408560a15ee56f7db33311fa2bf95b2d92952143ba",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-bg.jpg",
+      "sha256": "22b95b6b17c2e612163208140690dc9696dfd40b8d9ae24aeddef093bfbee01c",
+      "category": "media"
+    },
+    {
+      "path": "public/hero-bg.mp4",
+      "sha256": "04968e9e159b3f65a60020c6a4c2b6a5f1c294eb2d5b9ff999dee96ff78b59c1",
+      "category": "media"
+    },
+    {
+      "path": "public/logo.svg",
+      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/share/earth-map.jpg",
+      "sha256": "2faa400d1eade3bc44caf6750d1b772bd9bbb6d87362c02bc7c3304e78fa0a9d",
+      "category": "media"
+    },
+    {
+      "path": "public/xeno-logo-original.png",
+      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
+      "category": "identity-or-icon"
+    },
+    {
+      "path": "public/xeno-logo.svg",
+      "sha256": "fcf634df6d6961fcb5f6c20ddddabc06b8f9188bc97b31bdf26133c8c9704960",
+      "category": "identity-or-icon"
+    }
+  ]
+}
